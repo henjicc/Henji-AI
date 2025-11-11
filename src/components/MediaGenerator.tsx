@@ -19,8 +19,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [modelDropdownClosing, setModelDropdownClosing] = useState(false)
   const [isResolutionDropdownOpen, setIsResolutionDropdownOpen] = useState(false)
   const [selectedResolution, setSelectedResolution] = useState('2048x2048')
+  const [resolutionQuality, setResolutionQuality] = useState<'2K' | '4K'>('2K') // 2K/4K切换
   const [customWidth, setCustomWidth] = useState('')
   const [customHeight, setCustomHeight] = useState('')
+  const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
   const [sequentialImageGeneration, setSequentialImageGeneration] = useState<'auto' | 'disabled'>('auto')
   const [maxImages, setMaxImages] = useState<number>(15)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -31,19 +33,89 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
 
-  // 预设分辨率选项
-  const presetResolutions = [
-    { label: '1:1', value: '2048x2048', ratio: '1:1' },
-    { label: '4:3', value: '2304x1728', ratio: '4:3' },
-    { label: '3:4', value: '1728x2304', ratio: '3:4' },
-    { label: '16:9', value: '2560x1440', ratio: '16:9' },
-    { label: '9:16', value: '1440x2560', ratio: '9:16' },
-    { label: '3:2', value: '2496x1664', ratio: '3:2' },
-    { label: '2:3', value: '1664x2496', ratio: '2:3' },
-    { label: '21:9', value: '3024x1296', ratio: '21:9' },
-    { label: '自定义', value: 'custom' },
-    { label: '跟随图片', value: 'follow-image' }
-  ]
+  // 预设分辨率选项 - 2K基础分辨率
+  const baseResolutions: Record<string, string> = {
+    '1:1': '2048x2048',
+    '4:3': '2304x1728',
+    '3:4': '1728x2304',
+    '16:9': '2560x1440',
+    '9:16': '1440x2560',
+    '3:2': '2496x1664',
+    '2:3': '1664x2496',
+    '21:9': '3024x1296'
+  }
+
+  // 根据质量获取实际分辨率
+  const getActualResolution = (ratio: string): string => {
+    const base = baseResolutions[ratio]
+    if (!base) return base
+    
+    if (resolutionQuality === '4K') {
+      const [w, h] = base.split('x').map(Number)
+      return `${w * 2}x${h * 2}`
+    }
+    return base
+  }
+
+  // 监听分辨率选项变化,更新底部数值
+  useEffect(() => {
+    if (selectedResolution === 'smart' || isManualInput) {
+      return // 智能模式或手动输入时不自动更新
+    }
+    
+    const resolution = getActualResolution(selectedResolution)
+    if (resolution && resolution.includes('x')) {
+      const [w, h] = resolution.split('x')
+      setCustomWidth(w)
+      setCustomHeight(h)
+    }
+  }, [selectedResolution, resolutionQuality])
+
+  // 计算智能分辨率(基于第一张图片)
+  const calculateSmartResolution = (imageDataUrl: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const originalWidth = img.width
+        const originalHeight = img.height
+        const aspectRatio = originalWidth / originalHeight
+        
+        // 检查宽高比范围 [1/16, 16]
+        if (aspectRatio < 1/16 || aspectRatio > 16) {
+          // 超出范围,使用默认 1:1
+          resolve(resolutionQuality === '2K' ? '2048x2048' : '4096x4096')
+          return
+        }
+        
+        const maxPixels = resolutionQuality === '2K' ? 4194304 : 16777216 // 2K: 2048*2048, 4K: 4096*4096
+        
+        // 计算最大尺寸
+        let width = originalWidth
+        let height = originalHeight
+        
+        if (width * height > maxPixels) {
+          // 超过最大像素,需要缩小
+          const scale = Math.sqrt(maxPixels / (width * height))
+          width = Math.floor(width * scale)
+          height = Math.floor(height * scale)
+        }
+        
+        // 确保不超过原始尺寸
+        width = Math.min(width, originalWidth)
+        height = Math.min(height, originalHeight)
+        
+        // 确保不超过最大像素限制
+        if (width * height > maxPixels) {
+          const scale = Math.sqrt(maxPixels / (width * height))
+          width = Math.floor(width * scale)
+          height = Math.floor(height * scale)
+        }
+        
+        resolve(`${width}x${height}`)
+      }
+      img.src = imageDataUrl
+    })
+  }
 
   // 监听重新编辑事件
   useEffect(() => {
@@ -61,6 +133,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       window.removeEventListener('reedit-content', handleReedit as EventListener)
     }
   }, [])
+
+  // 监听分辨率选项变化,更新底部数值
+  useEffect(() => {
+    if (selectedResolution === 'smart' || isManualInput) {
+      return // 智能模式或手动输入时不自动更新
+    }
+    
+    const resolution = getActualResolution(selectedResolution)
+    if (resolution && resolution.includes('x')) {
+      const [w, h] = resolution.split('x')
+      setCustomWidth(w)
+      setCustomHeight(h)
+    }
+  }, [selectedResolution, resolutionQuality])
 
   // 点击外部区域关闭下拉框
   useEffect(() => {
@@ -87,7 +173,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if ((!input.trim() && uploadedImages.length === 0) || isLoading) return
     
     // 构建生成选项
@@ -100,12 +186,21 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
       
       // 处理分辨率设置
-      if (selectedResolution === 'custom') {
-        if (customWidth && customHeight) {
-          options.size = `${customWidth}x${customHeight}`
+      if (selectedResolution === 'smart') {
+        // 智能模式:根据第一张图片计算
+        if (uploadedImages.length > 0) {
+          const smartSize = await calculateSmartResolution(uploadedImages[0])
+          options.size = smartSize
+        } else {
+          // 没有图片时使用默认分辨率
+          options.size = resolutionQuality === '2K' ? '2048x2048' : '4096x4096'
         }
-      } else if (selectedResolution !== 'follow-image') {
-        options.size = selectedResolution
+      } else if (customWidth && customHeight && !isManualInput) {
+        // 预设模式:使用预设分辨率
+        options.size = `${customWidth}x${customHeight}`
+      } else if (isManualInput && customWidth && customHeight) {
+        // 手动输入模式:使用手动输入的值
+        options.size = `${customWidth}x${customHeight}`
       }
       
       // 添加即梦图片生成4.0的参数
@@ -225,9 +320,23 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   const handleResolutionSelect = (resolution: string) => {
     setSelectedResolution(resolution)
-    if (resolution !== 'custom') {
-      setIsResolutionDropdownOpen(false)
-    }
+    setIsManualInput(false) // 选择预设时重置手动输入标记
+    // 不再立即关闭面板
+  }
+
+  const handleQualitySelect = (quality: '2K' | '4K') => {
+    setResolutionQuality(quality)
+    setIsManualInput(false)
+  }
+
+  const handleManualWidthChange = (value: string) => {
+    setCustomWidth(value)
+    setIsManualInput(true) // 标记为手动输入
+  }
+
+  const handleManualHeightChange = (value: string) => {
+    setCustomHeight(value)
+    setIsManualInput(true) // 标记为手动输入
   }
 
   return (
@@ -303,11 +412,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 flex items-center"
             >
               <span className="mr-2 text-sm whitespace-nowrap">
-                {selectedResolution === 'custom' 
-                  ? `${customWidth}x${customHeight}` 
-                  : selectedResolution === 'follow-image' 
-                  ? '跟随图片' 
-                  : presetResolutions.find(r => r.value === selectedResolution)?.label}
+                {selectedResolution === 'smart' 
+                  ? '智能' 
+                  : `${customWidth || '?'}x${customHeight || '?'}`}
               </span>
               <svg 
                 className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isResolutionDropdownOpen ? 'rotate-180' : ''}`} 
@@ -328,15 +435,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     <label className="block text-xs text-gray-400 mb-2">选择比例</label>
                     <div className="grid grid-cols-4 gap-2">
                       {[
-                        { label: '智能', value: 'follow-image' },
-                        { label: '21:9', value: '3024x1296', ratio: '21:9' },
-                        { label: '16:9', value: '2560x1440', ratio: '16:9' },
-                        { label: '3:2', value: '2496x1664', ratio: '3:2' },
-                        { label: '4:3', value: '2304x1728', ratio: '4:3' },
-                        { label: '1:1', value: '2048x2048', ratio: '1:1' },
-                        { label: '3:4', value: '1728x2304', ratio: '3:4' },
-                        { label: '2:3', value: '1664x2496', ratio: '2:3' },
-                        { label: '9:16', value: '1440x2560', ratio: '9:16' }
+                        { label: '智能', value: 'smart' },
+                        { label: '21:9', value: '21:9', ratio: '21:9' },
+                        { label: '16:9', value: '16:9', ratio: '16:9' },
+                        { label: '3:2', value: '3:2', ratio: '3:2' },
+                        { label: '4:3', value: '4:3', ratio: '4:3' },
+                        { label: '1:1', value: '1:1', ratio: '1:1' },
+                        { label: '3:4', value: '3:4', ratio: '3:4' },
+                        { label: '2:3', value: '2:3', ratio: '2:3' },
+                        { label: '9:16', value: '9:16', ratio: '9:16' }
                       ].map(resolution => (
                         <button
                           key={resolution.value}
@@ -375,16 +482,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   {/* 选择分辨率 */}
                   <div className="mb-3">
                     <label className="block text-xs text-gray-400 mb-2">选择分辨率</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {[
                         { label: '高清 2K', value: '2K' },
                         { label: '超清 4K', value: '4K' }
                       ].map(res => (
                         <button
                           key={res.value}
-                          onClick={() => handleResolutionSelect(res.value)}
+                          onClick={() => handleQualitySelect(res.value as '2K' | '4K')}
                           className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
-                            selectedResolution === res.value
+                            resolutionQuality === res.value
                               ? 'bg-blue-500 text-white'
                               : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
                           }`}
@@ -403,11 +510,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         <input
                           type="number"
                           value={customWidth}
-                          onChange={(e) => setCustomWidth(e.target.value)}
+                          onChange={(e) => handleManualWidthChange(e.target.value)}
+                          disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className="w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm"
+                          className={`w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm ${
+                            selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
                           min="1024"
-                          max="4096"
+                          max="8192"
                         />
                       </div>
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -417,11 +527,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         <input
                           type="number"
                           value={customHeight}
-                          onChange={(e) => setCustomHeight(e.target.value)}
+                          onChange={(e) => handleManualHeightChange(e.target.value)}
+                          disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className="w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm"
+                          className={`w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm ${
+                            selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
                           min="1024"
-                          max="4096"
+                          max="8192"
                         />
                       </div>
                       <span className="text-xs text-gray-400">PX</span>

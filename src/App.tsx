@@ -414,7 +414,7 @@ const App: React.FC = () => {
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col relative z-10">
         {/* 结果显示区 - 瀑布流布局 */}
-        <div className="flex-1 overflow-y-auto p-4 pb-48"> {/* 添加底部内边距避免被输入框遮挡 */}
+        <div className="flex-1 overflow-y-auto p-4 pb-[400px]"> {/* 增加底部内边距避免被整个悬浮输入框遮挡 */}
           <div className="max-w-6xl mx-auto w-[90%]"> {/* 添加容器限制宽度并居中 */}
             {tasks.length > 0 ? (
               <>
