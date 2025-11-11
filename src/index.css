@@ -105,6 +105,135 @@
   animation: fadeInUp 0.5s ease-out forwards;
 }
 
+/* 图片滑入动画 - 简单流畅的淡入效果 */
+@keyframes imageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 图片滑出动画 - 删除时的消失效果 */
+@keyframes imageSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px) scale(0.8);
+  }
+}
+
+/* 平滑滚动 */
+* {
+  scroll-behavior: smooth;
+}
+
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1F2937;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4B5563;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
+/* 图片查看器动画 */
+@keyframes imageViewerFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes imageViewerFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes imageZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes imageZoomOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes imageSlideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes imageSlideRight {
+  from {
+    opacity: 0;
+    transform: translateX(-50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.image-viewer-enter {
+  animation: imageViewerFadeIn 0.3s ease-out, imageZoomIn 0.3s ease-out;
+}
+
+.image-viewer-exit {
+  animation: imageViewerFadeOut 0.3s ease-out, imageZoomOut 0.3s ease-out;
+}
+
+.image-transition {
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+.image-transitioning {
+  opacity: 0.5;
+}
+
 /* 响应式调整 */
 @media (max-width: 768px) {
   .fixed.bottom-6 {

@@ -34,6 +34,7 @@ export interface GenerateAudioParams {
 export interface ImageResult {
   id?: string
   url: string
+  base64Data?: string  // 添加Base64数据字段，用于离线下载和复制
   createdAt?: Date
 }
 

@@ -13,6 +13,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
   const [mediaType, setMediaType] = useState<'text' | 'image'>('text')
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
+  const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false)
+  const [removingImages, setRemovingImages] = useState<Set<string>>(new Set())
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [modelDropdownClosing, setModelDropdownClosing] = useState(false)
   const [isResolutionDropdownOpen, setIsResolutionDropdownOpen] = useState(false)
@@ -20,7 +22,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [customWidth, setCustomWidth] = useState('')
   const [customHeight, setCustomHeight] = useState('')
   const [sequentialImageGeneration, setSequentialImageGeneration] = useState<'auto' | 'disabled'>('auto')
-  const [maxImages, setMaxImages] = useState<number>(1)
+  const [maxImages, setMaxImages] = useState<number>(15)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
@@ -136,22 +138,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
-      const newImages: string[] = []
-      let processedCount = 0
-      
       files.forEach(file => {
         if (file) {
           const reader = new FileReader()
           reader.onload = (event) => {
             if (event.target?.result) {
-              newImages.push(event.target.result as string)
-              processedCount++
-              
-              // 当所有文件都处理完后更新状态
-              if (processedCount === files.length) {
-                setUploadedImages(prev => [...prev, ...newImages])
-                setMediaType('image')
-              }
+              setUploadedImages(prev => {
+                // 最多允许6张图片
+                if (prev.length >= 6) {
+                  return prev
+                }
+                return [...prev, event.target?.result as string]
+              })
+              setMediaType('image')
             }
           }
           reader.readAsDataURL(file)
@@ -181,11 +180,41 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   }
 
   const removeImage = (index: number) => {
-    setUploadedImages(prev => prev.filter((_, i) => i !== index))
+    const imageToRemove = uploadedImages[index]
+    // 标记该图片为正在删除
+    setRemovingImages(prev => new Set(prev).add(imageToRemove))
+    // 等待动画完成后再移除
+    setTimeout(() => {
+      setUploadedImages(prev => prev.filter((_, i) => i !== index))
+      setRemovingImages(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(imageToRemove)
+        return newSet
+      })
+    }, 250) // 与动画时长一致
   }
 
   const clearAllImages = () => {
     setUploadedImages([])
+  }
+
+  // 处理拖拽图片
+  const handleImageFileDrop = (files: File[]) => {
+    files.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          setUploadedImages(prev => {
+            // 最多允许6张图片
+            if (prev.length >= 6) {
+              return prev
+            }
+            return [...prev, reader.result as string]
+          })
+        }
+        reader.readAsDataURL(file)
+      }
+    })
   }
 
   const handleModelSelect = (providerId: string, modelId: string) => {
@@ -292,76 +321,111 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             
             {/* 分辨率设置悬浮窗口 - 向上弹出 */}
             {isResolutionDropdownOpen && (
-              <div className="absolute z-20 mb-1 w-64 bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg bottom-full right-0 mb-2 animate-scale-in">
-                <div className="p-3">
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    {presetResolutions.map(resolution => (
-                      <button
-                        key={resolution.value}
-                        onClick={() => handleResolutionSelect(resolution.value)}
-                        className={`px-2 py-2 text-xs rounded flex flex-col items-center transition-all duration-300 ${
-                          selectedResolution === resolution.value
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
-                        }`}
-                      >
-                        <span className="font-medium">{resolution.label}</span>
-                        {resolution.ratio && (
-                          <div className="mt-1 relative">
-                            <div 
-                              className={`border border-gray-400 ${
-                                resolution.ratio === '1:1' ? 'w-6 h-6' :
-                                resolution.ratio === '4:3' ? 'w-8 h-6' :
-                                resolution.ratio === '3:4' ? 'w-6 h-8' :
-                                resolution.ratio === '16:9' ? 'w-10 h-6' :
-                                resolution.ratio === '9:16' ? 'w-6 h-10' :
-                                resolution.ratio === '3:2' ? 'w-8 h-6' :
-                                resolution.ratio === '2:3' ? 'w-6 h-8' :
-                                resolution.ratio === '21:9' ? 'w-12 h-5' :
-                                'w-6 h-6'
-                              }`}
-                            ></div>
-                          </div>
-                        )}
-                      </button>
-                    ))}
+              <div className="absolute z-20 mb-1 w-80 bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg bottom-full right-0 mb-2 animate-scale-in">
+                <div className="p-4">
+                  {/* 选择比例 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-400 mb-2">选择比例</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { label: '智能', value: 'follow-image' },
+                        { label: '21:9', value: '3024x1296', ratio: '21:9' },
+                        { label: '16:9', value: '2560x1440', ratio: '16:9' },
+                        { label: '3:2', value: '2496x1664', ratio: '3:2' },
+                        { label: '4:3', value: '2304x1728', ratio: '4:3' },
+                        { label: '1:1', value: '2048x2048', ratio: '1:1' },
+                        { label: '3:4', value: '1728x2304', ratio: '3:4' },
+                        { label: '2:3', value: '1664x2496', ratio: '2:3' },
+                        { label: '9:16', value: '1440x2560', ratio: '9:16' }
+                      ].map(resolution => (
+                        <button
+                          key={resolution.value}
+                          onClick={() => handleResolutionSelect(resolution.value)}
+                          className={`px-2 py-3 text-xs rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
+                            selectedResolution === resolution.value
+                              ? 'bg-white text-black'
+                              : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                          }`}
+                        >
+                          {resolution.ratio && (
+                            <div className="flex items-center justify-center h-8">
+                              <div 
+                                className={`border-2 ${
+                                  selectedResolution === resolution.value ? 'border-black' : 'border-gray-400'
+                                } ${
+                                  resolution.ratio === '21:9' ? 'w-8 h-3' :
+                                  resolution.ratio === '16:9' ? 'w-8 h-4' :
+                                  resolution.ratio === '3:2' ? 'w-7 h-5' :
+                                  resolution.ratio === '4:3' ? 'w-7 h-5' :
+                                  resolution.ratio === '1:1' ? 'w-6 h-6' :
+                                  resolution.ratio === '3:4' ? 'w-5 h-7' :
+                                  resolution.ratio === '2:3' ? 'w-5 h-7' :
+                                  resolution.ratio === '9:16' ? 'w-4 h-8' :
+                                  'w-6 h-6'
+                                }`}
+                              ></div>
+                            </div>
+                          )}
+                          <span className="font-medium">{resolution.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  
-                  {selectedResolution === 'custom' && (
-                    <div className="flex gap-2 mt-2">
+
+                  {/* 选择分辨率 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-400 mb-2">选择分辨率</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: '高清 2K', value: '2K' },
+                        { label: '超清 4K', value: '4K' }
+                      ].map(res => (
+                        <button
+                          key={res.value}
+                          onClick={() => handleResolutionSelect(res.value)}
+                          className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
+                            selectedResolution === res.value
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                          }`}
+                        >
+                          {res.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 尺寸 */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">尺寸</label>
+                    <div className="flex gap-2 items-center">
                       <div className="flex-1">
-                        <label className="block text-xs text-gray-400 mb-1">宽度</label>
                         <input
                           type="number"
                           value={customWidth}
                           onChange={(e) => setCustomWidth(e.target.value)}
-                          placeholder="宽度"
-                          className="w-full bg-gray-700/50 border border-gray-600 rounded px-2 py-1 text-sm"
+                          placeholder="2048"
+                          className="w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm"
                           min="1024"
                           max="4096"
                         />
                       </div>
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                      </svg>
                       <div className="flex-1">
-                        <label className="block text-xs text-gray-400 mb-1">高度</label>
                         <input
                           type="number"
                           value={customHeight}
                           onChange={(e) => setCustomHeight(e.target.value)}
-                          placeholder="高度"
-                          className="w-full bg-gray-700/50 border border-gray-600 rounded px-2 py-1 text-sm"
+                          placeholder="2048"
+                          className="w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm"
                           min="1024"
                           max="4096"
                         />
                       </div>
+                      <span className="text-xs text-gray-400">PX</span>
                     </div>
-                  )}
-                  
-                  <div className="mt-2 text-xs text-gray-400">
-                    {selectedResolution === 'follow-image' 
-                      ? '分辨率将跟随第一张上传图片的尺寸（不超过4096x4096）' 
-                      : selectedResolution === 'custom'
-                      ? '自定义分辨率（范围：1024x1024 到 4096x4096）'
-                      : '预设分辨率'}
                   </div>
                 </div>
               </div>
@@ -417,108 +481,121 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         )}
       </div>
 
-      {/* 上传的图片预览 */}
-      {uploadedImages.length > 0 && (
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-medium text-gray-300">已上传图片 ({uploadedImages.length})</label>
-            <button
-              onClick={clearAllImages}
-              className="text-xs text-red-400 hover:text-red-300 flex items-center"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              清除全部
-            </button>
-          </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-32 overflow-y-auto p-1">
+      {/* 输入区域 */}
+      <div className="relative">
+        {/* 图片上传和预览区域 - 独立一行 */}
+        <div className="mb-3">
+          <div className="flex items-center gap-2">
+            {/* 已上传的图片 - 横向排列 */}
             {uploadedImages.map((image, index) => (
-              <div key={index} className="relative group">
-                <img 
-                  src={image} 
-                  alt={`Uploaded ${index + 1}`} 
-                  className="w-full h-16 object-cover rounded border border-gray-600"
-                />
-                <button
-                  onClick={() => removeImage(index)}
-                  className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+              <div
+                key={`${image}-${index}`}
+                className="relative group flex-shrink-0"
+                style={{
+                  animation: removingImages.has(image)
+                    ? 'imageSlideOut 0.25s ease-in forwards' 
+                    : 'imageSlideIn 0.25s ease-out forwards'
+                }}
+              >
+                <div className="relative w-12 h-16 rounded-lg shadow-lg">
+                  <img
+                    src={image}
+                    alt={`Uploaded ${index + 1}`}
+                    className="w-full h-full object-cover rounded-lg border-2 border-white"
+                  />
+                  {/* 删除按钮 - 只在hover时显示，不再有初始加载时的闪烁 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeImage(index)
+                    }}
+                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg z-20"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))}
+
+            {/* 上传按钮 - 紧跟在图片之后 */}
+            <div 
+              key={`upload-btn-${uploadedImages.length}`}
+              className="w-12 h-16 bg-gray-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-gray-500 hover:border-gray-400 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
+              onClick={() => imageFileInputRef.current?.click()}
+              style={{
+                animation: 'imageSlideIn 0.25s ease-out forwards'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* 输入区域 */}
-      <div className="mb-4">
+        {/* 文本输入框 - 独立一行 */}
         <div className="relative">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onPaste={handlePaste}
-            placeholder="输入提示词..."
-            className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-white placeholder-gray-400"
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))
+              if (files.length > 0) {
+                handleImageFileDrop(files)
+              }
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (e.ctrlKey) {
+                  // Ctrl+Enter 换行
+                  return
+                } else {
+                  // Enter 生成
+                  e.preventDefault()
+                  handleGenerate()
+                }
+              }
+            }}
+            placeholder="描述想要生成的图片"
+            className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-white placeholder-gray-400"
             disabled={isLoading}
           />
-          <div className="absolute bottom-3 right-3 flex gap-2">
-            <button
-              onClick={() => imageFileInputRef.current?.click()}
-              disabled={isLoading}
-              className="p-2 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg transition-all duration-300 backdrop-blur-sm border border-gray-600/50"
-              title="上传图片"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          
+          {/* 生成按钮 */}
+          <button
+            onClick={handleGenerate}
+            disabled={isLoading || (!input.trim() && uploadedImages.length === 0)}
+            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+              isLoading || (!input.trim() && uploadedImages.length === 0)
+                ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+            }`}
+          >
+            {isLoading ? (
+              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="p-2 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg transition-all duration-300 backdrop-blur-sm border border-gray-600/50"
-              title="上传文本文件"
-            >
+            ) : (
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
               </svg>
-            </button>
-          </div>
+            )}
+          </button>
         </div>
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={handleGenerate}
-          disabled={isLoading || (!input.trim() && uploadedImages.length === 0)}
-          className={`flex-1 min-w-[120px] px-6 py-3 rounded-xl font-medium transition-all duration-300 flex items-center justify-center ${
-            isLoading || (!input.trim() && uploadedImages.length === 0)
-              ? 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-          }`}
-        >
-          {isLoading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              生成中...
-            </>
-          ) : (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              生成
-            </>
-          )}
-        </button>
-
+      <div className="flex flex-wrap gap-3 mt-4">
         <button
           onClick={() => {
             setInput('')
@@ -526,34 +603,29 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             setMediaType('text')
           }}
           disabled={isLoading}
-          className="px-4 py-3 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-xl transition-all duration-300 border border-gray-600/50 flex items-center"
+          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-gray-600/50 flex items-center text-sm"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
+          清除
         </button>
         
         {/* 设置按钮 */}
         <button
           onClick={onOpenSettings}
-          className="px-4 py-3 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-xl transition-all duration-300 border border-gray-600/50 flex items-center"
+          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-gray-600/50 flex items-center text-sm"
           title="API设置"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
+          设置
         </button>
       </div>
 
       {/* 隐藏的文件输入 */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleTextFileUpload}
-        accept=".txt"
-        className="hidden"
-      />
       <input
         type="file"
         ref={imageFileInputRef}
