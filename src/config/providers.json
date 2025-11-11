@@ -1,0 +1,29 @@
+{
+  "providers": [
+    {
+      "id": "piaoyun",
+      "name": "派欧云",
+      "type": "multi",
+      "models": [
+        {
+          "id": "seedream-4.0",
+          "name": "即梦图片生成 4.0",
+          "type": "image",
+          "description": "先进的图像生成模型，支持4K分辨率"
+        },
+        {
+          "id": "vidu-q1-text2video",
+          "name": "Vidu Q1 文生视频",
+          "type": "video",
+          "description": "通过关键帧技术生成流畅无缝的视频"
+        },
+        {
+          "id": "minimax-speech-02-hd",
+          "name": "MiniMax Speech-02-hd 同步语音合成",
+          "type": "audio",
+          "description": "支持文本到语音的同步生成"
+        }
+      ]
+    }
+  ]
+}
