@@ -428,7 +428,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             
             {/* 分辨率设置悬浮窗口 - 向上弹出 */}
             {isResolutionDropdownOpen && (
-              <div className="absolute z-20 mb-1 w-80 bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg bottom-full right-0 mb-2 animate-scale-in">
+              <div 
+                className="absolute z-20 mb-1 w-80 bg-gray-800 border border-gray-700/50 rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
+              >
                 <div className="p-4">
                   {/* 选择比例 */}
                   <div className="mb-3">
