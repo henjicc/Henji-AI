@@ -18,8 +18,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [modelDropdownClosing, setModelDropdownClosing] = useState(false)
   const [isResolutionDropdownOpen, setIsResolutionDropdownOpen] = useState(false)
-  const [selectedResolution, setSelectedResolution] = useState('2048x2048')
-  const [resolutionQuality, setResolutionQuality] = useState<'2K' | '4K'>('2K') // 2K/4K切换
+  const [selectedResolution, setSelectedResolution] = useState('smart')  // 默认为智能模式
+  const [resolutionQuality, setResolutionQuality] = useState<'2K' | '4K'>('2K') // 2K/4K切换，默认2K
   const [customWidth, setCustomWidth] = useState('')
   const [customHeight, setCustomHeight] = useState('')
   const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
@@ -240,7 +240,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           const smartSize = await calculateSmartResolution(uploadedImages[0])
           options.size = smartSize
         } else {
-          // 没有图片时使用默认分辨率
+          // 没有图片时使用质量对应的默认分辨率
           options.size = resolutionQuality === '2K' ? '2048x2048' : '4096x4096'
         }
       } else if (customWidth && customHeight && !isManualInput) {
