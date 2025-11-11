@@ -274,6 +274,7 @@ const App: React.FC = () => {
       setCurrentImageIndex(0)
     }
     setCurrentImage(imageUrl)
+    // 打开时重置缩放和位置
     setImageScale(1)
     setImagePosition({ x: 0, y: 0 })
     setIsImageViewerOpen(true)
@@ -285,12 +286,13 @@ const App: React.FC = () => {
     setTimeout(() => {
       setIsImageViewerOpen(false)
       setImageViewerClosing(false)
-      // 在模态框完全关闭后再重置所有状态
-      setCurrentImage('')
-      setCurrentImageList([])
-      setCurrentImageIndex(0)
-      setImageScale(1)
-      setImagePosition({ x: 0, y: 0 })
+      // 延迟清空状态,确保 DOM 完全卸载后再清理
+      setTimeout(() => {
+        setCurrentImage('')
+        setCurrentImageList([])
+        setCurrentImageIndex(0)
+        // 不在这里重置 scale 和 position,留在下次打开时重置
+      }, 50)
     }, 300)
   }
 
@@ -653,13 +655,15 @@ const App: React.FC = () => {
       {isImageViewerOpen && (
         <div 
           className={`fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4 ${
-            imageViewerClosing ? 'image-viewer-exit' : 'image-viewer-enter'
+            imageViewerClosing ? 'image-viewer-mask-exit' : 'image-viewer-mask-enter'
           }`}
           onMouseMove={handleImageMouseMove}
           onMouseUp={handleImageMouseUp}
           onMouseLeave={handleImageMouseUp}
         >
-          <div className="relative max-w-6xl max-h-full flex items-center justify-center">
+          <div className={`relative max-w-6xl max-h-full flex items-center justify-center ${
+            imageViewerClosing ? 'image-viewer-content-exit' : 'image-viewer-content-enter'
+          }`}>
             {/* 关闭按钮 */}
             <button
               onClick={closeImageViewer}

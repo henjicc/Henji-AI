@@ -218,12 +218,29 @@
   }
 }
 
+.image-viewer-mask-enter {
+  animation: imageViewerFadeIn 0.3s ease-out;
+}
+
+.image-viewer-mask-exit {
+  animation: imageViewerFadeOut 0.3s ease-out;
+}
+
+.image-viewer-content-enter {
+  animation: imageZoomIn 0.3s ease-out;
+}
+
+.image-viewer-content-exit {
+  animation: imageZoomOut 0.3s ease-out;
+}
+
+/* 保留兼容性 */
 .image-viewer-enter {
-  animation: imageViewerFadeIn 0.3s ease-out, imageZoomIn 0.3s ease-out;
+  animation: imageViewerFadeIn 0.3s ease-out;
 }
 
 .image-viewer-exit {
-  animation: imageViewerFadeOut 0.3s ease-out, imageZoomOut 0.3s ease-out;
+  animation: imageViewerFadeOut 0.3s ease-out;
 }
 
 .image-transition {
