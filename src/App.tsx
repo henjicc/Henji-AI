@@ -279,10 +279,14 @@ const App: React.FC = () => {
     setImagePosition({ x: 0, y: 0 })
     setIsImageViewerOpen(true)
     setImageViewerClosing(false)
+    // 禁止后面页面滚动
+    document.body.style.overflow = 'hidden'
   }
 
   const closeImageViewer = () => {
     setImageViewerClosing(true)
+    // 恢复后面页面滚动
+    document.body.style.overflow = ''
     setTimeout(() => {
       setIsImageViewerOpen(false)
       setImageViewerClosing(false)
@@ -297,9 +301,7 @@ const App: React.FC = () => {
   }
 
   const navigateImage = (direction: 'prev' | 'next') => {
-    if (currentImageList.length === 0 || imageTransitioning) return
-    
-    setImageTransitioning(true)
+    if (currentImageList.length === 0) return
     
     let newIndex = currentImageIndex
     if (direction === 'prev') {
@@ -308,14 +310,9 @@ const App: React.FC = () => {
       newIndex = currentImageIndex < currentImageList.length - 1 ? currentImageIndex + 1 : 0
     }
     
-    // 重置缩放和位置到适应窗口
-    resetImageView()
-    
-    setTimeout(() => {
-      setCurrentImageIndex(newIndex)
-      setCurrentImage(currentImageList[newIndex])
-      setImageTransitioning(false)
-    }, 150)
+    // 直接硬切换图片,不重置缩放和位置
+    setCurrentImageIndex(newIndex)
+    setCurrentImage(currentImageList[newIndex])
   }
 
   // 重置图片视图到适应窗口大小
@@ -660,6 +657,7 @@ const App: React.FC = () => {
           onMouseMove={handleImageMouseMove}
           onMouseUp={handleImageMouseUp}
           onMouseLeave={handleImageMouseUp}
+          onWheel={(e) => e.preventDefault()}
         >
           <div className={`relative max-w-6xl max-h-full flex items-center justify-center ${
             imageViewerClosing ? 'image-viewer-content-exit' : 'image-viewer-content-enter'
@@ -673,18 +671,6 @@ const App: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            
-            {/* 左箭头按钮 */}
-            {currentImageList.length > 1 && (
-              <button
-                onClick={() => navigateImage('prev')}
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-3 rounded-full transition-all duration-200 z-10"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-            )}
             
             {/* 图片容器 */}
             <div 
@@ -711,20 +697,32 @@ const App: React.FC = () => {
               />
             </div>
             
-            {/* 右箭头按钮 */}
-            {currentImageList.length > 1 && (
-              <button
-                onClick={() => navigateImage('next')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-3 rounded-full transition-all duration-200 z-10"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            )}
-            
-            {/* 底部信息栏 */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4">
+            {/* 底部信息栏和切换按钮 */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+              {/* 切换按钮组 */}
+              {currentImageList.length > 1 && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => navigateImage('prev')}
+                    className="bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => navigateImage('next')}
+                    className="bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+              
+              {/* 信息按钮组 */}
+              <div className="flex items-center gap-4">
               {/* 导航指示器和计数器 */}
               {currentImageList.length > 1 && (
                 <div className="bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-gray-700/50">
@@ -737,22 +735,14 @@ const App: React.FC = () => {
                 {Math.round(imageScale * 100)}%
               </div>
               
-              {/* 重置按钮 */}
-              {(imageScale !== 1 || imagePosition.x !== 0 || imagePosition.y !== 0) && (
-                <button
-                  onClick={resetImageView}
-                  className="bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-gray-700/50 hover:bg-gray-800/90 transition-colors"
-                >
-                  重置视图
-                </button>
-              )}
+              {/* 重置按钮 - 始终显示 */}
+              <button
+                onClick={resetImageView}
+                className="bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-gray-700/50 hover:bg-gray-800/90 transition-colors"
+              >
+                重置视图
+              </button>
             </div>
-            
-            {/* 操作提示 */}
-            <div className="absolute top-4 left-4 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-lg text-white text-xs border border-gray-700/50 space-y-1">
-              <div>滚轮：缩放</div>
-              <div>左键拖拽：平移</div>
-              <div>← →：切换</div>
             </div>
           </div>
         </div>
