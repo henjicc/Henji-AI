@@ -25,6 +25,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
   const [sequentialImageGeneration, setSequentialImageGeneration] = useState<'auto' | 'disabled'>('auto')
   const [maxImages, setMaxImages] = useState<number>(15)
+  
+  // Vidu Q1 参数
+  const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
+  const [viduAspectRatio, setViduAspectRatio] = useState('16:9')
+  const [viduStyle, setViduStyle] = useState('general')
+  const [viduDuration, setViduDuration] = useState(5)
+  const [viduMovementAmplitude, setViduMovementAmplitude] = useState('auto')
+  const [viduBgm, setViduBgm] = useState(false)
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
@@ -214,6 +223,52 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
     
+    // 如果是Vidu Q1视频模型，添加相关参数
+    if (currentModel?.type === 'video' && selectedModel === 'vidu-q1') {
+      options.mode = viduMode
+      options.duration = viduDuration
+      options.movementAmplitude = viduMovementAmplitude
+      options.bgm = viduBgm
+      
+      // 根据模式添加不同的参数
+      if (viduMode === 'text-image-to-video') {
+        // 文/图生视频：最多1张图片
+        if (uploadedImages.length > 0) {
+          options.images = [uploadedImages[0]]
+        }
+        // 只有文生视频才支持aspect_ratio和style
+        if (uploadedImages.length === 0) {
+          options.aspectRatio = viduAspectRatio
+          options.style = viduStyle
+        }
+      } else if (viduMode === 'start-end-frame') {
+        // 首尾帧：必须2张图片
+        if (uploadedImages.length < 2) {
+          alert('首尾帧模式需要至少2张图片')
+          return
+        }
+        options.images = uploadedImages.slice(0, 2)
+      } else if (viduMode === 'reference-to-video') {
+        // 参考生视频：1-7张图片，必须prompt
+        if (uploadedImages.length < 1 || uploadedImages.length > 7) {
+          alert('参考生视频模式需要1-7张图片')
+          return
+        }
+        if (!input.trim()) {
+          alert('参考生视频模式必须提供文本提示词')
+          return
+        }
+        options.images = uploadedImages.slice(0, 7)
+        options.aspectRatio = viduAspectRatio
+      }
+      
+      console.log('[MediaGenerator] Vidu Q1 生成参数:', {
+        mode: viduMode,
+        imageCount: uploadedImages.length,
+        options
+      })
+    }
+    
     onGenerate(input, selectedModel, currentModel?.type || 'image', options)
   }
 
@@ -233,14 +288,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
+      // 计算最大图片数
+      let maxImageCount = 6 // 默认图片模型最多6张
+        
+      if (selectedModel === 'vidu-q1') {
+        if (viduMode === 'text-image-to-video') {
+          maxImageCount = 1
+        } else if (viduMode === 'start-end-frame') {
+          maxImageCount = 2
+        } else if (viduMode === 'reference-to-video') {
+          maxImageCount = 7
+        }
+      }
+        
       files.forEach(file => {
         if (file) {
           const reader = new FileReader()
           reader.onload = (event) => {
             if (event.target?.result) {
               setUploadedImages(prev => {
-                // 最多允许6张图片
-                if (prev.length >= 6) {
+                // 根据模型限制图片数量
+                if (prev.length >= maxImageCount) {
                   return prev
                 }
                 return [...prev, event.target?.result as string]
@@ -295,13 +363,26 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // 处理拖拽图片
   const handleImageFileDrop = (files: File[]) => {
+    // 计算最大图片数
+    let maxImageCount = 6 // 默认图片模型最多6张
+      
+    if (selectedModel === 'vidu-q1') {
+      if (viduMode === 'text-image-to-video') {
+        maxImageCount = 1
+      } else if (viduMode === 'start-end-frame') {
+        maxImageCount = 2
+      } else if (viduMode === 'reference-to-video') {
+        maxImageCount = 7
+      }
+    }
+      
     files.forEach(file => {
       if (file.type.startsWith('image/')) {
         const reader = new FileReader()
         reader.onloadend = () => {
           setUploadedImages(prev => {
-            // 最多允许6张图片
-            if (prev.length >= 6) {
+            // 根据模型限制图片数量
+            if (prev.length >= maxImageCount) {
               return prev
             }
             return [...prev, reader.result as string]
@@ -548,6 +629,98 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           </div>
         )}
 
+        {/* Vidu Q1 参数设置 - 仅对Vidu Q1模型显示 */}
+        {selectedModel === 'vidu-q1' && (
+          <>
+            {/* 模式选择 */}
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">模式</label>
+              <select
+                value={viduMode}
+                onChange={(e) => setViduMode(e.target.value as any)}
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+              >
+                <option value="text-image-to-video">文/图生视频</option>
+                <option value="start-end-frame">首尾帧</option>
+                <option value="reference-to-video">参考生视频</option>
+              </select>
+            </div>
+
+            {/* 宽高比 - 仅文生视频和参考生视频支持 */}
+            {(viduMode === 'text-image-to-video' && uploadedImages.length === 0 || viduMode === 'reference-to-video') && (
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
+                <select
+                  value={viduAspectRatio}
+                  onChange={(e) => setViduAspectRatio(e.target.value)}
+                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+                >
+                  <option value="16:9">16:9</option>
+                  <option value="9:16">9:16</option>
+                  <option value="1:1">1:1</option>
+                </select>
+              </div>
+            )}
+
+            {/* 风格 - 仅文生视频支持 */}
+            {viduMode === 'text-image-to-video' && uploadedImages.length === 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
+                <select
+                  value={viduStyle}
+                  onChange={(e) => setViduStyle(e.target.value)}
+                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+                >
+                  <option value="general">通用</option>
+                  <option value="anime">动漫</option>
+                </select>
+              </div>
+            )}
+
+            {/* 运动幅度 */}
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">运动幅度</label>
+              <select
+                value={viduMovementAmplitude}
+                onChange={(e) => setViduMovementAmplitude(e.target.value)}
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+              >
+                <option value="auto">自动</option>
+                <option value="small">小</option>
+                <option value="medium">中</option>
+                <option value="large">大</option>
+              </select>
+            </div>
+
+            {/* BGM开关 */}
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">BGM</label>
+              <div className="flex gap-1 h-[38px]">
+                <button
+                  onClick={() => setViduBgm(false)}
+                  className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
+                    !viduBgm
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                  }`}
+                >
+                  关闭
+                </button>
+                <button
+                  onClick={() => setViduBgm(true)}
+                  className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
+                    viduBgm
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                  }`}
+                >
+                  开启
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* 即梦图片生成4.0参数设置 - 仅对即梦模型显示 */}
         {selectedModel === 'seedream-4.0' && (
           <>
@@ -634,19 +807,38 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
             ))}
 
-            {/* 上传按钮 - 紧跟在图片之后 */}
-            <div 
-              key={`upload-btn-${uploadedImages.length}`}
-              className="w-12 h-16 bg-gray-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-gray-500 hover:border-gray-400 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
-              onClick={() => imageFileInputRef.current?.click()}
-              style={{
-                animation: 'imageSlideIn 0.25s ease-out forwards'
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
+            {/* 上传按钮 - 紧跟在图片之后，根据模型和模式限制 */}
+            {(() => {
+              // 计算最大图片数
+              let maxImageCount = 6 // 默认图片模型最多6张
+              
+              if (selectedModel === 'vidu-q1') {
+                if (viduMode === 'text-image-to-video') {
+                  maxImageCount = 1 // 文/图生视频最多1张
+                } else if (viduMode === 'start-end-frame') {
+                  maxImageCount = 2 // 首尾帧需要2张
+                } else if (viduMode === 'reference-to-video') {
+                  maxImageCount = 7 // 参考生视频最多7张
+                }
+              }
+              
+              const canUploadMore = uploadedImages.length < maxImageCount
+              
+              return canUploadMore ? (
+                <div 
+                  key={`upload-btn-${uploadedImages.length}`}
+                  className="w-12 h-16 bg-gray-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-gray-500 hover:border-gray-400 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
+                  onClick={() => imageFileInputRef.current?.click()}
+                  style={{
+                    animation: 'imageSlideIn 0.25s ease-out forwards'
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+              ) : null
+            })()}
           </div>
         </div>
 

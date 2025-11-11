@@ -9,6 +9,7 @@ interface GenerationTask {
   id: string
   type: 'image' | 'video' | 'audio'
   prompt: string
+  model: string  // 保存使用的模型
   images?: string[]
   size?: string
   status: 'pending' | 'generating' | 'success' | 'error'
@@ -177,6 +178,7 @@ const App: React.FC = () => {
       id: taskId,
       type,
       prompt: input,
+      model,  // 保存模型信息
       images: options?.images,
       size: options?.size,
       status: 'pending'
@@ -238,18 +240,39 @@ const App: React.FC = () => {
   }
 
   const pollTaskStatus = async (taskId: string): Promise<any> => {
+    console.log('[App] 开始轮询任务状态:', taskId)
     return new Promise((resolve, reject) => {
+      let pollCount = 0
+      const maxPolls = 100 // 最多轮询100次（5分钟）
+      
       const interval = setInterval(async () => {
         try {
+          pollCount++
+          console.log(`[App] 第${pollCount}次轮询任务状态:`, taskId)
+          
           const status = await apiService.checkTaskStatus(taskId)
-          if (status.status === 'TASK_STATUS_SUCCEEDED' && status.result) {
+          
+          // 注意：API返回的是 TASK_STATUS_SUCCEED，不是 TASK_STATUS_SUCCEEDED
+          if ((status.status === 'TASK_STATUS_SUCCEEDED' || status.status === 'TASK_STATUS_SUCCEED') && status.result) {
+            console.log('[App] 任务完成:', status.result)
             clearInterval(interval)
             resolve(status.result)
           } else if (status.status === 'TASK_STATUS_FAILED') {
+            console.error('[App] 任务失败')
             clearInterval(interval)
             reject(new Error('任务执行失败'))
+          } else if (pollCount >= maxPolls) {
+            console.error('[App] 轮询超时')
+            clearInterval(interval)
+            reject(new Error('任务超时'))
+          } else {
+            console.log('[App] 任务进行中...', {
+              status: status.status,
+              progress: status.progress
+            })
           }
         } catch (err) {
+          console.error('[App] 轮询错误:', err)
           clearInterval(interval)
           reject(err)
         }
@@ -382,13 +405,20 @@ const App: React.FC = () => {
 
 
   const handleRegenerate = async (task: GenerationTask) => {
-    // 复用原来的参数重新生成
+    // 复用原来的参数重新生成，使用任务保存的模型
     const options = {
       images: task.images,
       size: task.size
     }
     
-    await handleGenerate(task.prompt, 'seedream-4.0', task.type, options)
+    console.log('[App] 重新生成任务:', {
+      model: task.model,
+      type: task.type,
+      prompt: task.prompt,
+      options
+    })
+    
+    await handleGenerate(task.prompt, task.model, task.type, options)
   }
 
   const handleReedit = (task: GenerationTask) => {
@@ -461,6 +491,9 @@ const App: React.FC = () => {
                             <div className="flex flex-wrap gap-2 mt-1">
                               <span className="text-xs bg-gray-700/50 px-2 py-1 rounded">
                                 {task.type === 'image' ? '图片' : task.type === 'video' ? '视频' : '音频'}
+                              </span>
+                              <span className="text-xs bg-blue-700/50 px-2 py-1 rounded">
+                                {task.model}
                               </span>
                               {task.size && (
                                 <span className="text-xs bg-gray-700/50 px-2 py-1 rounded">

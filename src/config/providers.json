@@ -12,10 +12,10 @@
           "description": "先进的图像生成模型，支持4K分辨率"
         },
         {
-          "id": "vidu-q1-text2video",
-          "name": "Vidu Q1 文生视频",
+          "id": "vidu-q1",
+          "name": "Vidu Q1",
           "type": "video",
-          "description": "通过关键帧技术生成流畅无缝的视频"
+          "description": "支持文/图生视频、首尾帧、参考生视频多种模式"
         },
         {
           "id": "minimax-speech-02-hd",

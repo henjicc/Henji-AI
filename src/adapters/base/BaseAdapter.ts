@@ -21,6 +21,14 @@ export interface GenerateVideoParams {
   prompt: string
   model: string
   duration?: number
+  mode?: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video'
+  images?: string[]
+  aspectRatio?: string
+  resolution?: string
+  style?: string
+  seed?: number
+  movementAmplitude?: string
+  bgm?: boolean
   [key: string]: any
 }
 
@@ -51,7 +59,7 @@ export interface AudioResult {
 
 export interface TaskStatus {
   taskId: string
-  status: 'TASK_STATUS_QUEUED' | 'TASK_STATUS_SUCCEEDED' | 'TASK_STATUS_FAILED' | 'TASK_STATUS_PROCESSING'
+  status: 'TASK_STATUS_QUEUED' | 'TASK_STATUS_SUCCEEDED' | 'TASK_STATUS_SUCCEED' | 'TASK_STATUS_FAILED' | 'TASK_STATUS_PROCESSING'
   progress?: number
   result?: ImageResult | VideoResult | AudioResult
 }
