@@ -86,7 +86,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         className="bg-gray-900/90 backdrop-blur-xl border border-gray-700/50 rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 animate-scale-in"
       >
         <div className="p-5 border-b border-gray-700/50 flex justify-between items-center">
-          <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+          <h2 className="text-xl font-bold text-[#007eff]">
             API设置
           </h2>
           <button 
@@ -108,7 +108,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="请输入您的API密钥"
-                className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-white placeholder-gray-400"
+                className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -131,7 +131,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 placeholder="50"
                 min="1"
                 max="500"
-                className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-white placeholder-gray-400"
+                className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -173,8 +173,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               disabled={status === 'saving'}
               className={`px-4 py-2 rounded-lg transition-all duration-300 flex items-center ${
                 status === 'saving'
-                  ? 'bg-blue-700/50 text-blue-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg hover:shadow-xl'
+                  ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-not-allowed'
+                  : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl'
               }`}
             >
               {status === 'saving' ? (

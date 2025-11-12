@@ -9,12 +9,12 @@ export default {
       colors: {
         // 暗色主题
         dark: {
-          bg: '#000000',
+          bg: '#0a0b0d',
           'bg-secondary': '#1a1a1a',
           text: '#ffffff',
           'text-secondary': '#a0a0a0',
           border: '#404040',
-          accent: '#3b82f6',
+          accent: '#007eff',
         }
       }
     },

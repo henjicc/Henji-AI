@@ -614,7 +614,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black text-white flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden">
       <WindowControls />
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col relative z-10 pt-10">
@@ -668,7 +668,7 @@ const App: React.FC = () => {
                               <span className="text-xs bg-gray-700/50 px-2 py-1 rounded">
                                 {task.type === 'image' ? '图片' : task.type === 'video' ? '视频' : '音频'}
                               </span>
-                              <span className="text-xs bg-blue-700/50 px-2 py-1 rounded">
+                              <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded">
                                 {task.model}
                               </span>
                               {task.size && (
@@ -722,7 +722,7 @@ const App: React.FC = () => {
                         {task.status === 'pending' && (
                           <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg">
                             <div className="text-center">
-                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-2"></div>
                               <p className="text-gray-400">准备生成...</p>
                             </div>
                           </div>
@@ -731,11 +731,11 @@ const App: React.FC = () => {
                         {task.status === 'generating' && (
                           <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg">
                             <div className="text-center w-full px-6">
-                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-3"></div>
+                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-gray-400 mb-3">生成中...</p>
                               <div className="w-full h-2 bg-gray-700 rounded">
                                 <div
-                                  className="h-2 bg-purple-500 rounded transition-all duration-[2800ms] ease-out"
+                                  className="h-2 bg-[#007eff] rounded transition-all duration-[2800ms] ease-out"
                                   style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
                                 ></div>
                               </div>
@@ -745,7 +745,7 @@ const App: React.FC = () => {
                                   <span className="mr-2">轮询超时，任务仍在处理中。</span>
                                   <button
                                     onClick={() => retryPolling(task)}
-                                    className="inline-flex items-center px-3 py-1 rounded bg-purple-600/70 hover:bg-purple-600 text-white text-sm transition-colors"
+                                    className="inline-flex items-center px-3 py-1 rounded bg-[#007eff] hover:brightness-110 text-white text-sm transition-colors"
                                   >再次轮询 120 次</button>
                                 </div>
                               )}
@@ -813,7 +813,7 @@ const App: React.FC = () => {
                               )}
                               {task.result.type === 'audio' && (
                                 <div className="flex flex-col items-center">
-                                  <div className="w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center mb-4">
+                                  <div className="w-16 h-16 rounded-full bg-[#007eff] flex items-center justify-center mb-4">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                     </svg>

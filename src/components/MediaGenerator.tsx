@@ -575,7 +575,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         <div className="w-auto min-w-[180px] relative" ref={modelRef}>
           <label className="block text-sm font-medium mb-1 text-gray-300">模型</label>
           <div 
-            className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+            className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
             onClick={() => {
               if (isModelDropdownOpen) {
                 handleCloseModelDropdown()
@@ -613,7 +613,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         key={`${provider.id}-${model.id}`}
                         className={`px-3 py-2 cursor-pointer transition-colors duration-200 flex items-center ${
                           selectedProvider === provider.id && selectedModel === model.id
-                            ? 'bg-purple-500/20 text-purple-300' 
+                            ? 'bg-[#007eff]/20 text-[#66b3ff]' 
                             : 'hover:bg-gray-700/50'
                         }`}
                         onClick={() => handleModelSelect(provider.id, model.id)}
@@ -637,7 +637,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
             <button
               onClick={() => setIsResolutionDropdownOpen(!isResolutionDropdownOpen)}
-              className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 flex items-center"
+              className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 flex items-center"
             >
               <span className="mr-2 text-sm whitespace-nowrap">
                 {selectedResolution === 'smart' 
@@ -722,7 +722,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onClick={() => handleQualitySelect(res.value as '2K' | '4K')}
                           className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
                             resolutionQuality === res.value
-                              ? 'bg-blue-500 text-white'
+                              ? 'bg-[#007eff] text-white'
                               : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
                           }`}
                         >
@@ -782,7 +782,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[120px] relative" ref={viduModeRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">模式</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduModeDropdownOpen) {
                     handleCloseViduModeDropdown()
@@ -813,7 +813,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     ].map(opt => (
                       <div
                         key={opt.value}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMode === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMode === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
                         onClick={() => {
                           setViduMode(opt.value as any)
                           handleCloseViduModeDropdown()
@@ -832,7 +832,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={viduAspectRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
                 <div
-                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduAspectDropdownOpen) {
                       handleCloseViduAspectDropdown()
@@ -859,7 +859,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       {['16:9', '9:16', '1:1'].map(r => (
                         <div
                           key={r}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduAspectRatio === r ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
                           onClick={() => {
                             setViduAspectRatio(r)
                             handleCloseViduAspectDropdown()
@@ -879,7 +879,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[180px] relative" ref={viduStyleRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
                 <div
-                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduStyleDropdownOpen) {
                       handleCloseViduStyleDropdown()
@@ -909,7 +909,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       ].map(opt => (
                         <div
                           key={opt.value}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduStyle === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduStyle === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
                           onClick={() => {
                             setViduStyle(opt.value)
                             handleCloseViduStyleDropdown()
@@ -927,7 +927,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[80px] relative" ref={viduMovementRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">运动幅度</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduMovementDropdownOpen) {
                     handleCloseViduMovementDropdown()
@@ -959,7 +959,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     ].map(opt => (
                       <div
                         key={opt.value}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMovementAmplitude === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMovementAmplitude === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
                         onClick={() => {
                           setViduMovementAmplitude(opt.value)
                           handleCloseViduMovementDropdown()
@@ -976,7 +976,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[80px] relative" ref={viduBgmRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">BGM</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduBgmDropdownOpen) {
                     handleCloseViduBgmDropdown()
@@ -1006,7 +1006,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     ].map(opt => (
                       <div
                         key={String(opt.value)}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduBgm === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduBgm === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
                         onClick={() => {
                           setViduBgm(opt.value)
                           handleCloseViduBgmDropdown()
@@ -1033,7 +1033,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   onClick={() => setSequentialImageGeneration('auto')}
                   className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
                     sequentialImageGeneration === 'auto'
-                      ? 'bg-blue-500 text-white'
+                      ? 'bg-[#007eff] text-white'
                       : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
                   }`}
                 >
@@ -1043,7 +1043,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   onClick={() => setSequentialImageGeneration('disabled')}
                   className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
                     sequentialImageGeneration === 'disabled'
-                      ? 'bg-blue-500 text-white'
+                      ? 'bg-[#007eff] text-white'
                       : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
                   }`}
                 >
@@ -1060,7 +1060,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   type="number"
                   value={maxImages}
                   onChange={(e) => setMaxImages(Math.min(15, Math.max(1, parseInt(e.target.value) || 1)))}
-                  className="w-20 bg-gray-700/50 border border-gray-600 rounded px-3 py-2 h-[38px] text-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  className="w-20 bg-gray-700/50 border border-gray-600 rounded px-3 py-2 h-[38px] text-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50"
                   min="1"
                   max="15"
                 />
@@ -1174,7 +1174,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               }
             }}
             placeholder="描述想要生成的图片"
-            className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-white placeholder-gray-400"
+            className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
             disabled={isLoading}
           />
           
@@ -1185,7 +1185,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
               isLoading || (!input.trim() && uploadedImages.length === 0)
                 ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+                : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
             }`}
           >
             {isLoading ? (
