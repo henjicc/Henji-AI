@@ -575,7 +575,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         <div className="w-auto min-w-[180px] relative" ref={modelRef}>
           <label className="block text-sm font-medium mb-1 text-gray-300">模型</label>
           <div 
-            className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+            className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
             onClick={() => {
               if (isModelDropdownOpen) {
                 handleCloseModelDropdown()
@@ -598,7 +598,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           {/* 模型下拉菜单 - 限制最大高度并添加滚动条 */}
           {(isModelDropdownOpen || modelDropdownClosing) && (
             <div 
-              className={`absolute z-20 mt-1 w-full min-w-[200px] bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${
+              className={`absolute z-20 mt-1 w-full min-w-[200px] bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${
                 modelDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'
               }`}
             >
@@ -637,7 +637,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
             <button
               onClick={() => setIsResolutionDropdownOpen(!isResolutionDropdownOpen)}
-              className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 flex items-center"
+              className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 flex items-center"
             >
               <span className="mr-2 text-sm whitespace-nowrap">
                 {selectedResolution === 'smart' 
@@ -657,7 +657,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {/* 分辨率设置悬浮窗口 - 向上弹出 */}
             {isResolutionDropdownOpen && (
               <div 
-                className="absolute z-20 mb-1 w-80 bg-gray-800 border border-gray-700/50 rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
+                className="absolute z-20 mb-1 w-80 bg-gray-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
               >
                 <div className="p-4">
                   {/* 选择比例 */}
@@ -688,7 +688,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                             <div className="flex items-center justify-center h-8">
                               <div 
                                 className={`border-2 ${
-                                  selectedResolution === resolution.value ? 'border-black' : 'border-gray-400'
+                                  selectedResolution === resolution.value ? 'border-black' : 'border-[rgba(46,46,46,0.8)]'
                                 } ${
                                   resolution.ratio === '21:9' ? 'w-8 h-3' :
                                   resolution.ratio === '16:9' ? 'w-8 h-4' :
@@ -743,7 +743,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onChange={(e) => handleManualWidthChange(e.target.value)}
                           disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className={`w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm ${
+                          className={`w-full bg-gray-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
                             selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           min="1024"
@@ -760,7 +760,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onChange={(e) => handleManualHeightChange(e.target.value)}
                           disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className={`w-full bg-gray-700/50 border border-gray-600 rounded px-3 py-2 text-sm ${
+                          className={`w-full bg-gray-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
                             selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           min="1024"
@@ -782,7 +782,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[120px] relative" ref={viduModeRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">模式</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduModeDropdownOpen) {
                     handleCloseViduModeDropdown()
@@ -803,7 +803,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduModeDropdownOpen || viduModeDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -832,7 +832,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={viduAspectRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
                 <div
-                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduAspectDropdownOpen) {
                       handleCloseViduAspectDropdown()
@@ -852,8 +852,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
                 {(isViduAspectDropdownOpen || viduAspectDropdownClosing) && (
-                  <div
-                    className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {['16:9', '9:16', '1:1'].map(r => (
@@ -879,7 +879,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={viduStyleRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
                 <div
-                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduStyleDropdownOpen) {
                       handleCloseViduStyleDropdown()
@@ -899,8 +899,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
                 {(isViduStyleDropdownOpen || viduStyleDropdownClosing) && (
-                  <div
-                    className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {[
@@ -927,7 +927,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[80px] relative" ref={viduMovementRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">运动幅度</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduMovementDropdownOpen) {
                     handleCloseViduMovementDropdown()
@@ -948,7 +948,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduMovementDropdownOpen || viduMovementDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -976,7 +976,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[80px] relative" ref={viduBgmRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">BGM</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduBgmDropdownOpen) {
                     handleCloseViduBgmDropdown()
@@ -997,7 +997,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduBgmDropdownOpen || viduBgmDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -1071,7 +1071,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       </div>
 
       {/* 输入区域 */}
-      <div className="relative">
+      <div className="relative bg-[#1B1C21] rounded-xl border border-[rgba(46,46,46,0.8)] p-4">
         {/* 图片上传和预览区域 - 独立一行 */}
         <div className="mb-3">
           <div className="flex items-center gap-2">
@@ -1128,7 +1128,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               return canUploadMore ? (
                 <div 
                   key={`upload-btn-${uploadedImages.length}`}
-                  className="w-12 h-16 bg-gray-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-gray-500 hover:border-gray-400 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
+                  className="w-12 h-16 bg-gray-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-[rgba(46,46,46,0.8)] hover:border-[rgba(46,46,46,0.8)] flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
                   onClick={() => imageFileInputRef.current?.click()}
                   style={{
                     animation: 'imageSlideIn 0.25s ease-out forwards'
@@ -1174,7 +1174,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               }
             }}
             placeholder="描述想要生成的图片"
-            className="w-full bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
+            className="w-full bg-[#1B1C21] backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
             disabled={isLoading}
           />
           
@@ -1211,7 +1211,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             setMediaType('text')
           }}
           disabled={isLoading}
-          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-gray-600/50 flex items-center text-sm"
+          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1222,7 +1222,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {/* 设置按钮 */}
         <button
           onClick={onOpenSettings}
-          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-gray-600/50 flex items-center text-sm"
+          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
           title="API设置"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -639,13 +639,13 @@ const App: React.FC = () => {
                       className="overflow-hidden animate-fade-in-up"
                     >
                       {/* 任务信息行 */}
-                      <div className="pb-3 border-b border-gray-700/50">
+                      <div className="pb-3 border-b border-[rgba(46,46,46,0.8)]">
                         <div className="flex flex-wrap gap-4 items-start">
                           {/* 原始图片缩略图 */}
                           {task.images && task.images.length > 0 && (
                             <div className="flex gap-2">
                               {task.images.slice(0, 3).map((image, index) => (
-                                <div key={index} className="w-16 h-16 rounded border border-gray-600 overflow-hidden">
+                                <div key={index} className="w-16 h-16 rounded border border-[rgba(46,46,46,0.8)] overflow-hidden">
                                   <img 
                                     src={image} 
                                     alt={`Input ${index + 1}`} 
@@ -654,7 +654,7 @@ const App: React.FC = () => {
                                 </div>
                               ))}
                               {task.images.length > 3 && (
-                                <div className="w-16 h-16 rounded border border-gray-600 bg-gray-700/50 flex items-center justify-center text-xs">
+                                <div className="w-16 h-16 rounded border border-[rgba(46,46,46,0.8)] bg-gray-700/50 flex items-center justify-center text-xs">
                                   +{task.images.length - 3}
                                 </div>
                               )}
@@ -720,7 +720,7 @@ const App: React.FC = () => {
                       {/* 结果显示区域 */}
                       <div className="pt-3">
                         {task.status === 'pending' && (
-                          <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg">
+                          <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-2"></div>
                               <p className="text-gray-400">准备生成...</p>
@@ -729,7 +729,7 @@ const App: React.FC = () => {
                         )}
                         
                         {task.status === 'generating' && (
-                          <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg">
+                          <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-gray-400 mb-3">生成中...</p>
@@ -777,7 +777,7 @@ const App: React.FC = () => {
                                     return imageUrls.map((url, index) => (
                                       <div 
                                         key={index} 
-                                        className="relative w-64 h-64 bg-gray-900 rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center flex-shrink-0"
+                                        className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center flex-shrink-0"
                                       >
                                         <img 
                                           src={url} 
@@ -791,7 +791,7 @@ const App: React.FC = () => {
                                 ) : (
                                   // 单张图片
                                   <div 
-                                    className="relative w-64 h-64 bg-gray-900 rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center flex-shrink-0"
+                                    className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center flex-shrink-0"
                                   >
                                     <img 
                                       src={task.result.url} 
@@ -803,7 +803,7 @@ const App: React.FC = () => {
                                 )
                               )}
                               {task.result.type === 'video' && (
-                                <div className="relative w-64 h-64 bg-gray-900 rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center">
+                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center">
                                   <video 
                                     src={task.result.url} 
                                     controls 
@@ -871,7 +871,7 @@ const App: React.FC = () => {
 
         {/* 输入区域 - 悬浮设计 */}
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-4xl z-20">
-          <div className="bg-gray-900/70 backdrop-blur-xl border border-gray-700/50 rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
+          <div className="bg-[#131313]/70 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
             <MediaGenerator 
               onGenerate={handleGenerate}
               isLoading={isLoading}
@@ -883,7 +883,7 @@ const App: React.FC = () => {
       {isConfirmClearOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
-          <div className="relative bg-gray-900/80 border border-gray-700/50 rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
+          <div className="relative bg-[#131313]/80 border border-[rgba(46,46,46,0.8)] rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
             <div className="text-white text-base">确认清除历史</div>
             <div className="text-gray-300 text-sm mt-2">此操作会删除所有生成历史，且不可恢复。</div>
             <div className="mt-4 flex justify-end gap-2">
@@ -978,20 +978,20 @@ const App: React.FC = () => {
               <div className="flex items-center gap-4">
               {/* 导航指示器和计数器 */}
               {currentImageList.length > 1 && (
-                <div className="bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-gray-700/50">
+                <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)]">
                   {currentImageIndex + 1} / {currentImageList.length}
                 </div>
               )}
               
               {/* 缩放比例显示 */}
-              <div className="bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-gray-700/50">
+              <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)]">
                 {Math.round(imageScale * 100)}%
               </div>
               
               {/* 重置按钮 - 始终显示 */}
               <button
                 onClick={resetImageView}
-                className="bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-gray-700/50 hover:bg-gray-800/90 transition-colors"
+                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)] hover:bg-gray-800/90 transition-colors"
               >
                 重置视图
               </button>

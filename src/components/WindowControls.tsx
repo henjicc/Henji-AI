@@ -16,7 +16,7 @@ const WindowControls: React.FC = () => {
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 h-10 bg-gray-900/70 backdrop-blur-md border-b border-gray-700/50 z-40 flex items-center justify-between px-3"
+      className="fixed top-0 left-0 right-0 h-10 bg-[#131313]/70 backdrop-blur-md border-b border-[rgba(46,46,46,0.8)] z-40 flex items-center justify-between px-3"
       data-tauri-drag-region
     >
       <div className="text-sm text-gray-300">Henji AI</div>
