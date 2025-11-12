@@ -876,7 +876,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {/* 风格 - 仅文生视频支持 */}
             {viduMode === 'text-image-to-video' && uploadedImages.length === 0 && (
-              <div className="w-auto min-w-[180px] relative" ref={viduStyleRef}>
+              <div className="w-auto min-w-[80px] relative" ref={viduStyleRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
                 <div
                   className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
