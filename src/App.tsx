@@ -37,6 +37,8 @@ const App: React.FC = () => {
   const [imageTransitioning, setImageTransitioning] = useState(false)
   const [isTasksLoaded, setIsTasksLoaded] = useState(false) // 标记任务是否已从localStorage加载
   const [viewerOpacity, setViewerOpacity] = useState(0)
+  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
+  const [confirmOpacity, setConfirmOpacity] = useState(0)
   const tasksEndRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
 
@@ -106,6 +108,14 @@ const App: React.FC = () => {
       setViewerOpacity(0)
     }
   }, [isImageViewerOpen])
+
+  useEffect(() => {
+    if (isConfirmClearOpen) {
+      requestAnimationFrame(() => setConfirmOpacity(1))
+    } else {
+      setConfirmOpacity(0)
+    }
+  }, [isConfirmClearOpen])
 
   // 当任务列表变化时滚动到底部
   useEffect(() => {
@@ -483,8 +493,8 @@ const App: React.FC = () => {
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold">生成历史</h2>
                   <button
-                    onClick={clearAllHistory}
-                    className="px-3 py-1 bg-red-600/50 hover:bg-red-600/70 rounded-lg text-sm transition-colors"
+                    onClick={() => setIsConfirmClearOpen(true)}
+                    className="h-8 px-3 inline-flex items-center justify-center bg-red-600/60 hover:bg-red-600/80 rounded-md text-sm leading-none transition-colors"
                   >
                     清除历史
                   </button>
@@ -722,6 +732,29 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+      {isConfirmClearOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
+          <div className="relative bg-gray-900/80 border border-gray-700/50 rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
+            <div className="text-white text-base">确认清除历史</div>
+            <div className="text-gray-300 text-sm mt-2">此操作会删除所有生成历史，且不可恢复。</div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-gray-700/60 hover:bg-gray-600/60 text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => { setTasks([]); localStorage.removeItem('generationTasks'); setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-red-600/70 hover:bg-red-600 text-white text-sm"
+              >
+                清除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 图片查看器模态框 */}
       {isImageViewerOpen && (
