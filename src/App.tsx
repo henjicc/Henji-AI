@@ -19,6 +19,9 @@ interface GenerationTask {
   result?: MediaResult
   error?: string
   uploadedFilePaths?: string[]
+  progress?: number
+  serverTaskId?: string
+  timedOut?: boolean
 }
 
 const App: React.FC = () => {
@@ -220,7 +223,9 @@ const App: React.FC = () => {
       images: options?.images,
       size: options?.size,
       uploadedFilePaths: options?.uploadedFilePaths,
-      status: 'pending'
+      status: 'pending',
+      progress: 0,
+      timedOut: false
     }
 
     // 立即添加到任务列表（最新的在最后）
@@ -266,9 +271,9 @@ const App: React.FC = () => {
           break
         case 'video':
           result = await apiService.generateVideo(input, model, options)
-          // 视频生成是异步的，需要轮询状态
           if (result.taskId) {
-            result = await pollTaskStatus(result.taskId)
+            setTasks(prev => prev.map(t => t.id === taskId ? { ...t, serverTaskId: result.taskId } : t))
+            result = await pollTaskStatus(result.taskId, taskId, model)
           }
           break
         case 'audio':
@@ -279,20 +284,23 @@ const App: React.FC = () => {
       }
 
       // 更新任务状态为成功
-      setTasks(prev => prev.map(task => 
-        task.id === taskId ? {
-          ...task, 
-          status: 'success',
-          result: {
-            id: taskId,
-            type,
-            url: result.url,
-            filePath: (result as any).filePath,
-            prompt: input,
-            createdAt: new Date()
-          }
-        } : task
-      ))
+      if (result && result.url) {
+        setTasks(prev => prev.map(task => 
+          task.id === taskId ? {
+            ...task, 
+            status: 'success',
+            progress: 100,
+            result: {
+              id: taskId,
+              type,
+              url: result.url,
+              filePath: (result as any).filePath,
+              prompt: input,
+              createdAt: new Date()
+            }
+          } : task
+        ))
+      }
     } catch (err) {
       // 更新任务状态为错误
       setTasks(prev => prev.map(task => 
@@ -305,45 +313,91 @@ const App: React.FC = () => {
     }
   }
 
-  const pollTaskStatus = async (taskId: string): Promise<any> => {
-    console.log('[App] 开始轮询任务状态:', taskId)
+  const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, model?: string): Promise<any> => {
+    console.log('[App] 开始轮询任务状态:', serverTaskId)
     return new Promise((resolve, reject) => {
       let pollCount = 0
-      const maxPolls = 100 // 最多轮询100次（5分钟）
+      const maxPolls = model === 'vidu-q1' ? 120 : 100
       
       const interval = setInterval(async () => {
         try {
           pollCount++
-          console.log(`[App] 第${pollCount}次轮询任务状态:`, taskId)
+          console.log(`[App] 第${pollCount}次轮询任务状态:`, serverTaskId)
           
-          const status = await apiService.checkTaskStatus(taskId)
+          const status = await apiService.checkTaskStatus(serverTaskId)
           
           // 注意：API返回的是 TASK_STATUS_SUCCEED，不是 TASK_STATUS_SUCCEEDED
           if ((status.status === 'TASK_STATUS_SUCCEEDED' || status.status === 'TASK_STATUS_SUCCEED') && status.result) {
             console.log('[App] 任务完成:', status.result)
             clearInterval(interval)
+            setTasks(prev => prev.map(t => t.id === uiTaskId ? { ...t, progress: 100, timedOut: false } : t))
             resolve(status.result)
           } else if (status.status === 'TASK_STATUS_FAILED') {
             console.error('[App] 任务失败')
             clearInterval(interval)
             reject(new Error('任务执行失败'))
           } else if (pollCount >= maxPolls) {
-            console.error('[App] 轮询超时')
-            clearInterval(interval)
-            reject(new Error('任务超时'))
+            if (status.status === 'TASK_STATUS_PROCESSING' || status.status === 'TASK_STATUS_QUEUED') {
+              console.warn('[App] 轮询超时，仍在处理中，提供重试')
+              clearInterval(interval)
+              setTasks(prev => prev.map(t => t.id === uiTaskId ? { ...t, timedOut: true } : t))
+              resolve(null)
+            } else {
+              console.error('[App] 轮询超时')
+              clearInterval(interval)
+              reject(new Error('任务超时'))
+            }
           } else {
             console.log('[App] 任务进行中...', {
               status: status.status,
               progress: status.progress
             })
+            if (model === 'vidu-q1') {
+              const t = pollCount / maxPolls
+              const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
+              setTasks(prev => prev.map(t => {
+                if (t.id !== uiTaskId) return t
+                const inc = Math.max(1, stepProgress)
+                const next = Math.min(95, Math.max((t.progress ?? 0) + 1, inc))
+                return { ...t, progress: next }
+              }))
+            }
           }
         } catch (err) {
           console.error('[App] 轮询错误:', err)
           clearInterval(interval)
           reject(err)
         }
-      }, 3000) // 每3秒检查一次状态
+      }, 3000)
     })
+  }
+
+  const retryPolling = async (task: GenerationTask) => {
+    if (!task.serverTaskId) {
+      console.error('[App] 无 serverTaskId，无法重试轮询')
+      return
+    }
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timedOut: false } : t))
+    try {
+      const result = await pollTaskStatus(task.serverTaskId, task.id, task.model)
+      if (result && result.url) {
+        setTasks(prev => prev.map(t => t.id === task.id ? {
+          ...t,
+          status: 'success',
+          progress: 100,
+          result: {
+            id: task.id,
+            type: 'video',
+            url: result.url,
+            filePath: (result as any).filePath,
+            prompt: t.prompt,
+            createdAt: new Date()
+          }
+        } : t))
+      }
+    } catch (e) {
+      console.error('[App] 重试轮询失败', e)
+    }
   }
 
   const openSettings = () => {
@@ -676,9 +730,25 @@ const App: React.FC = () => {
                         
                         {task.status === 'generating' && (
                           <div className="flex items-center justify-center h-64 bg-gray-800/50 rounded-lg">
-                            <div className="text-center">
-                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-2"></div>
-                              <p className="text-gray-400">生成中...</p>
+                            <div className="text-center w-full px-6">
+                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-3"></div>
+                              <p className="text-gray-400 mb-3">生成中...</p>
+                              <div className="w-full h-2 bg-gray-700 rounded">
+                                <div
+                                  className="h-2 bg-purple-500 rounded transition-all duration-[2800ms] ease-out"
+                                  style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
+                                ></div>
+                              </div>
+                              <div className="mt-2 text-sm text-gray-400">{Math.min(100, Math.max(0, Math.floor(task.progress || 0)))}%</div>
+                              {task.timedOut && (
+                                <div className="mt-3 text-sm text-gray-300">
+                                  <span className="mr-2">轮询超时，任务仍在处理中。</span>
+                                  <button
+                                    onClick={() => retryPolling(task)}
+                                    className="inline-flex items-center px-3 py-1 rounded bg-purple-600/70 hover:bg-purple-600 text-white text-sm transition-colors"
+                                  >再次轮询 120 次</button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
