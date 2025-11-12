@@ -42,4 +42,6 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
 }

@@ -74,8 +74,8 @@ export async function fileToDataUrl(fullPath: string, mimeHint?: string): Promis
 }
 
 export async function saveUploadImage(fileOrBlob: File | Blob): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
-  const mime = (fileOrBlob as any).type || 'image/png'
-  const ext = mime.includes('png') ? 'png' : mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : mime.includes('webp') ? 'webp' : 'png'
+  const mime = 'image/png'
+  const ext = 'png'
   await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
   const arrayBuffer = await (fileOrBlob as Blob).arrayBuffer()
   const hashBuf = await crypto.subtle.digest('SHA-256', arrayBuffer)
@@ -87,7 +87,7 @@ export async function saveUploadImage(fileOrBlob: File | Blob): Promise<{ fullPa
   try {
     await readFile(full)
   } catch {
-    const array = new Uint8Array(arrayBuffer)
+    const array = await ensurePngBytes(fileOrBlob as Blob)
     await writeFile(rel, array, { baseDir: BaseDirectory.AppLocalData })
   }
   const displaySrc = await fileToBlobSrc(full, mime)
@@ -99,5 +99,71 @@ export async function saveUploadImage(fileOrBlob: File | Blob): Promise<{ fullPa
 export async function deleteUploads(paths: string[]): Promise<void> {
   for (const p of paths) {
     try { await remove(p) } catch (e) { console.error('[save] delete upload failed', p, e) }
+  }
+}
+
+export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  if (dataUrl.startsWith('data:')) {
+    const parts = dataUrl.split(',')
+    const header = parts[0]
+    const base64 = parts[1]
+    const mimeMatch = header.match(/data:(.*?);base64/)
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream'
+    const binary = atob(base64)
+    const len = binary.length
+    const bytes = new Uint8Array(len)
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i)
+    return new Blob([bytes], { type: mime })
+  }
+  try {
+    const res = await fetch(dataUrl)
+    return await res.blob()
+  } catch {
+    const res = await httpFetch(dataUrl, { method: 'GET' })
+    const buf = await res.arrayBuffer()
+    return new Blob([new Uint8Array(buf)], { type: inferMimeFromPath(dataUrl) })
+  }
+}
+
+async function ensurePngBytes(blob: Blob): Promise<Uint8Array> {
+  const url = URL.createObjectURL(blob)
+  try {
+    const img = new Image()
+    const p = new Promise<HTMLImageElement>((resolve, reject) => {
+      img.onload = () => resolve(img)
+      img.onerror = reject
+    })
+    img.src = url
+    const image = await p
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth || image.width
+    canvas.height = image.naturalHeight || image.height
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(image, 0, 0)
+    const pngDataUrl = canvas.toDataURL('image/png')
+    const base64 = pngDataUrl.split(',')[1]
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return bytes
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+export async function writeJsonToAppData(relPath: string, data: any): Promise<void> {
+  await mkdir('Henji-AI', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+  const json = JSON.stringify(data)
+  const bytes = new TextEncoder().encode(json)
+  await writeFile(relPath.startsWith('Henji-AI') ? relPath : `Henji-AI/${relPath}`, bytes, { baseDir: BaseDirectory.AppLocalData })
+}
+
+export async function readJsonFromAppData<T = any>(relPath: string): Promise<T | null> {
+  try {
+    const bytes = await readFile(relPath.startsWith('Henji-AI') ? relPath : `Henji-AI/${relPath}`, { baseDir: BaseDirectory.AppLocalData } as any)
+    const json = new TextDecoder().decode(bytes as any)
+    return JSON.parse(json) as T
+  } catch {
+    return null
   }
 }

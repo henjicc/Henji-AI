@@ -3,7 +3,7 @@ import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
-import { isDesktop, saveImageFromUrl, fileToBlobSrc } from './utils/save'
+import { isDesktop, saveImageFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData } from './utils/save'
 import WindowControls from './components/WindowControls'
 import { remove } from '@tauri-apps/plugin-fs'
 
@@ -126,50 +126,65 @@ const App: React.FC = () => {
     }
   }, [tasks])
 
-  // 从本地存储加载任务
+  // 加载历史（优先文件，其次本地存储）
   useEffect(() => {
-    const savedTasks = localStorage.getItem('generationTasks')
-    if (savedTasks) {
-      try {
-        const parsedTasks = JSON.parse(savedTasks)
-        // 确保从本地存储加载的任务状态正确
-        const loadedTasks = parsedTasks.map((task: any) => ({
+    const load = async () => {
+      const fileHistory = await readJsonFromAppData<any[]>('Henji-AI/history.json')
+      const store = fileHistory ?? (() => { try { return JSON.parse(localStorage.getItem('generationTasks') || '[]') } catch { return [] } })()
+      const loaded = await Promise.all((store || []).map(async (task: any) => {
+        let result = task.result
+        if (result && result.filePath) {
+          try { result = { ...result, url: await fileToBlobSrc(result.filePath) } } catch {}
+        }
+        let images = task.images
+        if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length) {
+          try {
+            const arr: string[] = []
+            for (const p of task.uploadedFilePaths) {
+              const src = await fileToBlobSrc(p, 'image/png')
+              arr.push(src)
+            }
+            images = arr
+          } catch {}
+        }
+        return {
           ...task,
-          // 任何正在生成中的任务都重置为错误状态,因为页面刷新后无法继续生成
           status: task.status === 'generating' || task.status === 'pending' ? 'error' : task.status,
           error: task.status === 'generating' || task.status === 'pending' ? '页面刷新后生成中断' : task.error,
-          // 确保 createdAt 是 Date 对象
-          result: task.result ? {
-            ...task.result,
-            createdAt: task.result.createdAt ? new Date(task.result.createdAt) : new Date()
-          } : undefined
-        }))
-        setTasks(loadedTasks)
-      } catch (e) {
-        console.error('Failed to parse saved tasks:', e)
-      }
+          result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
+          images
+        }
+      }))
+      setTasks(loaded)
+      setIsTasksLoaded(true)
     }
-    // 标记任务已加载完成
-    setIsTasksLoaded(true)
+    load()
   }, [])
 
-  // 保存任务到本地存储
+  // 保存历史到文件（避免本地存储配额）
   useEffect(() => {
-    // 只有在任务已从localStorage加载后才执行保存,避免初始化时覆盖已保存的数据
     if (!isTasksLoaded) return
-    
-    // 只保存成功和错误状态的任务,不保存pending和generating状态的任务
-    const tasksToSave = tasks.filter(task => 
-      task.status === 'success' || task.status === 'error'
-    )
-      
-    // 获取历史记录数量限制
+    const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error')
+      .map(t => ({
+        id: t.id,
+        type: t.type,
+        prompt: t.prompt,
+        model: t.model,
+        size: t.size,
+        status: t.status,
+        error: t.error,
+        uploadedFilePaths: t.uploadedFilePaths,
+        result: t.result ? {
+          id: t.result.id,
+          type: t.result.type,
+          filePath: t.result.filePath,
+          prompt: t.result.prompt,
+          createdAt: t.result.createdAt
+        } : undefined
+      }))
     const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
-      
-    // 只保存最新的N条记录
     const limitedTasks = tasksToSave.slice(-maxHistory)
-      
-    localStorage.setItem('generationTasks', JSON.stringify(limitedTasks))
+    writeJsonToAppData('Henji-AI/history.json', limitedTasks).catch(e => console.error('write history failed', e))
   }, [tasks, isTasksLoaded])
 
   // 检查是否有保存的API密钥
@@ -466,14 +481,37 @@ const App: React.FC = () => {
     await handleGenerate(task.prompt, task.model, task.type, options)
   }
 
-  const handleReedit = (task: GenerationTask) => {
-    // 将内容返回到输入框
-    const event = new CustomEvent('reedit-content', {
-      detail: {
-        prompt: task.prompt,
-        images: task.images
+  const handleReedit = async (task: GenerationTask) => {
+    let images: string[] | undefined = undefined
+    if (task.uploadedFilePaths && task.uploadedFilePaths.length) {
+      try {
+        const arr: string[] = []
+        for (const p of task.uploadedFilePaths) {
+          const data = await fileToDataUrl(p)
+          arr.push(data)
+        }
+        images = arr
+      } catch {}
+    } else if (task.images && task.images.length) {
+      // 如果历史中已有 images 但不是 data:，仍尝试用上传路径重建
+      if (task.images.some(img => typeof img === 'string' && !img.startsWith('data:'))) {
+        if (task.uploadedFilePaths && task.uploadedFilePaths.length) {
+          try {
+            const arr: string[] = []
+            for (const p of task.uploadedFilePaths) {
+              const data = await fileToDataUrl(p)
+              arr.push(data)
+            }
+            images = arr
+          } catch {}
+        } else {
+          images = task.images
+        }
+      } else {
+        images = task.images
       }
-    })
+    }
+    const event = new CustomEvent('reedit-content', { detail: { prompt: task.prompt, images } })
     window.dispatchEvent(event)
   }
 
@@ -657,7 +695,6 @@ const App: React.FC = () => {
                                 // 鼠标停留在图片区域时，滚轮变为横向滚动
                                 if (e.deltaY !== 0) {
                                   e.currentTarget.scrollLeft += e.deltaY
-                                  e.preventDefault()
                                 }
                               }}
                             >

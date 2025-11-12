@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { providers } from '../config/providers'
-import { saveUploadImage } from '@/utils/save'
+import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
 import { remove } from '@tauri-apps/plugin-fs'
 
 interface MediaGeneratorProps {
@@ -234,7 +234,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   if (currentModel?.type === 'image') {
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
-      options.uploadedFilePaths = uploadedFilePaths
+      const paths: string[] = []
+      for (const data of uploadedImages) {
+        const blob = await dataUrlToBlob(data)
+        const saved = await saveUploadImage(blob)
+        paths.push(saved.fullPath)
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
     }
       
       // 处理分辨率设置
@@ -278,7 +285,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         // 文/图生视频：最多1张图片
         if (uploadedImages.length > 0) {
           options.images = [uploadedImages[0]]
-          options.uploadedFilePaths = uploadedFilePaths.slice(0, 1)
+          const blob = await dataUrlToBlob(uploadedImages[0])
+          const saved = await saveUploadImage(blob)
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
         }
         // 只有文生视频才支持aspect_ratio和style
         if (uploadedImages.length === 0) {
@@ -292,7 +302,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           return
         }
         options.images = uploadedImages.slice(0, 2)
-        options.uploadedFilePaths = uploadedFilePaths.slice(0, 2)
+        const p2: string[] = []
+        for (const data of uploadedImages.slice(0, 2)) {
+          const blob = await dataUrlToBlob(data)
+          const saved = await saveUploadImage(blob)
+          p2.push(saved.fullPath)
+        }
+        options.uploadedFilePaths = p2
+        setUploadedFilePaths(p2)
       } else if (viduMode === 'reference-to-video') {
         // 参考生视频：1-7张图片，必须prompt
         if (uploadedImages.length < 1 || uploadedImages.length > 7) {
@@ -304,7 +321,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           return
         }
         options.images = uploadedImages.slice(0, 7)
-        options.uploadedFilePaths = uploadedFilePaths.slice(0, 7)
+        const p7: string[] = []
+        for (const data of uploadedImages.slice(0, 7)) {
+          const blob = await dataUrlToBlob(data)
+          const saved = await saveUploadImage(blob)
+          p7.push(saved.fullPath)
+        }
+        options.uploadedFilePaths = p7
+        setUploadedFilePaths(p7)
         options.aspectRatio = viduAspectRatio
       }
       
