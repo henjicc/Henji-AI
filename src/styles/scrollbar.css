@@ -1,24 +1,45 @@
-/* Global scrollbar styling for Chromium/WebView2 */
-/* Vertical */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: rgba(31, 41, 55, 0.6);
-}
-::-webkit-scrollbar-thumb {
-  background-color: rgba(75, 85, 99, 0.8);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(107, 114, 128, 0.9);
+/* Disable body scroll to prevent window-level scrollbar overlapping titlebar */
+/* Use a dedicated scroll container below the titlebar instead of window-level scroll */
+.app-scroll-container {
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
 }
 
-/* Horizontal scrollers inside image strip */
+/* Global scrollbar styling for scroll containers */
+.app-scroll-container::-webkit-scrollbar,
 .image-strip::-webkit-scrollbar {
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
+.app-scroll-container::-webkit-scrollbar-button,
+.image-strip::-webkit-scrollbar-button {
+  width: 0;
+  height: 0;
+  display: none;
+}
+.app-scroll-container::-webkit-scrollbar-track,
+.image-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-scroll-container::-webkit-scrollbar-thumb,
 .image-strip::-webkit-scrollbar-thumb {
-  background-color: rgba(75, 85, 99, 0.8);
+  background-color: rgba(156, 163, 175, 0.4); /* light gray with 0.4 opacity */
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+.app-scroll-container::-webkit-scrollbar-thumb:hover,
+.image-strip::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+
+/* Firefox */
+.app-scroll-container,
+.image-strip {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+  scrollbar-gutter: stable;
 }
