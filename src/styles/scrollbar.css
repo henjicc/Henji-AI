@@ -1,0 +1,24 @@
+/* Global scrollbar styling for Chromium/WebView2 */
+/* Vertical */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(75, 85, 99, 0.8);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.9);
+}
+
+/* Horizontal scrollers inside image strip */
+.image-strip::-webkit-scrollbar {
+  height: 8px;
+}
+.image-strip::-webkit-scrollbar-thumb {
+  background-color: rgba(75, 85, 99, 0.8);
+}

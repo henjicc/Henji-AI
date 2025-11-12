@@ -4,6 +4,7 @@ import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
 import { isDesktop, saveImageFromUrl, fileToBlobSrc } from './utils/save'
+import WindowControls from './components/WindowControls'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -468,8 +469,9 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black text-white flex flex-col relative overflow-hidden">
+      <WindowControls />
       {/* 主内容区 */}
-      <main className="flex-1 flex flex-col relative z-10">
+      <main className="flex-1 flex flex-col relative z-10 pt-10">
         {/* 结果显示区 - 瀑布流布局 */}
         <div className="flex-1 overflow-y-auto p-4 pb-[400px]"> {/* 增加底部内边距避免被整个悬浮输入框遮挡 */}
           <div className="max-w-6xl mx-auto w-[90%]"> {/* 添加容器限制宽度并居中 */}
@@ -592,7 +594,7 @@ const App: React.FC = () => {
                         {task.status === 'success' && task.result && (
                           <div className="flex justify-start">
                             <div 
-                              className="flex gap-2 overflow-x-auto max-w-full pb-2"
+                              className="flex gap-2 overflow-x-auto max-w-full pb-2 image-strip"
                               style={{
                                 scrollbarWidth: 'thin',
                                 scrollbarColor: '#4B5563 #1F2937'
