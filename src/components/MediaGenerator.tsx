@@ -28,6 +28,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
   const [sequentialImageGeneration, setSequentialImageGeneration] = useState<'auto' | 'disabled'>('auto')
   const [maxImages, setMaxImages] = useState<number>(15)
+  const [isViduModeDropdownOpen, setIsViduModeDropdownOpen] = useState(false)
+  const [viduModeDropdownClosing, setViduModeDropdownClosing] = useState(false)
+  const [isViduAspectDropdownOpen, setIsViduAspectDropdownOpen] = useState(false)
+  const [viduAspectDropdownClosing, setViduAspectDropdownClosing] = useState(false)
+  const [isViduMovementDropdownOpen, setIsViduMovementDropdownOpen] = useState(false)
+  const [viduMovementDropdownClosing, setViduMovementDropdownClosing] = useState(false)
+  const [isViduStyleDropdownOpen, setIsViduStyleDropdownOpen] = useState(false)
+  const [viduStyleDropdownClosing, setViduStyleDropdownClosing] = useState(false)
+  const [isViduBgmDropdownOpen, setIsViduBgmDropdownOpen] = useState(false)
+  const [viduBgmDropdownClosing, setViduBgmDropdownClosing] = useState(false)
   
   // Vidu Q1 参数
   const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
@@ -41,6 +51,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
   const resolutionRef = useRef<HTMLDivElement>(null)
+  const viduModeRef = useRef<HTMLDivElement>(null)
+  const viduAspectRef = useRef<HTMLDivElement>(null)
+  const viduMovementRef = useRef<HTMLDivElement>(null)
+  const viduStyleRef = useRef<HTMLDivElement>(null)
+  const viduBgmRef = useRef<HTMLDivElement>(null)
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -208,19 +223,74 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (resolutionRef.current && !resolutionRef.current.contains(event.target as Node) && isResolutionDropdownOpen) {
         setIsResolutionDropdownOpen(false)
       }
+      if (viduModeRef.current && !viduModeRef.current.contains(event.target as Node) && isViduModeDropdownOpen) {
+        handleCloseViduModeDropdown()
+      }
+      if (viduAspectRef.current && !viduAspectRef.current.contains(event.target as Node) && isViduAspectDropdownOpen) {
+        handleCloseViduAspectDropdown()
+      }
+      if (viduMovementRef.current && !viduMovementRef.current.contains(event.target as Node) && isViduMovementDropdownOpen) {
+        handleCloseViduMovementDropdown()
+      }
+      if (viduStyleRef.current && !viduStyleRef.current.contains(event.target as Node) && isViduStyleDropdownOpen) {
+        handleCloseViduStyleDropdown()
+      }
+      if (viduBgmRef.current && !viduBgmRef.current.contains(event.target as Node) && isViduBgmDropdownOpen) {
+        handleCloseViduBgmDropdown()
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
     setTimeout(() => {
       setIsModelDropdownOpen(false)
       setModelDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseViduModeDropdown = () => {
+    setViduModeDropdownClosing(true)
+    setTimeout(() => {
+      setIsViduModeDropdownOpen(false)
+      setViduModeDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseViduAspectDropdown = () => {
+    setViduAspectDropdownClosing(true)
+    setTimeout(() => {
+      setIsViduAspectDropdownOpen(false)
+      setViduAspectDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseViduMovementDropdown = () => {
+    setViduMovementDropdownClosing(true)
+    setTimeout(() => {
+      setIsViduMovementDropdownOpen(false)
+      setViduMovementDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseViduStyleDropdown = () => {
+    setViduStyleDropdownClosing(true)
+    setTimeout(() => {
+      setIsViduStyleDropdownOpen(false)
+      setViduStyleDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseViduBgmDropdown = () => {
+    setViduBgmDropdownClosing(true)
+    setTimeout(() => {
+      setIsViduBgmDropdownOpen(false)
+      setViduBgmDropdownClosing(false)
     }, 200)
   }
 
@@ -709,91 +779,245 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {/* Vidu Q1 参数设置 - 仅对Vidu Q1模型显示 */}
         {selectedModel === 'vidu-q1' && (
           <>
-            {/* 模式选择 */}
-            <div>
+            <div className="w-auto min-w-[120px] relative" ref={viduModeRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">模式</label>
-              <select
-                value={viduMode}
-                onChange={(e) => setViduMode(e.target.value as any)}
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+              <div
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                onClick={() => {
+                  if (isViduModeDropdownOpen) {
+                    handleCloseViduModeDropdown()
+                  } else {
+                    setIsViduModeDropdownOpen(true)
+                  }
+                }}
               >
-                <option value="text-image-to-video">文/图生视频</option>
-                <option value="start-end-frame">首尾帧</option>
-                <option value="reference-to-video">参考生视频</option>
-              </select>
+                <span className="text-sm">{viduMode === 'text-image-to-video' ? '文/图生视频' : viduMode === 'start-end-frame' ? '首尾帧' : '参考生视频'}</span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduModeDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+              {(isViduModeDropdownOpen || viduModeDropdownClosing) && (
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                >
+                  <div className="max-h-60 overflow-y-auto">
+                    {[
+                      { value: 'text-image-to-video', label: '文/图生视频' },
+                      { value: 'start-end-frame', label: '首尾帧' },
+                      { value: 'reference-to-video', label: '参考生视频' }
+                    ].map(opt => (
+                      <div
+                        key={opt.value}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMode === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                        onClick={() => {
+                          setViduMode(opt.value as any)
+                          handleCloseViduModeDropdown()
+                        }}
+                      >
+                        <span className="text-sm">{opt.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 宽高比 - 仅文生视频和参考生视频支持 */}
             {(viduMode === 'text-image-to-video' && uploadedImages.length === 0 || viduMode === 'reference-to-video') && (
-              <div>
+              <div className="w-auto min-w-[80px] relative" ref={viduAspectRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
-                <select
-                  value={viduAspectRatio}
-                  onChange={(e) => setViduAspectRatio(e.target.value)}
-                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+                <div
+                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isViduAspectDropdownOpen) {
+                      handleCloseViduAspectDropdown()
+                    } else {
+                      setIsViduAspectDropdownOpen(true)
+                    }
+                  }}
                 >
-                  <option value="16:9">16:9</option>
-                  <option value="9:16">9:16</option>
-                  <option value="1:1">1:1</option>
-                </select>
+                  <span className="text-sm">{viduAspectRatio}</span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduAspectDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+                {(isViduAspectDropdownOpen || viduAspectDropdownClosing) && (
+                  <div
+                    className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  >
+                    <div className="max-h-60 overflow-y-auto">
+                      {['16:9', '9:16', '1:1'].map(r => (
+                        <div
+                          key={r}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduAspectRatio === r ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                          onClick={() => {
+                            setViduAspectRatio(r)
+                            handleCloseViduAspectDropdown()
+                          }}
+                        >
+                          <span className="text-sm">{r}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* 风格 - 仅文生视频支持 */}
             {viduMode === 'text-image-to-video' && uploadedImages.length === 0 && (
-              <div>
+              <div className="w-auto min-w-[180px] relative" ref={viduStyleRef}>
                 <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
-                <select
-                  value={viduStyle}
-                  onChange={(e) => setViduStyle(e.target.value)}
-                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+                <div
+                  className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isViduStyleDropdownOpen) {
+                      handleCloseViduStyleDropdown()
+                    } else {
+                      setIsViduStyleDropdownOpen(true)
+                    }
+                  }}
                 >
-                  <option value="general">通用</option>
-                  <option value="anime">动漫</option>
-                </select>
+                  <span className="text-sm">{viduStyle === 'general' ? '通用' : '动漫'}</span>
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduStyleDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+                {(isViduStyleDropdownOpen || viduStyleDropdownClosing) && (
+                  <div
+                    className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  >
+                    <div className="max-h-60 overflow-y-auto">
+                      {[
+                        { value: 'general', label: '通用' },
+                        { value: 'anime', label: '动漫' }
+                      ].map(opt => (
+                        <div
+                          key={opt.value}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduStyle === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                          onClick={() => {
+                            setViduStyle(opt.value)
+                            handleCloseViduStyleDropdown()
+                          }}
+                        >
+                          <span className="text-sm">{opt.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* 运动幅度 */}
-            <div>
+            <div className="w-auto min-w-[80px] relative" ref={viduMovementRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">运动幅度</label>
-              <select
-                value={viduMovementAmplitude}
-                onChange={(e) => setViduMovementAmplitude(e.target.value)}
-                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 text-sm"
+              <div
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                onClick={() => {
+                  if (isViduMovementDropdownOpen) {
+                    handleCloseViduMovementDropdown()
+                  } else {
+                    setIsViduMovementDropdownOpen(true)
+                  }
+                }}
               >
-                <option value="auto">自动</option>
-                <option value="small">小</option>
-                <option value="medium">中</option>
-                <option value="large">大</option>
-              </select>
+                <span className="text-sm">{viduMovementAmplitude === 'auto' ? '自动' : viduMovementAmplitude === 'small' ? '小' : viduMovementAmplitude === 'medium' ? '中' : '大'}</span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduMovementDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+              {(isViduMovementDropdownOpen || viduMovementDropdownClosing) && (
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                >
+                  <div className="max-h-60 overflow-y-auto">
+                    {[
+                      { value: 'auto', label: '自动' },
+                      { value: 'small', label: '小' },
+                      { value: 'medium', label: '中' },
+                      { value: 'large', label: '大' }
+                    ].map(opt => (
+                      <div
+                        key={opt.value}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMovementAmplitude === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                        onClick={() => {
+                          setViduMovementAmplitude(opt.value)
+                          handleCloseViduMovementDropdown()
+                        }}
+                      >
+                        <span className="text-sm">{opt.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* BGM开关 */}
-            <div>
+            <div className="w-auto min-w-[80px] relative" ref={viduBgmRef}>
               <label className="block text-sm font-medium mb-1 text-gray-300">BGM</label>
-              <div className="flex gap-1 h-[38px]">
-                <button
-                  onClick={() => setViduBgm(false)}
-                  className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
-                    !viduBgm
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
-                  }`}
+              <div
+                className="bg-gray-800/70 backdrop-blur-lg border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                onClick={() => {
+                  if (isViduBgmDropdownOpen) {
+                    handleCloseViduBgmDropdown()
+                  } else {
+                    setIsViduBgmDropdownOpen(true)
+                  }
+                }}
+              >
+                <span className="text-sm">{viduBgm ? '开启' : '关闭'}</span>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduBgmDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  关闭
-                </button>
-                <button
-                  onClick={() => setViduBgm(true)}
-                  className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
-                    viduBgm
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
-                  }`}
-                >
-                  开启
-                </button>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
               </div>
+              {(isViduBgmDropdownOpen || viduBgmDropdownClosing) && (
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-gray-700/50 rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                >
+                  <div className="max-h-60 overflow-y-auto">
+                    {[
+                      { value: false, label: '关闭' },
+                      { value: true, label: '开启' }
+                    ].map(opt => (
+                      <div
+                        key={String(opt.value)}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduBgm === opt.value ? 'bg-purple-500/20 text-purple-300' : 'hover:bg-gray-700/50'}`}
+                        onClick={() => {
+                          setViduBgm(opt.value)
+                          handleCloseViduBgmDropdown()
+                        }}
+                      >
+                        <span className="text-sm">{opt.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
