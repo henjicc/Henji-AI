@@ -18,6 +18,7 @@ interface GenerationTask {
   status: 'pending' | 'generating' | 'success' | 'error'
   result?: MediaResult
   error?: string
+  uploadedFilePaths?: string[]
 }
 
 const App: React.FC = () => {
@@ -196,13 +197,14 @@ const App: React.FC = () => {
 
     // 创建新的生成任务
     const taskId = Date.now().toString()
-    const newTask: GenerationTask = {
+  const newTask: GenerationTask = {
       id: taskId,
       type,
       prompt: input,
       model,  // 保存模型信息
       images: options?.images,
       size: options?.size,
+      uploadedFilePaths: options?.uploadedFilePaths,
       status: 'pending'
     }
 
@@ -490,6 +492,9 @@ const App: React.FC = () => {
           if (p.includes('|||')) files.push(...p.split('|||'))
           else files.push(p)
         }
+        if (t.uploadedFilePaths && t.uploadedFilePaths.length) {
+          files.push(...t.uploadedFilePaths)
+        }
       })
       for (const f of files) {
         try { await remove(f) } catch (e) { console.error('[App] 删除文件失败', f, e) }
@@ -506,6 +511,11 @@ const App: React.FC = () => {
       const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
       for (const p of paths) {
         try { await remove(p) } catch (e) { console.error('[App] 删除单条文件失败', p, e) }
+      }
+    }
+    if (target?.uploadedFilePaths && target.uploadedFilePaths.length) {
+      for (const p of target.uploadedFilePaths) {
+        try { await remove(p) } catch (e) { console.error('[App] 删除单条上传文件失败', p, e) }
       }
     }
     setTasks(prev => prev.filter(task => task.id !== taskId))

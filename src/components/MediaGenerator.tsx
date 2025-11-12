@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { providers } from '../config/providers'
+import { saveUploadImage } from '@/utils/save'
+import { remove } from '@tauri-apps/plugin-fs'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -13,6 +15,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
   const [mediaType, setMediaType] = useState<'text' | 'image'>('text')
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
+  const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([])
   const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false)
   const [removingImages, setRemovingImages] = useState<Set<string>>(new Set())
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
@@ -228,10 +231,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     const options: any = {}
     
     // 如果是图片模型，添加图片和分辨率选项
-    if (currentModel?.type === 'image') {
-      if (uploadedImages.length > 0) {
-        options.images = uploadedImages
-      }
+  if (currentModel?.type === 'image') {
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      options.uploadedFilePaths = uploadedFilePaths
+    }
       
       // 处理分辨率设置
       if (selectedResolution === 'smart') {
@@ -274,6 +278,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         // 文/图生视频：最多1张图片
         if (uploadedImages.length > 0) {
           options.images = [uploadedImages[0]]
+          options.uploadedFilePaths = uploadedFilePaths.slice(0, 1)
         }
         // 只有文生视频才支持aspect_ratio和style
         if (uploadedImages.length === 0) {
@@ -287,6 +292,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           return
         }
         options.images = uploadedImages.slice(0, 2)
+        options.uploadedFilePaths = uploadedFilePaths.slice(0, 2)
       } else if (viduMode === 'reference-to-video') {
         // 参考生视频：1-7张图片，必须prompt
         if (uploadedImages.length < 1 || uploadedImages.length > 7) {
@@ -298,6 +304,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           return
         }
         options.images = uploadedImages.slice(0, 7)
+        options.uploadedFilePaths = uploadedFilePaths.slice(0, 7)
         options.aspectRatio = viduAspectRatio
       }
       
@@ -324,7 +331,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
       // 计算最大图片数
@@ -340,24 +347,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         }
       }
         
-      files.forEach(file => {
+      for (const file of files) {
         if (file) {
-          const reader = new FileReader()
-          reader.onload = (event) => {
-            if (event.target?.result) {
-              setUploadedImages(prev => {
-                // 根据模型限制图片数量
-                if (prev.length >= maxImageCount) {
-                  return prev
-                }
-                return [...prev, event.target?.result as string]
-              })
-              setMediaType('image')
-            }
-          }
-          reader.readAsDataURL(file)
+          const saved = await saveUploadImage(file)
+          setUploadedImages(prev => {
+            if (prev.length >= maxImageCount) return prev
+            return [...prev, saved.dataUrl]
+          })
+          setUploadedFilePaths(prev => {
+            if (prev.length >= maxImageCount) return prev
+            return [...prev, saved.fullPath]
+          })
+          setMediaType('image')
         }
-      })
+      }
     }
   }
 
@@ -387,7 +390,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setRemovingImages(prev => new Set(prev).add(imageToRemove))
     // 等待动画完成后再移除
     setTimeout(() => {
+      const pathToRemove = uploadedFilePaths[index]
+      if (pathToRemove) {
+        const remainingCount = uploadedFilePaths.filter(p => p === pathToRemove).length - 1
+        if (remainingCount <= 0) {
+          remove(pathToRemove).catch(e => console.error('[MediaGenerator] 删除上传文件失败', pathToRemove, e))
+        }
+      }
       setUploadedImages(prev => prev.filter((_, i) => i !== index))
+      setUploadedFilePaths(prev => prev.filter((_, i) => i !== index))
       setRemovingImages(prev => {
         const newSet = new Set(prev)
         newSet.delete(imageToRemove)
@@ -396,12 +407,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 250) // 与动画时长一致
   }
 
-  const clearAllImages = () => {
+  const clearAllImages = async () => {
+    const unique = Array.from(new Set(uploadedFilePaths))
+    for (const p of unique) {
+      try { await remove(p) } catch (e) { console.error('[MediaGenerator] 批量删除上传文件失败', p, e) }
+    }
     setUploadedImages([])
+    setUploadedFilePaths([])
   }
 
   // 处理拖拽图片
-  const handleImageFileDrop = (files: File[]) => {
+  const handleImageFileDrop = async (files: File[]) => {
     // 计算最大图片数
     let maxImageCount = 6 // 默认图片模型最多6张
       
@@ -415,21 +431,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
       
-    files.forEach(file => {
+    for (const file of files) {
       if (file.type.startsWith('image/')) {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          setUploadedImages(prev => {
-            // 根据模型限制图片数量
-            if (prev.length >= maxImageCount) {
-              return prev
-            }
-            return [...prev, reader.result as string]
-          })
-        }
-        reader.readAsDataURL(file)
+        const saved = await saveUploadImage(file)
+        setUploadedImages(prev => {
+          if (prev.length >= maxImageCount) return prev
+          return [...prev, saved.dataUrl]
+        })
+        setUploadedFilePaths(prev => {
+          if (prev.length >= maxImageCount) return prev
+          return [...prev, saved.fullPath]
+        })
       }
-    })
+    }
   }
 
   const handleModelSelect = (providerId: string, modelId: string) => {
