@@ -1,0 +1,63 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for Henji-AI",
+  "windows": ["main"],
+  "permissions": [
+    "core:app:default",
+    "core:window:default",
+    "core:event:default",
+    "core:path:default",
+    "core:resources:default",
+    "core:image:default",
+    "core:menu:default",
+    "core:tray:default",
+    "dialog:default",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://cos-output-image.ppinfra.com/*" },
+        { "url": "https://cos-output-video.ppinfra.com/*" }
+      ]
+    },
+    {
+      "identifier": "http:allow-fetch-read-body",
+      "allow": [
+        { "url": "https://cos-output-image.ppinfra.com/*" },
+        { "url": "https://cos-output-video.ppinfra.com/*" }
+      ]
+    },
+    {
+      "identifier": "http:allow-fetch-send",
+      "allow": [
+        { "url": "https://cos-output-image.ppinfra.com/*" },
+        { "url": "https://cos-output-video.ppinfra.com/*" }
+      ]
+    },
+    "fs:default",
+    "fs:allow-localdata-read-recursive",
+    "fs:allow-localdata-write-recursive",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPLOCALDATA" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "$APPLOCALDATA/Henji-AI/**/*" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$APPLOCALDATA/Henji-AI/**/*" },
+        { "path": "$APPLOCALDATA/**/*" }
+      ]
+    }
+  ]
+}

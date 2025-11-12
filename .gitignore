@@ -103,3 +103,5 @@ jspm_packages/
 
 # TypeScript cache
 *.tsbuildinfo
+src-tauri/target/
+src-tauri/gen/

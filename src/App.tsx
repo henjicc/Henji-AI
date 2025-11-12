@@ -3,6 +3,7 @@ import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
+import { isDesktop, saveImageFromUrl, fileToBlobSrc } from './utils/save'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -198,6 +199,28 @@ const App: React.FC = () => {
       switch (type) {
         case 'image':
           result = await apiService.generateImage(input, model, options)
+          console.log('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
+          if (result?.url) {
+            try {
+              if (result.url.includes('|||')) {
+                const urls = result.url.split('|||')
+                const display = [] as string[]
+                for (const u of urls) {
+                  const { fullPath } = await saveImageFromUrl(u)
+                  const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
+                  display.push(blobSrc)
+                }
+                result.url = display.join('|||')
+              } else {
+                const { fullPath } = await saveImageFromUrl(result.url)
+                const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
+                result.url = blobSrc
+              }
+              console.log('[App] 本地保存成功并替换展示地址')
+            } catch (e) {
+              console.error('[App] 本地保存失败，回退在线地址', e)
+            }
+          }
           break
         case 'video':
           result = await apiService.generateVideo(input, model, options)

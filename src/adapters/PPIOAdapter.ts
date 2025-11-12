@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { saveVideoFromUrl, fileToBlobSrc } from '@/utils/save'
 import { 
   MediaGeneratorAdapter, 
   GenerateImageParams, 
@@ -232,17 +233,15 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
           } as VideoResult
           console.log('[PPIOAdapter] 视频生成成功:', videoUrl)
           
-          // 由于视频链接有有效期，将视频下载到本地缓存
+          // 尝试保存到本地文件系统并生成显示用的 blob URL
           try {
-            console.log('[PPIOAdapter] 开始缓存视频到本地...')
-            const videoResponse = await fetch(videoUrl)
-            const videoBlob = await videoResponse.blob()
-            const localUrl = URL.createObjectURL(videoBlob)
-            result.result.url = localUrl
-            console.log('[PPIOAdapter] 视频已缓存到本地:', localUrl)
-          } catch (cacheError) {
-            console.error('[PPIOAdapter] 视频缓存失败，使用原始URL:', cacheError)
-            // 如果缓存失败，仍然使用原始URL
+            console.log('[PPIOAdapter] 开始保存视频到本地...')
+            const { fullPath } = await saveVideoFromUrl(videoUrl)
+            const blobSrc = await fileToBlobSrc(fullPath)
+            result.result.url = blobSrc
+            console.log('[PPIOAdapter] 视频已保存到本地并生成显示地址')
+          } catch (e) {
+            console.error('[PPIOAdapter] 视频本地保存失败，回退为远程URL', e)
           }
         } else if (response.data.audios && response.data.audios.length > 0) {
           result.result = {

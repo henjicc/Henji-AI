@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/v2/config.schema.json",
+  "productName": "Henji AI",
+  "version": "0.1.0",
+  "identifier": "com.henji.ai",
+  "build": {
+    "frontendDist": "dist",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Henji AI",
+        "width": 1200,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": [],
+    "icon": []
+  }
+}
+
