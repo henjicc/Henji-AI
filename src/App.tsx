@@ -36,6 +36,7 @@ const App: React.FC = () => {
   const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [imageTransitioning, setImageTransitioning] = useState(false)
   const [isTasksLoaded, setIsTasksLoaded] = useState(false) // 标记任务是否已从localStorage加载
+  const [viewerOpacity, setViewerOpacity] = useState(0)
   const tasksEndRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
 
@@ -95,6 +96,14 @@ const App: React.FC = () => {
     
     return () => {
       imgElement.removeEventListener('wheel', handleWheel)
+    }
+  }, [isImageViewerOpen])
+
+  useEffect(() => {
+    if (isImageViewerOpen) {
+      requestAnimationFrame(() => setViewerOpacity(1))
+    } else {
+      setViewerOpacity(0)
     }
   }, [isImageViewerOpen])
 
@@ -326,25 +335,19 @@ const App: React.FC = () => {
     setImagePosition({ x: 0, y: 0 })
     setIsImageViewerOpen(true)
     setImageViewerClosing(false)
+    setViewerOpacity(0)
     // 禁止后面页面滚动
     document.body.style.overflow = 'hidden'
   }
 
   const closeImageViewer = () => {
     setImageViewerClosing(true)
-    // 恢复后面页面滚动
-    document.body.style.overflow = ''
+    setViewerOpacity(0)
     setTimeout(() => {
       setIsImageViewerOpen(false)
       setImageViewerClosing(false)
-      // 延迟清空状态,确保 DOM 完全卸载后再清理
-      setTimeout(() => {
-        setCurrentImage('')
-        setCurrentImageList([])
-        setCurrentImageIndex(0)
-        // 不在这里重置 scale 和 position,留在下次打开时重置
-      }, 50)
-    }, 300)
+      document.body.style.overflow = ''
+    }, 200)
   }
 
   const navigateImage = (direction: 'prev' | 'next') => {
@@ -723,17 +726,14 @@ const App: React.FC = () => {
       {/* 图片查看器模态框 */}
       {isImageViewerOpen && (
         <div 
-          className={`fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4 ${
-            imageViewerClosing ? 'image-viewer-mask-exit' : 'image-viewer-mask-enter'
-          }`}
+          className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
+          style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease' }}
           onMouseMove={handleImageMouseMove}
           onMouseUp={handleImageMouseUp}
           onMouseLeave={handleImageMouseUp}
           onWheel={(e) => e.preventDefault()}
         >
-          <div className={`relative max-w-6xl max-h-full flex items-center justify-center ${
-            imageViewerClosing ? 'image-viewer-content-exit' : 'image-viewer-content-enter'
-          }`}>
+          <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
             {/* 关闭按钮 */}
             <button
               onClick={closeImageViewer}
@@ -759,8 +759,9 @@ const App: React.FC = () => {
                   imageTransitioning ? 'image-transitioning' : 'image-transition'
                 }`}
                 style={{
-                  transform: `scale(${imageScale}) translate(${imagePosition.x / imageScale}px, ${imagePosition.y / imageScale}px)`,
-                  transition: (isDragging || imageViewerClosing) ? 'none' : 'transform 0.2s ease-out',
+                  transform: `scale(${imageScale * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePosition.x / imageScale}px, ${imagePosition.y / imageScale}px)`,
+                  transition: isDragging ? 'none' : 'transform 200ms ease, opacity 200ms ease',
+                  opacity: viewerOpacity,
                   maxHeight: '90vh',
                   maxWidth: '90vw'
                 }}
