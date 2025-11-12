@@ -239,6 +239,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
             const { fullPath } = await saveVideoFromUrl(videoUrl)
             const blobSrc = await fileToBlobSrc(fullPath)
             result.result.url = blobSrc
+            ;(result.result as any).filePath = fullPath
             console.log('[PPIOAdapter] 视频已保存到本地并生成显示地址')
           } catch (e) {
             console.error('[PPIOAdapter] 视频本地保存失败，回退为远程URL', e)

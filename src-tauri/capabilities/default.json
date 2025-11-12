@@ -43,6 +43,12 @@
     "fs:allow-localdata-read-recursive",
     "fs:allow-localdata-write-recursive",
     {
+      "identifier": "fs:allow-remove",
+      "allow": [
+        { "path": "$APPLOCALDATA/Henji-AI/**/*" }
+      ]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         { "path": "$APPLOCALDATA" },

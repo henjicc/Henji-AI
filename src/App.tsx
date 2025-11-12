@@ -5,6 +5,7 @@ import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
 import { isDesktop, saveImageFromUrl, fileToBlobSrc } from './utils/save'
 import WindowControls from './components/WindowControls'
+import { remove } from '@tauri-apps/plugin-fs'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -225,16 +226,20 @@ const App: React.FC = () => {
               if (result.url.includes('|||')) {
                 const urls = result.url.split('|||')
                 const display = [] as string[]
+                const paths = [] as string[]
                 for (const u of urls) {
                   const { fullPath } = await saveImageFromUrl(u)
                   const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
                   display.push(blobSrc)
+                  paths.push(fullPath)
                 }
                 result.url = display.join('|||')
+                ;(result as any).filePath = paths.join('|||')
               } else {
                 const { fullPath } = await saveImageFromUrl(result.url)
                 const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
                 result.url = blobSrc
+                ;(result as any).filePath = fullPath
               }
               console.log('[App] 本地保存成功并替换展示地址')
             } catch (e) {
@@ -265,6 +270,7 @@ const App: React.FC = () => {
             id: taskId,
             type,
             url: result.url,
+            filePath: (result as any).filePath,
             prompt: input,
             createdAt: new Date()
           }
@@ -475,8 +481,33 @@ const App: React.FC = () => {
     localStorage.removeItem('generationTasks')
   }
 
+  const clearAllHistoryFiles = async () => {
+    try {
+      const files: string[] = []
+      tasks.forEach(t => {
+        const p = t.result?.filePath
+        if (p) {
+          if (p.includes('|||')) files.push(...p.split('|||'))
+          else files.push(p)
+        }
+      })
+      for (const f of files) {
+        try { await remove(f) } catch (e) { console.error('[App] 删除文件失败', f, e) }
+      }
+    } finally {
+      clearAllHistory()
+    }
+  }
+
   // 删除单条历史记录
-  const deleteTask = (taskId: string) => {
+  const deleteTask = async (taskId: string) => {
+    const target = tasks.find(t => t.id === taskId)
+    if (target?.result?.filePath) {
+      const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
+      for (const p of paths) {
+        try { await remove(p) } catch (e) { console.error('[App] 删除单条文件失败', p, e) }
+      }
+    }
     setTasks(prev => prev.filter(task => task.id !== taskId))
   }
 
@@ -746,7 +777,7 @@ const App: React.FC = () => {
                 取消
               </button>
               <button
-                onClick={() => { setTasks([]); localStorage.removeItem('generationTasks'); setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
+                onClick={async () => { await clearAllHistoryFiles(); setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
                 className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-red-600/70 hover:bg-red-600 text-white text-sm"
               >
                 清除
