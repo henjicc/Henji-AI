@@ -86,7 +86,7 @@ const App: React.FC = () => {
     if (!isImageViewerOpen || !imageViewerRef.current) return
 
     const handleWheel = (e: WheelEvent) => {
-      e.preventDefault()
+      if (e.cancelable) e.preventDefault()
       const delta = e.deltaY > 0 ? -0.1 : 0.1
       setImageScale(prev => {
         const newScale = Math.max(0.5, Math.min(5, prev + delta))
@@ -801,11 +801,10 @@ const App: React.FC = () => {
       {isImageViewerOpen && (
         <div 
           className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
-          style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease' }}
+          style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease', overscrollBehavior: 'contain' }}
           onMouseMove={handleImageMouseMove}
           onMouseUp={handleImageMouseUp}
           onMouseLeave={handleImageMouseUp}
-          onWheel={(e) => e.preventDefault()}
         >
           <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
             {/* 图片容器 */}
