@@ -5,7 +5,8 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 
 export const isDesktop = (): boolean => {
   const w: any = typeof window !== 'undefined' ? window : {}
-  return ('__TAURI__' in w) || (typeof navigator !== 'undefined' && !!navigator.userAgent && (navigator.userAgent.includes('Tauri') || navigator.userAgent.includes('Wry')))
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : ''
+  return Boolean(w.__TAURI__ || w.__TAURI_INTERNALS__ || /Tauri|Wry/i.test(ua))
 }
 
 export async function saveBinary(data: Uint8Array, filename: string): Promise<{ fullPath: string; webSrc: string }> {

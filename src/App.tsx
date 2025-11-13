@@ -46,6 +46,33 @@ const App: React.FC = () => {
   const [confirmOpacity, setConfirmOpacity] = useState(0)
   const tasksEndRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
+  const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
+  const [videoViewerOpacity, setVideoViewerOpacity] = useState(0)
+  const [currentVideoUrl, setCurrentVideoUrl] = useState('')
+  const videoRef = React.useRef<HTMLVideoElement>(null)
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [videoDuration, setVideoDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [loop, setLoop] = useState(false)
+  const [isBuffering, setIsBuffering] = useState(false)
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false)
+  const [isControlsVisible, setIsControlsVisible] = useState(true)
+  const controlsHideTimer = React.useRef<number | null>(null)
+  const [isVolumeMenuOpen, setIsVolumeMenuOpen] = useState(false)
+  const progressBarRef = React.useRef<HTMLDivElement>(null)
+  const progressFillRef = React.useRef<HTMLDivElement>(null)
+  const rafIdRef = React.useRef<number | null>(null)
+  const volumeSliderRef = React.useRef<HTMLDivElement>(null)
+  const speedDisplayRef = React.useRef<HTMLDivElement>(null)
+  const speedMenuRef = React.useRef<HTMLDivElement>(null)
+  const volumeDisplayRef = React.useRef<HTMLDivElement>(null)
+  const volumeMenuRef = React.useRef<HTMLDivElement>(null)
+  const [frameDuration, setFrameDuration] = useState(1 / 30)
+  const lastFrameMediaTimeRef = React.useRef<number | null>(null)
+  const controlsContainerRef = React.useRef<HTMLDivElement>(null)
 
   // 自动滚动到最新任务
   const scrollToBottom = () => {
@@ -113,6 +140,14 @@ const App: React.FC = () => {
       setViewerOpacity(0)
     }
   }, [isImageViewerOpen])
+
+  useEffect(() => {
+    if (isVideoViewerOpen) {
+      requestAnimationFrame(() => setVideoViewerOpacity(1))
+    } else {
+      setVideoViewerOpacity(0)
+    }
+  }, [isVideoViewerOpen])
 
   useEffect(() => {
     if (isConfirmClearOpen) {
@@ -437,6 +472,31 @@ const App: React.FC = () => {
     }, 200)
   }
 
+  const openVideoViewer = (url: string) => {
+    setCurrentVideoUrl(url)
+    setIsVideoViewerOpen(true)
+    setIsVideoPlaying(false)
+    setCurrentTime(0)
+    setVideoDuration(0)
+    setVolume(1)
+    setMuted(false)
+    setPlaybackRate(1)
+    setLoop(false)
+    setVideoViewerOpacity(0)
+    document.body.style.overflow = 'hidden'
+  }
+
+  const closeVideoViewer = () => {
+    setVideoViewerOpacity(0)
+    if (videoRef.current) {
+      try { videoRef.current.pause() } catch {}
+    }
+    setTimeout(() => {
+      setIsVideoViewerOpen(false)
+      document.body.style.overflow = ''
+    }, 200)
+  }
+
   const navigateImage = (direction: 'prev' | 'next') => {
     if (currentImageList.length === 0) return
     
@@ -474,6 +534,161 @@ const App: React.FC = () => {
       console.error('Download failed:', err)
     }
   }
+
+  const downloadVideo = async (videoUrl: string) => {
+    try {
+      const response = await fetch(videoUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `video-${Date.now()}.mp4`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+    }
+  }
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec < 10 ? '0' : ''}${sec}`
+  }
+
+  useEffect(() => {
+    if (!isVideoViewerOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        e.preventDefault()
+        if (videoRef.current) {
+          if (isVideoPlaying) videoRef.current.pause()
+          else videoRef.current.play()
+        }
+      } else if (e.key === 'ArrowLeft') {
+        if (videoRef.current) {
+          const step = e.ctrlKey ? (frameDuration || 1 / 30) : 1
+          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - step)
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (videoRef.current) {
+          const step = e.ctrlKey ? (frameDuration || 1 / 30) : 1
+          const dur = videoDuration || videoRef.current.duration || Infinity
+          videoRef.current.currentTime = Math.min(dur, videoRef.current.currentTime + step)
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (videoRef.current) {
+          const next = Math.min(1, (videoRef.current.muted ? 0 : videoRef.current.volume) + 0.05)
+          setMuted(false)
+          setVolume(next)
+        }
+      } else if (e.key === 'ArrowDown') {
+        if (videoRef.current) {
+          const next = Math.max(0, (videoRef.current.muted ? 0 : videoRef.current.volume) - 0.05)
+          setMuted(false)
+          setVolume(next)
+        }
+      } else if (e.key === 'Escape') {
+        closeVideoViewer()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isVideoViewerOpen, isVideoPlaying, videoDuration])
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = volume
+  }, [volume])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted
+  }, [muted])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = playbackRate
+  }, [playbackRate])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.loop = loop
+  }, [loop])
+
+  useEffect(() => {
+    if (!isSpeedMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      const d = speedDisplayRef.current
+      const m = speedMenuRef.current
+      const t = e.target as Node
+      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsSpeedMenuOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => { document.removeEventListener('click', handler) }
+  }, [isSpeedMenuOpen])
+
+  useEffect(() => {
+    if (!isVolumeMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      const d = volumeDisplayRef.current
+      const m = volumeMenuRef.current
+      const t = e.target as Node
+      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsVolumeMenuOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => { document.removeEventListener('click', handler) }
+  }, [isVolumeMenuOpen])
+
+  useEffect(() => {
+    if (!isVideoViewerOpen || !isVideoPlaying) return
+    const v = videoRef.current as any
+    if (!v || typeof v.requestVideoFrameCallback !== 'function') return
+    const handle = (now: number, meta: any) => {
+      const mt = meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : null
+      if (mt != null) {
+        const last = lastFrameMediaTimeRef.current
+        if (last != null) {
+          const delta = mt - last
+          if (delta > 0.005 && delta < 0.2) setFrameDuration(delta)
+        }
+        lastFrameMediaTimeRef.current = mt
+      }
+      v.requestVideoFrameCallback(handle)
+    }
+    v.requestVideoFrameCallback(handle)
+    return () => { lastFrameMediaTimeRef.current = null }
+  }, [isVideoViewerOpen, isVideoPlaying])
+
+  useEffect(() => {
+    if (!isVideoViewerOpen) {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      return
+    }
+    if (!isVideoPlaying) {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      return
+    }
+    const tick = () => {
+      const v = videoRef.current
+      if (v) {
+        const dur = v.duration || 0
+        const cur = v.currentTime || 0
+        setCurrentTime(cur)
+        if (progressFillRef.current) {
+          const percent = dur ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0
+          progressFillRef.current.style.width = `${percent}%`
+        }
+      }
+      rafIdRef.current = requestAnimationFrame(tick)
+    }
+    rafIdRef.current = requestAnimationFrame(tick)
+    return () => { if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current) }
+  }, [isVideoViewerOpen, isVideoPlaying])
+
+  useEffect(() => {
+    if (!isVideoViewerOpen && controlsHideTimer.current) {
+      clearTimeout(controlsHideTimer.current)
+      controlsHideTimer.current = null
+      setIsControlsVisible(true)
+    }
+  }, [isVideoViewerOpen])
 
   const copyImageToClipboard = async (imageUrl: string) => {
     try {
@@ -803,12 +1018,18 @@ const App: React.FC = () => {
                                 )
                               )}
                               {task.result.type === 'video' && (
-                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center">
+                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url)}>
                                   <video 
                                     src={task.result.url} 
-                                    controls 
                                     className="max-w-full max-h-full object-contain"
                                   />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="h-10 w-10 rounded-full bg-zinc-900/60 backdrop-blur-sm flex items-center justify-center text-white">
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
+                                        <path d="M8 5v14l11-7-11-7z" />
+                                      </svg>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                               {task.result.type === 'audio' && (
@@ -996,6 +1217,102 @@ const App: React.FC = () => {
                 重置视图
               </button>
             </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isVideoViewerOpen && (
+        <div 
+          className={"fixed inset-0 bg黑/70 backdrop-blur-xl z-50 flex items-center justify-center p-4".replace('黑','black')}
+          style={{ opacity: videoViewerOpacity, transition: 'opacity 500ms ease', overscrollBehavior: 'contain' }}
+        >
+          <div 
+            className={"relative max-w-6xl max-h-full flex items-center justify-center"}
+            onMouseEnter={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
+            onMouseMove={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
+            onMouseLeave={() => { if (controlsHideTimer.current) { clearTimeout(controlsHideTimer.current); controlsHideTimer.current = null } if (!isSpeedMenuOpen) setIsControlsVisible(false) }}
+            style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}
+          >
+            <div className="relative">
+              <video
+                ref={videoRef}
+                src={currentVideoUrl}
+                className="object-contain"
+                style={{ maxHeight: '90vh', maxWidth: '90vw', opacity: videoViewerOpacity, transition: 'opacity 500ms ease' }}
+                onLoadedMetadata={() => { if (videoRef.current) setVideoDuration(videoRef.current.duration || 0) }}
+                onTimeUpdate={() => { if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0) }}
+                onPlaying={() => { setIsBuffering(false); setIsVideoPlaying(true) }}
+                onPause={() => { setIsVideoPlaying(false) }}
+                onWaiting={() => { setIsBuffering(true) }}
+                onStalled={() => { setIsBuffering(true) }}
+                onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
+                controls={false}
+              />
+              <button
+                onClick={closeVideoViewer}
+                className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-full transition-all duration-200 z-10"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div ref={controlsContainerRef} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl" style={{ opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0, transition: 'opacity 500ms ease', pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none' }}>
+              <div className="bg-[#131313]/90 border border-[rgba(46,46,46,0.8)] rounded-xl px-4 py-3 text-white flex flex-col gap-3">
+                <div ref={progressBarRef} className="progress-container" onClick={(e) => { const el = progressBarRef.current; if (!el || !videoDuration) return; const rect = el.getBoundingClientRect(); const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)); const t = percent * videoDuration; setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%` }}>
+                  <div ref={progressFillRef} className="progress-bar" style={{ width: `${videoDuration ? Math.min(100, Math.max(0, (currentTime / videoDuration) * 100)) : 0}%` }} />
+                </div>
+                <div className="controls-main">
+                  <button
+                    onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
+                    className="btn btn-play"
+                  >
+                    {isVideoPlaying ? (
+                      <svg viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    )}
+                  </button>
+                  <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
+                  <div className="controls-right">
+                    <div className="speed-control">
+                      <div ref={volumeDisplayRef} className="speed-display" onClick={() => setIsVolumeMenuOpen(o => !o)} title="音量">
+                        <svg viewBox="0 0 1024 1024">
+                          <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z" fill="currentColor"></path>
+                          <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z" fill="currentColor"></path>
+                          <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z" fill="currentColor"></path>
+                        </svg>
+                      </div>
+                      <div ref={volumeMenuRef} className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`} onWheel={(e) => { e.preventDefault(); const d = e.deltaY > 0 ? -0.05 : 0.05; const next = Math.min(1, Math.max(0, (muted ? 0 : volume) + d)); setMuted(false); setVolume(next) }}>
+                        <div className="volume-vertical">
+                          <div className="volume-percent">{Math.round((muted ? 0 : volume) * 100)}</div>
+                          <div className="volume-track" onClick={(e) => { const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); const percent = 1 - Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)); const v = percent; setMuted(false); setVolume(v) }}>
+                            <div className="volume-fill" style={{ height: `calc(${muted ? 0 : Math.round(volume * 100)}% + 7px)` }}></div>
+                            <div className="volume-thumb" style={{ bottom: `${muted ? 0 : Math.round(volume * 100)}%` }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="speed-control">
+                      <div ref={speedDisplayRef} className="speed-display" onClick={() => setIsSpeedMenuOpen(o => !o)}>{playbackRate}x</div>
+                      <div ref={speedMenuRef} className={`speed-menu ${isSpeedMenuOpen ? 'active' : ''}`}>
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
+                          <div key={s} className={`speed-option ${playbackRate === s ? 'active' : ''}`} onClick={() => { setPlaybackRate(s); setIsSpeedMenuOpen(false) }}>{s}x</div>
+                        ))}
+                      </div>
+                    </div>
+                    <button className={`btn btn-small ${loop ? 'loop-active' : ''}`} onClick={() => setLoop(l => !l)}>
+                      <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                    </button>
+                    <button className="btn btn-small" onClick={() => downloadVideo(currentVideoUrl)}>
+                      <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {isBuffering && (<div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-300">缓冲中...</div>)}
             </div>
           </div>
         </div>
