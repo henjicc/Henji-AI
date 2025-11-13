@@ -1,0 +1,6 @@
+[env]
+CC = "cl.exe"
+CXX = "cl.exe"
+
+[target.x86_64-pc-windows-msvc]
+linker = "link.exe"

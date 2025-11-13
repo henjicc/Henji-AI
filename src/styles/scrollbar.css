@@ -27,7 +27,7 @@
 }
 .app-scroll-container::-webkit-scrollbar-thumb,
 .image-strip::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.4); /* light gray with 0.4 opacity */
+  background-color: rgba(156, 163, 175, 0.4); /* light zinc with 0.4 opacity */
   border-radius: 4px;
   transition: background-color 0.2s ease;
 }

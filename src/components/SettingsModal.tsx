@@ -11,6 +11,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
+  const [closing, setClosing] = useState(false)
 
   useEffect(() => {
     // 从localStorage获取保存的API密钥
@@ -35,15 +36,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   }, [])
 
   const handleClose = () => {
-    // 添加关闭动画
-    if (modalRef.current) {
-      modalRef.current.classList.add('animate-scale-out')
-      setTimeout(() => {
-        onClose()
-      }, 200)
-    } else {
+    setClosing(true)
+    setTimeout(() => {
       onClose()
-    }
+    }, 300)
   }
 
   const handleSave = () => {
@@ -80,18 +76,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+    <div className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}>
       <div 
         ref={modalRef}
-        className="bg-[#131313]/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 animate-scale-in"
+        className={`bg-[#131313]/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
       >
         <div className="p-5 border-b border-[rgba(46,46,46,0.8)] flex justify-between items-center">
           <h2 className="text-xl font-bold text-[#007eff]">
-            API设置
+            设置
           </h2>
           <button 
             onClick={handleClose}
-            className="text-gray-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-gray-800/50"
+            className="text-zinc-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-zinc-800/50"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -101,28 +97,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
         <div className="p-5">
           <div className="mb-5">
-            <label className="block text-sm font-medium mb-2 text-gray-300">派欧云API密钥</label>
+            <label className="block text-sm font-medium mb-2 text-zinc-300">派欧云API密钥</label>
             <div className="relative">
               <input
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="请输入您的API密钥"
-                className="w-full bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-zinc-400"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
               </div>
             </div>
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-zinc-400">
               您可以在派欧云控制台获取API密钥
             </p>
           </div>
 
           <div className="mb-5">
-            <label className="block text-sm font-medium mb-2 text-gray-300">历史记录保存数量</label>
+            <label className="block text-sm font-medium mb-2 text-zinc-300">历史记录保存数量</label>
             <div className="relative">
               <input
                 type="number"
@@ -131,15 +127,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 placeholder="50"
                 min="1"
                 max="500"
-                className="w-full bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text白 placeholder-gray-400"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text白 placeholder-zinc-400"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
             </div>
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-zinc-400">
               最多保存 1-500 条历史记录,超出后将自动删除最旧的记录
             </p>
           </div>
@@ -164,7 +160,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <div className="flex justify-end gap-3 mt-6">
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)]"
+              className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)]"
             >
               取消
             </button>

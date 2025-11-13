@@ -90,7 +90,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
       console.log('[PPIOAdapter] generateVideo 调用参数:', params)
 
       let endpoint = ''
-      const requestData: any = {
+      let requestData: any = {
         prompt: params.prompt,
         duration: params.duration || 5,
         resolution: params.resolution || '1080p',

@@ -657,15 +657,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setIsManualInput(true) // 标记为手动输入
   }
 
+  const bulkTooltipTimerRef = useRef<number | null>(null)
+  const [bulkTooltipVisible, setBulkTooltipVisible] = useState(false)
+  const [bulkTooltipClosing, setBulkTooltipClosing] = useState(false)
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* 模型选择器、分辨率设置和即梦参数设置 */}
       <div className="flex flex-wrap gap-3 mb-4">
         {/* 合并的提供商和模型选择器 - 缩短宽度 */}
         <div className="w-auto min-w-[180px] relative" ref={modelRef}>
-          <label className="block text-sm font-medium mb-1 text-gray-300">模型</label>
+          <label className="block text-sm font-medium mb-1 text-zinc-300">模型</label>
           <div 
-            className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+            className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
             onClick={() => {
               if (isModelDropdownOpen) {
                 handleCloseModelDropdown()
@@ -676,7 +680,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           >
             <span className="text-sm">{currentProvider?.name}_{currentModel?.name || '选择'}</span>
             <svg 
-              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isModelDropdownOpen ? 'rotate-180' : ''}`} 
+              className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isModelDropdownOpen ? 'rotate-180' : ''}`} 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -688,14 +692,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           {/* 模型下拉菜单 - 限制最大高度并添加滚动条 */}
           {(isModelDropdownOpen || modelDropdownClosing) && (
             <div 
-              className={`absolute z-20 mt-1 w-full min-w-[200px] bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${
+              className={`absolute z-20 mt-1 w-full min-w-[200px] bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${
                 modelDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'
               }`}
             >
-              <div className="max-h-60 overflow-y-auto">
+              <div className="max-h-60 overflow-y-auto dropdown-scroll">
                 {providers.map(provider => (
                   <div key={provider.id}>
-                    <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <div className="px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                       {provider.name}
                     </div>
                     {provider.models.map(model => (
@@ -704,12 +708,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         className={`px-3 py-2 cursor-pointer transition-colors duration-200 flex items-center ${
                           selectedProvider === provider.id && selectedModel === model.id
                             ? 'bg-[#007eff]/20 text-[#66b3ff]' 
-                            : 'hover:bg-gray-700/50'
+                            : 'hover:bg-zinc-700/50'
                         }`}
                         onClick={() => handleModelSelect(provider.id, model.id)}
                       >
                         <span className="flex-1 text-sm">{model.name}</span>
-                        <span className="text-xs text-gray-500 ml-2">
+                        <span className="text-xs text-zinc-500 ml-2">
                           {model.type === 'image' ? '图片' : model.type === 'video' ? '视频' : '音频'}
                         </span>
                       </div>
@@ -724,18 +728,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {/* 分辨率设置按钮 - 仅对图片模型显示 */}
         {currentModel?.type === 'image' && (
           <div className="relative" ref={resolutionRef}>
-            <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
+            <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
             <button
               onClick={() => setIsResolutionDropdownOpen(!isResolutionDropdownOpen)}
-              className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 flex items-center"
+              className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] w-[80px] outline-none focus:outline-none focus-visible:outline-none active:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between"
             >
-              <span className="mr-2 text-sm whitespace-nowrap">
+              <span className="text-sm whitespace-nowrap">
                 {selectedResolution === 'smart' 
                   ? '智能' 
-                  : `${customWidth || '?'}x${customHeight || '?'}`}
+                  : selectedResolution}
               </span>
               <svg 
-                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isResolutionDropdownOpen ? 'rotate-180' : ''}`} 
+                className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isResolutionDropdownOpen ? 'rotate-180' : ''}`} 
                 fill="none" 
                 stroke="currentColor" 
                 viewBox="0 0 24 24"
@@ -747,12 +751,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {/* 分辨率设置悬浮窗口 - 向上弹出 */}
             {isResolutionDropdownOpen && (
               <div 
-                className="absolute z-20 mb-1 w-80 bg-gray-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
+                className="absolute z-20 mb-1 w-80 bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
               >
                 <div className="p-4">
                   {/* 选择比例 */}
                   <div className="mb-3">
-                    <label className="block text-xs text-gray-400 mb-2">选择比例</label>
+                    <label className="block text-xs text-zinc-400 mb-2">选择比例</label>
                     <div className="grid grid-cols-4 gap-2">
                       {[
                         { label: '智能', value: 'smart' },
@@ -770,16 +774,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onClick={() => handleResolutionSelect(resolution.value)}
                           className={`px-2 py-3 text-xs rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
                             selectedResolution === resolution.value
-                              ? 'bg-white text-black'
-                              : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                              ? 'bg-[#007eff] text-white'
+                              : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                           }`}
                         >
                           {resolution.ratio && (
                             <div className="flex items-center justify-center h-8">
                               <div 
-                                className={`border-2 ${
-                                  selectedResolution === resolution.value ? 'border-black' : 'border-[rgba(46,46,46,0.8)]'
-                                } ${
+                                className={`border-2 border-white ${
                                   resolution.ratio === '21:9' ? 'w-8 h-3' :
                                   resolution.ratio === '16:9' ? 'w-8 h-4' :
                                   resolution.ratio === '3:2' ? 'w-7 h-5' :
@@ -801,7 +803,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
                   {/* 选择分辨率 */}
                   <div className="mb-3">
-                    <label className="block text-xs text-gray-400 mb-2">选择分辨率</label>
+                    <label className="block text-xs text-zinc-400 mb-2">选择分辨率</label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { label: '高清 2K', value: '2K' },
@@ -813,7 +815,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
                             resolutionQuality === res.value
                               ? 'bg-[#007eff] text-white'
-                              : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                              : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                           }`}
                         >
                           {res.label}
@@ -824,7 +826,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
                   {/* 尺寸 */}
                   <div>
-                    <label className="block text-xs text-gray-400 mb-2">尺寸</label>
+                    <label className="block text-xs text-zinc-400 mb-2">尺寸</label>
                     <div className="flex gap-2 items-center">
                       <div className="flex-1">
                         <input
@@ -833,14 +835,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onChange={(e) => handleManualWidthChange(e.target.value)}
                           disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className={`w-full bg-gray-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
+                          className={`w-full bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
                             selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           min="1024"
                           max="8192"
                         />
                       </div>
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
                       </svg>
                       <div className="flex-1">
@@ -850,14 +852,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onChange={(e) => handleManualHeightChange(e.target.value)}
                           disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className={`w-full bg-gray-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
+                          className={`w-full bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
                             selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           min="1024"
                           max="8192"
                         />
                       </div>
-                      <span className="text-xs text-gray-400">PX</span>
+                      <span className="text-xs text-zinc-400">PX</span>
                     </div>
                   </div>
                 </div>
@@ -870,9 +872,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {selectedModel === 'vidu-q1' && (
           <>
             <div className="w-auto min-w-[120px] relative" ref={viduModeRef}>
-              <label className="block text-sm font-medium mb-1 text-gray-300">模式</label>
+              <label className="block text-sm font-medium mb-1 text-zinc-300">模式</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduModeDropdownOpen) {
                     handleCloseViduModeDropdown()
@@ -883,7 +885,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               >
                 <span className="text-sm">{viduMode === 'text-image-to-video' ? '文/图生视频' : viduMode === 'start-end-frame' ? '首尾帧' : '参考生视频'}</span>
                 <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduModeDropdownOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduModeDropdownOpen ? 'rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -893,7 +895,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduModeDropdownOpen || viduModeDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -903,7 +905,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     ].map(opt => (
                       <div
                         key={opt.value}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMode === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMode === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
                         onClick={() => {
                           setViduMode(opt.value as any)
                           handleCloseViduModeDropdown()
@@ -920,9 +922,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {/* 宽高比 - 仅文生视频和参考生视频支持 */}
             {(viduMode === 'text-image-to-video' && uploadedImages.length === 0 || viduMode === 'reference-to-video') && (
               <div className="w-auto min-w-[80px] relative" ref={viduAspectRef}>
-                <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
                 <div
-                  className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduAspectDropdownOpen) {
                       handleCloseViduAspectDropdown()
@@ -933,7 +935,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 >
                   <span className="text-sm">{viduAspectRatio}</span>
                   <svg
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduAspectDropdownOpen ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduAspectDropdownOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -943,13 +945,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
                 {(isViduAspectDropdownOpen || viduAspectDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {['16:9', '9:16', '1:1'].map(r => (
                         <div
                           key={r}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
                           onClick={() => {
                             setViduAspectRatio(r)
                             handleCloseViduAspectDropdown()
@@ -967,9 +969,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {/* 风格 - 仅文生视频支持 */}
             {viduMode === 'text-image-to-video' && uploadedImages.length === 0 && (
               <div className="w-auto min-w-[80px] relative" ref={viduStyleRef}>
-                <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">风格</label>
                 <div
-                  className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduStyleDropdownOpen) {
                       handleCloseViduStyleDropdown()
@@ -980,7 +982,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 >
                   <span className="text-sm">{viduStyle === 'general' ? '通用' : '动漫'}</span>
                   <svg
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduStyleDropdownOpen ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduStyleDropdownOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -990,7 +992,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
                 {(isViduStyleDropdownOpen || viduStyleDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {[
@@ -999,7 +1001,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       ].map(opt => (
                         <div
                           key={opt.value}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduStyle === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduStyle === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
                           onClick={() => {
                             setViduStyle(opt.value)
                             handleCloseViduStyleDropdown()
@@ -1015,9 +1017,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             )}
 
             <div className="w-auto min-w-[80px] relative" ref={viduMovementRef}>
-              <label className="block text-sm font-medium mb-1 text-gray-300">运动幅度</label>
+              <label className="block text-sm font-medium mb-1 text-zinc-300">运动幅度</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduMovementDropdownOpen) {
                     handleCloseViduMovementDropdown()
@@ -1028,7 +1030,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               >
                 <span className="text-sm">{viduMovementAmplitude === 'auto' ? '自动' : viduMovementAmplitude === 'small' ? '小' : viduMovementAmplitude === 'medium' ? '中' : '大'}</span>
                 <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduMovementDropdownOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduMovementDropdownOpen ? 'rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1038,7 +1040,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduMovementDropdownOpen || viduMovementDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -1049,7 +1051,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     ].map(opt => (
                       <div
                         key={opt.value}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMovementAmplitude === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMovementAmplitude === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
                         onClick={() => {
                           setViduMovementAmplitude(opt.value)
                           handleCloseViduMovementDropdown()
@@ -1064,9 +1066,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             </div>
 
             <div className="w-auto min-w-[80px] relative" ref={viduBgmRef}>
-              <label className="block text-sm font-medium mb-1 text-gray-300">BGM</label>
+              <label className="block text-sm font-medium mb-1 text-zinc-300">BGM</label>
               <div
-                className="bg-gray-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduBgmDropdownOpen) {
                     handleCloseViduBgmDropdown()
@@ -1077,7 +1079,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               >
                 <span className="text-sm">{viduBgm ? '开启' : '关闭'}</span>
                 <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ml-2 ${isViduBgmDropdownOpen ? 'rotate-180' : ''}`}
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduBgmDropdownOpen ? 'rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1087,7 +1089,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduBgmDropdownOpen || viduBgmDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-gray-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -1096,7 +1098,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     ].map(opt => (
                       <div
                         key={String(opt.value)}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduBgm === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-gray-700/50'}`}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduBgm === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
                         onClick={() => {
                           setViduBgm(opt.value)
                           handleCloseViduBgmDropdown()
@@ -1115,8 +1117,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && (
           <>
             <div className="w-auto min-w-[100px]">
-              <label className="block text-sm font-medium mb-1 text-gray-300">时长</label>
-              <select value={selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast' ? (videoDuration || 6) : videoDuration} onChange={(e) => setVideoDuration(parseInt(e.target.value) || 5)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+              <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
+              <select value={selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast' ? (videoDuration || 6) : videoDuration} onChange={(e) => setVideoDuration(parseInt(e.target.value) || 5)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                 {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') ? (
                   <>
                     <option value={6}>6</option>
@@ -1133,8 +1135,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {(selectedModel === 'kling-2.5-turbo' || selectedModel === 'pixverse-v4.5') && uploadedImages.length === 0 && (
               <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
-                <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
+                <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                   <option value="16:9">16:9</option>
                   <option value="9:16">9:16</option>
                   <option value="1:1">1:1</option>
@@ -1144,8 +1146,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {(selectedModel === 'pixverse-v4.5' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
               <div className="w-auto min-w-[100px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
-                <select value={videoResolution} onChange={(e) => setVideoResolution(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
+                <select value={videoResolution} onChange={(e) => setVideoResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                   {selectedModel === 'pixverse-v4.5' ? (
                     <>
                       <option value="360p">360p</option>
@@ -1165,8 +1167,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {(selectedModel === 'pixverse-v4.5') && (
               <div className="w-auto min-w-[100px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
-                <select value={pixStyle || ''} onChange={(e) => setPixStyle(e.target.value || undefined)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                <label className="block text-sm font-medium mb-1 text-zinc-300">风格</label>
+                <select value={pixStyle || ''} onChange={(e) => setPixStyle(e.target.value || undefined)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                   <option value="">默认</option>
                   <option value="anime">anime</option>
                   <option value="3d_animation">3d_animation</option>
@@ -1179,64 +1181,64 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {(selectedModel === 'pixverse-v4.5') && (
               <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">快速模式</label>
-                <button onClick={() => setPixFastMode(!pixFastMode)} className={`px-3 py-2 h-[38px] rounded-lg border ${pixFastMode ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{pixFastMode ? '开启' : '关闭'}</button>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">快速模式</label>
+                <button onClick={() => setPixFastMode(!pixFastMode)} className={`px-3 py-2 h-[38px] rounded-lg border ${pixFastMode ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{pixFastMode ? '开启' : '关闭'}</button>
               </div>
             )}
 
             {(selectedModel === 'kling-2.5-turbo') && (
               <div className="w-auto min-w-[150px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">CFG Scale</label>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">CFG Scale</label>
                 <input type="range" min={0} max={1} step={0.1} value={klingCfgScale} onChange={(e) => setKlingCfgScale(parseFloat(e.target.value))} className="w-40" />
               </div>
             )}
 
             {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
               <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">提示词优化</label>
-                <button onClick={() => setMinimaxEnablePromptExpansion(!minimaxEnablePromptExpansion)} className={`px-3 py-2 h-[38px] rounded-lg border ${minimaxEnablePromptExpansion ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{minimaxEnablePromptExpansion ? '开启' : '关闭'}</button>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">提示词优化</label>
+                <button onClick={() => setMinimaxEnablePromptExpansion(!minimaxEnablePromptExpansion)} className={`px-3 py-2 h-[38px] rounded-lg border ${minimaxEnablePromptExpansion ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{minimaxEnablePromptExpansion ? '开启' : '关闭'}</button>
               </div>
             )}
 
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length === 0 && (
               <div className="w-auto min-w-[140px]">
-                <label className="block text-sm font-medium mb-1 text-gray-300">尺寸</label>
-                <input value={wanSize} onChange={(e) => setWanSize(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+                <label className="block text-sm font-medium mb-1 text-zinc-300">尺寸</label>
+                <input value={wanSize} onChange={(e) => setWanSize(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
               </div>
             )}
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length > 0 && (
               <>
                 <div className="w-auto min-w-[120px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
-                  <select value={wanResolution} onChange={(e) => setWanResolution(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
+                  <select value={wanResolution} onChange={(e) => setWanResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                     <option value="480P">480P</option>
                     <option value="720P">720P</option>
                     <option value="1080P">1080P</option>
                   </select>
                 </div>
                 <div className="w-auto min-w-[200px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">图片 URL</label>
-                  <input value={wanImageUrl} onChange={(e) => setWanImageUrl(e.target.value)} placeholder="https://..." className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">图片 URL</label>
+                  <input value={wanImageUrl} onChange={(e) => setWanImageUrl(e.target.value)} placeholder="https://..." className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
                 </div>
               </>
             )}
             {selectedModel === 'wan-2.5-preview' && (
               <>
                 <div className="w-auto min-w-[200px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">音频 URL</label>
-                  <input value={wanAudioUrl} onChange={(e) => setWanAudioUrl(e.target.value)} placeholder="https://..." className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">音频 URL</label>
+                  <input value={wanAudioUrl} onChange={(e) => setWanAudioUrl(e.target.value)} placeholder="https://..." className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
                 </div>
                 <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">智能改写</label>
-                  <button onClick={() => setWanPromptExtend(!wanPromptExtend)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanPromptExtend ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{wanPromptExtend ? '开启' : '关闭'}</button>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">智能改写</label>
+                  <button onClick={() => setWanPromptExtend(!wanPromptExtend)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanPromptExtend ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanPromptExtend ? '开启' : '关闭'}</button>
                 </div>
                 <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">水印</label>
-                  <button onClick={() => setWanWatermark(!wanWatermark)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanWatermark ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{wanWatermark ? '开启' : '关闭'}</button>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">水印</label>
+                  <button onClick={() => setWanWatermark(!wanWatermark)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanWatermark ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanWatermark ? '开启' : '关闭'}</button>
                 </div>
                 <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">音频</label>
-                  <button onClick={() => setWanAudio(!wanAudio)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanAudio ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{wanAudio ? '开启' : '关闭'}</button>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">音频</label>
+                  <button onClick={() => setWanAudio(!wanAudio)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanAudio ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanAudio ? '开启' : '关闭'}</button>
                 </div>
               </>
             )}
@@ -1244,16 +1246,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {(selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') && (
               <>
                 <div className="w-auto min-w-[120px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
-                  <select value={seedanceResolution} onChange={(e) => setSeedanceResolution(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
+                  <select value={seedanceResolution} onChange={(e) => setSeedanceResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                     <option value="480p">480p</option>
                     <option value="720p">720p</option>
                     <option value="1080p">1080p</option>
                   </select>
                 </div>
                 <div className="w-auto min-w-[100px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
-                  <select value={seedanceAspectRatio} onChange={(e) => setSeedanceAspectRatio(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
+                  <select value={seedanceAspectRatio} onChange={(e) => setSeedanceAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                     <option value="21:9">21:9</option>
                     <option value="16:9">16:9</option>
                     <option value="4:3">4:3</option>
@@ -1264,25 +1266,25 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </select>
                 </div>
                 <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-gray-300">相机固定</label>
-                  <button onClick={() => setSeedanceCameraFixed(!seedanceCameraFixed)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceCameraFixed ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{seedanceCameraFixed ? '是' : '否'}</button>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">相机固定</label>
+                  <button onClick={() => setSeedanceCameraFixed(!seedanceCameraFixed)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceCameraFixed ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{seedanceCameraFixed ? '是' : '否'}</button>
                 </div>
                 {selectedModel === 'seedance-v1-lite' && (
                   <div className="w-auto min-w-[120px]">
-                    <label className="block text-sm font-medium mb-1 text-gray-300">使用最后图为结束</label>
-                    <button onClick={() => setSeedanceUseLastImage(!seedanceUseLastImage)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceUseLastImage ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{seedanceUseLastImage ? '开启' : '关闭'}</button>
+                    <label className="block text-sm font-medium mb-1 text-zinc-300">使用最后图为结束</label>
+                    <button onClick={() => setSeedanceUseLastImage(!seedanceUseLastImage)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceUseLastImage ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{seedanceUseLastImage ? '开启' : '关闭'}</button>
                   </div>
                 )}
               </>
             )}
 
             <div className="w-auto flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium mb-1 text-gray-300">负面提示</label>
-              <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+              <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
+              <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
             </div>
             <div className="w-auto min-w-[120px]">
-              <label className="block text-sm font-medium mb-1 text-gray-300">随机种子</label>
-              <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+              <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
+              <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
             </div>
           </>
         )}
@@ -1292,24 +1294,52 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           <>
             {/* 批量生成开关 */}
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-300">批量生成</label>
+              <label className="block text-sm font-medium mb-1 text-zinc-300">
+                <span
+                  className="relative"
+                  onMouseEnter={() => {
+                    if (bulkTooltipTimerRef.current) { window.clearTimeout(bulkTooltipTimerRef.current) }
+                    bulkTooltipTimerRef.current = window.setTimeout(() => {
+                      setBulkTooltipVisible(true)
+                      setBulkTooltipClosing(false)
+                    }, 500)
+                  }}
+                  onMouseLeave={() => {
+                    if (bulkTooltipTimerRef.current) { window.clearTimeout(bulkTooltipTimerRef.current); bulkTooltipTimerRef.current = null }
+                    if (bulkTooltipVisible) {
+                      setBulkTooltipClosing(true)
+                      window.setTimeout(() => {
+                        setBulkTooltipVisible(false)
+                        setBulkTooltipClosing(false)
+                      }, 300)
+                    }
+                  }}
+                >
+                  批量生成
+                  <span
+                    className={`absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 w-[280px] bg-zinc-800/90 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg text-xs text-white p-3 ${bulkTooltipVisible ? (bulkTooltipClosing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'}`}
+                  >
+                    设置为自动时，可以通过提示词描述控制生成的图片数量，例如：生成4张图片。实际数量会受限于最大数量的设置，同时参考图+想要生成图片的数量无法超过15张。
+                  </span>
+                </span>
+              </label>
               <div className="flex gap-1 h-[38px]">
                 <button
                   onClick={() => setSequentialImageGeneration('auto')}
-                  className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
+                  className={`px-3 py-2 text-sm rounded-lg transition-all duration-300 ${
                     sequentialImageGeneration === 'auto'
                       ? 'bg-[#007eff] text-white'
-                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                      : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                   }`}
                 >
                   自动
                 </button>
                 <button
                   onClick={() => setSequentialImageGeneration('disabled')}
-                  className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
+                  className={`px-3 py-2 text-sm rounded-lg transition-all duration-300 ${
                     sequentialImageGeneration === 'disabled'
                       ? 'bg-[#007eff] text-white'
-                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                      : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                   }`}
                 >
                   禁用
@@ -1318,17 +1348,31 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             </div>
 
             {/* 最大图像数量 */}
-            {sequentialImageGeneration === 'auto' && (
+              {sequentialImageGeneration === 'auto' && (
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-300">最大数量</label>
-                <input
-                  type="number"
-                  value={maxImages}
-                  onChange={(e) => setMaxImages(Math.min(15, Math.max(1, parseInt(e.target.value) || 1)))}
-                  className="w-20 bg-gray-700/50 border border-gray-600 rounded px-3 py-2 h-[38px] text-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50"
-                  min="1"
-                  max="15"
-                />
+                <label className="block text-sm font-medium mb-1 text-zinc-300">最大数量</label>
+                <div className="relative inline-block">
+                  <input
+                    type="number"
+                    value={maxImages}
+                    onChange={(e) => setMaxImages(Math.min(15, Math.max(1, parseInt(e.target.value) || 1)))}
+                    className="w-20 bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0"
+                    min="1"
+                    max="15"
+                  />
+                  <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setMaxImages(prev => Math.min(15, (typeof prev === 'number' ? prev : 1) + 1))}
+                      className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
+                    >▲</button>
+                    <button
+                      type="button"
+                      onClick={() => setMaxImages(prev => Math.max(1, (typeof prev === 'number' ? prev : 1) - 1))}
+                      className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
+                    >▼</button>
+                  </div>
+                </div>
               </div>
             )}
           </>
@@ -1393,13 +1437,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               return canUploadMore ? (
                 <div 
                   key={`upload-btn-${uploadedImages.length}`}
-                  className="w-12 h-16 bg-gray-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-[rgba(46,46,46,0.8)] hover:border-[rgba(46,46,46,0.8)] flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
+                  className="w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-[rgba(46,46,46,0.8)] hover:border-[rgba(46,46,46,0.8)] flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
                   onClick={() => imageFileInputRef.current?.click()}
                   style={{
                     animation: 'imageSlideIn 0.25s ease-out forwards'
                   }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                 </div>
@@ -1439,7 +1483,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               }
             }}
             placeholder="描述想要生成的图片"
-            className="w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-gray-400"
+            className="w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400"
             disabled={isLoading}
           />
           
@@ -1449,7 +1493,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             disabled={isLoading || (!input.trim() && uploadedImages.length === 0)}
             className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
               isLoading || (!input.trim() && uploadedImages.length === 0)
-                ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
                 : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
             }`}
           >
@@ -1476,7 +1520,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             setMediaType('text')
           }}
           disabled={isLoading}
-          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
+          className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1487,8 +1531,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {/* 设置按钮 */}
         <button
           onClick={onOpenSettings}
-          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
-          title="API设置"
+          className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
+          title="设置"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />

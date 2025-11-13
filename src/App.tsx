@@ -654,7 +654,7 @@ const App: React.FC = () => {
                                 </div>
                               ))}
                               {task.images.length > 3 && (
-                                <div className="w-16 h-16 rounded border border-[rgba(46,46,46,0.8)] bg-gray-700/50 flex items-center justify-center text-xs">
+                                <div className="w-16 h-16 rounded border border-[rgba(46,46,46,0.8)] bg-zinc-700/50 flex items-center justify-center text-xs">
                                   +{task.images.length - 3}
                                 </div>
                               )}
@@ -663,21 +663,21 @@ const App: React.FC = () => {
                           
                           {/* 文本提示词 */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-300 truncate text-left">{task.prompt}</p>
+                            <p className="text-sm text-zinc-300 truncate text-left">{task.prompt}</p>
                             <div className="flex flex-wrap gap-2 mt-1">
-                              <span className="text-xs bg-gray-700/50 px-2 py-1 rounded">
+                              <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
                                 {task.type === 'image' ? '图片' : task.type === 'video' ? '视频' : '音频'}
                               </span>
                               <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded">
                                 {task.model}
                               </span>
                               {task.size && (
-                                <span className="text-xs bg-gray-700/50 px-2 py-1 rounded">
+                                <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
                                   {task.size}
                                 </span>
                               )}
                               {task.result?.createdAt && (
-                                <span className="text-xs bg-gray-700/50 px-2 py-1 rounded">
+                                <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
                                   {new Date(task.result.createdAt).toLocaleString()}
                                 </span>
                               )}
@@ -688,7 +688,7 @@ const App: React.FC = () => {
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleRegenerate(task)}
-                              className="p-2 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg transition-all duration-300"
+                              className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
                               title="重新生成"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -697,7 +697,7 @@ const App: React.FC = () => {
                             </button>
                             <button
                               onClick={() => handleReedit(task)}
-                              className="p-2 bg-gray-700/50 hover:bg-gray-600/50 rounded-lg transition-all duration-300"
+                              className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
                               title="重新编辑"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -723,7 +723,7 @@ const App: React.FC = () => {
                           <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-2"></div>
-                              <p className="text-gray-400">准备生成...</p>
+                              <p className="text-zinc-400">准备生成...</p>
                             </div>
                           </div>
                         )}
@@ -732,16 +732,16 @@ const App: React.FC = () => {
                           <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
-                              <p className="text-gray-400 mb-3">生成中...</p>
-                              <div className="w-full h-2 bg-gray-700 rounded">
+                              <p className="text-zinc-400 mb-3">生成中...</p>
+                              <div className="w-full h-2 bg-zinc-700 rounded">
                                 <div
                                   className="h-2 bg-[#007eff] rounded transition-all duration-[2800ms] ease-out"
                                   style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
                                 ></div>
                               </div>
-                              <div className="mt-2 text-sm text-gray-400">{Math.min(100, Math.max(0, Math.floor(task.progress || 0)))}%</div>
+                              <div className="mt-2 text-sm text-zinc-400">{Math.min(100, Math.max(0, Math.floor(task.progress || 0)))}%</div>
                               {task.timedOut && (
-                                <div className="mt-3 text-sm text-gray-300">
+                                <div className="mt-3 text-sm text-zinc-300">
                                   <span className="mr-2">轮询超时，任务仍在处理中。</span>
                                   <button
                                     onClick={() => retryPolling(task)}
@@ -849,13 +849,13 @@ const App: React.FC = () => {
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <div className="inline-block p-4 rounded-full bg-gray-800/30 backdrop-blur-lg mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="inline-block p-4 rounded-full bg-zinc-800/30 backdrop-blur-lg mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                   </div>
-                  <p className="text-gray-500 text-lg">生成的内容将显示在这里</p>
-                  <p className="text-gray-600 text-sm mt-2">选择模型并输入提示词开始创作</p>
+                  <p className="text-zinc-500 text-lg">生成的内容将显示在这里</p>
+                  <p className="text-zinc-600 text-sm mt-2">选择模型并输入提示词开始创作</p>
                 </div>
               </div>
             )}
@@ -885,11 +885,11 @@ const App: React.FC = () => {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
           <div className="relative bg-[#131313]/80 border border-[rgba(46,46,46,0.8)] rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
             <div className="text-white text-base">确认清除历史</div>
-            <div className="text-gray-300 text-sm mt-2">此操作会删除所有生成历史，且不可恢复。</div>
+            <div className="text-zinc-300 text-sm mt-2">此操作会删除所有生成历史，且不可恢复。</div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
-                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-gray-700/60 hover:bg-gray-600/60 text-sm"
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-zinc-600/60 text-sm"
               >
                 取消
               </button>
@@ -924,7 +924,7 @@ const App: React.FC = () => {
               {/* 关闭按钮 */}
               <button
                 onClick={closeImageViewer}
-                className="absolute top-2 right-2 bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200 z-10"
+                className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200 z-10"
                 title="关闭"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -957,7 +957,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => navigateImage('prev')}
-                    className="bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -965,7 +965,7 @@ const App: React.FC = () => {
                   </button>
                   <button
                     onClick={() => navigateImage('next')}
-                    className="bg-gray-800/80 hover:bg-gray-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -991,7 +991,7 @@ const App: React.FC = () => {
               {/* 重置按钮 - 始终显示 */}
               <button
                 onClick={resetImageView}
-                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)] hover:bg-gray-800/90 transition-colors"
+                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)] hover:bg-zinc-800/90 transition-colors"
               >
                 重置视图
               </button>
