@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
-import { remove } from '@tauri-apps/plugin-fs'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -557,6 +556,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         } else if (viduMode === 'reference-to-video') {
           maxImageCount = 7
         }
+      } else if (selectedModel === 'kling-2.5-turbo') {
+        maxImageCount = 1
       }
         
       for (const file of files) {
@@ -573,6 +574,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   }
 
   const handlePaste = (e: React.ClipboardEvent) => {
+    if (selectedModel === 'kling-2.5-turbo' && uploadedImages.length >= 1) {
+      return
+    }
     const items = e.clipboardData.items
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1) {
@@ -581,7 +585,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           const reader = new FileReader()
           reader.onload = (event) => {
             if (event.target?.result) {
-              setUploadedImages(prev => [...prev, event.target?.result as string])
+              setUploadedImages(prev => {
+                if (selectedModel === 'kling-2.5-turbo' && prev.length >= 1) return prev
+                return [...prev, event.target?.result as string]
+              })
               setMediaType('image')
             }
           }
@@ -594,32 +601,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   const removeImage = (index: number) => {
     const imageToRemove = uploadedImages[index]
-    // 标记该图片为正在删除
     setRemovingImages(prev => new Set(prev).add(imageToRemove))
-    // 等待动画完成后再移除
     setTimeout(() => {
-      const pathToRemove = uploadedFilePaths[index]
-      if (pathToRemove) {
-        const remainingCount = uploadedFilePaths.filter(p => p === pathToRemove).length - 1
-        if (remainingCount <= 0) {
-          remove(pathToRemove).catch(e => console.error('[MediaGenerator] 删除上传文件失败', pathToRemove, e))
-        }
-      }
       setUploadedImages(prev => prev.filter((_, i) => i !== index))
       setUploadedFilePaths(prev => prev.filter((_, i) => i !== index))
       setRemovingImages(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(imageToRemove)
-        return newSet
+        const s = new Set(prev)
+        s.delete(imageToRemove)
+        return s
       })
-    }, 250) // 与动画时长一致
+    }, 250)
   }
 
   const clearAllImages = async () => {
-    const unique = Array.from(new Set(uploadedFilePaths))
-    for (const p of unique) {
-      try { await remove(p) } catch (e) { console.error('[MediaGenerator] 批量删除上传文件失败', p, e) }
-    }
     setUploadedImages([])
     setUploadedFilePaths([])
   }
@@ -637,6 +631,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       } else if (viduMode === 'reference-to-video') {
         maxImageCount = 7
       }
+    } else if (selectedModel === 'kling-2.5-turbo') {
+      maxImageCount = 1
     }
       
     for (const file of files) {
@@ -1539,6 +1535,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 } else if (viduMode === 'reference-to-video') {
                   maxImageCount = 7 // 参考生视频最多7张
                 }
+              } else if (selectedModel === 'kling-2.5-turbo') {
+                maxImageCount = 1
               }
               
               const canUploadMore = uploadedImages.length < maxImageCount
@@ -1657,7 +1655,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         ref={imageFileInputRef}
         onChange={handleImageFileUpload}
         accept="image/*"
-        multiple
+        multiple={selectedModel === 'kling-2.5-turbo' ? false : true}
         className="hidden"
       />
     </div>
