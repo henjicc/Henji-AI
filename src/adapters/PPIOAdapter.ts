@@ -154,25 +154,37 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         }
       } else if (params.model === 'kling-2.5-turbo') {
         const images = params.images || []
+        const cfgScale = typeof params.cfgScale === 'number' ? Math.max(0, Math.min(1, params.cfgScale)) : 0.5
+        const duration = params.duration === 10 ? 10 : 5
+        const prompt = (params.prompt || '').slice(0, 2500)
+        const negative_prompt = params.negativePrompt ? params.negativePrompt.slice(0, 2500) : undefined
+        const ar = ['16:9', '9:16', '1:1'].includes(params.aspectRatio || '') ? (params.aspectRatio as string) : '16:9'
+
+        if (!prompt || prompt.trim() === '') {
+          throw new Error('Kling 文生视频需要提供非空的 prompt')
+        }
+
         if (images.length > 0) {
           endpoint = '/async/kling-2.5-turbo-i2v'
+          const img0 = images[0]
+          const base64 = typeof img0 === 'string' && img0.startsWith('data:') ? img0.split(',')[1] : img0
           requestData = {
-            image: images[0],
-            prompt: params.prompt,
-            duration: params.duration || 5,
-            cfg_scale: params.cfgScale ?? 0.5,
+            image: base64,
+            prompt,
+            duration: String(duration),
+            cfg_scale: cfgScale,
             mode: params.mode || 'pro',
-            negative_prompt: params.negativePrompt
+            negative_prompt
           }
         } else {
           endpoint = '/async/kling-2.5-turbo-t2v'
           requestData = {
-            prompt: params.prompt,
-            duration: params.duration || 5,
-            aspect_ratio: params.aspectRatio || '16:9',
-            cfg_scale: params.cfgScale ?? 0.5,
+            prompt,
+            duration: String(duration),
+            aspect_ratio: ar,
+            cfg_scale: cfgScale,
             mode: params.mode || 'pro',
-            negative_prompt: params.negativePrompt
+            negative_prompt
           }
         }
       } else if (params.model === 'minimax-hailuo-2.3' || params.model === 'minimax-hailuo-2.3-fast') {
@@ -350,6 +362,9 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
       }
     } catch (error) {
       console.error('[PPIOAdapter] generateVideo 错误:', error)
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('[PPIOAdapter] 错误响应数据:', error.response.data)
+      }
       throw this.handleError(error)
     }
   }
@@ -453,8 +468,10 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
     if (axios.isAxiosError(error)) {
       if (error.response) {
         const status = error.response.status
-        const message = error.response.data?.message || error.response.statusText
-        return new Error(`API Error ${status}: ${message}`)
+        const data = error.response.data
+        const message = (data && (data.message || data.error || data.reason)) || error.response.statusText || 'Bad Request'
+        const details = typeof data === 'object' ? JSON.stringify(data) : String(data)
+        return new Error(`API Error ${status}: ${message}${details ? ` | ${details}` : ''}`)
       } else if (error.request) {
         return new Error('Network error: No response received from server')
       }

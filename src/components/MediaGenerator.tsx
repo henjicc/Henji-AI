@@ -67,6 +67,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [seedanceDuration, setSeedanceDuration] = useState(5)
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
   const [seedanceUseLastImage, setSeedanceUseLastImage] = useState(false)
+  const [isKlingDurationDropdownOpen, setIsKlingDurationDropdownOpen] = useState(false)
+  const [klingDurationDropdownClosing, setKlingDurationDropdownClosing] = useState(false)
+  const [isKlingAspectDropdownOpen, setIsKlingAspectDropdownOpen] = useState(false)
+  const [klingAspectDropdownClosing, setKlingAspectDropdownClosing] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
@@ -77,6 +81,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const viduMovementRef = useRef<HTMLDivElement>(null)
   const viduStyleRef = useRef<HTMLDivElement>(null)
   const viduBgmRef = useRef<HTMLDivElement>(null)
+  const klingDurationRef = useRef<HTMLDivElement>(null)
+  const klingAspectRef = useRef<HTMLDivElement>(null)
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -259,13 +265,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (viduBgmRef.current && !viduBgmRef.current.contains(event.target as Node) && isViduBgmDropdownOpen) {
         handleCloseViduBgmDropdown()
       }
+      if (klingDurationRef.current && !klingDurationRef.current.contains(event.target as Node) && isKlingDurationDropdownOpen) {
+        handleCloseKlingDurationDropdown()
+      }
+      if (klingAspectRef.current && !klingAspectRef.current.contains(event.target as Node) && isKlingAspectDropdownOpen) {
+        handleCloseKlingAspectDropdown()
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -312,6 +324,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setTimeout(() => {
       setIsViduBgmDropdownOpen(false)
       setViduBgmDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseKlingDurationDropdown = () => {
+    setKlingDurationDropdownClosing(true)
+    setTimeout(() => {
+      setIsKlingDurationDropdownOpen(false)
+      setKlingDurationDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseKlingAspectDropdown = () => {
+    setKlingAspectDropdownClosing(true)
+    setTimeout(() => {
+      setIsKlingAspectDropdownOpen(false)
+      setKlingAspectDropdownClosing(false)
     }, 200)
   }
 
@@ -440,7 +468,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         options.uploadedFilePaths = [saved.fullPath]
         setUploadedFilePaths([saved.fullPath])
       }
-      if (videoSeed !== undefined) options.seed = videoSeed
+      
     } else if (currentModel?.type === 'video' && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast')) {
       options.duration = selectedModel === 'minimax-hailuo-2.3' ? (videoDuration || 6) : (videoDuration || 6)
       options.resolution = videoResolution || '768P'
@@ -662,7 +690,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [bulkTooltipClosing, setBulkTooltipClosing] = useState(false)
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full max-w-5xl mx-auto">
       {/* 模型选择器、分辨率设置和即梦参数设置 */}
       <div className="flex flex-wrap gap-3 mb-4">
         {/* 合并的提供商和模型选择器 - 缩短宽度 */}
@@ -1116,36 +1144,88 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
         {currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && (
           <>
-            <div className="w-auto min-w-[100px]">
+            <div className="w-auto min-w-[80px] relative" ref={klingDurationRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
-              <select value={selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast' ? (videoDuration || 6) : videoDuration} onChange={(e) => setVideoDuration(parseInt(e.target.value) || 5)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') ? (
-                  <>
-                    <option value={6}>6</option>
-                    <option value={10}>10</option>
-                  </>
-                ) : (
-                  <>
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                  </>
-                )}
-              </select>
+              {selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast' ? (
+                <select value={(videoDuration || 6)} onChange={(e) => setVideoDuration(parseInt(e.target.value) || 6)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <option value={6}>6</option>
+                  <option value={10}>10</option>
+                </select>
+              ) : (
+                <div
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isKlingDurationDropdownOpen) {
+                      handleCloseKlingDurationDropdown()
+                    } else {
+                      setIsKlingDurationDropdownOpen(true)
+                    }
+                  }}
+                >
+                  <span className="text-sm">{videoDuration}</span>
+                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+              )}
+              {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && selectedModel === 'kling-2.5-turbo' && (
+                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className="max-h-60 overflow-y-auto">
+                    {[5, 10].map(val => (
+                      <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoDuration === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseKlingDurationDropdown() }}>
+                        <span className="text-sm">{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {(selectedModel === 'kling-2.5-turbo' || selectedModel === 'pixverse-v4.5') && uploadedImages.length === 0 && (
-              <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                  <option value="16:9">16:9</option>
-                  <option value="9:16">9:16</option>
-                  <option value="1:1">1:1</option>
-                </select>
-              </div>
+              selectedModel === 'kling-2.5-turbo' ? (
+                <div className="w-auto min-w-[80px] relative" ref={klingAspectRef}>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isKlingAspectDropdownOpen) {
+                        handleCloseKlingAspectDropdown()
+                      } else {
+                        setIsKlingAspectDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{videoAspectRatio}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </div>
+                  {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                      <div className="max-h-60 overflow-y-auto">
+                        {['16:9', '9:16', '1:1'].map(r => (
+                          <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoAspectRatio(r); handleCloseKlingAspectDropdown() }}>
+                            <span className="text-sm">{r}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="w-auto min-w-[80px]">
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
+                  <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
+                    <option value="1:1">1:1</option>
+                  </select>
+                </div>
+              )
             )}
 
             {(selectedModel === 'pixverse-v4.5' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
-              <div className="w-auto min-w-[100px]">
+              <div className="w-auto min-w-[80px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                 <select value={videoResolution} onChange={(e) => setVideoResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                   {selectedModel === 'pixverse-v4.5' ? (
@@ -1166,7 +1246,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             )}
 
             {(selectedModel === 'pixverse-v4.5') && (
-              <div className="w-auto min-w-[100px]">
+              <div className="w-auto min-w-[80px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">风格</label>
                 <select value={pixStyle || ''} onChange={(e) => setPixStyle(e.target.value || undefined)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                   <option value="">默认</option>
@@ -1189,7 +1269,42 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {(selectedModel === 'kling-2.5-turbo') && (
               <div className="w-auto min-w-[150px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">CFG Scale</label>
-                <input type="range" min={0} max={1} step={0.1} value={klingCfgScale} onChange={(e) => setKlingCfgScale(parseFloat(e.target.value))} className="w-40" />
+                <div className="relative inline-block">
+                  <input
+                    type="number"
+                    value={Number.isFinite(klingCfgScale) ? klingCfgScale.toFixed(2) : '0.00'}
+                    onChange={(e) => {
+                      const raw = parseFloat(e.target.value)
+                      const clamped = Math.min(1, Math.max(0, isNaN(raw) ? 0 : raw))
+                      const rounded = Math.round(clamped * 100) / 100
+                      setKlingCfgScale(rounded)
+                    }}
+                    className="w-24 bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                  />
+                  <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setKlingCfgScale(prev => {
+                        const v = typeof prev === 'number' ? prev : 0
+                        const next = Math.min(1, v + 0.1)
+                        return Math.round(next * 100) / 100
+                      })}
+                      className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
+                    >▲</button>
+                    <button
+                      type="button"
+                      onClick={() => setKlingCfgScale(prev => {
+                        const v = typeof prev === 'number' ? prev : 0
+                        const next = Math.max(0, v - 0.1)
+                        return Math.round(next * 100) / 100
+                      })}
+                      className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
+                    >▼</button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1208,7 +1323,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             )}
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length > 0 && (
               <>
-                <div className="w-auto min-w-[120px]">
+                <div className="w-auto min-w-[80px]">
                   <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                   <select value={wanResolution} onChange={(e) => setWanResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                     <option value="480P">480P</option>
@@ -1245,7 +1360,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {(selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') && (
               <>
-                <div className="w-auto min-w-[120px]">
+                <div className="w-auto min-w-[80px]">
                   <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                   <select value={seedanceResolution} onChange={(e) => setSeedanceResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                     <option value="480p">480p</option>
@@ -1253,7 +1368,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     <option value="1080p">1080p</option>
                   </select>
                 </div>
-                <div className="w-auto min-w-[100px]">
+                <div className="w-auto min-w-[80px]">
                   <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
                   <select value={seedanceAspectRatio} onChange={(e) => setSeedanceAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
                     <option value="21:9">21:9</option>
@@ -1282,10 +1397,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
               <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
             </div>
-            <div className="w-auto min-w-[120px]">
-              <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
-              <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
-            </div>
+            {selectedModel !== 'kling-2.5-turbo' && (
+              <div className="w-auto min-w-[120px]">
+                <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
+                <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+              </div>
+            )}
           </>
         )}
 

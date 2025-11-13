@@ -73,6 +73,7 @@ const App: React.FC = () => {
   const [frameDuration, setFrameDuration] = useState(1 / 30)
   const lastFrameMediaTimeRef = React.useRef<number | null>(null)
   const controlsContainerRef = React.useRef<HTMLDivElement>(null)
+  const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
 
   // 自动滚动到最新任务
   const scrollToBottom = () => {
@@ -483,6 +484,7 @@ const App: React.FC = () => {
     setPlaybackRate(1)
     setLoop(false)
     setVideoViewerOpacity(0)
+    setAutoPlayOnOpen(true)
     document.body.style.overflow = 'hidden'
   }
 
@@ -491,6 +493,7 @@ const App: React.FC = () => {
     if (videoRef.current) {
       try { videoRef.current.pause() } catch {}
     }
+    setAutoPlayOnOpen(false)
     setTimeout(() => {
       setIsVideoViewerOpen(false)
       document.body.style.overflow = ''
@@ -598,6 +601,13 @@ const App: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [isVideoViewerOpen, isVideoPlaying, videoDuration])
+
+  useEffect(() => {
+    if (isVideoViewerOpen && autoPlayOnOpen && videoRef.current) {
+      videoRef.current.play().catch(() => {})
+      setAutoPlayOnOpen(false)
+    }
+  }, [isVideoViewerOpen, autoPlayOnOpen])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = volume
@@ -1091,7 +1101,7 @@ const App: React.FC = () => {
         )}
 
         {/* 输入区域 - 悬浮设计 */}
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-4xl z-20">
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
           <div className="bg-[#131313]/70 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
             <MediaGenerator 
               onGenerate={handleGenerate}
@@ -1240,7 +1250,7 @@ const App: React.FC = () => {
                 src={currentVideoUrl}
                 className="object-contain"
                 style={{ maxHeight: '90vh', maxWidth: '90vw', opacity: videoViewerOpacity, transition: 'opacity 500ms ease' }}
-                onLoadedMetadata={() => { if (videoRef.current) setVideoDuration(videoRef.current.duration || 0) }}
+                onLoadedMetadata={() => { if (videoRef.current) { setVideoDuration(videoRef.current.duration || 0); if (autoPlayOnOpen) { videoRef.current.play().catch(() => {}); setAutoPlayOnOpen(false) } } }}
                 onTimeUpdate={() => { if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0) }}
                 onPlaying={() => { setIsBuffering(false); setIsVideoPlaying(true) }}
                 onPause={() => { setIsVideoPlaying(false) }}
