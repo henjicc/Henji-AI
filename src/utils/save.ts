@@ -74,27 +74,51 @@ export async function fileToDataUrl(fullPath: string, mimeHint?: string): Promis
   return p
 }
 
-export async function saveUploadImage(fileOrBlob: File | Blob): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
-  const mime = 'image/png'
-  const ext = 'png'
-  await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
-  const arrayBuffer = await (fileOrBlob as Blob).arrayBuffer()
-  const hashBuf = await crypto.subtle.digest('SHA-256', arrayBuffer)
+const uploadCache: Map<string, { bytes: Uint8Array; dataUrl: string; displaySrc: string; compressedHash: string }> = new Map()
+
+function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
+  const bin = Array.from(bytes).map(b => String.fromCharCode(b)).join('')
+  const base64 = btoa(bin)
+  return `data:${mime};base64,${base64}`
+}
+
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf)
   const hashArr = Array.from(new Uint8Array(hashBuf))
-  const hashHex = hashArr.map(b => b.toString(16).padStart(2, '0')).join('')
-  const name = `upload-${hashHex}.${ext}`
+  return hashArr.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 'persist' = 'persist'): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
+  const mime = 'image/jpeg'
+  const ext = 'jpg'
+  const originalBuf = await (fileOrBlob as Blob).arrayBuffer()
+  const originalHash = await sha256Hex(originalBuf)
+  let cached = uploadCache.get(originalHash)
+  if (!cached) {
+    const bytes = await ensureCompressedJpegBytesWithPica(fileOrBlob as Blob, { maxPixels: 17_000_000, quality: 0.85 })
+    const dataUrl = bytesToDataUrl(bytes, mime)
+    const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
+    const compressedHash = await sha256Hex(bytes.buffer)
+    cached = { bytes, dataUrl, displaySrc, compressedHash }
+    uploadCache.set(originalHash, cached)
+  }
+  const name = `upload-${cached.compressedHash}.${ext}`
   const rel = await path.join('Henji-AI', 'Uploads', name)
   const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Uploads', name)
-  try {
-    await readFile(full)
-  } catch {
-    const array = await ensurePngBytes(fileOrBlob as Blob)
-    await writeFile(rel, array, { baseDir: BaseDirectory.AppLocalData })
+  if (mode === 'persist') {
+    await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+    let exists = false
+    try { await readFile(full); exists = true } catch {}
+    if (!exists) {
+      await writeFile(rel, cached.bytes, { baseDir: BaseDirectory.AppLocalData })
+    }
+    const displaySrc = await fileToBlobSrc(full, mime)
+    const dataUrl = await fileToDataUrl(full, mime)
+    console.log('[save] upload image persisted', full)
+    return { fullPath: full, displaySrc, dataUrl }
+  } else {
+    return { fullPath: full, displaySrc: cached.displaySrc, dataUrl: cached.dataUrl }
   }
-  const displaySrc = await fileToBlobSrc(full, mime)
-  const dataUrl = await fileToDataUrl(full, mime)
-  console.log('[save] upload image saved', full)
-  return { fullPath: full, displaySrc, dataUrl }
 }
 
 export async function deleteUploads(paths: string[]): Promise<void> {
@@ -126,9 +150,29 @@ export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   }
 }
 
-async function ensurePngBytes(blob: Blob): Promise<Uint8Array> {
-  const url = URL.createObjectURL(blob)
+async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?: number; quality?: number }): Promise<Uint8Array> {
+  const maxPixels = opts?.maxPixels ?? 17_000_000
+  const quality = opts?.quality ?? 0.85
+  let bitmap: ImageBitmap | null = null
   try {
+    bitmap = await createImageBitmap(blob)
+  } catch {}
+
+  const cleanup: Array<() => void> = []
+  let w0 = 0, h0 = 0
+  let srcCanvas: HTMLCanvasElement
+
+  if (bitmap) {
+    w0 = bitmap.width
+    h0 = bitmap.height
+    srcCanvas = document.createElement('canvas')
+    srcCanvas.width = w0
+    srcCanvas.height = h0
+    const sctx = srcCanvas.getContext('2d')!
+    sctx.drawImage(bitmap, 0, 0)
+  } else {
+    const url = URL.createObjectURL(blob)
+    cleanup.push(() => URL.revokeObjectURL(url))
     const img = new Image()
     const p = new Promise<HTMLImageElement>((resolve, reject) => {
       img.onload = () => resolve(img)
@@ -136,19 +180,42 @@ async function ensurePngBytes(blob: Blob): Promise<Uint8Array> {
     })
     img.src = url
     const image = await p
-    const canvas = document.createElement('canvas')
-    canvas.width = image.naturalWidth || image.width
-    canvas.height = image.naturalHeight || image.height
-    const ctx = canvas.getContext('2d')!
-    ctx.drawImage(image, 0, 0)
-    const pngDataUrl = canvas.toDataURL('image/png')
-    const base64 = pngDataUrl.split(',')[1]
+    w0 = image.naturalWidth || image.width
+    h0 = image.naturalHeight || image.height
+    srcCanvas = document.createElement('canvas')
+    srcCanvas.width = w0
+    srcCanvas.height = h0
+    const sctx = srcCanvas.getContext('2d')!
+    sctx.drawImage(image, 0, 0)
+  }
+
+  const total = w0 * h0
+  const scale = total > maxPixels ? Math.sqrt(maxPixels / total) : 1
+  const w = Math.max(1, Math.floor(w0 * scale))
+  const h = Math.max(1, Math.floor(h0 * scale))
+  const destCanvas = document.createElement('canvas')
+  destCanvas.width = w
+  destCanvas.height = h
+
+  try {
+    const mod = await import('pica')
+    const Pica = (mod as any).default || mod
+    const p = typeof Pica === 'function' ? Pica() : new Pica()
+    await p.resize(srcCanvas, destCanvas, { quality: 3, alpha: false })
+    const outBlob: Blob = await p.toBlob(destCanvas, 'image/jpeg', quality)
+    const buf = await outBlob.arrayBuffer()
+    return new Uint8Array(buf)
+  } catch (e) {
+    const dctx = destCanvas.getContext('2d')!
+    dctx.drawImage(srcCanvas, 0, 0, w, h)
+    const dataUrl = destCanvas.toDataURL('image/jpeg', quality)
+    const base64 = dataUrl.split(',')[1]
     const binary = atob(base64)
     const bytes = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
     return bytes
   } finally {
-    URL.revokeObjectURL(url)
+    cleanup.forEach(fn => { try { fn() } catch {} })
   }
 }
 

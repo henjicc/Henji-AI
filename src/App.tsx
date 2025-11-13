@@ -353,7 +353,7 @@ const App: React.FC = () => {
     console.log('[App] 开始轮询任务状态:', serverTaskId)
     return new Promise((resolve, reject) => {
       let pollCount = 0
-      const maxPolls = model === 'vidu-q1' ? 120 : 100
+      const maxPolls = 120
       
       const interval = setInterval(async () => {
         try {
@@ -389,6 +389,15 @@ const App: React.FC = () => {
               progress: status.progress
             })
             if (model === 'vidu-q1') {
+              const t = pollCount / maxPolls
+              const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
+              setTasks(prev => prev.map(t => {
+                if (t.id !== uiTaskId) return t
+                const inc = Math.max(1, stepProgress)
+                const next = Math.min(95, Math.max((t.progress ?? 0) + 1, inc))
+                return { ...t, progress: next }
+              }))
+            } else {
               const t = pollCount / maxPolls
               const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
               setTasks(prev => prev.map(t => {

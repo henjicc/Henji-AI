@@ -561,14 +561,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         
       for (const file of files) {
         if (file) {
-          const saved = await saveUploadImage(file)
+          const saved = await saveUploadImage(file, 'memory')
           setUploadedImages(prev => {
             if (prev.length >= maxImageCount) return prev
             return [...prev, saved.dataUrl]
-          })
-          setUploadedFilePaths(prev => {
-            if (prev.length >= maxImageCount) return prev
-            return [...prev, saved.fullPath]
           })
           setMediaType('image')
         }
@@ -645,14 +641,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       
     for (const file of files) {
       if (file.type.startsWith('image/')) {
-        const saved = await saveUploadImage(file)
+        const saved = await saveUploadImage(file, 'memory')
         setUploadedImages(prev => {
           if (prev.length >= maxImageCount) return prev
           return [...prev, saved.dataUrl]
-        })
-        setUploadedFilePaths(prev => {
-          if (prev.length >= maxImageCount) return prev
-          return [...prev, saved.fullPath]
         })
       }
     }
