@@ -29,6 +29,17 @@ export interface GenerateVideoParams {
   seed?: number
   movementAmplitude?: string
   bgm?: boolean
+  negativePrompt?: string
+  cfgScale?: number
+  fastMode?: boolean
+  cameraFixed?: boolean
+  lastImage?: string
+  size?: string
+  promptExtend?: boolean
+  watermark?: boolean
+  audio?: boolean
+  audioUrl?: string
+  imageUrl?: string
   [key: string]: any
 }
 

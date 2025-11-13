@@ -22,6 +22,48 @@
           "name": "MiniMax Speech-02-hd 同步语音合成",
           "type": "audio",
           "description": "支持文本到语音的同步生成"
+        },
+        {
+          "id": "kling-2.5-turbo",
+          "name": "Kling V2.5 Turbo",
+          "type": "video",
+          "description": "文生/图生视频，支持宽高比与负面提示"
+        },
+        {
+          "id": "minimax-hailuo-2.3",
+          "name": "Minimax Hailuo 2.3",
+          "type": "video",
+          "description": "文生/图生视频，分辨率与时长受限"
+        },
+        {
+          "id": "minimax-hailuo-2.3-fast",
+          "name": "Minimax Hailuo 2.3 Fast",
+          "type": "video",
+          "description": "图生视频快速版"
+        },
+        {
+          "id": "pixverse-v4.5",
+          "name": "PixVerse V4.5",
+          "type": "video",
+          "description": "文生/图生视频，支持 fast_mode 与风格"
+        },
+        {
+          "id": "wan-2.5-preview",
+          "name": "Wan 2.5 Preview",
+          "type": "video",
+          "description": "文生/图生视频，支持音频与水印选项"
+        },
+        {
+          "id": "seedance-v1-lite",
+          "name": "Seedance V1 Lite",
+          "type": "video",
+          "description": "文生/图生视频，支持相机固定与首尾图"
+        },
+        {
+          "id": "seedance-v1-pro",
+          "name": "Seedance V1 Pro",
+          "type": "video",
+          "description": "文生/图生视频（需认证）"
         }
       ]
     }

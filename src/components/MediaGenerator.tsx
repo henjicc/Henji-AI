@@ -46,6 +46,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [viduDuration, setViduDuration] = useState(5)
   const [viduMovementAmplitude, setViduMovementAmplitude] = useState('auto')
   const [viduBgm, setViduBgm] = useState(false)
+  const [videoDuration, setVideoDuration] = useState(5)
+  const [videoAspectRatio, setVideoAspectRatio] = useState('16:9')
+  const [videoResolution, setVideoResolution] = useState('540p')
+  const [videoSeed, setVideoSeed] = useState<number | undefined>(undefined)
+  const [videoNegativePrompt, setVideoNegativePrompt] = useState('')
+  const [klingCfgScale, setKlingCfgScale] = useState(0.5)
+  const [pixFastMode, setPixFastMode] = useState(false)
+  const [pixStyle, setPixStyle] = useState<string | undefined>(undefined)
+  const [minimaxEnablePromptExpansion, setMinimaxEnablePromptExpansion] = useState(true)
+  const [wanSize, setWanSize] = useState('1920*1080')
+  const [wanResolution, setWanResolution] = useState('1080P')
+  const [wanPromptExtend, setWanPromptExtend] = useState(true)
+  const [wanWatermark, setWanWatermark] = useState(false)
+  const [wanAudio, setWanAudio] = useState(true)
+  const [wanAudioUrl, setWanAudioUrl] = useState('')
+  const [wanImageUrl, setWanImageUrl] = useState('')
+  const [seedanceResolution, setSeedanceResolution] = useState('720p')
+  const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
+  const [seedanceDuration, setSeedanceDuration] = useState(5)
+  const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
+  const [seedanceUseLastImage, setSeedanceUseLastImage] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
@@ -343,7 +364,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
     
-    // 如果是Vidu Q1视频模型，添加相关参数
     if (currentModel?.type === 'video' && selectedModel === 'vidu-q1') {
       options.mode = viduMode
       options.duration = viduDuration
@@ -407,6 +427,76 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         imageCount: uploadedImages.length,
         options
       })
+    } else if (currentModel?.type === 'video' && selectedModel === 'kling-2.5-turbo') {
+      options.duration = videoDuration
+      options.cfgScale = klingCfgScale
+      options.negativePrompt = videoNegativePrompt
+      if (uploadedImages.length === 0) {
+        options.aspectRatio = videoAspectRatio
+      } else {
+        options.images = [uploadedImages[0]]
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob)
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+      if (videoSeed !== undefined) options.seed = videoSeed
+    } else if (currentModel?.type === 'video' && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast')) {
+      options.duration = selectedModel === 'minimax-hailuo-2.3' ? (videoDuration || 6) : (videoDuration || 6)
+      options.resolution = videoResolution || '768P'
+      options.promptExtend = minimaxEnablePromptExpansion
+      if (uploadedImages.length > 0) {
+        options.images = [uploadedImages[0]]
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob)
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+    } else if (currentModel?.type === 'video' && selectedModel === 'pixverse-v4.5') {
+      options.resolution = videoResolution
+      options.negativePrompt = videoNegativePrompt
+      options.fastMode = pixFastMode
+      options.style = pixStyle
+      if (uploadedImages.length === 0) {
+        options.aspectRatio = videoAspectRatio
+      } else {
+        options.images = [uploadedImages[0]]
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob)
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+      if (videoSeed !== undefined) options.seed = videoSeed
+    } else if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
+      options.duration = videoDuration
+      options.promptExtend = wanPromptExtend
+      options.watermark = wanWatermark
+      options.audio = wanAudio
+      options.audioUrl = wanAudioUrl || undefined
+      if (uploadedImages.length > 0) {
+        options.imageUrl = wanImageUrl
+        options.resolution = wanResolution
+      } else {
+        options.size = wanSize
+      }
+      options.negativePrompt = videoNegativePrompt
+      if (videoSeed !== undefined) options.seed = videoSeed
+    } else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
+      options.resolution = seedanceResolution
+      options.aspectRatio = seedanceAspectRatio
+      options.duration = seedanceDuration
+      options.cameraFixed = seedanceCameraFixed
+      if (uploadedImages.length > 0) {
+        options.images = [uploadedImages[0]]
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob)
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+        if (selectedModel === 'seedance-v1-lite' && seedanceUseLastImage && uploadedImages.length > 1) {
+          options.lastImage = uploadedImages[uploadedImages.length - 1]
+        }
+      }
+      if (videoSeed !== undefined) options.seed = videoSeed
     }
     
     onGenerate(input, selectedModel, currentModel?.type || 'image', options)
@@ -1022,6 +1112,181 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           </>
         )}
 
+        {currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && (
+          <>
+            <div className="w-auto min-w-[100px]">
+              <label className="block text-sm font-medium mb-1 text-gray-300">时长</label>
+              <select value={selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast' ? (videoDuration || 6) : videoDuration} onChange={(e) => setVideoDuration(parseInt(e.target.value) || 5)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') ? (
+                  <>
+                    <option value={6}>6</option>
+                    <option value={10}>10</option>
+                  </>
+                ) : (
+                  <>
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {(selectedModel === 'kling-2.5-turbo' || selectedModel === 'pixverse-v4.5') && uploadedImages.length === 0 && (
+              <div className="w-auto min-w-[80px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
+                <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <option value="16:9">16:9</option>
+                  <option value="9:16">9:16</option>
+                  <option value="1:1">1:1</option>
+                </select>
+              </div>
+            )}
+
+            {(selectedModel === 'pixverse-v4.5' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
+              <div className="w-auto min-w-[100px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
+                <select value={videoResolution} onChange={(e) => setVideoResolution(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  {selectedModel === 'pixverse-v4.5' ? (
+                    <>
+                      <option value="360p">360p</option>
+                      <option value="540p">540p</option>
+                      <option value="720p">720p</option>
+                      <option value="1080p">1080p</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="768P">768P</option>
+                      <option value="1080P">1080P</option>
+                    </>
+                  )}
+                </select>
+              </div>
+            )}
+
+            {(selectedModel === 'pixverse-v4.5') && (
+              <div className="w-auto min-w-[100px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">风格</label>
+                <select value={pixStyle || ''} onChange={(e) => setPixStyle(e.target.value || undefined)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <option value="">默认</option>
+                  <option value="anime">anime</option>
+                  <option value="3d_animation">3d_animation</option>
+                  <option value="clay">clay</option>
+                  <option value="comic">comic</option>
+                  <option value="cyberpunk">cyberpunk</option>
+                </select>
+              </div>
+            )}
+
+            {(selectedModel === 'pixverse-v4.5') && (
+              <div className="w-auto min-w-[80px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">快速模式</label>
+                <button onClick={() => setPixFastMode(!pixFastMode)} className={`px-3 py-2 h-[38px] rounded-lg border ${pixFastMode ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{pixFastMode ? '开启' : '关闭'}</button>
+              </div>
+            )}
+
+            {(selectedModel === 'kling-2.5-turbo') && (
+              <div className="w-auto min-w-[150px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">CFG Scale</label>
+                <input type="range" min={0} max={1} step={0.1} value={klingCfgScale} onChange={(e) => setKlingCfgScale(parseFloat(e.target.value))} className="w-40" />
+              </div>
+            )}
+
+            {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
+              <div className="w-auto min-w-[80px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">提示词优化</label>
+                <button onClick={() => setMinimaxEnablePromptExpansion(!minimaxEnablePromptExpansion)} className={`px-3 py-2 h-[38px] rounded-lg border ${minimaxEnablePromptExpansion ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{minimaxEnablePromptExpansion ? '开启' : '关闭'}</button>
+              </div>
+            )}
+
+            {selectedModel === 'wan-2.5-preview' && uploadedImages.length === 0 && (
+              <div className="w-auto min-w-[140px]">
+                <label className="block text-sm font-medium mb-1 text-gray-300">尺寸</label>
+                <input value={wanSize} onChange={(e) => setWanSize(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+              </div>
+            )}
+            {selectedModel === 'wan-2.5-preview' && uploadedImages.length > 0 && (
+              <>
+                <div className="w-auto min-w-[120px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
+                  <select value={wanResolution} onChange={(e) => setWanResolution(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                    <option value="480P">480P</option>
+                    <option value="720P">720P</option>
+                    <option value="1080P">1080P</option>
+                  </select>
+                </div>
+                <div className="w-auto min-w-[200px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">图片 URL</label>
+                  <input value={wanImageUrl} onChange={(e) => setWanImageUrl(e.target.value)} placeholder="https://..." className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+                </div>
+              </>
+            )}
+            {selectedModel === 'wan-2.5-preview' && (
+              <>
+                <div className="w-auto min-w-[200px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">音频 URL</label>
+                  <input value={wanAudioUrl} onChange={(e) => setWanAudioUrl(e.target.value)} placeholder="https://..." className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+                </div>
+                <div className="w-auto min-w-[80px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">智能改写</label>
+                  <button onClick={() => setWanPromptExtend(!wanPromptExtend)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanPromptExtend ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{wanPromptExtend ? '开启' : '关闭'}</button>
+                </div>
+                <div className="w-auto min-w-[80px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">水印</label>
+                  <button onClick={() => setWanWatermark(!wanWatermark)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanWatermark ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{wanWatermark ? '开启' : '关闭'}</button>
+                </div>
+                <div className="w-auto min-w-[80px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">音频</label>
+                  <button onClick={() => setWanAudio(!wanAudio)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanAudio ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{wanAudio ? '开启' : '关闭'}</button>
+                </div>
+              </>
+            )}
+
+            {(selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') && (
+              <>
+                <div className="w-auto min-w-[120px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">分辨率</label>
+                  <select value={seedanceResolution} onChange={(e) => setSeedanceResolution(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                    <option value="480p">480p</option>
+                    <option value="720p">720p</option>
+                    <option value="1080p">1080p</option>
+                  </select>
+                </div>
+                <div className="w-auto min-w-[100px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">宽高比</label>
+                  <select value={seedanceAspectRatio} onChange={(e) => setSeedanceAspectRatio(e.target.value)} className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                    <option value="21:9">21:9</option>
+                    <option value="16:9">16:9</option>
+                    <option value="4:3">4:3</option>
+                    <option value="1:1">1:1</option>
+                    <option value="3:4">3:4</option>
+                    <option value="9:16">9:16</option>
+                    <option value="9:21">9:21</option>
+                  </select>
+                </div>
+                <div className="w-auto min-w-[80px]">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">相机固定</label>
+                  <button onClick={() => setSeedanceCameraFixed(!seedanceCameraFixed)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceCameraFixed ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{seedanceCameraFixed ? '是' : '否'}</button>
+                </div>
+                {selectedModel === 'seedance-v1-lite' && (
+                  <div className="w-auto min-w-[120px]">
+                    <label className="block text-sm font-medium mb-1 text-gray-300">使用最后图为结束</label>
+                    <button onClick={() => setSeedanceUseLastImage(!seedanceUseLastImage)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceUseLastImage ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-gray-800/70 text-gray-300 border-gray-700/50'}`}>{seedanceUseLastImage ? '开启' : '关闭'}</button>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="w-auto flex-1 min-w-[200px]">
+              <label className="block text-sm font-medium mb-1 text-gray-300">负面提示</label>
+              <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+            </div>
+            <div className="w-auto min-w-[120px]">
+              <label className="block text-sm font-medium mb-1 text-gray-300">随机种子</label>
+              <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-gray-800/70 border border-gray-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+            </div>
+          </>
+        )}
+
         {/* 即梦图片生成4.0参数设置 - 仅对即梦模型显示 */}
         {selectedModel === 'seedream-4.0' && (
           <>
@@ -1071,7 +1336,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       </div>
 
       {/* 输入区域 */}
-      <div className="relative bg-[#1B1C21] rounded-xl border border-[rgba(46,46,46,0.8)] p-4">
+      <div className="relative bg-[#131313]/70 rounded-xl border border-[rgba(46,46,46,0.8)] p-4">
         {/* 图片上传和预览区域 - 独立一行 */}
         <div className="mb-3">
           <div className="flex items-center gap-2">
@@ -1174,7 +1439,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               }
             }}
             placeholder="描述想要生成的图片"
-            className="w-full bg-[#1B1C21] backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-gray-400"
+            className="w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-gray-400"
             disabled={isLoading}
           />
           

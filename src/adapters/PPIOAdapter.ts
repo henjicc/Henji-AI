@@ -152,6 +152,183 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
           default:
             throw new Error(`Unsupported video mode: ${mode}`)
         }
+      } else if (params.model === 'kling-2.5-turbo') {
+        const images = params.images || []
+        if (images.length > 0) {
+          endpoint = '/async/kling-2.5-turbo-i2v'
+          requestData = {
+            image: images[0],
+            prompt: params.prompt,
+            duration: params.duration || 5,
+            cfg_scale: params.cfgScale ?? 0.5,
+            mode: params.mode || 'pro',
+            negative_prompt: params.negativePrompt
+          }
+        } else {
+          endpoint = '/async/kling-2.5-turbo-t2v'
+          requestData = {
+            prompt: params.prompt,
+            duration: params.duration || 5,
+            aspect_ratio: params.aspectRatio || '16:9',
+            cfg_scale: params.cfgScale ?? 0.5,
+            mode: params.mode || 'pro',
+            negative_prompt: params.negativePrompt
+          }
+        }
+      } else if (params.model === 'minimax-hailuo-2.3' || params.model === 'minimax-hailuo-2.3-fast') {
+        const images = params.images || []
+        const isFast = params.model === 'minimax-hailuo-2.3-fast'
+        const baseResolution = params.resolution || '768P'
+        const baseDuration = params.duration || 6
+        const enable = params.promptExtend === undefined ? true : params.promptExtend
+        if (images.length > 0) {
+          endpoint = isFast ? '/async/minimax-hailuo-2.3-fast-i2v' : '/async/minimax-hailuo-2.3-i2v'
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            duration: baseDuration,
+            resolution: baseResolution,
+            enable_prompt_expansion: enable
+          }
+        } else {
+          endpoint = '/async/minimax-hailuo-2.3-t2v'
+          requestData = {
+            prompt: params.prompt,
+            duration: baseDuration,
+            resolution: baseResolution,
+            enable_prompt_expansion: enable
+          }
+        }
+      } else if (params.model === 'pixverse-v4.5') {
+        const images = params.images || []
+        const res = params.resolution || '540p'
+        const ar = params.aspectRatio || '16:9'
+        const fast = params.fastMode || false
+        if (images.length > 0) {
+          endpoint = '/async/pixverse-v4.5-i2v'
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            resolution: res,
+            negative_prompt: params.negativePrompt,
+            fast_mode: fast,
+            style: params.style,
+            seed: params.seed
+          }
+        } else {
+          endpoint = '/async/pixverse-v4.5-t2v'
+          requestData = {
+            prompt: params.prompt,
+            aspect_ratio: ar,
+            resolution: res,
+            negative_prompt: params.negativePrompt,
+            fast_mode: fast,
+            style: params.style,
+            seed: params.seed
+          }
+        }
+      } else if (params.model === 'wan-2.5-preview') {
+        const images = params.images || []
+        const duration = params.duration || 5
+        const prompt_extend = params.promptExtend === undefined ? true : params.promptExtend
+        const watermark = params.watermark || false
+        const audio = params.audio === undefined ? true : params.audio
+        if (images.length > 0) {
+          if (!params.imageUrl) {
+            throw new Error('Wan 图生视频需要提供可公开访问的 img_url')
+          }
+          endpoint = '/async/wan-2.5-i2v-preview'
+          requestData = {
+            input: {
+              prompt: params.prompt,
+              negative_prompt: params.negativePrompt,
+              img_url: params.imageUrl,
+              audio_url: params.audioUrl
+            },
+            parameters: {
+              resolution: params.resolution || '1080P',
+              duration,
+              prompt_extend,
+              watermark,
+              audio,
+              seed: params.seed
+            }
+          }
+        } else {
+          endpoint = '/async/wan-2.5-t2v-preview'
+          requestData = {
+            input: {
+              prompt: params.prompt,
+              negative_prompt: params.negativePrompt,
+              audio_url: params.audioUrl
+            },
+            parameters: {
+              size: params.size || '1920*1080',
+              duration,
+              prompt_extend,
+              watermark,
+              audio,
+              seed: params.seed
+            }
+          }
+        }
+      } else if (params.model === 'seedance-v1-lite') {
+        const images = params.images || []
+        const resolution = params.resolution || '720p'
+        const aspect = params.aspectRatio || '16:9'
+        const duration = params.duration || 5
+        const camera_fixed = params.cameraFixed || false
+        if (images.length > 0) {
+          endpoint = '/async/seedance-v1-lite-i2v'
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            resolution,
+            aspect_ratio: aspect,
+            last_image: params.lastImage,
+            camera_fixed,
+            seed: params.seed,
+            duration
+          }
+        } else {
+          endpoint = '/async/seedance-v1-lite-t2v'
+          requestData = {
+            prompt: params.prompt,
+            resolution,
+            aspect_ratio: aspect,
+            duration,
+            camera_fixed,
+            seed: params.seed
+          }
+        }
+      } else if (params.model === 'seedance-v1-pro') {
+        const images = params.images || []
+        const resolution = params.resolution || '720p'
+        const aspect = params.aspectRatio || '16:9'
+        const duration = params.duration || 5
+        const camera_fixed = params.cameraFixed || false
+        if (images.length > 0) {
+          endpoint = '/async/seedance-v1-pro-i2v'
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            resolution,
+            aspect_ratio: aspect,
+            camera_fixed,
+            seed: params.seed,
+            duration
+          }
+        } else {
+          endpoint = '/async/seedance-v1-pro-t2v'
+          requestData = {
+            prompt: params.prompt,
+            resolution,
+            aspect_ratio: aspect,
+            duration,
+            camera_fixed,
+            seed: params.seed
+          }
+        }
       } else {
         throw new Error(`Unsupported video model: ${params.model}`)
       }
