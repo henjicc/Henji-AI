@@ -718,6 +718,42 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const handleModelSelect = (providerId: string, modelId: string) => {
     setSelectedProvider(providerId)
     setSelectedModel(modelId)
+
+    const getMaxImageCount = (m: string, mode?: string): number => {
+      if (m === 'kling-2.5-turbo') return 1
+      if (m === 'minimax-hailuo-2.3') return 1
+      if (m === 'minimax-hailuo-02') return 2
+      if (m === 'vidu-q1') {
+        if (mode === 'start-end-frame') return 2
+        if (mode === 'reference-to-video') return 7
+        return 1
+      }
+      return 6
+    }
+
+    // 当切换到 Vidu Q1 时，根据图片数量自动选择模式
+    if (modelId === 'vidu-q1') {
+      const count = uploadedImages.length
+      if (count >= 3) {
+        // 3-7 张走参考生视频，截断到 7
+        setViduMode('reference-to-video')
+        if (count > 7) {
+          setUploadedImages(prev => prev.slice(0, 7))
+          setUploadedFilePaths(prev => prev.slice(0, 7))
+        }
+      } else if (count === 2) {
+        setViduMode('start-end-frame')
+      } else {
+        setViduMode('text-image-to-video')
+      }
+    } else {
+      // 非 Vidu：按目标模型最大支持数截断图片
+      const max = getMaxImageCount(modelId, undefined)
+      if (uploadedImages.length > max) {
+        setUploadedImages(prev => prev.slice(0, max))
+        setUploadedFilePaths(prev => prev.slice(0, max))
+      }
+    }
     handleCloseModelDropdown()
   }
 
@@ -1820,7 +1856,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         ref={imageFileInputRef}
         onChange={handleImageFileUpload}
         accept="image/*"
-        multiple={selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' ? false : true}
+        multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' ? false : true)}
         className="hidden"
       />
     </div>
