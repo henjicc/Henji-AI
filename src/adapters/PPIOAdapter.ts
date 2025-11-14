@@ -338,7 +338,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
             aspect_ratio: aspect,
             last_image: params.lastImage,
             camera_fixed,
-            seed: params.seed,
+            seed: -1,
             duration
           }
         } else {
@@ -349,7 +349,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
             aspect_ratio: aspect,
             duration,
             camera_fixed,
-            seed: params.seed
+            seed: -1
           }
         }
       } else if (params.model === 'seedance-v1-pro') {
@@ -363,10 +363,11 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
           requestData = {
             prompt: params.prompt,
             image: images[0],
+            last_image: params.lastImage,
             resolution,
             aspect_ratio: aspect,
             camera_fixed,
-            seed: params.seed,
+            seed: -1,
             duration
           }
         } else {
@@ -377,7 +378,39 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
             aspect_ratio: aspect,
             duration,
             camera_fixed,
-            seed: params.seed
+            seed: -1
+          }
+        }
+      } else if ((params as any).seedanceVariant && params.model === 'seedance-v1') {
+        const images = params.images || []
+        const resolution = params.resolution || '720p'
+        const aspect = params.aspectRatio || '16:9'
+        const duration = params.duration || 5
+        const camera_fixed = params.cameraFixed || false
+        const variant = (params as any).seedanceVariant === 'pro' ? 'pro' : 'lite'
+        if (images.length > 0) {
+          endpoint = `/async/seedance-v1-${variant}-i2v`
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            resolution,
+            aspect_ratio: aspect,
+            camera_fixed,
+            seed: -1,
+            duration
+          }
+          if ((params as any).lastImage) {
+            requestData.last_image = (params as any).lastImage
+          }
+        } else {
+          endpoint = `/async/seedance-v1-${variant}-t2v`
+          requestData = {
+            prompt: params.prompt,
+            resolution,
+            aspect_ratio: aspect,
+            duration,
+            camera_fixed,
+            seed: -1
           }
         }
       } else {

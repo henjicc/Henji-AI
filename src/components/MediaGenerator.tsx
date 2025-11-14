@@ -65,7 +65,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
   const [seedanceDuration, setSeedanceDuration] = useState(5)
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
-  const [seedanceUseLastImage, setSeedanceUseLastImage] = useState(false)
+  
+  const [seedanceVariant, setSeedanceVariant] = useState<'lite' | 'pro'>('lite')
   const [isKlingDurationDropdownOpen, setIsKlingDurationDropdownOpen] = useState(false)
   const [klingDurationDropdownClosing, setKlingDurationDropdownClosing] = useState(false)
   const [isKlingAspectDropdownOpen, setIsKlingAspectDropdownOpen] = useState(false)
@@ -82,6 +83,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [wanSizeDropdownClosing, setWanSizeDropdownClosing] = useState(false)
   const [isWanResolutionDropdownOpen, setIsWanResolutionDropdownOpen] = useState(false)
   const [wanResolutionDropdownClosing, setWanResolutionDropdownClosing] = useState(false)
+  const [isSeedanceVariantDropdownOpen, setIsSeedanceVariantDropdownOpen] = useState(false)
+  const [seedanceVariantDropdownClosing, setSeedanceVariantDropdownClosing] = useState(false)
+  const [isSeedanceResolutionDropdownOpen, setIsSeedanceResolutionDropdownOpen] = useState(false)
+  const [seedanceResolutionDropdownClosing, setSeedanceResolutionDropdownClosing] = useState(false)
+  const [isSeedanceAspectDropdownOpen, setIsSeedanceAspectDropdownOpen] = useState(false)
+  const [seedanceAspectDropdownClosing, setSeedanceAspectDropdownClosing] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
@@ -100,6 +107,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const pixResolutionRef = useRef<HTMLDivElement>(null)
   const wanSizeRef = useRef<HTMLDivElement>(null)
   const wanResolutionRef = useRef<HTMLDivElement>(null)
+  const seedanceVariantRef = useRef<HTMLDivElement>(null)
+  const seedanceResolutionRef = useRef<HTMLDivElement>(null)
+  const seedanceAspectRef = useRef<HTMLDivElement>(null)
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -160,6 +170,37 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
   }, [selectedModel, videoDuration, videoResolution])
+
+  useEffect(() => {
+    const first = uploadedImages[0]
+    if (!first) return
+    if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
+      const allowed = ['21:9','16:9','4:3','1:1','3:4','9:16','9:21']
+      const img = new Image()
+      img.onload = () => {
+        const w = img.width || 1
+        const h = img.height || 1
+        const target = w / h
+        const toVal = (s: string) => {
+          const parts = s.split(':')
+          const a = parseFloat(parts[0])
+          const b = parseFloat(parts[1])
+          return a / b
+        }
+        let best = allowed[0]
+        let bestDiff = Math.abs(target - toVal(best))
+        for (let i = 1; i < allowed.length; i++) {
+          const diff = Math.abs(target - toVal(allowed[i]))
+          if (diff < bestDiff) {
+            best = allowed[i]
+            bestDiff = diff
+          }
+        }
+        setSeedanceAspectRatio(best)
+      }
+      img.src = first
+    }
+  }, [uploadedImages, selectedModel])
 
   // PixVerse 分辨率规范化
   useEffect(() => {
@@ -339,13 +380,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (wanResolutionRef.current && !wanResolutionRef.current.contains(event.target as Node) && isWanResolutionDropdownOpen) {
         handleCloseWanResolutionDropdown()
       }
+      if (seedanceVariantRef.current && !seedanceVariantRef.current.contains(event.target as Node) && isSeedanceVariantDropdownOpen) {
+        handleCloseSeedanceVariantDropdown()
+      }
+      if (seedanceResolutionRef.current && !seedanceResolutionRef.current.contains(event.target as Node) && isSeedanceResolutionDropdownOpen) {
+        handleCloseSeedanceResolutionDropdown()
+      }
+      if (seedanceAspectRef.current && !seedanceAspectRef.current.contains(event.target as Node) && isSeedanceAspectDropdownOpen) {
+        handleCloseSeedanceAspectDropdown()
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -440,6 +490,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setTimeout(() => {
       setIsPixResolutionDropdownOpen(false)
       setPixResolutionDropdownClosing(false)
+    }, 200)
+  }
+  const handleCloseSeedanceVariantDropdown = () => {
+    setSeedanceVariantDropdownClosing(true)
+    setTimeout(() => {
+      setIsSeedanceVariantDropdownOpen(false)
+      setSeedanceVariantDropdownClosing(false)
+    }, 200)
+  }
+  const handleCloseSeedanceResolutionDropdown = () => {
+    setSeedanceResolutionDropdownClosing(true)
+    setTimeout(() => {
+      setIsSeedanceResolutionDropdownOpen(false)
+      setSeedanceResolutionDropdownClosing(false)
+    }, 200)
+  }
+  const handleCloseSeedanceAspectDropdown = () => {
+    setSeedanceAspectDropdownClosing(true)
+    setTimeout(() => {
+      setIsSeedanceAspectDropdownOpen(false)
+      setSeedanceAspectDropdownClosing(false)
     }, 200)
   }
 
@@ -647,22 +718,56 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         options.size = wanSize
       }
       options.negativePrompt = videoNegativePrompt
+    } else if (currentModel?.type === 'video' && selectedModel === 'seedance-v1') {
+      options.resolution = seedanceResolution
+      options.aspectRatio = seedanceAspectRatio
+      options.duration = videoDuration
+      options.cameraFixed = seedanceCameraFixed
+      ;(options as any).seedanceVariant = seedanceVariant
+      if (uploadedImages.length > 0) {
+        const first = uploadedImages[0]
+        options.images = [first]
+        const blob1 = await dataUrlToBlob(first)
+        const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
+        const paths: string[] = [saved1.fullPath]
+        if (uploadedImages.length > 1) {
+          const last = uploadedImages[1]
+          options.lastImage = last
+          const blob2 = await dataUrlToBlob(last)
+          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+          paths.push(saved2.fullPath)
+        }
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
+      }
     } else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
       options.resolution = seedanceResolution
       options.aspectRatio = seedanceAspectRatio
-      options.duration = seedanceDuration
+      options.duration = videoDuration
       options.cameraFixed = seedanceCameraFixed
       if (uploadedImages.length > 0) {
-        options.images = [uploadedImages[0]]
-        const blob = await dataUrlToBlob(uploadedImages[0])
-        const saved = await saveUploadImage(blob)
-        options.uploadedFilePaths = [saved.fullPath]
-        setUploadedFilePaths([saved.fullPath])
-        if (selectedModel === 'seedance-v1-lite' && seedanceUseLastImage && uploadedImages.length > 1) {
-          options.lastImage = uploadedImages[uploadedImages.length - 1]
+        const first = uploadedImages[0]
+        options.images = [first]
+        const blob1 = await dataUrlToBlob(first)
+        const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
+        const paths: string[] = [saved1.fullPath]
+        if (selectedModel === 'seedance-v1-lite' && uploadedImages.length > 1) {
+          const last = uploadedImages[1]
+          options.lastImage = last
+          const blob2 = await dataUrlToBlob(last)
+          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+          paths.push(saved2.fullPath)
         }
+        if (selectedModel === 'seedance-v1-pro' && uploadedImages.length > 1) {
+          const last = uploadedImages[1]
+          options.lastImage = last
+          const blob2 = await dataUrlToBlob(last)
+          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+          paths.push(saved2.fullPath)
+        }
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
       }
-      if (videoSeed !== undefined) options.seed = videoSeed
     }
     
     onGenerate(input, selectedModel, currentModel?.type || 'image', options)
@@ -699,6 +804,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         maxImageCount = 1
       } else if (selectedModel === 'wan-2.5-preview') {
         maxImageCount = 1
+      } else if (selectedModel === 'seedance-v1') {
+        maxImageCount = 2
+      } else if (selectedModel === 'seedance-v1-lite') {
+        maxImageCount = 2
+      } else if (selectedModel === 'seedance-v1-pro') {
+        maxImageCount = 2
       }
         
       for (const file of files) {
@@ -727,7 +838,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           reader.onload = (event) => {
             if (event.target?.result) {
               setUploadedImages(prev => {
-                if (selectedModel === 'kling-2.5-turbo' && prev.length >= 1) return prev
+                if ((selectedModel === 'kling-2.5-turbo' && prev.length >= 1)) return prev
                 return [...prev, event.target?.result as string]
               })
               setMediaType('image')
@@ -796,6 +907,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (m === 'minimax-hailuo-2.3') return 1
       if (m === 'minimax-hailuo-02') return 2
       if (m === 'wan-2.5-preview') return 1
+      if (m === 'seedance-v1') return seedanceVariant === 'lite' ? 2 : 1
       if (m === 'vidu-q1') {
         if (mode === 'start-end-frame') return 2
         if (mode === 'reference-to-video') return 7
@@ -1685,48 +1797,113 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </>
             )}
 
-            {(selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') && (
+            {selectedModel === 'seedance-v1' && (
               <>
-                <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                  <select value={seedanceResolution} onChange={(e) => setSeedanceResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                    <option value="480p">480p</option>
-                    <option value="720p">720p</option>
-                    <option value="1080p">1080p</option>
-                  </select>
+                <div className="w-auto min-w-[80px] relative" ref={seedanceVariantRef}>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">版本</label>
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isSeedanceVariantDropdownOpen) {
+                        handleCloseSeedanceVariantDropdown()
+                      } else {
+                        setIsSeedanceVariantDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{seedanceVariant === 'lite' ? 'Lite' : 'Pro'}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isSeedanceVariantDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </div>
+                  {(isSeedanceVariantDropdownOpen || seedanceVariantDropdownClosing) && (
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${seedanceVariantDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                      <div className="max-h-60 overflow-y-auto">
+                        {[
+                          { value: 'lite', label: 'Lite' },
+                          { value: 'pro', label: 'Pro' }
+                        ].map(opt => (
+                          <div key={opt.value} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceVariant === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceVariant(opt.value as any); handleCloseSeedanceVariantDropdown() }}>
+                            <span className="text-sm">{opt.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="w-auto min-w-[80px]">
+                <div className="w-auto min-w-[80px] relative" ref={seedanceResolutionRef}>
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isSeedanceResolutionDropdownOpen) {
+                        handleCloseSeedanceResolutionDropdown()
+                      } else {
+                        setIsSeedanceResolutionDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{seedanceResolution}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isSeedanceResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </div>
+                  {(isSeedanceResolutionDropdownOpen || seedanceResolutionDropdownClosing) && (
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${seedanceResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                      <div className="max-h-60 overflow-y-auto">
+                        {['480p','720p','1080p'].map(val => (
+                          <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceResolution === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceResolution(val); handleCloseSeedanceResolutionDropdown() }}>
+                            <span className="text-sm">{val}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="w-auto min-w-[80px] relative" ref={seedanceAspectRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                  <select value={seedanceAspectRatio} onChange={(e) => setSeedanceAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                    <option value="21:9">21:9</option>
-                    <option value="16:9">16:9</option>
-                    <option value="4:3">4:3</option>
-                    <option value="1:1">1:1</option>
-                    <option value="3:4">3:4</option>
-                    <option value="9:16">9:16</option>
-                    <option value="9:21">9:21</option>
-                  </select>
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isSeedanceAspectDropdownOpen) {
+                        handleCloseSeedanceAspectDropdown()
+                      } else {
+                        setIsSeedanceAspectDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{seedanceAspectRatio}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isSeedanceAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </div>
+                  {(isSeedanceAspectDropdownOpen || seedanceAspectDropdownClosing) && (
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${seedanceAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                      <div className="max-h-60 overflow-y-auto">
+                        {['21:9','16:9','4:3','1:1','3:4','9:16','9:21'].map(r => (
+                          <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceAspectRatio(r); handleCloseSeedanceAspectDropdown() }}>
+                            <span className="text-sm">{r}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="w-auto min-w-[80px]">
                   <label className="block text-sm font-medium mb-1 text-zinc-300">相机固定</label>
                   <button onClick={() => setSeedanceCameraFixed(!seedanceCameraFixed)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceCameraFixed ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{seedanceCameraFixed ? '是' : '否'}</button>
                 </div>
-                {selectedModel === 'seedance-v1-lite' && (
-                  <div className="w-auto min-w-[120px]">
-                    <label className="block text-sm font-medium mb-1 text-zinc-300">使用最后图为结束</label>
-                    <button onClick={() => setSeedanceUseLastImage(!seedanceUseLastImage)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceUseLastImage ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{seedanceUseLastImage ? '开启' : '关闭'}</button>
-                  </div>
-                )}
+                
               </>
             )}
 
-            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'wan-2.5-preview' && (
+            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && (
               <div className="w-auto flex-1 min-w-[200px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
                 <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
               </div>
             )}
-            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && selectedModel !== 'wan-2.5-preview' && (
+            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && (
               <div className="w-auto min-w-[120px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
                 <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
@@ -1881,6 +2058,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               } else if (selectedModel === 'minimax-hailuo-2.3') {
                 maxImageCount = 1
               } else if (selectedModel === 'minimax-hailuo-02') {
+                maxImageCount = 2
+              } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
                 maxImageCount = 2
               }
               

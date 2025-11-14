@@ -48,16 +48,10 @@
           "description": "文生/图生视频，支持音频与水印选项"
         },
         {
-          "id": "seedance-v1-lite",
-          "name": "Seedance V1 Lite",
+          "id": "seedance-v1",
+          "name": "Seedance V1 (Lite/Pro)",
           "type": "video",
-          "description": "文生/图生视频，支持相机固定与首尾图"
-        },
-        {
-          "id": "seedance-v1-pro",
-          "name": "Seedance V1 Pro",
-          "type": "video",
-          "description": "文生/图生视频（需认证）"
+          "description": "文/图生视频，480p/720p/1080p，支持相机固定；Lite 支持首尾图"
         },
         {
           "id": "minimax-speech-02-hd",
