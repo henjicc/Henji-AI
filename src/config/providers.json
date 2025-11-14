@@ -19,7 +19,7 @@
         },
         {
           "id": "minimax-speech-02-hd",
-          "name": "MiniMax Speech-02-hd 同步语音合成",
+          "name": "MiniMax Speech-02-hd",
           "type": "audio",
           "description": "支持文本到语音的同步生成"
         },

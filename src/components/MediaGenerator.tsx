@@ -19,6 +19,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [removingImages, setRemovingImages] = useState<Set<string>>(new Set())
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [modelDropdownClosing, setModelDropdownClosing] = useState(false)
+  const [modelFilterProvider, setModelFilterProvider] = useState<string>('all')
+  const [modelFilterType, setModelFilterType] = useState<'all' | 'image' | 'video' | 'audio'>('all')
   const [isResolutionDropdownOpen, setIsResolutionDropdownOpen] = useState(false)
   const [selectedResolution, setSelectedResolution] = useState('smart')  // 默认为智能模式
   const [resolutionQuality, setResolutionQuality] = useState<'2K' | '4K'>('2K') // 2K/4K切换，默认2K
@@ -756,37 +758,77 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             </svg>
           </div>
           
-          {/* 模型下拉菜单 - 限制最大高度并添加滚动条 */}
           {(isModelDropdownOpen || modelDropdownClosing) && (
-            <div 
-              className={`absolute z-20 mt-1 w-full min-w-[200px] bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${
+            <div
+              className={`absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 ${
                 modelDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'
               }`}
             >
-              <div className="max-h-60 overflow-y-auto dropdown-scroll">
-                {providers.map(provider => (
-                  <div key={provider.id}>
-                    <div className="px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                      {provider.name}
-                    </div>
-                    {provider.models.map(model => (
-                      <div
-                        key={`${provider.id}-${model.id}`}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 flex items-center ${
-                          selectedProvider === provider.id && selectedModel === model.id
-                            ? 'bg-[#007eff]/20 text-[#66b3ff]' 
-                            : 'hover:bg-zinc-700/50'
+              <div className="p-4 h-full flex flex-col">
+                <div className="mb-3">
+                  <div className="text-xs text-zinc-400 mb-2">供应商</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setModelFilterProvider('all')}
+                      className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
+                        modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                      }`}
+                    >全部</button>
+                    {providers.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setModelFilterProvider(p.id)}
+                        className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
+                          modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                         }`}
-                        onClick={() => handleModelSelect(provider.id, model.id)}
-                      >
-                        <span className="flex-1 text-sm">{model.name}</span>
-                        <span className="text-xs text-zinc-500 ml-2">
-                          {model.type === 'image' ? '图片' : model.type === 'video' ? '视频' : '音频'}
-                        </span>
-                      </div>
+                      >{p.name}</button>
                     ))}
                   </div>
-                ))}
+                </div>
+                <div className="mb-3">
+                  <div className="text-xs text-zinc-400 mb-2">类型</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: '全部', value: 'all' },
+                      { label: '图片', value: 'image' },
+                      { label: '视频', value: 'video' },
+                      { label: '音频', value: 'audio' }
+                    ].map(t => (
+                      <button
+                        key={t.value}
+                        onClick={() => setModelFilterType(t.value as 'all' | 'image' | 'video' | 'audio')}
+                        className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
+                          modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                        }`}
+                      >{t.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <div className="grid grid-cols-3 gap-2">
+                    {providers
+                      .flatMap(p => p.models.map(m => ({ p, m })))
+                      .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
+                      .filter(item => (modelFilterType === 'all' ? true : item.m.type === modelFilterType))
+                      .map(({ p, m }) => (
+                        <div
+                          key={`${p.id}-${m.id}`}
+                          onClick={() => handleModelSelect(p.id, m.id)}
+                          className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${
+                            selectedProvider === p.id && selectedModel === m.id
+                              ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30'
+                              : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-[rgba(46,46,46,0.8)]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">{m.name}</span>
+                            <span className="text-[11px] text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-zinc-500">{p.name}</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
