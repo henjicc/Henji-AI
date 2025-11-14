@@ -639,7 +639,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (uploadedImages.length > 0) {
         options.images = [uploadedImages[0]]
         const blob = await dataUrlToBlob(uploadedImages[0])
-        const saved = await saveUploadImage(blob)
+        const saved = await saveUploadImage(blob, 'persist', { maxDimension: 2000 })
         options.uploadedFilePaths = [saved.fullPath]
         setUploadedFilePaths([saved.fullPath])
         options.resolution = wanResolution

@@ -88,14 +88,14 @@ async function sha256Hex(buf: ArrayBuffer): Promise<string> {
   return hashArr.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 'persist' = 'persist'): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
+export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 'persist' = 'persist', opts?: { maxDimension?: number }): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
   const mime = 'image/jpeg'
   const ext = 'jpg'
   const originalBuf = await (fileOrBlob as Blob).arrayBuffer()
   const originalHash = await sha256Hex(originalBuf)
   let cached = uploadCache.get(originalHash)
   if (!cached) {
-    const bytes = await ensureCompressedJpegBytesWithPica(fileOrBlob as Blob, { maxPixels: 17_000_000, quality: 0.85 })
+    const bytes = await ensureCompressedJpegBytesWithPica(fileOrBlob as Blob, { maxPixels: 17_000_000, quality: 0.85, maxDimension: opts?.maxDimension })
     const dataUrl = bytesToDataUrl(bytes, mime)
     const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
     const compressedHash = await sha256Hex(bytes.buffer)
@@ -150,7 +150,7 @@ export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   }
 }
 
-async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?: number; quality?: number }): Promise<Uint8Array> {
+async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?: number; quality?: number; maxDimension?: number }): Promise<Uint8Array> {
   const maxPixels = opts?.maxPixels ?? 17_000_000
   const quality = opts?.quality ?? 0.85
   let bitmap: ImageBitmap | null = null
@@ -190,7 +190,10 @@ async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?
   }
 
   const total = w0 * h0
-  const scale = total > maxPixels ? Math.sqrt(maxPixels / total) : 1
+  const scalePixels = total > maxPixels ? Math.sqrt(maxPixels / total) : 1
+  const maxDim = opts?.maxDimension ?? Infinity
+  const scaleDim = Math.min(1, maxDim / Math.max(w0, h0))
+  const scale = Math.min(scalePixels, scaleDim)
   const w = Math.max(1, Math.floor(w0 * scale))
   const h = Math.max(1, Math.floor(h0 * scale))
   const destCanvas = document.createElement('canvas')

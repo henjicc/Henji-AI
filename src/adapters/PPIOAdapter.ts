@@ -290,12 +290,14 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         if (images.length > 0) {
           endpoint = '/async/wan-2.5-i2v-preview'
           const img0 = images[0]
-          const base64 = typeof img0 === 'string' && img0.startsWith('data:') ? img0.split(',')[1] : img0
+          const imgUrl = typeof img0 === 'string'
+            ? (img0.startsWith('data:') ? img0 : `data:image/jpeg;base64,${img0}`)
+            : img0
           requestData = {
             input: {
               prompt: params.prompt,
               negative_prompt: params.negativePrompt,
-              image: base64
+              img_url: imgUrl
             },
             parameters: {
               resolution: (params.resolution || '1080P'),
