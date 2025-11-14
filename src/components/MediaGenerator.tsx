@@ -60,10 +60,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [wanSize, setWanSize] = useState('1920*1080')
   const [wanResolution, setWanResolution] = useState('1080P')
   const [wanPromptExtend, setWanPromptExtend] = useState(true)
-  const [wanWatermark, setWanWatermark] = useState(false)
   const [wanAudio, setWanAudio] = useState(true)
-  const [wanAudioUrl, setWanAudioUrl] = useState('')
-  const [wanImageUrl, setWanImageUrl] = useState('')
   const [seedanceResolution, setSeedanceResolution] = useState('720p')
   const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
   const [seedanceDuration, setSeedanceDuration] = useState(5)
@@ -81,6 +78,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [pixAspectDropdownClosing, setPixAspectDropdownClosing] = useState(false)
   const [isPixResolutionDropdownOpen, setIsPixResolutionDropdownOpen] = useState(false)
   const [pixResolutionDropdownClosing, setPixResolutionDropdownClosing] = useState(false)
+  const [isWanSizeDropdownOpen, setIsWanSizeDropdownOpen] = useState(false)
+  const [wanSizeDropdownClosing, setWanSizeDropdownClosing] = useState(false)
+  const [isWanResolutionDropdownOpen, setIsWanResolutionDropdownOpen] = useState(false)
+  const [wanResolutionDropdownClosing, setWanResolutionDropdownClosing] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
@@ -97,6 +98,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const hailuoResolutionRef = useRef<HTMLDivElement>(null)
   const pixAspectRef = useRef<HTMLDivElement>(null)
   const pixResolutionRef = useRef<HTMLDivElement>(null)
+  const wanSizeRef = useRef<HTMLDivElement>(null)
+  const wanResolutionRef = useRef<HTMLDivElement>(null)
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -330,13 +333,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (pixResolutionRef.current && !pixResolutionRef.current.contains(event.target as Node) && isPixResolutionDropdownOpen) {
         handleClosePixResolutionDropdown()
       }
+      if (wanSizeRef.current && !wanSizeRef.current.contains(event.target as Node) && isWanSizeDropdownOpen) {
+        handleCloseWanSizeDropdown()
+      }
+      if (wanResolutionRef.current && !wanResolutionRef.current.contains(event.target as Node) && isWanResolutionDropdownOpen) {
+        handleCloseWanResolutionDropdown()
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -433,6 +442,24 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       setPixResolutionDropdownClosing(false)
     }, 200)
   }
+
+  const handleCloseWanSizeDropdown = () => {
+    setWanSizeDropdownClosing(true)
+    setTimeout(() => {
+      setIsWanSizeDropdownOpen(false)
+      setWanSizeDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseWanResolutionDropdown = () => {
+    setWanResolutionDropdownClosing(true)
+    setTimeout(() => {
+      setIsWanResolutionDropdownOpen(false)
+      setWanResolutionDropdownClosing(false)
+    }, 200)
+  }
+
+  
 
   const handleGenerate = async () => {
     if ((!input.trim() && uploadedImages.length === 0) || isLoading) return
@@ -608,17 +635,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     } else if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
       options.duration = videoDuration
       options.promptExtend = wanPromptExtend
-      options.watermark = wanWatermark
       options.audio = wanAudio
-      options.audioUrl = wanAudioUrl || undefined
       if (uploadedImages.length > 0) {
-        options.imageUrl = wanImageUrl
+        options.images = [uploadedImages[0]]
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob)
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
         options.resolution = wanResolution
       } else {
         options.size = wanSize
       }
       options.negativePrompt = videoNegativePrompt
-      if (videoSeed !== undefined) options.seed = videoSeed
     } else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
       options.resolution = seedanceResolution
       options.aspectRatio = seedanceAspectRatio
@@ -669,6 +697,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         }
       } else if (selectedModel === 'kling-2.5-turbo') {
         maxImageCount = 1
+      } else if (selectedModel === 'wan-2.5-preview') {
+        maxImageCount = 1
       }
         
       for (const file of files) {
@@ -685,7 +715,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   }
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    if (selectedModel === 'kling-2.5-turbo' && uploadedImages.length >= 1) {
+    if ((selectedModel === 'kling-2.5-turbo' || selectedModel === 'wan-2.5-preview') && uploadedImages.length >= 1) {
       return
     }
     const items = e.clipboardData.items
@@ -765,6 +795,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (m === 'kling-2.5-turbo') return 1
       if (m === 'minimax-hailuo-2.3') return 1
       if (m === 'minimax-hailuo-02') return 2
+      if (m === 'wan-2.5-preview') return 1
       if (m === 'vidu-q1') {
         if (mode === 'start-end-frame') return 2
         if (mode === 'reference-to-video') return 7
@@ -1366,7 +1397,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </div>
                 </div>
               )}
-              {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && selectedModel === 'kling-2.5-turbo' && (
+              {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
                 <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                   <div className="max-h-60 overflow-y-auto">
                     {[5, 10].map(val => (
@@ -1572,44 +1603,84 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             )}
 
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length === 0 && (
-              <div className="w-auto min-w-[140px]">
+              <div className="w-auto min-w-[140px] relative" ref={wanSizeRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">尺寸</label>
-                <input value={wanSize} onChange={(e) => setWanSize(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
+                <div
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isWanSizeDropdownOpen) {
+                      handleCloseWanSizeDropdown()
+                    } else {
+                      setIsWanSizeDropdownOpen(true)
+                    }
+                  }}
+                >
+                  <span className="text-sm">{wanSize}</span>
+                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isWanSizeDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+                {(isWanSizeDropdownOpen || wanSizeDropdownClosing) && (
+                  <div className={`absolute z-20 mt-1 w-[260px] bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${wanSizeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="max-h-60 overflow-y-auto">
+                      {[
+                        '832*480','480*832','624*624',
+                        '1280*720','720*1280','960*960','1088*832','832*1088',
+                        '1920*1080','1080*1920','1440*1440','1632*1248','1248*1632'
+                      ].map(val => (
+                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${wanSize === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setWanSize(val); handleCloseWanSizeDropdown() }}>
+                          <span className="text-sm">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length > 0 && (
-              <>
-                <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                  <select value={wanResolution} onChange={(e) => setWanResolution(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                    <option value="480P">480P</option>
-                    <option value="720P">720P</option>
-                    <option value="1080P">1080P</option>
-                  </select>
+              <div className="w-auto min-w-[80px] relative" ref={wanResolutionRef}>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
+                <div
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isWanResolutionDropdownOpen) {
+                      handleCloseWanResolutionDropdown()
+                    } else {
+                      setIsWanResolutionDropdownOpen(true)
+                    }
+                  }}
+                >
+                  <span className="text-sm">{wanResolution}</span>
+                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isWanResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
                 </div>
-                <div className="w-auto min-w-[200px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">图片 URL</label>
-                  <input value={wanImageUrl} onChange={(e) => setWanImageUrl(e.target.value)} placeholder="https://..." className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
-                </div>
-              </>
+                {(isWanResolutionDropdownOpen || wanResolutionDropdownClosing) && (
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${wanResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="max-h-60 overflow-y-auto">
+                      {['480P','720P','1080P'].map(val => (
+                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${wanResolution === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setWanResolution(val); handleCloseWanResolutionDropdown() }}>
+                          <span className="text-sm">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             {selectedModel === 'wan-2.5-preview' && (
               <>
-                <div className="w-auto min-w-[200px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">音频 URL</label>
-                  <input value={wanAudioUrl} onChange={(e) => setWanAudioUrl(e.target.value)} placeholder="https://..." className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
-                </div>
                 <div className="w-auto min-w-[80px]">
                   <label className="block text-sm font-medium mb-1 text-zinc-300">智能改写</label>
-                  <button onClick={() => setWanPromptExtend(!wanPromptExtend)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanPromptExtend ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanPromptExtend ? '开启' : '关闭'}</button>
-                </div>
-                <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">水印</label>
-                  <button onClick={() => setWanWatermark(!wanWatermark)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanWatermark ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanWatermark ? '开启' : '关闭'}</button>
+                  <button onClick={() => setWanPromptExtend(!wanPromptExtend)} className={`w-full px-3 py-2 h-[38px] rounded-lg border ${wanPromptExtend ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanPromptExtend ? '开启' : '关闭'}</button>
                 </div>
                 <div className="w-auto min-w-[80px]">
                   <label className="block text-sm font-medium mb-1 text-zinc-300">音频</label>
-                  <button onClick={() => setWanAudio(!wanAudio)} className={`px-3 py-2 h-[38px] rounded-lg border ${wanAudio ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanAudio ? '开启' : '关闭'}</button>
+                  <button onClick={() => setWanAudio(!wanAudio)} className={`w-full px-3 py-2 h-[38px] rounded-lg border ${wanAudio ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanAudio ? '开启' : '关闭'}</button>
+                </div>
+                <div className="w-auto flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
+                  <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
                 </div>
               </>
             )}
@@ -1649,13 +1720,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </>
             )}
 
-            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
+            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'wan-2.5-preview' && (
               <div className="w-auto flex-1 min-w-[200px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
                 <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
               </div>
             )}
-            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && (
+            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && selectedModel !== 'wan-2.5-preview' && (
               <div className="w-auto min-w-[120px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
                 <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
@@ -1929,7 +2000,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         ref={imageFileInputRef}
         onChange={handleImageFileUpload}
         accept="image/*"
-        multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' ? false : true)}
+        multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
         className="hidden"
       />
     </div>

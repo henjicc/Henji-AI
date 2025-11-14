@@ -286,27 +286,23 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         const images = params.images || []
         const duration = params.duration || 5
         const prompt_extend = params.promptExtend === undefined ? true : params.promptExtend
-        const watermark = params.watermark || false
         const audio = params.audio === undefined ? true : params.audio
         if (images.length > 0) {
-          if (!params.imageUrl) {
-            throw new Error('Wan 图生视频需要提供可公开访问的 img_url')
-          }
           endpoint = '/async/wan-2.5-i2v-preview'
+          const img0 = images[0]
+          const base64 = typeof img0 === 'string' && img0.startsWith('data:') ? img0.split(',')[1] : img0
           requestData = {
             input: {
               prompt: params.prompt,
               negative_prompt: params.negativePrompt,
-              img_url: params.imageUrl,
-              audio_url: params.audioUrl
+              image: base64
             },
             parameters: {
-              resolution: params.resolution || '1080P',
+              resolution: (params.resolution || '1080P'),
               duration,
               prompt_extend,
-              watermark,
-              audio,
-              seed: params.seed
+              watermark: false,
+              audio
             }
           }
         } else {
@@ -314,16 +310,14 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
           requestData = {
             input: {
               prompt: params.prompt,
-              negative_prompt: params.negativePrompt,
-              audio_url: params.audioUrl
+              negative_prompt: params.negativePrompt
             },
             parameters: {
               size: params.size || '1920*1080',
               duration,
               prompt_extend,
-              watermark,
-              audio,
-              seed: params.seed
+              watermark: false,
+              audio
             }
           }
         }
