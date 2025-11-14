@@ -135,7 +135,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // Hailuo 时长-分辨率联动与默认值
   useEffect(() => {
-    if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-2.3') {
+    if (currentModel?.type === 'video' && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02')) {
       if (videoDuration !== 6 && videoDuration !== 10) {
         setVideoDuration(6)
       }
@@ -531,6 +531,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
       if (uploadedImages.length > 0) {
         ;(options as any).hailuoFast = hailuoFastMode
+      }
+    } else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-02') {
+      options.duration = videoDuration || 6
+      options.resolution = videoResolution || '768P'
+      options.promptExtend = minimaxEnablePromptExpansion
+      if (uploadedImages.length > 0) {
+        const take = Math.min(uploadedImages.length, 2)
+        options.images = uploadedImages.slice(0, take)
+        const paths: string[] = []
+        for (const data of uploadedImages.slice(0, take)) {
+          const blob = await dataUrlToBlob(data)
+          const saved = await saveUploadImage(blob)
+          paths.push(saved.fullPath)
+        }
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
       }
     } else if (currentModel?.type === 'video' && selectedModel === 'pixverse-v4.5') {
       options.resolution = videoResolution
@@ -1225,9 +1241,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
         {currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && (
           <>
-            <div className="w-auto min-w-[80px] relative" ref={selectedModel === 'minimax-hailuo-2.3' ? hailuoDurationRef : klingDurationRef}>
+            <div className="w-auto min-w-[80px] relative" ref={(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? hailuoDurationRef : klingDurationRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
-              {selectedModel === 'minimax-hailuo-2.3' ? (
+              {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? (
                 <div
                   className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
@@ -1260,7 +1276,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
               )}
-              {(isHailuoDurationDropdownOpen || hailuoDurationDropdownClosing) && selectedModel === 'minimax-hailuo-2.3' && (
+              {(isHailuoDurationDropdownOpen || hailuoDurationDropdownClosing) && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
                 <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${hailuoDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                   <div className="max-h-60 overflow-y-auto">
                     {[6, 10].map(val => (
@@ -1338,7 +1354,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </select>
               </div>
             )}
-            {selectedModel === 'minimax-hailuo-2.3' && (
+            {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
               <div className="w-auto min-w-[80px] relative" ref={hailuoResolutionRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                 <div
@@ -1524,13 +1540,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </>
             )}
 
-            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && (
+            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
               <div className="w-auto flex-1 min-w-[200px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
                 <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
               </div>
             )}
-            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && (
+            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
               <div className="w-auto min-w-[120px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
                 <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
@@ -1684,6 +1700,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 maxImageCount = 1
               } else if (selectedModel === 'minimax-hailuo-2.3') {
                 maxImageCount = 1
+              } else if (selectedModel === 'minimax-hailuo-02') {
+                maxImageCount = 2
               }
               
               const canUploadMore = uploadedImages.length < maxImageCount

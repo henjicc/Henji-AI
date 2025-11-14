@@ -217,6 +217,36 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
             enable_prompt_expansion: enable
           }
         }
+      } else if (params.model === 'minimax-hailuo-02') {
+        const images = params.images || []
+        const { duration: baseDuration, resolution: baseResolution } = this.normalizeHailuo(params.duration, params.resolution)
+        const enable = params.promptExtend === undefined ? true : params.promptExtend
+        endpoint = '/async/minimax-hailuo-02'
+        if (images.length >= 2) {
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            end_image: images[1],
+            duration: baseDuration,
+            resolution: baseResolution,
+            enable_prompt_expansion: enable
+          }
+        } else if (images.length === 1) {
+          requestData = {
+            prompt: params.prompt,
+            image: images[0],
+            duration: baseDuration,
+            resolution: baseResolution,
+            enable_prompt_expansion: enable
+          }
+        } else {
+          requestData = {
+            prompt: params.prompt,
+            duration: baseDuration,
+            resolution: baseResolution,
+            enable_prompt_expansion: enable
+          }
+        }
       } else if (params.model === 'pixverse-v4.5') {
         const images = params.images || []
         const res = params.resolution || '540p'

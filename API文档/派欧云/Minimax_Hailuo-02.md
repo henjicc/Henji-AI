@@ -35,8 +35,13 @@ Minimax Hailuo-02 是一款支持文本生成视频和图片生成视频的AI视
 
 
 **resolution**: 生成视频的分辨率。默认值：768P
-6 秒视频支持：768P、1080P
-10 秒视频仅支持：768P
+联动规则：
+- 当 duration=10 时，resolution 必须为 768P（客户端会自动锁定为 768P）。
+- 当 duration=6 时，resolution 支持 768P 或 1080P（客户端仅提供这两项可选）。
+参数校验：如提供不合法组合将被拒绝（HTTP 400）。
+示例：
+- 10 秒：`{"duration":10,"resolution":"768P"}`
+- 6 秒：`{"duration":6,"resolution":"1080P"}`
 
 
 **enable_prompt_expansion**: 是否启用提示词优化。

@@ -18,14 +18,8 @@
           "description": "支持文/图生视频、首尾帧、参考生视频多种模式"
         },
         {
-          "id": "minimax-speech-02-hd",
-          "name": "MiniMax Speech-02-hd",
-          "type": "audio",
-          "description": "支持文本到语音的同步生成"
-        },
-        {
           "id": "kling-2.5-turbo",
-          "name": "Kling V2.5 Turbo",
+          "name": "可灵 V2.5 Turbo",
           "type": "video",
           "description": "文生/图生视频，支持宽高比与负面提示"
         },
@@ -34,6 +28,12 @@
           "name": "Minimax Hailuo 2.3",
           "type": "video",
           "description": "文生/图生视频，分辨率与时长受限"
+        },
+        {
+          "id": "minimax-hailuo-02",
+          "name": "Minimax Hailuo-02",
+          "type": "video",
+          "description": "文生/图生/首尾帧；6/10 秒与 768P/1080P"
         },
         {
           "id": "pixverse-v4.5",
@@ -58,6 +58,12 @@
           "name": "Seedance V1 Pro",
           "type": "video",
           "description": "文生/图生视频（需认证）"
+        },
+        {
+          "id": "minimax-speech-02-hd",
+          "name": "MiniMax Speech-02-hd",
+          "type": "audio",
+          "description": "支持文本到语音的同步生成"
         }
       ]
     }
