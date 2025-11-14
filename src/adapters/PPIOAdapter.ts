@@ -16,6 +16,13 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
   private apiClient: AxiosInstance
   private apiKey: string
 
+  private normalizeHailuo(duration?: number, resolution?: string): { duration: number; resolution: string } {
+    const d = duration === 10 ? 10 : 6
+    const rInput = (resolution || '').toUpperCase()
+    const r = d === 10 ? '768P' : (rInput === '1080P' ? '1080P' : '768P')
+    return { duration: d, resolution: r }
+  }
+
   constructor(apiKey: string) {
     this.apiKey = apiKey
     this.apiClient = axios.create({
@@ -189,9 +196,8 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         }
       } else if (params.model === 'minimax-hailuo-2.3' || params.model === 'minimax-hailuo-2.3-fast') {
         const images = params.images || []
-        const isFast = params.model === 'minimax-hailuo-2.3-fast'
-        const baseResolution = params.resolution || '768P'
-        const baseDuration = params.duration || 6
+        const isFast = (params.model === 'minimax-hailuo-2.3-fast') || (!!(params as any).hailuoFast && images.length > 0)
+        const { duration: baseDuration, resolution: baseResolution } = this.normalizeHailuo(params.duration, params.resolution)
         const enable = params.promptExtend === undefined ? true : params.promptExtend
         if (images.length > 0) {
           endpoint = isFast ? '/async/minimax-hailuo-2.3-fast-i2v' : '/async/minimax-hailuo-2.3-i2v'

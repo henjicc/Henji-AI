@@ -36,12 +36,6 @@
           "description": "文生/图生视频，分辨率与时长受限"
         },
         {
-          "id": "minimax-hailuo-2.3-fast",
-          "name": "Minimax Hailuo 2.3 Fast",
-          "type": "video",
-          "description": "图生视频快速版"
-        },
-        {
           "id": "pixverse-v4.5",
           "name": "PixVerse V4.5",
           "type": "video",
