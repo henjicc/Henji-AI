@@ -1,3 +1,6 @@
+API文档/
+.qoder/
+.trae/
 # Dependencies
 node_modules/
 npm-debug.log*
