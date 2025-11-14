@@ -77,6 +77,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [hailuoDurationDropdownClosing, setHailuoDurationDropdownClosing] = useState(false)
   const [isHailuoResolutionDropdownOpen, setIsHailuoResolutionDropdownOpen] = useState(false)
   const [hailuoResolutionDropdownClosing, setHailuoResolutionDropdownClosing] = useState(false)
+  const [isPixAspectDropdownOpen, setIsPixAspectDropdownOpen] = useState(false)
+  const [pixAspectDropdownClosing, setPixAspectDropdownClosing] = useState(false)
+  const [isPixResolutionDropdownOpen, setIsPixResolutionDropdownOpen] = useState(false)
+  const [pixResolutionDropdownClosing, setPixResolutionDropdownClosing] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
@@ -91,6 +95,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const klingAspectRef = useRef<HTMLDivElement>(null)
   const hailuoDurationRef = useRef<HTMLDivElement>(null)
   const hailuoResolutionRef = useRef<HTMLDivElement>(null)
+  const pixAspectRef = useRef<HTMLDivElement>(null)
+  const pixResolutionRef = useRef<HTMLDivElement>(null)
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -151,6 +157,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
   }, [selectedModel, videoDuration, videoResolution])
+
+  // PixVerse 分辨率规范化
+  useEffect(() => {
+    if (currentModel?.type === 'video' && selectedModel === 'pixverse-v4.5') {
+      const s = (videoResolution || '').toLowerCase()
+      const allowed = ['360p', '540p', '720p', '1080p']
+      if (!allowed.includes(s)) {
+        setVideoResolution('540p')
+      }
+      if (pixFastMode && s === '1080p') {
+        setVideoResolution('720p')
+      }
+    }
+  }, [selectedModel, videoResolution, pixFastMode])
 
   // 计算智能分辨率(基于第一张图片)
   const calculateSmartResolution = (imageDataUrl: string): Promise<string> => {
@@ -304,13 +324,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (hailuoResolutionRef.current && !hailuoResolutionRef.current.contains(event.target as Node) && isHailuoResolutionDropdownOpen) {
         handleCloseHailuoResolutionDropdown()
       }
+      if (pixAspectRef.current && !pixAspectRef.current.contains(event.target as Node) && isPixAspectDropdownOpen) {
+        handleClosePixAspectDropdown()
+      }
+      if (pixResolutionRef.current && !pixResolutionRef.current.contains(event.target as Node) && isPixResolutionDropdownOpen) {
+        handleClosePixResolutionDropdown()
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -389,6 +415,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setTimeout(() => {
       setIsHailuoResolutionDropdownOpen(false)
       setHailuoResolutionDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleClosePixAspectDropdown = () => {
+    setPixAspectDropdownClosing(true)
+    setTimeout(() => {
+      setIsPixAspectDropdownOpen(false)
+      setPixAspectDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleClosePixResolutionDropdown = () => {
+    setPixResolutionDropdownClosing(true)
+    setTimeout(() => {
+      setIsPixResolutionDropdownOpen(false)
+      setPixResolutionDropdownClosing(false)
     }, 200)
   }
 
@@ -1277,6 +1319,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
         {currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && (
           <>
+            {selectedModel !== 'pixverse-v4.5' && (
             <div className="w-auto min-w-[80px] relative" ref={(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? hailuoDurationRef : klingDurationRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
               {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? (
@@ -1335,6 +1378,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
               )}
             </div>
+            )}
 
             {(selectedModel === 'kling-2.5-turbo' || selectedModel === 'pixverse-v4.5') && uploadedImages.length === 0 && (
               selectedModel === 'kling-2.5-turbo' ? (
@@ -1368,26 +1412,67 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   )}
                 </div>
               ) : (
-                <div className="w-auto min-w-[80px]">
+                <div className="w-auto min-w-[80px] relative" ref={pixAspectRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                  <select value={videoAspectRatio} onChange={(e) => setVideoAspectRatio(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                    <option value="16:9">16:9</option>
-                    <option value="9:16">9:16</option>
-                    <option value="1:1">1:1</option>
-                  </select>
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isPixAspectDropdownOpen) {
+                        handleClosePixAspectDropdown()
+                      } else {
+                        setIsPixAspectDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{videoAspectRatio}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </div>
+                  {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                      <div className="max-h-60 overflow-y-auto">
+                        {['16:9', '9:16', '1:1'].map(r => (
+                          <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoAspectRatio(r); handleClosePixAspectDropdown() }}>
+                            <span className="text-sm">{r}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             )}
 
             {selectedModel === 'pixverse-v4.5' && (
-              <div className="w-auto min-w-[80px]">
+              <div className="w-auto min-w-[80px] relative" ref={pixResolutionRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                <select value={videoResolution} onChange={(e) => setVideoResolution(e.target.value)} className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer">
-                  <option value="360p">360p</option>
-                  <option value="540p">540p</option>
-                  <option value="720p">720p</option>
-                  <option value="1080p">1080p</option>
-                </select>
+                <div
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isPixResolutionDropdownOpen) {
+                      handleClosePixResolutionDropdown()
+                    } else {
+                      setIsPixResolutionDropdownOpen(true)
+                    }
+                  }}
+                >
+                  <span className="text-sm">{videoResolution}</span>
+                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+                {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="max-h-60 overflow-y-auto">
+                      {[...(pixFastMode ? ['360p','540p','720p'] : ['360p','540p','720p','1080p'])].map(val => (
+                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoResolution || '540p') === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoResolution(val); handleClosePixResolutionDropdown() }}>
+                          <span className="text-sm">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
@@ -1428,19 +1513,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
             )}
 
-            {(selectedModel === 'pixverse-v4.5') && (
-              <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">风格</label>
-                <select value={pixStyle || ''} onChange={(e) => setPixStyle(e.target.value || undefined)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                  <option value="">默认</option>
-                  <option value="anime">anime</option>
-                  <option value="3d_animation">3d_animation</option>
-                  <option value="clay">clay</option>
-                  <option value="comic">comic</option>
-                  <option value="cyberpunk">cyberpunk</option>
-                </select>
-              </div>
-            )}
+            {/* 移除 PixVerse 风格组件 */}
 
             {(selectedModel === 'pixverse-v4.5') && (
               <div className="w-auto min-w-[80px]">
@@ -1582,7 +1655,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
               </div>
             )}
-            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
+            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && (
               <div className="w-auto min-w-[120px]">
                 <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
                 <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />

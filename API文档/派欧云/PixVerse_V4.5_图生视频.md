@@ -50,7 +50,7 @@ fast_mode 为 true：360p、540p、720p
 可接受的值：anime、3d_animation、clay、comic、cyberpunk
 
 
-**seed**: 用于生成的随机种子。
+（当前应用未使用随机种子参数）
 
 
 ## ​

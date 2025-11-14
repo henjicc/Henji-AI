@@ -23,6 +23,12 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
     return { duration: d, resolution: r }
   }
 
+  private normalizePixverseResolution(resolution?: string): string {
+    const s = (resolution || '').toLowerCase()
+    const allowed = ['360p', '540p', '720p', '1080p']
+    return allowed.includes(s) ? s : '540p'
+  }
+
   constructor(apiKey: string) {
     this.apiKey = apiKey
     this.apiClient = axios.create({
@@ -249,30 +255,31 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         }
       } else if (params.model === 'pixverse-v4.5') {
         const images = params.images || []
-        const res = params.resolution || '540p'
+        const res = this.normalizePixverseResolution(params.resolution)
         const ar = params.aspectRatio || '16:9'
         const fast = params.fastMode || false
         if (images.length > 0) {
           endpoint = '/async/pixverse-v4.5-i2v'
+          const img0 = images[0]
+          const base64 = typeof img0 === 'string' && img0.startsWith('data:') ? img0.split(',')[1] : img0
+          // fast_mode 不支持 1080p
+          const finalRes = fast && res === '1080p' ? '720p' : res
           requestData = {
             prompt: params.prompt,
-            image: images[0],
-            resolution: res,
+            image: base64,
+            resolution: finalRes,
             negative_prompt: params.negativePrompt,
-            fast_mode: fast,
-            style: params.style,
-            seed: params.seed
+            fast_mode: fast
           }
         } else {
           endpoint = '/async/pixverse-v4.5-t2v'
+          const finalRes = fast && res === '1080p' ? '720p' : res
           requestData = {
             prompt: params.prompt,
             aspect_ratio: ar,
-            resolution: res,
+            resolution: finalRes,
             negative_prompt: params.negativePrompt,
-            fast_mode: fast,
-            style: params.style,
-            seed: params.seed
+            fast_mode: fast
           }
         }
       } else if (params.model === 'wan-2.5-preview') {
