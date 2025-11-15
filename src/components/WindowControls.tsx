@@ -1,9 +1,16 @@
 import React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { isDesktop } from '../utils/save'
+import { isDesktop, isDesktopAsync } from '../utils/save'
 
 const WindowControls: React.FC = () => {
-  const isTauri = isDesktop()
+  const [isTauri, setIsTauri] = React.useState<boolean>(false)
+  React.useEffect(() => {
+    const ok = isDesktop()
+    if (ok) setIsTauri(true)
+    else {
+      isDesktopAsync().then(v => { if (v) setIsTauri(true) })
+    }
+  }, [])
   if (!isTauri) return null
   const win = getCurrentWindow()
 

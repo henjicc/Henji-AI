@@ -5,8 +5,19 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 
 export const isDesktop = (): boolean => {
   const w: any = typeof window !== 'undefined' ? window : {}
+  if (w && w.__TAURI__ && typeof w.__TAURI__.invoke === 'function') return true
+  if (w && (w.__TAURI__ || w.__TAURI_INTERNALS__)) return true
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : ''
-  return Boolean(w.__TAURI__ || w.__TAURI_INTERNALS__ || /Tauri|Wry/i.test(ua))
+  return /Tauri|Wry/i.test(ua)
+}
+
+export const isDesktopAsync = async (): Promise<boolean> => {
+  try {
+    await path.appLocalDataDir()
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function saveBinary(data: Uint8Array, filename: string): Promise<{ fullPath: string; webSrc: string }> {

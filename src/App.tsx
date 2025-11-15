@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useLayoutEffect } from 'react'
 import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
 import { isDesktop, saveImageFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData } from './utils/save'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
 import { remove } from '@tauri-apps/plugin-fs'
 
@@ -45,6 +46,7 @@ const App: React.FC = () => {
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
   const [confirmOpacity, setConfirmOpacity] = useState(0)
   const tasksEndRef = React.useRef<HTMLDivElement>(null)
+  const listContainerRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [videoViewerOpacity, setVideoViewerOpacity] = useState(0)
@@ -75,9 +77,10 @@ const App: React.FC = () => {
   const controlsContainerRef = React.useRef<HTMLDivElement>(null)
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
 
-  // 自动滚动到最新任务
   const scrollToBottom = () => {
-    tasksEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = listContainerRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
   }
 
   // 键盘导航
@@ -158,8 +161,7 @@ const App: React.FC = () => {
     }
   }, [isConfirmClearOpen])
 
-  // 当任务列表变化时滚动到底部
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (tasks.length > 0) {
       scrollToBottom()
     }
@@ -168,22 +170,25 @@ const App: React.FC = () => {
   // 加载历史（优先文件，其次本地存储）
   useEffect(() => {
     const load = async () => {
-      const fileHistory = await readJsonFromAppData<any[]>('Henji-AI/history.json')
+      const fileHistory = isDesktop() ? await readJsonFromAppData<any[]>('Henji-AI/history.json') : null
       const store = fileHistory ?? (() => { try { return JSON.parse(localStorage.getItem('generationTasks') || '[]') } catch { return [] } })()
-      const loaded = await Promise.all((store || []).map(async (task: any) => {
+      const loaded = (store || []).map((task: any) => {
         let result = task.result
-        if (result && result.filePath) {
-          try { result = { ...result, url: await fileToBlobSrc(result.filePath) } } catch {}
+        if (result && result.filePath && isDesktop()) {
+          try {
+            if (typeof result.filePath === 'string' && result.filePath.includes('|||')) {
+              const paths = result.filePath.split('|||')
+              const display = paths.map(p => convertFileSrc(p)).join('|||')
+              result = { ...result, url: display }
+            } else {
+              result = { ...result, url: convertFileSrc(result.filePath) }
+            }
+          } catch {}
         }
         let images = task.images
-        if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length) {
+        if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length && isDesktop()) {
           try {
-            const arr: string[] = []
-            for (const p of task.uploadedFilePaths) {
-              const src = await fileToBlobSrc(p, 'image/png')
-              arr.push(src)
-            }
-            images = arr
+            images = task.uploadedFilePaths.map((p: string) => convertFileSrc(p))
           } catch {}
         }
         return {
@@ -193,16 +198,23 @@ const App: React.FC = () => {
           result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
           images
         }
-      }))
+      })
       setTasks(loaded)
       setIsTasksLoaded(true)
     }
     load()
   }, [])
 
+  useLayoutEffect(() => {
+    if (isTasksLoaded && tasks.length > 0) {
+      scrollToBottom()
+    }
+  }, [isTasksLoaded])
+
   // 保存历史到文件（避免本地存储配额）
   useEffect(() => {
     if (!isTasksLoaded) return
+    if (!isDesktop()) return
     const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error')
       .map(t => ({
         id: t.id,
@@ -279,7 +291,7 @@ const App: React.FC = () => {
         case 'image':
           result = await apiService.generateImage(input, model, options)
           console.log('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
-          if (result?.url) {
+          if (result?.url && isDesktop()) {
             try {
               if (result.url.includes('|||')) {
                 const urls = result.url.split('|||')
@@ -853,7 +865,7 @@ const App: React.FC = () => {
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col relative z-10 pt-10">
         {/* 结果显示区 - 瀑布流布局 */}
-        <div className="flex-1 overflow-y-auto p-4 pb-[400px] app-scroll-container"> {/* 增加底部内边距避免被整个悬浮输入框遮挡 */}
+        <div ref={listContainerRef} className="flex-1 overflow-y-auto p-4 pb-[400px] app-scroll-container"> {/* 增加底部内边距避免被整个悬浮输入框遮挡 */}
           <div className="max-w-6xl mx-auto w-[90%]"> {/* 添加容器限制宽度并居中 */}
             {tasks.length > 0 ? (
               <>
