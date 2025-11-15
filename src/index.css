@@ -129,9 +129,9 @@
   }
 }
 
-/* 平滑滚动 */
-* {
-  scroll-behavior: smooth;
+/* 滚动行为控制 */
+html, body {
+  scroll-behavior: auto;
 }
 
 /* 自定义滚动条样式 */

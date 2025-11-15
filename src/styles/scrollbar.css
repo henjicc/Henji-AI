@@ -8,6 +8,7 @@
   bottom: 0;
   overflow-y: auto;
   scroll-behavior: auto !important;
+  overflow-anchor: none;
 }
 
 /* Global scrollbar styling for scroll containers */

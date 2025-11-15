@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
@@ -42,12 +42,14 @@ const App: React.FC = () => {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [imageTransitioning, setImageTransitioning] = useState(false)
-  const [isTasksLoaded, setIsTasksLoaded] = useState(false) // 标记任务是否已从localStorage加载
+  const [isTasksLoaded, setIsTasksLoaded] = useState(false)
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
   const [viewerOpacity, setViewerOpacity] = useState(0)
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
   const [confirmOpacity, setConfirmOpacity] = useState(0)
   const tasksEndRef = React.useRef<HTMLDivElement>(null)
   const listContainerRef = React.useRef<HTMLDivElement>(null)
+  const contentRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [videoViewerOpacity, setVideoViewerOpacity] = useState(0)
@@ -78,11 +80,69 @@ const App: React.FC = () => {
   const lastFrameMediaTimeRef = React.useRef<number | null>(null)
   const controlsContainerRef = React.useRef<HTMLDivElement>(null)
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
+  const inputContainerRef = React.useRef<HTMLDivElement>(null)
+  const [inputPadding, setInputPadding] = useState<number>(400)
 
   const scrollToBottom = () => {
     const el = listContainerRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
+  }
+
+  const updateBottomState = () => {
+    const el = listContainerRef.current
+    if (!el) return
+    const threshold = 8
+    const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
+    setIsUserAtBottom(atBottom)
+  }
+
+  useEffect(() => {
+    const el = listContainerRef.current
+    if (!el) return
+    updateBottomState()
+    const handler = () => updateBottomState()
+    el.addEventListener('scroll', handler)
+    return () => { el.removeEventListener('scroll', handler) }
+  }, [])
+
+  useEffect(() => {
+    const contentEl = contentRef.current
+    if (!contentEl) return
+    const ro = new ResizeObserver(() => {
+      if (isUserAtBottom) scrollToBottom()
+    })
+    ro.observe(contentEl)
+    return () => { ro.disconnect() }
+  }, [isUserAtBottom])
+
+  useEffect(() => {
+    const inputEl = inputContainerRef.current
+    const listEl = listContainerRef.current
+    if (!inputEl || !listEl) return
+    const update = () => {
+      const h = inputEl.offsetHeight || 0
+      setInputPadding(h + 24)
+      listEl.style.paddingBottom = `${h + 24}px`
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(inputEl)
+    return () => { ro.disconnect() }
+  }, [])
+
+  const finalizeInitialScroll = async () => {
+    const el = listContainerRef.current
+    if (!el) return
+    const imgs = Array.from(el.querySelectorAll('img')) as HTMLImageElement[]
+    const pending = imgs.filter(img => !img.complete)
+    if (pending.length) {
+      await Promise.all(pending.map(img => new Promise<void>(resolve => {
+        img.addEventListener('load', () => resolve(), { once: true })
+        img.addEventListener('error', () => resolve(), { once: true })
+      })))
+    }
+    scrollToBottom()
   }
 
   // 键盘导航
@@ -163,11 +223,11 @@ const App: React.FC = () => {
     }
   }, [isConfirmClearOpen])
 
-  useLayoutEffect(() => {
-    if (tasks.length > 0) {
+  useEffect(() => {
+    if (tasks.length > 0 && isUserAtBottom) {
       scrollToBottom()
     }
-  }, [tasks])
+  }, [tasks, isUserAtBottom])
 
   // 加载历史（优先文件，其次本地存储）
   useEffect(() => {
@@ -207,9 +267,9 @@ const App: React.FC = () => {
     load()
   }, [])
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (isTasksLoaded && tasks.length > 0) {
-      scrollToBottom()
+      finalizeInitialScroll()
     }
   }, [isTasksLoaded])
 
@@ -889,8 +949,8 @@ const App: React.FC = () => {
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col relative z-10 pt-10">
         {/* 结果显示区 - 瀑布流布局 */}
-        <div ref={listContainerRef} className="flex-1 overflow-y-auto p-4 pb-[400px] app-scroll-container"> {/* 增加底部内边距避免被整个悬浮输入框遮挡 */}
-          <div className="max-w-6xl mx-auto w-[90%]"> {/* 添加容器限制宽度并居中 */}
+        <div ref={listContainerRef} className="flex-1 overflow-y-auto p-4 pb-[400px] app-scroll-container" style={{ paddingBottom: inputPadding }}>
+          <div ref={contentRef} className="max-w-6xl mx-auto w-[90%]">
             {tasks.length > 0 ? (
               <>
                 <div className="flex justify-between items-center mb-4">
@@ -908,7 +968,7 @@ const App: React.FC = () => {
                   {tasks.map((task) => (
                     <div 
                       key={task.id} 
-                      className="overflow-hidden animate-fade-in-up"
+                      className="overflow-hidden animate-fade-in"
                     >
                       {/* 任务信息行 */}
                       <div className="pb-3 border-b border-[rgba(46,46,46,0.8)]">
@@ -1127,7 +1187,7 @@ const App: React.FC = () => {
         )}
 
         {/* 输入区域 - 悬浮设计 */}
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
+        <div ref={inputContainerRef} className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
           <div className="bg-[#131313]/70 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
             <MediaGenerator 
               onGenerate={handleGenerate}

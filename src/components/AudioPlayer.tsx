@@ -161,8 +161,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>
-      {waveform && waveSampleRate != null && waveTotalSamples != null && (
-        <div className="mb-3">
+      <div className="mb-3 h-[72px]">
+        {waveform && waveSampleRate != null && waveTotalSamples != null ? (
           <Waveform
             samples={waveform}
             width={576}
@@ -185,8 +185,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
               }
             }}
           />
-        </div>
-      )}
+        ) : (
+          <div className="w-full h-full rounded-md bg-[#1B1C21]" />
+        )}
+      </div>
       <div className="mt-3 flex items-center justify-between">
         <div className="relative flex items-center">
           <button className="text-zinc-300 hover:opacity-70" title="音量">
