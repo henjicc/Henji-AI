@@ -5,16 +5,14 @@ interface WaveformProps {
   width?: number
   height?: number
   progress?: number
-  audioDuration: number
-  totalSamples: number
-  sampleRate: number
+  duration: number
   onSeek?: (ratio: number) => void
   onSeekStart?: (ratio: number) => void
   onSeekMove?: (ratio: number) => void
   onSeekEnd?: (ratio: number, dragged: boolean) => void
 }
 
-const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, progress = 0, audioDuration, totalSamples, sampleRate, onSeek, onSeekStart, onSeekMove, onSeekEnd }) => {
+const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, progress = 0, duration, onSeek, onSeekStart, onSeekMove, onSeekEnd }) => {
   const [hoverX, setHoverX] = React.useState<number | null>(null)
   const [dragging, setDragging] = React.useState(false)
   const [lastRatio, setLastRatio] = React.useState(0)
@@ -74,13 +72,8 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
       {samples.map((s, i) => {
         const amp = Math.max(0, Math.min(1, s))
         const bh = Math.max(2, Math.floor(amp * h))
-        const stepFloat = totalSamples / n
-        const startIdx = Math.floor(i * stepFloat)
-        const endIdx = Math.floor((i + 1) * stepFloat)
-        const tStart = startIdx / sampleRate
-        const tEnd = endIdx / sampleRate
-        const xStart = Math.floor((tStart / Math.max(1e-6, audioDuration)) * w)
-        const xEnd = Math.floor((tEnd / Math.max(1e-6, audioDuration)) * w)
+        const xStart = Math.floor((i / n) * w)
+        const xEnd = Math.floor(((i + 1) / n) * w)
         const baseW = Math.max(1, xEnd - xStart)
         const y = Math.floor((h - bh) / 2)
         const r = Math.min(4, Math.floor(baseW / 3))
@@ -98,7 +91,7 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
       {hoverX != null && (
         (() => {
           const ratio = Math.max(0, Math.min(1, hoverX / w))
-          const sec = ratio * audioDuration
+          const sec = ratio * (duration || 0)
           const t = Math.max(0, Math.floor(sec))
           const mm = Math.floor(t / 60)
           const ss = (t % 60).toString().padStart(2, '0')

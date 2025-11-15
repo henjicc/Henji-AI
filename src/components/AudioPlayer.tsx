@@ -168,9 +168,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
             width={576}
             height={72}
             progress={audioRef.current && audioRef.current.duration ? currentTime / audioRef.current.duration : (duration ? currentTime / duration : 0)}
-            audioDuration={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
-            totalSamples={waveTotalSamples}
-            sampleRate={waveSampleRate}
+            duration={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
             onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
             onSeekMove={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
             onSeekEnd={(r, dragged) => {
