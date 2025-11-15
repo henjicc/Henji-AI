@@ -874,12 +874,14 @@ const App: React.FC = () => {
               <>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold">生成历史</h2>
+                  {false && (
                   <button
                     onClick={() => setIsConfirmClearOpen(true)}
                     className="h-8 px-3 inline-flex items-center justify-center bg-red-600/60 hover:bg-red-600/80 rounded-md text-sm leading-none transition-colors"
                   >
                     清除历史
                   </button>
+                  )}
                 </div>
                 <div className="space-y-6">
                   {tasks.map((task) => (
@@ -1131,6 +1133,7 @@ const App: React.FC = () => {
               onGenerate={handleGenerate}
               isLoading={isLoading}
               onOpenSettings={openSettings}
+              onOpenClearHistory={() => setIsConfirmClearOpen(true)}
             />
           </div>
         </div>

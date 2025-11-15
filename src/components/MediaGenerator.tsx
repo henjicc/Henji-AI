@@ -6,9 +6,10 @@ interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
   isLoading: boolean
   onOpenSettings: () => void
+  onOpenClearHistory: () => void
 }
 
-const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings }) => {
+const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory }) => {
   const [input, setInput] = useState('')
   const [selectedProvider, setSelectedProvider] = useState('piaoyun')
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
@@ -2203,21 +2204,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       {/* 操作按钮 */}
       <div className="flex flex-wrap gap-3 mt-4">
         <button
-          onClick={() => {
-            setInput('')
-            setUploadedImages([])
-            setMediaType('text')
-          }}
+          onClick={onOpenClearHistory}
           disabled={isLoading}
-          className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
+          className="px-4 py-2 bg-red-600/60 hover:bg-red-600/80 backdrop-blur-lg rounded-lg transition-all duration-300 border border-red-700/50 flex items-center text-sm"
+          title="清除历史"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          清除
+          清除历史
         </button>
-        
-        {/* 设置按钮 */}
         <button
           onClick={onOpenSettings}
           className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
