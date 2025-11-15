@@ -281,6 +281,7 @@ const App: React.FC = () => {
     setError(null)
 
     try {
+      setIsLoading(true)
       // 更新任务状态为生成中
       setTasks(prev => prev.map(task => 
         task.id === taskId ? {...task, status: 'generating'} : task
@@ -358,6 +359,8 @@ const App: React.FC = () => {
           error: err instanceof Error ? err.message : '生成失败'
         } : task
       ))
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -811,7 +814,7 @@ const App: React.FC = () => {
         images = task.images
       }
     }
-    const event = new CustomEvent('reedit-content', { detail: { prompt: task.prompt, images } })
+    const event = new CustomEvent('reedit-content', { detail: { prompt: task.prompt, images, uploadedFilePaths: task.uploadedFilePaths } })
     window.dispatchEvent(event)
   }
 

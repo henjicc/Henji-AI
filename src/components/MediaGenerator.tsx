@@ -304,11 +304,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   // 监听重新编辑事件
   useEffect(() => {
     const handleReedit = (event: CustomEvent) => {
-      const { prompt, images } = event.detail
+      const { prompt, images, uploadedFilePaths } = event.detail as any
       setInput(prompt || '')
       if (images && Array.isArray(images)) {
         setUploadedImages(images)
         setMediaType('image')
+      }
+      if (uploadedFilePaths && Array.isArray(uploadedFilePaths)) {
+        setUploadedFilePaths(uploadedFilePaths)
+      } else {
+        setUploadedFilePaths([])
       }
     }
 
@@ -542,11 +547,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   if (currentModel?.type === 'image') {
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
-      const paths: string[] = []
-      for (const data of uploadedImages) {
-        const blob = await dataUrlToBlob(data)
-        const saved = await saveUploadImage(blob)
-        paths.push(saved.fullPath)
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob)
+          paths[i] = saved.fullPath
+        }
       }
       setUploadedFilePaths(paths)
       options.uploadedFilePaths = paths
@@ -592,10 +599,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         // 文/图生视频：最多1张图片
         if (uploadedImages.length > 0) {
           options.images = [uploadedImages[0]]
-          const blob = await dataUrlToBlob(uploadedImages[0])
-          const saved = await saveUploadImage(blob)
-          options.uploadedFilePaths = [saved.fullPath]
-          setUploadedFilePaths([saved.fullPath])
+          const p0 = uploadedFilePaths[0]
+          if (p0) {
+            options.uploadedFilePaths = [p0]
+          } else {
+            const blob = await dataUrlToBlob(uploadedImages[0])
+            const saved = await saveUploadImage(blob)
+            options.uploadedFilePaths = [saved.fullPath]
+            setUploadedFilePaths([saved.fullPath])
+          }
         }
         // 只有文生视频才支持aspect_ratio和style
         if (uploadedImages.length === 0) {
@@ -609,14 +621,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           return
         }
         options.images = uploadedImages.slice(0, 2)
-        const p2: string[] = []
-        for (const data of uploadedImages.slice(0, 2)) {
-          const blob = await dataUrlToBlob(data)
-          const saved = await saveUploadImage(blob)
-          p2.push(saved.fullPath)
+        const existing = uploadedFilePaths.slice(0, 2)
+        const paths: string[] = [...existing]
+        for (let i = 0; i < options.images.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(options.images[i])
+            const saved = await saveUploadImage(blob)
+            paths[i] = saved.fullPath
+          }
         }
-        options.uploadedFilePaths = p2
-        setUploadedFilePaths(p2)
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
       } else if (viduMode === 'reference-to-video') {
         // 参考生视频：1-7张图片，必须prompt
         if (uploadedImages.length < 1 || uploadedImages.length > 7) {
@@ -628,14 +643,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           return
         }
         options.images = uploadedImages.slice(0, 7)
-        const p7: string[] = []
-        for (const data of uploadedImages.slice(0, 7)) {
-          const blob = await dataUrlToBlob(data)
-          const saved = await saveUploadImage(blob)
-          p7.push(saved.fullPath)
+        const existing = uploadedFilePaths.slice(0, 7)
+        const paths: string[] = [...existing]
+        for (let i = 0; i < options.images.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(options.images[i])
+            const saved = await saveUploadImage(blob)
+            paths[i] = saved.fullPath
+          }
         }
-        options.uploadedFilePaths = p7
-        setUploadedFilePaths(p7)
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
         options.aspectRatio = viduAspectRatio
       }
       
@@ -652,10 +670,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         options.aspectRatio = videoAspectRatio
       } else {
         options.images = [uploadedImages[0]]
-        const blob = await dataUrlToBlob(uploadedImages[0])
-        const saved = await saveUploadImage(blob)
-        options.uploadedFilePaths = [saved.fullPath]
-        setUploadedFilePaths([saved.fullPath])
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          options.uploadedFilePaths = [p0]
+        } else {
+          const blob = await dataUrlToBlob(uploadedImages[0])
+          const saved = await saveUploadImage(blob)
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
+        }
       }
       
     } else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-2.3') {
@@ -664,10 +687,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       options.promptExtend = minimaxEnablePromptExpansion
       if (uploadedImages.length > 0) {
         options.images = [uploadedImages[0]]
-        const blob = await dataUrlToBlob(uploadedImages[0])
-        const saved = await saveUploadImage(blob)
-        options.uploadedFilePaths = [saved.fullPath]
-        setUploadedFilePaths([saved.fullPath])
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          options.uploadedFilePaths = [p0]
+        } else {
+          const blob = await dataUrlToBlob(uploadedImages[0])
+          const saved = await saveUploadImage(blob)
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
+        }
       }
       if (uploadedImages.length > 0) {
         ;(options as any).hailuoFast = hailuoFastMode
@@ -679,11 +707,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (uploadedImages.length > 0) {
         const take = Math.min(uploadedImages.length, 2)
         options.images = uploadedImages.slice(0, take)
-        const paths: string[] = []
-        for (const data of uploadedImages.slice(0, take)) {
-          const blob = await dataUrlToBlob(data)
-          const saved = await saveUploadImage(blob)
-          paths.push(saved.fullPath)
+        const existing = uploadedFilePaths.slice(0, take)
+        const paths: string[] = [...existing]
+        for (let i = 0; i < options.images.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(options.images[i])
+            const saved = await saveUploadImage(blob)
+            paths[i] = saved.fullPath
+          }
         }
         options.uploadedFilePaths = paths
         setUploadedFilePaths(paths)
@@ -697,10 +728,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         options.aspectRatio = videoAspectRatio
       } else {
         options.images = [uploadedImages[0]]
-        const blob = await dataUrlToBlob(uploadedImages[0])
-        const saved = await saveUploadImage(blob)
-        options.uploadedFilePaths = [saved.fullPath]
-        setUploadedFilePaths([saved.fullPath])
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          options.uploadedFilePaths = [p0]
+        } else {
+          const blob = await dataUrlToBlob(uploadedImages[0])
+          const saved = await saveUploadImage(blob)
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
+        }
       }
       if (videoSeed !== undefined) options.seed = videoSeed
     } else if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
@@ -709,10 +745,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       options.audio = wanAudio
       if (uploadedImages.length > 0) {
         options.images = [uploadedImages[0]]
-        const blob = await dataUrlToBlob(uploadedImages[0])
-        const saved = await saveUploadImage(blob, 'persist', { maxDimension: 2000 })
-        options.uploadedFilePaths = [saved.fullPath]
-        setUploadedFilePaths([saved.fullPath])
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          options.uploadedFilePaths = [p0]
+        } else {
+          const blob = await dataUrlToBlob(uploadedImages[0])
+          const saved = await saveUploadImage(blob, 'persist', { maxDimension: 2000 })
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
+        }
         options.resolution = wanResolution
       } else {
         options.size = wanSize
@@ -727,15 +768,26 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (uploadedImages.length > 0) {
         const first = uploadedImages[0]
         options.images = [first]
-        const blob1 = await dataUrlToBlob(first)
-        const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
-        const paths: string[] = [saved1.fullPath]
+        const paths: string[] = []
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          paths.push(p0)
+        } else {
+          const blob1 = await dataUrlToBlob(first)
+          const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
+          paths.push(saved1.fullPath)
+        }
         if (uploadedImages.length > 1) {
           const last = uploadedImages[1]
           options.lastImage = last
-          const blob2 = await dataUrlToBlob(last)
-          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
-          paths.push(saved2.fullPath)
+          const p1 = uploadedFilePaths[1]
+          if (p1) {
+            paths.push(p1)
+          } else {
+            const blob2 = await dataUrlToBlob(last)
+            const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+            paths.push(saved2.fullPath)
+          }
         }
         options.uploadedFilePaths = paths
         setUploadedFilePaths(paths)
@@ -748,22 +800,38 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (uploadedImages.length > 0) {
         const first = uploadedImages[0]
         options.images = [first]
-        const blob1 = await dataUrlToBlob(first)
-        const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
-        const paths: string[] = [saved1.fullPath]
+        const paths: string[] = []
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          paths.push(p0)
+        } else {
+          const blob1 = await dataUrlToBlob(first)
+          const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
+          paths.push(saved1.fullPath)
+        }
         if (selectedModel === 'seedance-v1-lite' && uploadedImages.length > 1) {
           const last = uploadedImages[1]
           options.lastImage = last
-          const blob2 = await dataUrlToBlob(last)
-          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
-          paths.push(saved2.fullPath)
+          const p1 = uploadedFilePaths[1]
+          if (p1) {
+            paths.push(p1)
+          } else {
+            const blob2 = await dataUrlToBlob(last)
+            const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+            paths.push(saved2.fullPath)
+          }
         }
         if (selectedModel === 'seedance-v1-pro' && uploadedImages.length > 1) {
           const last = uploadedImages[1]
           options.lastImage = last
-          const blob2 = await dataUrlToBlob(last)
-          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
-          paths.push(saved2.fullPath)
+          const p1 = uploadedFilePaths[1]
+          if (p1) {
+            paths.push(p1)
+          } else {
+            const blob2 = await dataUrlToBlob(last)
+            const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+            paths.push(saved2.fullPath)
+          }
         }
         options.uploadedFilePaths = paths
         setUploadedFilePaths(paths)
