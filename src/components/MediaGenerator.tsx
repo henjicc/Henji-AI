@@ -1946,28 +1946,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </span>
                 </span>
               </label>
-              <div className="flex gap-1 h-[38px]">
-                <button
-                  onClick={() => setSequentialImageGeneration('auto')}
-                  className={`px-3 py-2 text-sm rounded-lg transition-all duration-300 ${
-                    sequentialImageGeneration === 'auto'
-                      ? 'bg-[#007eff] text-white'
-                      : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                  }`}
-                >
-                  自动
-                </button>
-                <button
-                  onClick={() => setSequentialImageGeneration('disabled')}
-                  className={`px-3 py-2 text-sm rounded-lg transition-all duration-300 ${
-                    sequentialImageGeneration === 'disabled'
-                      ? 'bg-[#007eff] text-white'
-                      : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                  }`}
-                >
-                  禁用
-                </button>
-              </div>
+              <button
+                onClick={() => setSequentialImageGeneration(
+                  sequentialImageGeneration === 'auto' ? 'disabled' : 'auto'
+                )}
+                className={`px-3 py-2 h-[38px] rounded-lg border ${
+                  sequentialImageGeneration === 'auto'
+                    ? 'bg-[#007eff] text-white border-[#007eff]'
+                    : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
+                }`}
+              >
+                {sequentialImageGeneration === 'auto' ? '开启' : '关闭'}
+              </button>
             </div>
 
             {/* 最大图像数量 */}
