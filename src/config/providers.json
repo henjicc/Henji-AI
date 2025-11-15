@@ -52,12 +52,13 @@
           "name": "Seedance V1 (Lite/Pro)",
           "type": "video",
           "description": "文/图生视频，480p/720p/1080p，支持相机固定；Lite 支持首尾图"
-        },
+        }
+        ,
         {
-          "id": "minimax-speech-02-hd",
-          "name": "MiniMax Speech-02-hd",
+          "id": "minimax-speech-2.6",
+          "name": "MiniMax Speech-2.6",
           "type": "audio",
-          "description": "支持文本到语音的同步生成"
+          "description": "同步语音合成（HD/Turbo）"
         }
       ]
     }

@@ -3,9 +3,10 @@ import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
-import { isDesktop, saveImageFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData } from './utils/save'
+import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile } from './utils/save'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
+import AudioPlayer from './components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
 
 // 定义生成任务类型
@@ -51,6 +52,7 @@ const App: React.FC = () => {
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [videoViewerOpacity, setVideoViewerOpacity] = useState(0)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
+  const [currentVideoPath, setCurrentVideoPath] = useState('')
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [videoDuration, setVideoDuration] = useState(0)
@@ -326,7 +328,19 @@ const App: React.FC = () => {
           }
           break
         case 'audio':
+          console.log('[App] generateAudio 调用参数:', { input, model, options })
           result = await apiService.generateAudio(input, model, options)
+          if (result && result.url && isDesktop()) {
+            try {
+              const { fullPath } = await saveAudioFromUrl(result.url)
+              const blobSrc = await fileToBlobSrc(fullPath, 'audio/mpeg')
+              result.url = blobSrc
+              ;(result as any).filePath = fullPath
+              console.log('[App] 本地保存成功并替换展示地址')
+            } catch (e) {
+              console.error('[App] 本地保存失败，回退在线地址', e)
+            }
+          }
           break
         default:
           throw new Error('Unsupported media type')
@@ -351,6 +365,7 @@ const App: React.FC = () => {
         ))
       }
     } catch (err) {
+      console.error('[App] 生成失败:', err)
       // 更新任务状态为错误
       setTasks(prev => prev.map(task => 
         task.id === taskId ? {
@@ -497,8 +512,9 @@ const App: React.FC = () => {
     }, 200)
   }
 
-  const openVideoViewer = (url: string) => {
+  const openVideoViewer = (url: string, filePath?: string) => {
     setCurrentVideoUrl(url)
+    setCurrentVideoPath(filePath || '')
     setIsVideoViewerOpen(true)
     setIsVideoPlaying(false)
     setCurrentTime(0)
@@ -564,17 +580,22 @@ const App: React.FC = () => {
 
   const downloadVideo = async (videoUrl: string) => {
     try {
-      const response = await fetch(videoUrl)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `video-${Date.now()}.mp4`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+      if (currentVideoPath) {
+        await downloadMediaFile(currentVideoPath)
+      } else {
+        const response = await fetch(videoUrl)
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `video-${Date.now()}.mp4`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      }
     } catch (err) {
+      console.error('Video download failed', err)
     }
   }
 
@@ -1054,7 +1075,7 @@ const App: React.FC = () => {
                                 )
                               )}
                               {task.result.type === 'video' && (
-                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url)}>
+                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url, (task.result as any).filePath)}>
                                   <video 
                                     src={task.result.url} 
                                     className="max-w-full max-h-full object-contain"
@@ -1069,18 +1090,7 @@ const App: React.FC = () => {
                                 </div>
                               )}
                               {task.result.type === 'audio' && (
-                                <div className="flex flex-col items-center">
-                                  <div className="w-16 h-16 rounded-full bg-[#007eff] flex items-center justify-center mb-4">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                                    </svg>
-                                  </div>
-                                  <audio 
-                                    src={task.result.url} 
-                                    controls 
-                                    className="w-full max-w-xs"
-                                  />
-                                </div>
+                                <AudioPlayer src={task.result.url} filePath={(task.result as any).filePath} />
                               )}
                             </div>
                           </div>

@@ -14,7 +14,6 @@ import {
 export class PPIOAdapter implements MediaGeneratorAdapter {
   name = 'PiaoYun'
   private apiClient: AxiosInstance
-  private apiKey: string
 
   private normalizeHailuo(duration?: number, resolution?: string): { duration: number; resolution: string } {
     const d = duration === 10 ? 10 : 6
@@ -30,7 +29,6 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
   }
 
   constructor(apiKey: string) {
-    this.apiKey = apiKey
     this.apiClient = axios.create({
       baseURL: 'https://api.ppinfra.com/v3',
       headers: {
@@ -38,6 +36,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         'Authorization': `Bearer ${apiKey}`
       }
     })
+    
   }
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
@@ -443,25 +442,76 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
 
   async generateAudio(params: GenerateAudioParams): Promise<AudioResult> {
     try {
-      const endpoint = '/minimax-speech-02-hd'
-      
-      const response = await this.apiClient.post(endpoint, {
-        text: params.text,
-        stream: false,
-        output_format: 'url',
-        voice_setting: {
-          voice_id: params.voiceId || 'male-qn-jingying'
-        }
-      })
-
-      if (response.data.audio) {
-        return {
-          url: response.data.audio
-        }
+      let endpoint = ''
+      if (params.model === 'minimax-speech-2.6') {
+        const spec = (params.spec === 'turbo') ? 'turbo' : 'hd'
+        endpoint = spec === 'turbo' ? '/minimax-speech-2.6-turbo' : '/minimax-speech-2.6-hd'
+      } else if (params.model === 'minimax-speech-2.6-hd') {
+        endpoint = '/minimax-speech-2.6-hd'
+      } else if (params.model === 'minimax-speech-2.6-turbo') {
+        endpoint = '/minimax-speech-2.6-turbo'
       } else {
-        throw new Error('No audio returned from API')
+        throw new Error(`Unsupported audio model: ${params.model}`)
       }
+
+      const requestData: any = {
+        text: params.text,
+        output_format: params.output_format || 'url'
+      }
+
+      if (params.stream !== undefined) {
+        requestData.stream = params.stream
+      }
+      if (params.stream_options) {
+        requestData.stream_options = params.stream_options
+      }
+
+      const voice_setting: any = {}
+      if (params.voiceId) voice_setting.voice_id = params.voiceId
+      if (params.speed !== undefined) voice_setting.speed = params.speed
+      if (params.vol !== undefined) voice_setting.vol = params.vol
+      if (params.pitch !== undefined) voice_setting.pitch = params.pitch
+      if (params.emotion) voice_setting.emotion = params.emotion
+      if (params.latex_read !== undefined) voice_setting.latex_read = params.latex_read
+      if (params.text_normalization !== undefined) voice_setting.text_normalization = params.text_normalization
+      if (Object.keys(voice_setting).length > 0) {
+        requestData.voice_setting = voice_setting
+      }
+
+      const audio_setting: any = {}
+      if (params.sample_rate !== undefined) audio_setting.sample_rate = params.sample_rate
+      if (params.bitrate !== undefined) audio_setting.bitrate = params.bitrate
+      if (params.format) audio_setting.format = params.format
+      if (params.channel !== undefined) audio_setting.channel = params.channel
+      if (Object.keys(audio_setting).length > 0) {
+        requestData.audio_setting = audio_setting
+      }
+
+      if (params.pronunciation_dict) {
+        requestData.pronunciation_dict = params.pronunciation_dict
+      }
+      if (params.timbre_weights) {
+        requestData.timbre_weights = params.timbre_weights
+      }
+      if (params.language_boost) {
+        requestData.language_boost = params.language_boost
+      }
+      if (params.voice_modify) {
+        requestData.voice_modify = params.voice_modify
+      }
+
+      console.log('[PPIOAdapter] generateAudio 请求', { endpoint, requestData })
+      const response = await this.apiClient.post(endpoint, requestData)
+      console.log('[PPIOAdapter] generateAudio 响应', response.data)
+      if (response.data.audio) {
+        return { url: response.data.audio }
+      }
+      throw new Error('No audio returned from API')
     } catch (error) {
+      console.error('[PPIOAdapter] generateAudio 错误:', error)
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('[PPIOAdapter] 错误响应数据:', error.response.data)
+      }
       throw this.handleError(error)
     }
   }

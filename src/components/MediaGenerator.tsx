@@ -112,6 +112,50 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const seedanceResolutionRef = useRef<HTMLDivElement>(null)
   const seedanceAspectRef = useRef<HTMLDivElement>(null)
 
+  const [audioSpeed, setAudioSpeed] = useState<number>(1.0)
+  const [audioEmotion, setAudioEmotion] = useState<string>('neutral')
+  const [voiceId, setVoiceId] = useState<string>('male-qn-jingying')
+  const [isVoiceDropdownOpen, setIsVoiceDropdownOpen] = useState(false)
+  const [voiceDropdownClosing, setVoiceDropdownClosing] = useState(false)
+  const [voiceFilterGender, setVoiceFilterGender] = useState<'all' | 'male' | 'female' | 'child' | 'other'>('all')
+  const voiceRef = useRef<HTMLDivElement>(null)
+  const [isAudioAdvancedOpen, setIsAudioAdvancedOpen] = useState(false)
+  const audioAdvancedRef = useRef<HTMLDivElement>(null)
+  const [audioVol, setAudioVol] = useState<number>(1.0)
+  const [audioPitch, setAudioPitch] = useState<number>(0)
+  const [audioSampleRate, setAudioSampleRate] = useState<number>(32000)
+  const [audioBitrate, setAudioBitrate] = useState<number>(128000)
+  const [audioFormat, setAudioFormat] = useState<string>('mp3')
+  const [audioChannel, setAudioChannel] = useState<number>(1)
+  const [latexRead, setLatexRead] = useState<boolean>(false)
+  const [textNormalization, setTextNormalization] = useState<boolean>(false)
+  const [languageBoost, setLanguageBoost] = useState<string>('auto')
+  const [voiceModifyPitch, setVoiceModifyPitch] = useState<number>(0)
+  const [voiceModifyIntensity, setVoiceModifyIntensity] = useState<number>(0)
+  const [voiceModifyTimbre, setVoiceModifyTimbre] = useState<number>(0)
+  const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
+
+  const voicePresets: { id: string; name: string; gender: 'male' | 'female' | 'child' | 'other' }[] = [
+    { id: 'male-qn-qingse', name: '青涩青年', gender: 'male' },
+    { id: 'male-qn-jingying', name: '精英青年', gender: 'male' },
+    { id: 'male-qn-badao', name: '霸道青年', gender: 'male' },
+    { id: 'male-qn-daxuesheng', name: '青年大学生', gender: 'male' },
+    { id: 'female-shaonv', name: '少女', gender: 'female' },
+    { id: 'female-yujie', name: '御姐', gender: 'female' },
+    { id: 'female-chengshu', name: '成熟女性', gender: 'female' },
+    { id: 'female-tianmei', name: '甜美女性', gender: 'female' },
+    { id: 'presenter_male', name: '男性主持人', gender: 'male' },
+    { id: 'presenter_female', name: '女性主持人', gender: 'female' },
+    { id: 'audiobook_male_1', name: '男性有声书1', gender: 'male' },
+    { id: 'audiobook_male_2', name: '男性有声书2', gender: 'male' },
+    { id: 'audiobook_female_1', name: '女性有声书1', gender: 'female' },
+    { id: 'audiobook_female_2', name: '女性有声书2', gender: 'female' },
+    { id: 'clever_boy', name: '聪明男童', gender: 'child' },
+    { id: 'cute_boy', name: '可爱男童', gender: 'child' },
+    { id: 'lovely_girl', name: '萌萌女童', gender: 'child' },
+    { id: 'cartoon_pig', name: '卡通猪小琪', gender: 'other' }
+  ]
+
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
 
@@ -789,10 +833,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
             paths.push(saved2.fullPath)
           }
-        }
-        options.uploadedFilePaths = paths
-        setUploadedFilePaths(paths)
       }
+      options.uploadedFilePaths = paths
+      setUploadedFilePaths(paths)
+    }
     } else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
       options.resolution = seedanceResolution
       options.aspectRatio = seedanceAspectRatio
@@ -833,9 +877,29 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
             paths.push(saved2.fullPath)
           }
-        }
-        options.uploadedFilePaths = paths
-        setUploadedFilePaths(paths)
+      }
+      options.uploadedFilePaths = paths
+      setUploadedFilePaths(paths)
+      }
+    } else if (currentModel?.type === 'audio') {
+      options.speed = audioSpeed
+      options.emotion = audioEmotion
+      options.voiceId = voiceId
+      options.output_format = 'url'
+      options.spec = audioSpec
+      options.vol = audioVol
+      options.pitch = audioPitch
+      options.sample_rate = audioSampleRate
+      options.bitrate = audioBitrate
+      options.format = audioFormat
+      options.channel = audioChannel
+      options.latex_read = latexRead
+      options.text_normalization = textNormalization
+      options.language_boost = languageBoost
+      options.voice_modify = {
+        pitch: voiceModifyPitch,
+        intensity: voiceModifyIntensity,
+        timbre: voiceModifyTimbre
       }
     }
     
@@ -1035,6 +1099,24 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const bulkTooltipTimerRef = useRef<number | null>(null)
   const [bulkTooltipVisible, setBulkTooltipVisible] = useState(false)
   const [bulkTooltipClosing, setBulkTooltipClosing] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsVoiceDropdownOpen(false)
+    }
+    const onDoc = (e: MouseEvent) => {
+      const el = voiceRef.current
+      if (el && !el.contains(e.target as Node)) setIsVoiceDropdownOpen(false)
+    }
+    if (isVoiceDropdownOpen) {
+      document.addEventListener('keydown', onKey)
+      document.addEventListener('mousedown', onDoc)
+    }
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDoc)
+    }
+  }, [isVoiceDropdownOpen])
 
   return (
     <div className="w-full max-w-5xl mx-auto">
@@ -1281,6 +1363,154 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
             )}
           </div>
+        )}
+
+        {currentModel?.type === 'audio' && (
+          <>
+            <div className="w-auto min-w-[120px]" ref={voiceRef}>
+              <label className="block text-sm font-medium mb-1 text-zinc-300">音色</label>
+              <button
+                onClick={() => setIsVoiceDropdownOpen(v => !v)}
+                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] outline-none transition-all duration-300 text-sm"
+              >{voiceId}</button>
+              {(isVoiceDropdownOpen || voiceDropdownClosing) && (
+                <div className={`absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 ${voiceDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className="p-4 h-full flex flex-col">
+                    <div className="mb-3">
+                      <div className="text-xs text-zinc-400 mb-2">性别</div>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: '全部', value: 'all' },
+                          { label: '男', value: 'male' },
+                          { label: '女', value: 'female' },
+                          { label: '童声', value: 'child' },
+                          { label: '其他', value: 'other' }
+                        ].map(g => (
+                          <button key={g.value} onClick={() => setVoiceFilterGender(g.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${voiceFilterGender === g.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{g.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                      <div className="grid grid-cols-3 gap-2">
+                        {voicePresets
+                          .filter(v => voiceFilterGender === 'all' ? true : v.gender === voiceFilterGender)
+                          .map(v => (
+                            <div key={v.id} onClick={() => { setVoiceId(v.id); setVoiceDropdownClosing(true); setTimeout(() => { setVoiceDropdownClosing(false); setIsVoiceDropdownOpen(false) }, 200) }} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${voiceId === v.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-[rgba(46,46,46,0.8)]'}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm">{v.name}</span>
+                                <span className="text-[11px] text-zinc-400">{v.id}</span>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="w-auto min-w-[120px]">
+              <label className="block text-sm font-medium mb-1 text-zinc-300">速度</label>
+              <input type="number" step="0.1" min="0.5" max="2" value={audioSpeed} onChange={(e) => setAudioSpeed(parseFloat(e.target.value) || 1)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[90px]" />
+            </div>
+
+            <div className="w-auto min-w-[140px]">
+              <label className="block text-sm font-medium mb-1 text-zinc-300">情绪</label>
+              <select value={audioEmotion} onChange={(e) => setAudioEmotion(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                {['neutral','happy','sad','angry','fearful','disgusted','surprised'].map(x => (<option key={x} value={x}>{x}</option>))}
+              </select>
+            </div>
+
+            {selectedModel === 'minimax-speech-2.6' && (
+              <div className="w-auto min-w-[140px]">
+                <label className="block text-sm font-medium mb-1 text-zinc-300">规格</label>
+                <select value={audioSpec} onChange={(e)=>setAudioSpec((e.target.value as 'hd'|'turbo'))} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
+                  <option value="hd">HD</option>
+                  <option value="turbo">Turbo</option>
+                </select>
+              </div>
+            )}
+
+            <div className="w-auto min-w-[120px]" ref={audioAdvancedRef}>
+              <label className="block text-sm font-medium mb-1 text-zinc-300">高级选项</label>
+              <button onClick={() => setIsAudioAdvancedOpen(true)} className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">打开</button>
+              {isAudioAdvancedOpen && (
+                <div className="absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 animate-scale-in">
+                  <div className="p-4 h-full flex flex-col gap-3 overflow-y-auto">
+                    <div className="flex gap-3">
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">音量</div>
+                        <input type="number" step="0.1" min="0.1" max="10" value={audioVol} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">语调</div>
+                        <input type="number" step="1" min="-12" max="12" value={audioPitch} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">采样率</div>
+                        <select value={audioSampleRate} onChange={(e)=>setAudioSampleRate(parseInt(e.target.value))} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
+                          {[8000,16000,22050,24000,32000,44100].map(r=> (<option key={r} value={r}>{r}</option>))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">比特率</div>
+                        <select value={audioBitrate} onChange={(e)=>setAudioBitrate(parseInt(e.target.value))} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
+                          {[32000,64000,128000,256000].map(r=> (<option key={r} value={r}>{r}</option>))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">格式</div>
+                        <select value={audioFormat} onChange={(e)=>setAudioFormat(e.target.value)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
+                          {['mp3','pcm','flac','wav'].map(f=> (<option key={f} value={f}>{f}</option>))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">声道</div>
+                        <select value={audioChannel} onChange={(e)=>setAudioChannel(parseInt(e.target.value))} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
+                          {[1,2].map(c=> (<option key={c} value={c}>{c}</option>))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" checked={latexRead} onChange={(e)=>setLatexRead(e.target.checked)} />
+                        <span className="text-sm">朗读 LaTeX</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" checked={textNormalization} onChange={(e)=>setTextNormalization(e.target.checked)} />
+                        <span className="text-sm">英文规范化</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-400 mb-2">语言增强</div>
+                      <select value={languageBoost} onChange={(e)=>setLanguageBoost(e.target.value)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
+                        {['auto','Chinese','Chinese,Yue','English','Arabic','Russian','Spanish','French','Portuguese','German','Turkish','Dutch','Ukrainian','Vietnamese','Indonesian','Japanese','Italian','Korean','Thai','Polish','Romanian','Greek','Czech','Finnish','Hindi'].map(x=> (<option key={x} value={x}>{x}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex gap-3">
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">效果器音高</div>
+                        <input type="number" step="1" min="-100" max="100" value={voiceModifyPitch} onChange={(e)=>setVoiceModifyPitch(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">效果器强度</div>
+                        <input type="number" step="1" min="-100" max="100" value={voiceModifyIntensity} onChange={(e)=>setVoiceModifyIntensity(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">效果器音色</div>
+                        <input type="number" step="1" min="-100" max="100" value={voiceModifyTimbre} onChange={(e)=>setVoiceModifyTimbre(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <button onClick={() => setIsAudioAdvancedOpen(false)} className="px-3 py-2 h-[38px] rounded-lg border bg-[#007eff] text白">关闭</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* Vidu Q1 参数设置 - 仅对Vidu Q1模型显示 */}
@@ -2064,6 +2294,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       {/* 输入区域 */}
       <div className="relative bg-[#131313]/70 rounded-xl border border-[rgba(46,46,46,0.8)] p-4">
         {/* 图片上传和预览区域 - 独立一行 */}
+        {currentModel?.type !== 'audio' && (
         <div className="mb-3">
           <div className="flex items-center gap-2">
             {/* 已上传的图片 - 横向排列 */}
@@ -2141,6 +2372,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             })()}
           </div>
         </div>
+        )}
 
         {/* 文本输入框 - 独立一行 */}
         <div className="relative">
@@ -2172,15 +2404,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 }
               }
             }}
-            placeholder="描述想要生成的图片"
-            className="w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400"
+            placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的图片'}
+            className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' ? 'min-h-[140px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
             disabled={isLoading}
           />
           
           {/* 生成按钮 */}
           <button
             onClick={handleGenerate}
-            disabled={isLoading || (!input.trim() && uploadedImages.length === 0)}
+            disabled={isLoading || (!input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0))}
             className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
               isLoading || (!input.trim() && uploadedImages.length === 0)
                 ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'

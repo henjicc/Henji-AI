@@ -21,6 +21,7 @@ export class ApiService {
     }
     
     this.adapter = AdapterFactory.createAdapter(fullConfig)
+    console.log('[ApiService] 适配器已初始化', fullConfig)
   }
 
   async generateImage(prompt: string, model: string, options?: any) {
@@ -52,6 +53,7 @@ export class ApiService {
       throw new Error('Adapter is not initialized')
     }
 
+    console.log('[ApiService] generateAudio 调用', { text, model, options })
     return this.adapter.generateAudio({
       text,
       model,

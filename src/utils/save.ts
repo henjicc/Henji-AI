@@ -1,4 +1,5 @@
 import { BaseDirectory, writeFile, mkdir, readFile, remove } from '@tauri-apps/plugin-fs'
+import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import * as path from '@tauri-apps/api/path'
 import { convertFileSrc } from '@tauri-apps/api/core'
@@ -55,6 +56,36 @@ export async function saveVideoFromUrl(url: string, filename?: string): Promise<
   return saved
 }
 
+export async function saveAudioFromUrl(url: string, filename?: string): Promise<{ fullPath: string; webSrc: string }> {
+  const res = await httpFetch(url, { method: 'GET' })
+  const buf = await res.arrayBuffer()
+  const array = new Uint8Array(buf)
+  const lower = url.toLowerCase()
+  const ext = lower.includes('.mp3') ? 'mp3' : lower.includes('.wav') ? 'wav' : lower.includes('.flac') ? 'flac' : lower.includes('.pcm') ? 'pcm' : 'mp3'
+  const name = filename ?? `audio-${Date.now()}.${ext}`
+  const saved = await saveBinary(array, name)
+  console.log('[save] audio saved', saved.fullPath)
+  return saved
+}
+
+export async function downloadAudioFile(sourcePath: string, suggestedName?: string): Promise<string> {
+  const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `audio-${Date.now()}.mp3`)
+  const target = await saveDialog({ defaultPath: name }) as string | null
+  if (!target) throw new Error('cancelled')
+  const bytes = await readFile(sourcePath)
+  await writeFile(target, bytes as any)
+  return target
+}
+
+export async function downloadMediaFile(sourcePath: string, suggestedName?: string): Promise<string> {
+  const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
+  const target = await saveDialog({ defaultPath: name }) as string | null
+  if (!target) throw new Error('cancelled')
+  const bytes = await readFile(sourcePath)
+  await writeFile(target, bytes as any)
+  return target
+}
+
 export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promise<string> {
   const bytes = await readFile(fullPath)
   const blob = new Blob([bytes], { type: mimeHint || inferMimeFromPath(fullPath) })
@@ -70,6 +101,10 @@ function inferMimeFromPath(p: string): string {
   if (lower.endsWith('.webp')) return 'image/webp'
   if (lower.endsWith('.mp4')) return 'video/mp4'
   if (lower.endsWith('.webm')) return 'video/webm'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.wav')) return 'audio/wav'
+  if (lower.endsWith('.flac')) return 'audio/flac'
+  if (lower.endsWith('.pcm')) return 'audio/pcm'
   return 'application/octet-stream'
 }
 
