@@ -173,7 +173,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
         <span>{format(waveDuration ?? duration)}</span>
       </div>
       <div className="mb-3 h-[72px]">
-        {waveform && waveSampleRate != null && waveTotalSamples != null ? (
+        {waveform ? (
           <Waveform
             samples={waveform}
             width={576}
