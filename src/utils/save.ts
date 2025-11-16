@@ -86,6 +86,52 @@ export async function downloadMediaFile(sourcePath: string, suggestedName?: stri
   return target
 }
 
+async function sha256HexString(input: string): Promise<string> {
+  const enc = new TextEncoder().encode(input)
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc)
+  const hashArr = Array.from(new Uint8Array(hashBuf))
+  return hashArr.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function waveformCachePaths(audioFullPath: string): Promise<{ rel: string; full: string }> {
+  const hash = await sha256HexString(audioFullPath)
+  const name = `${hash}.json`
+  const rel = await path.join('Henji-AI', 'Waveforms', name)
+  const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Waveforms', name)
+  return { rel, full }
+}
+
+export async function readWaveformCacheForAudio(audioFullPath: string): Promise<number[] | null> {
+  try {
+    const { full } = await waveformCachePaths(audioFullPath)
+    const bytes = await readFile(full)
+    const text = new TextDecoder().decode(bytes as any)
+    const data = JSON.parse(text)
+    if (Array.isArray(data)) return data as number[]
+    if (Array.isArray(data?.samples)) return data.samples as number[]
+    return null
+  } catch {
+    return null
+  }
+}
+
+export async function writeWaveformCacheForAudio(audioFullPath: string, samples: number[]): Promise<string> {
+  const { rel, full } = await waveformCachePaths(audioFullPath)
+  await mkdir('Henji-AI/Waveforms', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+  const payload = JSON.stringify(samples)
+  await writeFile(rel, new TextEncoder().encode(payload), { baseDir: BaseDirectory.AppLocalData })
+  return full
+}
+
+export async function deleteWaveformCacheForAudio(audioFullPath: string): Promise<void> {
+  try {
+    const { full } = await waveformCachePaths(audioFullPath)
+    await remove(full)
+  } catch (e) {
+    console.warn('[save] delete waveform cache failed', e)
+  }
+}
+
 export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promise<string> {
   const bytes = await readFile(fullPath)
   const blob = new Blob([bytes], { type: mimeHint || inferMimeFromPath(fullPath) })

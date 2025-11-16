@@ -3,7 +3,7 @@ import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import { MediaResult } from './types'
-import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile } from './utils/save'
+import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, deleteWaveformCacheForAudio } from './utils/save'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
 import AudioPlayer from './components/AudioPlayer'
@@ -908,11 +908,16 @@ const App: React.FC = () => {
   const clearAllHistoryFiles = async () => {
     try {
       const files: string[] = []
+      const audioPaths: string[] = []
       tasks.forEach(t => {
         const p = t.result?.filePath
         if (p) {
           if (p.includes('|||')) files.push(...p.split('|||'))
           else files.push(p)
+          if (t.result?.type === 'audio') {
+            if (p.includes('|||')) audioPaths.push(...p.split('|||'))
+            else audioPaths.push(p)
+          }
         }
         if (t.uploadedFilePaths && t.uploadedFilePaths.length) {
           files.push(...t.uploadedFilePaths)
@@ -920,6 +925,9 @@ const App: React.FC = () => {
       })
       for (const f of files) {
         try { await remove(f) } catch (e) { console.error('[App] 删除文件失败', f, e) }
+      }
+      for (const ap of audioPaths) {
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除波形缓存失败', ap, e) }
       }
     } finally {
       clearAllHistory()
@@ -933,6 +941,11 @@ const App: React.FC = () => {
       const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
       for (const p of paths) {
         try { await remove(p) } catch (e) { console.error('[App] 删除单条文件失败', p, e) }
+      }
+      if (target?.result?.type === 'audio') {
+        for (const p of paths) {
+          try { await deleteWaveformCacheForAudio(p) } catch (e) { console.error('[App] 删除单条波形缓存失败', p, e) }
+        }
       }
     }
     if (target?.uploadedFilePaths && target.uploadedFilePaths.length) {

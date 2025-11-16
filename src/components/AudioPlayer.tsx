@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { downloadAudioFile } from '@/utils/save'
+import { downloadAudioFile, readWaveformCacheForAudio, writeWaveformCacheForAudio } from '@/utils/save'
 import Waveform from './Waveform'
 
 interface AudioPlayerProps {
@@ -103,6 +103,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
   useEffect(() => {
     let aborted = false
     const run = async () => {
+      if (filePath) {
+        const cached = await readWaveformCacheForAudio(filePath)
+        if (cached && cached.length) {
+          setWaveform(cached)
+          waveCacheRef.current.set(cacheKey, cached)
+          return
+        }
+      }
       if (waveCacheRef.current.has(cacheKey)) {
         setWaveform(waveCacheRef.current.get(cacheKey) || null)
         return
@@ -146,6 +154,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
           setWaveDuration(audioBuf.duration || null)
           setWaveSampleRate(audioBuf.sampleRate || null)
           setWaveTotalSamples(audioBuf.length || null)
+          if (filePath) {
+            try { await writeWaveformCacheForAudio(filePath, Array.from(smooth)) } catch {}
+          }
         }
       } catch {
         setWaveform(null)
