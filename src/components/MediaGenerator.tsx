@@ -120,6 +120,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [voiceFilterGender, setVoiceFilterGender] = useState<'all' | 'male' | 'female' | 'child' | 'other'>('all')
   const voiceRef = useRef<HTMLDivElement>(null)
   const [isAudioAdvancedOpen, setIsAudioAdvancedOpen] = useState(false)
+  const [audioAdvancedClosing, setAudioAdvancedClosing] = useState(false)
   const audioAdvancedRef = useRef<HTMLDivElement>(null)
   const [audioVol, setAudioVol] = useState<number>(1.0)
   const [audioPitch, setAudioPitch] = useState<number>(0)
@@ -134,6 +135,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [voiceModifyIntensity, setVoiceModifyIntensity] = useState<number>(0)
   const [voiceModifyTimbre, setVoiceModifyTimbre] = useState<number>(0)
   const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
+  const [isAudioEmotionDropdownOpen, setIsAudioEmotionDropdownOpen] = useState(false)
+  const [audioEmotionDropdownClosing, setAudioEmotionDropdownClosing] = useState(false)
+  const audioEmotionRef = useRef<HTMLDivElement>(null)
+  const [isAudioSpecDropdownOpen, setIsAudioSpecDropdownOpen] = useState(false)
+  const [audioSpecDropdownClosing, setAudioSpecDropdownClosing] = useState(false)
+  const audioSpecRef = useRef<HTMLDivElement>(null)
+  const [isLanguageBoostDropdownOpen, setIsLanguageBoostDropdownOpen] = useState(false)
+  const [languageBoostDropdownClosing, setLanguageBoostDropdownClosing] = useState(false)
+  const languageBoostRef = useRef<HTMLDivElement>(null)
 
   const voicePresets: { id: string; name: string; gender: 'male' | 'female' | 'child' | 'other' }[] = [
     { id: 'male-qn-qingse', name: '青涩青年', gender: 'male' },
@@ -155,6 +165,44 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     { id: 'lovely_girl', name: '萌萌女童', gender: 'child' },
     { id: 'cartoon_pig', name: '卡通猪小琪', gender: 'other' }
   ]
+
+  const emotionZhMap: Record<string, string> = {
+    neutral: '中性',
+    happy: '开心',
+    sad: '悲伤',
+    angry: '愤怒',
+    fearful: '恐惧',
+    disgusted: '厌恶',
+    surprised: '惊讶'
+  }
+
+  const languageBoostZhMap: Record<string, string> = {
+    auto: '自动',
+    Chinese: '中文',
+    'Chinese,Yue': '中文：粤语',
+    English: '英语',
+    Arabic: '阿拉伯语',
+    Russian: '俄语',
+    Spanish: '西班牙语',
+    French: '法语',
+    Portuguese: '葡萄牙语',
+    German: '德语',
+    Turkish: '土耳其语',
+    Dutch: '荷兰语',
+    Ukrainian: '乌克兰语',
+    Vietnamese: '越南语',
+    Indonesian: '印尼语',
+    Japanese: '日语',
+    Italian: '意大利语',
+    Korean: '韩语',
+    Thai: '泰语',
+    Polish: '波兰语',
+    Romanian: '罗马尼亚语',
+    Greek: '希腊语',
+    Czech: '捷克语',
+    Finnish: '芬兰语',
+    Hindi: '印地语'
+  }
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -439,13 +487,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (seedanceAspectRef.current && !seedanceAspectRef.current.contains(event.target as Node) && isSeedanceAspectDropdownOpen) {
         handleCloseSeedanceAspectDropdown()
       }
+      if (audioEmotionRef.current && !audioEmotionRef.current.contains(event.target as Node) && isAudioEmotionDropdownOpen) {
+        handleCloseAudioEmotionDropdown()
+      }
+      if (audioSpecRef.current && !audioSpecRef.current.contains(event.target as Node) && isAudioSpecDropdownOpen) {
+        handleCloseAudioSpecDropdown()
+      }
+      if (languageBoostRef.current && !languageBoostRef.current.contains(event.target as Node) && isLanguageBoostDropdownOpen) {
+        handleCloseLanguageBoostDropdown()
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen, isAudioEmotionDropdownOpen, isAudioSpecDropdownOpen, isLanguageBoostDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -1102,11 +1159,23 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsVoiceDropdownOpen(false)
+      if (e.key === 'Escape') {
+        setVoiceDropdownClosing(true)
+        setTimeout(() => {
+          setIsVoiceDropdownOpen(false)
+          setVoiceDropdownClosing(false)
+        }, 200)
+      }
     }
     const onDoc = (e: MouseEvent) => {
       const el = voiceRef.current
-      if (el && !el.contains(e.target as Node)) setIsVoiceDropdownOpen(false)
+      if (el && !el.contains(e.target as Node)) {
+        setVoiceDropdownClosing(true)
+        setTimeout(() => {
+          setIsVoiceDropdownOpen(false)
+          setVoiceDropdownClosing(false)
+        }, 200)
+      }
     }
     if (isVoiceDropdownOpen) {
       document.addEventListener('keydown', onKey)
@@ -1118,15 +1187,57 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }, [isVoiceDropdownOpen])
 
+  useEffect(() => {
+    if (!isAudioAdvancedOpen) return
+    const onDoc = (e: MouseEvent) => {
+      const el = audioAdvancedRef.current
+      if (el && !el.contains(e.target as Node)) {
+        setAudioAdvancedClosing(true)
+        setTimeout(() => {
+          setIsAudioAdvancedOpen(false)
+          setAudioAdvancedClosing(false)
+        }, 200)
+      }
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+    }
+  }, [isAudioAdvancedOpen])
+
+  const handleCloseAudioEmotionDropdown = () => {
+    setAudioEmotionDropdownClosing(true)
+    setTimeout(() => {
+      setIsAudioEmotionDropdownOpen(false)
+      setAudioEmotionDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseAudioSpecDropdown = () => {
+    setAudioSpecDropdownClosing(true)
+    setTimeout(() => {
+      setIsAudioSpecDropdownOpen(false)
+      setAudioSpecDropdownClosing(false)
+    }, 200)
+  }
+
+  const handleCloseLanguageBoostDropdown = () => {
+    setLanguageBoostDropdownClosing(true)
+    setTimeout(() => {
+      setIsLanguageBoostDropdownOpen(false)
+      setLanguageBoostDropdownClosing(false)
+    }, 200)
+  }
+
   return (
     <div className="w-full max-w-5xl mx-auto">
       {/* 模型选择器、分辨率设置和即梦参数设置 */}
       <div className="flex flex-wrap gap-3 mb-4">
         {/* 合并的提供商和模型选择器 - 缩短宽度 */}
-        <div className="w-auto min-w-[180px] relative" ref={modelRef}>
+        <div className="w-auto min-w-[180px] relative flex-shrink-0" ref={modelRef}>
           <label className="block text-sm font-medium mb-1 text-zinc-300">模型</label>
           <div 
-            className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+            className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
             onClick={() => {
               if (isModelDropdownOpen) {
                 handleCloseModelDropdown()
@@ -1135,7 +1246,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               }
             }}
           >
-            <span className="text-sm">{currentProvider?.name}_{currentModel?.name || '选择'}</span>
+            <span className="text-sm truncate">{currentProvider?.name}_{currentModel?.name || '选择'}</span>
             <svg 
               className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isModelDropdownOpen ? 'rotate-180' : ''}`} 
               fill="none" 
@@ -1367,15 +1478,71 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
         {currentModel?.type === 'audio' && (
           <>
-            <div className="w-auto min-w-[120px]" ref={voiceRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-300">音色</label>
+            {selectedModel === 'minimax-speech-2.6' && (
+              <div className="w-auto min-w-[70px] flex-shrink-0 relative" ref={audioSpecRef}>
+                <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">规格</label>
+                <div
+                  className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  onClick={() => {
+                    if (isAudioSpecDropdownOpen) {
+                      handleCloseAudioSpecDropdown()
+                    } else {
+                      setIsAudioSpecDropdownOpen(true)
+                    }
+                  }}
+                >
+                  <span className="text-sm">{audioSpec === 'hd' ? 'HD' : 'Turbo'}</span>
+                  <svg
+                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isAudioSpecDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </div>
+                {(isAudioSpecDropdownOpen || audioSpecDropdownClosing) && (
+                  <div
+                    className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${audioSpecDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  >
+                    <div className="max-h-60 overflow-y-auto">
+                      {['hd','turbo'].map(v => (
+                        <div
+                          key={v}
+                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSpec === v ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
+                          onClick={() => {
+                            setAudioSpec(v as 'hd'|'turbo')
+                            handleCloseAudioSpecDropdown()
+                          }}
+                        >
+                          <span className="text-sm">{v === 'hd' ? 'HD' : 'Turbo'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="w-auto min-w-[140px] flex-shrink-0 relative" ref={voiceRef}>
+              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">音色</label>
               <button
                 onClick={() => setIsVoiceDropdownOpen(v => !v)}
-                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] outline-none transition-all duration-300 text-sm"
-              >{voiceId}</button>
+                className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap text-sm"
+              >
+                <span className="text-sm">{voicePresets.find(v => v.id === voiceId)?.name || voiceId}</span>
+                <svg
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isVoiceDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </button>
               {(isVoiceDropdownOpen || voiceDropdownClosing) && (
-                <div className={`absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 ${voiceDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                  <div className="p-4 h-full flex flex-col">
+                <div className="absolute z-20 mb-2 w-[720px] h-[420px] bottom-full left-1/2 -translate-x-1/2">
+                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl ${voiceDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="p-4 h-full flex flex-col">
                     <div className="mb-3">
                       <div className="text-xs text-zinc-400 mb-2">性别</div>
                       <div className="flex flex-wrap gap-2">
@@ -1404,91 +1571,231 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           ))}
                       </div>
                     </div>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="w-auto min-w-[120px]">
-              <label className="block text-sm font-medium mb-1 text-zinc-300">速度</label>
-              <input type="number" step="0.1" min="0.5" max="2" value={audioSpeed} onChange={(e) => setAudioSpeed(parseFloat(e.target.value) || 1)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[90px]" />
-            </div>
+            
 
-            <div className="w-auto min-w-[140px]">
-              <label className="block text-sm font-medium mb-1 text-zinc-300">情绪</label>
-              <select value={audioEmotion} onChange={(e) => setAudioEmotion(e.target.value)} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                {['neutral','happy','sad','angry','fearful','disgusted','surprised'].map(x => (<option key={x} value={x}>{x}</option>))}
-              </select>
-            </div>
-
-            {selectedModel === 'minimax-speech-2.6' && (
-              <div className="w-auto min-w-[140px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">规格</label>
-                <select value={audioSpec} onChange={(e)=>setAudioSpec((e.target.value as 'hd'|'turbo'))} className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm">
-                  <option value="hd">HD</option>
-                  <option value="turbo">Turbo</option>
-                </select>
+            <div className="w-auto min-w-[70px] flex-shrink-0 relative" ref={audioEmotionRef}>
+              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">情绪</label>
+              <div
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                onClick={() => {
+                  if (isAudioEmotionDropdownOpen) {
+                    handleCloseAudioEmotionDropdown()
+                  } else {
+                    setIsAudioEmotionDropdownOpen(true)
+                  }
+                }}
+              >
+                <span className="text-sm">{emotionZhMap[audioEmotion] || audioEmotion}</span>
+                <svg
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isAudioEmotionDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
               </div>
-            )}
+              {(isAudioEmotionDropdownOpen || audioEmotionDropdownClosing) && (
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${audioEmotionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                >
+                  <div className="max-h-60 overflow-y-auto">
+                    {["neutral","happy","sad","angry","fearful","disgusted","surprised"].map(x => (
+                      <div
+                        key={x}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioEmotion === x ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
+                        onClick={() => {
+                          setAudioEmotion(x)
+                          handleCloseAudioEmotionDropdown()
+                        }}
+                      >
+                        <span className="text-sm">{emotionZhMap[x] || x}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
-            <div className="w-auto min-w-[120px]" ref={audioAdvancedRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-300">高级选项</label>
-              <button onClick={() => setIsAudioAdvancedOpen(true)} className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">打开</button>
-              {isAudioAdvancedOpen && (
-                <div className="absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 animate-scale-in">
-                  <div className="p-4 h-full flex flex-col gap-3 overflow-y-auto">
-                    <div className="flex gap-3">
+            <div className="w-auto min-w-[140px] flex-shrink-0 relative" ref={languageBoostRef}>
+              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">语言增强</label>
+              <div
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                onClick={() => {
+                  if (isLanguageBoostDropdownOpen) {
+                    handleCloseLanguageBoostDropdown()
+                  } else {
+                    setIsLanguageBoostDropdownOpen(true)
+                  }
+                }}
+              >
+                <span className="text-sm truncate">{languageBoostZhMap[languageBoost] || languageBoost}</span>
+                <svg
+                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isLanguageBoostDropdownOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+              {(isLanguageBoostDropdownOpen || languageBoostDropdownClosing) && (
+                <div
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${languageBoostDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                >
+                  <div className="max-h-60 overflow-y-auto">
+                    {['auto','Chinese','Chinese,Yue','English','Arabic','Russian','Spanish','French','Portuguese','German','Turkish','Dutch','Ukrainian','Vietnamese','Indonesian','Japanese','Italian','Korean','Thai','Polish','Romanian','Greek','Czech','Finnish','Hindi'].map(x => (
+                      <div
+                        key={x}
+                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${languageBoost === x ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
+                        onClick={() => {
+                          setLanguageBoost(x)
+                          handleCloseLanguageBoostDropdown()
+                        }}
+                      >
+                        <span className="text-sm">{languageBoostZhMap[x] || x}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+
+            <div className="w-auto min-w-[60px] flex-shrink-0 relative" ref={audioAdvancedRef}>
+              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">高级选项</label>
+              <button onClick={() => { if (isAudioAdvancedOpen) { setAudioAdvancedClosing(true); setTimeout(() => { setIsAudioAdvancedOpen(false); setAudioAdvancedClosing(false) }, 200) } else { setIsAudioAdvancedOpen(true) } }} className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50">打开</button>
+              {(isAudioAdvancedOpen || audioAdvancedClosing) && (
+                <div className="absolute z-20 mb-2 w-[576px] bottom-full left-1/2 -translate-x-1/2">
+                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl max-h-[420px] ${audioAdvancedClosing ? 'animate-scale-out' : 'animate-scale-in'}`}> 
+                    <div className="p-4 flex flex-col gap-4 overflow-y-auto">
+                    <div className="flex gap-4">
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">音量</div>
-                        <input type="number" step="0.1" min="0.1" max="10" value={audioVol} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                        <div className="relative inline-block">
+                          <input type="number" value={audioVol} min={0.1} max={10} step={0.1} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+                            <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.min(10,(v||1)+0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
+                            <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.max(0.1,(v||1)-0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
+                          </div>
+                        </div>
                       </div>
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">语调</div>
-                        <input type="number" step="1" min="-12" max="12" value={audioPitch} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                        <div className="relative inline-block">
+                          <input type="number" value={audioPitch} min={-12} max={12} step={1} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="w-[100px] bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+                            <button type="button" onClick={()=>setAudioPitch(v=>Math.min(12,(v||0)+1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
+                            <button type="button" onClick={()=>setAudioPitch(v=>Math.max(-12,(v||0)-1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-400 mb-2">速度</div>
+                        <div className="relative inline-block">
+                          <input type="number" value={audioSpeed} min={0.5} max={2} step={0.1} onChange={(e)=>setAudioSpeed(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+                            <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.min(2,(v||1)+0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
+                            <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.max(0.5,(v||1)-0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex gap-3">
-                      <div>
+                    <div className="flex gap-4">
+                      <div className="relative" ref={klingAspectRef}>
                         <div className="text-xs text-zinc-400 mb-2">采样率</div>
-                        <select value={audioSampleRate} onChange={(e)=>setAudioSampleRate(parseInt(e.target.value))} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
-                          {[8000,16000,22050,24000,32000,44100].map(r=> (<option key={r} value={r}>{r}</option>))}
-                        </select>
+                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                          onClick={() => setIsKlingAspectDropdownOpen(v => !v)}>
+                          <span className="text-sm">{audioSampleRate}</span>
+                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                        {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
+                          <div className={`absolute z-20 mt-1 w-full bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                            <div className="max-h-60 overflow-y-auto">
+                              {[8000,16000,22050,24000,32000,44100].map(r => (
+                                <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSampleRate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioSampleRate(r); setKlingAspectDropdownClosing(true); setTimeout(()=>{ setIsKlingAspectDropdownOpen(false); setKlingAspectDropdownClosing(false) },200) }}>
+                                  <span className="text-sm">{r}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
+                      <div className="relative" ref={klingDurationRef}>
                         <div className="text-xs text-zinc-400 mb-2">比特率</div>
-                        <select value={audioBitrate} onChange={(e)=>setAudioBitrate(parseInt(e.target.value))} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
-                          {[32000,64000,128000,256000].map(r=> (<option key={r} value={r}>{r}</option>))}
-                        </select>
+                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                          onClick={() => setIsKlingDurationDropdownOpen(v => !v)}>
+                          <span className="text-sm">{audioBitrate}</span>
+                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                        {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && (
+                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                            <div className="max-h-60 overflow-y-auto">
+                              {[32000,64000,128000,256000].map(r => (
+                                <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioBitrate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioBitrate(r); setKlingDurationDropdownClosing(true); setTimeout(()=>{ setIsKlingDurationDropdownOpen(false); setKlingDurationDropdownClosing(false) },200) }}>
+                                  <span className="text-sm">{r}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
+                      <div className="relative" ref={pixAspectRef}>
                         <div className="text-xs text-zinc-400 mb-2">格式</div>
-                        <select value={audioFormat} onChange={(e)=>setAudioFormat(e.target.value)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
-                          {['mp3','pcm','flac','wav'].map(f=> (<option key={f} value={f}>{f}</option>))}
-                        </select>
+                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                          onClick={() => setIsPixAspectDropdownOpen(v => !v)}>
+                          <span className="text-sm">{audioFormat}</span>
+                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                        {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
+                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                            <div className="max-h-60 overflow-y-auto">
+                              {['mp3','pcm','flac','wav'].map(f => (
+                                <div key={f} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioFormat === f ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioFormat(f); setPixAspectDropdownClosing(true); setTimeout(()=>{ setIsPixAspectDropdownOpen(false); setPixAspectDropdownClosing(false) },200) }}>
+                                  <span className="text-sm">{f}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
+                      <div className="relative" ref={pixResolutionRef}>
                         <div className="text-xs text-zinc-400 mb-2">声道</div>
-                        <select value={audioChannel} onChange={(e)=>setAudioChannel(parseInt(e.target.value))} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
-                          {[1,2].map(c=> (<option key={c} value={c}>{c}</option>))}
-                        </select>
+                        <div className="w-[120px] bg白/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                          onClick={() => setIsPixResolutionDropdownOpen(v => !v)}>
+                          <span className="text-sm">{audioChannel}</span>
+                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                        {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
+                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                            <div className="max-h-60 overflow-y-auto">
+                              {[1,2].map(c => (
+                                <div key={c} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioChannel === c ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioChannel(c); setPixResolutionDropdownClosing(true); setTimeout(()=>{ setIsPixResolutionDropdownOpen(false); setPixResolutionDropdownClosing(false) },200) }}>
+                                  <span className="text-sm">{c}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-3">
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" checked={latexRead} onChange={(e)=>setLatexRead(e.target.checked)} />
-                        <span className="text-sm">朗读 LaTeX</span>
+                    <div className="flex gap-4">
+                      <div className="w-auto min-w-[120px]">
+                        <label className="block text-xs text-zinc-400 mb-2">朗读 LaTeX</label>
+                        <button onClick={()=>setLatexRead(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${latexRead ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-[rgba(46,46,46,0.8)]'}`}>{latexRead ? '开启' : '关闭'}</button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" checked={textNormalization} onChange={(e)=>setTextNormalization(e.target.checked)} />
-                        <span className="text-sm">英文规范化</span>
+                      <div className="w-auto min-w-[120px]">
+                        <label className="block text-xs text-zinc-400 mb-2">英文规范化</label>
+                        <button onClick={()=>setTextNormalization(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${textNormalization ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-[rgba(46,46,46,0.8)]'}`}>{textNormalization ? '开启' : '关闭'}</button>
                       </div>
                     </div>
-                    <div>
-                      <div className="text-xs text-zinc-400 mb-2">语言增强</div>
-                      <select value={languageBoost} onChange={(e)=>setLanguageBoost(e.target.value)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm">
-                        {['auto','Chinese','Chinese,Yue','English','Arabic','Russian','Spanish','French','Portuguese','German','Turkish','Dutch','Ukrainian','Vietnamese','Indonesian','Japanese','Italian','Korean','Thai','Polish','Romanian','Greek','Czech','Finnish','Hindi'].map(x=> (<option key={x} value={x}>{x}</option>))}
-                      </select>
-                    </div>
+                    
                     <div className="flex gap-3">
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">效果器音高</div>
@@ -1503,8 +1810,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         <input type="number" step="1" min="-100" max="100" value={voiceModifyTimbre} onChange={(e)=>setVoiceModifyTimbre(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
                       </div>
                     </div>
-                    <div className="mt-2">
-                      <button onClick={() => setIsAudioAdvancedOpen(false)} className="px-3 py-2 h-[38px] rounded-lg border bg-[#007eff] text白">关闭</button>
+                    
                     </div>
                   </div>
                 </div>
