@@ -79,9 +79,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     <div className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}>
       <div 
         ref={modalRef}
-        className={`bg-[#131313]/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        className={`bg-[#131313]/90 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
       >
-        <div className="p-5 border-b border-[rgba(46,46,46,0.8)] flex justify-between items-center">
+        <div className="p-5 border-b border-zinc-700/50 flex justify-between items-center">
           <h2 className="text-xl font-bold text-[#007eff]">
             设置
           </h2>
@@ -104,7 +104,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="请输入您的API密钥"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-zinc-400"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-zinc-400"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -127,7 +127,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 placeholder="50"
                 min="1"
                 max="500"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text白 placeholder-zinc-400"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text白 placeholder-zinc-400"
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -160,7 +160,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <div className="flex justify-end gap-3 mt-6">
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)]"
+              className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-zinc-700/50"
             >
               取消
             </button>

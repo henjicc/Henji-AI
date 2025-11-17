@@ -167,7 +167,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
   }, [cacheKey, src])
 
   return (
-    <div className={`w-[36rem] bg-[#131313]/70 rounded-xl border border-[rgba(46,46,46,0.8)] p-4 ${className || ''}`}>
+    <div className={`w-[36rem] bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4 ${className || ''}`}>
       <div className="mb-2 flex items-center justify-between text-xs text-zinc-300">
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>

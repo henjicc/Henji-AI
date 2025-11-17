@@ -984,13 +984,13 @@ const App: React.FC = () => {
                       className="overflow-hidden animate-fade-in"
                     >
                       {/* 任务信息行 */}
-                      <div className="pb-3 border-b border-[rgba(46,46,46,0.8)]">
+                      <div className="pb-3 border-b border-zinc-700/50">
                         <div className="flex flex-wrap gap-4 items-start">
                           {/* 原始图片缩略图 */}
                           {task.images && task.images.length > 0 && (
                             <div className="flex gap-2">
                               {task.images.slice(0, 3).map((image, index) => (
-                                <div key={index} className="w-16 h-16 rounded border border-[rgba(46,46,46,0.8)] overflow-hidden">
+                                <div key={index} className="w-16 h-16 rounded border border-zinc-700/50 overflow-hidden">
                                   <img 
                                     src={image} 
                                     alt={`Input ${index + 1}`} 
@@ -999,7 +999,7 @@ const App: React.FC = () => {
                                 </div>
                               ))}
                               {task.images.length > 3 && (
-                                <div className="w-16 h-16 rounded border border-[rgba(46,46,46,0.8)] bg-zinc-700/50 flex items-center justify-center text-xs">
+                                <div className="w-16 h-16 rounded border border-zinc-700/50 bg-zinc-700/50 flex items-center justify-center text-xs">
                                   +{task.images.length - 3}
                                 </div>
                               )}
@@ -1122,7 +1122,7 @@ const App: React.FC = () => {
                                     return imageUrls.map((url, index) => (
                                       <div 
                                         key={index} 
-                                        className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center flex-shrink-0"
+                                        className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center flex-shrink-0"
                                       >
                                         <img 
                                           src={url} 
@@ -1136,7 +1136,7 @@ const App: React.FC = () => {
                                 ) : (
                                   // 单张图片
                                   <div 
-                                    className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center flex-shrink-0"
+                                    className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center flex-shrink-0"
                                   >
                                     <img 
                                       src={task.result.url} 
@@ -1148,7 +1148,7 @@ const App: React.FC = () => {
                                 )
                               )}
                               {task.result.type === 'video' && (
-                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-[rgba(46,46,46,0.8)] flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url, (task.result as any).filePath)}>
+                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url, (task.result as any).filePath)}>
                                   <video 
                                     src={task.result.url} 
                                     className="max-w-full max-h-full object-contain"
@@ -1201,7 +1201,7 @@ const App: React.FC = () => {
 
         {/* 输入区域 - 悬浮设计 */}
         <div ref={inputContainerRef} className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
-          <div className="bg-[#131313]/70 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
+          <div className="bg-[#131313]/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
             <MediaGenerator 
               onGenerate={handleGenerate}
               isLoading={isLoading}
@@ -1214,7 +1214,7 @@ const App: React.FC = () => {
       {isConfirmClearOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
-          <div className="relative bg-[#131313]/80 border border-[rgba(46,46,46,0.8)] rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
+          <div className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
             <div className="text-white text-base">确认清除历史</div>
             <div className="text-zinc-300 text-sm mt-2">此操作会删除所有生成历史，且不可恢复。</div>
             <div className="mt-4 flex justify-end gap-2">
@@ -1309,20 +1309,20 @@ const App: React.FC = () => {
               <div className="flex items-center gap-4">
               {/* 导航指示器和计数器 */}
               {currentImageList.length > 1 && (
-                <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)]">
+                <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
                   {currentImageIndex + 1} / {currentImageList.length}
                 </div>
               )}
               
               {/* 缩放比例显示 */}
-              <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)]">
+              <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
                 {Math.round(imageScale * 100)}%
               </div>
               
               {/* 重置按钮 - 始终显示 */}
               <button
                 onClick={resetImageView}
-                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-[rgba(46,46,46,0.8)] hover:bg-zinc-800/90 transition-colors"
+                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
               >
                 重置视图
               </button>
@@ -1370,7 +1370,7 @@ const App: React.FC = () => {
               </button>
             </div>
             <div ref={controlsContainerRef} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl" style={{ opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0, transition: 'opacity 500ms ease', pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none' }}>
-              <div className="bg-[#131313]/90 border border-[rgba(46,46,46,0.8)] rounded-xl px-4 py-3 text-white flex flex-col gap-3">
+              <div className="bg-[#131313]/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
                 <div ref={progressBarRef} className="progress-container" onClick={(e) => { const el = progressBarRef.current; if (!el || !videoDuration) return; const rect = el.getBoundingClientRect(); const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)); const t = percent * videoDuration; setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%` }}>
                   <div ref={progressFillRef} className="progress-bar" style={{ width: `${videoDuration ? Math.min(100, Math.max(0, (currentTime / videoDuration) * 100)) : 0}%` }} />
                 </div>

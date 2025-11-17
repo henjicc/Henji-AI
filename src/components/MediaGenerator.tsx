@@ -1237,7 +1237,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         <div className="w-auto min-w-[180px] relative flex-shrink-0" ref={modelRef}>
           <label className="block text-sm font-medium mb-1 text-zinc-300">模型</label>
           <div 
-            className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+            className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
             onClick={() => {
               if (isModelDropdownOpen) {
                 handleCloseModelDropdown()
@@ -1259,7 +1259,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           
           {(isModelDropdownOpen || modelDropdownClosing) && (
             <div
-              className={`absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 ${
+              className={`absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-zinc-700/50 rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 ${
                 modelDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'
               }`}
             >
@@ -1316,7 +1316,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${
                             selectedProvider === p.id && selectedModel === m.id
                               ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30'
-                              : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-[rgba(46,46,46,0.8)]'
+                              : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -1339,7 +1339,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
             <button
               onClick={() => setIsResolutionDropdownOpen(!isResolutionDropdownOpen)}
-              className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] w-[80px] outline-none focus:outline-none focus-visible:outline-none active:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between"
+              className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] w-[80px] outline-none focus:outline-none focus-visible:outline-none active:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between"
             >
               <span className="text-sm whitespace-nowrap">
                 {selectedResolution === 'smart' 
@@ -1359,7 +1359,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             {/* 分辨率设置悬浮窗口 - 向上弹出 */}
             {isResolutionDropdownOpen && (
               <div 
-                className="absolute z-20 mb-1 w-80 bg-zinc-800 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
+                className="absolute z-20 mb-1 w-80 bg-zinc-800 border border-zinc-700/50 rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
               >
                 <div className="p-4">
                   {/* 选择比例 */}
@@ -1443,7 +1443,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onChange={(e) => handleManualWidthChange(e.target.value)}
                           disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className={`w-full bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
+                          className={`w-full bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm ${
                             selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           min="1024"
@@ -1460,7 +1460,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           onChange={(e) => handleManualHeightChange(e.target.value)}
                           disabled={selectedResolution === 'smart'}
                           placeholder="2048"
-                          className={`w-full bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded px-3 py-2 text-sm ${
+                          className={`w-full bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm ${
                             selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                           min="1024"
@@ -1482,7 +1482,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[70px] flex-shrink-0 relative" ref={audioSpecRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">规格</label>
                 <div
-                  className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isAudioSpecDropdownOpen) {
                       handleCloseAudioSpecDropdown()
@@ -1503,7 +1503,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
                 {(isAudioSpecDropdownOpen || audioSpecDropdownClosing) && (
                   <div
-                    className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${audioSpecDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                    className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${audioSpecDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {['hd','turbo'].map(v => (
@@ -1527,7 +1527,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">音色</label>
               <button
                 onClick={() => setIsVoiceDropdownOpen(v => !v)}
-                className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap text-sm"
+                className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap text-sm"
               >
                 <span className="text-sm">{voicePresets.find(v => v.id === voiceId)?.name || voiceId}</span>
                 <svg
@@ -1541,7 +1541,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </button>
               {(isVoiceDropdownOpen || voiceDropdownClosing) && (
                 <div className="absolute z-20 mb-2 w-[720px] h-[420px] bottom-full left-1/2 -translate-x-1/2">
-                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl ${voiceDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-2xl ${voiceDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <div className="p-4 h-full flex flex-col">
                     <div className="mb-3">
                       <div className="text-xs text-zinc-400 mb-2">性别</div>
@@ -1562,7 +1562,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         {voicePresets
                           .filter(v => voiceFilterGender === 'all' ? true : v.gender === voiceFilterGender)
                           .map(v => (
-                            <div key={v.id} onClick={() => { setVoiceId(v.id); setVoiceDropdownClosing(true); setTimeout(() => { setVoiceDropdownClosing(false); setIsVoiceDropdownOpen(false) }, 200) }} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${voiceId === v.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-[rgba(46,46,46,0.8)]'}`}>
+                            <div key={v.id} onClick={() => { setVoiceId(v.id); setVoiceDropdownClosing(true); setTimeout(() => { setVoiceDropdownClosing(false); setIsVoiceDropdownOpen(false) }, 200) }} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${voiceId === v.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
                               <div className="flex items-center justify-between">
                                 <span className="text-sm">{v.name}</span>
                                 <span className="text-[11px] text-zinc-400">{v.id}</span>
@@ -1582,7 +1582,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[70px] flex-shrink-0 relative" ref={audioEmotionRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">情绪</label>
               <div
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isAudioEmotionDropdownOpen) {
                     handleCloseAudioEmotionDropdown()
@@ -1603,7 +1603,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isAudioEmotionDropdownOpen || audioEmotionDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${audioEmotionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${audioEmotionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {["neutral","happy","sad","angry","fearful","disgusted","surprised"].map(x => (
@@ -1626,7 +1626,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[140px] flex-shrink-0 relative" ref={languageBoostRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">语言增强</label>
               <div
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isLanguageBoostDropdownOpen) {
                     handleCloseLanguageBoostDropdown()
@@ -1647,7 +1647,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isLanguageBoostDropdownOpen || languageBoostDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${languageBoostDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${languageBoostDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {['auto','Chinese','Chinese,Yue','English','Arabic','Russian','Spanish','French','Portuguese','German','Turkish','Dutch','Ukrainian','Vietnamese','Indonesian','Japanese','Italian','Korean','Thai','Polish','Romanian','Greek','Czech','Finnish','Hindi'].map(x => (
@@ -1670,16 +1670,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             <div className="w-auto min-w-[60px] flex-shrink-0 relative" ref={audioAdvancedRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">高级选项</label>
-              <button onClick={() => { if (isAudioAdvancedOpen) { setAudioAdvancedClosing(true); setTimeout(() => { setIsAudioAdvancedOpen(false); setAudioAdvancedClosing(false) }, 200) } else { setIsAudioAdvancedOpen(true) } }} className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50">打开</button>
+              <button onClick={() => { if (isAudioAdvancedOpen) { setAudioAdvancedClosing(true); setTimeout(() => { setIsAudioAdvancedOpen(false); setAudioAdvancedClosing(false) }, 200) } else { setIsAudioAdvancedOpen(true) } }} className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50">打开</button>
               {(isAudioAdvancedOpen || audioAdvancedClosing) && (
                 <div className="absolute z-20 mb-2 w-[576px] bottom-full left-1/2 -translate-x-1/2">
-                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-2xl max-h-[420px] ${audioAdvancedClosing ? 'animate-scale-out' : 'animate-scale-in'}`}> 
+                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-2xl max-h-[420px] ${audioAdvancedClosing ? 'animate-scale-out' : 'animate-scale-in'}`}> 
                     <div className="p-4 flex flex-col gap-4 overflow-y-auto">
                     <div className="flex gap-4">
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">音量</div>
                         <div className="relative inline-block">
-                          <input type="number" value={audioVol} min={0.1} max={10} step={0.1} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <input type="number" value={audioVol} min={0.1} max={10} step={0.1} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
                           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
                             <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.min(10,(v||1)+0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
                             <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.max(0.1,(v||1)-0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
@@ -1689,7 +1689,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">语调</div>
                         <div className="relative inline-block">
-                          <input type="number" value={audioPitch} min={-12} max={12} step={1} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="w-[100px] bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <input type="number" value={audioPitch} min={-12} max={12} step={1} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
                           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
                             <button type="button" onClick={()=>setAudioPitch(v=>Math.min(12,(v||0)+1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
                             <button type="button" onClick={()=>setAudioPitch(v=>Math.max(-12,(v||0)-1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
@@ -1699,7 +1699,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">速度</div>
                         <div className="relative inline-block">
-                          <input type="number" value={audioSpeed} min={0.5} max={2} step={0.1} onChange={(e)=>setAudioSpeed(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <input type="number" value={audioSpeed} min={0.5} max={2} step={0.1} onChange={(e)=>setAudioSpeed(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
                           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
                             <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.min(2,(v||1)+0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
                             <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.max(0.5,(v||1)-0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
@@ -1710,13 +1710,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     <div className="flex gap-4">
                       <div className="relative" ref={klingAspectRef}>
                         <div className="text-xs text-zinc-400 mb-2">采样率</div>
-                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
                           onClick={() => setIsKlingAspectDropdownOpen(v => !v)}>
                           <span className="text-sm">{audioSampleRate}</span>
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                          <div className={`absolute z-20 mt-1 w-full bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                             <div className="max-h-60 overflow-y-auto">
                               {[8000,16000,22050,24000,32000,44100].map(r => (
                                 <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSampleRate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioSampleRate(r); setKlingAspectDropdownClosing(true); setTimeout(()=>{ setIsKlingAspectDropdownOpen(false); setKlingAspectDropdownClosing(false) },200) }}>
@@ -1729,13 +1729,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       </div>
                       <div className="relative" ref={klingDurationRef}>
                         <div className="text-xs text-zinc-400 mb-2">比特率</div>
-                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
                           onClick={() => setIsKlingDurationDropdownOpen(v => !v)}>
                           <span className="text-sm">{audioBitrate}</span>
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                             <div className="max-h-60 overflow-y-auto">
                               {[32000,64000,128000,256000].map(r => (
                                 <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioBitrate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioBitrate(r); setKlingDurationDropdownClosing(true); setTimeout(()=>{ setIsKlingDurationDropdownOpen(false); setKlingDurationDropdownClosing(false) },200) }}>
@@ -1748,13 +1748,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       </div>
                       <div className="relative" ref={pixAspectRef}>
                         <div className="text-xs text-zinc-400 mb-2">格式</div>
-                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
                           onClick={() => setIsPixAspectDropdownOpen(v => !v)}>
                           <span className="text-sm">{audioFormat}</span>
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                             <div className="max-h-60 overflow-y-auto">
                               {['mp3','pcm','flac','wav'].map(f => (
                                 <div key={f} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioFormat === f ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioFormat(f); setPixAspectDropdownClosing(true); setTimeout(()=>{ setIsPixAspectDropdownOpen(false); setPixAspectDropdownClosing(false) },200) }}>
@@ -1767,13 +1767,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       </div>
                       <div className="relative" ref={pixResolutionRef}>
                         <div className="text-xs text-zinc-400 mb-2">声道</div>
-                        <div className="w-[120px] bg白/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
+                        <div className="w-[120px] bg白/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
                           onClick={() => setIsPixResolutionDropdownOpen(v => !v)}>
                           <span className="text-sm">{audioChannel}</span>
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                             <div className="max-h-60 overflow-y-auto">
                               {[1,2].map(c => (
                                 <div key={c} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioChannel === c ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioChannel(c); setPixResolutionDropdownClosing(true); setTimeout(()=>{ setIsPixResolutionDropdownOpen(false); setPixResolutionDropdownClosing(false) },200) }}>
@@ -1788,26 +1788,26 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     <div className="flex gap-4">
                       <div className="w-auto min-w-[120px]">
                         <label className="block text-xs text-zinc-400 mb-2">朗读 LaTeX</label>
-                        <button onClick={()=>setLatexRead(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${latexRead ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-[rgba(46,46,46,0.8)]'}`}>{latexRead ? '开启' : '关闭'}</button>
+                        <button onClick={()=>setLatexRead(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${latexRead ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{latexRead ? '开启' : '关闭'}</button>
                       </div>
                       <div className="w-auto min-w-[120px]">
                         <label className="block text-xs text-zinc-400 mb-2">英文规范化</label>
-                        <button onClick={()=>setTextNormalization(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${textNormalization ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-[rgba(46,46,46,0.8)]'}`}>{textNormalization ? '开启' : '关闭'}</button>
+                        <button onClick={()=>setTextNormalization(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${textNormalization ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{textNormalization ? '开启' : '关闭'}</button>
                       </div>
                     </div>
                     
                     <div className="flex gap-3">
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">效果器音高</div>
-                        <input type="number" step="1" min="-100" max="100" value={voiceModifyPitch} onChange={(e)=>setVoiceModifyPitch(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                        <input type="number" step="1" min="-100" max="100" value={voiceModifyPitch} onChange={(e)=>setVoiceModifyPitch(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
                       </div>
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">效果器强度</div>
-                        <input type="number" step="1" min="-100" max="100" value={voiceModifyIntensity} onChange={(e)=>setVoiceModifyIntensity(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                        <input type="number" step="1" min="-100" max="100" value={voiceModifyIntensity} onChange={(e)=>setVoiceModifyIntensity(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
                       </div>
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">效果器音色</div>
-                        <input type="number" step="1" min="-100" max="100" value={voiceModifyTimbre} onChange={(e)=>setVoiceModifyTimbre(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
+                        <input type="number" step="1" min="-100" max="100" value={voiceModifyTimbre} onChange={(e)=>setVoiceModifyTimbre(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
                       </div>
                     </div>
                     
@@ -1825,7 +1825,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[120px] relative" ref={viduModeRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-300">模式</label>
               <div
-                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduModeDropdownOpen) {
                     handleCloseViduModeDropdown()
@@ -1846,7 +1846,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduModeDropdownOpen || viduModeDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -1875,7 +1875,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={viduAspectRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduAspectDropdownOpen) {
                       handleCloseViduAspectDropdown()
@@ -1896,7 +1896,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
                 {(isViduAspectDropdownOpen || viduAspectDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {['16:9', '9:16', '1:1'].map(r => (
@@ -1922,7 +1922,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={viduStyleRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">风格</label>
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isViduStyleDropdownOpen) {
                       handleCloseViduStyleDropdown()
@@ -1943,7 +1943,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
                 {(isViduStyleDropdownOpen || viduStyleDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                   >
                     <div className="max-h-60 overflow-y-auto">
                       {[
@@ -1970,7 +1970,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[80px] relative" ref={viduMovementRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-300">运动幅度</label>
               <div
-                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduMovementDropdownOpen) {
                     handleCloseViduMovementDropdown()
@@ -1991,7 +1991,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduMovementDropdownOpen || viduMovementDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -2019,7 +2019,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[80px] relative" ref={viduBgmRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-300">BGM</label>
               <div
-                className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                 onClick={() => {
                   if (isViduBgmDropdownOpen) {
                     handleCloseViduBgmDropdown()
@@ -2040,7 +2040,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
               {(isViduBgmDropdownOpen || viduBgmDropdownClosing) && (
                 <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
                     {[
@@ -2072,7 +2072,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
               {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? (
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isHailuoDurationDropdownOpen) {
                       handleCloseHailuoDurationDropdown()
@@ -2088,7 +2088,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
               ) : (
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isKlingDurationDropdownOpen) {
                       handleCloseKlingDurationDropdown()
@@ -2104,7 +2104,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
               )}
               {(isHailuoDurationDropdownOpen || hailuoDurationDropdownClosing) && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
-                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${hailuoDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${hailuoDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                   <div className="max-h-60 overflow-y-auto">
                     {[6, 10].map(val => (
                       <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoDuration || 6) === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseHailuoDurationDropdown() }}>
@@ -2115,7 +2115,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 </div>
               )}
               {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
-                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                   <div className="max-h-60 overflow-y-auto">
                     {[5, 10].map(val => (
                       <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoDuration === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseKlingDurationDropdown() }}>
@@ -2133,7 +2133,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 <div className="w-auto min-w-[80px] relative" ref={klingAspectRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
                   <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                     onClick={() => {
                       if (isKlingAspectDropdownOpen) {
                         handleCloseKlingAspectDropdown()
@@ -2148,7 +2148,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     </svg>
                   </div>
                   {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                       <div className="max-h-60 overflow-y-auto">
                         {['16:9', '9:16', '1:1'].map(r => (
                           <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoAspectRatio(r); handleCloseKlingAspectDropdown() }}>
@@ -2163,7 +2163,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 <div className="w-auto min-w-[80px] relative" ref={pixAspectRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
                   <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                     onClick={() => {
                       if (isPixAspectDropdownOpen) {
                         handleClosePixAspectDropdown()
@@ -2178,7 +2178,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     </svg>
                   </div>
                   {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                       <div className="max-h-60 overflow-y-auto">
                         {['16:9', '9:16', '1:1'].map(r => (
                           <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoAspectRatio(r); handleClosePixAspectDropdown() }}>
@@ -2196,7 +2196,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={pixResolutionRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isPixResolutionDropdownOpen) {
                       handleClosePixResolutionDropdown()
@@ -2211,7 +2211,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
                 {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <div className="max-h-60 overflow-y-auto">
                       {[...(pixFastMode ? ['360p','540p','720p'] : ['360p','540p','720p','1080p'])].map(val => (
                         <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoResolution || '540p') === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoResolution(val); handleClosePixResolutionDropdown() }}>
@@ -2227,7 +2227,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={hailuoResolutionRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isHailuoResolutionDropdownOpen) {
                       handleCloseHailuoResolutionDropdown()
@@ -2242,7 +2242,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
                 {(isHailuoResolutionDropdownOpen || hailuoResolutionDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${hailuoResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${hailuoResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <div className="max-h-60 overflow-y-auto">
                       {([...(videoDuration === 6 ? ['768P','1080P'] : ['768P'])] as string[]).map(val => (
                         <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoResolution || '768P') === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoResolution(val); handleCloseHailuoResolutionDropdown() }}>
@@ -2283,7 +2283,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       const rounded = Math.round(clamped * 100) / 100
                       setKlingCfgScale(rounded)
                     }}
-                    className="w-24 bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300"
+                    className="w-24 bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300"
                     min="0"
                     max="1"
                     step="0.01"
@@ -2323,7 +2323,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[140px] relative" ref={wanSizeRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">尺寸</label>
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isWanSizeDropdownOpen) {
                       handleCloseWanSizeDropdown()
@@ -2338,7 +2338,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
                 {(isWanSizeDropdownOpen || wanSizeDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-[260px] bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${wanSizeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className={`absolute z-20 mt-1 w-[260px] bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${wanSizeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <div className="max-h-60 overflow-y-auto">
                       {[
                         '832*480','480*832','624*624',
@@ -2358,7 +2358,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <div className="w-auto min-w-[80px] relative" ref={wanResolutionRef}>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                 <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                   onClick={() => {
                     if (isWanResolutionDropdownOpen) {
                       handleCloseWanResolutionDropdown()
@@ -2373,7 +2373,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   </svg>
                 </div>
                 {(isWanResolutionDropdownOpen || wanResolutionDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${wanResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${wanResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <div className="max-h-60 overflow-y-auto">
                       {['480P','720P','1080P'].map(val => (
                         <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${wanResolution === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setWanResolution(val); handleCloseWanResolutionDropdown() }}>
@@ -2407,7 +2407,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 <div className="w-auto min-w-[80px] relative" ref={seedanceVariantRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">版本</label>
                   <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                     onClick={() => {
                       if (isSeedanceVariantDropdownOpen) {
                         handleCloseSeedanceVariantDropdown()
@@ -2422,7 +2422,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     </svg>
                   </div>
                   {(isSeedanceVariantDropdownOpen || seedanceVariantDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${seedanceVariantDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${seedanceVariantDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                       <div className="max-h-60 overflow-y-auto">
                         {[
                           { value: 'lite', label: 'Lite' },
@@ -2439,7 +2439,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 <div className="w-auto min-w-[80px] relative" ref={seedanceResolutionRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
                   <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                     onClick={() => {
                       if (isSeedanceResolutionDropdownOpen) {
                         handleCloseSeedanceResolutionDropdown()
@@ -2454,7 +2454,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     </svg>
                   </div>
                   {(isSeedanceResolutionDropdownOpen || seedanceResolutionDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${seedanceResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${seedanceResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                       <div className="max-h-60 overflow-y-auto">
                         {['480p','720p','1080p'].map(val => (
                           <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceResolution === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceResolution(val); handleCloseSeedanceResolutionDropdown() }}>
@@ -2468,7 +2468,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 <div className="w-auto min-w-[80px] relative" ref={seedanceAspectRef}>
                   <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
                   <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-[rgba(46,46,46,0.8)] rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
                     onClick={() => {
                       if (isSeedanceAspectDropdownOpen) {
                         handleCloseSeedanceAspectDropdown()
@@ -2483,7 +2483,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     </svg>
                   </div>
                   {(isSeedanceAspectDropdownOpen || seedanceAspectDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg ${seedanceAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${seedanceAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                       <div className="max-h-60 overflow-y-auto">
                         {['21:9','16:9','4:3','1:1','3:4','9:16','9:21'].map(r => (
                           <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceAspectRatio(r); handleCloseSeedanceAspectDropdown() }}>
@@ -2545,7 +2545,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 >
                   批量生成
                   <span
-                    className={`absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 w-[280px] bg-zinc-800/90 border border-[rgba(46,46,46,0.8)] rounded-lg shadow-lg text-xs text-white p-3 ${bulkTooltipVisible ? (bulkTooltipClosing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'}`}
+                    className={`absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 w-[280px] bg-zinc-800/90 border border-zinc-700/50 rounded-lg shadow-lg text-xs text-white p-3 ${bulkTooltipVisible ? (bulkTooltipClosing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'}`}
                   >
                     设置为自动时，可以通过提示词描述控制生成的图片数量，例如：生成4张图片。实际数量会受限于最大数量的设置，同时参考图+想要生成图片的数量无法超过15张。
                   </span>
@@ -2574,7 +2574,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     type="number"
                     value={maxImages}
                     onChange={(e) => setMaxImages(Math.min(15, Math.max(1, parseInt(e.target.value) || 1)))}
-                    className="w-20 bg-zinc-700/50 border border-[rgba(46,46,46,0.8)] rounded-lg px-3 pr-8 py-2 h-[38px] text-sm transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0"
+                    className="w-20 bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0"
                     min="1"
                     max="15"
                   />
@@ -2598,7 +2598,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       </div>
 
       {/* 输入区域 */}
-      <div className="relative bg-[#131313]/70 rounded-xl border border-[rgba(46,46,46,0.8)] p-4">
+      <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
         {/* 图片上传和预览区域 - 独立一行 */}
         {currentModel?.type !== 'audio' && (
         <div className="mb-3">
@@ -2664,7 +2664,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               return canUploadMore ? (
                 <div 
                   key={`upload-btn-${uploadedImages.length}`}
-                  className="w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-[rgba(46,46,46,0.8)] hover:border-[rgba(46,46,46,0.8)] flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
+                  className="w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-zinc-700/50 hover:border-zinc-700/50 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
                   onClick={() => imageFileInputRef.current?.click()}
                   style={{
                     animation: 'imageSlideIn 0.25s ease-out forwards'
@@ -2754,7 +2754,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         </button>
         <button
           onClick={onOpenSettings}
-          className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-[rgba(46,46,46,0.8)] flex items-center text-sm"
+          className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-zinc-700/50 flex items-center text-sm"
           title="设置"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
