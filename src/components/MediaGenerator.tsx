@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
 
@@ -131,9 +132,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [latexRead, setLatexRead] = useState<boolean>(false)
   const [textNormalization, setTextNormalization] = useState<boolean>(false)
   const [languageBoost, setLanguageBoost] = useState<string>('auto')
-  const [voiceModifyPitch, setVoiceModifyPitch] = useState<number>(0)
-  const [voiceModifyIntensity, setVoiceModifyIntensity] = useState<number>(0)
-  const [voiceModifyTimbre, setVoiceModifyTimbre] = useState<number>(0)
   const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
   const [isAudioEmotionDropdownOpen, setIsAudioEmotionDropdownOpen] = useState(false)
   const [audioEmotionDropdownClosing, setAudioEmotionDropdownClosing] = useState(false)
@@ -144,6 +142,38 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isLanguageBoostDropdownOpen, setIsLanguageBoostDropdownOpen] = useState(false)
   const [languageBoostDropdownClosing, setLanguageBoostDropdownClosing] = useState(false)
   const languageBoostRef = useRef<HTMLDivElement>(null)
+  const [klingAspectPos, setKlingAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [klingDurationPos, setKlingDurationPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [pixAspectPos, setPixAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [pixResolutionPos, setPixResolutionPos] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  useEffect(() => {
+    if ((isKlingAspectDropdownOpen || klingAspectDropdownClosing) && klingAspectRef.current) {
+      const rect = klingAspectRef.current.getBoundingClientRect()
+      setKlingAspectPos({ top: rect.bottom + 8, left: rect.left, width: rect.width })
+    }
+  }, [isKlingAspectDropdownOpen, klingAspectDropdownClosing])
+
+  useEffect(() => {
+    if ((isKlingDurationDropdownOpen || klingDurationDropdownClosing) && klingDurationRef.current) {
+      const rect = klingDurationRef.current.getBoundingClientRect()
+      setKlingDurationPos({ top: rect.bottom + 8, left: rect.left, width: rect.width })
+    }
+  }, [isKlingDurationDropdownOpen, klingDurationDropdownClosing])
+
+  useEffect(() => {
+    if ((isPixAspectDropdownOpen || pixAspectDropdownClosing) && pixAspectRef.current) {
+      const rect = pixAspectRef.current.getBoundingClientRect()
+      setPixAspectPos({ top: rect.bottom + 8, left: rect.left, width: rect.width })
+    }
+  }, [isPixAspectDropdownOpen, pixAspectDropdownClosing])
+
+  useEffect(() => {
+    if ((isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && pixResolutionRef.current) {
+      const rect = pixResolutionRef.current.getBoundingClientRect()
+      setPixResolutionPos({ top: rect.bottom + 8, left: rect.left, width: rect.width })
+    }
+  }, [isPixResolutionDropdownOpen, pixResolutionDropdownClosing])
 
   const voicePresets: { id: string; name: string; gender: 'male' | 'female' | 'child' | 'other' }[] = [
     { id: 'male-qn-qingse', name: '青涩青年', gender: 'male' },
@@ -953,11 +983,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       options.latex_read = latexRead
       options.text_normalization = textNormalization
       options.language_boost = languageBoost
-      options.voice_modify = {
-        pitch: voiceModifyPitch,
-        intensity: voiceModifyIntensity,
-        timbre: voiceModifyTimbre
-      }
     }
     
     onGenerate(input, selectedModel, currentModel?.type || 'image', options)
@@ -1526,12 +1551,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             <div className="w-auto min-w-[140px] flex-shrink-0 relative" ref={voiceRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">音色</label>
               <button
+                type="button"
                 onClick={() => setIsVoiceDropdownOpen(v => !v)}
-                className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap text-sm"
+                className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 active:ring-0 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap text-sm"
               >
                 <span className="text-sm">{voicePresets.find(v => v.id === voiceId)?.name || voiceId}</span>
                 <svg
-                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isVoiceDropdownOpen ? 'rotate-180' : ''}`}
+                  tabIndex={-1}
+                  className={`pointer-events-none w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isVoiceDropdownOpen ? 'rotate-180' : ''}`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1553,7 +1580,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           { label: '童声', value: 'child' },
                           { label: '其他', value: 'other' }
                         ].map(g => (
-                          <button key={g.value} onClick={() => setVoiceFilterGender(g.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${voiceFilterGender === g.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{g.label}</button>
+                          <button key={g.value} type="button" onClick={() => setVoiceFilterGender(g.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 ${voiceFilterGender === g.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{g.label}</button>
                         ))}
                       </div>
                     </div>
@@ -1673,13 +1700,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <button onClick={() => { if (isAudioAdvancedOpen) { setAudioAdvancedClosing(true); setTimeout(() => { setIsAudioAdvancedOpen(false); setAudioAdvancedClosing(false) }, 200) } else { setIsAudioAdvancedOpen(true) } }} className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50">打开</button>
               {(isAudioAdvancedOpen || audioAdvancedClosing) && (
                 <div className="absolute z-20 mb-2 w-[576px] bottom-full left-1/2 -translate-x-1/2">
-                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-2xl max-h-[420px] ${audioAdvancedClosing ? 'animate-scale-out' : 'animate-scale-in'}`}> 
+                  <div className={`flex flex-col overflow-visible bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-2xl max-h-[420px] ${audioAdvancedClosing ? 'animate-scale-out' : 'animate-scale-in'}`}> 
                     <div className="p-4 flex flex-col gap-4 overflow-y-auto">
                     <div className="flex gap-4">
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">音量</div>
                         <div className="relative inline-block">
-                          <input type="number" value={audioVol} min={0.1} max={10} step={0.1} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <input type="number" value={audioVol} min={0.1} max={10} step={0.1} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-all duration-300" />
                           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
                             <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.min(10,(v||1)+0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
                             <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.max(0.1,(v||1)-0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
@@ -1689,7 +1716,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">语调</div>
                         <div className="relative inline-block">
-                          <input type="number" value={audioPitch} min={-12} max={12} step={1} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <input type="number" value={audioPitch} min={-12} max={12} step={1} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-all duration-300" />
                           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
                             <button type="button" onClick={()=>setAudioPitch(v=>Math.min(12,(v||0)+1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
                             <button type="button" onClick={()=>setAudioPitch(v=>Math.max(-12,(v||0)-1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
@@ -1699,7 +1726,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       <div>
                         <div className="text-xs text-zinc-400 mb-2">速度</div>
                         <div className="relative inline-block">
-                          <input type="number" value={audioSpeed} min={0.5} max={2} step={0.1} onChange={(e)=>setAudioSpeed(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm focus:outline-none transition-all duration-300" />
+                          <input type="number" value={audioSpeed} min={0.5} max={2} step={0.1} onChange={(e)=>setAudioSpeed(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-all duration-300" />
                           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
                             <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.min(2,(v||1)+0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
                             <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.max(0.5,(v||1)-0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
@@ -1716,15 +1743,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                            <div className="max-h-60 overflow-y-auto">
-                              {[8000,16000,22050,24000,32000,44100].map(r => (
-                                <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSampleRate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioSampleRate(r); setKlingAspectDropdownClosing(true); setTimeout(()=>{ setIsKlingAspectDropdownOpen(false); setKlingAspectDropdownClosing(false) },200) }}>
-                                  <span className="text-sm">{r}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                          createPortal(
+                            <div className={`z-50 bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (klingAspectPos?.top || 0), left: (klingAspectPos?.left || 0), width: (klingAspectPos?.width || undefined) }}>
+                              <div className="max-h-60 overflow-y-auto">
+                                {[8000,16000,22050,24000,32000,44100].map(r => (
+                                  <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSampleRate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioSampleRate(r); setKlingAspectDropdownClosing(true); setTimeout(()=>{ setIsKlingAspectDropdownOpen(false); setKlingAspectDropdownClosing(false) },200) }}>
+                                    <span className="text-sm">{r}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>,
+                            document.body
+                          )
                         )}
                       </div>
                       <div className="relative" ref={klingDurationRef}>
@@ -1735,15 +1765,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                            <div className="max-h-60 overflow-y-auto">
-                              {[32000,64000,128000,256000].map(r => (
-                                <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioBitrate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioBitrate(r); setKlingDurationDropdownClosing(true); setTimeout(()=>{ setIsKlingDurationDropdownOpen(false); setKlingDurationDropdownClosing(false) },200) }}>
-                                  <span className="text-sm">{r}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                          createPortal(
+                            <div className={`z-50 bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (klingDurationPos?.top || 0), left: (klingDurationPos?.left || 0), width: (klingDurationPos?.width || undefined) }}>
+                              <div className="max-h-60 overflow-y-auto">
+                                {[32000,64000,128000,256000].map(r => (
+                                  <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioBitrate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioBitrate(r); setKlingDurationDropdownClosing(true); setTimeout(()=>{ setIsKlingDurationDropdownOpen(false); setKlingDurationDropdownClosing(false) },200) }}>
+                                    <span className="text-sm">{r}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>,
+                            document.body
+                          )
                         )}
                       </div>
                       <div className="relative" ref={pixAspectRef}>
@@ -1754,15 +1787,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                            <div className="max-h-60 overflow-y-auto">
-                              {['mp3','pcm','flac','wav'].map(f => (
-                                <div key={f} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioFormat === f ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioFormat(f); setPixAspectDropdownClosing(true); setTimeout(()=>{ setIsPixAspectDropdownOpen(false); setPixAspectDropdownClosing(false) },200) }}>
-                                  <span className="text-sm">{f}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                          createPortal(
+                            <div className={`z-50 bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (pixAspectPos?.top || 0), left: (pixAspectPos?.left || 0), width: (pixAspectPos?.width || undefined) }}>
+                              <div className="max-h-60 overflow-y-auto">
+                                {['mp3','pcm','flac','wav'].map(f => (
+                                  <div key={f} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioFormat === f ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioFormat(f); setPixAspectDropdownClosing(true); setTimeout(()=>{ setIsPixAspectDropdownOpen(false); setPixAspectDropdownClosing(false) },200) }}>
+                                    <span className="text-sm">{f}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>,
+                            document.body
+                          )
                         )}
                       </div>
                       <div className="relative" ref={pixResolutionRef}>
@@ -1773,15 +1809,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                         {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
-                          <div className={`absolute z-20 mt-1 w-full bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                            <div className="max-h-60 overflow-y-auto">
-                              {[1,2].map(c => (
-                                <div key={c} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioChannel === c ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioChannel(c); setPixResolutionDropdownClosing(true); setTimeout(()=>{ setIsPixResolutionDropdownOpen(false); setPixResolutionDropdownClosing(false) },200) }}>
-                                  <span className="text-sm">{c}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                          createPortal(
+                            <div className={`z-50 bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (pixResolutionPos?.top || 0), left: (pixResolutionPos?.left || 0), width: (pixResolutionPos?.width || undefined) }}>
+                              <div className="max-h-60 overflow-y-auto">
+                                {[1,2].map(c => (
+                                  <div key={c} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioChannel === c ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioChannel(c); setPixResolutionDropdownClosing(true); setTimeout(()=>{ setIsPixResolutionDropdownOpen(false); setPixResolutionDropdownClosing(false) },200) }}>
+                                    <span className="text-sm">{c}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>,
+                            document.body
+                          )
                         )}
                       </div>
                     </div>
@@ -1796,20 +1835,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                       </div>
                     </div>
                     
-                    <div className="flex gap-3">
-                      <div>
-                        <div className="text-xs text-zinc-400 mb-2">效果器音高</div>
-                        <input type="number" step="1" min="-100" max="100" value={voiceModifyPitch} onChange={(e)=>setVoiceModifyPitch(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
-                      </div>
-                      <div>
-                        <div className="text-xs text-zinc-400 mb-2">效果器强度</div>
-                        <input type="number" step="1" min="-100" max="100" value={voiceModifyIntensity} onChange={(e)=>setVoiceModifyIntensity(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
-                      </div>
-                      <div>
-                        <div className="text-xs text-zinc-400 mb-2">效果器音色</div>
-                        <input type="number" step="1" min="-100" max="100" value={voiceModifyTimbre} onChange={(e)=>setVoiceModifyTimbre(parseInt(e.target.value)||0)} className="bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm w-[100px]" />
-                      </div>
-                    </div>
+                    
                     
                     </div>
                   </div>
