@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import NumberInput from './ui/NumberInput'
 import { apiService } from '../services/api'
 
 interface SettingsModalProps {
@@ -118,26 +119,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
 
           <div className="mb-5">
-            <label className="block text-sm font-medium mb-2 text-zinc-300">历史记录保存数量</label>
-            <div className="relative">
-              <input
-                type="number"
-                value={maxHistoryCount}
-                onChange={(e) => setMaxHistoryCount(Math.max(1, Math.min(500, parseInt(e.target.value) || 50)))}
-                placeholder="50"
-                min="1"
-                max="500"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text白 placeholder-zinc-400"
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-zinc-400">
-              最多保存 1-500 条历史记录,超出后将自动删除最旧的记录
-            </p>
+            <NumberInput label="历史记录保存数量" value={maxHistoryCount} onChange={(v)=>setMaxHistoryCount(Math.max(1, Math.min(500, Math.round(v))))} min={1} max={500} step={1} widthClassName="w-full" />
+            <p className="mt-2 text-xs text-zinc-400">最多保存 1-500 条历史记录,超出后将自动删除最旧的记录</p>
           </div>
 
           {error && (

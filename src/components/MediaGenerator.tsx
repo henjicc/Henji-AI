@@ -2,6 +2,12 @@ import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
+import ParamRow from './ui/ParamRow'
+import Dropdown from './ui/Dropdown'
+import Toggle from './ui/Toggle'
+import NumberInput from './ui/NumberInput'
+import TextInput from './ui/TextInput'
+import PanelTrigger from './ui/PanelTrigger'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -31,16 +37,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
   const [sequentialImageGeneration, setSequentialImageGeneration] = useState<'auto' | 'disabled'>('auto')
   const [maxImages, setMaxImages] = useState<number>(15)
-  const [isViduModeDropdownOpen, setIsViduModeDropdownOpen] = useState(false)
-  const [viduModeDropdownClosing, setViduModeDropdownClosing] = useState(false)
-  const [isViduAspectDropdownOpen, setIsViduAspectDropdownOpen] = useState(false)
-  const [viduAspectDropdownClosing, setViduAspectDropdownClosing] = useState(false)
-  const [isViduMovementDropdownOpen, setIsViduMovementDropdownOpen] = useState(false)
-  const [viduMovementDropdownClosing, setViduMovementDropdownClosing] = useState(false)
   const [isViduStyleDropdownOpen, setIsViduStyleDropdownOpen] = useState(false)
   const [viduStyleDropdownClosing, setViduStyleDropdownClosing] = useState(false)
-  const [isViduBgmDropdownOpen, setIsViduBgmDropdownOpen] = useState(false)
-  const [viduBgmDropdownClosing, setViduBgmDropdownClosing] = useState(false)
+  
   
   // Vidu Q1 参数
   const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
@@ -96,11 +95,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
   const resolutionRef = useRef<HTMLDivElement>(null)
-  const viduModeRef = useRef<HTMLDivElement>(null)
-  const viduAspectRef = useRef<HTMLDivElement>(null)
-  const viduMovementRef = useRef<HTMLDivElement>(null)
+  
   const viduStyleRef = useRef<HTMLDivElement>(null)
-  const viduBgmRef = useRef<HTMLDivElement>(null)
+  
   const klingDurationRef = useRef<HTMLDivElement>(null)
   const klingAspectRef = useRef<HTMLDivElement>(null)
   const hailuoDurationRef = useRef<HTMLDivElement>(null)
@@ -120,9 +117,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [voiceDropdownClosing, setVoiceDropdownClosing] = useState(false)
   const [voiceFilterGender, setVoiceFilterGender] = useState<'all' | 'male' | 'female' | 'child' | 'other'>('all')
   const voiceRef = useRef<HTMLDivElement>(null)
-  const [isAudioAdvancedOpen, setIsAudioAdvancedOpen] = useState(false)
-  const [audioAdvancedClosing, setAudioAdvancedClosing] = useState(false)
-  const audioAdvancedRef = useRef<HTMLDivElement>(null)
   const [audioVol, setAudioVol] = useState<number>(1.0)
   const [audioPitch, setAudioPitch] = useState<number>(0)
   const [audioSampleRate, setAudioSampleRate] = useState<number>(32000)
@@ -469,20 +463,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (resolutionRef.current && !resolutionRef.current.contains(event.target as Node) && isResolutionDropdownOpen) {
         setIsResolutionDropdownOpen(false)
       }
-      if (viduModeRef.current && !viduModeRef.current.contains(event.target as Node) && isViduModeDropdownOpen) {
-        handleCloseViduModeDropdown()
-      }
-      if (viduAspectRef.current && !viduAspectRef.current.contains(event.target as Node) && isViduAspectDropdownOpen) {
-        handleCloseViduAspectDropdown()
-      }
-      if (viduMovementRef.current && !viduMovementRef.current.contains(event.target as Node) && isViduMovementDropdownOpen) {
-        handleCloseViduMovementDropdown()
-      }
       if (viduStyleRef.current && !viduStyleRef.current.contains(event.target as Node) && isViduStyleDropdownOpen) {
         handleCloseViduStyleDropdown()
-      }
-      if (viduBgmRef.current && !viduBgmRef.current.contains(event.target as Node) && isViduBgmDropdownOpen) {
-        handleCloseViduBgmDropdown()
       }
       if (klingDurationRef.current && !klingDurationRef.current.contains(event.target as Node) && isKlingDurationDropdownOpen) {
         handleCloseKlingDurationDropdown()
@@ -532,7 +514,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduModeDropdownOpen, isViduAspectDropdownOpen, isViduMovementDropdownOpen, isViduStyleDropdownOpen, isViduBgmDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen, isAudioEmotionDropdownOpen, isAudioSpecDropdownOpen, isLanguageBoostDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduStyleDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen, isAudioEmotionDropdownOpen, isAudioSpecDropdownOpen, isLanguageBoostDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -542,29 +524,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
 
-  const handleCloseViduModeDropdown = () => {
-    setViduModeDropdownClosing(true)
-    setTimeout(() => {
-      setIsViduModeDropdownOpen(false)
-      setViduModeDropdownClosing(false)
-    }, 200)
-  }
-
-  const handleCloseViduAspectDropdown = () => {
-    setViduAspectDropdownClosing(true)
-    setTimeout(() => {
-      setIsViduAspectDropdownOpen(false)
-      setViduAspectDropdownClosing(false)
-    }, 200)
-  }
-
-  const handleCloseViduMovementDropdown = () => {
-    setViduMovementDropdownClosing(true)
-    setTimeout(() => {
-      setIsViduMovementDropdownOpen(false)
-      setViduMovementDropdownClosing(false)
-    }, 200)
-  }
 
   const handleCloseViduStyleDropdown = () => {
     setViduStyleDropdownClosing(true)
@@ -574,13 +533,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
 
-  const handleCloseViduBgmDropdown = () => {
-    setViduBgmDropdownClosing(true)
-    setTimeout(() => {
-      setIsViduBgmDropdownOpen(false)
-      setViduBgmDropdownClosing(false)
-    }, 200)
-  }
 
   const handleCloseKlingDurationDropdown = () => {
     setKlingDurationDropdownClosing(true)
@@ -1154,7 +1106,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         setUploadedFilePaths(prev => prev.slice(0, max))
       }
     }
-    handleCloseModelDropdown()
+    
   }
 
   const handleResolutionSelect = (resolution: string) => {
@@ -1212,23 +1164,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }, [isVoiceDropdownOpen])
 
-  useEffect(() => {
-    if (!isAudioAdvancedOpen) return
-    const onDoc = (e: MouseEvent) => {
-      const el = audioAdvancedRef.current
-      if (el && !el.contains(e.target as Node)) {
-        setAudioAdvancedClosing(true)
-        setTimeout(() => {
-          setIsAudioAdvancedOpen(false)
-          setAudioAdvancedClosing(false)
-        }, 200)
-      }
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-    }
-  }, [isAudioAdvancedOpen])
+  
 
   const handleCloseAudioEmotionDropdown = () => {
     setAudioEmotionDropdownClosing(true)
@@ -1257,398 +1193,187 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   return (
     <div className="w-full max-w-5xl mx-auto">
       {/* 模型选择器、分辨率设置和即梦参数设置 */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        {/* 合并的提供商和模型选择器 - 缩短宽度 */}
-        <div className="w-auto min-w-[180px] relative flex-shrink-0" ref={modelRef}>
-          <label className="block text-sm font-medium mb-1 text-zinc-300">模型</label>
-          <div 
-            className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-            onClick={() => {
-              if (isModelDropdownOpen) {
-                handleCloseModelDropdown()
-              } else {
-                setIsModelDropdownOpen(true)
-              }
-            }}
-          >
-            <span className="text-sm truncate">{currentProvider?.name}_{currentModel?.name || '选择'}</span>
-            <svg 
-              className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isModelDropdownOpen ? 'rotate-180' : ''}`} 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-            </svg>
-          </div>
-          
-          {(isModelDropdownOpen || modelDropdownClosing) && (
-            <div
-              className={`absolute z-20 mb-1 w-[720px] h-[420px] flex flex-col overflow-hidden bg-zinc-800 border border-zinc-700/50 rounded-lg shadow-2xl bottom-full left-1/2 -ml-[360px] mb-2 ${
-                modelDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'
-              }`}
-            >
-              <div className="p-4 h-full flex flex-col">
-                <div className="mb-3">
-                  <div className="text-xs text-zinc-400 mb-2">供应商</div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setModelFilterProvider('all')}
-                      className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
-                        modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                      }`}
-                    >全部</button>
-                    {providers.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => setModelFilterProvider(p.id)}
-                        className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
-                          modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                        }`}
-                      >{p.name}</button>
-                    ))}
-                  </div>
+      <ParamRow className="mb-4">
+        <PanelTrigger
+          label="模型"
+          display={`${currentProvider?.name}_${currentModel?.name || '选择'}`}
+          className="w-auto min-w-[180px] flex-shrink-0"
+          panelWidth={720}
+          alignment="aboveCenter"
+          closeOnPanelClick={(t) => !!(t as HTMLElement).closest('[data-close-on-select]')}
+          renderPanel={() => (
+            <div className="p-4 h-full flex flex-col">
+              <div className="mb-3">
+                <div className="text-xs text-zinc-400 mb-2">供应商</div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setModelFilterProvider('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
+                  {providers.map(p => (
+                    <button key={p.id} onClick={() => setModelFilterProvider(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
+                  ))}
                 </div>
-                <div className="mb-3">
-                  <div className="text-xs text-zinc-400 mb-2">类型</div>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: '全部', value: 'all' },
-                      { label: '图片', value: 'image' },
-                      { label: '视频', value: 'video' },
-                      { label: '音频', value: 'audio' }
-                    ].map(t => (
-                      <button
-                        key={t.value}
-                        onClick={() => setModelFilterType(t.value as 'all' | 'image' | 'video' | 'audio')}
-                        className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
-                          modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                        }`}
-                      >{t.label}</button>
-                    ))}
-                  </div>
+              </div>
+              <div className="mb-3">
+                <div className="text-xs text-zinc-400 mb-2">类型</div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: '全部', value: 'all' },
+                    { label: '图片', value: 'image' },
+                    { label: '视频', value: 'video' },
+                    { label: '音频', value: 'audio' }
+                  ].map(t => (
+                    <button key={t.value} onClick={() => setModelFilterType(t.value as 'all' | 'image' | 'video' | 'audio')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
+                  ))}
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                  <div className="grid grid-cols-3 gap-2">
-                    {providers
-                      .flatMap(p => p.models.map(m => ({ p, m })))
-                      .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
-                      .filter(item => (modelFilterType === 'all' ? true : item.m.type === modelFilterType))
-                      .map(({ p, m }) => (
-                        <div
-                          key={`${p.id}-${m.id}`}
-                          onClick={() => handleModelSelect(p.id, m.id)}
-                          className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${
-                            selectedProvider === p.id && selectedModel === m.id
-                              ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30'
-                              : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm">{m.name}</span>
-                            <span className="text-[11px] text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
-                          </div>
-                          <div className="mt-1 text-[11px] text-zinc-500">{p.name}</div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-3 gap-2">
+                  {providers
+                    .flatMap(p => p.models.map(m => ({ p, m })))
+                    .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
+                    .filter(item => (modelFilterType === 'all' ? true : item.m.type === modelFilterType))
+                    .map(({ p, m }) => (
+                      <div key={`${p.id}-${m.id}`} data-close-on-select onClick={() => handleModelSelect(p.id, m.id)} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${selectedProvider === p.id && selectedModel === m.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{m.name}</span>
+                          <span className="text-[11px] text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
                         </div>
-                      ))}
-                  </div>
+                        <div className="mt-1 text-[11px] text-zinc-500">{p.name}</div>
+                      </div>
+                    ))}
                 </div>
               </div>
             </div>
           )}
-        </div>
+        />
 
         {/* 分辨率设置按钮 - 仅对图片模型显示 */}
         {currentModel?.type === 'image' && (
-          <div className="relative" ref={resolutionRef}>
-            <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-            <button
-              onClick={() => setIsResolutionDropdownOpen(!isResolutionDropdownOpen)}
-              className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] w-[80px] outline-none focus:outline-none focus-visible:outline-none active:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between"
-            >
-              <span className="text-sm whitespace-nowrap">
-                {selectedResolution === 'smart' 
-                  ? '智能' 
-                  : selectedResolution}
-              </span>
-              <svg 
-                className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isResolutionDropdownOpen ? 'rotate-180' : ''}`} 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-              </svg>
-            </button>
-            
-            {/* 分辨率设置悬浮窗口 - 向上弹出 */}
-            {isResolutionDropdownOpen && (
-              <div 
-                className="absolute z-20 mb-1 w-80 bg-zinc-800 border border-zinc-700/50 rounded-lg shadow-2xl bottom-full right-0 mb-2 animate-scale-in"
-              >
-                <div className="p-4">
-                  {/* 选择比例 */}
-                  <div className="mb-3">
-                    <label className="block text-xs text-zinc-400 mb-2">选择比例</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { label: '智能', value: 'smart' },
-                        { label: '21:9', value: '21:9', ratio: '21:9' },
-                        { label: '16:9', value: '16:9', ratio: '16:9' },
-                        { label: '3:2', value: '3:2', ratio: '3:2' },
-                        { label: '4:3', value: '4:3', ratio: '4:3' },
-                        { label: '1:1', value: '1:1', ratio: '1:1' },
-                        { label: '3:4', value: '3:4', ratio: '3:4' },
-                        { label: '2:3', value: '2:3', ratio: '2:3' },
-                        { label: '9:16', value: '9:16', ratio: '9:16' }
-                      ].map(resolution => (
-                        <button
-                          key={resolution.value}
-                          onClick={() => handleResolutionSelect(resolution.value)}
-                          className={`px-2 py-3 text-xs rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
-                            selectedResolution === resolution.value
-                              ? 'bg-[#007eff] text-white'
-                              : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                          }`}
-                        >
-                          {resolution.ratio && (
-                            <div className="flex items-center justify-center h-8">
-                              <div 
-                                className={`border-2 border-white ${
-                                  resolution.ratio === '21:9' ? 'w-8 h-3' :
-                                  resolution.ratio === '16:9' ? 'w-8 h-4' :
-                                  resolution.ratio === '3:2' ? 'w-7 h-5' :
-                                  resolution.ratio === '4:3' ? 'w-7 h-5' :
-                                  resolution.ratio === '1:1' ? 'w-6 h-6' :
-                                  resolution.ratio === '3:4' ? 'w-5 h-7' :
-                                  resolution.ratio === '2:3' ? 'w-5 h-7' :
-                                  resolution.ratio === '9:16' ? 'w-4 h-8' :
-                                  'w-6 h-6'
-                                }`}
-                              ></div>
-                            </div>
-                          )}
-                          <span className="font-medium">{resolution.label}</span>
-                        </button>
-                      ))}
-                    </div>
+          <PanelTrigger
+            label="分辨率"
+            display={selectedResolution === 'smart' ? '智能' : selectedResolution}
+            className="w-auto"
+            panelWidth={320}
+            alignment="aboveCenter"
+            closeOnPanelClick={false}
+            renderPanel={() => (
+              <div className="p-4">
+                <div className="mb-3">
+                  <label className="block text-xs text-zinc-400 mb-2">选择比例</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: '智能', value: 'smart' },
+                      { label: '21:9', value: '21:9', ratio: '21:9' },
+                      { label: '16:9', value: '16:9', ratio: '16:9' },
+                      { label: '3:2', value: '3:2', ratio: '3:2' },
+                      { label: '4:3', value: '4:3', ratio: '4:3' },
+                      { label: '1:1', value: '1:1', ratio: '1:1' },
+                      { label: '3:4', value: '3:4', ratio: '3:4' },
+                      { label: '2:3', value: '2:3', ratio: '2:3' },
+                      { label: '9:16', value: '9:16', ratio: '9:16' }
+                    ].map(resolution => (
+                      <button key={resolution.value} onClick={() => handleResolutionSelect(resolution.value)} className={`px-2 py-3 text-xs rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${selectedResolution === resolution.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>
+                        {resolution.ratio && (
+                          <div className="flex items-center justify-center h-8">
+                            <div className={`border-2 border-white ${resolution.ratio === '21:9' ? 'w-8 h-3' : resolution.ratio === '16:9' ? 'w-8 h-4' : resolution.ratio === '3:2' ? 'w-7 h-5' : resolution.ratio === '4:3' ? 'w-7 h-5' : resolution.ratio === '1:1' ? 'w-6 h-6' : resolution.ratio === '3:4' ? 'w-5 h-7' : resolution.ratio === '2:3' ? 'w-5 h-7' : resolution.ratio === '9:16' ? 'w-4 h-8' : 'w-6 h-6'}`}></div>
+                          </div>
+                        )}
+                        <span className="font-medium">{resolution.label}</span>
+                      </button>
+                    ))}
                   </div>
-
-                  {/* 选择分辨率 */}
-                  <div className="mb-3">
-                    <label className="block text-xs text-zinc-400 mb-2">选择分辨率</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { label: '高清 2K', value: '2K' },
-                        { label: '超清 4K', value: '4K' }
-                      ].map(res => (
-                        <button
-                          key={res.value}
-                          onClick={() => handleQualitySelect(res.value as '2K' | '4K')}
-                          className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
-                            resolutionQuality === res.value
-                              ? 'bg-[#007eff] text-white'
-                              : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                          }`}
-                        >
-                          {res.label}
-                        </button>
-                      ))}
-                    </div>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs text-zinc-400 mb-2">选择分辨率</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: '高清 2K', value: '2K' },
+                      { label: '超清 4K', value: '4K' }
+                    ].map(res => (
+                      <button key={res.value} onClick={() => handleQualitySelect(res.value as '2K' | '4K')} className={`px-3 py-2 text-sm rounded transition-all duration-300 ${resolutionQuality === res.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{res.label}</button>
+                    ))}
                   </div>
-
-                  {/* 尺寸 */}
-                  <div>
-                    <label className="block text-xs text-zinc-400 mb-2">尺寸</label>
-                    <div className="flex gap-2 items-center">
-                      <div className="flex-1">
-                        <input
-                          type="number"
-                          value={customWidth}
-                          onChange={(e) => handleManualWidthChange(e.target.value)}
-                          disabled={selectedResolution === 'smart'}
-                          placeholder="2048"
-                          className={`w-full bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm ${
-                            selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                          min="1024"
-                          max="8192"
-                        />
-                      </div>
-                      <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
-                      </svg>
-                      <div className="flex-1">
-                        <input
-                          type="number"
-                          value={customHeight}
-                          onChange={(e) => handleManualHeightChange(e.target.value)}
-                          disabled={selectedResolution === 'smart'}
-                          placeholder="2048"
-                          className={`w-full bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm ${
-                            selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                          min="1024"
-                          max="8192"
-                        />
-                      </div>
-                      <span className="text-xs text-zinc-400">PX</span>
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-2">尺寸</label>
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <input type="number" value={customWidth} onChange={(e) => handleManualWidthChange(e.target.value)} disabled={selectedResolution === 'smart'} placeholder="2048" className={`w-full bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm ${selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''}`} min="1024" max="8192" />
                     </div>
+                    <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                    <div className="flex-1">
+                      <input type="number" value={customHeight} onChange={(e) => handleManualHeightChange(e.target.value)} disabled={selectedResolution === 'smart'} placeholder="2048" className={`w-full bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm ${selectedResolution === 'smart' ? 'opacity-50 cursor-not-allowed' : ''}`} min="1024" max="8192" />
+                    </div>
+                    <span className="text-xs text-zinc-400">PX</span>
                   </div>
                 </div>
               </div>
             )}
-          </div>
+          />
         )}
 
         {currentModel?.type === 'audio' && (
           <>
             {selectedModel === 'minimax-speech-2.6' && (
-              <div className="w-auto min-w-[70px] flex-shrink-0 relative" ref={audioSpecRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">规格</label>
-                <div
-                  className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isAudioSpecDropdownOpen) {
-                      handleCloseAudioSpecDropdown()
-                    } else {
-                      setIsAudioSpecDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{audioSpec === 'hd' ? 'HD' : 'Turbo'}</span>
-                  <svg
-                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isAudioSpecDropdownOpen ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isAudioSpecDropdownOpen || audioSpecDropdownClosing) && (
-                  <div
-                    className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${audioSpecDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                  >
-                    <div className="max-h-60 overflow-y-auto">
-                      {['hd','turbo'].map(v => (
-                        <div
-                          key={v}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSpec === v ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                          onClick={() => {
-                            setAudioSpec(v as 'hd'|'turbo')
-                            handleCloseAudioSpecDropdown()
-                          }}
-                        >
-                          <span className="text-sm">{v === 'hd' ? 'HD' : 'Turbo'}</span>
-                        </div>
+              <Dropdown
+                label="规格"
+                value={audioSpec as any}
+                display={audioSpec === 'hd' ? 'HD' : 'Turbo'}
+                options={[{ value: 'hd' as any, label: 'HD' }, { value: 'turbo' as any, label: 'Turbo' }]}
+                onSelect={(v) => setAudioSpec(v as any)}
+                className="w-auto min-w-[70px] flex-shrink-0 relative"
+              />
+            )}
+          <PanelTrigger
+            label="音色"
+            display={voicePresets.find(v => v.id === voiceId)?.name || voiceId}
+            className="w-auto min-w-[140px] flex-shrink-0"
+            panelWidth={720}
+            alignment="aboveCenter"
+            closeOnPanelClick={(t) => !!(t as HTMLElement).closest('[data-close-on-select]')}
+            renderPanel={() => (
+                <div className="p-4 h-full flex flex-col">
+                  <div className="mb-3">
+                    <div className="text-xs text-zinc-400 mb-2">性别</div>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: '全部', value: 'all' },
+                        { label: '男', value: 'male' },
+                        { label: '女', value: 'female' },
+                        { label: '童声', value: 'child' },
+                        { label: '其他', value: 'other' }
+                      ].map(g => (
+                        <button key={g.value} type="button" onClick={() => setVoiceFilterGender(g.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 ${voiceFilterGender === g.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{g.label}</button>
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-            <div className="w-auto min-w-[140px] flex-shrink-0 relative" ref={voiceRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">音色</label>
-              <button
-                type="button"
-                onClick={() => setIsVoiceDropdownOpen(v => !v)}
-                className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 active:ring-0 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap text-sm"
-              >
-                <span className="text-sm">{voicePresets.find(v => v.id === voiceId)?.name || voiceId}</span>
-                <svg
-                  tabIndex={-1}
-                  className={`pointer-events-none w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isVoiceDropdownOpen ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </button>
-              {(isVoiceDropdownOpen || voiceDropdownClosing) && (
-                <div className="absolute z-20 mb-2 w-[720px] h-[420px] bottom-full left-1/2 -translate-x-1/2">
-                  <div className={`flex flex-col overflow-hidden bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-2xl ${voiceDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                    <div className="p-4 h-full flex flex-col">
-                    <div className="mb-3">
-                      <div className="text-xs text-zinc-400 mb-2">性别</div>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { label: '全部', value: 'all' },
-                          { label: '男', value: 'male' },
-                          { label: '女', value: 'female' },
-                          { label: '童声', value: 'child' },
-                          { label: '其他', value: 'other' }
-                        ].map(g => (
-                          <button key={g.value} type="button" onClick={() => setVoiceFilterGender(g.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 ${voiceFilterGender === g.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{g.label}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                      <div className="grid grid-cols-3 gap-2">
-                        {voicePresets
-                          .filter(v => voiceFilterGender === 'all' ? true : v.gender === voiceFilterGender)
-                          .map(v => (
-                            <div key={v.id} onClick={() => { setVoiceId(v.id); setVoiceDropdownClosing(true); setTimeout(() => { setVoiceDropdownClosing(false); setIsVoiceDropdownOpen(false) }, 200) }} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${voiceId === v.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm">{v.name}</span>
-                                <span className="text-[11px] text-zinc-400">{v.id}</span>
-                              </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="grid grid-cols-3 gap-2">
+                      {voicePresets
+                        .filter(v => voiceFilterGender === 'all' ? true : v.gender === voiceFilterGender)
+                        .map(v => (
+                          <div key={v.id} data-close-on-select onClick={() => { setVoiceId(v.id); }} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${voiceId === v.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm">{v.name}</span>
+                              <span className="text-[11px] text-zinc-400">{v.id}</span>
                             </div>
-                          ))}
-                      </div>
-                    </div>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 </div>
               )}
-            </div>
+            />
 
             
 
-            <div className="w-auto min-w-[70px] flex-shrink-0 relative" ref={audioEmotionRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">情绪</label>
-              <div
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                onClick={() => {
-                  if (isAudioEmotionDropdownOpen) {
-                    handleCloseAudioEmotionDropdown()
-                  } else {
-                    setIsAudioEmotionDropdownOpen(true)
-                  }
-                }}
-              >
-                <span className="text-sm">{emotionZhMap[audioEmotion] || audioEmotion}</span>
-                <svg
-                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isAudioEmotionDropdownOpen ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
-              {(isAudioEmotionDropdownOpen || audioEmotionDropdownClosing) && (
-                <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${audioEmotionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                >
-                  <div className="max-h-60 overflow-y-auto">
-                    {["neutral","happy","sad","angry","fearful","disgusted","surprised"].map(x => (
-                      <div
-                        key={x}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioEmotion === x ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                        onClick={() => {
-                          setAudioEmotion(x)
-                          handleCloseAudioEmotionDropdown()
-                        }}
-                      >
-                        <span className="text-sm">{emotionZhMap[x] || x}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <Dropdown
+              label="情绪"
+              value={audioEmotion as any}
+              display={emotionZhMap[audioEmotion] || audioEmotion}
+              options={["neutral","happy","sad","angry","fearful","disgusted","surprised"].map(x => ({ value: x as any, label: emotionZhMap[x] || x }))}
+              onSelect={(v) => setAudioEmotion(v as any)}
+              className="w-auto min-w-[70px] flex-shrink-0 relative"
+            />
 
             <div className="w-auto min-w-[140px] flex-shrink-0 relative" ref={languageBoostRef}>
               <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">语言增强</label>
@@ -1695,134 +1420,60 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             </div>
 
 
-            <div className="w-auto min-w-[60px] flex-shrink-0 relative" ref={audioAdvancedRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-800 dark:text-zinc-300">高级选项</label>
-              <button onClick={() => { if (isAudioAdvancedOpen) { setAudioAdvancedClosing(true); setTimeout(() => { setIsAudioAdvancedOpen(false); setAudioAdvancedClosing(false) }, 200) } else { setIsAudioAdvancedOpen(true) } }} className="w-full bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50">打开</button>
-              {(isAudioAdvancedOpen || audioAdvancedClosing) && (
-                <div className="absolute z-20 mb-2 w-[576px] bottom-full left-1/2 -translate-x-1/2">
-                  <div className={`flex flex-col overflow-visible bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-2xl max-h-[420px] ${audioAdvancedClosing ? 'animate-scale-out' : 'animate-scale-in'}`}> 
-                    <div className="p-4 flex flex-col gap-4 overflow-y-auto">
+            <PanelTrigger
+              label="高级选项"
+              display="打开"
+              className="w-auto min-w-[100px] flex-shrink-0"
+              panelWidth={576}
+              alignment="aboveCenter"
+              closeOnPanelClick={false}
+              renderPanel={() => (
+                <div className="flex flex-col bg-white/95 dark:bg-zinc-800 rounded-lg max-h-[420px]">
+                  <div className="p-4 flex flex-col gap-4 overflow-y-auto">
                     <div className="flex gap-4">
                       <div>
-                        <div className="text-xs text-zinc-400 mb-2">音量</div>
-                        <div className="relative inline-block">
-                          <input type="number" value={audioVol} min={0.1} max={10} step={0.1} onChange={(e)=>setAudioVol(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-all duration-300" />
-                          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
-                            <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.min(10,(v||1)+0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
-                            <button type="button" onClick={()=>setAudioVol(v=>{const next=Math.max(0.1,(v||1)-0.1);return Math.round(next*100)/100})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
-                          </div>
-                        </div>
+                        <NumberInput label="音量" value={audioVol} onChange={(v)=>setAudioVol(Math.min(10, Math.max(0.1, v)))} min={0.1} max={10} step={0.1} precision={2} widthClassName="w-[100px]" />
                       </div>
                       <div>
-                        <div className="text-xs text-zinc-400 mb-2">语调</div>
-                        <div className="relative inline-block">
-                          <input type="number" value={audioPitch} min={-12} max={12} step={1} onChange={(e)=>setAudioPitch(parseInt(e.target.value)||0)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-all duration-300" />
-                          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
-                            <button type="button" onClick={()=>setAudioPitch(v=>Math.min(12,(v||0)+1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
-                            <button type="button" onClick={()=>setAudioPitch(v=>Math.max(-12,(v||0)-1))} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
-                          </div>
-                        </div>
+                        <NumberInput label="语调" value={audioPitch} onChange={(v)=>setAudioPitch(Math.min(12, Math.max(-12, Math.round(v))))} min={-12} max={12} step={1} widthClassName="w-[100px]" />
                       </div>
                       <div>
-                        <div className="text-xs text-zinc-400 mb-2">速度</div>
-                        <div className="relative inline-block">
-                          <input type="number" value={audioSpeed} min={0.5} max={2} step={0.1} onChange={(e)=>setAudioSpeed(parseFloat(e.target.value)||1)} className="w-[100px] bg-zinc-700/50 border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-all duration-300" />
-                          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
-                            <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.min(2,(v||1)+0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▲</button>
-                            <button type="button" onClick={()=>setAudioSpeed(v=>{const next=Math.max(0.5,(v||1)-0.1);return Math.round(next*10)/10})} className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer">▼</button>
-                          </div>
-                        </div>
+                        <NumberInput label="速度" value={audioSpeed} onChange={(v)=>setAudioSpeed(Math.min(2, Math.max(0.5, Math.round(v*10)/10)))} min={0.5} max={2} step={0.1} precision={1} widthClassName="w-[100px]" />
                       </div>
                     </div>
                     <div className="flex gap-4">
-                      <div className="relative" ref={klingAspectRef}>
-                        <div className="text-xs text-zinc-400 mb-2">采样率</div>
-                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
-                          onClick={() => setIsKlingAspectDropdownOpen(v => !v)}>
-                          <span className="text-sm">{audioSampleRate}</span>
-                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
-                        {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
-                          createPortal(
-                            <div className={`z-50 bg-white/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (klingAspectPos?.top || 0), left: (klingAspectPos?.left || 0), width: (klingAspectPos?.width || undefined) }}>
-                              <div className="max-h-60 overflow-y-auto">
-                                {[8000,16000,22050,24000,32000,44100].map(r => (
-                                  <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioSampleRate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioSampleRate(r); setKlingAspectDropdownClosing(true); setTimeout(()=>{ setIsKlingAspectDropdownOpen(false); setKlingAspectDropdownClosing(false) },200) }}>
-                                    <span className="text-sm">{r}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>,
-                            document.body
-                          )
-                        )}
-                      </div>
-                      <div className="relative" ref={klingDurationRef}>
-                        <div className="text-xs text-zinc-400 mb-2">比特率</div>
-                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
-                          onClick={() => setIsKlingDurationDropdownOpen(v => !v)}>
-                          <span className="text-sm">{audioBitrate}</span>
-                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
-                        {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && (
-                          createPortal(
-                            <div className={`z-50 bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (klingDurationPos?.top || 0), left: (klingDurationPos?.left || 0), width: (klingDurationPos?.width || undefined) }}>
-                              <div className="max-h-60 overflow-y-auto">
-                                {[32000,64000,128000,256000].map(r => (
-                                  <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioBitrate === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioBitrate(r); setKlingDurationDropdownClosing(true); setTimeout(()=>{ setIsKlingDurationDropdownOpen(false); setKlingDurationDropdownClosing(false) },200) }}>
-                                    <span className="text-sm">{r}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>,
-                            document.body
-                          )
-                        )}
-                      </div>
-                      <div className="relative" ref={pixAspectRef}>
-                        <div className="text-xs text-zinc-400 mb-2">格式</div>
-                        <div className="w-[120px] bg-white/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
-                          onClick={() => setIsPixAspectDropdownOpen(v => !v)}>
-                          <span className="text-sm">{audioFormat}</span>
-                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
-                        {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
-                          createPortal(
-                            <div className={`z-50 bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (pixAspectPos?.top || 0), left: (pixAspectPos?.left || 0), width: (pixAspectPos?.width || undefined) }}>
-                              <div className="max-h-60 overflow-y-auto">
-                                {['mp3','pcm','flac','wav'].map(f => (
-                                  <div key={f} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioFormat === f ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioFormat(f); setPixAspectDropdownClosing(true); setTimeout(()=>{ setIsPixAspectDropdownOpen(false); setPixAspectDropdownClosing(false) },200) }}>
-                                    <span className="text-sm">{f}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>,
-                            document.body
-                          )
-                        )}
-                      </div>
-                      <div className="relative" ref={pixResolutionRef}>
-                        <div className="text-xs text-zinc-400 mb-2">声道</div>
-                        <div className="w-[120px] bg白/70 dark:bg-zinc-800/70 backdrop-blur-lg border border-gray-200 dark:border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm cursor-pointer flex items-center justify-between"
-                          onClick={() => setIsPixResolutionDropdownOpen(v => !v)}>
-                          <span className="text-sm">{audioChannel}</span>
-                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
-                        {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
-                          createPortal(
-                            <div className={`z-50 bg白/95 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 rounded-lg shadow-lg text-zinc-800 dark:text-white ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`} style={{ position: 'fixed', top: (pixResolutionPos?.top || 0), left: (pixResolutionPos?.left || 0), width: (pixResolutionPos?.width || undefined) }}>
-                              <div className="max-h-60 overflow-y-auto">
-                                {[1,2].map(c => (
-                                  <div key={c} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${audioChannel === c ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`} onClick={() => { setAudioChannel(c); setPixResolutionDropdownClosing(true); setTimeout(()=>{ setIsPixResolutionDropdownOpen(false); setPixResolutionDropdownClosing(false) },200) }}>
-                                    <span className="text-sm">{c}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>,
-                            document.body
-                          )
-                        )}
-                      </div>
+                      <Dropdown
+                        label="采样率"
+                        value={audioSampleRate as any}
+                        display={String(audioSampleRate)}
+                        options={[8000,16000,22050,24000,32000,44100].map(r => ({ value: r as any, label: String(r) }))}
+                        onSelect={(v) => setAudioSampleRate(Number(v))}
+                        className=""
+                      />
+                      <Dropdown
+                        label="比特率"
+                        value={audioBitrate as any}
+                        display={String(audioBitrate)}
+                        options={[32000,64000,128000,256000].map(r => ({ value: r as any, label: String(r) }))}
+                        onSelect={(v) => setAudioBitrate(Number(v))}
+                        className=""
+                      />
+                      <Dropdown
+                        label="格式"
+                        value={audioFormat as any}
+                        display={audioFormat}
+                        options={['mp3','pcm','flac','wav'].map(f => ({ value: f as any, label: f }))}
+                        onSelect={(v) => setAudioFormat(String(v))}
+                        className=""
+                      />
+                      <Dropdown
+                        label="声道"
+                        value={audioChannel as any}
+                        display={String(audioChannel)}
+                        options={[1,2].map(c => ({ value: c as any, label: String(c) }))}
+                        onSelect={(v) => setAudioChannel(Number(v))}
+                        className=""
+                      />
                     </div>
                     <div className="flex gap-4">
                       <div className="w-auto min-w-[120px]">
@@ -1834,260 +1485,74 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         <button onClick={()=>setTextNormalization(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${textNormalization ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{textNormalization ? '开启' : '关闭'}</button>
                       </div>
                     </div>
-                    
-                    
-                    
-                    </div>
                   </div>
                 </div>
               )}
-            </div>
+            />
           </>
         )}
 
         {/* Vidu Q1 参数设置 - 仅对Vidu Q1模型显示 */}
         {selectedModel === 'vidu-q1' && (
           <>
-            <div className="w-auto min-w-[120px] relative" ref={viduModeRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-300">模式</label>
-              <div
-                className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                onClick={() => {
-                  if (isViduModeDropdownOpen) {
-                    handleCloseViduModeDropdown()
-                  } else {
-                    setIsViduModeDropdownOpen(true)
-                  }
-                }}
-              >
-                <span className="text-sm">{viduMode === 'text-image-to-video' ? '文/图生视频' : viduMode === 'start-end-frame' ? '首尾帧' : '参考生视频'}</span>
-                <svg
-                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduModeDropdownOpen ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
-              {(isViduModeDropdownOpen || viduModeDropdownClosing) && (
-                <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduModeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                >
-                  <div className="max-h-60 overflow-y-auto">
-                    {[
-                      { value: 'text-image-to-video', label: '文/图生视频' },
-                      { value: 'start-end-frame', label: '首尾帧' },
-                      { value: 'reference-to-video', label: '参考生视频' }
-                    ].map(opt => (
-                      <div
-                        key={opt.value}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMode === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                        onClick={() => {
-                          setViduMode(opt.value as any)
-                          handleCloseViduModeDropdown()
-                        }}
-                      >
-                        <span className="text-sm">{opt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <Dropdown
+              label="模式"
+              value={viduMode}
+              display={viduMode === 'text-image-to-video' ? '文/图生视频' : viduMode === 'start-end-frame' ? '首尾帧' : '参考生视频'}
+              options={[
+                { value: 'text-image-to-video', label: '文/图生视频' },
+                { value: 'start-end-frame', label: '首尾帧' },
+                { value: 'reference-to-video', label: '参考生视频' }
+              ]}
+              onSelect={(v) => setViduMode(v as any)}
+              className="w-auto min-w-[120px] relative"
+            />
 
             {/* 宽高比 - 仅文生视频和参考生视频支持 */}
             {(viduMode === 'text-image-to-video' && uploadedImages.length === 0 || viduMode === 'reference-to-video') && (
-              <div className="w-auto min-w-[80px] relative" ref={viduAspectRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isViduAspectDropdownOpen) {
-                      handleCloseViduAspectDropdown()
-                    } else {
-                      setIsViduAspectDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{viduAspectRatio}</span>
-                  <svg
-                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduAspectDropdownOpen ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isViduAspectDropdownOpen || viduAspectDropdownClosing) && (
-                <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                  >
-                    <div className="max-h-60 overflow-y-auto">
-                      {['16:9', '9:16', '1:1'].map(r => (
-                        <div
-                          key={r}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                          onClick={() => {
-                            setViduAspectRatio(r)
-                            handleCloseViduAspectDropdown()
-                          }}
-                        >
-                          <span className="text-sm">{r}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Dropdown
+                label="宽高比"
+                value={viduAspectRatio}
+                options={[{ value: '16:9', label: '16:9' }, { value: '9:16', label: '9:16' }, { value: '1:1', label: '1:1' }]}
+                onSelect={(v) => setViduAspectRatio(v as string)}
+                className="w-auto min-w-[80px] relative"
+              />
             )}
 
             {/* 风格 - 仅文生视频支持 */}
             {viduMode === 'text-image-to-video' && uploadedImages.length === 0 && (
-              <div className="w-auto min-w-[80px] relative" ref={viduStyleRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-300">风格</label>
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isViduStyleDropdownOpen) {
-                      handleCloseViduStyleDropdown()
-                    } else {
-                      setIsViduStyleDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{viduStyle === 'general' ? '通用' : '动漫'}</span>
-                  <svg
-                    className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduStyleDropdownOpen ? 'rotate-180' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isViduStyleDropdownOpen || viduStyleDropdownClosing) && (
-                <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduStyleDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                  >
-                    <div className="max-h-60 overflow-y-auto">
-                      {[
-                        { value: 'general', label: '通用' },
-                        { value: 'anime', label: '动漫' }
-                      ].map(opt => (
-                        <div
-                          key={opt.value}
-                          className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduStyle === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                          onClick={() => {
-                            setViduStyle(opt.value)
-                            handleCloseViduStyleDropdown()
-                          }}
-                        >
-                          <span className="text-sm">{opt.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Dropdown
+                label="风格"
+                value={viduStyle}
+                display={viduStyle === 'general' ? '通用' : '动漫'}
+                options={[{ value: 'general', label: '通用' }, { value: 'anime', label: '动漫' }]}
+                onSelect={(v) => setViduStyle(v as any)}
+                className="w-auto min-w-[80px] relative"
+              />
             )}
 
-            <div className="w-auto min-w-[80px] relative" ref={viduMovementRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-300">运动幅度</label>
-              <div
-                className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                onClick={() => {
-                  if (isViduMovementDropdownOpen) {
-                    handleCloseViduMovementDropdown()
-                  } else {
-                    setIsViduMovementDropdownOpen(true)
-                  }
-                }}
-              >
-                <span className="text-sm">{viduMovementAmplitude === 'auto' ? '自动' : viduMovementAmplitude === 'small' ? '小' : viduMovementAmplitude === 'medium' ? '中' : '大'}</span>
-                <svg
-                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduMovementDropdownOpen ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
-              {(isViduMovementDropdownOpen || viduMovementDropdownClosing) && (
-                <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduMovementDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                >
-                  <div className="max-h-60 overflow-y-auto">
-                    {[
-                      { value: 'auto', label: '自动' },
-                      { value: 'small', label: '小' },
-                      { value: 'medium', label: '中' },
-                      { value: 'large', label: '大' }
-                    ].map(opt => (
-                      <div
-                        key={opt.value}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduMovementAmplitude === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                        onClick={() => {
-                          setViduMovementAmplitude(opt.value)
-                          handleCloseViduMovementDropdown()
-                        }}
-                      >
-                        <span className="text-sm">{opt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+              <Dropdown
+                label="运动幅度"
+                value={viduMovementAmplitude}
+                display={viduMovementAmplitude === 'auto' ? '自动' : viduMovementAmplitude === 'small' ? '小' : viduMovementAmplitude === 'medium' ? '中' : '大'}
+                options={[
+                  { value: 'auto', label: '自动' },
+                  { value: 'small', label: '小' },
+                  { value: 'medium', label: '中' },
+                  { value: 'large', label: '大' }
+                ]}
+                onSelect={(v) => setViduMovementAmplitude(v as any)}
+                className="w-auto min-w-[80px] relative"
+              />
 
-            <div className="w-auto min-w-[80px] relative" ref={viduBgmRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-300">BGM</label>
-              <div
-                className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                onClick={() => {
-                  if (isViduBgmDropdownOpen) {
-                    handleCloseViduBgmDropdown()
-                  } else {
-                    setIsViduBgmDropdownOpen(true)
-                  }
-                }}
-              >
-                <span className="text-sm">{viduBgm ? '开启' : '关闭'}</span>
-                <svg
-                  className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isViduBgmDropdownOpen ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
-              {(isViduBgmDropdownOpen || viduBgmDropdownClosing) && (
-                <div
-                  className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${viduBgmDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                >
-                  <div className="max-h-60 overflow-y-auto">
-                    {[
-                      { value: false, label: '关闭' },
-                      { value: true, label: '开启' }
-                    ].map(opt => (
-                      <div
-                        key={String(opt.value)}
-                        className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${viduBgm === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
-                        onClick={() => {
-                          setViduBgm(opt.value)
-                          handleCloseViduBgmDropdown()
-                        }}
-                      >
-                        <span className="text-sm">{opt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <Dropdown
+              label="BGM"
+              value={viduBgm as any}
+              display={viduBgm ? '开启' : '关闭'}
+              options={[{ value: false as any, label: '关闭' }, { value: true as any, label: '开启' }]}
+              onSelect={(v) => setViduBgm(Boolean(v))}
+              className="w-auto min-w-[80px] relative"
+            />
           </>
         )}
 
@@ -2156,193 +1621,70 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
             {(selectedModel === 'kling-2.5-turbo' || selectedModel === 'pixverse-v4.5') && uploadedImages.length === 0 && (
               selectedModel === 'kling-2.5-turbo' ? (
-                <div className="w-auto min-w-[80px] relative" ref={klingAspectRef}>
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                  <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                    onClick={() => {
-                      if (isKlingAspectDropdownOpen) {
-                        handleCloseKlingAspectDropdown()
-                      } else {
-                        setIsKlingAspectDropdownOpen(true)
-                      }
-                    }}
-                  >
-                    <span className="text-sm">{videoAspectRatio}</span>
-                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
-                  {(isKlingAspectDropdownOpen || klingAspectDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${klingAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                      <div className="max-h-60 overflow-y-auto">
-                        {['16:9', '9:16', '1:1'].map(r => (
-                          <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoAspectRatio(r); handleCloseKlingAspectDropdown() }}>
-                            <span className="text-sm">{r}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <Dropdown
+                  label="宽高比"
+                  value={videoAspectRatio as any}
+                  options={[{ value: '16:9' as any, label: '16:9' }, { value: '9:16' as any, label: '9:16' }, { value: '1:1' as any, label: '1:1' }]}
+                  onSelect={(v) => setVideoAspectRatio(String(v))}
+                  className="w-auto min-w-[80px]"
+                />
               ) : (
-                <div className="w-auto min-w-[80px] relative" ref={pixAspectRef}>
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                  <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                    onClick={() => {
-                      if (isPixAspectDropdownOpen) {
-                        handleClosePixAspectDropdown()
-                      } else {
-                        setIsPixAspectDropdownOpen(true)
-                      }
-                    }}
-                  >
-                    <span className="text-sm">{videoAspectRatio}</span>
-                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
-                  {(isPixAspectDropdownOpen || pixAspectDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${pixAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                      <div className="max-h-60 overflow-y-auto">
-                        {['16:9', '9:16', '1:1'].map(r => (
-                          <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoAspectRatio(r); handleClosePixAspectDropdown() }}>
-                            <span className="text-sm">{r}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <Dropdown
+                  label="宽高比"
+                  value={videoAspectRatio as any}
+                  options={[{ value: '16:9' as any, label: '16:9' }, { value: '9:16' as any, label: '9:16' }, { value: '1:1' as any, label: '1:1' }]}
+                  onSelect={(v) => setVideoAspectRatio(String(v))}
+                  className="w-auto min-w-[80px]"
+                />
               )
             )}
 
             {selectedModel === 'pixverse-v4.5' && (
-              <div className="w-auto min-w-[80px] relative" ref={pixResolutionRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isPixResolutionDropdownOpen) {
-                      handleClosePixResolutionDropdown()
-                    } else {
-                      setIsPixResolutionDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{videoResolution}</span>
-                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isPixResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isPixResolutionDropdownOpen || pixResolutionDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${pixResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                    <div className="max-h-60 overflow-y-auto">
-                      {[...(pixFastMode ? ['360p','540p','720p'] : ['360p','540p','720p','1080p'])].map(val => (
-                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoResolution || '540p') === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoResolution(val); handleClosePixResolutionDropdown() }}>
-                          <span className="text-sm">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Dropdown
+                label="分辨率"
+                value={(videoResolution || '540p') as any}
+                options={[...(pixFastMode ? ['360p','540p','720p'] : ['360p','540p','720p','1080p'])].map(v => ({ value: v as any, label: v }))}
+                onSelect={(v) => setVideoResolution(String(v))}
+                className="w-auto"
+                
+              />
             )}
             {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
-              <div className="w-auto min-w-[80px] relative" ref={hailuoResolutionRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isHailuoResolutionDropdownOpen) {
-                      handleCloseHailuoResolutionDropdown()
-                    } else {
-                      setIsHailuoResolutionDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{videoResolution || '768P'}</span>
-                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isHailuoResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isHailuoResolutionDropdownOpen || hailuoResolutionDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${hailuoResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                    <div className="max-h-60 overflow-y-auto">
-                      {([...(videoDuration === 6 ? ['768P','1080P'] : ['768P'])] as string[]).map(val => (
-                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoResolution || '768P') === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoResolution(val); handleCloseHailuoResolutionDropdown() }}>
-                          <span className="text-sm">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Dropdown
+                label="分辨率"
+                value={(videoResolution || '768P') as any}
+                options={([...(videoDuration === 6 ? ['768P','1080P'] : ['768P'])] as string[]).map(v => ({ value: v as any, label: v }))}
+                onSelect={(v) => setVideoResolution(String(v))}
+                className="w-auto"
+                
+              />
             )}
             {selectedModel === 'minimax-hailuo-2.3' && uploadedImages.length > 0 && (
-              <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">Fast模式</label>
-                <button onClick={() => setHailuoFastMode(!hailuoFastMode)} className={`px-3 py-2 h-[38px] rounded-lg border ${hailuoFastMode ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{hailuoFastMode ? '开启' : '关闭'}</button>
-              </div>
+              <Toggle label="Fast模式" checked={hailuoFastMode} onChange={setHailuoFastMode} className="w-auto min-w-[80px]" />
             )}
 
             {/* 移除 PixVerse 风格组件 */}
 
             {(selectedModel === 'pixverse-v4.5') && (
-              <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">快速模式</label>
-                <button onClick={() => setPixFastMode(!pixFastMode)} className={`px-3 py-2 h-[38px] rounded-lg border ${pixFastMode ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{pixFastMode ? '开启' : '关闭'}</button>
-              </div>
+              <Toggle label="快速模式" checked={pixFastMode} onChange={setPixFastMode} className="w-auto min-w-[80px]" />
             )}
 
             {(selectedModel === 'kling-2.5-turbo') && (
-              <div className="w-auto min-w-[150px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">CFG Scale</label>
-                <div className="relative inline-block">
-                  <input
-                    type="number"
-                    value={Number.isFinite(klingCfgScale) ? klingCfgScale.toFixed(2) : '0.00'}
-                    onChange={(e) => {
-                      const raw = parseFloat(e.target.value)
-                      const clamped = Math.min(1, Math.max(0, isNaN(raw) ? 0 : raw))
-                      const rounded = Math.round(clamped * 100) / 100
-                      setKlingCfgScale(rounded)
-                    }}
-                    className="w-24 bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                  />
-                  <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setKlingCfgScale(prev => {
-                        const v = typeof prev === 'number' ? prev : 0
-                        const next = Math.min(1, v + 0.1)
-                        return Math.round(next * 100) / 100
-                      })}
-                      className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
-                    >▲</button>
-                    <button
-                      type="button"
-                      onClick={() => setKlingCfgScale(prev => {
-                        const v = typeof prev === 'number' ? prev : 0
-                        const next = Math.max(0, v - 0.1)
-                        return Math.round(next * 100) / 100
-                      })}
-                      className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
-                    >▼</button>
-                  </div>
-                </div>
-              </div>
+              <NumberInput
+                label="CFG Scale"
+                value={klingCfgScale}
+                onChange={(v) => setKlingCfgScale(Math.round(Math.min(1, Math.max(0, v)) * 100) / 100)}
+                min={0}
+                max={1}
+                step={0.01}
+                precision={2}
+                className="w-auto min-w-[150px]"
+                widthClassName="w-24"
+              />
             )}
 
             {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
-              <div className="w-auto min-w-[80px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">提示词优化</label>
-                <button onClick={() => setMinimaxEnablePromptExpansion(!minimaxEnablePromptExpansion)} className={`px-3 py-2 h-[38px] rounded-lg border ${minimaxEnablePromptExpansion ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{minimaxEnablePromptExpansion ? '开启' : '关闭'}</button>
-              </div>
+              <Toggle label="提示词优化" checked={minimaxEnablePromptExpansion} onChange={setMinimaxEnablePromptExpansion} className="w-auto min-w-[80px]" />
             )}
 
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length === 0 && (
@@ -2381,164 +1723,58 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               </div>
             )}
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length > 0 && (
-              <div className="w-auto min-w-[80px] relative" ref={wanResolutionRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isWanResolutionDropdownOpen) {
-                      handleCloseWanResolutionDropdown()
-                    } else {
-                      setIsWanResolutionDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{wanResolution}</span>
-                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isWanResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isWanResolutionDropdownOpen || wanResolutionDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${wanResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                    <div className="max-h-60 overflow-y-auto">
-                      {['480P','720P','1080P'].map(val => (
-                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${wanResolution === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setWanResolution(val); handleCloseWanResolutionDropdown() }}>
-                          <span className="text-sm">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Dropdown
+                label="分辨率"
+                value={wanResolution as any}
+                options={['480P','720P','1080P'].map(v => ({ value: v as any, label: v }))}
+                onSelect={(v) => setWanResolution(String(v))}
+                className="w-auto"
+                
+              />
             )}
             {selectedModel === 'wan-2.5-preview' && (
               <>
-                <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">智能改写</label>
-                  <button onClick={() => setWanPromptExtend(!wanPromptExtend)} className={`w-full px-3 py-2 h-[38px] rounded-lg border ${wanPromptExtend ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanPromptExtend ? '开启' : '关闭'}</button>
-                </div>
-                <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">音频</label>
-                  <button onClick={() => setWanAudio(!wanAudio)} className={`w-full px-3 py-2 h-[38px] rounded-lg border ${wanAudio ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{wanAudio ? '开启' : '关闭'}</button>
-                </div>
-                <div className="w-auto flex-1 min-w-[200px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
-                  <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out" />
-                </div>
+                <Toggle label="智能改写" checked={wanPromptExtend} onChange={setWanPromptExtend} className="w-auto min-w-[80px]" />
+                <Toggle label="音频" checked={wanAudio} onChange={setWanAudio} className="w-auto min-w-[80px]" />
+                <TextInput label="负面提示" value={videoNegativePrompt} onChange={setVideoNegativePrompt} placeholder="不希望出现的内容" className="w-auto flex-1 min-w-[200px]" inputClassName="w-full" />
               </>
             )}
 
             {selectedModel === 'seedance-v1' && (
               <>
-                <div className="w-auto min-w-[80px] relative" ref={seedanceVariantRef}>
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">版本</label>
-                  <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                    onClick={() => {
-                      if (isSeedanceVariantDropdownOpen) {
-                        handleCloseSeedanceVariantDropdown()
-                      } else {
-                        setIsSeedanceVariantDropdownOpen(true)
-                      }
-                    }}
-                  >
-                    <span className="text-sm">{seedanceVariant === 'lite' ? 'Lite' : 'Pro'}</span>
-                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isSeedanceVariantDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
-                  {(isSeedanceVariantDropdownOpen || seedanceVariantDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${seedanceVariantDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                      <div className="max-h-60 overflow-y-auto">
-                        {[
-                          { value: 'lite', label: 'Lite' },
-                          { value: 'pro', label: 'Pro' }
-                        ].map(opt => (
-                          <div key={opt.value} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceVariant === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceVariant(opt.value as any); handleCloseSeedanceVariantDropdown() }}>
-                            <span className="text-sm">{opt.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="w-auto min-w-[80px] relative" ref={seedanceResolutionRef}>
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">分辨率</label>
-                  <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                    onClick={() => {
-                      if (isSeedanceResolutionDropdownOpen) {
-                        handleCloseSeedanceResolutionDropdown()
-                      } else {
-                        setIsSeedanceResolutionDropdownOpen(true)
-                      }
-                    }}
-                  >
-                    <span className="text-sm">{seedanceResolution}</span>
-                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isSeedanceResolutionDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
-                  {(isSeedanceResolutionDropdownOpen || seedanceResolutionDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${seedanceResolutionDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                      <div className="max-h-60 overflow-y-auto">
-                        {['480p','720p','1080p'].map(val => (
-                          <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceResolution === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceResolution(val); handleCloseSeedanceResolutionDropdown() }}>
-                            <span className="text-sm">{val}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="w-auto min-w-[80px] relative" ref={seedanceAspectRef}>
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">宽高比</label>
-                  <div
-                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                    onClick={() => {
-                      if (isSeedanceAspectDropdownOpen) {
-                        handleCloseSeedanceAspectDropdown()
-                      } else {
-                        setIsSeedanceAspectDropdownOpen(true)
-                      }
-                    }}
-                  >
-                    <span className="text-sm">{seedanceAspectRatio}</span>
-                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isSeedanceAspectDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
-                  {(isSeedanceAspectDropdownOpen || seedanceAspectDropdownClosing) && (
-                    <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${seedanceAspectDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                      <div className="max-h-60 overflow-y-auto">
-                        {['21:9','16:9','4:3','1:1','3:4','9:16','9:21'].map(r => (
-                          <div key={r} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${seedanceAspectRatio === r ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setSeedanceAspectRatio(r); handleCloseSeedanceAspectDropdown() }}>
-                            <span className="text-sm">{r}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="w-auto min-w-[80px]">
-                  <label className="block text-sm font-medium mb-1 text-zinc-300">相机固定</label>
-                  <button onClick={() => setSeedanceCameraFixed(!seedanceCameraFixed)} className={`px-3 py-2 h-[38px] rounded-lg border ${seedanceCameraFixed ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'}`}>{seedanceCameraFixed ? '是' : '否'}</button>
-                </div>
+                <Dropdown
+                  label="版本"
+                  value={seedanceVariant as any}
+                  display={seedanceVariant === 'lite' ? 'Lite' : 'Pro'}
+                  options={[{ value: 'lite' as any, label: 'Lite' }, { value: 'pro' as any, label: 'Pro' }]}
+                  onSelect={(v) => setSeedanceVariant(v as any)}
+                className="w-auto"
+                
+                />
+                <Dropdown
+                  label="分辨率"
+                  value={seedanceResolution as any}
+                  options={['480p','720p','1080p'].map(v => ({ value: v as any, label: v }))}
+                  onSelect={(v) => setSeedanceResolution(String(v))}
+                  className="w-auto min-w-[80px]"
+                />
+                <Dropdown
+                  label="宽高比"
+                  value={seedanceAspectRatio as any}
+                  options={['21:9','16:9','4:3','1:1','3:4','9:16','9:21'].map(v => ({ value: v as any, label: v }))}
+                  onSelect={(v) => setSeedanceAspectRatio(String(v))}
+                  className="w-auto min-w-[80px]"
+                />
+                <Toggle label="相机固定" checked={seedanceCameraFixed} onChange={setSeedanceCameraFixed} className="w-auto min-w-[80px]" />
                 
               </>
             )}
 
             {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && (
-              <div className="w-auto flex-1 min-w-[200px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">负面提示</label>
-                <input value={videoNegativePrompt} onChange={(e) => setVideoNegativePrompt(e.target.value)} placeholder="不希望出现的内容" className="w-full bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out" />
-              </div>
+              <TextInput label="负面提示" value={videoNegativePrompt} onChange={setVideoNegativePrompt} placeholder="不希望出现的内容" className="w-auto flex-1 min-w-[200px]" inputClassName="w-full" />
             )}
             {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && (
-              <div className="w-auto min-w-[120px]">
-                <label className="block text-sm font-medium mb-1 text-zinc-300">随机种子</label>
-                <input type="number" value={videoSeed || ''} onChange={(e) => setVideoSeed(e.target.value ? parseInt(e.target.value) : undefined)} placeholder="可选" className="bg-zinc-800/70 border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] text-sm" />
-              </div>
+              <NumberInput label="随机种子" value={typeof videoSeed === 'number' ? videoSeed : 0} onChange={(v) => setVideoSeed(Math.max(0, Math.round(v)))} min={0} step={1} widthClassName="w-20" className="w-auto min-w-[120px]" />
             )}
           </>
         )}
@@ -2621,7 +1857,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             )}
           </>
         )}
-      </div>
+      </ParamRow>
 
       {/* 输入区域 */}
       <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
