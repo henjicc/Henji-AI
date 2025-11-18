@@ -22,7 +22,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Henji AI",
+        "title": "痕迹AI",
         "width": 1200,
         "height": 800,
         "resizable": true,

@@ -12,6 +12,9 @@ pub fn run() {
       if let Err(e) = std::fs::create_dir_all(&media_dir) {
         eprintln!("failed to create media dir: {}", e);
       }
+      if let Some(win) = app.get_webview_window("main") {
+        let _ = win.maximize();
+      }
       Ok(())
     })
     .run(tauri::generate_context!())

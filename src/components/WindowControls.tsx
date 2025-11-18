@@ -30,7 +30,7 @@ const WindowControls: React.FC = () => {
       data-tauri-drag-region
       style={{ WebkitAppRegion: 'drag' as any }}
     >
-      <div className="text-sm text-zinc-300">Henji AI</div>
+      <div className="text-sm text-zinc-300">痕迹AI</div>
       <div
         className="flex items-center gap-2"
         data-tauri-ignore-drag-region
