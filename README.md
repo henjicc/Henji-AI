@@ -101,6 +101,10 @@ src-tauri/
 - Windows 构建失败：确认 VS BuildTools 与 MSVC 工具链安装完整，并通过 `npm run tauri:dev` 测试
 - API Key 失效：在“设置”中重新填写并保存
 
+## 扩展开发
+
+- **添加新模型/供应商**：请参考 [模型与供应商适配指南](docs/model-adaptation-guide.md)，了解如何定义参数 Schema 和实现后端适配器。
+
 ## 许可证
 
 本项目代码以仓库根目录声明为准。
