@@ -19,7 +19,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   const { label, display, disabled, className, buttonClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight, closeOnPanelClick = true, renderPanel } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
@@ -63,25 +63,22 @@ export default function PanelTrigger(props: PanelTriggerProps) {
       const rect = target.getBoundingClientRect()
       anchorRectRef.current = rect
 
-      if (panelRef.current) {
-        const h = panelRef.current.getBoundingClientRect().height
-        const viewportW = window.innerWidth
-        const margin = 8
-        const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-        let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-        left = Math.max(margin, Math.min(left, viewportW - w - margin))
-        const gap = 8
-        let top = alignment === 'aboveCenter' ? (rect.top - h - gap) : (rect.bottom + 4)
-        if (alignment === 'aboveCenter') top = Math.max(margin, top)
-        setPos({ top, left, width: w })
+      const viewportW = window.innerWidth
+      const viewportH = window.innerHeight
+      const margin = 8
+      const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
+      let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
+      left = Math.max(margin, Math.min(left, viewportW - w - margin))
+      const gap = 45
+
+      if (alignment === 'aboveCenter') {
+        const bottom = viewportH - rect.top + gap
+        const maxHeight = rect.top - margin - gap
+        setPos({ bottom, left, width: w, maxHeight })
       } else {
-        const viewportW = window.innerWidth
-        const margin = 8
-        const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-        let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-        left = Math.max(margin, Math.min(left, viewportW - w - margin))
-        const top = alignment === 'bottomLeft' ? (rect.bottom + 4) : 0
-        setPos({ top, left, width: w })
+        const top = rect.bottom + 4
+        const maxHeight = viewportH - top - margin
+        setPos({ top, left, width: w, maxHeight })
       }
       setReady(!!panelRef.current)
     }
@@ -102,23 +99,29 @@ export default function PanelTrigger(props: PanelTriggerProps) {
 
   useLayoutEffect(() => {
     if (!open) return
-    if (!panelRef.current || !anchorRectRef.current) return
+    if (!anchorRectRef.current) return
 
     const updatePos = () => {
-      if (!panelRef.current || !anchorRectRef.current) return
-      const measuredH = panelRef.current.getBoundingClientRect().height
+      if (!anchorRectRef.current) return
       const rect = anchorRectRef.current
       const viewportW = window.innerWidth
+      const viewportH = window.innerHeight
       const margin = 8
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
 
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
       left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = 8
-      let top = alignment === 'aboveCenter' ? (rect.top - measuredH - gap) : (rect.bottom + 4)
-      if (alignment === 'aboveCenter') top = Math.max(margin, top)
+      const gap = 45
 
-      setPos({ top, left, width: w })
+      if (alignment === 'aboveCenter') {
+        const bottom = viewportH - rect.top + gap
+        const maxHeight = rect.top - margin - gap
+        setPos({ bottom, left, width: w, maxHeight })
+      } else {
+        const top = rect.bottom + 4
+        const maxHeight = viewportH - top - margin
+        setPos({ top, left, width: w, maxHeight })
+      }
       setReady(true)
     }
 
@@ -128,18 +131,15 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   useEffect(() => {
     if (!open || !panelRef.current) return
     const obs = new ResizeObserver(() => {
-      if (!anchorRectRef.current || !panelRef.current) return
-      const rect = anchorRectRef.current
-      const h = panelRef.current.getBoundingClientRect().height
-      const viewportW = window.innerWidth
-      const margin = 8
-      const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-      let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-      left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = 8
-      let top = alignment === 'aboveCenter' ? (rect.top - h - gap) : (rect.bottom + 4)
-      if (alignment === 'aboveCenter') top = Math.max(margin, top)
-      setPos({ top, left, width: w })
+      // No need to recalculate position on resize if we use 'bottom' for aboveCenter, 
+      // as it stays pinned to the trigger. 
+      // But we might need to update if the trigger moves (handled by scroll/resize listeners).
+      // However, if the panel content changes, height changes. 
+      // With 'bottom' positioning, it grows upwards automatically!
+      // So we actually don't need to do anything here for 'aboveCenter' position-wise.
+      // But for 'bottomLeft', 'top' is fixed, so it grows downwards.
+      // So ResizeObserver is less critical for positioning now, but good for width updates if we supported that.
+      // We'll keep it simple and rely on the layout effect and scroll listeners.
     })
     obs.observe(panelRef.current)
     return () => obs.disconnect()
@@ -149,19 +149,25 @@ export default function PanelTrigger(props: PanelTriggerProps) {
     if (!open) return
     if (!anchorRectRef.current) return
     requestAnimationFrame(() => {
-      if (!panelRef.current) return
       const rect = anchorRectRef.current!
-      const measuredH = panelRef.current.getBoundingClientRect().height
       const viewportW = window.innerWidth
+      const viewportH = window.innerHeight
       const margin = 8
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
 
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
       left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = 8
-      let top = alignment === 'aboveCenter' ? (rect.top - measuredH - gap) : (rect.bottom + 4)
-      if (alignment === 'aboveCenter') top = Math.max(margin, top)
-      setPos({ top, left, width: w })
+      const gap = 45
+
+      if (alignment === 'aboveCenter') {
+        const bottom = viewportH - rect.top + gap
+        const maxHeight = rect.top - margin - gap
+        setPos({ bottom, left, width: w, maxHeight })
+      } else {
+        const top = rect.bottom + 4
+        const maxHeight = viewportH - top - margin
+        setPos({ top, left, width: w, maxHeight })
+      }
       setReady(true)
     })
   }, [open, alignment, panelWidth])
@@ -184,14 +190,24 @@ export default function PanelTrigger(props: PanelTriggerProps) {
               const rect = target.getBoundingClientRect()
               anchorRectRef.current = rect
               const viewportW = window.innerWidth
+              const viewportH = window.innerHeight
               const margin = 8
               const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
               let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
               left = Math.max(margin, Math.min(left, viewportW - w - margin))
-              const gap = 8
-              const top = alignment === 'bottomLeft' ? (rect.bottom + 4) : Math.max(margin, rect.top - gap)
-              setReady(false)
-              setPos({ top, left, width: w })
+              const gap = 45
+
+              if (alignment === 'aboveCenter') {
+                const bottom = viewportH - rect.top + gap
+                const maxHeight = rect.top - margin - gap
+                setReady(false)
+                setPos({ bottom, left, width: w, maxHeight })
+              } else {
+                const top = rect.bottom + 4
+                const maxHeight = viewportH - top - margin
+                setReady(false)
+                setPos({ top, left, width: w, maxHeight })
+              }
             }
             setOpen(true)
           }
@@ -205,8 +221,18 @@ export default function PanelTrigger(props: PanelTriggerProps) {
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}
-          className={`bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl text-white max-h-[80vh] overflow-y-auto ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex, opacity: ready ? 1 : 0, visibility: ready ? 'visible' : 'hidden' }}
+          className={`bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl text-white overflow-y-auto ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            bottom: pos.bottom,
+            left: pos.left,
+            width: pos.width,
+            maxHeight: pos.maxHeight,
+            zIndex,
+            opacity: ready ? 1 : 0,
+            visibility: ready ? 'visible' : 'hidden'
+          }}
         >
           {renderPanel()}
         </div>,
