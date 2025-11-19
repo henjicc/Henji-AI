@@ -81,8 +81,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [pixAspectDropdownClosing, setPixAspectDropdownClosing] = useState(false)
   const [isPixResolutionDropdownOpen, setIsPixResolutionDropdownOpen] = useState(false)
   const [pixResolutionDropdownClosing, setPixResolutionDropdownClosing] = useState(false)
-  const [isWanSizeDropdownOpen, setIsWanSizeDropdownOpen] = useState(false)
-  const [wanSizeDropdownClosing, setWanSizeDropdownClosing] = useState(false)
+
   const [isWanResolutionDropdownOpen, setIsWanResolutionDropdownOpen] = useState(false)
   const [wanResolutionDropdownClosing, setWanResolutionDropdownClosing] = useState(false)
   const [isSeedanceVariantDropdownOpen, setIsSeedanceVariantDropdownOpen] = useState(false)
@@ -104,7 +103,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const hailuoResolutionRef = useRef<HTMLDivElement>(null)
   const pixAspectRef = useRef<HTMLDivElement>(null)
   const pixResolutionRef = useRef<HTMLDivElement>(null)
-  const wanSizeRef = useRef<HTMLDivElement>(null)
+
   const wanResolutionRef = useRef<HTMLDivElement>(null)
   const seedanceVariantRef = useRef<HTMLDivElement>(null)
   const seedanceResolutionRef = useRef<HTMLDivElement>(null)
@@ -484,9 +483,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (pixResolutionRef.current && !pixResolutionRef.current.contains(event.target as Node) && isPixResolutionDropdownOpen) {
         handleClosePixResolutionDropdown()
       }
-      if (wanSizeRef.current && !wanSizeRef.current.contains(event.target as Node) && isWanSizeDropdownOpen) {
-        handleCloseWanSizeDropdown()
-      }
+
       if (wanResolutionRef.current && !wanResolutionRef.current.contains(event.target as Node) && isWanResolutionDropdownOpen) {
         handleCloseWanResolutionDropdown()
       }
@@ -514,7 +511,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduStyleDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanSizeDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen, isAudioEmotionDropdownOpen, isAudioSpecDropdownOpen, isLanguageBoostDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduStyleDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen, isAudioEmotionDropdownOpen, isAudioSpecDropdownOpen, isLanguageBoostDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -603,13 +600,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
 
-  const handleCloseWanSizeDropdown = () => {
-    setWanSizeDropdownClosing(true)
-    setTimeout(() => {
-      setIsWanSizeDropdownOpen(false)
-      setWanSizeDropdownClosing(false)
-    }, 200)
-  }
+
 
   const handleCloseWanResolutionDropdown = () => {
     setWanResolutionDropdownClosing(true)
@@ -1676,13 +1667,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               />
             )}
             {selectedModel === 'minimax-hailuo-2.3' && uploadedImages.length > 0 && (
-              <Toggle label="Fast模式" checked={hailuoFastMode} onChange={setHailuoFastMode} className="w-auto min-w-[80px]" />
+              <Toggle label="Fast模式" checked={hailuoFastMode} onChange={setHailuoFastMode} className="w-auto" />
             )}
 
             {/* 移除 PixVerse 风格组件 */}
 
             {(selectedModel === 'pixverse-v4.5') && (
-              <Toggle label="快速模式" checked={pixFastMode} onChange={setPixFastMode} className="w-auto min-w-[80px]" />
+              <Toggle label="快速模式" checked={pixFastMode} onChange={setPixFastMode} className="w-auto" />
             )}
 
             {(selectedModel === 'kling-2.5-turbo') && (
@@ -1694,49 +1685,28 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 max={1}
                 step={0.01}
                 precision={2}
-                className="w-auto min-w-[150px]"
                 widthClassName="w-24"
               />
             )}
 
             {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fast') && (
-              <Toggle label="提示词优化" checked={minimaxEnablePromptExpansion} onChange={setMinimaxEnablePromptExpansion} className="w-auto min-w-[80px]" />
+              <Toggle label="提示词优化" checked={minimaxEnablePromptExpansion} onChange={setMinimaxEnablePromptExpansion} className="w-auto" />
             )}
 
+
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length === 0 && (
-              <div className="w-auto min-w-[140px] relative" ref={wanSizeRef}>
-                <label className="block text-sm font-medium mb-1 text-zinc-300">尺寸</label>
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isWanSizeDropdownOpen) {
-                      handleCloseWanSizeDropdown()
-                    } else {
-                      setIsWanSizeDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{wanSize}</span>
-                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isWanSizeDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-                {(isWanSizeDropdownOpen || wanSizeDropdownClosing) && (
-                  <div className={`absolute z-20 mt-1 w-[260px] bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${wanSizeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                    <div className="max-h-60 overflow-y-auto">
-                      {[
-                        '832*480', '480*832', '624*624',
-                        '1280*720', '720*1280', '960*960', '1088*832', '832*1088',
-                        '1920*1080', '1080*1920', '1440*1440', '1632*1248', '1248*1632'
-                      ].map(val => (
-                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${wanSize === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setWanSize(val); handleCloseWanSizeDropdown() }}>
-                          <span className="text-sm">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Dropdown
+                label="尺寸"
+                value={wanSize as any}
+                options={[
+                  '832*480', '480*832', '624*624',
+                  '1280*720', '720*1280', '960*960', '1088*832', '832*1088',
+                  '1920*1080', '1080*1920', '1440*1440', '1632*1248', '1248*1632'
+                ].map(v => ({ value: v as any, label: v }))}
+                onSelect={(v) => setWanSize(String(v))}
+                className="w-auto min-w-[140px]"
+                panelClassName="w-[260px]"
+              />
             )}
             {selectedModel === 'wan-2.5-preview' && uploadedImages.length > 0 && (
               <Dropdown
@@ -1749,11 +1719,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               />
             )}
             {selectedModel === 'wan-2.5-preview' && (
-              <>
-                <Toggle label="智能改写" checked={wanPromptExtend} onChange={setWanPromptExtend} className="w-auto min-w-[80px]" />
-                <Toggle label="音频" checked={wanAudio} onChange={setWanAudio} className="w-auto min-w-[80px]" />
-                <TextInput label="负面提示" value={videoNegativePrompt} onChange={setVideoNegativePrompt} placeholder="不希望出现的内容" className="w-auto flex-1 min-w-[200px]" inputClassName="w-full" />
-              </>
+              <Toggle label="智能改写" checked={wanPromptExtend} onChange={setWanPromptExtend} className="w-auto" />
+            )}
+            {selectedModel === 'wan-2.5-preview' && (
+              <Toggle label="音频" checked={wanAudio} onChange={setWanAudio} className="w-auto" />
+            )}
+            {selectedModel === 'wan-2.5-preview' && (
+              <TextInput label="负面提示" value={videoNegativePrompt} onChange={setVideoNegativePrompt} placeholder="不希望出现的内容" className="w-auto flex-1 min-w-[200px]" inputClassName="w-full" />
             )}
 
             {selectedModel === 'seedance-v1' && (
@@ -1781,7 +1753,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   onSelect={(v) => setSeedanceAspectRatio(String(v))}
                   className="w-auto min-w-[80px]"
                 />
-                <Toggle label="相机固定" checked={seedanceCameraFixed} onChange={setSeedanceCameraFixed} className="w-auto min-w-[80px]" />
+                <Toggle label="相机固定" checked={seedanceCameraFixed} onChange={setSeedanceCameraFixed} className="w-auto" />
 
               </>
             )}
