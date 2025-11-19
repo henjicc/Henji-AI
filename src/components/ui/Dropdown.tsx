@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 type Option<T extends string | number | boolean> = {
   label: string
   value: T
+  disabled?: boolean
 }
 
 type DropdownProps<T extends string | number | boolean> = {
@@ -105,8 +106,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         }}
         data-dropdown-button
         className={
-          `bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between whitespace-nowrap ${
-            disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          `bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between whitespace-nowrap ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           } ${buttonClassName || 'w-full'}`
         }
         style={minWidthPx ? { minWidth: `${minWidthPx}px` } : undefined}
@@ -127,8 +127,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                   {(options || []).map(opt => (
                     <div
                       key={String(opt.value)}
-                      className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${value === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
+                      className={`px-3 py-2 transition-colors duration-200 ${(opt as any).disabled
+                        ? 'opacity-50 cursor-not-allowed'
+                        : value === opt.value
+                          ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-pointer'
+                          : 'hover:bg-zinc-700/50 cursor-pointer'
+                        }`}
                       onClick={() => {
+                        if ((opt as any).disabled) return
                         onSelect && onSelect(opt.value)
                         setClosing(true)
                         setTimeout(() => { setOpen(false); setClosing(false) }, 200)
@@ -151,8 +157,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 {(options || []).map(opt => (
                   <div
                     key={String(opt.value)}
-                    className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${value === opt.value ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
+                    className={`px-3 py-2 transition-colors duration-200 ${(opt as any).disabled
+                      ? 'opacity-50 cursor-not-allowed'
+                      : value === opt.value
+                        ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-pointer'
+                        : 'hover:bg-zinc-700/50 cursor-pointer'
+                      }`}
                     onClick={() => {
+                      if ((opt as any).disabled) return
                       onSelect && onSelect(opt.value)
                       setClosing(true)
                       setTimeout(() => { setOpen(false); setClosing(false) }, 200)

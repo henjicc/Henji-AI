@@ -1650,7 +1650,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <Dropdown
                 label="分辨率"
                 value={(videoResolution || '540p') as any}
-                options={[...(pixFastMode ? ['360p', '540p', '720p'] : ['360p', '540p', '720p', '1080p'])].map(v => ({ value: v as any, label: v }))}
+                options={[
+                  { value: '360p' as any, label: '360p' },
+                  { value: '540p' as any, label: '540p' },
+                  { value: '720p' as any, label: '720p' },
+                  { value: '1080p' as any, label: '1080p', disabled: pixFastMode }
+                ]}
                 onSelect={(v) => setVideoResolution(String(v))}
                 className="w-auto"
 
@@ -1660,7 +1665,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <Dropdown
                 label="分辨率"
                 value={(videoResolution || '768P') as any}
-                options={([...(videoDuration === 6 ? ['768P', '1080P'] : ['768P'])] as string[]).map(v => ({ value: v as any, label: v }))}
+                options={[
+                  { value: '768P' as any, label: '768P' },
+                  { value: '1080P' as any, label: '1080P', disabled: videoDuration !== 6 }
+                ]}
                 onSelect={(v) => setVideoResolution(String(v))}
                 className="w-auto"
 
