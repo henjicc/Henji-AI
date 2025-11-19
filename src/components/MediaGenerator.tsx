@@ -8,6 +8,7 @@ import Toggle from './ui/Toggle'
 import NumberInput from './ui/NumberInput'
 import TextInput from './ui/TextInput'
 import PanelTrigger from './ui/PanelTrigger'
+import FileUploader from './ui/FileUploader'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -91,8 +92,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isSeedanceAspectDropdownOpen, setIsSeedanceAspectDropdownOpen] = useState(false)
   const [seedanceAspectDropdownClosing, setSeedanceAspectDropdownClosing] = useState(false)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const imageFileInputRef = useRef<HTMLInputElement>(null)
+
   const modelRef = useRef<HTMLDivElement>(null)
   const resolutionRef = useRef<HTMLDivElement>(null)
 
@@ -953,8 +953,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }
 
-  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
+  const handleImageFileUpload = async (files: File[]) => {
     if (files.length > 0) {
       // 计算最大图片数
       let maxImageCount = 6 // 默认图片模型最多6张
@@ -990,6 +989,21 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         }
       }
     }
+  }
+
+  const handleImageReplace = async (index: number, newFile: File) => {
+    const saved = await saveUploadImage(newFile, 'memory')
+    setUploadedImages(prev => {
+      const updated = [...prev]
+      updated[index] = saved.dataUrl
+      return updated
+    })
+    setUploadedFilePaths(prev => {
+      const updated = [...prev]
+      updated[index] = saved.fullPath
+      return updated
+    })
+    setMediaType('image')
   }
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -1820,8 +1834,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   sequentialImageGeneration === 'auto' ? 'disabled' : 'auto'
                 )}
                 className={`px-3 py-2 h-[38px] rounded-lg border ${sequentialImageGeneration === 'auto'
-                    ? 'bg-[#007eff] text-white border-[#007eff]'
-                    : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
+                  ? 'bg-[#007eff] text-white border-[#007eff]'
+                  : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
                   }`}
               >
                 {sequentialImageGeneration === 'auto' ? '开启' : '关闭'}
@@ -1865,81 +1879,41 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {/* 图片上传和预览区域 - 独立一行 */}
         {currentModel?.type !== 'audio' && (
           <div className="mb-3">
-            <div className="flex items-center gap-2">
-              {/* 已上传的图片 - 横向排列 */}
-              {uploadedImages.map((image, index) => (
-                <div
-                  key={`${image}-${index}`}
-                  className="relative group flex-shrink-0"
-                  style={{
-                    animation: removingImages.has(image)
-                      ? 'imageSlideOut 0.25s ease-in forwards'
-                      : 'imageSlideIn 0.25s ease-out forwards'
-                  }}
-                >
-                  <div className="relative w-12 h-16 rounded-lg shadow-lg">
-                    <img
-                      src={image}
-                      alt={`Uploaded ${index + 1}`}
-                      className="w-full h-full object-cover rounded-lg border-2 border-white"
-                    />
-                    {/* 删除按钮 - 只在hover时显示，不再有初始加载时的闪烁 */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeImage(index)
-                      }}
-                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg z-20"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
+            {(() => {
+              // 计算最大图片数
+              let maxImageCount = 6 // 默认图片模型最多6张
 
-              {/* 上传按钮 - 紧跟在图片之后，根据模型和模式限制 */}
-              {(() => {
-                // 计算最大图片数
-                let maxImageCount = 6 // 默认图片模型最多6张
-
-                if (selectedModel === 'vidu-q1') {
-                  if (viduMode === 'text-image-to-video') {
-                    maxImageCount = 1 // 文/图生视频最多1张
-                  } else if (viduMode === 'start-end-frame') {
-                    maxImageCount = 2 // 首尾帧需要2张
-                  } else if (viduMode === 'reference-to-video') {
-                    maxImageCount = 7 // 参考生视频最多7张
-                  }
-                } else if (selectedModel === 'kling-2.5-turbo') {
-                  maxImageCount = 1
-                } else if (selectedModel === 'minimax-hailuo-2.3') {
-                  maxImageCount = 1
-                } else if (selectedModel === 'minimax-hailuo-02') {
-                  maxImageCount = 2
-                } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
-                  maxImageCount = 2
+              if (selectedModel === 'vidu-q1') {
+                if (viduMode === 'text-image-to-video') {
+                  maxImageCount = 1 // 文/图生视频最多1张
+                } else if (viduMode === 'start-end-frame') {
+                  maxImageCount = 2 // 首尾帧需要2张
+                } else if (viduMode === 'reference-to-video') {
+                  maxImageCount = 7 // 参考生视频最多7张
                 }
+              } else if (selectedModel === 'kling-2.5-turbo') {
+                maxImageCount = 1
+              } else if (selectedModel === 'minimax-hailuo-2.3') {
+                maxImageCount = 1
+              } else if (selectedModel === 'minimax-hailuo-02') {
+                maxImageCount = 2
+              } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
+                maxImageCount = 2
+              }
 
-                const canUploadMore = uploadedImages.length < maxImageCount
-
-                return canUploadMore ? (
-                  <div
-                    key={`upload-btn-${uploadedImages.length}`}
-                    className="w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-zinc-700/50 hover:border-zinc-700/50 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
-                    onClick={() => imageFileInputRef.current?.click()}
-                    style={{
-                      animation: 'imageSlideIn 0.25s ease-out forwards'
-                    }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </div>
-                ) : null
-              })()}
-            </div>
+              return (
+                <FileUploader
+                  files={uploadedImages}
+                  onUpload={handleImageFileUpload}
+                  onRemove={removeImage}
+                  onReplace={handleImageReplace}
+                  accept="image/*"
+                  multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
+                  maxCount={maxImageCount}
+                  removingIndices={removingImages}
+                />
+              )
+            })()}
           </div>
         )}
 
@@ -1983,8 +1957,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             onClick={handleGenerate}
             disabled={isLoading || (!input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0))}
             className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isLoading || (!input.trim() && uploadedImages.length === 0)
-                ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
-                : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+              ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
+              : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}
           >
             {isLoading ? (
@@ -2027,15 +2001,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         </button>
       </div>
 
-      {/* 隐藏的文件输入 */}
-      <input
-        type="file"
-        ref={imageFileInputRef}
-        onChange={handleImageFileUpload}
-        accept="image/*"
-        multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
-        className="hidden"
-      />
+
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
@@ -8,6 +8,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
 import AudioPlayer from './components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
+import { useDragDrop } from './contexts/DragDropContext'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -27,6 +28,8 @@ interface GenerationTask {
 }
 
 const App: React.FC = () => {
+  const { startDrag } = useDragDrop()
+  const isDraggingRef = useRef(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [tasks, setTasks] = useState<GenerationTask[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -193,7 +196,7 @@ const App: React.FC = () => {
     const imgElement = imageViewerRef.current
     // 使用 { passive: false } 允许 preventDefault
     imgElement.addEventListener('wheel', handleWheel, { passive: false })
-    
+
     return () => {
       imgElement.removeEventListener('wheel', handleWheel)
     }
@@ -245,13 +248,13 @@ const App: React.FC = () => {
             } else {
               result = { ...result, url: convertFileSrc(result.filePath) }
             }
-          } catch {}
+          } catch { }
         }
         let images = task.images
         if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length && isDesktop()) {
           try {
             images = task.uploadedFilePaths.map((p: string) => convertFileSrc(p))
-          } catch {}
+          } catch { }
         }
         return {
           ...task,
@@ -325,7 +328,7 @@ const App: React.FC = () => {
 
     // 创建新的生成任务
     const taskId = Date.now().toString()
-  const newTask: GenerationTask = {
+    const newTask: GenerationTask = {
       id: taskId,
       type,
       prompt: input,
@@ -345,8 +348,8 @@ const App: React.FC = () => {
     try {
       setIsLoading(true)
       // 更新任务状态为生成中
-      setTasks(prev => prev.map(task => 
-        task.id === taskId ? {...task, status: 'generating'} : task
+      setTasks(prev => prev.map(task =>
+        task.id === taskId ? { ...task, status: 'generating' } : task
       ))
 
       let result: any
@@ -367,12 +370,12 @@ const App: React.FC = () => {
                   paths.push(fullPath)
                 }
                 result.url = display.join('|||')
-                ;(result as any).filePath = paths.join('|||')
+                  ; (result as any).filePath = paths.join('|||')
               } else {
                 const { fullPath } = await saveImageFromUrl(result.url)
                 const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
                 result.url = blobSrc
-                ;(result as any).filePath = fullPath
+                  ; (result as any).filePath = fullPath
               }
               console.log('[App] 本地保存成功并替换展示地址')
             } catch (e) {
@@ -395,7 +398,7 @@ const App: React.FC = () => {
               const { fullPath } = await saveAudioFromUrl(result.url)
               const blobSrc = await fileToBlobSrc(fullPath, 'audio/mpeg')
               result.url = blobSrc
-              ;(result as any).filePath = fullPath
+                ; (result as any).filePath = fullPath
               console.log('[App] 本地保存成功并替换展示地址')
             } catch (e) {
               console.error('[App] 本地保存失败，回退在线地址', e)
@@ -408,9 +411,9 @@ const App: React.FC = () => {
 
       // 更新任务状态为成功
       if (result && result.url) {
-        setTasks(prev => prev.map(task => 
+        setTasks(prev => prev.map(task =>
           task.id === taskId ? {
-            ...task, 
+            ...task,
             status: 'success',
             progress: 100,
             result: {
@@ -427,9 +430,9 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('[App] 生成失败:', err)
       // 更新任务状态为错误
-      setTasks(prev => prev.map(task => 
+      setTasks(prev => prev.map(task =>
         task.id === taskId ? {
-          ...task, 
+          ...task,
           status: 'error',
           error: err instanceof Error ? err.message : '生成失败'
         } : task
@@ -444,14 +447,14 @@ const App: React.FC = () => {
     return new Promise((resolve, reject) => {
       let pollCount = 0
       const maxPolls = 120
-      
+
       const interval = setInterval(async () => {
         try {
           pollCount++
           console.log(`[App] 第${pollCount}次轮询任务状态:`, serverTaskId)
-          
+
           const status = await apiService.checkTaskStatus(serverTaskId)
-          
+
           // 注意：API返回的是 TASK_STATUS_SUCCEED，不是 TASK_STATUS_SUCCEEDED
           if ((status.status === 'TASK_STATUS_SUCCEEDED' || status.status === 'TASK_STATUS_SUCCEED') && status.result) {
             console.log('[App] 任务完成:', status.result)
@@ -591,7 +594,7 @@ const App: React.FC = () => {
   const closeVideoViewer = () => {
     setVideoViewerOpacity(0)
     if (videoRef.current) {
-      try { videoRef.current.pause() } catch {}
+      try { videoRef.current.pause() } catch { }
     }
     setAutoPlayOnOpen(false)
     setTimeout(() => {
@@ -602,14 +605,14 @@ const App: React.FC = () => {
 
   const navigateImage = (direction: 'prev' | 'next') => {
     if (currentImageList.length === 0) return
-    
+
     let newIndex = currentImageIndex
     if (direction === 'prev') {
       newIndex = currentImageIndex > 0 ? currentImageIndex - 1 : currentImageList.length - 1
     } else {
       newIndex = currentImageIndex < currentImageList.length - 1 ? currentImageIndex + 1 : 0
     }
-    
+
     // 直接硬切换图片,不重置缩放和位置
     setCurrentImageIndex(newIndex)
     setCurrentImage(currentImageList[newIndex])
@@ -709,7 +712,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isVideoViewerOpen && autoPlayOnOpen && videoRef.current) {
-      videoRef.current.play().catch(() => {})
+      videoRef.current.play().catch(() => { })
       setAutoPlayOnOpen(false)
     }
   }, [isVideoViewerOpen, autoPlayOnOpen])
@@ -846,6 +849,53 @@ const App: React.FC = () => {
     setIsDragging(false)
   }
 
+  // 历史记录图片拖拽开始 (使用自定义拖拽)
+  const handleHistoryImageDragStart = (e: React.MouseEvent, imageUrl: string) => {
+    e.preventDefault()
+    const initialX = e.clientX
+    const initialY = e.clientY
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = Math.abs(moveEvent.clientX - initialX)
+      const deltaY = Math.abs(moveEvent.clientY - initialY)
+      // If moved more than 5 pixels, consider it a drag
+      if (deltaX > 5 || deltaY > 5) {
+        isDraggingRef.current = true
+        startDrag(
+          {
+            type: 'image',
+            imageUrl,
+            sourceType: 'history'
+          },
+          imageUrl
+        )
+        // Remove listeners after starting drag
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('mouseup', handleMouseUp)
+      }
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      // Reset dragging flag after a short delay (onClick fires after mouseup)
+      setTimeout(() => {
+        isDraggingRef.current = false
+      }, 100)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Handle image click - prevent if dragging occurred
+  const handleHistoryImageClick = (url: string, imageUrls: string[]) => {
+    if (isDraggingRef.current) {
+      return // Don't open viewer if we just finished dragging
+    }
+    openImageViewer(url, imageUrls)
+  }
+
 
 
   const handleRegenerate = async (task: GenerationTask) => {
@@ -854,14 +904,14 @@ const App: React.FC = () => {
       images: task.images,
       size: task.size
     }
-    
+
     console.log('[App] 重新生成任务:', {
       model: task.model,
       type: task.type,
       prompt: task.prompt,
       options
     })
-    
+
     await handleGenerate(task.prompt, task.model, task.type, options)
   }
 
@@ -875,7 +925,7 @@ const App: React.FC = () => {
           arr.push(data)
         }
         images = arr
-      } catch {}
+      } catch { }
     } else if (task.images && task.images.length) {
       // 如果历史中已有 images 但不是 data:，仍尝试用上传路径重建
       if (task.images.some(img => typeof img === 'string' && !img.startsWith('data:'))) {
@@ -887,7 +937,7 @@ const App: React.FC = () => {
               arr.push(data)
             }
             images = arr
-          } catch {}
+          } catch { }
         } else {
           images = task.images
         }
@@ -969,18 +1019,18 @@ const App: React.FC = () => {
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold">生成历史</h2>
                   {false && (
-                  <button
-                    onClick={() => setIsConfirmClearOpen(true)}
-                    className="h-8 px-3 inline-flex items-center justify-center bg-red-600/60 hover:bg-red-600/80 rounded-md text-sm leading-none transition-colors"
-                  >
-                    清除历史
-                  </button>
+                    <button
+                      onClick={() => setIsConfirmClearOpen(true)}
+                      className="h-8 px-3 inline-flex items-center justify-center bg-red-600/60 hover:bg-red-600/80 rounded-md text-sm leading-none transition-colors"
+                    >
+                      清除历史
+                    </button>
                   )}
                 </div>
                 <div className="space-y-6">
                   {tasks.map((task) => (
-                    <div 
-                      key={task.id} 
+                    <div
+                      key={task.id}
                       className="overflow-hidden animate-fade-in"
                     >
                       {/* 任务信息行 */}
@@ -991,9 +1041,9 @@ const App: React.FC = () => {
                             <div className="flex gap-2">
                               {task.images.slice(0, 3).map((image, index) => (
                                 <div key={index} className="w-16 h-16 rounded border border-zinc-700/50 overflow-hidden">
-                                  <img 
-                                    src={image} 
-                                    alt={`Input ${index + 1}`} 
+                                  <img
+                                    src={image}
+                                    alt={`Input ${index + 1}`}
                                     className="w-full h-full object-cover"
                                   />
                                 </div>
@@ -1005,7 +1055,7 @@ const App: React.FC = () => {
                               )}
                             </div>
                           )}
-                          
+
                           {/* 文本提示词 */}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-zinc-300 truncate text-left">{task.prompt}</p>
@@ -1028,7 +1078,7 @@ const App: React.FC = () => {
                               )}
                             </div>
                           </div>
-                          
+
                           {/* 操作按钮 */}
                           <div className="flex gap-2">
                             <button
@@ -1061,7 +1111,7 @@ const App: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* 结果显示区域 */}
                       <div className="pt-3">
                         {task.status === 'pending' && (
@@ -1072,7 +1122,7 @@ const App: React.FC = () => {
                             </div>
                           </div>
                         )}
-                        
+
                         {task.status === 'generating' && (
                           <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center w-full px-6">
@@ -1097,10 +1147,10 @@ const App: React.FC = () => {
                             </div>
                           </div>
                         )}
-                        
+
                         {task.status === 'success' && task.result && (
                           <div className="flex justify-start">
-                            <div 
+                            <div
                               className="flex gap-2 overflow-x-auto max-w-full pb-2 image-strip"
                               style={{
                                 scrollbarWidth: 'thin',
@@ -1120,37 +1170,47 @@ const App: React.FC = () => {
                                   (() => {
                                     const imageUrls = task.result!.url.split('|||')
                                     return imageUrls.map((url, index) => (
-                                      <div 
-                                        key={index} 
+                                      <div
+                                        key={index}
                                         className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center flex-shrink-0"
+                                        onClick={() => handleHistoryImageClick(url, imageUrls)}
                                       >
-                                        <img 
-                                          src={url} 
+                                        <img
+                                          src={url}
                                           alt={`${task.result!.prompt} ${index + 1}`}
-                                          className="max-w-full max-h-full object-contain cursor-pointer"
-                                          onClick={() => openImageViewer(url, imageUrls)}
+                                          className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing select-none"
+                                          onMouseDown={(e) => {
+                                            e.stopPropagation()
+                                            handleHistoryImageDragStart(e, url)
+                                          }}
+                                          draggable={false}
                                         />
                                       </div>
                                     ))
                                   })()
                                 ) : (
                                   // 单张图片
-                                  <div 
+                                  <div
                                     className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center flex-shrink-0"
+                                    onClick={() => handleHistoryImageClick(task.result!.url, [task.result!.url])}
                                   >
-                                    <img 
-                                      src={task.result.url} 
-                                      alt={task.result.prompt} 
-                                      className="max-w-full max-h-full object-contain cursor-pointer"
-                                      onClick={() => openImageViewer(task.result!.url, [task.result!.url])}
+                                    <img
+                                      src={task.result.url}
+                                      alt={task.result.prompt}
+                                      className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing select-none"
+                                      onMouseDown={(e) => {
+                                        e.stopPropagation()
+                                        handleHistoryImageDragStart(e, task.result!.url)
+                                      }}
+                                      draggable={false}
                                     />
                                   </div>
                                 )
                               )}
                               {task.result.type === 'video' && (
                                 <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url, (task.result as any).filePath)}>
-                                  <video 
-                                    src={task.result.url} 
+                                  <video
+                                    src={task.result.url}
                                     className="max-w-full max-h-full object-contain"
                                   />
                                   <div className="absolute inset-0 flex items-center justify-center">
@@ -1168,7 +1228,7 @@ const App: React.FC = () => {
                             </div>
                           </div>
                         )}
-                        
+
                         {task.status === 'error' && (
                           <div className="flex items-center justify-center h-64 bg-red-900/20 rounded-lg border border-red-700/50">
                             <div className="text-center">
@@ -1202,7 +1262,7 @@ const App: React.FC = () => {
         {/* 输入区域 - 悬浮设计 */}
         <div ref={inputContainerRef} className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
           <div className="bg-[#131313]/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
-            <MediaGenerator 
+            <MediaGenerator
               onGenerate={handleGenerate}
               isLoading={isLoading}
               onOpenSettings={openSettings}
@@ -1237,7 +1297,7 @@ const App: React.FC = () => {
 
       {/* 图片查看器模态框 */}
       {isImageViewerOpen && (
-        <div 
+        <div
           className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
           style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease', overscrollBehavior: 'contain' }}
           onMouseMove={handleImageMouseMove}
@@ -1246,7 +1306,7 @@ const App: React.FC = () => {
         >
           <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
             {/* 图片容器 */}
-            <div 
+            <div
               className="relative"
               style={{
                 cursor: isDragging ? 'grabbing' : 'grab'
@@ -1262,13 +1322,12 @@ const App: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <img 
+              <img
                 ref={imageViewerRef}
-                src={currentImage} 
-                alt="Full size" 
-                className={`object-contain select-none ${
-                  imageTransitioning ? 'image-transitioning' : 'image-transition'
-                }`}
+                src={currentImage}
+                alt="Full size"
+                className={`object-contain select-none ${imageTransitioning ? 'image-transitioning' : 'image-transition'
+                  }`}
                 style={{
                   transform: `scale(${imageScale * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePosition.x / imageScale}px, ${imagePosition.y / imageScale}px)`,
                   transition: isDragging ? 'none' : 'transform 200ms ease, opacity 200ms ease',
@@ -1280,7 +1339,7 @@ const App: React.FC = () => {
                 draggable={false}
               />
             </div>
-            
+
             {/* 底部信息栏和切换按钮 */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
               {/* 切换按钮组 */}
@@ -1304,40 +1363,40 @@ const App: React.FC = () => {
                   </button>
                 </div>
               )}
-              
+
               {/* 信息按钮组 */}
               <div className="flex items-center gap-4">
-              {/* 导航指示器和计数器 */}
-              {currentImageList.length > 1 && (
+                {/* 导航指示器和计数器 */}
+                {currentImageList.length > 1 && (
+                  <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                    {currentImageIndex + 1} / {currentImageList.length}
+                  </div>
+                )}
+
+                {/* 缩放比例显示 */}
                 <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                  {currentImageIndex + 1} / {currentImageList.length}
+                  {Math.round(imageScale * 100)}%
                 </div>
-              )}
-              
-              {/* 缩放比例显示 */}
-              <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                {Math.round(imageScale * 100)}%
+
+                {/* 重置按钮 - 始终显示 */}
+                <button
+                  onClick={resetImageView}
+                  className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                >
+                  重置视图
+                </button>
               </div>
-              
-              {/* 重置按钮 - 始终显示 */}
-              <button
-                onClick={resetImageView}
-                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
-              >
-                重置视图
-              </button>
-            </div>
             </div>
           </div>
         </div>
       )}
 
       {isVideoViewerOpen && (
-        <div 
-          className={"fixed inset-0 bg黑/70 backdrop-blur-xl z-50 flex items-center justify-center p-4".replace('黑','black')}
+        <div
+          className={"fixed inset-0 bg黑/70 backdrop-blur-xl z-50 flex items-center justify-center p-4".replace('黑', 'black')}
           style={{ opacity: videoViewerOpacity, transition: 'opacity 500ms ease', overscrollBehavior: 'contain' }}
         >
-          <div 
+          <div
             className={"relative max-w-6xl max-h-full flex items-center justify-center"}
             onMouseEnter={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
             onMouseMove={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
@@ -1350,7 +1409,7 @@ const App: React.FC = () => {
                 src={currentVideoUrl}
                 className="object-contain"
                 style={{ maxHeight: '90vh', maxWidth: '90vw', opacity: videoViewerOpacity, transition: 'opacity 500ms ease' }}
-                onLoadedMetadata={() => { if (videoRef.current) { setVideoDuration(videoRef.current.duration || 0); if (autoPlayOnOpen) { videoRef.current.play().catch(() => {}); setAutoPlayOnOpen(false) } } }}
+                onLoadedMetadata={() => { if (videoRef.current) { setVideoDuration(videoRef.current.duration || 0); if (autoPlayOnOpen) { videoRef.current.play().catch(() => { }); setAutoPlayOnOpen(false) } } }}
                 onTimeUpdate={() => { if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0) }}
                 onPlaying={() => { setIsBuffering(false); setIsVideoPlaying(true) }}
                 onPause={() => { setIsVideoPlaying(false) }}
@@ -1380,9 +1439,9 @@ const App: React.FC = () => {
                     className="btn btn-play"
                   >
                     {isVideoPlaying ? (
-                      <svg viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+                      <svg viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
                     ) : (
-                      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                     )}
                   </button>
                   <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
@@ -1414,10 +1473,10 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     <button className={`btn btn-small ${loop ? 'loop-active' : ''}`} onClick={() => setLoop(l => !l)}>
-                      <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                      <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" /></svg>
                     </button>
                     <button className="btn btn-small" onClick={() => downloadVideo(currentVideoUrl)}>
-                      <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                      <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
                     </button>
                   </div>
                 </div>

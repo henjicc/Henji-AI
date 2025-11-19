@@ -140,7 +140,7 @@ export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promis
   return url
 }
 
-function inferMimeFromPath(p: string): string {
+export function inferMimeFromPath(p: string): string {
   const lower = p.toLowerCase()
   if (lower.endsWith('.png')) return 'image/png'
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
@@ -200,7 +200,7 @@ export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 
   if (mode === 'persist') {
     await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
     let exists = false
-    try { await readFile(full); exists = true } catch {}
+    try { await readFile(full); exists = true } catch { }
     if (!exists) {
       await writeFile(rel, cached.bytes, { baseDir: BaseDirectory.AppLocalData })
     }
@@ -248,7 +248,7 @@ async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?
   let bitmap: ImageBitmap | null = null
   try {
     bitmap = await createImageBitmap(blob)
-  } catch {}
+  } catch { }
 
   const cleanup: Array<() => void> = []
   let w0 = 0, h0 = 0
@@ -310,7 +310,7 @@ async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
     return bytes
   } finally {
-    cleanup.forEach(fn => { try { fn() } catch {} })
+    cleanup.forEach(fn => { try { fn() } catch { } })
   }
 }
 
