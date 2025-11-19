@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
 import ParamRow from './ui/ParamRow'
-import Dropdown from './ui/Dropdown'
 import Toggle from './ui/Toggle'
 import NumberInput from './ui/NumberInput'
 import TextInput from './ui/TextInput'
@@ -75,8 +74,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [klingDurationDropdownClosing, setKlingDurationDropdownClosing] = useState(false)
   const [isKlingAspectDropdownOpen, setIsKlingAspectDropdownOpen] = useState(false)
   const [klingAspectDropdownClosing, setKlingAspectDropdownClosing] = useState(false)
-  const [isHailuoDurationDropdownOpen, setIsHailuoDurationDropdownOpen] = useState(false)
-  const [hailuoDurationDropdownClosing, setHailuoDurationDropdownClosing] = useState(false)
+
   const [isHailuoResolutionDropdownOpen, setIsHailuoResolutionDropdownOpen] = useState(false)
   const [hailuoResolutionDropdownClosing, setHailuoResolutionDropdownClosing] = useState(false)
   const [isPixAspectDropdownOpen, setIsPixAspectDropdownOpen] = useState(false)
@@ -101,7 +99,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   const klingDurationRef = useRef<HTMLDivElement>(null)
   const klingAspectRef = useRef<HTMLDivElement>(null)
-  const hailuoDurationRef = useRef<HTMLDivElement>(null)
+
   const hailuoResolutionRef = useRef<HTMLDivElement>(null)
   const pixAspectRef = useRef<HTMLDivElement>(null)
   const pixResolutionRef = useRef<HTMLDivElement>(null)
@@ -128,15 +126,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [textNormalization, setTextNormalization] = useState<boolean>(false)
   const [languageBoost, setLanguageBoost] = useState<string>('auto')
   const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
-  const [isAudioEmotionDropdownOpen, setIsAudioEmotionDropdownOpen] = useState(false)
-  const [audioEmotionDropdownClosing, setAudioEmotionDropdownClosing] = useState(false)
-  const audioEmotionRef = useRef<HTMLDivElement>(null)
-  const [isAudioSpecDropdownOpen, setIsAudioSpecDropdownOpen] = useState(false)
-  const [audioSpecDropdownClosing, setAudioSpecDropdownClosing] = useState(false)
-  const audioSpecRef = useRef<HTMLDivElement>(null)
-  const [isLanguageBoostDropdownOpen, setIsLanguageBoostDropdownOpen] = useState(false)
-  const [languageBoostDropdownClosing, setLanguageBoostDropdownClosing] = useState(false)
-  const languageBoostRef = useRef<HTMLDivElement>(null)
+
+
   const [klingAspectPos, setKlingAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [klingDurationPos, setKlingDurationPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [pixAspectPos, setPixAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
@@ -191,43 +182,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     { id: 'cartoon_pig', name: '卡通猪小琪', gender: 'other' }
   ]
 
-  const emotionZhMap: Record<string, string> = {
-    neutral: '中性',
-    happy: '开心',
-    sad: '悲伤',
-    angry: '愤怒',
-    fearful: '恐惧',
-    disgusted: '厌恶',
-    surprised: '惊讶'
-  }
-
-  const languageBoostZhMap: Record<string, string> = {
-    auto: '自动',
-    Chinese: '中文',
-    'Chinese,Yue': '中文：粤语',
-    English: '英语',
-    Arabic: '阿拉伯语',
-    Russian: '俄语',
-    Spanish: '西班牙语',
-    French: '法语',
-    Portuguese: '葡萄牙语',
-    German: '德语',
-    Turkish: '土耳其语',
-    Dutch: '荷兰语',
-    Ukrainian: '乌克兰语',
-    Vietnamese: '越南语',
-    Indonesian: '印尼语',
-    Japanese: '日语',
-    Italian: '意大利语',
-    Korean: '韩语',
-    Thai: '泰语',
-    Polish: '波兰语',
-    Romanian: '罗马尼亚语',
-    Greek: '希腊语',
-    Czech: '捷克语',
-    Finnish: '芬兰语',
-    Hindi: '印地语'
-  }
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
@@ -473,9 +427,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (klingAspectRef.current && !klingAspectRef.current.contains(event.target as Node) && isKlingAspectDropdownOpen) {
         handleCloseKlingAspectDropdown()
       }
-      if (hailuoDurationRef.current && !hailuoDurationRef.current.contains(event.target as Node) && isHailuoDurationDropdownOpen) {
-        handleCloseHailuoDurationDropdown()
-      }
+
       if (hailuoResolutionRef.current && !hailuoResolutionRef.current.contains(event.target as Node) && isHailuoResolutionDropdownOpen) {
         handleCloseHailuoResolutionDropdown()
       }
@@ -498,22 +450,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       if (seedanceAspectRef.current && !seedanceAspectRef.current.contains(event.target as Node) && isSeedanceAspectDropdownOpen) {
         handleCloseSeedanceAspectDropdown()
       }
-      if (audioEmotionRef.current && !audioEmotionRef.current.contains(event.target as Node) && isAudioEmotionDropdownOpen) {
-        handleCloseAudioEmotionDropdown()
-      }
-      if (audioSpecRef.current && !audioSpecRef.current.contains(event.target as Node) && isAudioSpecDropdownOpen) {
-        handleCloseAudioSpecDropdown()
-      }
-      if (languageBoostRef.current && !languageBoostRef.current.contains(event.target as Node) && isLanguageBoostDropdownOpen) {
-        handleCloseLanguageBoostDropdown()
-      }
+
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduStyleDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoDurationDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen, isAudioEmotionDropdownOpen, isAudioSpecDropdownOpen, isLanguageBoostDropdownOpen])
+  }, [isModelDropdownOpen, isResolutionDropdownOpen, isViduStyleDropdownOpen, isKlingDurationDropdownOpen, isKlingAspectDropdownOpen, isHailuoResolutionDropdownOpen, isPixAspectDropdownOpen, isPixResolutionDropdownOpen, isWanResolutionDropdownOpen, isSeedanceVariantDropdownOpen, isSeedanceResolutionDropdownOpen, isSeedanceAspectDropdownOpen])
 
   const handleCloseModelDropdown = () => {
     setModelDropdownClosing(true)
@@ -549,13 +493,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
 
-  const handleCloseHailuoDurationDropdown = () => {
-    setHailuoDurationDropdownClosing(true)
-    setTimeout(() => {
-      setIsHailuoDurationDropdownOpen(false)
-      setHailuoDurationDropdownClosing(false)
-    }, 200)
-  }
 
   const handleCloseHailuoResolutionDropdown = () => {
     setHailuoResolutionDropdownClosing(true)
@@ -1039,10 +976,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 250)
   }
 
-  const clearAllImages = () => {
-    setUploadedImages([])
-    setUploadedFilePaths([])
-  }
 
   const handleSchemaChange = (id: string, value: any) => {
     switch (id) {
@@ -1183,9 +1116,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setIsManualInput(true) // 标记为手动输入
   }
 
-  const bulkTooltipTimerRef = useRef<number | null>(null)
-  const [bulkTooltipVisible, setBulkTooltipVisible] = useState(false)
-  const [bulkTooltipClosing, setBulkTooltipClosing] = useState(false)
+
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1219,29 +1150,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
 
 
-  const handleCloseAudioEmotionDropdown = () => {
-    setAudioEmotionDropdownClosing(true)
-    setTimeout(() => {
-      setIsAudioEmotionDropdownOpen(false)
-      setAudioEmotionDropdownClosing(false)
-    }, 200)
-  }
 
-  const handleCloseAudioSpecDropdown = () => {
-    setAudioSpecDropdownClosing(true)
-    setTimeout(() => {
-      setIsAudioSpecDropdownOpen(false)
-      setAudioSpecDropdownClosing(false)
-    }, 200)
-  }
-
-  const handleCloseLanguageBoostDropdown = () => {
-    setLanguageBoostDropdownClosing(true)
-    setTimeout(() => {
-      setIsLanguageBoostDropdownOpen(false)
-      setLanguageBoostDropdownClosing(false)
-    }, 200)
-  }
 
   return (
     <div className="w-full max-w-5xl mx-auto">
