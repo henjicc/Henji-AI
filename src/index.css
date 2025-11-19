@@ -451,3 +451,57 @@ input[type="number"] {
 .volume-fill { position: absolute; bottom: 0; left: 0; width: 100%; background: #007eff; border-radius: 4px; }
 .volume-thumb { position: absolute; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; background: #007eff; border-radius: 50%; }
 .volume-menu { width: 64px; }
+
+/* Context Menu Styles */
+.context-menu {
+  position: fixed;
+  background: rgba(19, 19, 19, 0.9);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(113, 113, 122, 0.5);
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+  padding: 0.5rem;
+  min-width: 180px;
+  z-index: 9999;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: white;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: background 0.2s;
+  font-size: 0.875rem;
+  user-select: none;
+}
+
+.context-menu-item:hover:not(.disabled) {
+  background: rgba(113, 113, 122, 0.5);
+}
+
+.context-menu-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.context-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.context-menu-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: rgba(113, 113, 122, 0.3);
+  margin: 0.25rem 0;
+}
+

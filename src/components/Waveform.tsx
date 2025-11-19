@@ -16,6 +16,7 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
   const [hoverX, setHoverX] = React.useState<number | null>(null)
   const [dragging, setDragging] = React.useState(false)
   const [lastRatio, setLastRatio] = React.useState(0)
+  const hasDraggedRef = React.useRef(false)
   const svgRef = React.useRef<SVGSVGElement | null>(null)
   const [vw, setVw] = React.useState<number>(width || 0)
   React.useLayoutEffect(() => {
@@ -41,8 +42,10 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
     return Math.max(0, Math.min(1, ratio))
   }
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return
     const r = posToRatio(e)
     setDragging(true)
+    hasDraggedRef.current = false
     setLastRatio(r)
     onSeekStart && onSeekStart(r)
   }
@@ -50,14 +53,17 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
     const r = posToRatio(e)
     setHoverX(e.clientX - (e.currentTarget as SVGSVGElement).getBoundingClientRect().left)
     if (dragging) {
+      hasDraggedRef.current = true
       setLastRatio(r)
       onSeekMove && onSeekMove(r)
     }
   }
   const handleMouseUp = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return
     const r = posToRatio(e)
-    onSeekEnd && onSeekEnd(r, dragging)
-    if (!dragging && onSeek) onSeek(r)
+    const wasDragged = hasDraggedRef.current
+    onSeekEnd && onSeekEnd(r, wasDragged)
+    if (!wasDragged && onSeek) onSeek(r)
     setDragging(false)
   }
   const handleMouseLeave = () => {

@@ -6,9 +6,10 @@ interface AudioPlayerProps {
   src: string
   filePath?: string
   className?: string
+  onContextMenu?: (e: React.MouseEvent) => void
 }
 
-const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) => {
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onContextMenu }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -155,7 +156,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
           setWaveSampleRate(audioBuf.sampleRate || null)
           setWaveTotalSamples(audioBuf.length || null)
           if (filePath) {
-            try { await writeWaveformCacheForAudio(filePath, Array.from(smooth)) } catch {}
+            try { await writeWaveformCacheForAudio(filePath, Array.from(smooth)) } catch { }
           }
         }
       } catch {
@@ -167,7 +168,18 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
   }, [cacheKey, src])
 
   return (
-    <div className={`w-[36rem] bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4 ${className || ''}`}>
+    <div
+      className={`w-[36rem] bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4 outline-none ${className || ''}`}
+      onContextMenu={onContextMenu}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.code === 'Space') {
+          e.preventDefault()
+          e.stopPropagation()
+          togglePlay()
+        }
+      }}
+    >
       <div className="mb-2 flex items-center justify-between text-xs text-zinc-300">
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
@@ -187,10 +199,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
               const d = audioRef.current.duration || duration || 0
               audioRef.current.currentTime = r * d
               if (dragged) {
-                audioRef.current.play().catch(() => {})
+                audioRef.current.play().catch(() => { })
                 setIsPlaying(true)
-              } else {
-                if (isPlaying) { audioRef.current.pause(); setIsPlaying(false) } else { audioRef.current.play().catch(() => {}); setIsPlaying(true) }
               }
             }}
           />
@@ -212,20 +222,20 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className }) =
         <div className="flex items-center">
           <button onClick={togglePlay} className="text-zinc-300 hover:opacity-70" title="播放/暂停">
             {isPlaying ? (
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
             ) : (
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
             )}
           </button>
         </div>
         <div>
           <button
-            onClick={async () => { if (filePath) { try { await downloadAudioFile(filePath) } catch {} } }}
+            onClick={async () => { if (filePath) { try { await downloadAudioFile(filePath) } catch { } } }}
             disabled={!filePath}
             className={`${filePath ? 'text-zinc-300 hover:opacity-70' : 'text-zinc-500 opacity-40 cursor-not-allowed'} transition-opacity`}
             title="下载"
           >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
           </button>
         </div>
       </div>

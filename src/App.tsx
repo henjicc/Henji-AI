@@ -2,13 +2,16 @@ import React, { useState, useEffect, useRef } from 'react'
 import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
+import ContextMenu from './components/ContextMenu'
 import { MediaResult } from './types'
 import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, deleteWaveformCacheForAudio } from './utils/save'
+import { convertBlobToPng } from './utils/imageConversion'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
 import AudioPlayer from './components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
 import { useDragDrop } from './contexts/DragDropContext'
+import { useContextMenu, MenuItem } from './hooks/useContextMenu'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -35,16 +38,16 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
-  const [imageViewerClosing, setImageViewerClosing] = useState(false)
+
   const [currentImage, setCurrentImage] = useState('')
   const [currentImageList, setCurrentImageList] = useState<string[]>([])
+  const [currentFilePathList, setCurrentFilePathList] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [imageScale, setImageScale] = useState(1)
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [isSpacePressed, setIsSpacePressed] = useState(false)
-  const [imageTransitioning, setImageTransitioning] = useState(false)
+
   const [isTasksLoaded, setIsTasksLoaded] = useState(false)
   const [isUserAtBottom, setIsUserAtBottom] = useState(true)
   const [viewerOpacity, setViewerOpacity] = useState(0)
@@ -74,7 +77,7 @@ const App: React.FC = () => {
   const progressBarRef = React.useRef<HTMLDivElement>(null)
   const progressFillRef = React.useRef<HTMLDivElement>(null)
   const rafIdRef = React.useRef<number | null>(null)
-  const volumeSliderRef = React.useRef<HTMLDivElement>(null)
+
   const speedDisplayRef = React.useRef<HTMLDivElement>(null)
   const speedMenuRef = React.useRef<HTMLDivElement>(null)
   const volumeDisplayRef = React.useRef<HTMLDivElement>(null)
@@ -85,6 +88,9 @@ const App: React.FC = () => {
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
   const inputContainerRef = React.useRef<HTMLDivElement>(null)
   const [inputPadding, setInputPadding] = useState<number>(400)
+
+  // 初始化右键菜单
+  const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
 
   const scrollToBottom = () => {
     const el = listContainerRef.current
@@ -161,164 +167,327 @@ const App: React.FC = () => {
         closeImageViewer()
       } else if (e.key === ' ') {
         e.preventDefault()
-        setIsSpacePressed(true)
+      } else if (e.key === 'ArrowRight') {
+        if (videoRef.current) {
+          const step = e.ctrlKey ? (frameDuration || 1 / 30) : 1
+          const dur = videoDuration || videoRef.current.duration || Infinity
+          videoRef.current.currentTime = Math.min(dur, videoRef.current.currentTime + step)
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (videoRef.current) {
+          const next = Math.min(1, (videoRef.current.muted ? 0 : videoRef.current.volume) + 0.05)
+          setMuted(false)
+          setVolume(next)
+        }
+      } else if (e.key === 'ArrowDown') {
+        if (videoRef.current) {
+          const next = Math.max(0, (videoRef.current.muted ? 0 : videoRef.current.volume) - 0.05)
+          setMuted(false)
+          setVolume(next)
+        }
+      } else if (e.key === 'Escape') {
+        closeVideoViewer()
       }
     }
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ') {
-        setIsSpacePressed(false)
-        setIsDragging(false)
-      }
-    }
-
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [isImageViewerOpen, currentImageIndex, currentImageList])
-
-  // 图片缩放的滚轮事件监听(非passive模式)
-  useEffect(() => {
-    if (!isImageViewerOpen || !imageViewerRef.current) return
-
-    const handleWheel = (e: WheelEvent) => {
-      if (e.cancelable) e.preventDefault()
-      const delta = e.deltaY > 0 ? -0.1 : 0.1
-      setImageScale(prev => {
-        const newScale = Math.max(0.5, Math.min(5, prev + delta))
-        return newScale
-      })
-    }
-
-    const imgElement = imageViewerRef.current
-    // 使用 { passive: false } 允许 preventDefault
-    imgElement.addEventListener('wheel', handleWheel, { passive: false })
-
-    return () => {
-      imgElement.removeEventListener('wheel', handleWheel)
-    }
-  }, [isImageViewerOpen])
+  }, [isVideoViewerOpen, isVideoPlaying, videoDuration])
 
   useEffect(() => {
-    if (isImageViewerOpen) {
-      requestAnimationFrame(() => setViewerOpacity(1))
-    } else {
-      setViewerOpacity(0)
+    if (isVideoViewerOpen && autoPlayOnOpen && videoRef.current) {
+      videoRef.current.play().catch(() => { })
+      setAutoPlayOnOpen(false)
     }
-  }, [isImageViewerOpen])
+  }, [isVideoViewerOpen, autoPlayOnOpen])
 
   useEffect(() => {
-    if (isVideoViewerOpen) {
-      requestAnimationFrame(() => setVideoViewerOpacity(1))
-    } else {
-      setVideoViewerOpacity(0)
+    if (videoRef.current) videoRef.current.volume = volume
+  }, [volume])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted
+  }, [muted])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = playbackRate
+  }, [playbackRate])
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.loop = loop
+  }, [loop])
+
+  useEffect(() => {
+    if (!isSpeedMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      const d = speedDisplayRef.current
+      const m = speedMenuRef.current
+      const t = e.target as Node
+      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsSpeedMenuOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => { document.removeEventListener('click', handler) }
+  }, [isSpeedMenuOpen])
+
+  useEffect(() => {
+    if (!isVolumeMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      const d = volumeDisplayRef.current
+      const m = volumeMenuRef.current
+      const t = e.target as Node
+      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsVolumeMenuOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => { document.removeEventListener('click', handler) }
+  }, [isVolumeMenuOpen])
+
+  useEffect(() => {
+    if (!isVideoViewerOpen || !isVideoPlaying) return
+    const v = videoRef.current as any
+    if (!v || typeof v.requestVideoFrameCallback !== 'function') return
+    const handle = (_now: number, meta: any) => {
+      const mt = meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : null
+      if (mt != null) {
+        const last = lastFrameMediaTimeRef.current
+        if (last != null) {
+          const delta = mt - last
+          if (delta > 0.005 && delta < 0.2) setFrameDuration(delta)
+        }
+        lastFrameMediaTimeRef.current = mt
+      }
+      v.requestVideoFrameCallback(handle)
+    }
+    v.requestVideoFrameCallback(handle)
+    return () => { lastFrameMediaTimeRef.current = null }
+  }, [isVideoViewerOpen, isVideoPlaying])
+
+  useEffect(() => {
+    if (!isVideoViewerOpen) {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      return
+    }
+    if (!isVideoPlaying) {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
+      return
+    }
+    const tick = () => {
+      const v = videoRef.current
+      if (v) {
+        const dur = v.duration || 0
+        const cur = v.currentTime || 0
+        setCurrentTime(cur)
+        if (progressFillRef.current) {
+          const percent = dur ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0
+          progressFillRef.current.style.width = `${percent}%`
+        }
+      }
+      rafIdRef.current = requestAnimationFrame(tick)
+    }
+    rafIdRef.current = requestAnimationFrame(tick)
+    return () => { if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current) }
+  }, [isVideoViewerOpen, isVideoPlaying])
+
+  useEffect(() => {
+    if (!isVideoViewerOpen && controlsHideTimer.current) {
+      clearTimeout(controlsHideTimer.current)
+      controlsHideTimer.current = null
+      setIsControlsVisible(true)
     }
   }, [isVideoViewerOpen])
 
-  useEffect(() => {
-    if (isConfirmClearOpen) {
-      requestAnimationFrame(() => setConfirmOpacity(1))
-    } else {
-      setConfirmOpacity(0)
-    }
-  }, [isConfirmClearOpen])
+  const copyImageToClipboard = async (imageUrl: string) => {
+    try {
+      const response = await fetch(imageUrl)
+      let blob = await response.blob()
 
-  useEffect(() => {
-    if (tasks.length > 0 && isUserAtBottom) {
-      scrollToBottom()
-    }
-  }, [tasks, isUserAtBottom])
+      // 确保转换为 PNG，因为 Clipboard API 主要支持 PNG
+      if (blob.type !== 'image/png') {
+        try {
+          blob = await convertBlobToPng(blob)
+        } catch (e) {
+          console.error('Image conversion failed:', e)
+          throw new Error('图片格式转换失败')
+        }
+      }
 
-  // 加载历史（优先文件，其次本地存储）
-  useEffect(() => {
-    const load = async () => {
-      const fileHistory = isDesktop() ? await readJsonFromAppData<any[]>('Henji-AI/history.json') : null
-      const store = fileHistory ?? (() => { try { return JSON.parse(localStorage.getItem('generationTasks') || '[]') } catch { return [] } })()
-      const loaded = (store || []).map((task: any) => {
-        let result = task.result
-        if (result && result.filePath && isDesktop()) {
-          try {
-            if (typeof result.filePath === 'string' && result.filePath.includes('|||')) {
-              const paths = result.filePath.split('|||')
-              const display = paths.map(p => convertFileSrc(p)).join('|||')
-              result = { ...result, url: display }
-            } else {
-              result = { ...result, url: convertFileSrc(result.filePath) }
-            }
-          } catch { }
-        }
-        let images = task.images
-        if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length && isDesktop()) {
-          try {
-            images = task.uploadedFilePaths.map((p: string) => convertFileSrc(p))
-          } catch { }
-        }
-        return {
-          ...task,
-          status: task.status === 'generating' || task.status === 'pending' ? 'error' : task.status,
-          error: task.status === 'generating' || task.status === 'pending' ? '页面刷新后生成中断' : task.error,
-          result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
-          images
-        }
-      })
-      setTasks(loaded)
-      setIsTasksLoaded(true)
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ])
+    } catch (err) {
+      console.error('Copy failed:', err)
+      setError('复制图片失败: ' + (err instanceof Error ? err.message : String(err)))
     }
-    load()
+  }
+
+  // 生成图片右键菜单项
+  const getImageMenuItems = (imageUrl: string, filePath?: string): MenuItem[] => [
+    {
+      id: 'copy-image',
+      label: '复制图片',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      ),
+      onClick: () => copyImageToClipboard(imageUrl)
+    },
+    {
+      id: 'download-image',
+      label: '下载图片',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      ),
+      onClick: async () => {
+        if (filePath) {
+          try {
+            await downloadMediaFile(filePath)
+          } catch (err) {
+            console.error('Download image failed:', err)
+          }
+        }
+      },
+      disabled: !filePath
+    }
+  ]
+
+  // 生成视频缩略图右键菜单项
+  const getVideoThumbnailMenuItems = (filePath?: string): MenuItem[] => [
+    {
+      id: 'download-video',
+      label: '下载视频',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      ),
+      onClick: async () => {
+        if (filePath) {
+          try {
+            await downloadMediaFile(filePath)
+          } catch (err) {
+            console.error('Download video failed:', err)
+          }
+        }
+      },
+      disabled: !filePath
+    }
+  ]
+
+  // 生成音频右键菜单项
+  const getAudioMenuItems = (filePath?: string): MenuItem[] => [
+    {
+      id: 'download-audio',
+      label: '下载音频',
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      ),
+      onClick: async () => {
+        if (filePath) {
+          try {
+            await downloadMediaFile(filePath)
+          } catch (err) {
+            console.error('Download audio failed:', err)
+          }
+        }
+      },
+      disabled: !filePath
+    }
+  ]
+
+  // 全局禁用默认右键菜单（但允许视频播放器使用原生菜单）
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // 如果是视频播放器中的 video 元素，允许原生右键菜单
+      if (target.tagName === 'VIDEO' && target.closest('.video-viewer')) {
+        return
+      }
+      e.preventDefault()
+    }
+    document.addEventListener('contextmenu', handleContextMenu)
+    return () => document.removeEventListener('contextmenu', handleContextMenu)
   }, [])
 
-  useEffect(() => {
-    if (isTasksLoaded && tasks.length > 0) {
-      finalizeInitialScroll()
+
+  // 图片拖动开始
+  const handleImageMouseDown = (e: React.MouseEvent) => {
+    // 只响应左键点击
+    if (e.button === 0) {
+      e.preventDefault()
+      setIsDragging(true)
+      setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y })
     }
-  }, [isTasksLoaded])
+  }
 
-  // 保存历史到文件（避免本地存储配额）
-  useEffect(() => {
-    if (!isTasksLoaded) return
-    if (!isDesktop()) return
-    const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error')
-      .map(t => ({
-        id: t.id,
-        type: t.type,
-        prompt: t.prompt,
-        model: t.model,
-        size: t.size,
-        status: t.status,
-        error: t.error,
-        uploadedFilePaths: t.uploadedFilePaths,
-        result: t.result ? {
-          id: t.result.id,
-          type: t.result.type,
-          filePath: t.result.filePath,
-          prompt: t.result.prompt,
-          createdAt: t.result.createdAt
-        } : undefined
-      }))
-    const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
-    const limitedTasks = tasksToSave.slice(-maxHistory)
-    writeJsonToAppData('Henji-AI/history.json', limitedTasks).catch(e => console.error('write history failed', e))
-  }, [tasks, isTasksLoaded])
+  // 图片拖动中
+  const handleImageMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      setImagePosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      })
+    }
+  }
 
-  // 检查是否有保存的API密钥
-  useEffect(() => {
-    const savedApiKey = localStorage.getItem('piaoyun_api_key')
-    if (savedApiKey) {
-      apiService.setApiKey(savedApiKey)
-      // 默认初始化派欧云适配器
-      try {
-        apiService.initializeAdapter({
-          type: 'piaoyun',
-          modelName: 'seedream-4.0'
-        })
-      } catch (err) {
-        console.error('Failed to initialize adapter:', err)
+  // 图片拖动结束
+  const handleImageMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  // 历史记录图片拖拽开始 (使用自定义拖拽)
+  const handleHistoryImageDragStart = (e: React.MouseEvent, imageUrl: string) => {
+    e.preventDefault()
+    const initialX = e.clientX
+    const initialY = e.clientY
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = Math.abs(moveEvent.clientX - initialX)
+      const deltaY = Math.abs(moveEvent.clientY - initialY)
+      // If moved more than 5 pixels, consider it a drag
+      if (deltaX > 5 || deltaY > 5) {
+        isDraggingRef.current = true
+        startDrag(
+          {
+            type: 'image',
+            imageUrl,
+            sourceType: 'history'
+          },
+          imageUrl
+        )
+        // Remove listeners after starting drag
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('mouseup', handleMouseUp)
       }
     }
-  }, [])
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      // Reset dragging flag after a short delay (onClick fires after mouseup)
+      setTimeout(() => {
+        isDraggingRef.current = false
+      }, 100)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Handle image click - prevent if dragging occurred
+  const handleHistoryImageClick = (url: string, imageUrls: string[], filePaths: string[] = []) => {
+    if (isDraggingRef.current) {
+      return // Don't open viewer if we just finished dragging
+    }
+    openImageViewer(url, imageUrls, filePaths)
+  }
 
   const handleGenerate = async (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => {
     if (!input.trim() && (!options || !options.images || options.images.length === 0)) {
@@ -546,7 +715,7 @@ const App: React.FC = () => {
     setIsSettingsOpen(false)
   }
 
-  const openImageViewer = (imageUrl: string, imageList?: string[]) => {
+  const openImageViewer = (imageUrl: string, imageList?: string[], filePaths?: string[]) => {
     if (imageList && imageList.length > 0) {
       setCurrentImageList(imageList)
       setCurrentImageIndex(imageList.indexOf(imageUrl))
@@ -554,23 +723,25 @@ const App: React.FC = () => {
       setCurrentImageList([imageUrl])
       setCurrentImageIndex(0)
     }
+    if (filePaths && filePaths.length > 0) {
+      setCurrentFilePathList(filePaths)
+    } else {
+      setCurrentFilePathList([])
+    }
     setCurrentImage(imageUrl)
     // 打开时重置缩放和位置
     setImageScale(1)
     setImagePosition({ x: 0, y: 0 })
     setIsImageViewerOpen(true)
-    setImageViewerClosing(false)
     setViewerOpacity(0)
     // 禁止后面页面滚动
     document.body.style.overflow = 'hidden'
   }
 
   const closeImageViewer = () => {
-    setImageViewerClosing(true)
     setViewerOpacity(0)
     setTimeout(() => {
       setIsImageViewerOpen(false)
-      setImageViewerClosing(false)
       document.body.style.overflow = ''
     }, 200)
   }
@@ -624,23 +795,6 @@ const App: React.FC = () => {
     setImagePosition({ x: 0, y: 0 })
   }
 
-  const downloadImage = async (imageUrl: string) => {
-    try {
-      const response = await fetch(imageUrl)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `image-${Date.now()}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error('Download failed:', err)
-    }
-  }
-
   const downloadVideo = async (videoUrl: string) => {
     try {
       if (currentVideoPath) {
@@ -668,233 +822,93 @@ const App: React.FC = () => {
     return `${m}:${sec < 10 ? '0' : ''}${sec}`
   }
 
+  // 加载历史（优先文件，其次本地存储）
   useEffect(() => {
-    if (!isVideoViewerOpen) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === ' ') {
-        e.preventDefault()
-        if (videoRef.current) {
-          if (isVideoPlaying) videoRef.current.pause()
-          else videoRef.current.play()
+    const load = async () => {
+      const fileHistory = isDesktop() ? await readJsonFromAppData<any[]>('Henji-AI/history.json') : null
+      const store = fileHistory ?? (() => { try { return JSON.parse(localStorage.getItem('generationTasks') || '[]') } catch { return [] } })()
+      const loaded = (store || []).map((task: any) => {
+        let result = task.result
+        if (result && result.filePath && isDesktop()) {
+          try {
+            if (typeof result.filePath === 'string' && result.filePath.includes('|||')) {
+              const paths = result.filePath.split('|||')
+              const display = paths.map((p: string) => convertFileSrc(p)).join('|||')
+              result = { ...result, url: display }
+            } else {
+              result = { ...result, url: convertFileSrc(result.filePath) }
+            }
+          } catch { }
         }
-      } else if (e.key === 'ArrowLeft') {
-        if (videoRef.current) {
-          const step = e.ctrlKey ? (frameDuration || 1 / 30) : 1
-          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - step)
+        let images = task.images
+        if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length && isDesktop()) {
+          try {
+            images = task.uploadedFilePaths.map((p: string) => convertFileSrc(p))
+          } catch { }
         }
-      } else if (e.key === 'ArrowRight') {
-        if (videoRef.current) {
-          const step = e.ctrlKey ? (frameDuration || 1 / 30) : 1
-          const dur = videoDuration || videoRef.current.duration || Infinity
-          videoRef.current.currentTime = Math.min(dur, videoRef.current.currentTime + step)
+        return {
+          ...task,
+          status: task.status === 'generating' || task.status === 'pending' ? 'error' : task.status,
+          error: task.status === 'generating' || task.status === 'pending' ? '页面刷新后生成中断' : task.error,
+          result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
+          images
         }
-      } else if (e.key === 'ArrowUp') {
-        if (videoRef.current) {
-          const next = Math.min(1, (videoRef.current.muted ? 0 : videoRef.current.volume) + 0.05)
-          setMuted(false)
-          setVolume(next)
-        }
-      } else if (e.key === 'ArrowDown') {
-        if (videoRef.current) {
-          const next = Math.max(0, (videoRef.current.muted ? 0 : videoRef.current.volume) - 0.05)
-          setMuted(false)
-          setVolume(next)
-        }
-      } else if (e.key === 'Escape') {
-        closeVideoViewer()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isVideoViewerOpen, isVideoPlaying, videoDuration])
-
-  useEffect(() => {
-    if (isVideoViewerOpen && autoPlayOnOpen && videoRef.current) {
-      videoRef.current.play().catch(() => { })
-      setAutoPlayOnOpen(false)
-    }
-  }, [isVideoViewerOpen, autoPlayOnOpen])
-
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.volume = volume
-  }, [volume])
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = muted
-  }, [muted])
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = playbackRate
-  }, [playbackRate])
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.loop = loop
-  }, [loop])
-
-  useEffect(() => {
-    if (!isSpeedMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      const d = speedDisplayRef.current
-      const m = speedMenuRef.current
-      const t = e.target as Node
-      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsSpeedMenuOpen(false)
-    }
-    document.addEventListener('click', handler)
-    return () => { document.removeEventListener('click', handler) }
-  }, [isSpeedMenuOpen])
-
-  useEffect(() => {
-    if (!isVolumeMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      const d = volumeDisplayRef.current
-      const m = volumeMenuRef.current
-      const t = e.target as Node
-      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsVolumeMenuOpen(false)
-    }
-    document.addEventListener('click', handler)
-    return () => { document.removeEventListener('click', handler) }
-  }, [isVolumeMenuOpen])
-
-  useEffect(() => {
-    if (!isVideoViewerOpen || !isVideoPlaying) return
-    const v = videoRef.current as any
-    if (!v || typeof v.requestVideoFrameCallback !== 'function') return
-    const handle = (now: number, meta: any) => {
-      const mt = meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : null
-      if (mt != null) {
-        const last = lastFrameMediaTimeRef.current
-        if (last != null) {
-          const delta = mt - last
-          if (delta > 0.005 && delta < 0.2) setFrameDuration(delta)
-        }
-        lastFrameMediaTimeRef.current = mt
-      }
-      v.requestVideoFrameCallback(handle)
-    }
-    v.requestVideoFrameCallback(handle)
-    return () => { lastFrameMediaTimeRef.current = null }
-  }, [isVideoViewerOpen, isVideoPlaying])
-
-  useEffect(() => {
-    if (!isVideoViewerOpen) {
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
-      return
-    }
-    if (!isVideoPlaying) {
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current)
-      return
-    }
-    const tick = () => {
-      const v = videoRef.current
-      if (v) {
-        const dur = v.duration || 0
-        const cur = v.currentTime || 0
-        setCurrentTime(cur)
-        if (progressFillRef.current) {
-          const percent = dur ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0
-          progressFillRef.current.style.width = `${percent}%`
-        }
-      }
-      rafIdRef.current = requestAnimationFrame(tick)
-    }
-    rafIdRef.current = requestAnimationFrame(tick)
-    return () => { if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current) }
-  }, [isVideoViewerOpen, isVideoPlaying])
-
-  useEffect(() => {
-    if (!isVideoViewerOpen && controlsHideTimer.current) {
-      clearTimeout(controlsHideTimer.current)
-      controlsHideTimer.current = null
-      setIsControlsVisible(true)
-    }
-  }, [isVideoViewerOpen])
-
-  const copyImageToClipboard = async (imageUrl: string) => {
-    try {
-      const response = await fetch(imageUrl)
-      const blob = await response.blob()
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [blob.type]: blob
-        })
-      ])
-    } catch (err) {
-      console.error('Copy failed:', err)
-    }
-  }
-
-
-
-  // 图片拖动开始
-  const handleImageMouseDown = (e: React.MouseEvent) => {
-    // 只响应左键点击
-    if (e.button === 0) {
-      e.preventDefault()
-      setIsDragging(true)
-      setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y })
-    }
-  }
-
-  // 图片拖动中
-  const handleImageMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      setImagePosition({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
       })
+      setTasks(loaded)
+      setIsTasksLoaded(true)
     }
-  }
+    load()
+  }, [])
 
-  // 图片拖动结束
-  const handleImageMouseUp = () => {
-    setIsDragging(false)
-  }
+  useEffect(() => {
+    if (isTasksLoaded && tasks.length > 0) {
+      finalizeInitialScroll()
+    }
+  }, [isTasksLoaded])
 
-  // 历史记录图片拖拽开始 (使用自定义拖拽)
-  const handleHistoryImageDragStart = (e: React.MouseEvent, imageUrl: string) => {
-    e.preventDefault()
-    const initialX = e.clientX
-    const initialY = e.clientY
+  // 保存历史到文件（避免本地存储配额）
+  useEffect(() => {
+    if (!isTasksLoaded) return
+    if (!isDesktop()) return
+    const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error')
+      .map(t => ({
+        id: t.id,
+        type: t.type,
+        prompt: t.prompt,
+        model: t.model,
+        size: t.size,
+        status: t.status,
+        error: t.error,
+        uploadedFilePaths: t.uploadedFilePaths,
+        result: t.result ? {
+          id: t.result.id,
+          type: t.result.type,
+          filePath: t.result.filePath,
+          prompt: t.result.prompt,
+          createdAt: t.result.createdAt
+        } : undefined
+      }))
+    const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
+    const limitedTasks = tasksToSave.slice(-maxHistory)
+    writeJsonToAppData('Henji-AI/history.json', limitedTasks).catch(e => console.error('write history failed', e))
+  }, [tasks, isTasksLoaded])
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = Math.abs(moveEvent.clientX - initialX)
-      const deltaY = Math.abs(moveEvent.clientY - initialY)
-      // If moved more than 5 pixels, consider it a drag
-      if (deltaX > 5 || deltaY > 5) {
-        isDraggingRef.current = true
-        startDrag(
-          {
-            type: 'image',
-            imageUrl,
-            sourceType: 'history'
-          },
-          imageUrl
-        )
-        // Remove listeners after starting drag
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
+  // 检查是否有保存的API密钥
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('piaoyun_api_key')
+    if (savedApiKey) {
+      apiService.setApiKey(savedApiKey)
+      // 默认初始化派欧云适配器
+      try {
+        apiService.initializeAdapter({
+          type: 'piaoyun',
+          modelName: 'seedream-4.0'
+        })
+      } catch (err) {
+        console.error('Failed to initialize adapter:', err)
       }
     }
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-      // Reset dragging flag after a short delay (onClick fires after mouseup)
-      setTimeout(() => {
-        isDraggingRef.current = false
-      }, 100)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-  }
-
-  // Handle image click - prevent if dragging occurred
-  const handleHistoryImageClick = (url: string, imageUrls: string[]) => {
-    if (isDraggingRef.current) {
-      return // Don't open viewer if we just finished dragging
-    }
-    openImageViewer(url, imageUrls)
-  }
+  }, [])
 
 
 
@@ -1128,13 +1142,18 @@ const App: React.FC = () => {
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-zinc-400 mb-3">生成中...</p>
-                              <div className="w-full h-2 bg-zinc-700 rounded">
-                                <div
-                                  className="h-2 bg-[#007eff] rounded transition-all duration-[2800ms] ease-out"
-                                  style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
-                                ></div>
-                              </div>
-                              <div className="mt-2 text-sm text-zinc-400">{Math.min(100, Math.max(0, Math.floor(task.progress || 0)))}%</div>
+                              {/* 进度条仅在视频生成时显示 */}
+                              {task.type === 'video' && (
+                                <>
+                                  <div className="w-full h-2 bg-zinc-700 rounded">
+                                    <div
+                                      className="h-2 bg-[#007eff] rounded transition-all duration-[2800ms] ease-out"
+                                      style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
+                                    ></div>
+                                  </div>
+                                  <div className="mt-2 text-sm text-zinc-400">{Math.min(100, Math.max(0, Math.floor(task.progress || 0)))}%</div>
+                                </>
+                              )}
                               {task.timedOut && (
                                 <div className="mt-3 text-sm text-zinc-300">
                                   <span className="mr-2">轮询超时，任务仍在处理中。</span>
@@ -1169,11 +1188,16 @@ const App: React.FC = () => {
                                   // 多张图片
                                   (() => {
                                     const imageUrls = task.result!.url.split('|||')
+                                    const filePaths = task.result!.filePath ? (task.result!.filePath.includes('|||') ? task.result!.filePath.split('|||') : [task.result!.filePath]) : []
                                     return imageUrls.map((url, index) => (
                                       <div
                                         key={index}
                                         className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center flex-shrink-0"
-                                        onClick={() => handleHistoryImageClick(url, imageUrls)}
+                                        onClick={() => handleHistoryImageClick(url, imageUrls, filePaths)}
+                                        onContextMenu={(e) => {
+                                          const filePath = filePaths[index]
+                                          showMenu(e, getImageMenuItems(url, filePath))
+                                        }}
                                       >
                                         <img
                                           src={url}
@@ -1192,7 +1216,8 @@ const App: React.FC = () => {
                                   // 单张图片
                                   <div
                                     className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center flex-shrink-0"
-                                    onClick={() => handleHistoryImageClick(task.result!.url, [task.result!.url])}
+                                    onClick={() => handleHistoryImageClick(task.result!.url, [task.result!.url], task.result!.filePath ? [task.result!.filePath] : [])}
+                                    onContextMenu={(e) => showMenu(e, getImageMenuItems(task.result!.url, task.result!.filePath))}
                                   >
                                     <img
                                       src={task.result.url}
@@ -1208,7 +1233,11 @@ const App: React.FC = () => {
                                 )
                               )}
                               {task.result.type === 'video' && (
-                                <div className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer" onClick={() => openVideoViewer(task.result.url, (task.result as any).filePath)}>
+                                <div
+                                  className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
+                                  onClick={() => openVideoViewer(task.result!.url, (task.result as any).filePath)}
+                                  onContextMenu={(e) => showMenu(e, getVideoThumbnailMenuItems(task.result!.filePath))}
+                                >
                                   <video
                                     src={task.result.url}
                                     className="max-w-full max-h-full object-contain"
@@ -1223,7 +1252,11 @@ const App: React.FC = () => {
                                 </div>
                               )}
                               {task.result.type === 'audio' && (
-                                <AudioPlayer src={task.result.url} filePath={(task.result as any).filePath} />
+                                <AudioPlayer
+                                  src={task.result.url}
+                                  filePath={(task.result as any).filePath}
+                                  onContextMenu={(e) => showMenu(e, getAudioMenuItems((task.result as any).filePath))}
+                                />
                               )}
                             </div>
                           </div>
@@ -1253,11 +1286,13 @@ const App: React.FC = () => {
         </div>
 
         {/* 错误提示 */}
-        {error && (
-          <div className="mx-4 mb-4 p-3 bg-red-900/50 backdrop-blur-lg border border-red-700/50 rounded-xl shadow-lg animate-shake">
-            <p className="text-red-200">{error}</p>
-          </div>
-        )}
+        {
+          error && (
+            <div className="mx-4 mb-4 p-3 bg-red-900/50 backdrop-blur-lg border border-red-700/50 rounded-xl shadow-lg animate-shake">
+              <p className="text-red-200">{error}</p>
+            </div>
+          )
+        }
 
         {/* 输入区域 - 悬浮设计 */}
         <div ref={inputContainerRef} className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
@@ -1270,7 +1305,7 @@ const App: React.FC = () => {
             />
           </div>
         </div>
-      </main>
+      </main >
       {isConfirmClearOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
@@ -1296,202 +1331,219 @@ const App: React.FC = () => {
       )}
 
       {/* 图片查看器模态框 */}
-      {isImageViewerOpen && (
-        <div
-          className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
-          style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease', overscrollBehavior: 'contain' }}
-          onMouseMove={handleImageMouseMove}
-          onMouseUp={handleImageMouseUp}
-          onMouseLeave={handleImageMouseUp}
-        >
-          <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
-            {/* 图片容器 */}
-            <div
-              className="relative"
-              style={{
-                cursor: isDragging ? 'grabbing' : 'grab'
-              }}
-            >
-              {/* 关闭按钮 */}
-              <button
-                onClick={closeImageViewer}
-                className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200 z-10"
-                title="关闭"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <img
-                ref={imageViewerRef}
-                src={currentImage}
-                alt="Full size"
-                className={`object-contain select-none ${imageTransitioning ? 'image-transitioning' : 'image-transition'
-                  }`}
+      {
+        isImageViewerOpen && (
+          <div
+            className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
+            style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease', overscrollBehavior: 'contain' }}
+            onMouseMove={handleImageMouseMove}
+            onMouseUp={handleImageMouseUp}
+            onMouseLeave={handleImageMouseUp}
+          >
+            <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
+              {/* 图片容器 */}
+              <div
+                className="relative"
                 style={{
-                  transform: `scale(${imageScale * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePosition.x / imageScale}px, ${imagePosition.y / imageScale}px)`,
-                  transition: isDragging ? 'none' : 'transform 200ms ease, opacity 200ms ease',
-                  opacity: viewerOpacity,
-                  maxHeight: '90vh',
-                  maxWidth: '90vw'
+                  cursor: isDragging ? 'grabbing' : 'grab'
                 }}
-                onMouseDown={handleImageMouseDown}
-                draggable={false}
-              />
-            </div>
+              >
+                {/* 关闭按钮 */}
+                <button
+                  onClick={closeImageViewer}
+                  className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200 z-10"
+                  title="关闭"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <img
+                  ref={imageViewerRef}
+                  src={currentImage}
+                  alt="Full size"
+                  className={`object-contain select-none image-transition`}
+                  style={{
+                    transform: `scale(${imageScale * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePosition.x / imageScale}px, ${imagePosition.y / imageScale}px)`,
+                    transition: isDragging ? 'none' : 'transform 200ms ease, opacity 200ms ease',
+                    opacity: viewerOpacity,
+                    maxHeight: '90vh',
+                    maxWidth: '90vw'
+                  }}
+                  onMouseDown={handleImageMouseDown}
+                  onContextMenu={(e) => {
+                    const filePath = currentFilePathList[currentImageIndex]
+                    showMenu(e, getImageMenuItems(currentImage, filePath))
+                  }}
+                  draggable={false}
+                />
+              </div>
 
-            {/* 底部信息栏和切换按钮 */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-              {/* 切换按钮组 */}
-              {currentImageList.length > 1 && (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => navigateImage('prev')}
-                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => navigateImage('next')}
-                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-
-              {/* 信息按钮组 */}
-              <div className="flex items-center gap-4">
-                {/* 导航指示器和计数器 */}
+              {/* 底部信息栏和切换按钮 */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+                {/* 切换按钮组 */}
                 {currentImageList.length > 1 && (
-                  <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                    {currentImageIndex + 1} / {currentImageList.length}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => navigateImage('prev')}
+                      className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => navigateImage('next')}
+                      className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                   </div>
                 )}
 
-                {/* 缩放比例显示 */}
-                <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                  {Math.round(imageScale * 100)}%
-                </div>
+                {/* 信息按钮组 */}
+                <div className="flex items-center gap-4">
+                  {/* 导航指示器和计数器 */}
+                  {currentImageList.length > 1 && (
+                    <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                      {currentImageIndex + 1} / {currentImageList.length}
+                    </div>
+                  )}
 
-                {/* 重置按钮 - 始终显示 */}
-                <button
-                  onClick={resetImageView}
-                  className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
-                >
-                  重置视图
-                </button>
+                  {/* 缩放比例显示 */}
+                  <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                    {Math.round(imageScale * 100)}%
+                  </div>
+
+                  {/* 重置按钮 - 始终显示 */}
+                  <button
+                    onClick={resetImageView}
+                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                  >
+                    重置视图
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {isVideoViewerOpen && (
-        <div
-          className={"fixed inset-0 bg黑/70 backdrop-blur-xl z-50 flex items-center justify-center p-4".replace('黑', 'black')}
-          style={{ opacity: videoViewerOpacity, transition: 'opacity 500ms ease', overscrollBehavior: 'contain' }}
-        >
+      {
+        isVideoViewerOpen && (
           <div
-            className={"relative max-w-6xl max-h-full flex items-center justify-center"}
-            onMouseEnter={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
-            onMouseMove={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
-            onMouseLeave={() => { if (controlsHideTimer.current) { clearTimeout(controlsHideTimer.current); controlsHideTimer.current = null } if (!isSpeedMenuOpen) setIsControlsVisible(false) }}
-            style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}
+            className={"fixed inset-0 bg黑/70 backdrop-blur-xl z-50 flex items-center justify-center p-4".replace('黑', 'black')}
+            style={{ opacity: videoViewerOpacity, transition: 'opacity 500ms ease', overscrollBehavior: 'contain' }}
           >
-            <div className="relative">
-              <video
-                ref={videoRef}
-                src={currentVideoUrl}
-                className="object-contain"
-                style={{ maxHeight: '90vh', maxWidth: '90vw', opacity: videoViewerOpacity, transition: 'opacity 500ms ease' }}
-                onLoadedMetadata={() => { if (videoRef.current) { setVideoDuration(videoRef.current.duration || 0); if (autoPlayOnOpen) { videoRef.current.play().catch(() => { }); setAutoPlayOnOpen(false) } } }}
-                onTimeUpdate={() => { if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0) }}
-                onPlaying={() => { setIsBuffering(false); setIsVideoPlaying(true) }}
-                onPause={() => { setIsVideoPlaying(false) }}
-                onWaiting={() => { setIsBuffering(true) }}
-                onStalled={() => { setIsBuffering(true) }}
-                onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
-                controls={false}
-              />
-              <button
-                onClick={closeVideoViewer}
-                className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-full transition-all duration-200 z-10"
-                style={{ pointerEvents: 'auto' }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div ref={controlsContainerRef} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl" style={{ opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0, transition: 'opacity 500ms ease', pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none' }}>
-              <div className="bg-[#131313]/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
-                <div ref={progressBarRef} className="progress-container" onClick={(e) => { const el = progressBarRef.current; if (!el || !videoDuration) return; const rect = el.getBoundingClientRect(); const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)); const t = percent * videoDuration; setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%` }}>
-                  <div ref={progressFillRef} className="progress-bar" style={{ width: `${videoDuration ? Math.min(100, Math.max(0, (currentTime / videoDuration) * 100)) : 0}%` }} />
-                </div>
-                <div className="controls-main">
-                  <button
-                    onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
-                    className="btn btn-play"
-                  >
-                    {isVideoPlaying ? (
-                      <svg viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    )}
-                  </button>
-                  <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
-                  <div className="controls-right">
-                    <div className="speed-control">
-                      <div ref={volumeDisplayRef} className="speed-display" onClick={() => setIsVolumeMenuOpen(o => !o)} title="音量">
-                        <svg viewBox="0 0 1024 1024">
-                          <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z" fill="currentColor"></path>
-                          <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z" fill="currentColor"></path>
-                          <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z" fill="currentColor"></path>
-                        </svg>
-                      </div>
-                      <div ref={volumeMenuRef} className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`} onWheel={(e) => { e.preventDefault(); const d = e.deltaY > 0 ? -0.05 : 0.05; const next = Math.min(1, Math.max(0, (muted ? 0 : volume) + d)); setMuted(false); setVolume(next) }}>
-                        <div className="volume-vertical">
-                          <div className="volume-percent">{Math.round((muted ? 0 : volume) * 100)}</div>
-                          <div className="volume-track" onClick={(e) => { const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); const percent = 1 - Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)); const v = percent; setMuted(false); setVolume(v) }}>
-                            <div className="volume-fill" style={{ height: `calc(${muted ? 0 : Math.round(volume * 100)}% + 7px)` }}></div>
-                            <div className="volume-thumb" style={{ bottom: `${muted ? 0 : Math.round(volume * 100)}%` }}></div>
+            <div
+              className={"relative max-w-6xl max-h-full flex items-center justify-center"}
+              onMouseEnter={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
+              onMouseMove={(e) => { setIsControlsVisible(true); if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current); const inside = controlsContainerRef.current?.contains(e.target as Node); if (isVideoPlaying && !isSpeedMenuOpen && !isVolumeMenuOpen && !inside) controlsHideTimer.current = window.setTimeout(() => { if (!isSpeedMenuOpen && !isVolumeMenuOpen) setIsControlsVisible(false) }, 1500) }}
+              onMouseLeave={() => { if (controlsHideTimer.current) { clearTimeout(controlsHideTimer.current); controlsHideTimer.current = null } if (!isSpeedMenuOpen) setIsControlsVisible(false) }}
+              style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}
+            >
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  src={currentVideoUrl}
+                  className="object-contain"
+                  style={{ maxHeight: '90vh', maxWidth: '90vw', opacity: videoViewerOpacity, transition: 'opacity 500ms ease' }}
+                  onLoadedMetadata={() => { if (videoRef.current) { setVideoDuration(videoRef.current.duration || 0); if (autoPlayOnOpen) { videoRef.current.play().catch(() => { }); setAutoPlayOnOpen(false) } } }}
+                  onTimeUpdate={() => { if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0) }}
+                  onPlaying={() => { setIsBuffering(false); setIsVideoPlaying(true) }}
+                  onPause={() => { setIsVideoPlaying(false) }}
+                  onWaiting={() => { setIsBuffering(true) }}
+                  onStalled={() => { setIsBuffering(true) }}
+                  onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
+                  controls={false}
+                />
+                <button
+                  onClick={closeVideoViewer}
+                  className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-full transition-all duration-200 z-10"
+                  style={{ pointerEvents: 'auto' }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div ref={controlsContainerRef} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl" style={{ opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0, transition: 'opacity 500ms ease', pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none' }}>
+                <div className="bg-[#131313]/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
+                  <div ref={progressBarRef} className="progress-container" onClick={(e) => { const el = progressBarRef.current; if (!el || !videoDuration) return; const rect = el.getBoundingClientRect(); const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)); const t = percent * videoDuration; setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%` }}>
+                    <div ref={progressFillRef} className="progress-bar" style={{ width: `${videoDuration ? Math.min(100, Math.max(0, (currentTime / videoDuration) * 100)) : 0}%` }} />
+                  </div>
+                  <div className="controls-main">
+                    <button
+                      onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
+                      className="btn btn-play"
+                    >
+                      {isVideoPlaying ? (
+                        <svg viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                      )}
+                    </button>
+                    <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
+                    <div className="controls-right">
+                      <div className="speed-control">
+                        <div ref={volumeDisplayRef} className="speed-display" onClick={() => setIsVolumeMenuOpen(o => !o)} title="音量">
+                          <svg viewBox="0 0 1024 1024">
+                            <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z" fill="currentColor"></path>
+                            <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z" fill="currentColor"></path>
+                            <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z" fill="currentColor"></path>
+                          </svg>
+                        </div>
+                        <div ref={volumeMenuRef} className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`} onWheel={(e) => { e.preventDefault(); const d = e.deltaY > 0 ? -0.05 : 0.05; const next = Math.min(1, Math.max(0, (muted ? 0 : volume) + d)); setMuted(false); setVolume(next) }}>
+                          <div className="volume-vertical">
+                            <div className="volume-percent">{Math.round((muted ? 0 : volume) * 100)}</div>
+                            <div className="volume-track" onClick={(e) => { const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); const percent = 1 - Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)); const v = percent; setMuted(false); setVolume(v) }}>
+                              <div className="volume-fill" style={{ height: `calc(${muted ? 0 : Math.round(volume * 100)}% + 7px)` }}></div>
+                              <div className="volume-thumb" style={{ bottom: `${muted ? 0 : Math.round(volume * 100)}%` }}></div>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="speed-control">
-                      <div ref={speedDisplayRef} className="speed-display" onClick={() => setIsSpeedMenuOpen(o => !o)}>{playbackRate}x</div>
-                      <div ref={speedMenuRef} className={`speed-menu ${isSpeedMenuOpen ? 'active' : ''}`}>
-                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
-                          <div key={s} className={`speed-option ${playbackRate === s ? 'active' : ''}`} onClick={() => { setPlaybackRate(s); setIsSpeedMenuOpen(false) }}>{s}x</div>
-                        ))}
+                      <div className="speed-control">
+                        <div ref={speedDisplayRef} className="speed-display" onClick={() => setIsSpeedMenuOpen(o => !o)}>{playbackRate}x</div>
+                        <div ref={speedMenuRef} className={`speed-menu ${isSpeedMenuOpen ? 'active' : ''}`}>
+                          {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
+                            <div key={s} className={`speed-option ${playbackRate === s ? 'active' : ''}`} onClick={() => { setPlaybackRate(s); setIsSpeedMenuOpen(false) }}>{s}x</div>
+                          ))}
+                        </div>
                       </div>
+                      <button className={`btn btn-small ${loop ? 'loop-active' : ''}`} onClick={() => setLoop(l => !l)}>
+                        <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" /></svg>
+                      </button>
+                      <button className="btn btn-small" onClick={() => downloadVideo(currentVideoUrl)}>
+                        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+                      </button>
                     </div>
-                    <button className={`btn btn-small ${loop ? 'loop-active' : ''}`} onClick={() => setLoop(l => !l)}>
-                      <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" /></svg>
-                    </button>
-                    <button className="btn btn-small" onClick={() => downloadVideo(currentVideoUrl)}>
-                      <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-                    </button>
                   </div>
                 </div>
+                {isBuffering && (<div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-300">缓冲中...</div>)}
               </div>
-              {isBuffering && (<div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-300">缓冲中...</div>)}
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
+
+      {/* 右键菜单 */}
+      <ContextMenu
+        items={menuItems}
+        position={menuPosition}
+        visible={menuVisible}
+        onClose={hideMenu}
+      />
 
       {/* 设置模态框 */}
-      {isSettingsOpen && (
-        <SettingsModal onClose={closeSettings} />
-      )}
-    </div>
+      {
+        isSettingsOpen && (
+          <SettingsModal onClose={closeSettings} />
+        )
+      }
+    </div >
   )
 }
 
