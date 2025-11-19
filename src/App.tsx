@@ -43,10 +43,8 @@ const App: React.FC = () => {
   const [currentImageList, setCurrentImageList] = useState<string[]>([])
   const [currentFilePathList, setCurrentFilePathList] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [imageScale, setImageScale] = useState(1)
-  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const dragStartRef = useRef({ x: 0, y: 0 })
 
   const [isTasksLoaded, setIsTasksLoaded] = useState(false)
   const [isUserAtBottom, setIsUserAtBottom] = useState(true)
@@ -57,6 +55,9 @@ const App: React.FC = () => {
   const listContainerRef = React.useRef<HTMLDivElement>(null)
   const contentRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
+  const imageViewerContainerRef = React.useRef<HTMLDivElement>(null)
+  const imageScaleRef = React.useRef(1)
+  const imagePositionRef = React.useRef({ x: 0, y: 0 })
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [videoViewerOpacity, setVideoViewerOpacity] = useState(0)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
@@ -77,6 +78,11 @@ const App: React.FC = () => {
   const progressBarRef = React.useRef<HTMLDivElement>(null)
   const progressFillRef = React.useRef<HTMLDivElement>(null)
   const rafIdRef = React.useRef<number | null>(null)
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false)
+  const targetScaleRef = React.useRef(1)
+  const targetPositionRef = React.useRef({ x: 0, y: 0 })
+  const animationFrameRef = React.useRef<number | null>(null)
+  const scaleDisplayRef = React.useRef<HTMLDivElement>(null)
 
   const speedDisplayRef = React.useRef<HTMLDivElement>(null)
   const speedMenuRef = React.useRef<HTMLDivElement>(null)
@@ -153,6 +159,133 @@ const App: React.FC = () => {
     }
     scrollToBottom()
   }
+
+  // 图片查看器打开时的动画
+  useEffect(() => {
+    if (isImageViewerOpen) {
+      requestAnimationFrame(() => {
+        setViewerOpacity(1)
+      })
+    }
+  }, [isImageViewerOpen])
+
+  // 视频查看器打开时的动画
+  useEffect(() => {
+    if (isVideoViewerOpen) {
+      requestAnimationFrame(() => {
+        setVideoViewerOpacity(1)
+      })
+    }
+  }, [isVideoViewerOpen])
+
+  const updateImageTransform = () => {
+    if (!imageViewerRef.current) return
+    const scale = imageScaleRef.current
+    const pos = imagePositionRef.current
+    imageViewerRef.current.style.transform = `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`
+    if (scaleDisplayRef.current) {
+      scaleDisplayRef.current.innerText = `${Math.round(scale * 100)}%`
+    }
+  }
+
+  // 图片查看器滚轮缩放（使用原生事件避免 passive 警告）
+  useEffect(() => {
+    const container = imageViewerContainerRef.current
+    if (!container || !isImageViewerOpen) return
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+
+      // 如果没有正在进行的动画，初始化目标状态为当前状态
+      if (!animationFrameRef.current) {
+        targetScaleRef.current = imageScaleRef.current
+        targetPositionRef.current = imagePositionRef.current
+      }
+
+      const currentScale = targetScaleRef.current
+      const currentPos = targetPositionRef.current
+
+      // Windows 照片风格：滚轮向上放大，向下缩小
+      // 使用乘法因子实现平滑缩放
+      const zoom = e.deltaY > 0 ? (1 / 1.1) : 1.1
+      let newScale = currentScale * zoom
+
+      // 限制缩放范围
+      newScale = Math.max(0.1, Math.min(10, newScale))
+
+      // 计算鼠标相对于容器中心的位置
+      const rect = container.getBoundingClientRect()
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      const mouseX = e.clientX - rect.left
+      const mouseY = e.clientY - rect.top
+
+      const mouseFromCenter = {
+        x: mouseX - centerX,
+        y: mouseY - centerY
+      }
+
+      // 计算新的偏移量，保持鼠标指向的图片点不动
+      const k = newScale / currentScale
+
+      const newPos = {
+        x: mouseFromCenter.x * (1 - k) + currentPos.x * k,
+        y: mouseFromCenter.y * (1 - k) + currentPos.y * k
+      }
+
+      // 更新目标状态
+      targetScaleRef.current = newScale
+      targetPositionRef.current = newPos
+
+      // 启动平滑动画循环
+      if (!animationFrameRef.current) {
+        const loop = () => {
+          const targetScale = targetScaleRef.current
+          const targetPos = targetPositionRef.current
+          const currentScale = imageScaleRef.current
+          const currentPos = imagePositionRef.current
+
+          // 线性插值 (Lerp) 实现平滑效果
+          const factor = 0.3
+
+          const nextScale = currentScale + (targetScale - currentScale) * factor
+          const nextPos = {
+            x: currentPos.x + (targetPos.x - currentPos.x) * factor,
+            y: currentPos.y + (targetPos.y - currentPos.y) * factor
+          }
+
+          // 更新 Refs
+          imageScaleRef.current = nextScale
+          imagePositionRef.current = nextPos
+
+          // 直接更新 DOM
+          updateImageTransform()
+
+          // 检查是否足够接近目标
+          if (Math.abs(nextScale - targetScale) < 0.001 &&
+            Math.abs(nextPos.x - targetPos.x) < 0.1 &&
+            Math.abs(nextPos.y - targetPos.y) < 0.1) {
+            imageScaleRef.current = targetScale
+            imagePositionRef.current = targetPos
+            updateImageTransform()
+            animationFrameRef.current = null
+          } else {
+            animationFrameRef.current = requestAnimationFrame(loop)
+          }
+        }
+        animationFrameRef.current = requestAnimationFrame(loop)
+      }
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      container.removeEventListener('wheel', handleWheel)
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+    }
+  }, [isImageViewerOpen])
 
   // 键盘导航
   useEffect(() => {
@@ -293,6 +426,18 @@ const App: React.FC = () => {
     }
   }, [isVideoViewerOpen])
 
+  // 处理进度条拖动时的全局鼠标释放
+  useEffect(() => {
+    if (!isDraggingProgress) return
+    const handleGlobalMouseUp = () => {
+      setIsDraggingProgress(false)
+    }
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+    }
+  }, [isDraggingProgress])
+
   const copyImageToClipboard = async (imageUrl: string) => {
     try {
       const response = await fetch(imageUrl)
@@ -423,17 +568,23 @@ const App: React.FC = () => {
     if (e.button === 0) {
       e.preventDefault()
       setIsDragging(true)
-      setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y })
+      dragStartRef.current = {
+        x: e.clientX - imagePositionRef.current.x,
+        y: e.clientY - imagePositionRef.current.y
+      }
     }
   }
 
   // 图片拖动中
   const handleImageMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
-      setImagePosition({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      })
+      const newPos = {
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y
+      }
+      imagePositionRef.current = newPos
+      targetPositionRef.current = newPos // 同步目标位置，防止冲突
+      updateImageTransform()
     }
   }
 
@@ -730,8 +881,10 @@ const App: React.FC = () => {
     }
     setCurrentImage(imageUrl)
     // 打开时重置缩放和位置
-    setImageScale(1)
-    setImagePosition({ x: 0, y: 0 })
+    imageScaleRef.current = 1
+    imagePositionRef.current = { x: 0, y: 0 }
+    targetScaleRef.current = 1
+    targetPositionRef.current = { x: 0, y: 0 }
     setIsImageViewerOpen(true)
     setViewerOpacity(0)
     // 禁止后面页面滚动
@@ -791,8 +944,11 @@ const App: React.FC = () => {
 
   // 重置图片视图到适应窗口大小
   const resetImageView = () => {
-    setImageScale(1)
-    setImagePosition({ x: 0, y: 0 })
+    imageScaleRef.current = 1
+    imagePositionRef.current = { x: 0, y: 0 }
+    targetScaleRef.current = 1
+    targetPositionRef.current = { x: 0, y: 0 }
+    updateImageTransform()
   }
 
   const downloadVideo = async (videoUrl: string) => {
@@ -1334,6 +1490,7 @@ const App: React.FC = () => {
       {
         isImageViewerOpen && (
           <div
+            ref={imageViewerContainerRef}
             className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
             style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease', overscrollBehavior: 'contain' }}
             onMouseMove={handleImageMouseMove}
@@ -1364,8 +1521,8 @@ const App: React.FC = () => {
                   alt="Full size"
                   className={`object-contain select-none image-transition`}
                   style={{
-                    transform: `scale(${imageScale * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePosition.x / imageScale}px, ${imagePosition.y / imageScale}px)`,
-                    transition: isDragging ? 'none' : 'transform 200ms ease, opacity 200ms ease',
+                    transform: viewerOpacity < 1 ? `scale(${0.97 + 0.03 * viewerOpacity})` : undefined,
+                    transition: 'opacity 200ms ease',
                     opacity: viewerOpacity,
                     maxHeight: '90vh',
                     maxWidth: '90vw'
@@ -1413,8 +1570,8 @@ const App: React.FC = () => {
                   )}
 
                   {/* 缩放比例显示 */}
-                  <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                    {Math.round(imageScale * 100)}%
+                  <div ref={scaleDisplayRef} className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                    100%
                   </div>
 
                   {/* 重置按钮 - 始终显示 */}
@@ -1471,8 +1628,36 @@ const App: React.FC = () => {
               </div>
               <div ref={controlsContainerRef} className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl" style={{ opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0, transition: 'opacity 500ms ease', pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none' }}>
                 <div className="bg-[#131313]/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
-                  <div ref={progressBarRef} className="progress-container" onClick={(e) => { const el = progressBarRef.current; if (!el || !videoDuration) return; const rect = el.getBoundingClientRect(); const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)); const t = percent * videoDuration; setCurrentTime(t); if (videoRef.current) videoRef.current.currentTime = t; if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%` }}>
-                    <div ref={progressFillRef} className="progress-bar" style={{ width: `${videoDuration ? Math.min(100, Math.max(0, (currentTime / videoDuration) * 100)) : 0}%` }} />
+                  <div
+                    ref={progressBarRef}
+                    className="progress-container"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setIsDraggingProgress(true)
+                      const el = progressBarRef.current
+                      if (!el || !videoDuration) return
+                      const rect = el.getBoundingClientRect()
+                      const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+                      const t = percent * videoDuration
+                      setCurrentTime(t)
+                      if (videoRef.current) videoRef.current.currentTime = t
+                      if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%`
+                    }}
+                    onMouseMove={(e) => {
+                      if (!isDraggingProgress) return
+                      const el = progressBarRef.current
+                      if (!el || !videoDuration) return
+                      const rect = el.getBoundingClientRect()
+                      const percent = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+                      const t = percent * videoDuration
+                      setCurrentTime(t)
+                      if (videoRef.current) videoRef.current.currentTime = t
+                      if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%`
+                    }}
+                    onMouseUp={() => setIsDraggingProgress(false)}
+                    onMouseLeave={() => setIsDraggingProgress(false)}
+                  >
+                    <div ref={progressFillRef} className="progress-bar" />
                   </div>
                   <div className="controls-main">
                     <button
