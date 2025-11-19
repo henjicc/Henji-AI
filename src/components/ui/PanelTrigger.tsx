@@ -13,10 +13,11 @@ type PanelTriggerProps = {
   panelHeight?: number
   closeOnPanelClick?: boolean | ((target: Node) => boolean)
   renderPanel: () => React.ReactNode
+  stableHeight?: boolean
 }
 
 export default function PanelTrigger(props: PanelTriggerProps) {
-  const { label, display, disabled, className, buttonClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight, closeOnPanelClick = true, renderPanel } = props
+  const { label, display, disabled, className, buttonClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight, closeOnPanelClick = true, renderPanel, stableHeight } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)
@@ -24,6 +25,9 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
   const anchorRectRef = useRef<DOMRect | null>(null)
+  const maxHeightRef = useRef<number>(0)
+
+
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -122,28 +126,35 @@ export default function PanelTrigger(props: PanelTriggerProps) {
         const maxHeight = viewportH - top - margin
         setPos({ top, left, width: w, maxHeight })
       }
+
+      if (panelRef.current && stableHeight) {
+        const h = panelRef.current.offsetHeight
+        if (h > maxHeightRef.current) {
+          maxHeightRef.current = h
+        }
+      }
+
       setReady(true)
     }
 
     updatePos()
-  }, [open, alignment, panelWidth])
+  }, [open, alignment, panelWidth, stableHeight])
 
   useEffect(() => {
     if (!open || !panelRef.current) return
     const obs = new ResizeObserver(() => {
-      // No need to recalculate position on resize if we use 'bottom' for aboveCenter, 
-      // as it stays pinned to the trigger. 
-      // But we might need to update if the trigger moves (handled by scroll/resize listeners).
-      // However, if the panel content changes, height changes. 
-      // With 'bottom' positioning, it grows upwards automatically!
-      // So we actually don't need to do anything here for 'aboveCenter' position-wise.
-      // But for 'bottomLeft', 'top' is fixed, so it grows downwards.
-      // So ResizeObserver is less critical for positioning now, but good for width updates if we supported that.
-      // We'll keep it simple and rely on the layout effect and scroll listeners.
+      if (panelRef.current && stableHeight) {
+        const h = panelRef.current.offsetHeight
+        if (h > maxHeightRef.current) {
+          maxHeightRef.current = h
+          // Force re-render to apply new minHeight
+          setPos(prev => prev ? { ...prev } : prev)
+        }
+      }
     })
     obs.observe(panelRef.current)
     return () => obs.disconnect()
-  }, [open, alignment, panelWidth])
+  }, [open, alignment, panelWidth, stableHeight])
 
   useEffect(() => {
     if (!open) return
@@ -168,9 +179,17 @@ export default function PanelTrigger(props: PanelTriggerProps) {
         const maxHeight = viewportH - top - margin
         setPos({ top, left, width: w, maxHeight })
       }
+
+      if (panelRef.current && stableHeight) {
+        const h = panelRef.current.offsetHeight
+        if (h > maxHeightRef.current) {
+          maxHeightRef.current = h
+        }
+      }
+
       setReady(true)
     })
-  }, [open, alignment, panelWidth])
+  }, [open, alignment, panelWidth, stableHeight])
 
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
@@ -229,6 +248,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
             left: pos.left,
             width: pos.width,
             maxHeight: pos.maxHeight,
+            minHeight: stableHeight && maxHeightRef.current ? Math.min(maxHeightRef.current, pos.maxHeight) : undefined,
             zIndex,
             opacity: ready ? 1 : 0,
             visibility: ready ? 'visible' : 'hidden'

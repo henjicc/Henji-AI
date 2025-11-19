@@ -39,8 +39,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [maxImages, setMaxImages] = useState<number>(15)
   const [isViduStyleDropdownOpen, setIsViduStyleDropdownOpen] = useState(false)
   const [viduStyleDropdownClosing, setViduStyleDropdownClosing] = useState(false)
-  
-  
+
+
   // Vidu Q1 参数
   const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
   const [viduAspectRatio, setViduAspectRatio] = useState('16:9')
@@ -66,7 +66,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
   const [seedanceDuration, setSeedanceDuration] = useState(5)
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
-  
+
   const [seedanceVariant, setSeedanceVariant] = useState<'lite' | 'pro'>('lite')
   const [isKlingDurationDropdownOpen, setIsKlingDurationDropdownOpen] = useState(false)
   const [klingDurationDropdownClosing, setKlingDurationDropdownClosing] = useState(false)
@@ -90,14 +90,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [seedanceResolutionDropdownClosing, setSeedanceResolutionDropdownClosing] = useState(false)
   const [isSeedanceAspectDropdownOpen, setIsSeedanceAspectDropdownOpen] = useState(false)
   const [seedanceAspectDropdownClosing, setSeedanceAspectDropdownClosing] = useState(false)
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
   const resolutionRef = useRef<HTMLDivElement>(null)
-  
+
   const viduStyleRef = useRef<HTMLDivElement>(null)
-  
+
   const klingDurationRef = useRef<HTMLDivElement>(null)
   const klingAspectRef = useRef<HTMLDivElement>(null)
   const hailuoDurationRef = useRef<HTMLDivElement>(null)
@@ -247,7 +247,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const getActualResolution = (ratio: string): string => {
     const base = baseResolutions[ratio]
     if (!base) return base
-    
+
     if (resolutionQuality === '4K') {
       const [w, h] = base.split('x').map(Number)
       return `${w * 2}x${h * 2}`
@@ -260,7 +260,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     if (selectedResolution === 'smart' || isManualInput) {
       return // 智能模式或手动输入时不自动更新
     }
-    
+
     const resolution = getActualResolution(selectedResolution)
     if (resolution && resolution.includes('x')) {
       const [w, h] = resolution.split('x')
@@ -292,7 +292,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     const first = uploadedImages[0]
     if (!first) return
     if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
-      const allowed = ['21:9','16:9','4:3','1:1','3:4','9:16','9:21']
+      const allowed = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21']
       const img = new Image()
       img.onload = () => {
         const w = img.width || 1
@@ -341,25 +341,25 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         const originalWidth = img.width
         const originalHeight = img.height
         const aspectRatio = originalWidth / originalHeight
-        
+
         // 检查宽高比范围 [1/16, 16]
-        if (aspectRatio < 1/16 || aspectRatio > 16) {
+        if (aspectRatio < 1 / 16 || aspectRatio > 16) {
           // 超出范围,使用默认 1:1
           resolve(resolutionQuality === '2K' ? '2048x2048' : '4096x4096')
           return
         }
-        
+
         const maxPixels = resolutionQuality === '2K' ? 4194304 : 16777216 // 2K: 2048*2048, 4K: 4096*4096
-        
+
         // 优化算法：在保持原图比例的前提下，让分辨率尽可能接近目标像素数
         // 计算能达到目标像素数的理想尺寸
         const targetHeight = Math.sqrt(maxPixels / aspectRatio)
         const targetWidth = targetHeight * aspectRatio
-        
+
         // 取整到合理的值（8的倍数，便于编码）
         let width = Math.floor(targetWidth / 8) * 8
         let height = Math.floor(targetHeight / 8) * 8
-        
+
         // 2K模式：允许略微超过目标像素（最多105%），以更接近理想尺寸
         // 4K模式：严格不超过目标像素
         if (resolutionQuality === '2K') {
@@ -369,7 +369,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             // 尝试增加宽度或高度，看是否能更接近目标
             const withExtraWidth = (width + 8) * height
             const withExtraHeight = width * (height + 8)
-            
+
             // 选择更接近目标且不超过105%的方案
             const maxAllowed = maxPixels * 1.05
             if (withExtraWidth <= maxAllowed && Math.abs(withExtraWidth - maxPixels) < Math.abs(currentPixels - maxPixels)) {
@@ -387,11 +387,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             height = Math.floor(height * scale / 8) * 8
           }
         }
-        
+
         // 确保最小尺寸（至少512像素）
         if (width < 512) width = 512
         if (height < 512) height = 512
-        
+
         // 最终验证：4K模式严格检查，2K模式允许105%
         const finalPixels = width * height
         const maxAllowed = resolutionQuality === '2K' ? maxPixels * 1.05 : maxPixels
@@ -400,7 +400,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           width = Math.floor(width * scale / 8) * 8
           height = Math.floor(height * scale / 8) * 8
         }
-        
+
         console.log('[MediaGenerator] 智能分辨率计算:', {
           原图尺寸: `${originalWidth}x${originalHeight}`,
           宽高比: aspectRatio.toFixed(3),
@@ -411,7 +411,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           利用率: `${((width * height / maxPixels) * 100).toFixed(1)}%`,
           允许超限: resolutionQuality === '2K' ? '是(105%)' : '否(严格)'
         })
-        
+
         resolve(`${width}x${height}`)
       }
       img.src = imageDataUrl
@@ -445,7 +445,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     if (selectedResolution === 'smart' || isManualInput) {
       return // 智能模式或手动输入时不自动更新
     }
-    
+
     const resolution = getActualResolution(selectedResolution)
     if (resolution && resolution.includes('x')) {
       const [w, h] = resolution.split('x')
@@ -619,30 +619,30 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
 
-  
+
 
   const handleGenerate = async () => {
     if ((!input.trim() && uploadedImages.length === 0) || isLoading) return
-    
+
     // 构建生成选项
     const options: any = {}
-    
+
     // 如果是图片模型，添加图片和分辨率选项
-  if (currentModel?.type === 'image') {
-    if (uploadedImages.length > 0) {
-      options.images = uploadedImages
-      const paths: string[] = [...uploadedFilePaths]
-      for (let i = 0; i < uploadedImages.length; i++) {
-        if (!paths[i]) {
-          const blob = await dataUrlToBlob(uploadedImages[i])
-          const saved = await saveUploadImage(blob)
-          paths[i] = saved.fullPath
+    if (currentModel?.type === 'image') {
+      if (uploadedImages.length > 0) {
+        options.images = uploadedImages
+        const paths: string[] = [...uploadedFilePaths]
+        for (let i = 0; i < uploadedImages.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(uploadedImages[i])
+            const saved = await saveUploadImage(blob)
+            paths[i] = saved.fullPath
+          }
         }
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
       }
-      setUploadedFilePaths(paths)
-      options.uploadedFilePaths = paths
-    }
-      
+
       // 处理分辨率设置
       if (selectedResolution === 'smart') {
         // 智能模式:根据第一张图片计算
@@ -660,7 +660,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         // 手动输入模式:使用手动输入的值
         options.size = `${customWidth}x${customHeight}`
       }
-      
+
       // 添加即梦图片生成4.0的参数
       if (selectedModel === 'seedream-4.0') {
         options.sequential_image_generation = sequentialImageGeneration
@@ -671,13 +671,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         options.watermark = false
       }
     }
-    
+
     if (currentModel?.type === 'video' && selectedModel === 'vidu-q1') {
       options.mode = viduMode
       options.duration = viduDuration
       options.movementAmplitude = viduMovementAmplitude
       options.bgm = viduBgm
-      
+
       // 根据模式添加不同的参数
       if (viduMode === 'text-image-to-video') {
         // 文/图生视频：最多1张图片
@@ -740,7 +740,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         setUploadedFilePaths(paths)
         options.aspectRatio = viduAspectRatio
       }
-      
+
       console.log('[MediaGenerator] Vidu Q1 生成参数:', {
         mode: viduMode,
         imageCount: uploadedImages.length,
@@ -764,7 +764,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           setUploadedFilePaths([saved.fullPath])
         }
       }
-      
+
     } else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-2.3') {
       options.duration = videoDuration || 6
       options.resolution = videoResolution || '768P'
@@ -782,7 +782,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         }
       }
       if (uploadedImages.length > 0) {
-        ;(options as any).hailuoFast = hailuoFastMode
+        ; (options as any).hailuoFast = hailuoFastMode
       }
     } else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-02') {
       options.duration = videoDuration || 6
@@ -848,7 +848,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       options.aspectRatio = seedanceAspectRatio
       options.duration = videoDuration
       options.cameraFixed = seedanceCameraFixed
-      ;(options as any).seedanceVariant = seedanceVariant
+        ; (options as any).seedanceVariant = seedanceVariant
       if (uploadedImages.length > 0) {
         const first = uploadedImages[0]
         options.images = [first]
@@ -872,10 +872,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
             paths.push(saved2.fullPath)
           }
+        }
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
       }
-      options.uploadedFilePaths = paths
-      setUploadedFilePaths(paths)
-    }
     } else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
       options.resolution = seedanceResolution
       options.aspectRatio = seedanceAspectRatio
@@ -916,9 +916,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
             paths.push(saved2.fullPath)
           }
-      }
-      options.uploadedFilePaths = paths
-      setUploadedFilePaths(paths)
+        }
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
       }
     } else if (currentModel?.type === 'audio') {
       options.speed = audioSpeed
@@ -936,7 +936,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       options.text_normalization = textNormalization
       options.language_boost = languageBoost
     }
-    
+
     onGenerate(input, selectedModel, currentModel?.type || 'image', options)
   }
 
@@ -958,7 +958,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     if (files.length > 0) {
       // 计算最大图片数
       let maxImageCount = 6 // 默认图片模型最多6张
-        
+
       if (selectedModel === 'vidu-q1') {
         if (viduMode === 'text-image-to-video') {
           maxImageCount = 1
@@ -978,7 +978,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       } else if (selectedModel === 'seedance-v1-pro') {
         maxImageCount = 2
       }
-        
+
       for (const file of files) {
         if (file) {
           const saved = await saveUploadImage(file, 'memory')
@@ -1041,7 +1041,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const handleImageFileDrop = async (files: File[]) => {
     // 计算最大图片数
     let maxImageCount = 6 // 默认图片模型最多6张
-      
+
     if (selectedModel === 'vidu-q1') {
       if (viduMode === 'text-image-to-video') {
         maxImageCount = 1
@@ -1053,7 +1053,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     } else if (selectedModel === 'kling-2.5-turbo') {
       maxImageCount = 1
     }
-      
+
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         const saved = await saveUploadImage(file, 'memory')
@@ -1106,7 +1106,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         setUploadedFilePaths(prev => prev.slice(0, max))
       }
     }
-    
+
   }
 
   const handleResolutionSelect = (resolution: string) => {
@@ -1164,7 +1164,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }, [isVoiceDropdownOpen])
 
-  
+
 
   const handleCloseAudioEmotionDropdown = () => {
     setAudioEmotionDropdownClosing(true)
@@ -1200,6 +1200,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           className="w-auto min-w-[180px] flex-shrink-0"
           panelWidth={720}
           alignment="aboveCenter"
+          stableHeight={true}
           closeOnPanelClick={(t) => !!(t as HTMLElement).closest('[data-close-on-select]')}
           renderPanel={() => (
             <div className="p-4 h-full flex flex-col">
@@ -1323,14 +1324,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 className="w-auto min-w-[70px] flex-shrink-0 relative"
               />
             )}
-          <PanelTrigger
-            label="音色"
-            display={voicePresets.find(v => v.id === voiceId)?.name || voiceId}
-            className="w-auto min-w-[140px] flex-shrink-0"
-            panelWidth={720}
-            alignment="aboveCenter"
-            closeOnPanelClick={(t) => !!(t as HTMLElement).closest('[data-close-on-select]')}
-            renderPanel={() => (
+            <PanelTrigger
+              label="音色"
+              display={voicePresets.find(v => v.id === voiceId)?.name || voiceId}
+              className="w-auto min-w-[140px] flex-shrink-0"
+              panelWidth={720}
+              alignment="aboveCenter"
+              stableHeight={true}
+              closeOnPanelClick={(t) => !!(t as HTMLElement).closest('[data-close-on-select]')}
+              renderPanel={() => (
                 <div className="p-4 h-full flex flex-col">
                   <div className="mb-3">
                     <div className="text-xs text-zinc-400 mb-2">性别</div>
@@ -1364,13 +1366,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               )}
             />
 
-            
+
 
             <Dropdown
               label="情绪"
               value={audioEmotion as any}
               display={emotionZhMap[audioEmotion] || audioEmotion}
-              options={["neutral","happy","sad","angry","fearful","disgusted","surprised"].map(x => ({ value: x as any, label: emotionZhMap[x] || x }))}
+              options={["neutral", "happy", "sad", "angry", "fearful", "disgusted", "surprised"].map(x => ({ value: x as any, label: emotionZhMap[x] || x }))}
               onSelect={(v) => setAudioEmotion(v as any)}
               className="w-auto min-w-[70px] flex-shrink-0 relative"
             />
@@ -1402,7 +1404,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${languageBoostDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
                 >
                   <div className="max-h-60 overflow-y-auto">
-                    {['auto','Chinese','Chinese,Yue','English','Arabic','Russian','Spanish','French','Portuguese','German','Turkish','Dutch','Ukrainian','Vietnamese','Indonesian','Japanese','Italian','Korean','Thai','Polish','Romanian','Greek','Czech','Finnish','Hindi'].map(x => (
+                    {['auto', 'Chinese', 'Chinese,Yue', 'English', 'Arabic', 'Russian', 'Spanish', 'French', 'Portuguese', 'German', 'Turkish', 'Dutch', 'Ukrainian', 'Vietnamese', 'Indonesian', 'Japanese', 'Italian', 'Korean', 'Thai', 'Polish', 'Romanian', 'Greek', 'Czech', 'Finnish', 'Hindi'].map(x => (
                       <div
                         key={x}
                         className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${languageBoost === x ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`}
@@ -1432,13 +1434,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   <div className="p-4 flex flex-col gap-4 overflow-y-auto">
                     <div className="flex gap-4">
                       <div>
-                        <NumberInput label="音量" value={audioVol} onChange={(v)=>setAudioVol(Math.min(10, Math.max(0.1, v)))} min={0.1} max={10} step={0.1} precision={2} widthClassName="w-[100px]" />
+                        <NumberInput label="音量" value={audioVol} onChange={(v) => setAudioVol(Math.min(10, Math.max(0.1, v)))} min={0.1} max={10} step={0.1} precision={2} widthClassName="w-[100px]" />
                       </div>
                       <div>
-                        <NumberInput label="语调" value={audioPitch} onChange={(v)=>setAudioPitch(Math.min(12, Math.max(-12, Math.round(v))))} min={-12} max={12} step={1} widthClassName="w-[100px]" />
+                        <NumberInput label="语调" value={audioPitch} onChange={(v) => setAudioPitch(Math.min(12, Math.max(-12, Math.round(v))))} min={-12} max={12} step={1} widthClassName="w-[100px]" />
                       </div>
                       <div>
-                        <NumberInput label="速度" value={audioSpeed} onChange={(v)=>setAudioSpeed(Math.min(2, Math.max(0.5, Math.round(v*10)/10)))} min={0.5} max={2} step={0.1} precision={1} widthClassName="w-[100px]" />
+                        <NumberInput label="速度" value={audioSpeed} onChange={(v) => setAudioSpeed(Math.min(2, Math.max(0.5, Math.round(v * 10) / 10)))} min={0.5} max={2} step={0.1} precision={1} widthClassName="w-[100px]" />
                       </div>
                     </div>
                     <div className="flex gap-4">
@@ -1446,7 +1448,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         label="采样率"
                         value={audioSampleRate as any}
                         display={String(audioSampleRate)}
-                        options={[8000,16000,22050,24000,32000,44100].map(r => ({ value: r as any, label: String(r) }))}
+                        options={[8000, 16000, 22050, 24000, 32000, 44100].map(r => ({ value: r as any, label: String(r) }))}
                         onSelect={(v) => setAudioSampleRate(Number(v))}
                         className=""
                       />
@@ -1454,7 +1456,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         label="比特率"
                         value={audioBitrate as any}
                         display={String(audioBitrate)}
-                        options={[32000,64000,128000,256000].map(r => ({ value: r as any, label: String(r) }))}
+                        options={[32000, 64000, 128000, 256000].map(r => ({ value: r as any, label: String(r) }))}
                         onSelect={(v) => setAudioBitrate(Number(v))}
                         className=""
                       />
@@ -1462,7 +1464,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         label="格式"
                         value={audioFormat as any}
                         display={audioFormat}
-                        options={['mp3','pcm','flac','wav'].map(f => ({ value: f as any, label: f }))}
+                        options={['mp3', 'pcm', 'flac', 'wav'].map(f => ({ value: f as any, label: f }))}
                         onSelect={(v) => setAudioFormat(String(v))}
                         className=""
                       />
@@ -1470,7 +1472,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                         label="声道"
                         value={audioChannel as any}
                         display={String(audioChannel)}
-                        options={[1,2].map(c => ({ value: c as any, label: String(c) }))}
+                        options={[1, 2].map(c => ({ value: c as any, label: String(c) }))}
                         onSelect={(v) => setAudioChannel(Number(v))}
                         className=""
                       />
@@ -1478,11 +1480,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     <div className="flex gap-4">
                       <div className="w-auto min-w-[120px]">
                         <label className="block text-xs text-zinc-400 mb-2">朗读 LaTeX</label>
-                        <button onClick={()=>setLatexRead(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${latexRead ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{latexRead ? '开启' : '关闭'}</button>
+                        <button onClick={() => setLatexRead(v => !v)} className={`px-3 py-2 h-[38px] rounded-lg border ${latexRead ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{latexRead ? '开启' : '关闭'}</button>
                       </div>
                       <div className="w-auto min-w-[120px]">
                         <label className="block text-xs text-zinc-400 mb-2">英文规范化</label>
-                        <button onClick={()=>setTextNormalization(v=>!v)} className={`px-3 py-2 h-[38px] rounded-lg border ${textNormalization ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{textNormalization ? '开启' : '关闭'}</button>
+                        <button onClick={() => setTextNormalization(v => !v)} className={`px-3 py-2 h-[38px] rounded-lg border ${textNormalization ? 'bg-[#007eff] text-white border-[#007eff]' : 'bg-white/70 dark:bg-zinc-800/70 text-zinc-800 dark:text-zinc-300 border-gray-200 dark:border-zinc-700/50'}`}>{textNormalization ? '开启' : '关闭'}</button>
                       </div>
                     </div>
                   </div>
@@ -1531,19 +1533,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               />
             )}
 
-              <Dropdown
-                label="运动幅度"
-                value={viduMovementAmplitude}
-                display={viduMovementAmplitude === 'auto' ? '自动' : viduMovementAmplitude === 'small' ? '小' : viduMovementAmplitude === 'medium' ? '中' : '大'}
-                options={[
-                  { value: 'auto', label: '自动' },
-                  { value: 'small', label: '小' },
-                  { value: 'medium', label: '中' },
-                  { value: 'large', label: '大' }
-                ]}
-                onSelect={(v) => setViduMovementAmplitude(v as any)}
-                className="w-auto min-w-[80px] relative"
-              />
+            <Dropdown
+              label="运动幅度"
+              value={viduMovementAmplitude}
+              display={viduMovementAmplitude === 'auto' ? '自动' : viduMovementAmplitude === 'small' ? '小' : viduMovementAmplitude === 'medium' ? '中' : '大'}
+              options={[
+                { value: 'auto', label: '自动' },
+                { value: 'small', label: '小' },
+                { value: 'medium', label: '中' },
+                { value: 'large', label: '大' }
+              ]}
+              onSelect={(v) => setViduMovementAmplitude(v as any)}
+              className="w-auto min-w-[80px] relative"
+            />
 
             <Dropdown
               label="BGM"
@@ -1559,64 +1561,64 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         {currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && (
           <>
             {selectedModel !== 'pixverse-v4.5' && (
-            <div className="w-auto min-w-[80px] relative" ref={(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? hailuoDurationRef : klingDurationRef}>
-              <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
-              {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? (
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isHailuoDurationDropdownOpen) {
-                      handleCloseHailuoDurationDropdown()
-                    } else {
-                      setIsHailuoDurationDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{videoDuration || 6}</span>
-                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isHailuoDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-              ) : (
-                <div
-                  className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
-                  onClick={() => {
-                    if (isKlingDurationDropdownOpen) {
-                      handleCloseKlingDurationDropdown()
-                    } else {
-                      setIsKlingDurationDropdownOpen(true)
-                    }
-                  }}
-                >
-                  <span className="text-sm">{videoDuration}</span>
-                  <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                  </svg>
-                </div>
-              )}
-              {(isHailuoDurationDropdownOpen || hailuoDurationDropdownClosing) && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
-                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${hailuoDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                  <div className="max-h-60 overflow-y-auto">
-                    {[6, 10].map(val => (
-                      <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${ (videoDuration || 6) === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseHailuoDurationDropdown() }}>
-                        <span className="text-sm">{val}</span>
-                      </div>
-                    ))}
+              <div className="w-auto min-w-[80px] relative" ref={(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? hailuoDurationRef : klingDurationRef}>
+                <label className="block text-sm font-medium mb-1 text-zinc-300">时长</label>
+                {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') ? (
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isHailuoDurationDropdownOpen) {
+                        handleCloseHailuoDurationDropdown()
+                      } else {
+                        setIsHailuoDurationDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{videoDuration || 6}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isHailuoDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
                   </div>
-                </div>
-              )}
-              {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
-                <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                  <div className="max-h-60 overflow-y-auto">
-                    {[5, 10].map(val => (
-                      <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoDuration === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseKlingDurationDropdown() }}>
-                        <span className="text-sm">{val}</span>
-                      </div>
-                    ))}
+                ) : (
+                  <div
+                    className="bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 cursor-pointer flex items-center justify-between whitespace-nowrap"
+                    onClick={() => {
+                      if (isKlingDurationDropdownOpen) {
+                        handleCloseKlingDurationDropdown()
+                      } else {
+                        setIsKlingDurationDropdownOpen(true)
+                      }
+                    }}
+                  >
+                    <span className="text-sm">{videoDuration}</span>
+                    <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${isKlingDurationDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+                {(isHailuoDurationDropdownOpen || hailuoDurationDropdownClosing) && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${hailuoDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="max-h-60 overflow-y-auto">
+                      {[6, 10].map(val => (
+                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${(videoDuration || 6) === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseHailuoDurationDropdown() }}>
+                          <span className="text-sm">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(isKlingDurationDropdownOpen || klingDurationDropdownClosing) && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && (
+                  <div className={`absolute z-20 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${klingDurationDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="max-h-60 overflow-y-auto">
+                      {[5, 10].map(val => (
+                        <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${videoDuration === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setVideoDuration(val); handleCloseKlingDurationDropdown() }}>
+                          <span className="text-sm">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {(selectedModel === 'kling-2.5-turbo' || selectedModel === 'pixverse-v4.5') && uploadedImages.length === 0 && (
@@ -1643,20 +1645,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <Dropdown
                 label="分辨率"
                 value={(videoResolution || '540p') as any}
-                options={[...(pixFastMode ? ['360p','540p','720p'] : ['360p','540p','720p','1080p'])].map(v => ({ value: v as any, label: v }))}
+                options={[...(pixFastMode ? ['360p', '540p', '720p'] : ['360p', '540p', '720p', '1080p'])].map(v => ({ value: v as any, label: v }))}
                 onSelect={(v) => setVideoResolution(String(v))}
                 className="w-auto"
-                
+
               />
             )}
             {(selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02') && (
               <Dropdown
                 label="分辨率"
                 value={(videoResolution || '768P') as any}
-                options={([...(videoDuration === 6 ? ['768P','1080P'] : ['768P'])] as string[]).map(v => ({ value: v as any, label: v }))}
+                options={([...(videoDuration === 6 ? ['768P', '1080P'] : ['768P'])] as string[]).map(v => ({ value: v as any, label: v }))}
                 onSelect={(v) => setVideoResolution(String(v))}
                 className="w-auto"
-                
+
               />
             )}
             {selectedModel === 'minimax-hailuo-2.3' && uploadedImages.length > 0 && (
@@ -1709,9 +1711,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   <div className={`absolute z-20 mt-1 w-[260px] bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg ${wanSizeDropdownClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <div className="max-h-60 overflow-y-auto">
                       {[
-                        '832*480','480*832','624*624',
-                        '1280*720','720*1280','960*960','1088*832','832*1088',
-                        '1920*1080','1080*1920','1440*1440','1632*1248','1248*1632'
+                        '832*480', '480*832', '624*624',
+                        '1280*720', '720*1280', '960*960', '1088*832', '832*1088',
+                        '1920*1080', '1080*1920', '1440*1440', '1632*1248', '1248*1632'
                       ].map(val => (
                         <div key={val} className={`px-3 py-2 cursor-pointer transition-colors duration-200 ${wanSize === val ? 'bg-[#007eff]/20 text-[#66b3ff]' : 'hover:bg-zinc-700/50'}`} onClick={() => { setWanSize(val); handleCloseWanSizeDropdown() }}>
                           <span className="text-sm">{val}</span>
@@ -1726,10 +1728,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               <Dropdown
                 label="分辨率"
                 value={wanResolution as any}
-                options={['480P','720P','1080P'].map(v => ({ value: v as any, label: v }))}
+                options={['480P', '720P', '1080P'].map(v => ({ value: v as any, label: v }))}
                 onSelect={(v) => setWanResolution(String(v))}
                 className="w-auto"
-                
+
               />
             )}
             {selectedModel === 'wan-2.5-preview' && (
@@ -1748,25 +1750,25 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   display={seedanceVariant === 'lite' ? 'Lite' : 'Pro'}
                   options={[{ value: 'lite' as any, label: 'Lite' }, { value: 'pro' as any, label: 'Pro' }]}
                   onSelect={(v) => setSeedanceVariant(v as any)}
-                className="w-auto"
-                
+                  className="w-auto"
+
                 />
                 <Dropdown
                   label="分辨率"
                   value={seedanceResolution as any}
-                  options={['480p','720p','1080p'].map(v => ({ value: v as any, label: v }))}
+                  options={['480p', '720p', '1080p'].map(v => ({ value: v as any, label: v }))}
                   onSelect={(v) => setSeedanceResolution(String(v))}
                   className="w-auto min-w-[80px]"
                 />
                 <Dropdown
                   label="宽高比"
                   value={seedanceAspectRatio as any}
-                  options={['21:9','16:9','4:3','1:1','3:4','9:16','9:21'].map(v => ({ value: v as any, label: v }))}
+                  options={['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'].map(v => ({ value: v as any, label: v }))}
                   onSelect={(v) => setSeedanceAspectRatio(String(v))}
                   className="w-auto min-w-[80px]"
                 />
                 <Toggle label="相机固定" checked={seedanceCameraFixed} onChange={setSeedanceCameraFixed} className="w-auto min-w-[80px]" />
-                
+
               </>
             )}
 
@@ -1817,18 +1819,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 onClick={() => setSequentialImageGeneration(
                   sequentialImageGeneration === 'auto' ? 'disabled' : 'auto'
                 )}
-                className={`px-3 py-2 h-[38px] rounded-lg border ${
-                  sequentialImageGeneration === 'auto'
+                className={`px-3 py-2 h-[38px] rounded-lg border ${sequentialImageGeneration === 'auto'
                     ? 'bg-[#007eff] text-white border-[#007eff]'
                     : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
-                }`}
+                  }`}
               >
                 {sequentialImageGeneration === 'auto' ? '开启' : '关闭'}
               </button>
             </div>
 
             {/* 最大图像数量 */}
-              {sequentialImageGeneration === 'auto' && (
+            {sequentialImageGeneration === 'auto' && (
               <div>
                 <label className="block text-sm font-medium mb-1 text-zinc-300">最大数量</label>
                 <div className="relative inline-block">
@@ -1863,83 +1864,83 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
         {/* 图片上传和预览区域 - 独立一行 */}
         {currentModel?.type !== 'audio' && (
-        <div className="mb-3">
-          <div className="flex items-center gap-2">
-            {/* 已上传的图片 - 横向排列 */}
-            {uploadedImages.map((image, index) => (
-              <div
-                key={`${image}-${index}`}
-                className="relative group flex-shrink-0"
-                style={{
-                  animation: removingImages.has(image)
-                    ? 'imageSlideOut 0.25s ease-in forwards' 
-                    : 'imageSlideIn 0.25s ease-out forwards'
-                }}
-              >
-                <div className="relative w-12 h-16 rounded-lg shadow-lg">
-                  <img
-                    src={image}
-                    alt={`Uploaded ${index + 1}`}
-                    className="w-full h-full object-cover rounded-lg border-2 border-white"
-                  />
-                  {/* 删除按钮 - 只在hover时显示，不再有初始加载时的闪烁 */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeImage(index)
-                    }}
-                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg z-20"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {/* 上传按钮 - 紧跟在图片之后，根据模型和模式限制 */}
-            {(() => {
-              // 计算最大图片数
-              let maxImageCount = 6 // 默认图片模型最多6张
-              
-              if (selectedModel === 'vidu-q1') {
-                if (viduMode === 'text-image-to-video') {
-                  maxImageCount = 1 // 文/图生视频最多1张
-                } else if (viduMode === 'start-end-frame') {
-                  maxImageCount = 2 // 首尾帧需要2张
-                } else if (viduMode === 'reference-to-video') {
-                  maxImageCount = 7 // 参考生视频最多7张
-                }
-              } else if (selectedModel === 'kling-2.5-turbo') {
-                maxImageCount = 1
-              } else if (selectedModel === 'minimax-hailuo-2.3') {
-                maxImageCount = 1
-              } else if (selectedModel === 'minimax-hailuo-02') {
-                maxImageCount = 2
-              } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
-                maxImageCount = 2
-              }
-              
-              const canUploadMore = uploadedImages.length < maxImageCount
-              
-              return canUploadMore ? (
-                <div 
-                  key={`upload-btn-${uploadedImages.length}`}
-                  className="w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-zinc-700/50 hover:border-zinc-700/50 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
-                  onClick={() => imageFileInputRef.current?.click()}
+          <div className="mb-3">
+            <div className="flex items-center gap-2">
+              {/* 已上传的图片 - 横向排列 */}
+              {uploadedImages.map((image, index) => (
+                <div
+                  key={`${image}-${index}`}
+                  className="relative group flex-shrink-0"
                   style={{
-                    animation: 'imageSlideIn 0.25s ease-out forwards'
+                    animation: removingImages.has(image)
+                      ? 'imageSlideOut 0.25s ease-in forwards'
+                      : 'imageSlideIn 0.25s ease-out forwards'
                   }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+                  <div className="relative w-12 h-16 rounded-lg shadow-lg">
+                    <img
+                      src={image}
+                      alt={`Uploaded ${index + 1}`}
+                      className="w-full h-full object-cover rounded-lg border-2 border-white"
+                    />
+                    {/* 删除按钮 - 只在hover时显示，不再有初始加载时的闪烁 */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeImage(index)
+                      }}
+                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg z-20"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              ) : null
-            })()}
+              ))}
+
+              {/* 上传按钮 - 紧跟在图片之后，根据模型和模式限制 */}
+              {(() => {
+                // 计算最大图片数
+                let maxImageCount = 6 // 默认图片模型最多6张
+
+                if (selectedModel === 'vidu-q1') {
+                  if (viduMode === 'text-image-to-video') {
+                    maxImageCount = 1 // 文/图生视频最多1张
+                  } else if (viduMode === 'start-end-frame') {
+                    maxImageCount = 2 // 首尾帧需要2张
+                  } else if (viduMode === 'reference-to-video') {
+                    maxImageCount = 7 // 参考生视频最多7张
+                  }
+                } else if (selectedModel === 'kling-2.5-turbo') {
+                  maxImageCount = 1
+                } else if (selectedModel === 'minimax-hailuo-2.3') {
+                  maxImageCount = 1
+                } else if (selectedModel === 'minimax-hailuo-02') {
+                  maxImageCount = 2
+                } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
+                  maxImageCount = 2
+                }
+
+                const canUploadMore = uploadedImages.length < maxImageCount
+
+                return canUploadMore ? (
+                  <div
+                    key={`upload-btn-${uploadedImages.length}`}
+                    className="w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed border-zinc-700/50 hover:border-zinc-700/50 flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0"
+                    onClick={() => imageFileInputRef.current?.click()}
+                    style={{
+                      animation: 'imageSlideIn 0.25s ease-out forwards'
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                ) : null
+              })()}
+            </div>
           </div>
-        </div>
         )}
 
         {/* 文本输入框 - 独立一行 */}
@@ -1976,16 +1977,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' ? 'min-h-[140px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
             disabled={isLoading}
           />
-          
+
           {/* 生成按钮 */}
           <button
             onClick={handleGenerate}
             disabled={isLoading || (!input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0))}
-            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-              isLoading || (!input.trim() && uploadedImages.length === 0)
+            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isLoading || (!input.trim() && uploadedImages.length === 0)
                 ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
                 : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
-            }`}
+              }`}
           >
             {isLoading ? (
               <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
