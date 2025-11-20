@@ -1121,12 +1121,33 @@ const App: React.FC = () => {
   }, [])
 
 
-
   const handleRegenerate = async (task: GenerationTask) => {
-    // 复用原来的参数重新生成，使用任务保存的模型
-    const options = {
-      images: task.images,
-      size: task.size
+    // 复用原来的参数重新生成，使用任务保存的模型和所有参数
+    const options = task.options ? { ...task.options } : {}
+
+    // 向后兼容：如果 options 中没有 size，从 task 的顶级字段获取
+    if (!options.size && task.size) {
+      options.size = task.size
+    }
+
+    // 如果有 uploadedFilePaths，需要重建 base64 图片数据
+    if (task.uploadedFilePaths && task.uploadedFilePaths.length > 0) {
+      options.uploadedFilePaths = task.uploadedFilePaths
+      // 尝试重建 base64，使用正确的 MIME 类型（image/jpeg）
+      if (!options.images) {
+        try {
+          const arr: string[] = []
+          for (const p of task.uploadedFilePaths) {
+            // 明确使用 image/jpeg MIME 类型，与 saveUploadImage 保持一致
+            const data = await fileToDataUrl(p, 'image/jpeg')
+            arr.push(data)
+          }
+          options.images = arr
+          console.log('[App] 重建 images 成功，数量:', arr.length)
+        } catch (e) {
+          console.error('[App] 重建 images 失败:', e)
+        }
+      }
     }
 
     console.log('[App] 重新生成任务:', {
