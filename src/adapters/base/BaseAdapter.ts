@@ -6,14 +6,25 @@ export interface MediaGeneratorAdapter {
   checkStatus(taskId: string): Promise<TaskStatus>
 }
 
+export interface ProgressStatus {
+  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED'
+  queue_position?: number
+  message?: string
+}
+
 export interface GenerateImageParams {
   prompt: string
   model: string
+  model_id?: string  // 用于区分不同的 fal 模型（nano-banana vs nano-banana-pro）
   images?: string[]
   size?: string
   sequential_image_generation?: 'auto' | 'disabled'
   max_images?: number
   watermark?: boolean
+  num_images?: number  // fal 模型的图片数量参数
+  aspect_ratio?: string  // fal 模型的宽高比参数
+  resolution?: string  // nano-banana-pro 的分辨率参数
+  onProgress?: (status: ProgressStatus) => void  // 进度回调（用于队列 API）
   [key: string]: any
 }
 
@@ -55,6 +66,11 @@ export interface ImageResult {
   url: string
   base64Data?: string  // 添加Base64数据字段，用于离线下载和复制
   createdAt?: Date
+  // 超时恢复支持
+  status?: 'completed' | 'timeout'  // 任务状态
+  requestId?: string  // fal 队列请求ID（用于继续查询）
+  modelId?: string    // fal 模型ID（用于继续查询）
+  message?: string    // 状态消息
 }
 
 export interface VideoResult {

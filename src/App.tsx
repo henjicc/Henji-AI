@@ -20,15 +20,20 @@ interface GenerationTask {
   type: 'image' | 'video' | 'audio'
   prompt: string
   model: string  // 保存使用的模型
+  provider?: string  // 保存供应商信息（用于继续查询）
   images?: string[]
   size?: string
-  status: 'pending' | 'generating' | 'success' | 'error'
+  status: 'pending' | 'generating' | 'success' | 'error' | 'timeout'  // 添加 timeout 状态
   result?: MediaResult
   error?: string
   uploadedFilePaths?: string[]
   progress?: number
   serverTaskId?: string
   timedOut?: boolean
+  // fal 队列超时恢复
+  requestId?: string  // fal 队列请求ID
+  modelId?: string    // fal 模型ID
+  message?: string    // 状态消息
 }
 
 const App: React.FC = () => {
@@ -710,6 +715,24 @@ const App: React.FC = () => {
       switch (type) {
         case 'image':
           result = await apiService.generateImage(input, model, options)
+
+          // 检查是否为 fal 队列超时状态
+          if (result?.status === 'timeout') {
+            console.log('[App] 检测到队列超时:', result)
+            setTasks(prev => prev.map(task =>
+              task.id === taskId ? {
+                ...task,
+                status: 'timeout',
+                provider: providerObj?.id,
+                requestId: result.requestId,
+                modelId: result.modelId,
+                message: result.message || '等待超时，任务依然在处理中'
+              } : task
+            ))
+            setIsLoading(false)
+            return  // 提前返回，不继续处理
+          }
+
           console.log('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
           if (result?.url && isDesktop()) {
             try {
@@ -1153,6 +1176,121 @@ const App: React.FC = () => {
     window.dispatchEvent(event)
   }
 
+  // 继续查询超时的 fal 队列请求
+  const handleContinuePolling = async (task: GenerationTask) => {
+    if (!task.requestId || !task.modelId || !task.provider) {
+      console.error('[App] 缺少继续查询所需的信息')
+      return
+    }
+
+    console.log('[App] 继续查询 fal 队列:', { requestId: task.requestId, modelId: task.modelId })
+
+    try {
+      // 更新任务状态为生成中
+      setTasks(prev => prev.map(t =>
+        t.id === task.id ? { ...t, status: 'generating' } : t
+      ))
+      setIsLoading(true)
+
+      // 初始化 fal 适配器
+      const apiKey = localStorage.getItem('fal_api_key') || ''
+      if (!apiKey) {
+        throw new Error('请先在设置中配置 fal 的 API Key')
+      }
+
+      apiService.setApiKey(apiKey)
+      apiService.initializeAdapter({
+        type: 'fal',
+        modelName: task.model
+      })
+
+      // 调用 continuePolling 方法
+      const adapter = apiService.getAdapter() as any
+      if (!adapter.continuePolling) {
+        throw new Error('当前适配器不支持继续查询')
+      }
+
+      const result = await adapter.continuePolling(
+        task.modelId,
+        task.requestId,
+        (status: any) => {
+          console.log('[App] 继续查询进度:', status.message)
+        }
+      )
+
+      // 再次检查是否超时
+      if (result?.status === 'timeout') {
+        console.log('[App] 再次超时')
+        setTasks(prev => prev.map(t =>
+          t.id === task.id ? {
+            ...t,
+            status: 'timeout',
+            message: result.message || '等待超时，任务依然在处理中'
+          } : t
+        ))
+        setIsLoading(false)
+        return
+      }
+
+      // 成功获取结果，保存图片
+      if (result?.url && isDesktop()) {
+        try {
+          if (result.url.includes('|||')) {
+            const urls = result.url.split('|||')
+            const display = [] as string[]
+            const paths = [] as string[]
+            for (const u of urls) {
+              const { fullPath } = await saveImageFromUrl(u)
+              const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
+              display.push(blobSrc)
+              paths.push(fullPath)
+            }
+            result.url = display.join('|||')
+              ; (result as any).filePath = paths.join('|||')
+          } else {
+            const { fullPath } = await saveImageFromUrl(result.url)
+            const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
+            result.url = blobSrc
+              ; (result as any).filePath = fullPath
+          }
+          console.log('[App] 本地保存成功')
+        } catch (e) {
+          console.error('[App] 本地保存失败', e)
+        }
+      }
+
+      // 更新任务为成功状态
+      setTasks(prev => prev.map(t =>
+        t.id === task.id ? {
+          ...t,
+          status: 'success',
+          result: {
+            id: task.id,
+            type: task.type,
+            url: result.url,
+            filePath: (result as any).filePath,
+            prompt: task.prompt,
+            createdAt: new Date()
+          },
+          requestId: undefined,
+          modelId: undefined,
+          message: undefined
+        } : t
+      ))
+    } catch (err) {
+      console.error('[App] 继续查询失败:', err)
+      setTasks(prev => prev.map(t =>
+        t.id === task.id ? {
+          ...t,
+          status: 'error',
+          error: err instanceof Error ? err.message : '继续查询失败'
+        } : t
+      ))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // 清除所有历史记录
   const clearAllHistory = () => {
     setTasks([])
@@ -1353,6 +1491,30 @@ const App: React.FC = () => {
                                   >再次轮询 120 次</button>
                                 </div>
                               )}
+                            </div>
+                          </div>
+                        )}
+
+                        {task.status === 'timeout' && (
+                          <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg border-2 border-yellow-500/30">
+                            <div className="text-center w-full px-6">
+                              <div className="inline-block mb-3">
+                                <svg className="w-12 h-12 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <p className="text-yellow-400 mb-2 font-medium">{task.message || '等待超时，任务依然在处理中'}</p>
+                              <p className="text-zinc-400 text-sm mb-4">图片可能还在生成中，您可以继续查询状态</p>
+                              <button
+                                onClick={() => handleContinuePolling(task)}
+                                disabled={isLoading}
+                                className="inline-flex items-center px-4 py-2 rounded-lg bg-[#007eff] hover:brightness-110 text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                继续查询
+                              </button>
                             </div>
                           </div>
                         )}

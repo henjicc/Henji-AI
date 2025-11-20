@@ -32,7 +32,10 @@ interface DragDropProviderProps {
 export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) => {
     const [isDragging, setIsDragging] = useState(false)
     const [dragData, setDragData] = useState<DragData | null>(null)
-    const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
+    const previewRef = React.useRef<HTMLDivElement>(null)
+    // We keep dragPosition in state only for initial placement if needed, 
+    // but we won't update it on every mouse move to prevent re-renders.
+    const [dragPosition] = useState({ x: 0, y: 0 })
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
     const startDrag = (data: DragData, preview: string) => {
@@ -51,7 +54,11 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
     React.useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (isDragging) {
-                setDragPosition({ x: e.clientX, y: e.clientY })
+                // Directly update DOM to avoid re-renders
+                if (previewRef.current) {
+                    previewRef.current.style.left = `${e.clientX - 32}px`
+                    previewRef.current.style.top = `${e.clientY - 32}px`
+                }
             }
         }
 
@@ -78,13 +85,18 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             {/* Drag preview */}
             {isDragging && previewUrl && (
                 <div
+                    ref={previewRef}
                     style={{
                         position: 'fixed',
-                        left: dragPosition.x - 32,
-                        top: dragPosition.y - 32,
+                        left: 0, // Initial position, will be updated by JS immediately
+                        top: 0,
                         pointerEvents: 'none',
                         zIndex: 9999,
                         opacity: 0.8,
+                        // Hide initially until first move to avoid jumping from 0,0? 
+                        // Or we can rely on the fact that mousemove fires quickly.
+                        // Better: use a ref to store the last mouse position if available?
+                        // For now, let's just let it update on first move.
                     }}
                 >
                     <img

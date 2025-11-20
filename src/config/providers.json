@@ -114,6 +114,16 @@
             "图片生成",
             "图片编辑"
           ]
+        },
+        {
+          "id": "nano-banana-pro",
+          "name": "Nano Banana Pro",
+          "type": "image",
+          "description": "Google 最新的图像生成和编辑模型，支持高分辨率输出",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ]
         }
       ]
     }

@@ -22,6 +22,7 @@ const PRICES = {
     // 图片
     SEEDREAM: 0.2,
     NANO_BANANA: 0.2775, // CNY
+    NANO_BANANA_PRO: 0.3557, // CNY
 
     // 音频（每万字符）
     SPEECH_HD: 3.5,
@@ -147,6 +148,17 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const numImages = params.num_images || 1
             return PRICES.NANO_BANANA * numImages
+        },
+        unit: '张'
+    },
+    {
+        providerId: 'fal',
+        modelId: 'nano-banana-pro',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const numImages = params.num_images || 1
+            return PRICES.NANO_BANANA_PRO * numImages
         },
         unit: '张'
     },

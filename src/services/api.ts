@@ -14,12 +14,12 @@ export class ApiService {
     if (!this.apiKey) {
       throw new Error('API key is not set')
     }
-    
+
     const fullConfig: AdapterConfig = {
       ...config,
       apiKey: this.apiKey
     }
-    
+
     this.adapter = AdapterFactory.createAdapter(fullConfig)
     console.log('[ApiService] 适配器已初始化', fullConfig)
   }
@@ -68,6 +68,10 @@ export class ApiService {
 
     return this.adapter.checkStatus(taskId)
   }
+
+  getAdapter(): MediaGeneratorAdapter | null {
+    return this.adapter
+  }
 }
 
 // 创建全局API服务实例
@@ -95,7 +99,7 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response) {
       throw new ApiError(
-        error.response.data?.message || 'Request failed',
+        (error.response.data as any)?.message || 'Request failed',
         error.response.status,
         error.response.data
       )

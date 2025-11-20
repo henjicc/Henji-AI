@@ -10,7 +10,7 @@ import PanelTrigger from './ui/PanelTrigger'
 import FileUploader from './ui/FileUploader'
 import SchemaForm from './ui/SchemaForm'
 import PriceEstimate from './ui/PriceEstimate'
-import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams } from '../schemas/modelParams'
+import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams, nanoBananaProParams } from '../schemas/modelParams'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -70,9 +70,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [seedanceDuration, setSeedanceDuration] = useState(5)
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
 
-  // Nano Banana 参数
+  // Nano Banana 和 Nano Banana Pro 参数
   const [numImages, setNumImages] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('1:1')
+  const [resolution, setResolution] = useState('1K')  // nano-banana-pro 分辨率
 
   const [seedanceVariant, setSeedanceVariant] = useState<'lite' | 'pro'>('lite')
   const [isKlingDurationDropdownOpen, setIsKlingDurationDropdownOpen] = useState(false)
@@ -138,9 +139,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [pixAspectPos, setPixAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [pixResolutionPos, setPixResolutionPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
-  // Nano Banana: 根据是否上传图片动态调整 aspect_ratio 默认值
+  // Nano Banana 和 Nano Banana Pro: 根据是否上传图片动态调整 aspect_ratio 默认值
   useEffect(() => {
-    if (selectedModel === 'nano-banana') {
+    if (selectedModel === 'nano-banana' || selectedModel === 'nano-banana-pro') {
       if (uploadedImages.length > 0) {
         // 图生图模式：默认 auto
         setAspectRatio('auto')
@@ -578,8 +579,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     const options: any = {}
 
     // 如果是图片模型，添加图片和分辨率选项
-    // 图片模型的通用处理（排除 nano-banana，它有独立的参数处理）
-    if (currentModel?.type === 'image' && selectedModel !== 'nano-banana') {
+    // 图片模型的通用处理（排除 nano-banana 和 nano-banana-pro，它们有独立的参数处理）
+    if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro') {
       if (uploadedImages.length > 0) {
         options.images = uploadedImages
         const paths: string[] = [...uploadedFilePaths]
@@ -908,6 +909,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         setUploadedFilePaths(paths)
         options.uploadedFilePaths = paths
       }
+    } else if (currentModel?.type === 'image' && selectedModel === 'nano-banana-pro') {
+      // Nano Banana Pro 参数
+      options.model_id = 'nano-banana-pro'
+      options.num_images = numImages
+      options.aspect_ratio = aspectRatio
+      options.resolution = resolution
+
+      // 处理图片上传（图生图模式）
+      if (uploadedImages.length > 0) {
+        options.images = uploadedImages
+        const paths: string[] = [...uploadedFilePaths]
+        for (let i = 0; i < uploadedImages.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(uploadedImages[i])
+            const saved = await saveUploadImage(blob)
+            paths[i] = saved.fullPath
+          }
+        }
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
+      }
     }
 
     // 处理即梦4.0的批量生成前缀
@@ -1068,9 +1090,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       case 'audioChannel': setAudioChannel(value); break
       case 'latexRead': setLatexRead(value); break
       case 'textNormalization': setTextNormalization(value); break
-      // Nano Banana
+      // Nano Banana & Nano Banana Pro
       case 'num_images': setNumImages(value); break
       case 'aspect_ratio': setAspectRatio(value); break
+      case 'resolution': setResolution(value); break
     }
   }
 
@@ -1274,8 +1297,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           )}
         />
 
-        {/* 分辨率设置按钮 - 仅对图片模型显示（排除 nano-banana，它使用 aspect_ratio） */}
-        {currentModel?.type === 'image' && selectedModel !== 'nano-banana' && (
+        {/* 分辨率设置按钮 - 仅对图片模型显示（排除 nano-banana 和 nano-banana-pro，它们使用 aspect_ratio） */}
+        {currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro' && (
           <PanelTrigger
             label="分辨率"
             display={selectedResolution === 'smart' ? '智能' : selectedResolution}
@@ -1572,6 +1595,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             values={{
               num_images: numImages,
               aspect_ratio: aspectRatio,
+              uploadedImages
+            }}
+            onChange={handleSchemaChange}
+          />
+        )}
+
+        {/* Nano Banana Pro Parameters */}
+        {selectedModel === 'nano-banana-pro' && (
+          <SchemaForm
+            schema={nanoBananaProParams}
+            values={{
+              num_images: numImages,
+              aspect_ratio: aspectRatio,
+              resolution: resolution,
               uploadedImages
             }}
             onChange={handleSchemaChange}
