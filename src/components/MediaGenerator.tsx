@@ -39,8 +39,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [customWidth, setCustomWidth] = useState('')
   const [customHeight, setCustomHeight] = useState('')
   const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
-  const [sequentialImageGeneration, setSequentialImageGeneration] = useState<'auto' | 'disabled'>('auto')
-  const [maxImages, setMaxImages] = useState<number>(15)
+  const [maxImages, setMaxImages] = useState<number>(1)
   const [isViduStyleDropdownOpen, setIsViduStyleDropdownOpen] = useState(false)
   const [viduStyleDropdownClosing, setViduStyleDropdownClosing] = useState(false)
 
@@ -615,9 +614,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
       // 添加即梦图片生成4.0的参数
       if (selectedModel === 'seedream-4.0') {
-        options.sequential_image_generation = sequentialImageGeneration
-        if (sequentialImageGeneration === 'auto' && maxImages > 1) {
+        // 根据maxImages决定sequential_image_generation
+        if (maxImages > 1) {
+          options.sequential_image_generation = 'auto'
           options.max_images = maxImages
+        } else {
+          options.sequential_image_generation = 'disabled'
         }
         // 默认不添加水印
         options.watermark = false
@@ -908,7 +910,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
 
-    onGenerate(input, selectedModel, currentModel?.type || 'image', options)
+    // 处理即梦4.0的批量生成前缀
+    let finalInput = input
+    if (selectedModel === 'seedream-4.0' && maxImages > 1) {
+      finalInput = `生成${maxImages}张图片。${input}`
+    }
+
+    onGenerate(finalInput, selectedModel, currentModel?.type || 'image', options)
   }
 
   const handleTextFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1046,7 +1054,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       case 'seedanceAspectRatio': setSeedanceAspectRatio(value); break
       case 'seedanceCameraFixed': setSeedanceCameraFixed(value); break
       // Seedream
-      case 'sequentialImageGeneration': setSequentialImageGeneration(value); break
       case 'maxImages': setMaxImages(value); break
       // Minimax Speech
       case 'audioSpec': setAudioSpec(value); break
@@ -1552,7 +1559,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           <SchemaForm
             schema={seedreamParams}
             values={{
-              sequentialImageGeneration,
               maxImages
             }}
             onChange={handleSchemaChange}

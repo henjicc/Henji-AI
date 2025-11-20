@@ -281,23 +281,15 @@ export const seedanceParams: ParamDef[] = [
 
 export const seedreamParams: ParamDef[] = [
     {
-        id: 'sequentialImageGeneration',
-        type: 'toggle',
-        label: '批量生成',
-        tooltip: '设置为自动时，可以通过提示词描述控制生成的图片数量，例如：生成4张图片。实际数量会受限于最大数量的设置，同时参考图+想要生成图片的数量无法超过15张。',
-        tooltipDelay: 500,
-        toValue: (checked) => checked ? 'auto' : 'disabled',
-        fromValue: (value) => value === 'auto'
-    },
-    {
         id: 'maxImages',
         type: 'number',
-        label: '最大数量',
+        label: '数量',
         min: 1,
         max: 15,
         step: 1,
         widthClassName: 'w-20',
-        hidden: (values) => values.sequentialImageGeneration !== 'auto'
+        tooltip: '设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。',
+        tooltipDelay: 500
     }
 ]
 
