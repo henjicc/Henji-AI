@@ -9,6 +9,7 @@ import TextInput from './ui/TextInput'
 import PanelTrigger from './ui/PanelTrigger'
 import FileUploader from './ui/FileUploader'
 import SchemaForm from './ui/SchemaForm'
+import PriceEstimate from './ui/PriceEstimate'
 import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams } from '../schemas/modelParams'
 
 interface MediaGeneratorProps {
@@ -1645,7 +1646,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 }
               }
             }}
-            placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的图片'}
+            placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的内容'}
             className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' ? 'min-h-[140px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
             disabled={isLoading}
           />
@@ -1674,7 +1675,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex flex-wrap gap-3 mt-4">
+      <div className="flex flex-wrap gap-3 mt-4 justify-between items-center">
         <button
           onClick={onOpenClearHistory}
           disabled={isLoading}
@@ -1697,6 +1698,34 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           </svg>
           设置
         </button>
+
+        {/* 价格估算 - 放在操作按钮右侧 */}
+        <div className="ml-auto">
+          <PriceEstimate
+            providerId={selectedProvider}
+            modelId={selectedModel}
+            params={{
+              // 图片参数
+              num_images: numImages,
+              uploadedImages,
+
+              // 视频参数
+              videoDuration,
+              videoResolution,
+              viduMode,
+              hailuoFastMode,
+              pixFastMode,
+              seedanceVariant,
+              seedanceResolution,
+              seedanceAspectRatio,
+              wanResolution,
+
+              // 音频参数
+              input,
+              audioSpec
+            }}
+          />
+        </div>
       </div>
 
 

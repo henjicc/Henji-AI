@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import NumberInput from './ui/NumberInput'
+import Toggle from './ui/Toggle'
 import { apiService } from '../services/api'
 
 interface SettingsModalProps {
@@ -10,23 +11,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [apiKey, setApiKey] = useState('')
   const [falApiKey, setFalApiKey] = useState('')
   const [maxHistoryCount, setMaxHistoryCount] = useState(50)
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [error, setError] = useState('')
+  const [showPriceEstimate, setShowPriceEstimate] = useState(true)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [showFalApiKey, setShowFalApiKey] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
 
   useEffect(() => {
-    // 从localStorage获取保存的API密钥
+    // 从localStorage获取保存的设置
     const savedApiKey = localStorage.getItem('piaoyun_api_key') || ''
     setApiKey(savedApiKey)
 
-    // 获取 fal API Key
     const savedFalApiKey = localStorage.getItem('fal_api_key') || ''
     setFalApiKey(savedFalApiKey)
 
-    // 从localStorage获取历史记录数量设置
     const savedMaxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
     setMaxHistoryCount(savedMaxHistory)
+
+    const savedShowPrice = localStorage.getItem('show_price_estimate')
+    setShowPriceEstimate(savedShowPrice !== 'false') // 默认开启
 
     // 点击模态框外部关闭
     const handleClickOutside = (event: MouseEvent) => {
@@ -48,38 +51,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }, 300)
   }
 
-  const handleSave = () => {
-    if (!apiKey.trim()) {
-      setError('请输入API密钥')
-      return
-    }
-
-    setStatus('saving')
-    setError('')
-
-    try {
-      // 保存到localStorage
-      localStorage.setItem('piaoyun_api_key', apiKey)
-      localStorage.setItem('fal_api_key', falApiKey)
-      localStorage.setItem('max_history_count', maxHistoryCount.toString())
-
-      // 设置到API服务
-      apiService.setApiKey(apiKey)
-
-      // 初始化适配器
+  // 实时保存 Piaoyun API Key
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value)
+    localStorage.setItem('piaoyun_api_key', value)
+    apiService.setApiKey(value)
+    // 尝试初始化适配器（如果key不为空）
+    if (value.trim()) {
       apiService.initializeAdapter({
         type: 'piaoyun',
         modelName: 'seedream-4.0'
       })
-
-      setStatus('saved')
-      setTimeout(() => {
-        handleClose()
-      }, 1000)
-    } catch (err) {
-      setStatus('error')
-      setError(err instanceof Error ? err.message : '保存失败')
     }
+  }
+
+  // 实时保存 fal API Key
+  const handleFalApiKeyChange = (value: string) => {
+    setFalApiKey(value)
+    localStorage.setItem('fal_api_key', value)
+  }
+
+  // 实时保存历史记录数量
+  const handleHistoryCountChange = (value: number) => {
+    const newValue = Math.max(1, Math.min(500, Math.round(value)))
+    setMaxHistoryCount(newValue)
+    localStorage.setItem('max_history_count', newValue.toString())
+  }
+
+  // 实时保存价格显示设置
+  const handleShowPriceChange = (value: boolean) => {
+    setShowPriceEstimate(value)
+    localStorage.setItem('show_price_estimate', value.toString())
+    // 触发自定义事件，通知 PriceEstimate 组件更新
+    window.dispatchEvent(new Event('priceSettingChanged'))
   }
 
   return (
@@ -107,17 +111,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <label className="block text-sm font-medium mb-2 text-zinc-300">派欧云API密钥</label>
             <div className="relative">
               <input
-                type="password"
+                type={showApiKey ? "text" : "password"}
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
                 placeholder="请输入您的API密钥"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-zinc-400"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 outline-none focus:outline-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out text-white placeholder-zinc-400 pr-10"
               />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-              </div>
+              <button
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                {showApiKey ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
             </div>
             <p className="mt-2 text-xs text-zinc-400">
               您可以在派欧云控制台获取API密钥
@@ -128,17 +142,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <label className="block text-sm font-medium mb-2 text-zinc-300">fal API密钥</label>
             <div className="relative">
               <input
-                type="password"
+                type={showFalApiKey ? "text" : "password"}
                 value={falApiKey}
-                onChange={(e) => setFalApiKey(e.target.value)}
+                onChange={(e) => handleFalApiKeyChange(e.target.value)}
                 placeholder="请输入您的 fal API 密钥"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-zinc-400"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 outline-none focus:outline-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out text-white placeholder-zinc-400 pr-10"
               />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-              </div>
+              <button
+                onClick={() => setShowFalApiKey(!showFalApiKey)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                {showFalApiKey ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
             </div>
             <p className="mt-2 text-xs text-zinc-400">
               您可以在 fal.ai 控制台获取 API 密钥
@@ -146,58 +170,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
 
           <div className="mb-5">
-            <NumberInput label="历史记录保存数量" value={maxHistoryCount} onChange={(v) => setMaxHistoryCount(Math.max(1, Math.min(500, Math.round(v))))} min={1} max={500} step={1} widthClassName="w-full" />
+            <NumberInput
+              label="历史记录保存数量"
+              value={maxHistoryCount}
+              onChange={handleHistoryCountChange}
+              min={1}
+              max={500}
+              step={1}
+              widthClassName="w-full"
+            />
             <p className="mt-2 text-xs text-zinc-400">最多保存 1-500 条历史记录,超出后将自动删除最旧的记录</p>
           </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-900/50 backdrop-blur-lg border border-red-700/50 rounded-lg animate-shake">
-              <p className="text-red-200 text-sm">{error}</p>
-            </div>
-          )}
+          <div className="mb-5">
+            <Toggle
+              label="显示价格估算"
+              checked={showPriceEstimate}
+              onChange={handleShowPriceChange}
+              className="w-full"
+            />
+            <p className="mt-2 text-xs text-zinc-400">在生成面板显示预估费用</p>
+          </div>
 
-          {status === 'saved' && (
-            <div className="mb-4 p-3 bg-green-900/50 backdrop-blur-lg border border-green-700/50 rounded-lg">
-              <p className="text-green-200 text-sm flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                保存成功！
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="flex justify-end mt-6">
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-zinc-700/50"
+              className="px-6 py-2 bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl rounded-lg transition-all duration-300 flex items-center font-medium"
             >
-              取消
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={status === 'saving'}
-              className={`px-4 py-2 rounded-lg transition-all duration-300 flex items-center ${status === 'saving'
-                  ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-not-allowed'
-                  : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl'
-                }`}
-            >
-              {status === 'saving' ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  保存中...
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  保存
-                </>
-              )}
+              确定
             </button>
           </div>
         </div>

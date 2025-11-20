@@ -188,6 +188,264 @@ Henji AI 的模型适配分为前端和后端两个部分：
 
 ---
 
+## 💰 价格配置指南
+
+### 概述
+
+Henji AI 集成了实时价格估算功能，显示在生成面板的右下角。为新模型配置价格是可选的，但强烈建议配置以提供更好的用户体验。
+
+### 价格配置结构
+
+价格配置位于 `src/config/pricing.ts`，采用 **Provider + Model ID** 双重标识来支持"同一模型在不同供应商下价格不同"的场景。
+
+#### PricingConfig 接口
+
+```typescript
+interface PricingConfig {
+  providerId: string    // 供应商 ID（如 'piaoyun', 'fal'）
+  modelId: string       // 模型 ID（如 'seedream-4.0'）
+  currency: '¥' | '$'   // 货币符号（统一使用人民币 ¥）
+  type: 'fixed' | 'calculated'  // 价格类型
+  
+  // 固定价格字段
+  fixedPrice?: number   // 固定价格（如 0.2）
+  unit?: string         // 单位（可选，目前不显示）
+  
+  // 动态计算字段
+  calculator?: (params: any) => number | { min: number; max: number }
+}
+```
+
+### 配置步骤
+
+#### 1. 固定价格模型（推荐用于简单计费）
+
+**适用场景**: 价格不随参数变化的模型（如图片生成固定单价）
+
+**配置示例**:
+```typescript
+{
+  providerId: 'piaoyun',
+  modelId: 'seedream-4.0',
+  currency: '¥',
+  type: 'fixed',
+  fixedPrice: 0.2
+}
+```
+
+**显示效果**: `预估: ¥0.2`
+
+#### 2. 动态计价模型（用于复杂计费）
+
+**适用场景**: 价格随时长、分辨率、模式等参数变化
+
+##### 示例 1: 按图片数量计费
+
+```typescript
+{
+  providerId: 'fal',
+  modelId: 'nano-banana',
+  currency: '¥',
+  type: 'calculated',
+  calculator: (params) => {
+    const numImages = params.num_images || 1
+    return 0.2775 * numImages
+  }
+}
+```
+
+##### 示例 2: 按时长分级计费
+
+```typescript
+{
+  providerId: 'piaoyun',
+  modelId: 'kling-2.5-turbo',
+  currency: '¥',
+  type: 'calculated',
+  calculator: (params) => {
+    const duration = params.videoDuration || 5
+    return duration === 10 ? 5 : 2.5
+  }
+}
+```
+
+##### 示例 3: 多维度计费（分辨率 + 时长 + 模式）
+
+```typescript
+{
+  providerId: 'piaoyun',
+  modelId: 'minimax-hailuo-2.3',
+  currency: '¥',
+  type: 'calculated',
+  calculator: (params) => {
+    const hasImage = params.uploadedImages?.length > 0
+    const duration = params.videoDuration || 6
+    const resolution = (params.videoResolution || '768p') as '768p' | '1080p'
+    const isFast = params.hailuoFastMode
+    
+    // 根据不同条件组合返回不同价格
+    let priceTable
+    if (hasImage && isFast) {
+      priceTable = HAILUO_FAST_IMAGE_PRICES
+    } else if (hasImage) {
+      priceTable = HAILUO_IMAGE_PRICES
+    } else {
+      priceTable = HAILUO_TEXT_PRICES
+    }
+    
+    return priceTable[resolution]?.[duration] || 0
+  }
+}
+```
+
+##### 示例 4: 按字符数计费（音频模型）
+
+```typescript
+{
+  providerId: 'piaoyun',
+  modelId: 'minimax-speech-2.6',
+  currency: '¥',
+  type: 'calculated',
+  calculator: (params) => {
+    const textLength = params.input?.length || 0
+    const charsIn10k = textLength / 10000
+    const pricePerChar = params.audioSpec === 'audio-pro' ? 3.5 : 2
+    return charsIn10k * pricePerChar
+  }
+}
+```
+
+### 参数传递
+
+**关键**: `calculator` 函数接收的 `params` 来自 `MediaGenerator.tsx` 中传递给 `PriceEstimate` 组件的参数对象。
+
+#### 需要确保传递的参数
+
+在 `MediaGenerator.tsx` 的 `PriceEstimate` 组件中，确保传递计算所需的所有参数：
+
+```typescript
+<PriceEstimate
+  providerId={selectedProvider}
+  modelId={selectedModel}
+  params={{
+    // 图片参数
+    num_images: numImages,
+    uploadedImages,
+    
+    // 视频参数
+    videoDuration,
+    videoResolution,
+    viduMode,
+    hailuoFastMode,
+    pixFastMode,
+    seedanceVariant,
+    seedanceResolution,
+    seedanceAspectRatio,  // 如需按宽高比计费
+    wanResolution,
+    
+    // 音频参数
+    input,  // 文本内容
+    audioSpec
+  }}
+/>
+```
+
+⚠️ **重要**: 如果新增了影响价格的参数，必须在此处添加传递。
+
+### 价格常量管理
+
+为了便于批量调整价格，建议在 `pricing.ts` 的 `PRICES` 常量中集中管理：
+
+```typescript
+const PRICES = {
+  // 图片
+  SEEDREAM: 0.2,
+  NANO_BANANA: 0.2775,
+  
+  // 视频 - 分级定价
+  KLING: {
+    5: 2.5,
+    10: 5
+  },
+  
+  // 复杂嵌套定价
+  HAILUO_23: {
+    text: {
+      '768p': { 6: 2, 10: 4 },
+      '1080p': { 6: 3.5, 10: 0 }
+    },
+    // ...
+  }
+} as const
+```
+
+### 价格显示格式
+
+- **自动格式化**: 价格会自动去除尾部的 0（`0.20` → `0.2`）
+- **小数精度**: 
+  - 价格 < 1 元: 最多 4 位小数
+  - 价格 ≥ 1 元: 最多 2 位小数
+- **单位显示**: 单位信息不会显示给用户，但仍可配置以便未来扩展
+
+### 常见计费模式
+
+#### 1. 阶梯计费
+
+```typescript
+calculator: (params) => {
+  const duration = params.videoDuration || 5
+  if (duration <= 5) return 2.5
+  if (duration <= 10) return 5
+  return 10
+}
+```
+
+#### 2. 组合计费（分辨率 × 时长）
+
+```typescript
+const PRICE_TABLE = {
+  '480p': { 5: 1.5, 10: 3 },
+  '720p': { 5: 3, 10: 6 },
+  '1080p': { 5: 5, 10: 10 }
+}
+
+calculator: (params) => {
+  const duration = params.videoDuration || 5
+  const resolution = params.videoResolution || '720p'
+  return PRICE_TABLE[resolution]?.[duration] || 0
+}
+```
+
+#### 3. 模式切换计费
+
+```typescript
+calculator: (params) => {
+  const isFastMode = params.fastMode
+  const basePrice = 2.5
+  return isFastMode ? basePrice * 2 : basePrice
+}
+```
+
+### 注意事项
+
+1. **唯一性**: `providerId` + `modelId` 的组合必须唯一
+2. **货币统一**: 目前统一使用人民币 `¥`
+3. **空值处理**: 在 `calculator` 中使用 `||` 提供默认值，避免计算错误
+4. **类型断言**: 对于枚举类型的参数，使用 TypeScript 类型断言确保类型安全
+5. **返回值**: 可以返回单个数字，或 `{ min: number; max: number }` 表示价格范围
+6. **零值**: 返回 `0` 表示该参数组合下不支持（会显示为 ¥0）
+7. **无配置**: 如果模型没有配置价格，价格估算不会显示
+
+### 调试技巧
+
+如果价格显示不正确，检查：
+1. `providerId` 和 `modelId` 是否与 `providers.json` 中的一致
+2. `calculator` 函数中的参数名是否与 `MediaGenerator.tsx` 传递的一致
+3. 在 `calculator` 中添加 `console.log(params)` 查看实际传入的参数
+4. 检查是否有类型转换问题（如字符串 vs 数字）
+
+---
+
 ## ⚠️ 常见陷阱与注意事项
 
 ### 1. UI 硬编码逻辑冲突
@@ -283,6 +541,14 @@ if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
 - [ ] 搜索 `currentModel?.type === 'image'` 等判断
 - [ ] 确认是否需要排除新模型
 - [ ] 确保 `App.tsx` 有动态适配器初始化
+
+**价格配置** 💰:
+- [ ] 在 `src/config/pricing.ts` 添加价格配置
+- [ ] 配置 `providerId` 和 `modelId`（两者组合必须唯一）
+- [ ] 选择价格类型（固定 `fixed` 或动态计算 `calculated`）
+- [ ] 设置货币符号和单位
+- [ ] 如果是动态计费，实现 `calculator` 函数
+- [ ] 确保 `MediaGenerator.tsx` 传递所有计算所需的参数
 
 **Tauri 配置**:
 - [ ] `src-tauri/capabilities/default.json` 添加 CDN 域名
