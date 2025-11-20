@@ -12,6 +12,7 @@ import AudioPlayer from './components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
 import { useDragDrop } from './contexts/DragDropContext'
 import { useContextMenu, MenuItem } from './hooks/useContextMenu'
+import { providers } from './config/providers'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -166,6 +167,10 @@ const App: React.FC = () => {
       requestAnimationFrame(() => {
         setViewerOpacity(1)
       })
+      // 动画完成后，调用 updateImageTransform 接管 transform 控制
+      setTimeout(() => {
+        updateImageTransform()
+      }, 250)
     }
   }, [isImageViewerOpen])
 
@@ -300,33 +305,34 @@ const App: React.FC = () => {
         closeImageViewer()
       } else if (e.key === ' ') {
         e.preventDefault()
-      } else if (e.key === 'ArrowRight') {
-        if (videoRef.current) {
-          const step = e.ctrlKey ? (frameDuration || 1 / 30) : 1
-          const dur = videoDuration || videoRef.current.duration || Infinity
-          videoRef.current.currentTime = Math.min(dur, videoRef.current.currentTime + step)
-        }
-      } else if (e.key === 'ArrowUp') {
-        if (videoRef.current) {
-          const next = Math.min(1, (videoRef.current.muted ? 0 : videoRef.current.volume) + 0.05)
-          setMuted(false)
-          setVolume(next)
-        }
-      } else if (e.key === 'ArrowDown') {
-        if (videoRef.current) {
-          const next = Math.max(0, (videoRef.current.muted ? 0 : videoRef.current.volume) - 0.05)
-          setMuted(false)
-          setVolume(next)
-        }
-      } else if (e.key === 'Escape') {
-        closeVideoViewer()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isVideoViewerOpen, isVideoPlaying, videoDuration])
+  }, [isImageViewerOpen])
+
+  // 视频播放器键盘控制
+  useEffect(() => {
+    if (!isVideoViewerOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeVideoViewer()
+      } else if (e.key === ' ') {
+        e.preventDefault()
+        if (videoRef.current) {
+          if (isVideoPlaying) videoRef.current.pause()
+          else videoRef.current.play()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isVideoViewerOpen, isVideoPlaying])
 
   useEffect(() => {
     if (isVideoViewerOpen && autoPlayOnOpen && videoRef.current) {
@@ -667,6 +673,34 @@ const App: React.FC = () => {
 
     try {
       setIsLoading(true)
+
+      // 动态初始化适配器（根据模型判断供应商）
+      const providerObj = providers.find(p => p.models.some(m => m.id === model))
+      if (providerObj) {
+        const providerType = providerObj.id as 'piaoyun' | 'fal'
+
+        // 获取对应的 API Key
+        let apiKey = ''
+        if (providerType === 'fal') {
+          apiKey = localStorage.getItem('fal_api_key') || ''
+        } else {
+          apiKey = localStorage.getItem('piaoyun_api_key') || ''
+        }
+
+        if (!apiKey) {
+          throw new Error(`请先在设置中配置 ${providerObj.name} 的 API Key`)
+        }
+
+        // 初始化对应的适配器
+        apiService.setApiKey(apiKey)
+        apiService.initializeAdapter({
+          type: providerType,
+          modelName: model
+        })
+
+        console.log('[App] 已切换适配器:', { provider: providerType, model })
+      }
+
       // 更新任务状态为生成中
       setTasks(prev => prev.map(task =>
         task.id === taskId ? { ...task, status: 'generating' } : task
@@ -1339,7 +1373,7 @@ const App: React.FC = () => {
                               }}
                             >
                               {/* 支持多张图片显示 */}
-                              {task.result.type === 'image' && (
+                              {task.result.type === 'image' && task.result.url && (
                                 task.result.url.includes('|||') ? (
                                   // 多张图片
                                   (() => {
@@ -1521,8 +1555,10 @@ const App: React.FC = () => {
                   alt="Full size"
                   className={`object-contain select-none image-transition`}
                   style={{
-                    transform: viewerOpacity < 1 ? `scale(${0.97 + 0.03 * viewerOpacity})` : undefined,
-                    transition: 'opacity 200ms ease',
+                    transform: viewerOpacity < 1
+                      ? `scale(${imageScaleRef.current * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`
+                      : undefined,
+                    transition: viewerOpacity < 1 ? 'transform 200ms ease, opacity 200ms ease' : 'opacity 200ms ease',
                     opacity: viewerOpacity,
                     maxHeight: '90vh',
                     maxWidth: '90vw'
@@ -1593,6 +1629,12 @@ const App: React.FC = () => {
           <div
             className={"fixed inset-0 bg黑/70 backdrop-blur-xl z-50 flex items-center justify-center p-4".replace('黑', 'black')}
             style={{ opacity: videoViewerOpacity, transition: 'opacity 500ms ease', overscrollBehavior: 'contain' }}
+            onClick={(e) => {
+              // 点击背景区域（不是视频内容）时关闭
+              if (e.target === e.currentTarget) {
+                closeVideoViewer()
+              }
+            }}
           >
             <div
               className={"relative max-w-6xl max-h-full flex items-center justify-center"}

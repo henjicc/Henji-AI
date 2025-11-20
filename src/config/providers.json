@@ -52,13 +52,25 @@
           "name": "Seedance V1 (Lite/Pro)",
           "type": "video",
           "description": "文/图生视频，480p/720p/1080p，支持相机固定；Lite 支持首尾图"
-        }
-        ,
+        },
         {
           "id": "minimax-speech-2.6",
           "name": "MiniMax Speech-2.6",
           "type": "audio",
           "description": "同步语音合成（HD/Turbo）"
+        }
+      ]
+    },
+    {
+      "id": "fal",
+      "name": "fal",
+      "type": "multi",
+      "models": [
+        {
+          "id": "nano-banana",
+          "name": "Nano Banana",
+          "type": "image",
+          "description": "Google 最先进的图像生成和编辑模型"
         }
       ]
     }

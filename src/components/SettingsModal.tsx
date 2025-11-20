@@ -8,6 +8,7 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [apiKey, setApiKey] = useState('')
+  const [falApiKey, setFalApiKey] = useState('')
   const [maxHistoryCount, setMaxHistoryCount] = useState(50)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [error, setError] = useState('')
@@ -18,18 +19,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     // 从localStorage获取保存的API密钥
     const savedApiKey = localStorage.getItem('piaoyun_api_key') || ''
     setApiKey(savedApiKey)
-    
+
+    // 获取 fal API Key
+    const savedFalApiKey = localStorage.getItem('fal_api_key') || ''
+    setFalApiKey(savedFalApiKey)
+
     // 从localStorage获取历史记录数量设置
     const savedMaxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
     setMaxHistoryCount(savedMaxHistory)
-    
+
     // 点击模态框外部关闭
     const handleClickOutside = (event: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
         handleClose()
       }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
@@ -55,17 +60,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     try {
       // 保存到localStorage
       localStorage.setItem('piaoyun_api_key', apiKey)
+      localStorage.setItem('fal_api_key', falApiKey)
       localStorage.setItem('max_history_count', maxHistoryCount.toString())
-      
+
       // 设置到API服务
       apiService.setApiKey(apiKey)
-      
+
       // 初始化适配器
       apiService.initializeAdapter({
         type: 'piaoyun',
         modelName: 'seedream-4.0'
       })
-      
+
       setStatus('saved')
       setTimeout(() => {
         handleClose()
@@ -78,7 +84,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   return (
     <div className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}>
-      <div 
+      <div
         ref={modalRef}
         className={`bg-[#131313]/90 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
       >
@@ -86,7 +92,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <h2 className="text-xl font-bold text-[#007eff]">
             设置
           </h2>
-          <button 
+          <button
             onClick={handleClose}
             className="text-zinc-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-zinc-800/50"
           >
@@ -119,7 +125,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
 
           <div className="mb-5">
-            <NumberInput label="历史记录保存数量" value={maxHistoryCount} onChange={(v)=>setMaxHistoryCount(Math.max(1, Math.min(500, Math.round(v))))} min={1} max={500} step={1} widthClassName="w-full" />
+            <label className="block text-sm font-medium mb-2 text-zinc-300">fal API密钥</label>
+            <div className="relative">
+              <input
+                type="password"
+                value={falApiKey}
+                onChange={(e) => setFalApiKey(e.target.value)}
+                placeholder="请输入您的 fal API 密钥"
+                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#007eff]/50 transition-all duration-300 text-white placeholder-zinc-400"
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-zinc-400">
+              您可以在 fal.ai 控制台获取 API 密钥
+            </p>
+          </div>
+
+          <div className="mb-5">
+            <NumberInput label="历史记录保存数量" value={maxHistoryCount} onChange={(v) => setMaxHistoryCount(Math.max(1, Math.min(500, Math.round(v))))} min={1} max={500} step={1} widthClassName="w-full" />
             <p className="mt-2 text-xs text-zinc-400">最多保存 1-500 条历史记录,超出后将自动删除最旧的记录</p>
           </div>
 
@@ -150,11 +177,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <button
               onClick={handleSave}
               disabled={status === 'saving'}
-              className={`px-4 py-2 rounded-lg transition-all duration-300 flex items-center ${
-                status === 'saving'
+              className={`px-4 py-2 rounded-lg transition-all duration-300 flex items-center ${status === 'saving'
                   ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-not-allowed'
                   : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl'
-              }`}
+                }`}
             >
               {status === 'saving' ? (
                 <>

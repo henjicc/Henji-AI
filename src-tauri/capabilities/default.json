@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Henji-AI",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:app:default",
     "core:window:default",
@@ -21,25 +23,52 @@
     {
       "identifier": "http:allow-fetch",
       "allow": [
-        { "url": "https://cos-output-image.ppinfra.com/*" },
-        { "url": "https://cos-output-video.ppinfra.com/*" },
-        { "url": "https://*.myqcloud.com/*" }
+        {
+          "url": "https://cos-output-image.ppinfra.com/*"
+        },
+        {
+          "url": "https://cos-output-video.ppinfra.com/*"
+        },
+        {
+          "url": "https://*.myqcloud.com/*"
+        },
+        {
+          "url": "https://*.fal.media/*"
+        }
       ]
     },
     {
       "identifier": "http:allow-fetch-read-body",
       "allow": [
-        { "url": "https://cos-output-image.ppinfra.com/*" },
-        { "url": "https://cos-output-video.ppinfra.com/*" },
-        { "url": "https://*.myqcloud.com/*" }
+        {
+          "url": "https://cos-output-image.ppinfra.com/*"
+        },
+        {
+          "url": "https://cos-output-video.ppinfra.com/*"
+        },
+        {
+          "url": "https://*.myqcloud.com/*"
+        },
+        {
+          "url": "https://*.fal.media/*"
+        }
       ]
     },
     {
       "identifier": "http:allow-fetch-send",
       "allow": [
-        { "url": "https://cos-output-image.ppinfra.com/*" },
-        { "url": "https://cos-output-video.ppinfra.com/*" },
-        { "url": "https://*.myqcloud.com/*" }
+        {
+          "url": "https://cos-output-image.ppinfra.com/*"
+        },
+        {
+          "url": "https://cos-output-video.ppinfra.com/*"
+        },
+        {
+          "url": "https://*.myqcloud.com/*"
+        },
+        {
+          "url": "https://*.fal.media/*"
+        }
       ]
     },
     "fs:default",
@@ -48,28 +77,42 @@
     {
       "identifier": "fs:allow-remove",
       "allow": [
-        { "path": "$APPLOCALDATA/Henji-AI/**/*" }
+        {
+          "path": "$APPLOCALDATA/Henji-AI/**/*"
+        }
       ]
     },
     {
       "identifier": "fs:scope",
       "allow": [
-        { "path": "$APPLOCALDATA" },
-        { "path": "$APPLOCALDATA/**/*" }
+        {
+          "path": "$APPLOCALDATA"
+        },
+        {
+          "path": "$APPLOCALDATA/**/*"
+        }
       ]
     },
     {
       "identifier": "fs:allow-write-file",
       "allow": [
-        { "path": "$APPLOCALDATA/Henji-AI/**/*" },
-        { "path": "$APPLOCALDATA/**/*" }
+        {
+          "path": "$APPLOCALDATA/Henji-AI/**/*"
+        },
+        {
+          "path": "$APPLOCALDATA/**/*"
+        }
       ]
     },
     {
       "identifier": "fs:allow-write-text-file",
       "allow": [
-        { "path": "$APPLOCALDATA/Henji-AI/**/*" },
-        { "path": "$APPLOCALDATA/**/*" }
+        {
+          "path": "$APPLOCALDATA/Henji-AI/**/*"
+        },
+        {
+          "path": "$APPLOCALDATA/**/*"
+        }
       ]
     }
   ]

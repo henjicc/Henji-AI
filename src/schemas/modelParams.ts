@@ -42,6 +42,46 @@ export const wan25Params: ParamDef[] = [
     }
 ]
 
+export const nanoBananaParams: ParamDef[] = [
+    {
+        id: 'num_images',
+        type: 'number',
+        label: '数量',
+        min: 1,
+        max: 4,
+        step: 1,
+        widthClassName: 'w-20'
+    },
+    {
+        id: 'aspect_ratio',
+        type: 'dropdown',
+        label: '宽高比',
+        // 动态选项：图生图时包含 auto，文生图时不包含
+        options: (values) => {
+            const baseOptions = [
+                { value: '1:1', label: '1:1' },
+                { value: '16:9', label: '16:9' },
+                { value: '9:16', label: '9:16' },
+                { value: '21:9', label: '21:9' },
+                { value: '3:2', label: '3:2' },
+                { value: '2:3', label: '2:3' },
+                { value: '4:3', label: '4:3' },
+                { value: '3:4', label: '3:4' },
+                { value: '5:4', label: '5:4' },
+                { value: '4:5', label: '4:5' }
+            ]
+
+            // 图生图时添加 auto 选项在最前面
+            if (values.uploadedImages && values.uploadedImages.length > 0) {
+                return [{ value: 'auto', label: '自动' }, ...baseOptions]
+            }
+
+            return baseOptions
+        },
+        className: 'min-w-[100px]'
+    }
+]
+
 export const viduParams: ParamDef[] = [
     {
         id: 'viduMode',
