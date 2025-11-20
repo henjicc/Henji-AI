@@ -28,12 +28,12 @@ interface GenerationTask {
   error?: string
   uploadedFilePaths?: string[]
   progress?: number
+  requestId?: string
+  modelId?: string
+  message?: string
+  options?: any
   serverTaskId?: string
   timedOut?: boolean
-  // fal 队列超时恢复
-  requestId?: string  // fal 队列请求ID
-  modelId?: string    // fal 模型ID
-  message?: string    // 状态消息
 }
 
 const App: React.FC = () => {
@@ -94,8 +94,7 @@ const App: React.FC = () => {
   const speedMenuRef = React.useRef<HTMLDivElement>(null)
   const volumeDisplayRef = React.useRef<HTMLDivElement>(null)
   const volumeMenuRef = React.useRef<HTMLDivElement>(null)
-  const [frameDuration, setFrameDuration] = useState(1 / 30)
-  const lastFrameMediaTimeRef = React.useRef<number | null>(null)
+
   const controlsContainerRef = React.useRef<HTMLDivElement>(null)
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
   const inputContainerRef = React.useRef<HTMLDivElement>(null)
@@ -383,25 +382,7 @@ const App: React.FC = () => {
     return () => { document.removeEventListener('click', handler) }
   }, [isVolumeMenuOpen])
 
-  useEffect(() => {
-    if (!isVideoViewerOpen || !isVideoPlaying) return
-    const v = videoRef.current as any
-    if (!v || typeof v.requestVideoFrameCallback !== 'function') return
-    const handle = (_now: number, meta: any) => {
-      const mt = meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : null
-      if (mt != null) {
-        const last = lastFrameMediaTimeRef.current
-        if (last != null) {
-          const delta = mt - last
-          if (delta > 0.005 && delta < 0.2) setFrameDuration(delta)
-        }
-        lastFrameMediaTimeRef.current = mt
-      }
-      v.requestVideoFrameCallback(handle)
-    }
-    v.requestVideoFrameCallback(handle)
-    return () => { lastFrameMediaTimeRef.current = null }
-  }, [isVideoViewerOpen, isVideoPlaying])
+
 
   useEffect(() => {
     if (!isVideoViewerOpen) {
@@ -657,6 +638,16 @@ const App: React.FC = () => {
       return
     }
 
+    // 创建 sanitizedOptions，移除 base64 图片数据以防止 history.json 膨胀
+    const sanitizedOptions = { ...options }
+    if (sanitizedOptions && sanitizedOptions.images) {
+      delete sanitizedOptions.images
+    }
+
+    // 查找供应商信息
+    const providerObj = providers.find(p => p.models.some(m => m.id === model))
+    const providerId = providerObj?.id
+
     // 创建新的生成任务
     const taskId = Date.now().toString()
     const newTask: GenerationTask = {
@@ -664,12 +655,13 @@ const App: React.FC = () => {
       type,
       prompt: input,
       model,  // 保存模型信息
+      provider: providerId, // 保存供应商信息
       images: options?.images,
       size: options?.size,
       uploadedFilePaths: options?.uploadedFilePaths,
       status: 'pending',
       progress: 0,
-      timedOut: false
+      options: sanitizedOptions, // 保存清洗后的参数
     }
 
     // 立即添加到任务列表（最新的在最后）
@@ -1083,16 +1075,21 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isTasksLoaded) return
     if (!isDesktop()) return
-    const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error')
+    const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'timeout' || t.status === 'pending' || t.status === 'generating')
       .map(t => ({
         id: t.id,
         type: t.type,
         prompt: t.prompt,
         model: t.model,
+        provider: t.provider, // 保存供应商信息
         size: t.size,
         status: t.status,
         error: t.error,
         uploadedFilePaths: t.uploadedFilePaths,
+        options: t.options, // 保存生成参数
+        requestId: t.requestId, // 保存请求ID（用于超时恢复）
+        modelId: t.modelId, // 保存模型ID（用于超时恢复）
+        message: t.message, // 保存状态消息
         result: t.result ? {
           id: t.result.id,
           type: t.result.type,
@@ -1154,34 +1151,35 @@ const App: React.FC = () => {
         images = arr
       } catch { }
     } else if (task.images && task.images.length) {
-      // 如果历史中已有 images 但不是 data:，仍尝试用上传路径重建
-      if (task.images.some(img => typeof img === 'string' && !img.startsWith('data:'))) {
-        if (task.uploadedFilePaths && task.uploadedFilePaths.length) {
-          try {
-            const arr: string[] = []
-            for (const p of task.uploadedFilePaths) {
-              const data = await fileToDataUrl(p)
-              arr.push(data)
-            }
-            images = arr
-          } catch { }
-        } else {
+      if (task.images.some(img => typeof img === 'string' && !img.startsWith('data:')) && task.uploadedFilePaths && task.uploadedFilePaths.length) {
+        try {
+          const arr: string[] = []
+          for (const p of task.uploadedFilePaths) {
+            const data = await fileToDataUrl(p)
+            arr.push(data)
+          }
+          images = arr
+        } catch {
           images = task.images
         }
       } else {
         images = task.images
       }
     }
-    const event = new CustomEvent('reedit-content', { detail: { prompt: task.prompt, images, uploadedFilePaths: task.uploadedFilePaths } })
-    window.dispatchEvent(event)
+
+    window.dispatchEvent(new CustomEvent('reedit-content', {
+      detail: {
+        prompt: task.prompt,
+        images,
+        uploadedFilePaths: task.uploadedFilePaths,
+        model: task.model,
+        provider: task.provider,
+        options: task.options
+      }
+    }))
   }
 
-  // 继续查询超时的 fal 队列请求
   const handleContinuePolling = async (task: GenerationTask) => {
-    if (!task.requestId || !task.modelId || !task.provider) {
-      console.error('[App] 缺少继续查询所需的信息')
-      return
-    }
 
     console.log('[App] 继续查询 fal 队列:', { requestId: task.requestId, modelId: task.modelId })
 

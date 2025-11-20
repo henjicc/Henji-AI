@@ -141,6 +141,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // Nano Banana 和 Nano Banana Pro: 根据是否上传图片动态调整 aspect_ratio 默认值
   useEffect(() => {
+    if (isRestoringRef.current) return
     if (selectedModel === 'nano-banana' || selectedModel === 'nano-banana-pro') {
       if (uploadedImages.length > 0) {
         // 图生图模式：默认 auto
@@ -247,6 +248,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // Hailuo 时长-分辨率联动与默认值
   useEffect(() => {
+    if (isRestoringRef.current) return
     if (currentModel?.type === 'video' && (selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-02')) {
       if (videoDuration !== 6 && videoDuration !== 10) {
         setVideoDuration(6)
@@ -265,6 +267,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   }, [selectedModel, videoDuration, videoResolution])
 
   useEffect(() => {
+    if (isRestoringRef.current) return
     const first = uploadedImages[0]
     if (!first) return
     if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
@@ -297,6 +300,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // PixVerse 分辨率规范化
   useEffect(() => {
+    if (isRestoringRef.current) return
     if (currentModel?.type === 'video' && selectedModel === 'pixverse-v4.5') {
       const s = (videoResolution || '').toLowerCase()
       const allowed = ['360p', '540p', '720p', '1080p']
@@ -394,11 +398,33 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     })
   }
 
+  const isRestoringRef = useRef(false)
+
   // 监听重新编辑事件
   useEffect(() => {
     const handleReedit = (event: CustomEvent) => {
-      const { prompt, images, uploadedFilePaths } = event.detail as any
+      const { prompt, images, uploadedFilePaths, model, provider, options } = event.detail as any
+
+      // 标记正在恢复状态，防止 useEffect 重置参数
+      isRestoringRef.current = true
+
       setInput(prompt || '')
+
+      // 恢复模型选择
+      if (model) {
+        let targetProvider = provider
+        if (!targetProvider) {
+          // 如果 provider 缺失（旧历史记录），尝试从 model 推断
+          const p = providers.find(p => p.models.some(m => m.id === model))
+          if (p) targetProvider = p.id
+        }
+
+        if (targetProvider) {
+          handleModelSelect(targetProvider, model)
+        }
+      }
+
+      // 恢复图片
       if (images && Array.isArray(images)) {
         setUploadedImages(images)
         setMediaType('image')
@@ -408,6 +434,65 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       } else {
         setUploadedFilePaths([])
       }
+
+      // 恢复参数
+      if (options) {
+        // 通用参数
+        if (options.num_images) setNumImages(options.num_images)
+        if (options.aspect_ratio) setAspectRatio(options.aspect_ratio)
+        if (options.resolution) setResolution(options.resolution)
+
+        // Seedream
+        if (options.maxImages) setMaxImages(options.maxImages)
+
+        // Video parameters
+        if (options.duration) setVideoDuration(options.duration)
+        if (options.aspectRatio) setVideoAspectRatio(options.aspectRatio) // 注意：视频参数可能是 camelCase
+        if (options.resolution) setVideoResolution(options.resolution)
+        if (options.negativePrompt) setVideoNegativePrompt(options.negativePrompt)
+        if (options.seed) setVideoSeed(options.seed)
+
+        // Kling
+        if (options.cfg_scale) setKlingCfgScale(options.cfg_scale)
+
+        // Hailuo
+        if (options.hailuoFast) setHailuoFastMode(options.hailuoFast)
+
+        // PixVerse
+        if (options.fastMode) setPixFastMode(options.fastMode)
+        if (options.style) setPixStyle(options.style)
+
+        // Seedance
+        if (options.seedanceVariant) setSeedanceVariant(options.seedanceVariant)
+        if (options.cameraFixed !== undefined) setSeedanceCameraFixed(options.cameraFixed)
+
+        // Vidu
+        if (options.viduMode) setViduMode(options.viduMode)
+        if (options.viduStyle) setViduStyle(options.viduStyle)
+        if (options.viduMovementAmplitude) setViduMovementAmplitude(options.viduMovementAmplitude)
+        if (options.viduBgm) setViduBgm(options.viduBgm)
+
+        // Audio
+        if (options.speed) setAudioSpeed(options.speed)
+        if (options.emotion) setAudioEmotion(options.emotion)
+        if (options.voiceId) setVoiceId(options.voiceId)
+        if (options.spec) setAudioSpec(options.spec)
+        if (options.vol) setAudioVol(options.vol)
+        if (options.pitch) setAudioPitch(options.pitch)
+        if (options.sample_rate) setAudioSampleRate(options.sample_rate)
+        if (options.bitrate) setAudioBitrate(options.bitrate)
+        if (options.format) setAudioFormat(options.format)
+        if (options.channel) setAudioChannel(options.channel)
+        if (options.latex_read !== undefined) setLatexRead(options.latex_read)
+        if (options.text_normalization !== undefined) setTextNormalization(options.text_normalization)
+        if (options.language_boost !== undefined) setLanguageBoost(options.language_boost)
+        if (options.language_boost !== undefined) setLanguageBoost(options.language_boost)
+      }
+
+      // 恢复完成后重置标记
+      setTimeout(() => {
+        isRestoringRef.current = false
+      }, 100)
     }
 
     window.addEventListener('reedit-content', handleReedit as EventListener)
