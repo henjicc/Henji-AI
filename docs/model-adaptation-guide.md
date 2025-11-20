@@ -56,6 +56,37 @@ Henji AI 的模型适配分为前端和后端两个部分：
 
 ### 2. 添加新模型 (Model)
 
+#### 模型分类规范 🏷️
+
+添加新模型时，必须在 `src/config/providers.json` 中正确配置以下三个维度的分类：
+
+1. **供应商 (Provider)**: 模型所属的 API 服务商
+   - 例如：`piaoyun`, `fal`
+   - 如果是新供应商，需要先按照「添加新供应商」流程进行配置
+
+2. **类型 (Type)**: 模型的媒体类型
+   - 必选值：`image` | `video` | `audio`
+   - 这决定了模型在 UI 中的基础筛选分类
+
+3. **功能 (Functions)**: 模型支持的具体功能（数组）
+   - **图片模型**可选值：`图片生成`, `图片编辑`
+   - **视频模型**可选值：`文生视频`, `图生视频`, `首尾帧`, `参考生视频`
+   - **音频模型**可选值：`语音合成`
+   - 一个模型可以有多个功能标签
+
+**配置示例**：
+```json
+{
+  "id": "your-model",
+  "name": "Your Model Name",
+  "type": "video",
+  "description": "模型描述",
+  "functions": ["文生视频", "图生视频", "首尾帧"]
+}
+```
+
+> **⚠️ 重要**: 功能标签会影响用户在模型选择面板中的筛选体验，请根据模型的实际能力准确配置。如果未来需要添加新的功能类型，需要同时更新 `MediaGenerator.tsx` 中的功能筛选器选项列表。
+
 #### 通用原则：功能合并与智能路由
 
 **重要原则**：不要因为同一个模型提供了不同的 API 端点（如 Text-to-Image 和 Image-to-Image）就在 UI 上拆分成两个模型选项。
@@ -239,6 +270,7 @@ if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
 
 **配置层**:
 - [ ] `providers.json` 添加供应商和模型
+- [ ] **重要**: 为模型配置正确的 `type` (image/video/audio) 和 `functions` 数组
 - [ ] `modelParams.ts` 定义参数 Schema（注意动态选项）
 - [ ] `SettingsModal.tsx` 添加 API Key 输入
 

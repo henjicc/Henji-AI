@@ -31,6 +31,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [modelDropdownClosing, setModelDropdownClosing] = useState(false)
   const [modelFilterProvider, setModelFilterProvider] = useState<string>('all')
   const [modelFilterType, setModelFilterType] = useState<'all' | 'image' | 'video' | 'audio'>('all')
+  const [modelFilterFunction, setModelFilterFunction] = useState<string>('all')
   const [isResolutionDropdownOpen, setIsResolutionDropdownOpen] = useState(false)
   const [selectedResolution, setSelectedResolution] = useState('smart')  // 默认为智能模式
   const [resolutionQuality, setResolutionQuality] = useState<'2K' | '4K'>('2K') // 2K/4K切换，默认2K
@@ -1209,24 +1210,37 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           renderPanel={() => (
             <div className="p-4 h-full flex flex-col">
               <div className="mb-3">
-                <div className="text-xs text-zinc-400 mb-2">供应商</div>
+                <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setModelFilterProvider('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
+                  <button onClick={() => setModelFilterProvider('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部供应商</button>
                   {providers.map(p => (
                     <button key={p.id} onClick={() => setModelFilterProvider(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
                   ))}
-                </div>
-              </div>
-              <div className="mb-3">
-                <div className="text-xs text-zinc-400 mb-2">类型</div>
-                <div className="flex flex-wrap gap-2">
+                  <div className="w-px bg-zinc-600/50 mx-1"></div>
                   {[
-                    { label: '全部', value: 'all' },
+                    { label: '全部类型', value: 'all' },
                     { label: '图片', value: 'image' },
                     { label: '视频', value: 'video' },
                     { label: '音频', value: 'audio' }
                   ].map(t => (
                     <button key={t.value} onClick={() => setModelFilterType(t.value as 'all' | 'image' | 'video' | 'audio')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-3">
+                <div className="text-xs text-zinc-400 mb-2">功能</div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: '全部', value: 'all' },
+                    { label: '图片生成', value: '图片生成' },
+                    { label: '图片编辑', value: '图片编辑' },
+                    { label: '文生视频', value: '文生视频' },
+                    { label: '图生视频', value: '图生视频' },
+                    { label: '首尾帧', value: '首尾帧' },
+                    { label: '参考生视频', value: '参考生视频' },
+                    { label: '语音合成', value: '语音合成' }
+                  ].map(f => (
+                    <button key={f.value} onClick={() => setModelFilterFunction(f.value)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterFunction === f.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{f.label}</button>
                   ))}
                 </div>
               </div>
@@ -1236,6 +1250,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                     .flatMap(p => p.models.map(m => ({ p, m })))
                     .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
                     .filter(item => (modelFilterType === 'all' ? true : item.m.type === modelFilterType))
+                    .filter(item => (modelFilterFunction === 'all' ? true : item.m.functions.includes(modelFilterFunction)))
                     .map(({ p, m }) => (
                       <div key={`${p.id}-${m.id}`} data-close-on-select onClick={() => handleModelSelect(p.id, m.id)} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${selectedProvider === p.id && selectedModel === m.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
                         <div className="flex items-center justify-between">

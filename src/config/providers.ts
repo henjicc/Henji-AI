@@ -12,6 +12,7 @@ export interface Model {
   name: string
   type: 'image' | 'video' | 'audio'
   description: string
+  functions: string[]
 }
 
 // 类型转换，确保数据符合接口定义
