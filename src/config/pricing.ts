@@ -132,8 +132,11 @@ export const pricingConfigs: PricingConfig[] = [
         providerId: 'piaoyun',
         modelId: 'seedream-4.0',
         currency: '¥',
-        type: 'fixed',
-        fixedPrice: PRICES.SEEDREAM,
+        type: 'calculated',
+        calculator: (params) => {
+            const maxImages = params.maxImages || 1
+            return PRICES.SEEDREAM * maxImages
+        },
         unit: '张'
     },
     {

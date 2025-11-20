@@ -1713,6 +1713,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             params={{
               // 图片参数
               num_images: numImages,
+              maxImages,
               uploadedImages,
 
               // 视频参数
