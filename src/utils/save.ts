@@ -1,4 +1,5 @@
 import { BaseDirectory, writeFile, mkdir, readFile, remove } from '@tauri-apps/plugin-fs'
+import Pica from 'pica'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import * as path from '@tauri-apps/api/path'
@@ -293,10 +294,8 @@ async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?
   destCanvas.height = h
 
   try {
-    const mod = await import('pica')
-    const Pica = (mod as any).default || mod
-    const p = typeof Pica === 'function' ? Pica() : new Pica()
-    await p.resize(srcCanvas, destCanvas, { quality: 3, alpha: false })
+    const p = new Pica()
+    await p.resize(srcCanvas, destCanvas, { quality: 3 })
     const outBlob: Blob = await p.toBlob(destCanvas, 'image/jpeg', quality)
     const buf = await outBlob.arrayBuffer()
     return new Uint8Array(buf)

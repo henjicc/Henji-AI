@@ -17,7 +17,7 @@
           "$APPLOCALDATA/**"
         ]
       },
-      "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src *; img-src 'self' asset: http://asset.localhost data: blob: *; media-src 'self' asset: http://asset.localhost data: blob: *;"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src *; img-src 'self' asset: http://asset.localhost data: blob: *; media-src 'self' asset: http://asset.localhost data: blob: *; worker-src 'self' blob:;"
     },
     "windows": [
       {
@@ -39,10 +39,18 @@
     "targets": "all",
     "resources": [],
     "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
       "icons/icon.ico"
     ],
     "longDescription": "Henji AI（痕迹AI）是一款使用Tauri框架构建的跨平台桌面应用，通过调用各种API接口生成图片、视频和音频。支持多种AI模型，包括图片生成、视频制作、语音合成等功能。",
     "shortDescription": "使用AI技术生成图片、视频和音频的桌面应用",
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13"
+    },
     "windows": {
       "wix": {
         "language": "zh-CN"
