@@ -41,12 +41,7 @@ jobs:
         run: npm ci
 
       - name: Build application
-        shell: cmd
-        run: |
-          call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64
-          set CC=cl.exe
-          set CXX=cl.exe
-          npm run tauri:build
+        run: npm run tauri:build
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -87,6 +82,9 @@ jobs:
         run: npm ci
 
       - name: Build application (Universal Binary)
+        env:
+          CC: ""
+          CXX: ""
         run: npm run tauri:build:mac -- --target universal-apple-darwin
 
       - name: Upload macOS DMG
