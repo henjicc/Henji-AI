@@ -1,5 +1,7 @@
 .qoder/
 .trae/
+.claude/
+.cargo/
 docs/GITHUB_ACTIONS_GUIDE.md
 # Dependencies
 node_modules/

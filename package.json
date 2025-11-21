@@ -2,7 +2,9 @@
   "name": "henji-ai",
   "private": true,
   "version": "0.1.0",
+  "description": "一个聚合多家AI供应商，一站式生成图片、视频和音频的客户端",
   "type": "module",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

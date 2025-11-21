@@ -45,8 +45,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "longDescription": "Henji AI（痕迹AI）是一款使用Tauri框架构建的跨平台桌面应用，通过调用各种API接口生成图片、视频和音频。支持多种AI模型，包括图片生成、视频制作、语音合成等功能。",
-    "shortDescription": "使用AI技术生成图片、视频和音频的桌面应用",
+    "longDescription": "痕迹AI 是一个基于 Tauri 和 React 构建的跨平台桌面应用，聚合派欧云、fal 等多家 AI 供应商，提供图片生成（即梦 4.0、Nano Banana 等）、视频生成（Vidu Q1、可灵 2.5、Hailuo 等）和音频合成（MiniMax Speech 2.6）功能。采用适配器模式统一不同供应商接口，支持 Windows 和 macOS。",
+    "shortDescription": "聚合多家AI供应商，一站式生成图片、视频和音频的客户端",
     "macOS": {
       "frameworks": [],
       "minimumSystemVersion": "10.13"
