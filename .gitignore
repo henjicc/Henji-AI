@@ -1,5 +1,6 @@
 .qoder/
 .trae/
+docs/GITHUB_ACTIONS_GUIDE.md
 # Dependencies
 node_modules/
 npm-debug.log*
