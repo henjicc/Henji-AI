@@ -24,16 +24,7 @@
       "identifier": "http:allow-fetch",
       "allow": [
         {
-          "url": "https://cos-output-image.ppinfra.com/*"
-        },
-        {
-          "url": "https://cos-output-video.ppinfra.com/*"
-        },
-        {
-          "url": "https://*.myqcloud.com/*"
-        },
-        {
-          "url": "https://*.fal.media/*"
+          "url": "https://*"
         }
       ]
     },
@@ -41,16 +32,7 @@
       "identifier": "http:allow-fetch-read-body",
       "allow": [
         {
-          "url": "https://cos-output-image.ppinfra.com/*"
-        },
-        {
-          "url": "https://cos-output-video.ppinfra.com/*"
-        },
-        {
-          "url": "https://*.myqcloud.com/*"
-        },
-        {
-          "url": "https://*.fal.media/*"
+          "url": "https://*"
         }
       ]
     },
@@ -58,16 +40,7 @@
       "identifier": "http:allow-fetch-send",
       "allow": [
         {
-          "url": "https://cos-output-image.ppinfra.com/*"
-        },
-        {
-          "url": "https://cos-output-video.ppinfra.com/*"
-        },
-        {
-          "url": "https://*.myqcloud.com/*"
-        },
-        {
-          "url": "https://*.fal.media/*"
+          "url": "https://*"
         }
       ]
     },

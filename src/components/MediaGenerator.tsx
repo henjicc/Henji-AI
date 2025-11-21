@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
 import ParamRow from './ui/ParamRow'
@@ -23,13 +22,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [input, setInput] = useState('')
   const [selectedProvider, setSelectedProvider] = useState('piaoyun')
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
-  const [mediaType, setMediaType] = useState<'text' | 'image'>('text')
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([])
-  const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false)
   const [removingImages, setRemovingImages] = useState<Set<string>>(new Set())
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
-  const [modelDropdownClosing, setModelDropdownClosing] = useState(false)
+  const [_modelDropdownClosing, setModelDropdownClosing] = useState(false)
+
   const [modelFilterProvider, setModelFilterProvider] = useState<string>('all')
   const [modelFilterType, setModelFilterType] = useState<'all' | 'image' | 'video' | 'audio'>('all')
   const [modelFilterFunction, setModelFilterFunction] = useState<string>('all')
@@ -41,14 +39,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [isManualInput, setIsManualInput] = useState(false) // 标记是否手动输入
   const [maxImages, setMaxImages] = useState<number>(1)
   const [isViduStyleDropdownOpen, setIsViduStyleDropdownOpen] = useState(false)
-  const [viduStyleDropdownClosing, setViduStyleDropdownClosing] = useState(false)
+  const [_viduStyleDropdownClosing, setViduStyleDropdownClosing] = useState(false)
+
 
 
   // Vidu Q1 参数
   const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
   const [viduAspectRatio, setViduAspectRatio] = useState('16:9')
   const [viduStyle, setViduStyle] = useState('general')
-  const [viduDuration, setViduDuration] = useState(5)
+  const [_viduDuration, _setViduDuration] = useState(5)
+
   const [viduMovementAmplitude, setViduMovementAmplitude] = useState('auto')
   const [viduBgm, setViduBgm] = useState(false)
   const [videoDuration, setVideoDuration] = useState(5)
@@ -67,7 +67,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [wanAudio, setWanAudio] = useState(true)
   const [seedanceResolution, setSeedanceResolution] = useState('720p')
   const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
-  const [seedanceDuration, setSeedanceDuration] = useState(5)
+
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
 
   // Nano Banana 和 Nano Banana Pro 参数
@@ -82,20 +82,34 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [klingAspectDropdownClosing, setKlingAspectDropdownClosing] = useState(false)
 
   const [isHailuoResolutionDropdownOpen, setIsHailuoResolutionDropdownOpen] = useState(false)
-  const [hailuoResolutionDropdownClosing, setHailuoResolutionDropdownClosing] = useState(false)
+
   const [isPixAspectDropdownOpen, setIsPixAspectDropdownOpen] = useState(false)
   const [pixAspectDropdownClosing, setPixAspectDropdownClosing] = useState(false)
   const [isPixResolutionDropdownOpen, setIsPixResolutionDropdownOpen] = useState(false)
   const [pixResolutionDropdownClosing, setPixResolutionDropdownClosing] = useState(false)
 
+  const [_hailuoResolutionDropdownClosing, _setHailuoResolutionDropdownClosing] = useState(false)
+  const [_seedanceVariantDropdownClosing, _setSeedanceVariantDropdownClosing] = useState(false)
+  const [_seedanceResolutionDropdownClosing, _setSeedanceResolutionDropdownClosing] = useState(false)
+  const [_seedanceAspectDropdownClosing, _setSeedanceAspectDropdownClosing] = useState(false)
+  const [_wanResolutionDropdownClosing, _setWanResolutionDropdownClosing] = useState(false)
+  const [_voiceDropdownClosing, _setVoiceDropdownClosing] = useState(false)
+  const [_stableHeight, _setStableHeight] = useState(false)
+
+  // Position states for dropdown positioning
+  const [_klingAspectPos, setKlingAspectPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
+  const [_klingDurationPos, setKlingDurationPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
+  const [_pixAspectPos, setPixAspectPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
+  const [_pixResolutionPos, setPixResolutionPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
+
   const [isWanResolutionDropdownOpen, setIsWanResolutionDropdownOpen] = useState(false)
-  const [wanResolutionDropdownClosing, setWanResolutionDropdownClosing] = useState(false)
+
   const [isSeedanceVariantDropdownOpen, setIsSeedanceVariantDropdownOpen] = useState(false)
-  const [seedanceVariantDropdownClosing, setSeedanceVariantDropdownClosing] = useState(false)
+
   const [isSeedanceResolutionDropdownOpen, setIsSeedanceResolutionDropdownOpen] = useState(false)
-  const [seedanceResolutionDropdownClosing, setSeedanceResolutionDropdownClosing] = useState(false)
+
   const [isSeedanceAspectDropdownOpen, setIsSeedanceAspectDropdownOpen] = useState(false)
-  const [seedanceAspectDropdownClosing, setSeedanceAspectDropdownClosing] = useState(false)
+
 
 
   const modelRef = useRef<HTMLDivElement>(null)
@@ -119,7 +133,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [audioEmotion, setAudioEmotion] = useState<string>('neutral')
   const [voiceId, setVoiceId] = useState<string>('male-qn-jingying')
   const [isVoiceDropdownOpen, setIsVoiceDropdownOpen] = useState(false)
-  const [voiceDropdownClosing, setVoiceDropdownClosing] = useState(false)
+
   const [voiceFilterGender, setVoiceFilterGender] = useState<'all' | 'male' | 'female' | 'child' | 'other'>('all')
   const voiceRef = useRef<HTMLDivElement>(null)
   const [audioVol, setAudioVol] = useState<number>(1.0)
@@ -134,10 +148,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
 
 
-  const [klingAspectPos, setKlingAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  const [klingDurationPos, setKlingDurationPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  const [pixAspectPos, setPixAspectPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  const [pixResolutionPos, setPixResolutionPos] = useState<{ top: number; left: number; width: number } | null>(null)
+
+
+
+
 
   // Nano Banana 和 Nano Banana Pro: 根据是否上传图片动态调整 aspect_ratio 默认值
   useEffect(() => {
@@ -427,7 +441,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       // 恢复图片
       if (images && Array.isArray(images)) {
         setUploadedImages(images)
-        setMediaType('image')
       }
       if (uploadedFilePaths && Array.isArray(uploadedFilePaths)) {
         setUploadedFilePaths(uploadedFilePaths)
@@ -601,10 +614,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
 
   const handleCloseHailuoResolutionDropdown = () => {
-    setHailuoResolutionDropdownClosing(true)
+    _setHailuoResolutionDropdownClosing(true)
     setTimeout(() => {
       setIsHailuoResolutionDropdownOpen(false)
-      setHailuoResolutionDropdownClosing(false)
+      _setHailuoResolutionDropdownClosing(false)
     }, 200)
   }
 
@@ -624,34 +637,34 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 200)
   }
   const handleCloseSeedanceVariantDropdown = () => {
-    setSeedanceVariantDropdownClosing(true)
+    _setSeedanceVariantDropdownClosing(true)
     setTimeout(() => {
       setIsSeedanceVariantDropdownOpen(false)
-      setSeedanceVariantDropdownClosing(false)
+      _setSeedanceVariantDropdownClosing(false)
     }, 200)
   }
   const handleCloseSeedanceResolutionDropdown = () => {
-    setSeedanceResolutionDropdownClosing(true)
+    _setSeedanceResolutionDropdownClosing(true)
     setTimeout(() => {
       setIsSeedanceResolutionDropdownOpen(false)
-      setSeedanceResolutionDropdownClosing(false)
+      _setSeedanceResolutionDropdownClosing(false)
     }, 200)
   }
   const handleCloseSeedanceAspectDropdown = () => {
-    setSeedanceAspectDropdownClosing(true)
+    _setSeedanceAspectDropdownClosing(true)
     setTimeout(() => {
       setIsSeedanceAspectDropdownOpen(false)
-      setSeedanceAspectDropdownClosing(false)
+      _setSeedanceAspectDropdownClosing(false)
     }, 200)
   }
 
 
 
   const handleCloseWanResolutionDropdown = () => {
-    setWanResolutionDropdownClosing(true)
+    _setWanResolutionDropdownClosing(true)
     setTimeout(() => {
       setIsWanResolutionDropdownOpen(false)
-      setWanResolutionDropdownClosing(false)
+      _setWanResolutionDropdownClosing(false)
     }, 200)
   }
 
@@ -714,7 +727,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
     if (currentModel?.type === 'video' && selectedModel === 'vidu-q1') {
       options.mode = viduMode
-      options.duration = viduDuration
+      options.duration = _viduDuration
       options.movementAmplitude = viduMovementAmplitude
       options.bgm = viduBgm
 
@@ -1026,18 +1039,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     onGenerate(finalInput, selectedModel, currentModel?.type || 'image', options)
   }
 
-  const handleTextFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setInput(event.target.result as string)
-        }
-      }
-      reader.readAsText(file)
-    }
-  }
 
   const handleImageFileUpload = async (files: File[]) => {
     if (files.length > 0) {
@@ -1071,7 +1072,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
             if (prev.length >= maxImageCount) return prev
             return [...prev, saved.dataUrl]
           })
-          setMediaType('image')
         }
       }
     }
@@ -1089,7 +1089,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       updated[index] = saved.fullPath
       return updated
     })
-    setMediaType('image')
   }
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -1108,7 +1107,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 if ((selectedModel === 'kling-2.5-turbo' && prev.length >= 1)) return prev
                 return [...prev, event.target?.result as string]
               })
-              setMediaType('image')
             }
           }
           reader.readAsDataURL(blob)
@@ -1280,20 +1278,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setVoiceDropdownClosing(true)
+        _setVoiceDropdownClosing(true)
         setTimeout(() => {
           setIsVoiceDropdownOpen(false)
-          setVoiceDropdownClosing(false)
+          _setVoiceDropdownClosing(false)
         }, 200)
       }
     }
     const onDoc = (e: MouseEvent) => {
       const el = voiceRef.current
       if (el && !el.contains(e.target as Node)) {
-        setVoiceDropdownClosing(true)
+        _setVoiceDropdownClosing(true)
         setTimeout(() => {
           setIsVoiceDropdownOpen(false)
-          setVoiceDropdownClosing(false)
+          _setVoiceDropdownClosing(false)
         }, 200)
       }
     }

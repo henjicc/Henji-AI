@@ -17,7 +17,7 @@ type PanelTriggerProps = {
 }
 
 export default function PanelTrigger(props: PanelTriggerProps) {
-  const { label, display, disabled, className, buttonClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight, closeOnPanelClick = true, renderPanel, stableHeight } = props
+  const { label, display, disabled, className, buttonClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight: _panelHeight, closeOnPanelClick = true, renderPanel, stableHeight } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)

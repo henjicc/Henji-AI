@@ -189,8 +189,8 @@ export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 
   if (!cached) {
     const bytes = await ensureCompressedJpegBytesWithPica(fileOrBlob as Blob, { maxPixels: 17_000_000, quality: 0.85, maxDimension: opts?.maxDimension })
     const dataUrl = bytesToDataUrl(bytes, mime)
-    const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
-    const compressedHash = await sha256Hex(bytes.buffer)
+    const displaySrc = URL.createObjectURL(new Blob([bytes as any], { type: mime }))
+    const compressedHash = await sha256Hex(bytes.buffer as ArrayBuffer)
     cached = { bytes, dataUrl, displaySrc, compressedHash }
     uploadCache.set(originalHash, cached)
   }

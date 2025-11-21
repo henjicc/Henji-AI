@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!-- 使用变量定义的默认语言 -->
+  <?ifndef lang ?>
+    <?define lang = "zh-CN" ?>
+  <?endif ?>
+  
+  <Product Id="*" 
+           Name="$(var.product_name)" 
+           Language="$(var.lang)" 
+           Version="$(var.product_version)" 
+           Manufacturer="$(var.product_publisher)" 
+           UpgradeCode="$(var.upgrade_guid)">
+    
+    <!-- 包属性 -->
+    <Package InstallerVersion="200" 
+             Compressed="yes" 
+             InstallScope="perMachine" 
+             Platform="x64" />
+    
+    <!-- 主要升级规则 -->
+    <MajorUpgrade 
+      DowngradeErrorMessage="此应用程序的较新版本已经安装。" 
+      Schedule="afterInstallInitialize" />
+    
+    <!-- 许可协议 -->
+    <Property Id="ARPPRODUCTICON" Value="henji_icon.exe" />
+    <Property Id="ARPHELPLINK" Value="https://www.henjihenji.com/" />
+    <Property Id="ARPURLINFOABOUT" Value="https://www.henjihenji.com/" />
+    
+    <!-- 图标 -->
+    <Icon Id="henji_icon.exe" SourceFile="..\target\release\henji-ai.exe" />
+    
+    <!-- 目录结构 -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <!-- 程序文件目录 -->
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="$(var.product_name)">
+          <Directory Id="APPDIR" Name="app">
+            <Directory Id="BUNDLE" Name="bundle" />
+          </Directory>
+        </Directory>
+      </Directory>
+      
+      <!-- 桌面快捷方式 -->
+      <Directory Id="DesktopFolder" Name="Desktop" />
+      
+      <!-- 开始菜单 -->
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="$(var.product_name)" />
+      </Directory>
+    </Directory>
+    
+    <!-- 应用程序特性 -->
+    <Feature Id="ProductFeature" 
+             Title="$(var.product_name)" 
+             Level="1" 
+             ConfigurableDirectory="INSTALLFOLDER">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+    
+    <!-- 组件组定义 -->
+    <ComponentGroup Id="ProductComponents" Directory="APPDIR">
+      <Component Id="MainExecutable">
+        <File Id="henji_exe" 
+              Source="..\target\release\henji-ai.exe" 
+              KeyPath="yes">
+          <!-- 创建桌面快捷方式 -->
+          <Shortcut Id="DesktopApplicationShortcut"
+                    Directory="DesktopFolder"
+                    Name="$(var.product_name)"
+                    Description="$(var.product_description)"
+                    WorkingDirectory="APPDIR" />
+          
+          <!-- 创建开始菜单快捷方式 -->
+          <Shortcut Id="StartMenuApplicationShortcut"
+                    Directory="ApplicationProgramsFolder"
+                    Name="$(var.product_name)"
+                    Description="$(var.product_description)"
+                    WorkingDirectory="APPDIR" />
+          
+          <!-- 注册到卸载程序 -->
+          <RegistryValue Root="HKCU" 
+                         Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.upgrade_guid)" 
+                         Name="DisplayName" 
+                         Type="string" 
+                         Value="$(var.product_name)" 
+                         KeyPath="yes" />
+          
+          <RegistryValue Root="HKCU" 
+                         Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.upgrade_guid)" 
+                         Name="DisplayIcon" 
+                         Type="string" 
+                         Value="[#henji_exe]" 
+                         KeyPath="no" />
+          
+          <RegistryValue Root="HKCU" 
+                         Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.upgrade_guid)" 
+                         Name="UninstallString" 
+                         Type="string" 
+                         Value="[System64Folder]msiexec.exe /x [ProductCode]" 
+                         KeyPath="no" />
+        </File>
+      </Component>
+    </ComponentGroup>
+    
+    <!-- 桌面快捷方式组件 -->
+    <Component Id="DesktopShortcut" Directory="DesktopFolder">
+      <RegistryValue Root="HKCU" 
+                     Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.upgrade_guid)" 
+                     Name="DesktopShortcut" 
+                     Type="integer" 
+                     Value="1" 
+                     KeyPath="yes" />
+    </Component>
+    
+    <!-- 开始菜单快捷方式组件 -->
+    <Component Id="ApplicationShortcut" Directory="ApplicationProgramsFolder">
+      <RegistryValue Root="HKCU" 
+                     Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\$(var.upgrade_guid)" 
+                     Name="StartMenuShortcut" 
+                     Type="integer" 
+                     Value="1" 
+                     KeyPath="yes" />
+    </Component>
+    
+    <!-- UI自定义 -->
+    <UIRef Id="WixUI_FeatureTree" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+    
+    <!-- 许可协议 -->
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+    
+    <!-- 属性设置 -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    
+    <!-- 安装模式 -->
+    <Property Id="ARPNOMODIFY" Value="yes" />
+    <Property Id="ARPSIZE" Value="50000" />
+  </Product>
+</Wix>

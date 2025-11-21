@@ -14,6 +14,19 @@
         document.documentElement.classList.add(applied)
       })()
     </script>
+    <style>
+      /* 设置body背景色，避免白屏 */
+      body {
+        background-color: #0a0b0d;
+        margin: 0;
+        padding: 0;
+      }
+      /* 确保根元素也有背景色 */
+      #root {
+        background-color: #0a0b0d;
+        min-height: 100vh;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

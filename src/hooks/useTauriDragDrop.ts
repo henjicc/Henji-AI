@@ -1,7 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { useEffect, useState, useRef } from 'react'
-import { listen } from '@tauri-apps/api/event'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { inferMimeFromPath, isDesktop } from '../utils/save'
 

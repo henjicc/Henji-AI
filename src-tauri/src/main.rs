@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -12,9 +14,19 @@ pub fn run() {
       if let Err(e) = std::fs::create_dir_all(&media_dir) {
         eprintln!("failed to create media dir: {}", e);
       }
+      
       if let Some(win) = app.get_webview_window("main") {
+        // 先最大化窗口，然后显示，避免看到小窗口
         let _ = win.maximize();
+        
+        // 延迟显示窗口，确保内容加载完成
+        let window = win.clone();
+        std::thread::spawn(move || {
+          std::thread::sleep(std::time::Duration::from_millis(100));
+          let _ = window.show();
+        });
       }
+      
       Ok(())
     })
     .run(tauri::generate_context!())

@@ -29,7 +29,6 @@ export default function FileUploader({
     removingIndices = new Set()
 }: FileUploaderProps) {
     const inputRef = useRef<HTMLInputElement>(null)
-    const containerRef = useRef<HTMLDivElement>(null)
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
     const dragCounter = useRef(0)
     const lastDropTime = useRef(0)
@@ -70,7 +69,8 @@ export default function FileUploader({
         if (e.target.files && e.target.files.length > 0) {
             handleFiles(Array.from(e.target.files))
             // Reset input value to allow selecting the same file again
-            e.target.value = ''
+            const target = e.target as HTMLInputElement
+            target.value = ''
         }
     }
 
@@ -133,10 +133,7 @@ export default function FileUploader({
 
     return (
         <div
-            ref={(node) => {
-                if (elementRef.current !== node) elementRef.current = node
-                containerRef.current = node
-            }}
+            ref={elementRef}
             className={`flex items-center gap-2 transition-all duration-200 rounded-lg ${className}`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}

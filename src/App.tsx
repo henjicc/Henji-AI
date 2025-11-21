@@ -99,6 +99,14 @@ const App: React.FC = () => {
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
   const inputContainerRef = React.useRef<HTMLDivElement>(null)
   const [inputPadding, setInputPadding] = useState<number>(400)
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsReady(true)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [])
 
   // 初始化右键菜单
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
@@ -1368,7 +1376,13 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden">
+    <div
+      className="min-h-screen bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden"
+      style={{
+        opacity: isReady ? 1 : 0,
+        transition: 'opacity 0.3s ease-in-out'
+      }}
+    >
       <WindowControls />
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col relative z-10 pt-10">

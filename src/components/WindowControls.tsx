@@ -2,6 +2,18 @@ import React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isDesktop, isDesktopAsync } from '../utils/save'
 
+// CSS properties that are not in the default type definitions
+type WebkitAppRegion = 'drag' | 'no-drag'
+
+// Extend the CSSProperties interface
+declare global {
+  namespace React {
+    interface CSSProperties {
+      WebkitAppRegion?: WebkitAppRegion
+    }
+  }
+}
+
 const WindowControls: React.FC = () => {
   const [isTauri, setIsTauri] = React.useState<boolean>(false)
   React.useEffect(() => {
@@ -28,13 +40,13 @@ const WindowControls: React.FC = () => {
     <div
       className="fixed top-0 left-0 right-0 h-10 bg-[#131313] border-b border-zinc-700/50 z-40 flex items-center justify-between px-3 text-white"
       data-tauri-drag-region
-      style={{ WebkitAppRegion: 'drag' as any }}
+      style={{ WebkitAppRegion: 'drag' }}
     >
       <div className="text-sm text-zinc-300">痕迹AI</div>
       <div
         className="flex items-center gap-2"
         data-tauri-ignore-drag-region
-        style={{ WebkitAppRegion: 'no-drag' as any }}
+        style={{ WebkitAppRegion: 'no-drag' }}
       >
         <button
           onClick={handleMinimize}

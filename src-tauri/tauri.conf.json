@@ -1,13 +1,13 @@
 {
-  "$schema": "https://schema.tauri.app/v2/config.schema.json",
-  "productName": "Henji AI",
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "痕迹AI",
   "version": "0.1.0",
   "identifier": "com.henji.ai",
   "build": {
-    "frontendDist": "dist",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run dev"
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "security": {
@@ -17,7 +17,7 @@
           "$APPLOCALDATA/**"
         ]
       },
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost data: blob:;"
+      "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src *; img-src 'self' asset: http://asset.localhost data: blob: *; media-src 'self' asset: http://asset.localhost data: blob: *;"
     },
     "windows": [
       {
@@ -26,7 +26,11 @@
         "width": 1200,
         "height": 800,
         "resizable": true,
-        "decorations": false
+        "decorations": false,
+        "visible": false,
+        "center": true,
+        "transparent": true,
+        "backgroundColor": "#00000000"
       }
     ]
   },
@@ -34,6 +38,15 @@
     "active": true,
     "targets": "all",
     "resources": [],
-    "icon": []
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "longDescription": "Henji AI（痕迹AI）是一款使用Tauri框架构建的跨平台桌面应用，通过调用各种API接口生成图片、视频和音频。支持多种AI模型，包括图片生成、视频制作、语音合成等功能。",
+    "shortDescription": "使用AI技术生成图片、视频和音频的桌面应用",
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      }
+    }
   }
 }

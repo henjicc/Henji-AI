@@ -17,8 +17,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
   const [volume, setVolume] = useState(1)
   const [waveform, setWaveform] = useState<number[] | null>(null)
   const [waveDuration, setWaveDuration] = useState<number | null>(null)
-  const [waveSampleRate, setWaveSampleRate] = useState<number | null>(null)
-  const [waveTotalSamples, setWaveTotalSamples] = useState<number | null>(null)
   const cacheKey = useMemo(() => src, [src])
   const waveCacheRef = useRef<Map<string, number[]>>(new Map())
 
@@ -88,14 +86,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
     return `${mm}:${ss.toString().padStart(2, '0')}`
   }
 
-  const onSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const a = audioRef.current
-    if (!a) return
-    const v = parseFloat(e.target.value)
-    a.currentTime = isNaN(v) ? 0 : v
-    setCurrentTime(a.currentTime)
-  }
-
   const onVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value)
     setVolume(isNaN(v) ? 1 : v)
@@ -153,8 +143,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
           waveCacheRef.current.set(cacheKey, smooth)
           setWaveform(smooth)
           setWaveDuration(audioBuf.duration || null)
-          setWaveSampleRate(audioBuf.sampleRate || null)
-          setWaveTotalSamples(audioBuf.length || null)
           if (filePath) {
             try { await writeWaveformCacheForAudio(filePath, Array.from(smooth)) } catch { }
           }
