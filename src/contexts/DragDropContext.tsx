@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react'
 interface DragData {
     type: 'image'
     imageUrl: string
+    filePath?: string  // 原始文件路径 (仅 Tauri 环境，用于直接读取本地文件)
     sourceType: 'history' | 'upload'
 }
 

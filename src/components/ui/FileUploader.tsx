@@ -2,6 +2,8 @@ import React, { useRef, useState } from 'react'
 import { useTauriDragDrop } from '../../hooks/useTauriDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
+import { readFile } from '@tauri-apps/plugin-fs'
+import { isDesktop, inferMimeFromPath } from '../../utils/save'
 
 type FileUploaderProps = {
     files: string[]
@@ -119,7 +121,20 @@ export default function FileUploader({
             // Drop detected!
             if (dragData.type === 'image') {
                 try {
-                    const file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+                    let file: File
+
+                    // 优先使用原始文件路径 (Tauri 环境)
+                    if (dragData.filePath && isDesktop()) {
+                        const bytes = await readFile(dragData.filePath)
+                        const mime = inferMimeFromPath(dragData.filePath)
+                        const blob = new Blob([bytes], { type: mime })
+                        const filename = dragData.filePath.split(/[\\\/]/).pop() || `image-${Date.now()}.jpg`
+                        file = new File([blob], filename, { type: mime })
+                    } else {
+                        // Fallback 到 URL 转换（开发环境或没有文件路径时）
+                        file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+                    }
+
                     handleFiles([file])
                 } catch (error) {
                     console.error('Failed to convert dragged image:', error)
@@ -163,7 +178,20 @@ export default function FileUploader({
 
                         if (dragData.type === 'image') {
                             try {
-                                const file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+                                let file: File
+
+                                // 优先使用原始文件路径 (Tauri 环境)
+                                if (dragData.filePath && isDesktop()) {
+                                    const bytes = await readFile(dragData.filePath)
+                                    const mime = inferMimeFromPath(dragData.filePath)
+                                    const blob = new Blob([bytes], { type: mime })
+                                    const filename = dragData.filePath.split(/[\\\/]/).pop() || `image-${Date.now()}.jpg`
+                                    file = new File([blob], filename, { type: mime })
+                                } else {
+                                    // Fallback 到 URL 转换（开发环境或没有文件路径时）
+                                    file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+                                }
+
                                 onReplace(targetIndex, file)
                             } catch (error) {
                                 console.error('Failed to convert dragged image:', error)

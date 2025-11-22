@@ -54,3 +54,12 @@ export async function convertBlobToPng(blob: Blob): Promise<Blob> {
         img.src = url;
     });
 }
+
+export function inferMimeFromPath(path: string): string {
+    const lower = path.toLowerCase()
+    if (lower.endsWith('.png')) return 'image/png'
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+    if (lower.endsWith('.webp')) return 'image/webp'
+    if (lower.endsWith('.gif')) return 'image/gif'
+    return 'image/jpeg'
+}

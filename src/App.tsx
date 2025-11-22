@@ -594,7 +594,7 @@ const App: React.FC = () => {
   }
 
   // 历史记录图片拖拽开始 (使用自定义拖拽)
-  const handleHistoryImageDragStart = (e: React.MouseEvent, imageUrl: string) => {
+  const handleHistoryImageDragStart = (e: React.MouseEvent, imageUrl: string, filePath?: string) => {
     e.preventDefault()
     const initialX = e.clientX
     const initialY = e.clientY
@@ -609,6 +609,7 @@ const App: React.FC = () => {
           {
             type: 'image',
             imageUrl,
+            filePath,  // 传递原始文件路径
             sourceType: 'history'
           },
           imageUrl
@@ -1590,7 +1591,7 @@ const App: React.FC = () => {
                                           className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing select-none"
                                           onMouseDown={(e) => {
                                             e.stopPropagation()
-                                            handleHistoryImageDragStart(e, url)
+                                            handleHistoryImageDragStart(e, url, filePaths[index])
                                           }}
                                           draggable={false}
                                         />
@@ -1610,7 +1611,7 @@ const App: React.FC = () => {
                                       className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing select-none"
                                       onMouseDown={(e) => {
                                         e.stopPropagation()
-                                        handleHistoryImageDragStart(e, task.result!.url)
+                                        handleHistoryImageDragStart(e, task.result!.url, task.result!.filePath)
                                       }}
                                       draggable={false}
                                     />
