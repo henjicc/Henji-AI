@@ -9,7 +9,6 @@ export interface PricingConfig {
 
     // 固定价格（如图片模型）
     fixedPrice?: number
-    unit?: string
 
     // 动态计算（传入当前参数，返回价格或价格范围）
     calculator?: (params: any) => number | { min: number; max: number }
@@ -21,8 +20,8 @@ export type PriceResult = number | { min: number; max: number } | null
 const PRICES = {
     // 图片
     SEEDREAM: 0.2,
-    NANO_BANANA: 0.2775, // CNY
-    NANO_BANANA_PRO: 0.3557, // CNY
+    NANO_BANANA: 0.277, // CNY
+    NANO_BANANA_PRO: 1.07, // CNY
 
     // 音频（每万字符）
     SPEECH_HD: 3.5,
@@ -137,8 +136,7 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const maxImages = params.maxImages || 1
             return PRICES.SEEDREAM * maxImages
-        },
-        unit: '张'
+        }
     },
     {
         providerId: 'fal',
@@ -148,8 +146,7 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const numImages = params.num_images || 1
             return PRICES.NANO_BANANA * numImages
-        },
-        unit: '张'
+        }
     },
     {
         providerId: 'fal',
@@ -158,9 +155,11 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.num_images || 1
-            return PRICES.NANO_BANANA_PRO * numImages
-        },
-        unit: '张'
+            const basePrice = PRICES.NANO_BANANA_PRO * numImages
+            // 4K 分辨率时价格为 2 倍
+            const multiplier = params.resolution === '4K' ? 2 : 1
+            return basePrice * multiplier
+        }
     },
 
     // ===== 音频模型 =====
@@ -176,8 +175,7 @@ export const pricingConfigs: PricingConfig[] = [
                 ? PRICES.SPEECH_HD
                 : PRICES.SPEECH_TURBO
             return charsIn10k * pricePerChar
-        },
-        unit: ''
+        }
     },
 
     // ===== 视频模型 =====
@@ -186,8 +184,7 @@ export const pricingConfigs: PricingConfig[] = [
         modelId: 'vidu-q1',
         currency: '¥',
         type: 'fixed',
-        fixedPrice: PRICES.VIDU,
-        unit: '个'
+        fixedPrice: PRICES.VIDU
     },
     {
         providerId: 'piaoyun',
@@ -197,8 +194,7 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const duration = (params.videoDuration || 5) as 5 | 10
             return PRICES.KLING[duration] || PRICES.KLING[5]
-        },
-        unit: '个'
+        }
     },
     {
         providerId: 'piaoyun',
@@ -221,8 +217,7 @@ export const pricingConfigs: PricingConfig[] = [
             }
 
             return priceTable[resolution]?.[duration as 6 | 10] || 0
-        },
-        unit: '个'
+        }
     },
     {
         providerId: 'piaoyun',
@@ -233,8 +228,7 @@ export const pricingConfigs: PricingConfig[] = [
             const duration = params.videoDuration || 6
             const resolution = (params.videoResolution || '768p') as '768p' | '1080p'
             return PRICES.HAILUO_02[resolution]?.[duration as 6 | 10] || 0
-        },
-        unit: '个'
+        }
     },
     {
         providerId: 'piaoyun',
@@ -246,8 +240,7 @@ export const pricingConfigs: PricingConfig[] = [
             const isFast = params.pixFastMode
             const priceTable = isFast ? PRICES.PIXVERSE.fast : PRICES.PIXVERSE.normal
             return priceTable[resolution] || 0
-        },
-        unit: '个'
+        }
     },
     {
         providerId: 'piaoyun',
@@ -259,8 +252,7 @@ export const pricingConfigs: PricingConfig[] = [
             // wanResolution 格式为 "1080P"，需要转换为 "1080p"
             const resolution = (params.wanResolution || '1080P').toLowerCase() as '480p' | '720p' | '1080p'
             return PRICES.WAN[resolution]?.[duration as 5 | 10] || 0
-        },
-        unit: '个'
+        }
     },
     {
         providerId: 'piaoyun',
@@ -278,8 +270,7 @@ export const pricingConfigs: PricingConfig[] = [
             const price = PRICES.SEEDANCE[variant]?.[duration]?.[resolution]?.[aspectGroup]
 
             return price || 0
-        },
-        unit: '个'
+        }
     }
 ]
 

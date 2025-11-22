@@ -97,10 +97,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [_stableHeight, _setStableHeight] = useState(false)
 
   // Position states for dropdown positioning
-  const [_klingAspectPos, setKlingAspectPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
-  const [_klingDurationPos, setKlingDurationPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
-  const [_pixAspectPos, setPixAspectPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
-  const [_pixResolutionPos, setPixResolutionPos] = useState<{top: number, left: number, width: number}>({top: 0, left: 0, width: 0})
+  const [_klingAspectPos, setKlingAspectPos] = useState<{ top: number, left: number, width: number }>({ top: 0, left: 0, width: 0 })
+  const [_klingDurationPos, setKlingDurationPos] = useState<{ top: number, left: number, width: number }>({ top: 0, left: 0, width: 0 })
+  const [_pixAspectPos, setPixAspectPos] = useState<{ top: number, left: number, width: number }>({ top: 0, left: 0, width: 0 })
+  const [_pixResolutionPos, setPixResolutionPos] = useState<{ top: number, left: number, width: number }>({ top: 0, left: 0, width: 0 })
 
   const [isWanResolutionDropdownOpen, setIsWanResolutionDropdownOpen] = useState(false)
 
@@ -1835,6 +1835,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               num_images: numImages,
               maxImages,
               uploadedImages,
+              resolution,
 
               // 视频参数
               videoDuration,
