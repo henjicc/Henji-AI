@@ -14,6 +14,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [showPriceEstimate, setShowPriceEstimate] = useState(true)
   const [showApiKey, setShowApiKey] = useState(false)
   const [showFalApiKey, setShowFalApiKey] = useState(false)
+  const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
+  const [collapseDelay, setCollapseDelay] = useState(500)
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
 
@@ -30,6 +32,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedShowPrice = localStorage.getItem('show_price_estimate')
     setShowPriceEstimate(savedShowPrice !== 'false') // 默认开启
+
+    const savedAutoCollapse = localStorage.getItem('enable_auto_collapse')
+    setEnableAutoCollapse(savedAutoCollapse !== 'false') // 默认开启
+
+    const savedCollapseDelay = parseInt(localStorage.getItem('collapse_delay') || '500', 10)
+    setCollapseDelay(savedCollapseDelay)
 
     // 点击模态框外部关闭
     const handleClickOutside = (event: MouseEvent) => {
@@ -84,6 +92,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     localStorage.setItem('show_price_estimate', value.toString())
     // 触发自定义事件，通知 PriceEstimate 组件更新
     window.dispatchEvent(new Event('priceSettingChanged'))
+  }
+
+  // 实时保存自动折叠设置
+  const handleAutoCollapseChange = (value: boolean) => {
+    setEnableAutoCollapse(value)
+    localStorage.setItem('enable_auto_collapse', value.toString())
+    // 触发自定义事件通知 App 组件
+    window.dispatchEvent(new Event('collapseSettingChanged'))
+  }
+
+  // 实时保存折叠延迟设置
+  const handleCollapseDelayChange = (value: number) => {
+    const newValue = Math.max(100, Math.min(3000, Math.round(value)))
+    setCollapseDelay(newValue)
+    localStorage.setItem('collapse_delay', newValue.toString())
+    // 触发自定义事件通知 App 组件
+    window.dispatchEvent(new Event('collapseSettingChanged'))
   }
 
   return (
@@ -190,6 +215,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               className="w-full"
             />
             <p className="mt-2 text-xs text-zinc-400">在生成面板显示预估费用</p>
+          </div>
+
+          <div className="mb-5">
+            <Toggle
+              label="底部面板智能折叠"
+              checked={enableAutoCollapse}
+              onChange={handleAutoCollapseChange}
+              className="w-full"
+            />
+            <p className="mt-2 text-xs text-zinc-400">浏览历史记录时自动折叠底部面板，节省显示空间</p>
+          </div>
+
+          <div className="mb-5">
+            <NumberInput
+              label="折叠延迟时间 (ms)"
+              value={collapseDelay}
+              onChange={handleCollapseDelayChange}
+              min={100}
+              max={3000}
+              step={100}
+              widthClassName="w-full"
+              disabled={!enableAutoCollapse}
+            />
+            <p className="mt-2 text-xs text-zinc-400">鼠标离开底部面板后等待多久自动折叠（100-3000毫秒）</p>
           </div>
 
           <div className="flex justify-end mt-6">

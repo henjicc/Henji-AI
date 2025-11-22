@@ -16,9 +16,11 @@ interface MediaGeneratorProps {
   isLoading: boolean
   onOpenSettings: () => void
   onOpenClearHistory: () => void
+  isCollapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
-const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory }) => {
+const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory, isCollapsed = false, onToggleCollapse }) => {
   const [input, setInput] = useState('')
   const [selectedProvider, setSelectedProvider] = useState('piaoyun')
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
@@ -221,6 +223,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   const currentProvider = providers.find(p => p.id === selectedProvider)
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
+
+  // 向父组件暴露当前状态（用于折叠条显示）
+  useEffect(() => {
+    const event = new CustomEvent('generatorStateChanged', {
+      detail: {
+        modelName: currentModel?.name || selectedModel,
+        prompt: input
+      }
+    })
+    window.dispatchEvent(event)
+  }, [selectedModel, input, currentModel])
 
   // 预设分辨率选项 - 2K基础分辨率
   const baseResolutions: Record<string, string> = {

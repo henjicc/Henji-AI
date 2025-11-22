@@ -101,11 +101,123 @@ const App: React.FC = () => {
   const [inputPadding, setInputPadding] = useState<number>(400)
   const [isReady, setIsReady] = useState(false)
 
+  // 智能折叠相关状态
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
+  const [isCollapsing, setIsCollapsing] = useState(false) // 动画进行中
+  const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
+  const [collapseDelay, setCollapseDelay] = useState(500)
+  const [currentModelName, setCurrentModelName] = useState('')
+  const [currentPrompt, setCurrentPrompt] = useState('')
+  const collapseTimerRef = React.useRef<number | null>(null)
+  const isPanelHoveredRef = React.useRef(false)
+  const collapseAnimationRef = React.useRef<number | null>(null)
+  const lastScrollTopRef = React.useRef(0)
+  const isProgrammaticScrollRef = React.useRef(false) // 标记是否为程序调整滚动
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsReady(true)
     }, 100)
     return () => clearTimeout(timer)
+  }, [])
+
+  // 初始化时监听首次鼠标交互
+  useEffect(() => {
+    let isInitialized = false
+    
+    const handleFirstInteraction = (e: MouseEvent) => {
+      if (isInitialized) return
+      isInitialized = true
+      
+      const panel = inputContainerRef.current
+      if (!panel) return
+      
+      const rect = panel.getBoundingClientRect()
+      const isInside = (
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom
+      )
+      
+      isPanelHoveredRef.current = isInside
+    }
+    
+    // 监听多种交互事件
+    document.addEventListener('mousemove', handleFirstInteraction, { once: true, passive: true })
+    document.addEventListener('mousedown', handleFirstInteraction, { once: true, passive: true })
+    document.addEventListener('wheel', handleFirstInteraction, { once: true, passive: true })
+    
+    return () => {
+      document.removeEventListener('mousemove', handleFirstInteraction)
+      document.removeEventListener('mousedown', handleFirstInteraction)
+      document.removeEventListener('wheel', handleFirstInteraction)
+    }
+  }, [])
+  
+  // 持续监测鼠标位置，确保状态同步
+  useEffect(() => {
+    let lastMouseX = 0
+    let lastMouseY = 0
+    
+    const checkMousePosition = () => {
+      const panel = inputContainerRef.current
+      if (!panel) return
+      
+      // 使用 document.elementsFromPoint 获取鼠标下的所有元素
+      const elements = document.elementsFromPoint(lastMouseX, lastMouseY)
+      const isInside = elements.some(el => panel.contains(el))
+      
+      if (isPanelHoveredRef.current !== isInside) {
+        isPanelHoveredRef.current = isInside
+      }
+    }
+    
+    // 全局跟踪鼠标位置
+    const trackMousePosition = (e: MouseEvent) => {
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
+    }
+    
+    document.addEventListener('mousemove', trackMousePosition, { passive: true })
+    
+    // 定期检查鼠标位置（每500ms）
+    const interval = setInterval(checkMousePosition, 500)
+    
+    return () => {
+      document.removeEventListener('mousemove', trackMousePosition)
+      clearInterval(interval)
+    }
+  }, [])
+
+  // 从 localStorage 加载折叠设置
+  useEffect(() => {
+    const savedAutoCollapse = localStorage.getItem('enable_auto_collapse')
+    setEnableAutoCollapse(savedAutoCollapse !== 'false')
+    const savedCollapseDelay = parseInt(localStorage.getItem('collapse_delay') || '500', 10)
+    setCollapseDelay(savedCollapseDelay)
+
+    // 监听设置变化
+    const handleSettingChange = () => {
+      const newAutoCollapse = localStorage.getItem('enable_auto_collapse')
+      setEnableAutoCollapse(newAutoCollapse !== 'false')
+      const newDelay = parseInt(localStorage.getItem('collapse_delay') || '500', 10)
+      setCollapseDelay(newDelay)
+    }
+    window.addEventListener('collapseSettingChanged', handleSettingChange)
+    return () => window.removeEventListener('collapseSettingChanged', handleSettingChange)
+  }, [])
+
+  // 监听 MediaGenerator 状态变化
+  useEffect(() => {
+    const handleStateChange = (e: Event) => {
+      const customEvent = e as CustomEvent
+      const { modelName, prompt } = customEvent.detail
+      setCurrentModelName(modelName)
+      setCurrentPrompt(prompt)
+    }
+    window.addEventListener('generatorStateChanged', handleStateChange)
+    return () => window.removeEventListener('generatorStateChanged', handleStateChange)
   }, [])
 
   // 初始化右键菜单
@@ -148,16 +260,39 @@ const App: React.FC = () => {
     const inputEl = inputContainerRef.current
     const listEl = listContainerRef.current
     if (!inputEl || !listEl) return
+    
     const update = () => {
       const h = inputEl.offsetHeight || 0
-      setInputPadding(h + 24)
-      listEl.style.paddingBottom = `${h + 24}px`
+      // 折叠时使用固定的小高度，展开时使用实际高度
+      // 关键修改：当正在折叠动画进行中时，也要使用展开后的高度
+      const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
+      setInputPadding(actualHeight + 24)
+      
+      const newPadding = actualHeight + 24
+      const oldPadding = parseInt(listEl.style.paddingBottom) || 0
+      const paddingDiff = newPadding - oldPadding
+      
+      // 关键：如果 padding 增加且用户在底部，调整 scrollTop
+      const threshold = 8
+      const atBottom = listEl.scrollHeight - listEl.clientHeight - listEl.scrollTop <= threshold
+      
+      listEl.style.paddingBottom = `${newPadding}px`
+      
+      // 如果用户在底部且 padding 增加，自动调整滚动位置
+      if (atBottom && paddingDiff > 0) {
+        isProgrammaticScrollRef.current = true
+        listEl.scrollTop += paddingDiff
+        requestAnimationFrame(() => {
+          isProgrammaticScrollRef.current = false
+        })
+      }
     }
+    
     update()
     const ro = new ResizeObserver(update)
     ro.observe(inputEl)
     return () => { ro.disconnect() }
-  }, [])
+  }, [isPanelCollapsed, isCollapsing])
 
   const finalizeInitialScroll = async () => {
     const el = listContainerRef.current
@@ -171,6 +306,168 @@ const App: React.FC = () => {
       })))
     }
     scrollToBottom()
+  }
+
+  // 智能折叠逻辑：监听滚动和鼠标事件
+  useEffect(() => {
+    if (!enableAutoCollapse) {
+      expandPanelSmooth()
+      return
+    }
+
+    const el = listContainerRef.current
+    if (!el) return
+
+    // 初始化滚动位置
+    lastScrollTopRef.current = el.scrollTop
+
+    const handleScroll = () => {
+      // 关键：忽略程序触发的滚动事件
+      if (isProgrammaticScrollRef.current) {
+        return
+      }
+      
+      const threshold = 8
+      const currentScrollTop = el.scrollTop
+      const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
+      const isScrollingUp = currentScrollTop > lastScrollTopRef.current
+      const scrollDelta = Math.abs(currentScrollTop - lastScrollTopRef.current)
+      
+      // 关键修改：检查最新一条历史记录是否在可视区域内
+      const lastTaskElement = el.querySelector('.space-y-6 > div:last-child')
+      let isLastTaskVisible = false
+      
+      if (lastTaskElement) {
+        const taskRect = lastTaskElement.getBoundingClientRect()
+        const containerRect = el.getBoundingClientRect()
+        // 最新记录的底部是否在容器的可视区域内（留一些余量）
+        isLastTaskVisible = taskRect.bottom > containerRect.top && taskRect.top < containerRect.bottom
+      }
+      
+      // 更新最后滚动位置
+      lastScrollTopRef.current = currentScrollTop
+      
+      // 如果用户滚动到底部，立即展开面板
+      if (atBottom) {
+        if (collapseTimerRef.current) {
+          clearTimeout(collapseTimerRef.current)
+          collapseTimerRef.current = null
+        }
+        expandPanelSmooth()
+        return
+      }
+      
+      // 关键修改：只有当最新记录完全离开可视区域时才折叠
+      // 条件：
+      // 1. 不在底部
+      // 2. 滚动距离足够（避免微小抖动）
+      // 3. 鼠标不在面板上
+      // 4. 最新记录已经不可见（完全滚出视图）
+      if (scrollDelta > 3 && !isPanelHoveredRef.current && !isLastTaskVisible) {
+        if (collapseTimerRef.current) {
+          clearTimeout(collapseTimerRef.current)
+          collapseTimerRef.current = null
+        }
+        collapsePanelSmooth()
+      }
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', handleScroll)
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current)
+      }
+      if (collapseAnimationRef.current) {
+        clearTimeout(collapseAnimationRef.current)
+      }
+    }
+  }, [enableAutoCollapse, collapseDelay, isPanelCollapsed, isCollapsing])
+
+  // 平滑折叠面板
+  const collapsePanelSmooth = () => {
+    if (isPanelCollapsed || isCollapsing) return
+    setIsCollapsing(true)
+    // 先触发折叠动画
+    requestAnimationFrame(() => {
+      // 等待动画完成后更新状态
+      collapseAnimationRef.current = window.setTimeout(() => {
+        setIsPanelCollapsed(true)
+        setIsCollapsing(false)
+      }, 500) // 延长到 500ms
+    })
+  }
+
+  // 平滑展开面板
+  const expandPanelSmooth = () => {
+    if (!isPanelCollapsed && !isCollapsing) return
+    if (collapseAnimationRef.current) {
+      clearTimeout(collapseAnimationRef.current)
+      collapseAnimationRef.current = null
+    }
+    
+    // 先更新 isCollapsing 状态，触发 paddingBottom 立即调整
+    // padding 的调整和 scrollTop 的补偿现在在 useEffect 中处理
+    setIsCollapsing(true)
+    
+    // 然后在下一帧开始展开动画
+    requestAnimationFrame(() => {
+      setIsPanelCollapsed(false)
+      setIsCollapsing(false)
+    })
+  }
+
+  // 处理面板鼠标进入/离开事件
+  const handlePanelMouseEnter = (e: React.MouseEvent) => {
+    isPanelHoveredRef.current = true
+    if (collapseTimerRef.current) {
+      clearTimeout(collapseTimerRef.current)
+      collapseTimerRef.current = null
+    }
+    expandPanelSmooth()
+  }
+
+  const handlePanelMouseLeave = (e: React.MouseEvent) => {
+    isPanelHoveredRef.current = false
+    
+    if (!enableAutoCollapse) return
+    
+    // 鼠标离开后，立即检查当前状态
+    const el = listContainerRef.current
+    if (!el) return
+    
+    const threshold = 8
+    const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
+    
+    // 检查最新记录是否可见
+    const lastTaskElement = el.querySelector('.space-y-6 > div:last-child')
+    let isLastTaskVisible = false
+    if (lastTaskElement) {
+      const taskRect = lastTaskElement.getBoundingClientRect()
+      const containerRect = el.getBoundingClientRect()
+      isLastTaskVisible = taskRect.bottom > containerRect.top && taskRect.top < containerRect.bottom
+    }
+    
+    // 如果不在底部且最新记录不可见，使用延迟折叠
+    if (!atBottom && !isLastTaskVisible) {
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current)
+      }
+      collapseTimerRef.current = window.setTimeout(() => {
+        // 再次确认鼠标确实不在面板上
+        if (!isPanelHoveredRef.current) {
+          collapsePanelSmooth()
+        }
+      }, collapseDelay)
+    }
+  }
+  
+  // 持续同步鼠标位置状态
+  const handlePanelMouseMove = (e: React.MouseEvent) => {
+    // 确保鼠标在面板内时状态始终为 true
+    if (!isPanelHoveredRef.current) {
+      isPanelHoveredRef.current = true
+    }
   }
 
   // 图片查看器打开时的动画
@@ -1681,14 +1978,86 @@ const App: React.FC = () => {
         }
 
         {/* 输入区域 - 悬浮设计 */}
-        <div ref={inputContainerRef} className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20">
-          <div className="bg-[#131313]/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl p-4 hover:shadow-3xl transition-all duration-300">
-            <MediaGenerator
-              onGenerate={handleGenerate}
-              isLoading={isLoading}
-              onOpenSettings={openSettings}
-              onOpenClearHistory={() => setIsConfirmClearOpen(true)}
-            />
+        <div 
+          ref={inputContainerRef} 
+          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20"
+          onMouseEnter={handlePanelMouseEnter}
+          onMouseLeave={handlePanelMouseLeave}
+          onMouseMove={handlePanelMouseMove}
+        >
+          {/* 折叠状态的简洁条 */}
+          <div 
+            className="bg-[#131313]/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl hover:shadow-3xl cursor-pointer relative"
+            style={{
+              transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+              maxHeight: isPanelCollapsed || isCollapsing ? '52px' : '600px',
+              minHeight: isPanelCollapsed || isCollapsing ? '52px' : 'auto',
+              opacity: isPanelCollapsed || isCollapsing ? 1 : 1,
+              padding: isPanelCollapsed || isCollapsing ? '12px 24px' : '16px',
+              overflow: isPanelCollapsed && !isCollapsing ? 'visible' : 'hidden'
+            }}
+            onClick={() => {
+              if (isPanelCollapsed) {
+                expandPanelSmooth()
+              }
+            }}
+          >
+            {/* 折叠状态内容 - 绝对定位，跟随面板移动 */}
+            <div 
+              className="absolute left-0 right-0"
+              style={{
+                top: isPanelCollapsed || isCollapsing ? '12px' : '-60px',
+                opacity: isPanelCollapsed || isCollapsing ? 1 : 0,
+                transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), top 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                padding: '0 24px'
+              }}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded whitespace-nowrap">
+                    {currentModelName || 'seedream-4.0'}
+                  </span>
+                  <span className="text-sm text-zinc-300 truncate flex-1">
+                    {currentPrompt || '点击展开输入面板...'}
+                  </span>
+                </div>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-5 w-5 text-zinc-400" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* 完整面板内容 */}
+            <div 
+              style={{
+                opacity: !isPanelCollapsed && !isCollapsing ? 1 : 0,
+                transition: 'opacity 0.4s ease 0.15s',
+                pointerEvents: !isPanelCollapsed && !isCollapsing ? 'auto' : 'none',
+                display: !isPanelCollapsed || isCollapsing ? 'block' : 'none'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MediaGenerator
+                onGenerate={handleGenerate}
+                isLoading={isLoading}
+                onOpenSettings={openSettings}
+                onOpenClearHistory={() => setIsConfirmClearOpen(true)}
+                isCollapsed={isPanelCollapsed}
+                onToggleCollapse={() => {
+                  if (isPanelCollapsed) {
+                    expandPanelSmooth()
+                  } else {
+                    collapsePanelSmooth()
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
       </main >
