@@ -16,6 +16,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [showFalApiKey, setShowFalApiKey] = useState(false)
   const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
   const [collapseDelay, setCollapseDelay] = useState(500)
+  const [collapseOnScrollOnly, setCollapseOnScrollOnly] = useState(true)
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
 
@@ -38,6 +39,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedCollapseDelay = parseInt(localStorage.getItem('collapse_delay') || '500', 10)
     setCollapseDelay(savedCollapseDelay)
+
+    const savedCollapseOnScrollOnly = localStorage.getItem('collapse_on_scroll_only')
+    setCollapseOnScrollOnly(savedCollapseOnScrollOnly !== 'false') // 默认开启
 
     // 点击模态框外部关闭
     const handleClickOutside = (event: MouseEvent) => {
@@ -107,6 +111,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const newValue = Math.max(100, Math.min(3000, Math.round(value)))
     setCollapseDelay(newValue)
     localStorage.setItem('collapse_delay', newValue.toString())
+    // 触发自定义事件通知 App 组件
+    window.dispatchEvent(new Event('collapseSettingChanged'))
+  }
+
+  // 实时保存仅滚动时折叠设置
+  const handleCollapseOnScrollOnlyChange = (value: boolean) => {
+    setCollapseOnScrollOnly(value)
+    localStorage.setItem('collapse_on_scroll_only', value.toString())
     // 触发自定义事件通知 App 组件
     window.dispatchEvent(new Event('collapseSettingChanged'))
   }
@@ -239,6 +251,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               disabled={!enableAutoCollapse}
             />
             <p className="mt-2 text-xs text-zinc-400">鼠标离开底部面板后等待多久自动折叠（100-3000毫秒）</p>
+          </div>
+
+          <div className="mb-5">
+            <Toggle
+              label="仅滚动时折叠"
+              checked={collapseOnScrollOnly}
+              onChange={handleCollapseOnScrollOnlyChange}
+              className="w-full"
+              disabled={!enableAutoCollapse}
+            />
+            <p className="mt-2 text-xs text-zinc-400">开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠</p>
           </div>
 
           <div className="flex justify-end mt-6">
