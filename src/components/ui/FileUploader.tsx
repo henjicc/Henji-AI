@@ -10,6 +10,7 @@ type FileUploaderProps = {
     onUpload: (files: File[]) => void
     onRemove: (index: number) => void
     onReplace?: (index: number, newFile: File) => void
+    onReorder?: (from: number, to: number) => void
     accept?: string
     multiple?: boolean
     maxCount?: number
@@ -23,6 +24,7 @@ export default function FileUploader({
     onUpload,
     onRemove,
     onReplace,
+    onReorder,
     accept = 'image/*',
     multiple = false,
     maxCount = 1,
@@ -34,6 +36,10 @@ export default function FileUploader({
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
     const dragCounter = useRef(0)
     const lastDropTime = useRef(0)
+    const [reorderHoverIndex, setReorderHoverIndex] = useState<number | null>(null)
+    const [isSorting, setIsSorting] = useState(false)
+    const [sortFromIndex, setSortFromIndex] = useState<number | null>(null)
+    const [sortOverIndex, setSortOverIndex] = useState<number | null>(null)
 
     // Custom drag and drop context
     const { isDragging: isCustomDragging, dragData, endDrag } = useDragDrop()
@@ -81,6 +87,11 @@ export default function FileUploader({
         e.stopPropagation()
         dragCounter.current += 1
         setIsHTML5Dragging(true)
+        console.log('[FileUploader] wrapper dragenter', { types: Array.from(e.dataTransfer.types || []) })
+        const hasReorderType = Array.from(e.dataTransfer.types || []).includes('text/henji-reorder-index')
+        if (hasReorderType) {
+            e.dataTransfer.dropEffect = 'move'
+        }
     }
 
     const handleDragLeave = (e: React.DragEvent) => {
@@ -95,7 +106,9 @@ export default function FileUploader({
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault()
         e.stopPropagation()
-        e.dataTransfer.dropEffect = 'copy'
+        const hasReorderType = Array.from(e.dataTransfer.types || []).includes('text/henji-reorder-index')
+        console.log('[FileUploader] wrapper dragover', { types: Array.from(e.dataTransfer.types || []), hasReorderType })
+        e.dataTransfer.dropEffect = hasReorderType ? 'move' : 'copy'
     }
 
     const handleDrop = async (e: React.DragEvent) => {
@@ -106,9 +119,16 @@ export default function FileUploader({
 
         if (disabled) return
 
-        // Handle regular file drops
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            console.log('[FileUploader] wrapper drop files', { fileCount: e.dataTransfer.files.length })
             handleFiles(Array.from(e.dataTransfer.files))
+            return
+        }
+
+        const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
+        console.log('[FileUploader] wrapper drop reorder', { fromIndexData })
+        if (fromIndexData) {
+            setReorderHoverIndex(null)
         }
     }
 
@@ -141,7 +161,42 @@ export default function FileUploader({
                 }
             }
             endDrag()
+        } else if (isSorting) {
+            e.preventDefault()
+            e.stopPropagation()
+            if (typeof sortFromIndex === 'number' && typeof sortOverIndex === 'number' && onReorder && sortFromIndex !== sortOverIndex) {
+                onReorder(sortFromIndex, sortOverIndex)
+            }
+            setIsSorting(false)
+            setSortFromIndex(null)
+            setSortOverIndex(null)
+            setReorderHoverIndex(null)
         }
+    }
+
+    const beginSort = (index: number, e: React.MouseEvent) => {
+        if (disabled || isCustomDragging) return
+        if ((e as React.MouseEvent).button !== 0) return
+        setIsSorting(true)
+        setSortFromIndex(index)
+        setReorderHoverIndex(index)
+    }
+
+    const enterSortTarget = (index: number) => {
+        if (!isSorting) return
+        setSortOverIndex(index)
+        setReorderHoverIndex(index)
+    }
+
+    const endSort = () => {
+        if (!isSorting) return
+        if (typeof sortFromIndex === 'number' && typeof sortOverIndex === 'number' && onReorder && sortFromIndex !== sortOverIndex) {
+            onReorder(sortFromIndex, sortOverIndex)
+        }
+        setIsSorting(false)
+        setSortFromIndex(null)
+        setSortOverIndex(null)
+        setReorderHoverIndex(null)
     }
 
     const canUploadMore = !maxCount || files.length < maxCount
@@ -155,6 +210,14 @@ export default function FileUploader({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onMouseUp={handleCustomDrop}
+            onMouseLeave={() => {
+                if (isSorting) {
+                    setIsSorting(false)
+                    setSortFromIndex(null)
+                    setSortOverIndex(null)
+                    setReorderHoverIndex(null)
+                }
+            }}
         >
             {/* Previews */}
             {files.map((file, index) => {
@@ -162,13 +225,26 @@ export default function FileUploader({
                     e.preventDefault()
                     e.stopPropagation()
 
-                    if (disabled || !onReplace) return
+                    if (disabled) return
 
-                    // Handle regular file drops
                     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                        const droppedFile = e.dataTransfer.files[0]
-                        onReplace(targetIndex, droppedFile)
+                        console.log('[FileUploader] drop replace', { targetIndex, fileCount: e.dataTransfer.files.length })
+                        if (onReplace) {
+                            const droppedFile = e.dataTransfer.files[0]
+                            onReplace(targetIndex, droppedFile)
+                        }
+                        return
                     }
+
+                    const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
+                    console.log('[FileUploader] drop reorder', { targetIndex, fromIndexData })
+                    if (fromIndexData && onReorder) {
+                        const from = parseInt(fromIndexData, 10)
+                        if (!Number.isNaN(from) && from !== targetIndex) {
+                            onReorder(from, targetIndex)
+                        }
+                    }
+                    setReorderHoverIndex(null)
                 }
 
                 const handleCustomPreviewDrop = async (e: React.MouseEvent, targetIndex: number) => {
@@ -211,26 +287,25 @@ export default function FileUploader({
                                 : 'imageSlideIn 0.25s ease-out forwards'
                         }}
                         onDrop={(e) => handlePreviewDrop(e, index)}
-                        onMouseUp={(e) => handleCustomPreviewDrop(e, index)}
-                        onDragOver={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                        }}
-                        onDragEnter={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                        }}
-                        onDragLeave={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
+                        onMouseDown={(e) => beginSort(index, e)}
+                        onMouseEnter={() => enterSortTarget(index)}
+                        onMouseUp={(e) => {
+                            if (isSorting) {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                endSort()
+                            } else {
+                                handleCustomPreviewDrop(e, index)
+                            }
                         }}
                     >
-                        <div className={`relative w-12 h-16 rounded-lg shadow-lg pointer-events-none ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''}`}>
+                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''} ${reorderHoverIndex === index ? 'ring-2 ring-amber-400' : ''}`}>
                             {accept.startsWith('image') ? (
                                 <img
                                     src={file}
                                     alt={`Uploaded ${index + 1}`}
                                     className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                    draggable={false}
                                 />
                             ) : (
                                 <div className="w-full h-full bg-zinc-800 rounded-lg border-2 border-zinc-600 flex items-center justify-center">

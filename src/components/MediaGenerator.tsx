@@ -1143,6 +1143,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }, 250)
   }
 
+  const handleImageReorder = (from: number, to: number) => {
+    if (from === to) return
+    setUploadedImages(prev => {
+      const arr = [...prev]
+      const [item] = arr.splice(from, 1)
+      arr.splice(to, 0, item)
+      return arr
+    })
+    setUploadedFilePaths(prev => {
+      const arr = [...prev]
+      const [item] = arr.splice(from, 1)
+      arr.splice(to, 0, item)
+      return arr
+    })
+  }
+
 
   const handleSchemaChange = (id: string, value: any) => {
     switch (id) {
@@ -1745,6 +1761,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   onUpload={handleImageFileUpload}
                   onRemove={removeImage}
                   onReplace={handleImageReplace}
+                  onReorder={handleImageReorder}
                   accept="image/*"
                   multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
                   maxCount={maxImageCount}
