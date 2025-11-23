@@ -201,27 +201,55 @@ export default function FileUploader({
         if (!dragState.isDragging) return
 
         const handleMouseMove = (e: MouseEvent) => {
-            setDragState(prev => {
-                if (!prev.isDragging) return prev
+            const from = dragStateRef.current.fromIndex!
+            const oldTo = dragStateRef.current.toIndex!
 
-                let newToIndex = prev.fromIndex!
-                for (let i = 0; i < itemRefs.current.length; i++) {
-                    const el = itemRefs.current[i]
-                    if (!el) continue
-                    const rect = el.getBoundingClientRect()
-                    if (e.clientX >= rect.left && e.clientX <= rect.right) {
-                        newToIndex = i
-                        break
-                    }
+            let newToIndex = oldTo
+            let minDist = Infinity
+
+            for (let i = 0; i < itemRefs.current.length; i++) {
+                const el = itemRefs.current[i]
+                if (!el) continue
+                const rect = el.getBoundingClientRect()
+
+                // 计算原始位置（减去 translateX 偏移）
+                let originalCenterX = rect.left + rect.width / 2
+                if (from < oldTo && i > from && i <= oldTo) {
+                    originalCenterX += 64
+                } else if (from > oldTo && i < from && i >= oldTo) {
+                    originalCenterX -= 64
                 }
 
-                return {
-                    ...prev,
+                const dist = Math.abs(e.clientX - originalCenterX)
+                if (dist < minDist) {
+                    minDist = dist
+                    newToIndex = i
+                }
+            }
+
+            // 添加阈值：只有当距离新位置足够近时才切换（图片宽度的30%）
+            if (newToIndex !== oldTo) {
+                const threshold = 20
+                if (minDist > threshold) {
+                    newToIndex = oldTo
+                }
+            }
+
+            if (newToIndex !== oldTo) {
+                console.log('[ToIndex Update]', { from, oldTo, newTo: newToIndex })
+                setDragState({
+                    ...dragStateRef.current,
                     currentX: e.clientX,
                     currentY: e.clientY,
                     toIndex: newToIndex
-                }
-            })
+                })
+            } else {
+                setDragState({
+                    ...dragStateRef.current,
+                    currentX: e.clientX,
+                    currentY: e.clientY
+                })
+            }
         }
 
         const handleMouseUp = () => {
@@ -261,12 +289,10 @@ export default function FileUploader({
             onMouseUp={handleCustomDrop}
         >
             {/* Previews */}
+            {dragState.isDragging && console.log('[Render]', { fromIndex: dragState.fromIndex, toIndex: dragState.toIndex })}
             {files.map((file, index) => {
                 const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
                 const shouldShift = dragState.isDragging && dragState.fromIndex !== null && dragState.toIndex !== null
-                if (isDraggingThis) {
-                    console.log('[Hide]', { index, isDragging: dragState.isDragging, fromIndex: dragState.fromIndex })
-                }
 
                 let translateX = 0
                 if (shouldShift && !isDraggingThis) {
@@ -276,6 +302,9 @@ export default function FileUploader({
                         translateX = -64
                     } else if (from > to && index < from && index >= to) {
                         translateX = 64
+                    }
+                    if (translateX !== 0) {
+                        console.log('[Shift]', { index, from, to, translateX })
                     }
                 }
 
@@ -313,7 +342,7 @@ export default function FileUploader({
                         style={{
                             animation: removingIndices.has(file)
                                 ? 'imageSlideOut 0.25s ease-in forwards'
-                                : !isDraggingThis ? 'imageSlideIn 0.25s ease-out forwards' : 'none',
+                                : dragState.isDragging ? 'none' : 'imageSlideIn 0.25s ease-out forwards',
                             transform: isDraggingThis ? 'scale(0)' : `translateX(${translateX}px)`,
                             transition: isDraggingThis ? 'none' : 'transform 0.2s ease-out',
                             pointerEvents: isDraggingThis ? 'none' : 'auto',
