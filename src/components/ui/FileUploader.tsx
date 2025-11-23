@@ -264,6 +264,9 @@ export default function FileUploader({
             {files.map((file, index) => {
                 const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
                 const shouldShift = dragState.isDragging && dragState.fromIndex !== null && dragState.toIndex !== null
+                if (isDraggingThis) {
+                    console.log('[Hide]', { index, isDragging: dragState.isDragging, fromIndex: dragState.fromIndex })
+                }
 
                 let translateX = 0
                 if (shouldShift && !isDraggingThis) {
@@ -310,10 +313,12 @@ export default function FileUploader({
                         style={{
                             animation: removingIndices.has(file)
                                 ? 'imageSlideOut 0.25s ease-in forwards'
-                                : 'imageSlideIn 0.25s ease-out forwards',
+                                : !isDraggingThis ? 'imageSlideIn 0.25s ease-out forwards' : 'none',
                             transform: isDraggingThis ? 'scale(0)' : `translateX(${translateX}px)`,
                             transition: isDraggingThis ? 'none' : 'transform 0.2s ease-out',
-                            pointerEvents: isDraggingThis ? 'none' : 'auto'
+                            pointerEvents: isDraggingThis ? 'none' : 'auto',
+                            opacity: isDraggingThis ? 0 : 1,
+                            visibility: isDraggingThis ? 'hidden' : 'visible'
                         }}
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
