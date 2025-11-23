@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTauriDragDrop } from '../../hooks/useTauriDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
@@ -36,10 +37,25 @@ export default function FileUploader({
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
     const dragCounter = useRef(0)
     const lastDropTime = useRef(0)
-    const [reorderHoverIndex, setReorderHoverIndex] = useState<number | null>(null)
-    const [isSorting, setIsSorting] = useState(false)
-    const [sortFromIndex, setSortFromIndex] = useState<number | null>(null)
-    const [sortOverIndex, setSortOverIndex] = useState<number | null>(null)
+    const [dragState, setDragState] = useState<{
+        isDragging: boolean
+        fromIndex: number | null
+        toIndex: number | null
+        startX: number
+        startY: number
+        currentX: number
+        currentY: number
+    }>({
+        isDragging: false,
+        fromIndex: null,
+        toIndex: null,
+        startX: 0,
+        startY: 0,
+        currentX: 0,
+        currentY: 0
+    })
+    const dragStateRef = useRef(dragState)
+    dragStateRef.current = dragState
 
     // Custom drag and drop context
     const { isDragging: isCustomDragging, dragData, endDrag } = useDragDrop()
@@ -161,43 +177,76 @@ export default function FileUploader({
                 }
             }
             endDrag()
-        } else if (isSorting) {
-            e.preventDefault()
-            e.stopPropagation()
-            if (typeof sortFromIndex === 'number' && typeof sortOverIndex === 'number' && onReorder && sortFromIndex !== sortOverIndex) {
-                onReorder(sortFromIndex, sortOverIndex)
+        }
+    }
+
+    const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+
+    const handleMouseDown = (index: number, e: React.MouseEvent) => {
+        if (disabled || isCustomDragging || e.button !== 0) return
+        e.preventDefault()
+        console.log('[Drag] Start', { index, x: e.clientX, y: e.clientY })
+        setDragState({
+            isDragging: true,
+            fromIndex: index,
+            toIndex: index,
+            startX: e.clientX,
+            startY: e.clientY,
+            currentX: e.clientX,
+            currentY: e.clientY
+        })
+    }
+
+    React.useEffect(() => {
+        if (!dragState.isDragging) return
+
+        const handleMouseMove = (e: MouseEvent) => {
+            setDragState(prev => {
+                if (!prev.isDragging) return prev
+
+                let newToIndex = prev.fromIndex!
+                for (let i = 0; i < itemRefs.current.length; i++) {
+                    const el = itemRefs.current[i]
+                    if (!el) continue
+                    const rect = el.getBoundingClientRect()
+                    if (e.clientX >= rect.left && e.clientX <= rect.right) {
+                        newToIndex = i
+                        break
+                    }
+                }
+
+                return {
+                    ...prev,
+                    currentX: e.clientX,
+                    currentY: e.clientY,
+                    toIndex: newToIndex
+                }
+            })
+        }
+
+        const handleMouseUp = () => {
+            const { fromIndex, toIndex } = dragStateRef.current
+            if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex && onReorder) {
+                onReorder(fromIndex, toIndex)
             }
-            setIsSorting(false)
-            setSortFromIndex(null)
-            setSortOverIndex(null)
-            setReorderHoverIndex(null)
+            setDragState({
+                isDragging: false,
+                fromIndex: null,
+                toIndex: null,
+                startX: 0,
+                startY: 0,
+                currentX: 0,
+                currentY: 0
+            })
         }
-    }
 
-    const beginSort = (index: number, e: React.MouseEvent) => {
-        if (disabled || isCustomDragging) return
-        if ((e as React.MouseEvent).button !== 0) return
-        setIsSorting(true)
-        setSortFromIndex(index)
-        setReorderHoverIndex(index)
-    }
-
-    const enterSortTarget = (index: number) => {
-        if (!isSorting) return
-        setSortOverIndex(index)
-        setReorderHoverIndex(index)
-    }
-
-    const endSort = () => {
-        if (!isSorting) return
-        if (typeof sortFromIndex === 'number' && typeof sortOverIndex === 'number' && onReorder && sortFromIndex !== sortOverIndex) {
-            onReorder(sortFromIndex, sortOverIndex)
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
         }
-        setIsSorting(false)
-        setSortFromIndex(null)
-        setSortOverIndex(null)
-        setReorderHoverIndex(null)
-    }
+    }, [dragState.isDragging, onReorder])
 
     const canUploadMore = !maxCount || files.length < maxCount
 
@@ -210,41 +259,21 @@ export default function FileUploader({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onMouseUp={handleCustomDrop}
-            onMouseLeave={() => {
-                if (isSorting) {
-                    setIsSorting(false)
-                    setSortFromIndex(null)
-                    setSortOverIndex(null)
-                    setReorderHoverIndex(null)
-                }
-            }}
         >
             {/* Previews */}
             {files.map((file, index) => {
-                const handlePreviewDrop = async (e: React.DragEvent, targetIndex: number) => {
-                    e.preventDefault()
-                    e.stopPropagation()
+                const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
+                const shouldShift = dragState.isDragging && dragState.fromIndex !== null && dragState.toIndex !== null
 
-                    if (disabled) return
-
-                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                        console.log('[FileUploader] drop replace', { targetIndex, fileCount: e.dataTransfer.files.length })
-                        if (onReplace) {
-                            const droppedFile = e.dataTransfer.files[0]
-                            onReplace(targetIndex, droppedFile)
-                        }
-                        return
+                let translateX = 0
+                if (shouldShift && !isDraggingThis) {
+                    const from = dragState.fromIndex!
+                    const to = dragState.toIndex!
+                    if (from < to && index > from && index <= to) {
+                        translateX = -64
+                    } else if (from > to && index < from && index >= to) {
+                        translateX = 64
                     }
-
-                    const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
-                    console.log('[FileUploader] drop reorder', { targetIndex, fromIndexData })
-                    if (fromIndexData && onReorder) {
-                        const from = parseInt(fromIndexData, 10)
-                        if (!Number.isNaN(from) && from !== targetIndex) {
-                            onReorder(from, targetIndex)
-                        }
-                    }
-                    setReorderHoverIndex(null)
                 }
 
                 const handleCustomPreviewDrop = async (e: React.MouseEvent, targetIndex: number) => {
@@ -255,8 +284,6 @@ export default function FileUploader({
                         if (dragData.type === 'image') {
                             try {
                                 let file: File
-
-                                // 优先使用原始文件路径 (Tauri 环境)
                                 if (dragData.filePath && isDesktop()) {
                                     const bytes = await readFile(dragData.filePath)
                                     const mime = inferMimeFromPath(dragData.filePath)
@@ -264,10 +291,8 @@ export default function FileUploader({
                                     const filename = dragData.filePath.split(/[\\\/]/).pop() || `image-${Date.now()}.jpg`
                                     file = new File([blob], filename, { type: mime })
                                 } else {
-                                    // Fallback 到 URL 转换（开发环境或没有文件路径时）
                                     file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
                                 }
-
                                 onReplace(targetIndex, file)
                             } catch (error) {
                                 console.error('Failed to convert dragged image:', error)
@@ -280,26 +305,20 @@ export default function FileUploader({
                 return (
                     <div
                         key={`${file}-${index}`}
+                        ref={el => itemRefs.current[index] = el}
                         className="relative group flex-shrink-0"
                         style={{
                             animation: removingIndices.has(file)
                                 ? 'imageSlideOut 0.25s ease-in forwards'
-                                : 'imageSlideIn 0.25s ease-out forwards'
+                                : 'imageSlideIn 0.25s ease-out forwards',
+                            transform: isDraggingThis ? 'scale(0)' : `translateX(${translateX}px)`,
+                            transition: isDraggingThis ? 'none' : 'transform 0.2s ease-out',
+                            pointerEvents: isDraggingThis ? 'none' : 'auto'
                         }}
-                        onDrop={(e) => handlePreviewDrop(e, index)}
-                        onMouseDown={(e) => beginSort(index, e)}
-                        onMouseEnter={() => enterSortTarget(index)}
-                        onMouseUp={(e) => {
-                            if (isSorting) {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                endSort()
-                            } else {
-                                handleCustomPreviewDrop(e, index)
-                            }
-                        }}
+                        onMouseDown={(e) => handleMouseDown(index, e)}
+                        onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
-                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''} ${reorderHoverIndex === index ? 'ring-2 ring-amber-400' : ''}`}>
+                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''}`}>
                             {accept.startsWith('image') ? (
                                 <img
                                     src={file}
@@ -315,7 +334,6 @@ export default function FileUploader({
                                 </div>
                             )}
 
-                            {/* Remove button - Enable pointer events */}
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation()
@@ -332,6 +350,7 @@ export default function FileUploader({
                     </div>
                 )
             })}
+
 
             {/* Upload Button */}
             {canUploadMore && (
@@ -357,6 +376,38 @@ export default function FileUploader({
                 className="hidden"
                 disabled={disabled}
             />
+
+            {dragState.isDragging && dragState.fromIndex !== null && createPortal(
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: dragState.currentX,
+                        top: dragState.currentY,
+                        transform: 'translate(-50%, -50%) scale(1.15)',
+                        pointerEvents: 'none',
+                        zIndex: 9999,
+                        filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.5))'
+                    }}
+                >
+                    <div className="relative w-12 h-16 rounded-lg">
+                        {accept.startsWith('image') ? (
+                            <img
+                                src={files[dragState.fromIndex]}
+                                alt="Dragging"
+                                className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                draggable={false}
+                            />
+                        ) : (
+                            <div className="w-full h-full bg-zinc-800 rounded-lg border-2 border-zinc-600 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     )
 }
