@@ -296,10 +296,11 @@ export default function FileUploader({
 
                 // 计算原始位置（减去 translateX 偏移）
                 let originalCenterX = rect.left + rect.width / 2
+                // 使用准确的位移量，图片宽度为48px + 8px gap = 56px
                 if (from < oldTo && i > from && i <= oldTo) {
-                    originalCenterX += 64
+                    originalCenterX += 56
                 } else if (from > oldTo && i < from && i >= oldTo) {
-                    originalCenterX -= 64
+                    originalCenterX -= 56
                 }
 
                 const dist = Math.abs(e.clientX - originalCenterX)
@@ -383,10 +384,11 @@ export default function FileUploader({
                 if (shouldShift && !isDraggingThis) {
                     const from = dragState.fromIndex!
                     const to = dragState.toIndex!
+                    // 使用准确的位移量，图片宽度为48px + 8px gap = 56px
                     if (from < to && index > from && index <= to) {
-                        translateX = -64
+                        translateX = -56
                     } else if (from > to && index < from && index >= to) {
-                        translateX = 64
+                        translateX = 56
                     }
                     if (translateX !== 0) {
                         console.log('[Shift]', { index, from, to, translateX })
