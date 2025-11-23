@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useTauriDragDrop } from '../../hooks/useTauriDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
@@ -54,6 +54,9 @@ export default function FileUploader({
         currentX: 0,
         currentY: 0
     })
+    
+    // Track newly uploaded files to apply upload animation only to them
+    const [newlyUploadedFiles, setNewlyUploadedFiles] = useState<Set<string>>(new Set())
     const dragStateRef = useRef(dragState)
     dragStateRef.current = dragState
 
@@ -85,6 +88,23 @@ export default function FileUploader({
         })
 
         if (acceptedFiles.length > 0) {
+            // Mark these files as newly uploaded to apply upload animation
+            const fileUrls = acceptedFiles.map(file => URL.createObjectURL(file))
+            setNewlyUploadedFiles(prev => {
+                const newSet = new Set(prev)
+                fileUrls.forEach(url => newSet.add(url))
+                return newSet
+            })
+            
+            // Clear the newly uploaded files marker after animation duration
+            setTimeout(() => {
+                setNewlyUploadedFiles(prev => {
+                    const newSet = new Set(prev)
+                    fileUrls.forEach(url => newSet.delete(url))
+                    return newSet
+                })
+            }, 300) // Slightly longer than the animation duration
+            
             onUpload(acceptedFiles)
         }
     }
@@ -144,7 +164,7 @@ export default function FileUploader({
         const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
         console.log('[FileUploader] wrapper drop reorder', { fromIndexData })
         if (fromIndexData) {
-            setReorderHoverIndex(null)
+
         }
     }
 
@@ -183,6 +203,14 @@ export default function FileUploader({
     const itemRefs = useRef<(HTMLDivElement | null)[]>([])
 
     const handleMouseDown = (index: number, e: React.MouseEvent) => {
+        // 防止在删除按钮上触发拖拽
+        const target = e.target as HTMLElement;
+        // 检查点击的元素或其父元素是否为删除按钮
+        if (target.tagName === 'BUTTON' || target.closest('button')) {
+            e.preventDefault(); // 防止默认行为
+            return;
+        }
+        
         if (disabled || isCustomDragging || e.button !== 0) return
         e.preventDefault()
         console.log('[Drag] Start', { index, x: e.clientX, y: e.clientY })
@@ -196,6 +224,60 @@ export default function FileUploader({
             currentY: e.clientY
         })
     }
+
+    React.useEffect(() => {
+        // 只有在有起始索引但还未确认拖拽时才监听鼠标移动
+        if (dragState.fromIndex === null || dragState.isDragging) return
+
+        let moved = false;
+        const startX = dragState.startX;
+        const startY = dragState.startY;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const moveX = e.clientX;
+            const moveY = e.clientY;
+            const deltaX = Math.abs(moveX - startX);
+            const deltaY = Math.abs(moveY - startY);
+            
+            // 只有当鼠标移动超过一定距离时才真正开始拖拽
+            if (deltaX > 5 || deltaY > 5) {
+                console.log('[Drag] Confirmed', { index: dragState.fromIndex, deltaX, deltaY });
+                setDragState(prev => ({
+                    ...prev,
+                    isDragging: true,
+                    currentX: moveX,
+                    currentY: moveY
+                }));
+                moved = true;
+            }
+        };
+
+        const handleMouseUp = () => {
+            // 如果从未真正开始拖拽，则清理状态
+            if (!moved) {
+                setDragState({
+                    isDragging: false,
+                    fromIndex: null,
+                    toIndex: null,
+                    startX: 0,
+                    startY: 0,
+                    currentX: 0,
+                    currentY: 0
+                });
+            }
+            
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [dragState.fromIndex, dragState.isDragging, dragState.startX, dragState.startY]);
 
     React.useEffect(() => {
         if (!dragState.isDragging) return
@@ -289,10 +371,13 @@ export default function FileUploader({
             onMouseUp={handleCustomDrop}
         >
             {/* Previews */}
-            {dragState.isDragging && console.log('[Render]', { fromIndex: dragState.fromIndex, toIndex: dragState.toIndex })}
+            {dragState.isDragging && console.log('[Render]', { fromIndex: dragState.fromIndex, toIndex: dragState.toIndex }) as any}
             {files.map((file, index) => {
                 const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
                 const shouldShift = dragState.isDragging && dragState.fromIndex !== null && dragState.toIndex !== null
+                
+                // Check if this is a newly uploaded file (should apply upload animation)
+                const isNewlyUploaded = newlyUploadedFiles.has(file)
 
                 let translateX = 0
                 if (shouldShift && !isDraggingThis) {
@@ -342,7 +427,9 @@ export default function FileUploader({
                         style={{
                             animation: removingIndices.has(file)
                                 ? 'imageSlideOut 0.25s ease-in forwards'
-                                : dragState.isDragging ? 'none' : 'imageSlideIn 0.25s ease-out forwards',
+                                : (isNewlyUploaded && !dragState.isDragging) 
+                                    ? 'imageSlideIn 0.25s ease-out forwards' 
+                                    : 'none',
                             transform: isDraggingThis ? 'scale(0)' : `translateX(${translateX}px)`,
                             transition: isDraggingThis ? 'none' : 'transform 0.2s ease-out',
                             pointerEvents: isDraggingThis ? 'none' : 'auto',
@@ -370,7 +457,8 @@ export default function FileUploader({
 
                             <button
                                 onClick={(e) => {
-                                    e.stopPropagation()
+                                    e.stopPropagation()  // 阻止事件冒泡
+                                    e.preventDefault()    // 防止默认行为
                                     onRemove(index)
                                 }}
                                 className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg z-20 pointer-events-auto"
