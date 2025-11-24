@@ -4,7 +4,7 @@ import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
 import ContextMenu from './components/ContextMenu'
 import { MediaResult } from './types'
-import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, deleteWaveformCacheForAudio } from './utils/save'
+import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio } from './utils/save'
 import { convertBlobToPng } from './utils/imageConversion'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
@@ -43,6 +43,9 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<GenerationTask[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
+  const [notificationVisible, setNotificationVisible] = useState(false)
+  const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
 
   const [currentImage, setCurrentImage] = useState('')
@@ -782,6 +785,55 @@ const App: React.FC = () => {
     }
   }
 
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    if (notificationTimeoutRef.current) {
+      clearTimeout(notificationTimeoutRef.current)
+    }
+    setNotification({ message, type })
+    // 稍微延迟显示以触发进入动画
+    requestAnimationFrame(() => {
+      setNotificationVisible(true)
+    })
+
+    notificationTimeoutRef.current = setTimeout(() => {
+      setNotificationVisible(false)
+      // 等待退出动画完成后清除数据
+      setTimeout(() => {
+        setNotification(null)
+      }, 500)
+    }, 3000)
+  }
+
+  // 处理媒体文件下载
+  const handleDownloadMedia = async (filePath: string, fromButton: boolean = false) => {
+    if (!filePath) return
+
+    try {
+      const enableQuick = localStorage.getItem('enable_quick_download') === 'true'
+      const buttonOnly = localStorage.getItem('quick_download_button_only') === 'true'
+      const quickPath = localStorage.getItem('quick_download_path') || ''
+
+      // 判断是否使用快速下载
+      const useQuickDownload = enableQuick && (!buttonOnly || fromButton) && quickPath
+
+      if (useQuickDownload) {
+        await quickDownloadMediaFile(filePath, quickPath)
+        console.log('[App] Quick download completed')
+        showNotification('下载成功', 'success')
+      } else {
+        await downloadMediaFile(filePath)
+        console.log('[App] Manual download completed')
+        showNotification('下载成功', 'success')
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message !== 'cancelled') {
+        console.error('Download failed:', err)
+        // setError('下载失败: ' + err.message) // 使用顶部通知代替底部错误提示
+        showNotification('下载失败: ' + err.message, 'error')
+      }
+    }
+  }
+
   // 生成图片右键菜单项
   const getImageMenuItems = (imageUrl: string, filePath?: string): MenuItem[] => [
     {
@@ -806,11 +858,7 @@ const App: React.FC = () => {
       ),
       onClick: async () => {
         if (filePath) {
-          try {
-            await downloadMediaFile(filePath)
-          } catch (err) {
-            console.error('Download image failed:', err)
-          }
+          await handleDownloadMedia(filePath, false)
         }
       },
       disabled: !filePath
@@ -830,11 +878,7 @@ const App: React.FC = () => {
       ),
       onClick: async () => {
         if (filePath) {
-          try {
-            await downloadMediaFile(filePath)
-          } catch (err) {
-            console.error('Download video failed:', err)
-          }
+          await handleDownloadMedia(filePath, false)
         }
       },
       disabled: !filePath
@@ -854,11 +898,7 @@ const App: React.FC = () => {
       ),
       onClick: async () => {
         if (filePath) {
-          try {
-            await downloadMediaFile(filePath)
-          } catch (err) {
-            console.error('Download audio failed:', err)
-          }
+          await handleDownloadMedia(filePath, false)
         }
       },
       disabled: !filePath
@@ -1730,6 +1770,31 @@ const App: React.FC = () => {
       }}
     >
       <WindowControls />
+
+      {/* 顶部通知 - 考虑标题栏高度下移 */}
+      <div
+        className={`fixed top-12 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${notificationVisible ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0 pointer-events-none'
+          }`}
+      >
+        {notification && (
+          <div className={`px-6 py-3 rounded-xl shadow-2xl backdrop-blur-md border flex items-center gap-3 ${notification.type === 'success'
+            ? 'bg-green-500/20 border-green-500/30 text-green-100'
+            : 'bg-red-500/20 border-red-500/30 text-red-100'
+            }`}>
+            {notification.type === 'success' ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <span className="font-medium text-sm">{notification.message}</span>
+          </div>
+        )}
+      </div>
+
       {/* 主内容区 */}
       <main className="flex-1 flex flex-col relative z-10 pt-10">
         {/* 结果显示区 - 瀑布流布局 */}
@@ -1802,6 +1867,29 @@ const App: React.FC = () => {
 
                           {/* 操作按钮 */}
                           <div className="flex gap-2">
+                            {/* 下载按钮 */}
+                            {task.result && (
+                              <button
+                                onClick={async () => {
+                                  if (task.result?.filePath) {
+                                    // 处理多文件下载
+                                    const filePaths = task.result.filePath.includes('|||')
+                                      ? task.result.filePath.split('|||')
+                                      : [task.result.filePath]
+
+                                    for (const fp of filePaths) {
+                                      await handleDownloadMedia(fp, true)
+                                    }
+                                  }
+                                }}
+                                className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
+                                title="下载"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </button>
+                            )}
                             <button
                               onClick={() => handleRegenerate(task)}
                               className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
@@ -2014,7 +2102,7 @@ const App: React.FC = () => {
               <div className="h-full" />
             )}
           </div>
-        </div>
+        </div >
 
         {/* 错误提示 */}
         {

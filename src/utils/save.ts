@@ -87,6 +87,15 @@ export async function downloadMediaFile(sourcePath: string, suggestedName?: stri
   return target
 }
 
+export async function quickDownloadMediaFile(sourcePath: string, targetDir: string, suggestedName?: string): Promise<string> {
+  const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
+  const target = await path.join(targetDir, name)
+  const bytes = await readFile(sourcePath)
+  await writeFile(target, bytes as any)
+  console.log('[save] quick download saved to:', target)
+  return target
+}
+
 async function sha256HexString(input: string): Promise<string> {
   const enc = new TextEncoder().encode(input)
   const hashBuf = await crypto.subtle.digest('SHA-256', enc)

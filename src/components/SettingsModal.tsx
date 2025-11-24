@@ -3,6 +3,7 @@ import NumberInput from './ui/NumberInput'
 import Toggle from './ui/Toggle'
 import { apiService } from '../services/api'
 import { open } from '@tauri-apps/plugin-shell'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -21,6 +22,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
   const [collapseDelay, setCollapseDelay] = useState(500)
   const [collapseOnScrollOnly, setCollapseOnScrollOnly] = useState(true)
+  const [enableQuickDownload, setEnableQuickDownload] = useState(false)
+  const [quickDownloadButtonOnly, setQuickDownloadButtonOnly] = useState(false)
+  const [quickDownloadPath, setQuickDownloadPath] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
 
@@ -46,6 +50,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedCollapseOnScrollOnly = localStorage.getItem('collapse_on_scroll_only')
     setCollapseOnScrollOnly(savedCollapseOnScrollOnly !== 'false') // 默认开启
+
+    const savedEnableQuickDownload = localStorage.getItem('enable_quick_download')
+    setEnableQuickDownload(savedEnableQuickDownload === 'true')
+
+    const savedQuickDownloadButtonOnly = localStorage.getItem('quick_download_button_only')
+    setQuickDownloadButtonOnly(savedQuickDownloadButtonOnly === 'true')
+
+    const savedQuickDownloadPath = localStorage.getItem('quick_download_path') || ''
+    setQuickDownloadPath(savedQuickDownloadPath)
 
     // 点击模态框外部关闭
     const handleClickOutside = (event: MouseEvent) => {
@@ -127,6 +140,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     window.dispatchEvent(new Event('collapseSettingChanged'))
   }
 
+  // 实时保存快速下载启用设置
+  const handleEnableQuickDownloadChange = (value: boolean) => {
+    setEnableQuickDownload(value)
+    localStorage.setItem('enable_quick_download', value.toString())
+  }
+
+  // 实时保存仅按钮快速下载设置
+  const handleQuickDownloadButtonOnlyChange = (value: boolean) => {
+    setQuickDownloadButtonOnly(value)
+    localStorage.setItem('quick_download_button_only', value.toString())
+  }
+
+  // 实时保存快速下载路径
+  const handleQuickDownloadPathChange = (value: string) => {
+    setQuickDownloadPath(value)
+    localStorage.setItem('quick_download_path', value)
+  }
+
+  // 选择快速下载路径
+  const handleSelectQuickDownloadPath = async () => {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: '选择快速下载保存目录'
+      })
+
+      if (selected && typeof selected === 'string') {
+        handleQuickDownloadPathChange(selected)
+      }
+    } catch (error) {
+      console.error('选择目录失败:', error)
+    }
+  }
+
   // 打开外部链接
   const handleOpenLink = async (url: string) => {
     try {
@@ -171,7 +219,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     <div className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}>
       <div
         ref={modalRef}
-        className={`bg-[#131313]/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-4xl h-[550px] shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        className={`bg-[#131313]/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-4xl shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        style={{
+          height: '70vh',
+          minHeight: '450px',
+          maxHeight: '900px'
+        }}
       >
         {/* 左侧侧边栏 */}
         <div className="w-56 bg-zinc-900/50 border-r border-zinc-700/50 flex flex-col">
@@ -240,6 +293,54 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                       className="w-full"
                     />
                     <p className="mt-2 text-xs text-zinc-500">在生成面板显示预估费用</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">下载设置</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30 space-y-5">
+                    <div>
+                      <Toggle
+                        label="启用快速下载"
+                        checked={enableQuickDownload}
+                        onChange={handleEnableQuickDownloadChange}
+                        className="w-full"
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">开启后下载文件将直接保存到指定目录，无需手动选择</p>
+                    </div>
+
+                    <div className={`transition-opacity duration-300 ${!enableQuickDownload ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <Toggle
+                        label="仅按钮使用快速下载"
+                        checked={quickDownloadButtonOnly}
+                        onChange={handleQuickDownloadButtonOnlyChange}
+                        className="w-full"
+                        disabled={!enableQuickDownload}
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">开启后，只有点击下载按钮时才使用快速下载，右键菜单下载依然手动选择目录</p>
+                    </div>
+
+                    <div className={`transition-opacity duration-300 ${!enableQuickDownload ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <label className="block text-sm font-medium mb-2 text-zinc-300">快速下载保存路径</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={quickDownloadPath}
+                          onChange={(e) => handleQuickDownloadPathChange(e.target.value)}
+                          placeholder="选择保存目录"
+                          disabled={!enableQuickDownload}
+                          className="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 text-sm disabled:opacity-50"
+                        />
+                        <button
+                          onClick={handleSelectQuickDownloadPath}
+                          disabled={!enableQuickDownload}
+                          className="px-4 py-2.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          选择
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-zinc-500">所有快速下载的文件将保存到此目录</p>
+                    </div>
                   </div>
                 </div>
               </div>
