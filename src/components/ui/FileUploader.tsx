@@ -11,6 +11,7 @@ type FileUploaderProps = {
     onRemove: (index: number) => void
     onReplace?: (index: number, newFile: File) => void
     onReorder?: (from: number, to: number) => void
+    onDragStateChange?: (isDragging: boolean) => void
     accept?: string
     multiple?: boolean
     maxCount?: number
@@ -25,6 +26,7 @@ export default function FileUploader({
     onRemove,
     onReplace,
     onReorder,
+    onDragStateChange,
     accept = 'image/*',
     multiple = false,
     maxCount = 1,
@@ -330,6 +332,12 @@ export default function FileUploader({
         }
     }, [dragState.isDragging, onReorder])
 
+    // 通知父组件拖动状态变化 (包括 dropping 状态)
+    React.useEffect(() => {
+        const isActive = dragState.isDragging || dragState.isDropping
+        onDragStateChange?.(isActive)
+    }, [dragState.isDragging, dragState.isDropping, onDragStateChange])
+
     // 添加拖拽确认逻辑
     React.useEffect(() => {
         if (dragState.fromIndex === null || dragState.isDragging || dragState.isDropping) return
@@ -474,7 +482,7 @@ export default function FileUploader({
                             opacity: isDraggingThis ? 0.8 : 1,
                             visibility: 'visible',
                             position: isDraggingThis ? 'relative' : 'static',
-                            zIndex: isDraggingThis || isDroppingThis ? 50 : 'auto'
+                            zIndex: isDraggingThis || isDroppingThis ? 10000 : 'auto'
                         }}
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}

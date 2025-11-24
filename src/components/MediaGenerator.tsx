@@ -149,6 +149,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [languageBoost, setLanguageBoost] = useState<string>('auto')
   const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
 
+  // 图片拖动状态
+  const [isDraggingImage, setIsDraggingImage] = useState(false)
+
+  // 向 App 发送拖动状态变化事件
+  useEffect(() => {
+    console.log('[MediaGenerator] Image drag/drop state changed:', isDraggingImage)
+    const event = new CustomEvent('imageDragStateChanged', {
+      detail: { isDragging: isDraggingImage }
+    })
+    window.dispatchEvent(event)
+  }, [isDraggingImage])
+
 
 
 
@@ -1762,6 +1774,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   onRemove={removeImage}
                   onReplace={handleImageReplace}
                   onReorder={handleImageReorder}
+                  onDragStateChange={setIsDraggingImage}
                   accept="image/*"
                   multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
                   maxCount={maxImageCount}

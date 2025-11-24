@@ -114,6 +114,9 @@ const App: React.FC = () => {
   const lastScrollTopRef = React.useRef(0)
   const isProgrammaticScrollRef = React.useRef(false) // 标记是否为程序调整滚动
 
+  // 图片拖动状态 - 用于动态调整底部面板 z-index
+  const [isImageDragging, setIsImageDragging] = useState(false)
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsReady(true)
@@ -124,14 +127,14 @@ const App: React.FC = () => {
   // 初始化时监听首次鼠标交互
   useEffect(() => {
     let isInitialized = false
-    
+
     const handleFirstInteraction = (e: MouseEvent) => {
       if (isInitialized) return
       isInitialized = true
-      
+
       const panel = inputContainerRef.current
       if (!panel) return
-      
+
       const rect = panel.getBoundingClientRect()
       const isInside = (
         e.clientX >= rect.left &&
@@ -139,51 +142,51 @@ const App: React.FC = () => {
         e.clientY >= rect.top &&
         e.clientY <= rect.bottom
       )
-      
+
       isPanelHoveredRef.current = isInside
     }
-    
+
     // 监听多种交互事件
     document.addEventListener('mousemove', handleFirstInteraction, { once: true, passive: true })
     document.addEventListener('mousedown', handleFirstInteraction, { once: true, passive: true })
     document.addEventListener('wheel', handleFirstInteraction, { once: true, passive: true })
-    
+
     return () => {
       document.removeEventListener('mousemove', handleFirstInteraction)
       document.removeEventListener('mousedown', handleFirstInteraction)
       document.removeEventListener('wheel', handleFirstInteraction)
     }
   }, [])
-  
+
   // 持续监测鼠标位置，确保状态同步
   useEffect(() => {
     let lastMouseX = 0
     let lastMouseY = 0
-    
+
     const checkMousePosition = () => {
       const panel = inputContainerRef.current
       if (!panel) return
-      
+
       // 使用 document.elementsFromPoint 获取鼠标下的所有元素
       const elements = document.elementsFromPoint(lastMouseX, lastMouseY)
       const isInside = elements.some(el => panel.contains(el))
-      
+
       if (isPanelHoveredRef.current !== isInside) {
         isPanelHoveredRef.current = isInside
       }
     }
-    
+
     // 全局跟踪鼠标位置
     const trackMousePosition = (e: MouseEvent) => {
       lastMouseX = e.clientX
       lastMouseY = e.clientY
     }
-    
+
     document.addEventListener('mousemove', trackMousePosition, { passive: true })
-    
+
     // 定期检查鼠标位置（每500ms）
     const interval = setInterval(checkMousePosition, 500)
-    
+
     return () => {
       document.removeEventListener('mousemove', trackMousePosition)
       clearInterval(interval)
@@ -219,6 +222,23 @@ const App: React.FC = () => {
     window.addEventListener('generatorStateChanged', handleStateChange)
     return () => window.removeEventListener('generatorStateChanged', handleStateChange)
   }, [])
+
+  // 监听图片拖动状态变化
+  useEffect(() => {
+    const handleDragStateChange = (e: Event) => {
+      const customEvent = e as CustomEvent
+      const { isDragging } = customEvent.detail
+      console.log('[App] Received drag state change:', isDragging)
+      setIsImageDragging(isDragging)
+    }
+    window.addEventListener('imageDragStateChanged', handleDragStateChange)
+    return () => window.removeEventListener('imageDragStateChanged', handleDragStateChange)
+  }, [])
+
+  // Debug: log z-index changes
+  useEffect(() => {
+    console.log('[App] isImageDragging:', isImageDragging, '→ z-index:', isImageDragging ? 9999 : 20, ', overflow:', isImageDragging ? 'visible' : 'hidden')
+  }, [isImageDragging])
 
   // 初始化右键菜单
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
@@ -260,24 +280,24 @@ const App: React.FC = () => {
     const inputEl = inputContainerRef.current
     const listEl = listContainerRef.current
     if (!inputEl || !listEl) return
-    
+
     const update = () => {
       const h = inputEl.offsetHeight || 0
       // 折叠时使用固定的小高度，展开时使用实际高度
       // 关键修改：当正在折叠动画进行中时，也要使用展开后的高度
       const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
       setInputPadding(actualHeight + 24)
-      
+
       const newPadding = actualHeight + 24
       const oldPadding = parseInt(listEl.style.paddingBottom) || 0
       const paddingDiff = newPadding - oldPadding
-      
+
       // 关键：如果 padding 增加且用户在底部，调整 scrollTop
       const threshold = 8
       const atBottom = listEl.scrollHeight - listEl.clientHeight - listEl.scrollTop <= threshold
-      
+
       listEl.style.paddingBottom = `${newPadding}px`
-      
+
       // 如果用户在底部且 padding 增加，自动调整滚动位置
       if (atBottom && paddingDiff > 0) {
         isProgrammaticScrollRef.current = true
@@ -287,7 +307,7 @@ const App: React.FC = () => {
         })
       }
     }
-    
+
     update()
     const ro = new ResizeObserver(update)
     ro.observe(inputEl)
@@ -326,27 +346,27 @@ const App: React.FC = () => {
       if (isProgrammaticScrollRef.current) {
         return
       }
-      
+
       const threshold = 8
       const currentScrollTop = el.scrollTop
       const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
       // const isScrollingUp = currentScrollTop > lastScrollTopRef.current
       const scrollDelta = Math.abs(currentScrollTop - lastScrollTopRef.current)
-      
+
       // 关键修改：检查最新一条历史记录是否在可视区域内
       const lastTaskElement = el.querySelector('.space-y-6 > div:last-child')
       let isLastTaskVisible = false
-      
+
       if (lastTaskElement) {
         const taskRect = lastTaskElement.getBoundingClientRect()
         const containerRect = el.getBoundingClientRect()
         // 最新记录的底部是否在容器的可视区域内（留一些余量）
         isLastTaskVisible = taskRect.bottom > containerRect.top && taskRect.top < containerRect.bottom
       }
-      
+
       // 更新最后滚动位置
       lastScrollTopRef.current = currentScrollTop
-      
+
       // 如果用户滚动到底部，立即展开面板
       if (atBottom) {
         if (collapseTimerRef.current) {
@@ -356,7 +376,7 @@ const App: React.FC = () => {
         expandPanelSmooth()
         return
       }
-      
+
       // 关键修改：只有当最新记录完全离开可视区域时才折叠
       // 条件：
       // 1. 不在底部
@@ -405,11 +425,11 @@ const App: React.FC = () => {
       clearTimeout(collapseAnimationRef.current)
       collapseAnimationRef.current = null
     }
-    
+
     // 先更新 isCollapsing 状态，触发 paddingBottom 立即调整
     // padding 的调整和 scrollTop 的补偿现在在 useEffect 中处理
     setIsCollapsing(true)
-    
+
     // 然后在下一帧开始展开动画
     requestAnimationFrame(() => {
       setIsPanelCollapsed(false)
@@ -429,16 +449,16 @@ const App: React.FC = () => {
 
   const handlePanelMouseLeave = () => {
     isPanelHoveredRef.current = false
-    
+
     if (!enableAutoCollapse) return
-    
+
     // 鼠标离开后，立即检查当前状态
     const el = listContainerRef.current
     if (!el) return
-    
+
     const threshold = 8
     const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
-    
+
     // 检查最新记录是否可见
     const lastTaskElement = el.querySelector('.space-y-6 > div:last-child')
     let isLastTaskVisible = false
@@ -447,7 +467,7 @@ const App: React.FC = () => {
       const containerRect = el.getBoundingClientRect()
       isLastTaskVisible = taskRect.bottom > containerRect.top && taskRect.top < containerRect.bottom
     }
-    
+
     // 如果不在底部且最新记录不可见，使用延迟折叠
     if (!atBottom && !isLastTaskVisible) {
       if (collapseTimerRef.current) {
@@ -461,7 +481,7 @@ const App: React.FC = () => {
       }, collapseDelay)
     }
   }
-  
+
   // 持续同步鼠标位置状态
   const handlePanelMouseMove = () => {
     // 确保鼠标在面板内时状态始终为 true
@@ -1978,15 +1998,18 @@ const App: React.FC = () => {
         }
 
         {/* 输入区域 - 悬浮设计 */}
-        <div 
-          ref={inputContainerRef} 
-          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl z-20"
+        <div
+          ref={inputContainerRef}
+          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl"
+          style={{
+            zIndex: isImageDragging ? 9999 : 20
+          }}
           onMouseEnter={handlePanelMouseEnter}
           onMouseLeave={handlePanelMouseLeave}
           onMouseMove={handlePanelMouseMove}
         >
           {/* 折叠状态的简洁条 */}
-          <div 
+          <div
             className="bg-[#131313]/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl hover:shadow-3xl cursor-pointer relative"
             style={{
               transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -1994,7 +2017,7 @@ const App: React.FC = () => {
               minHeight: isPanelCollapsed || isCollapsing ? '52px' : 'auto',
               opacity: isPanelCollapsed || isCollapsing ? 1 : 1,
               padding: isPanelCollapsed || isCollapsing ? '12px 24px' : '16px',
-              overflow: isPanelCollapsed && !isCollapsing ? 'visible' : 'hidden'
+              overflow: (isPanelCollapsed && !isCollapsing) || isImageDragging ? 'visible' : 'hidden'
             }}
             onClick={() => {
               if (isPanelCollapsed) {
@@ -2003,7 +2026,7 @@ const App: React.FC = () => {
             }}
           >
             {/* 折叠状态内容 - 绝对定位，跟随面板移动 */}
-            <div 
+            <div
               className="absolute left-0 right-0"
               style={{
                 top: isPanelCollapsed || isCollapsing ? '12px' : '-60px',
@@ -2021,11 +2044,11 @@ const App: React.FC = () => {
                     {currentPrompt || '点击展开输入面板...'}
                   </span>
                 </div>
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  className="h-5 w-5 text-zinc-400" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 text-zinc-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
                   stroke="currentColor"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -2034,7 +2057,7 @@ const App: React.FC = () => {
             </div>
 
             {/* 完整面板内容 */}
-            <div 
+            <div
               style={{
                 opacity: !isPanelCollapsed && !isCollapsing ? 1 : 0,
                 transition: 'opacity 0.4s ease 0.15s',
