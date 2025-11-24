@@ -228,17 +228,18 @@ const App: React.FC = () => {
     const handleDragStateChange = (e: Event) => {
       const customEvent = e as CustomEvent
       const { isDragging } = customEvent.detail
-      console.log('[App] Received drag state change:', isDragging)
       setIsImageDragging(isDragging)
     }
     window.addEventListener('imageDragStateChanged', handleDragStateChange)
     return () => window.removeEventListener('imageDragStateChanged', handleDragStateChange)
   }, [])
 
-  // Debug: log z-index changes
+  // 清除历史确认对话框动画
   useEffect(() => {
-    console.log('[App] isImageDragging:', isImageDragging, '→ z-index:', isImageDragging ? 9999 : 20, ', overflow:', isImageDragging ? 'visible' : 'hidden')
-  }, [isImageDragging])
+    if (isConfirmClearOpen) {
+      requestAnimationFrame(() => setConfirmOpacity(1))
+    }
+  }, [isConfirmClearOpen])
 
   // 初始化右键菜单
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
@@ -1674,6 +1675,8 @@ const App: React.FC = () => {
   // 删除单条历史记录
   const deleteTask = async (taskId: string) => {
     const target = tasks.find(t => t.id === taskId)
+
+    // 删除生成的结果文件
     if (target?.result?.filePath) {
       const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
       for (const p of paths) {
@@ -1685,11 +1688,36 @@ const App: React.FC = () => {
         }
       }
     }
+
+    // 删除上传的文件 - 使用引用计数
     if (target?.uploadedFilePaths && target.uploadedFilePaths.length) {
+      // 统计所有历史记录中上传文件的引用次数
+      const fileRefCounts = new Map<string, number>()
+
+      for (const task of tasks) {
+        if (task.uploadedFilePaths) {
+          for (const filePath of task.uploadedFilePaths) {
+            fileRefCounts.set(filePath, (fileRefCounts.get(filePath) || 0) + 1)
+          }
+        }
+      }
+
+      // 只删除引用计数为 1 的文件(即仅被当前要删除的记录使用)
       for (const p of target.uploadedFilePaths) {
-        try { await remove(p) } catch (e) { console.error('[App] 删除单条上传文件失败', p, e) }
+        const refCount = fileRefCounts.get(p) || 0
+        if (refCount === 1) {
+          try {
+            await remove(p)
+            console.log('[App] 删除上传文件(引用计数=1):', p)
+          } catch (e) {
+            console.error('[App] 删除单条上传文件失败', p, e)
+          }
+        } else {
+          console.log('[App] 保留上传文件(引用计数=' + refCount + '):', p)
+        }
       }
     }
+
     setTasks(prev => prev.filter(task => task.id !== taskId))
   }
 

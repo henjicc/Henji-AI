@@ -154,7 +154,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // 向 App 发送拖动状态变化事件
   useEffect(() => {
-    console.log('[MediaGenerator] Image drag/drop state changed:', isDraggingImage)
     const event = new CustomEvent('imageDragStateChanged', {
       detail: { isDragging: isDraggingImage }
     })
