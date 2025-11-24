@@ -87,6 +87,8 @@
           "path": "$APPLOCALDATA/**/*"
         }
       ]
-    }
+    },
+    "shell:default",
+    "shell:allow-open"
   ]
 }

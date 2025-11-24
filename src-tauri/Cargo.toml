@@ -13,6 +13,7 @@ tauri = { version = "2.0.0", features = ["protocol-asset"] }
 tauri-plugin-fs = "2.0.0"
 tauri-plugin-dialog = "2.0.0"
 tauri-plugin-http = "2.0.0"
+tauri-plugin-shell = "2.0.0"
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

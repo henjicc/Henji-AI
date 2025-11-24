@@ -8,6 +8,7 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_http::init())
+    .plugin(tauri_plugin_shell::init())
     .setup(|app| {
       let app_local = app.path().app_local_data_dir().expect("get app local data dir");
       let media_dir = app_local.join("Henji-AI").join("Media");

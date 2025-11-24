@@ -22,6 +22,7 @@
     "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-http": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.3.3",
     "axios": "^1.6.0",
     "pica": "^9.0.1",
     "react": "^18.2.0",

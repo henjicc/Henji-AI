@@ -2,12 +2,16 @@ import React, { useState, useEffect, useRef } from 'react'
 import NumberInput from './ui/NumberInput'
 import Toggle from './ui/Toggle'
 import { apiService } from '../services/api'
+import { open } from '@tauri-apps/plugin-shell'
 
 interface SettingsModalProps {
   onClose: () => void
 }
 
+type SettingsTab = 'general' | 'api' | 'interface'
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [apiKey, setApiKey] = useState('')
   const [falApiKey, setFalApiKey] = useState('')
   const [maxHistoryCount, setMaxHistoryCount] = useState(50)
@@ -123,151 +127,273 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     window.dispatchEvent(new Event('collapseSettingChanged'))
   }
 
+  // 打开外部链接
+  const handleOpenLink = async (url: string) => {
+    try {
+      await open(url)
+    } catch (error) {
+      console.error('Failed to open link:', error)
+    }
+  }
+
+  const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+    {
+      id: 'general',
+      label: '常规设置',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      )
+    },
+    {
+      id: 'api',
+      label: 'API 设置',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+        </svg>
+      )
+    },
+    {
+      id: 'interface',
+      label: '界面设置',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+      )
+    }
+  ]
+
   return (
     <div className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}>
       <div
         ref={modalRef}
-        className={`bg-[#131313]/90 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-md shadow-2xl transform transition-all duration-300 scale-100 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        className={`bg-[#131313]/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-4xl h-[550px] shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
       >
-        <div className="p-5 border-b border-zinc-700/50 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-[#007eff]">
-            设置
-          </h2>
-          <button
-            onClick={handleClose}
-            className="text-zinc-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-zinc-800/50"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+        {/* 左侧侧边栏 */}
+        <div className="w-56 bg-zinc-900/50 border-r border-zinc-700/50 flex flex-col">
+          <div className="p-4 border-b border-zinc-700/50">
+            <h2 className="text-lg font-bold text-[#007eff]">设置</h2>
+          </div>
+          <div className="flex-1 py-3 space-y-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`w-full px-4 py-2.5 flex items-center space-x-3 transition-colors duration-200 ${activeTab === tab.id
+                  ? 'bg-[#007eff]/10 text-[#007eff] border-r-2 border-[#007eff]'
+                  : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+                  }`}
+              >
+                {tab.icon}
+                <span className="font-medium text-sm">{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="p-5">
-          <div className="mb-5">
-            <label className="block text-sm font-medium mb-2 text-zinc-300">派欧云API密钥</label>
-            <div className="relative">
-              <input
-                type={showApiKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="请输入您的API密钥"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 outline-none focus:outline-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out text-white placeholder-zinc-400 pr-10"
-              />
-              <button
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                {showApiKey ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-zinc-400">
-              您可以在派欧云控制台获取API密钥
-            </p>
-          </div>
-
-          <div className="mb-5">
-            <label className="block text-sm font-medium mb-2 text-zinc-300">fal API密钥</label>
-            <div className="relative">
-              <input
-                type={showFalApiKey ? "text" : "password"}
-                value={falApiKey}
-                onChange={(e) => handleFalApiKeyChange(e.target.value)}
-                placeholder="请输入您的 fal API 密钥"
-                className="w-full bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-4 py-3 outline-none focus:outline-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out text-white placeholder-zinc-400 pr-10"
-              />
-              <button
-                onClick={() => setShowFalApiKey(!showFalApiKey)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                {showFalApiKey ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-zinc-400">
-              您可以在 fal.ai 控制台获取 API 密钥
-            </p>
-          </div>
-
-          <div className="mb-5">
-            <NumberInput
-              label="历史记录保存数量"
-              value={maxHistoryCount}
-              onChange={handleHistoryCountChange}
-              min={1}
-              max={500}
-              step={1}
-              widthClassName="w-full"
-            />
-            <p className="mt-2 text-xs text-zinc-400">最多保存 1-500 条历史记录,超出后将自动删除最旧的记录</p>
-          </div>
-
-          <div className="mb-5">
-            <Toggle
-              label="显示价格估算"
-              checked={showPriceEstimate}
-              onChange={handleShowPriceChange}
-              className="w-full"
-            />
-            <p className="mt-2 text-xs text-zinc-400">在生成面板显示预估费用</p>
-          </div>
-
-          <div className="mb-5">
-            <Toggle
-              label="底部面板智能折叠"
-              checked={enableAutoCollapse}
-              onChange={handleAutoCollapseChange}
-              className="w-full"
-            />
-            <p className="mt-2 text-xs text-zinc-400">浏览历史记录时自动折叠底部面板，节省显示空间</p>
-          </div>
-
-          <div className="mb-5">
-            <NumberInput
-              label="折叠延迟时间 (ms)"
-              value={collapseDelay}
-              onChange={handleCollapseDelayChange}
-              min={100}
-              max={3000}
-              step={100}
-              widthClassName="w-full"
-              disabled={!enableAutoCollapse}
-            />
-            <p className="mt-2 text-xs text-zinc-400">鼠标离开底部面板后等待多久自动折叠（100-3000毫秒）</p>
-          </div>
-
-          <div className="mb-5">
-            <Toggle
-              label="仅滚动时折叠"
-              checked={collapseOnScrollOnly}
-              onChange={handleCollapseOnScrollOnlyChange}
-              className="w-full"
-              disabled={!enableAutoCollapse}
-            />
-            <p className="mt-2 text-xs text-zinc-400">开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠</p>
-          </div>
-
-          <div className="flex justify-end mt-6">
+        {/* 右侧内容区域 */}
+        <div className="flex-1 flex flex-col h-full">
+          <div className="p-4 border-b border-zinc-700/50 flex justify-between items-center bg-zinc-900/20">
+            <h3 className="text-base font-medium text-white">
+              {tabs.find(t => t.id === activeTab)?.label}
+            </h3>
             <button
               onClick={handleClose}
-              className="px-6 py-2 bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl rounded-lg transition-all duration-300 flex items-center font-medium"
+              className="text-zinc-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-zinc-800/50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5">
+            {activeTab === 'general' && (
+              <div className="space-y-5 animate-fade-in">
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">历史记录</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <NumberInput
+                      label="保存数量限制"
+                      value={maxHistoryCount}
+                      onChange={handleHistoryCountChange}
+                      min={1}
+                      max={500}
+                      step={1}
+                      widthClassName="w-full"
+                    />
+                    <p className="mt-2 text-xs text-zinc-500">最多保存 1-500 条历史记录，超出后将自动删除最旧的记录</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">显示设置</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <Toggle
+                      label="显示价格估算"
+                      checked={showPriceEstimate}
+                      onChange={handleShowPriceChange}
+                      className="w-full"
+                    />
+                    <p className="mt-2 text-xs text-zinc-500">在生成面板显示预估费用</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'api' && (
+              <div className="space-y-5 animate-fade-in">
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">派欧云</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">API 密钥</label>
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={apiKey}
+                        onChange={(e) => handleApiKeyChange(e.target.value)}
+                        placeholder="请输入您的 API 密钥"
+                        className="w-full bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 pr-10 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      >
+                        {showApiKey ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      打开
+                      <button
+                        onClick={() => handleOpenLink('https://ppio.com/user/register?invited_by=MLBDS6')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        派欧云官网
+                      </button>
+                      注册并登录，然后在
+                      <button
+                        onClick={() => handleOpenLink('https://ppio.com/settings/key-management')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        密钥管理页面
+                      </button>
+                      获取密钥
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 tracking-wider">fal.ai</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">API 密钥</label>
+                    <div className="relative">
+                      <input
+                        type={showFalApiKey ? "text" : "password"}
+                        value={falApiKey}
+                        onChange={(e) => handleFalApiKeyChange(e.target.value)}
+                        placeholder="请输入您的 fal API 密钥"
+                        className="w-full bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 pr-10 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowFalApiKey(!showFalApiKey)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      >
+                        {showFalApiKey ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      打开
+                      <button
+                        onClick={() => handleOpenLink('https://fal.ai/')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        fal 官网
+                      </button>
+                      注册并登录，然后在
+                      <button
+                        onClick={() => handleOpenLink('https://fal.ai/dashboard/keys')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        密钥管理页面
+                      </button>
+                      获取密钥
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'interface' && (
+              <div className="space-y-5 animate-fade-in">
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">底部面板</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30 space-y-5">
+                    <div>
+                      <Toggle
+                        label="智能折叠"
+                        checked={enableAutoCollapse}
+                        onChange={handleAutoCollapseChange}
+                        className="w-full"
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">浏览历史记录时自动折叠底部面板，节省显示空间</p>
+                    </div>
+
+                    <div className={`transition-opacity duration-300 ${!enableAutoCollapse ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <NumberInput
+                        label="折叠延迟 (ms)"
+                        value={collapseDelay}
+                        onChange={handleCollapseDelayChange}
+                        min={100}
+                        max={3000}
+                        step={100}
+                        widthClassName="w-full"
+                        disabled={!enableAutoCollapse}
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">鼠标离开面板后等待多久自动折叠</p>
+                    </div>
+
+                    <div className={`transition-opacity duration-300 ${!enableAutoCollapse ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <Toggle
+                        label="仅滚动时折叠"
+                        checked={collapseOnScrollOnly}
+                        onChange={handleCollapseOnScrollOnlyChange}
+                        className="w-full"
+                        disabled={!enableAutoCollapse}
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t border-zinc-700/50 bg-zinc-900/20 flex justify-end">
+            <button
+              onClick={handleClose}
+              className="px-6 py-2 bg-[#007eff] hover:bg-[#006add] text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 rounded-lg transition-all duration-300 font-medium text-sm"
             >
               确定
             </button>
