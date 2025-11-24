@@ -330,7 +330,7 @@ const App: React.FC = () => {
       const threshold = 8
       const currentScrollTop = el.scrollTop
       const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
-      const isScrollingUp = currentScrollTop > lastScrollTopRef.current
+      // const isScrollingUp = currentScrollTop > lastScrollTopRef.current
       const scrollDelta = Math.abs(currentScrollTop - lastScrollTopRef.current)
       
       // 关键修改：检查最新一条历史记录是否在可视区域内
@@ -418,7 +418,7 @@ const App: React.FC = () => {
   }
 
   // 处理面板鼠标进入/离开事件
-  const handlePanelMouseEnter = (e: React.MouseEvent) => {
+  const handlePanelMouseEnter = () => {
     isPanelHoveredRef.current = true
     if (collapseTimerRef.current) {
       clearTimeout(collapseTimerRef.current)
@@ -427,7 +427,7 @@ const App: React.FC = () => {
     expandPanelSmooth()
   }
 
-  const handlePanelMouseLeave = (e: React.MouseEvent) => {
+  const handlePanelMouseLeave = () => {
     isPanelHoveredRef.current = false
     
     if (!enableAutoCollapse) return
@@ -463,7 +463,7 @@ const App: React.FC = () => {
   }
   
   // 持续同步鼠标位置状态
-  const handlePanelMouseMove = (e: React.MouseEvent) => {
+  const handlePanelMouseMove = () => {
     // 确保鼠标在面板内时状态始终为 true
     if (!isPanelHoveredRef.current) {
       isPanelHoveredRef.current = true

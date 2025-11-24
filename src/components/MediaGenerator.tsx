@@ -20,7 +20,7 @@ interface MediaGeneratorProps {
   onToggleCollapse?: () => void
 }
 
-const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory, isCollapsed = false, onToggleCollapse }) => {
+const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory }) => {
   const [input, setInput] = useState('')
   const [selectedProvider, setSelectedProvider] = useState('piaoyun')
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')

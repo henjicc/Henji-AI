@@ -1,5 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import React, { useRef, useState } from 'react'
 import { useTauriDragDrop } from '../../hooks/useTauriDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
@@ -39,6 +38,7 @@ export default function FileUploader({
     const lastDropTime = useRef(0)
     const [dragState, setDragState] = useState<{
         isDragging: boolean
+        isDropping: boolean
         fromIndex: number | null
         toIndex: number | null
         startX: number
@@ -47,6 +47,7 @@ export default function FileUploader({
         currentY: number
     }>({
         isDragging: false,
+        isDropping: false,
         fromIndex: null,
         toIndex: null,
         startX: 0,
@@ -54,7 +55,7 @@ export default function FileUploader({
         currentX: 0,
         currentY: 0
     })
-    
+
     // Track newly uploaded files to apply upload animation only to them
     const [newlyUploadedFiles, setNewlyUploadedFiles] = useState<Set<string>>(new Set())
     const dragStateRef = useRef(dragState)
@@ -95,7 +96,7 @@ export default function FileUploader({
                 fileUrls.forEach(url => newSet.add(url))
                 return newSet
             })
-            
+
             // Clear the newly uploaded files marker after animation duration
             setTimeout(() => {
                 setNewlyUploadedFiles(prev => {
@@ -104,7 +105,7 @@ export default function FileUploader({
                     return newSet
                 })
             }, 300) // Slightly longer than the animation duration
-            
+
             onUpload(acceptedFiles)
         }
     }
@@ -210,12 +211,13 @@ export default function FileUploader({
             e.preventDefault(); // 防止默认行为
             return;
         }
-        
+
         if (disabled || isCustomDragging || e.button !== 0) return
         e.preventDefault()
         console.log('[Drag] Start', { index, x: e.clientX, y: e.clientY })
         setDragState({
-            isDragging: true,
+            isDragging: false, // 初始状态不拖拽，等待鼠标移动确认
+            isDropping: false,
             fromIndex: index,
             toIndex: index,
             startX: e.clientX,
@@ -226,100 +228,42 @@ export default function FileUploader({
     }
 
     React.useEffect(() => {
-        // 只有在有起始索引但还未确认拖拽时才监听鼠标移动
-        if (dragState.fromIndex === null || dragState.isDragging) return
-
-        let moved = false;
-        const startX = dragState.startX;
-        const startY = dragState.startY;
-
-        const handleMouseMove = (e: MouseEvent) => {
-            const moveX = e.clientX;
-            const moveY = e.clientY;
-            const deltaX = Math.abs(moveX - startX);
-            const deltaY = Math.abs(moveY - startY);
-            
-            // 只有当鼠标移动超过一定距离时才真正开始拖拽
-            if (deltaX > 5 || deltaY > 5) {
-                console.log('[Drag] Confirmed', { index: dragState.fromIndex, deltaX, deltaY });
-                setDragState(prev => ({
-                    ...prev,
-                    isDragging: true,
-                    currentX: moveX,
-                    currentY: moveY
-                }));
-                moved = true;
-            }
-        };
-
-        const handleMouseUp = () => {
-            // 如果从未真正开始拖拽，则清理状态
-            if (!moved) {
-                setDragState({
-                    isDragging: false,
-                    fromIndex: null,
-                    toIndex: null,
-                    startX: 0,
-                    startY: 0,
-                    currentX: 0,
-                    currentY: 0
-                });
-            }
-            
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [dragState.fromIndex, dragState.isDragging, dragState.startX, dragState.startY]);
-
-    React.useEffect(() => {
         if (!dragState.isDragging) return
 
         const handleMouseMove = (e: MouseEvent) => {
             const from = dragStateRef.current.fromIndex!
             const oldTo = dragStateRef.current.toIndex!
 
-            let newToIndex = oldTo
+            let newToIndex = from
             let minDist = Infinity
 
+            // 获取当前拖拽元素的位置
+            const draggingEl = itemRefs.current[from]
+            if (!draggingEl) return
+
+            const draggingRect = draggingEl.getBoundingClientRect()
+            const draggingCenterX = draggingRect.left + draggingRect.width / 2
+
+            // 找到最近的目标位置
             for (let i = 0; i < itemRefs.current.length; i++) {
+                if (i === from) continue
+
                 const el = itemRefs.current[i]
                 if (!el) continue
                 const rect = el.getBoundingClientRect()
+                const targetCenterX = rect.left + rect.width / 2
 
-                // 计算原始位置（减去 translateX 偏移）
-                let originalCenterX = rect.left + rect.width / 2
-                // 使用准确的位移量，图片宽度为48px + 8px gap = 56px
-                if (from < oldTo && i > from && i <= oldTo) {
-                    originalCenterX += 56
-                } else if (from > oldTo && i < from && i >= oldTo) {
-                    originalCenterX -= 56
-                }
-
-                const dist = Math.abs(e.clientX - originalCenterX)
+                const dist = Math.abs(draggingCenterX - targetCenterX)
                 if (dist < minDist) {
                     minDist = dist
                     newToIndex = i
                 }
             }
 
-            // 添加阈值：只有当距离新位置足够近时才切换（图片宽度的30%）
-            if (newToIndex !== oldTo) {
-                const threshold = 20
-                if (minDist > threshold) {
-                    newToIndex = oldTo
-                }
-            }
+            // 更灵敏的阈值
+            const threshold = 28
 
-            if (newToIndex !== oldTo) {
-                console.log('[ToIndex Update]', { from, oldTo, newTo: newToIndex })
+            if (minDist < threshold && newToIndex !== oldTo) {
                 setDragState({
                     ...dragStateRef.current,
                     currentX: e.clientX,
@@ -337,18 +281,45 @@ export default function FileUploader({
 
         const handleMouseUp = () => {
             const { fromIndex, toIndex } = dragStateRef.current
-            if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex && onReorder) {
-                onReorder(fromIndex, toIndex)
+
+            // 如果发生了位置变化，进入 dropping 状态
+            if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex) {
+                // 设置 dropping 状态，触发归位动画
+                setDragState(prev => ({
+                    ...prev,
+                    isDragging: false,
+                    isDropping: true
+                }))
+
+                // 动画结束后执行实际的 reorder 和状态重置
+                setTimeout(() => {
+                    if (onReorder) {
+                        onReorder(fromIndex, toIndex)
+                    }
+                    setDragState({
+                        isDragging: false,
+                        isDropping: false,
+                        fromIndex: null,
+                        toIndex: null,
+                        startX: 0,
+                        startY: 0,
+                        currentX: 0,
+                        currentY: 0
+                    })
+                }, 150) // 动画时长，与 CSS transition 匹配
+            } else {
+                // 如果没有位置变化，直接重置
+                setDragState({
+                    isDragging: false,
+                    isDropping: false,
+                    fromIndex: null,
+                    toIndex: null,
+                    startX: 0,
+                    startY: 0,
+                    currentX: 0,
+                    currentY: 0
+                })
             }
-            setDragState({
-                isDragging: false,
-                fromIndex: null,
-                toIndex: null,
-                startX: 0,
-                startY: 0,
-                currentX: 0,
-                currentY: 0
-            })
         }
 
         window.addEventListener('mousemove', handleMouseMove)
@@ -358,6 +329,53 @@ export default function FileUploader({
             window.removeEventListener('mouseup', handleMouseUp)
         }
     }, [dragState.isDragging, onReorder])
+
+    // 添加拖拽确认逻辑
+    React.useEffect(() => {
+        if (dragState.fromIndex === null || dragState.isDragging || dragState.isDropping) return
+
+        let moved = false
+        const startX = dragState.startX
+        const startY = dragState.startY
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const deltaX = Math.abs(e.clientX - startX)
+            const deltaY = Math.abs(e.clientY - startY)
+
+            if (deltaX > 5 || deltaY > 5) {
+                setDragState(prev => ({
+                    ...prev,
+                    isDragging: true
+                }))
+                moved = true
+            }
+        }
+
+        const handleMouseUp = () => {
+            if (!moved) {
+                setDragState({
+                    isDragging: false,
+                    isDropping: false,
+                    fromIndex: null,
+                    toIndex: null,
+                    startX: 0,
+                    startY: 0,
+                    currentX: 0,
+                    currentY: 0
+                })
+            }
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [dragState.fromIndex, dragState.isDragging, dragState.isDropping, dragState.startX, dragState.startY])
 
     const canUploadMore = !maxCount || files.length < maxCount
 
@@ -375,13 +393,16 @@ export default function FileUploader({
             {dragState.isDragging && console.log('[Render]', { fromIndex: dragState.fromIndex, toIndex: dragState.toIndex }) as any}
             {files.map((file, index) => {
                 const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
-                const shouldShift = dragState.isDragging && dragState.fromIndex !== null && dragState.toIndex !== null
-                
+                const isDroppingThis = dragState.isDropping && dragState.fromIndex === index
+                const shouldShift = (dragState.isDragging || dragState.isDropping) && dragState.fromIndex !== null && dragState.toIndex !== null
+
                 // Check if this is a newly uploaded file (should apply upload animation)
                 const isNewlyUploaded = newlyUploadedFiles.has(file)
 
                 let translateX = 0
-                if (shouldShift && !isDraggingThis) {
+                let scale = 1
+
+                if (shouldShift && !isDraggingThis && !isDroppingThis) {
                     const from = dragState.fromIndex!
                     const to = dragState.toIndex!
                     // 使用准确的位移量，图片宽度为48px + 8px gap = 56px
@@ -390,9 +411,20 @@ export default function FileUploader({
                     } else if (from > to && index < from && index >= to) {
                         translateX = 56
                     }
-                    if (translateX !== 0) {
-                        console.log('[Shift]', { index, from, to, translateX })
-                    }
+                }
+
+                // 如果是目标位置，添加轻微的缩放效果
+                if (dragState.toIndex === index && !isDraggingThis && !isDroppingThis) {
+                    scale = 0.95
+                }
+
+                // 计算 dropping 时的目标位置
+                let dropTransform = ''
+                if (isDroppingThis) {
+                    const from = dragState.fromIndex!
+                    const to = dragState.toIndex!
+                    const moveX = (to - from) * 56 // 56px per item
+                    dropTransform = `translateX(${moveX}px)`
                 }
 
                 const handleCustomPreviewDrop = async (e: React.MouseEvent, targetIndex: number) => {
@@ -429,19 +461,25 @@ export default function FileUploader({
                         style={{
                             animation: removingIndices.has(file)
                                 ? 'imageSlideOut 0.25s ease-in forwards'
-                                : (isNewlyUploaded && !dragState.isDragging) 
-                                    ? 'imageSlideIn 0.25s ease-out forwards' 
+                                : (isNewlyUploaded && !dragState.isDragging && !dragState.isDropping)
+                                    ? 'imageSlideIn 0.25s ease-out forwards'
                                     : 'none',
-                            transform: isDraggingThis ? 'scale(0)' : `translateX(${translateX}px)`,
-                            transition: isDraggingThis ? 'none' : 'transform 0.2s ease-out',
-                            pointerEvents: isDraggingThis ? 'none' : 'auto',
-                            opacity: isDraggingThis ? 0 : 1,
-                            visibility: isDraggingThis ? 'hidden' : 'visible'
+                            transform: isDraggingThis
+                                ? `translate(${dragState.currentX - dragState.startX}px, ${dragState.currentY - dragState.startY}px) scale(1.15)`
+                                : isDroppingThis
+                                    ? dropTransform
+                                    : `translateX(${translateX}px) scale(${scale})`,
+                            transition: isDraggingThis ? 'none' : 'transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                            pointerEvents: isDraggingThis || isDroppingThis ? 'none' : 'auto',
+                            opacity: isDraggingThis ? 0.8 : 1,
+                            visibility: 'visible',
+                            position: isDraggingThis ? 'relative' : 'static',
+                            zIndex: isDraggingThis || isDroppingThis ? 50 : 'auto'
                         }}
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
-                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''}`}>
+                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isDraggingThis ? 'ring-2 ring-[#007eff] shadow-2xl' : ''} ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''}`}>
                             {accept.startsWith('image') ? (
                                 <img
                                     src={file}
@@ -500,38 +538,6 @@ export default function FileUploader({
                 className="hidden"
                 disabled={disabled}
             />
-
-            {dragState.isDragging && dragState.fromIndex !== null && createPortal(
-                <div
-                    style={{
-                        position: 'fixed',
-                        left: dragState.currentX,
-                        top: dragState.currentY,
-                        transform: 'translate(-50%, -50%) scale(1.15)',
-                        pointerEvents: 'none',
-                        zIndex: 9999,
-                        filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.5))'
-                    }}
-                >
-                    <div className="relative w-12 h-16 rounded-lg">
-                        {accept.startsWith('image') ? (
-                            <img
-                                src={files[dragState.fromIndex]}
-                                alt="Dragging"
-                                className="w-full h-full object-cover rounded-lg border-2 border-white"
-                                draggable={false}
-                            />
-                        ) : (
-                            <div className="w-full h-full bg-zinc-800 rounded-lg border-2 border-zinc-600 flex items-center justify-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                        )}
-                    </div>
-                </div>,
-                document.body
-            )}
         </div>
     )
 }
