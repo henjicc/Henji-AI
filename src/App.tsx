@@ -1251,7 +1251,7 @@ const App: React.FC = () => {
       console.error('[App] 无 serverTaskId，无法重试轮询')
       return
     }
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timedOut: false } : t))
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timedOut: false, status: 'generating' } : t))
     try {
       const result = await pollTaskStatus(task.serverTaskId, task.id, task.model)
       if (result && result.url) {
@@ -1420,8 +1420,15 @@ const App: React.FC = () => {
         }
         return {
           ...task,
-          status: task.status === 'generating' || task.status === 'pending' ? 'error' : task.status,
-          error: task.status === 'generating' || task.status === 'pending' ? '页面刷新后生成中断' : task.error,
+          status: (task.status === 'generating' || task.status === 'pending')
+            ? ((task.serverTaskId || (task.requestId && task.modelId)) ? 'timeout' : 'error')
+            : task.status,
+          error: (task.status === 'generating' || task.status === 'pending')
+            ? ((task.serverTaskId || (task.requestId && task.modelId)) ? undefined : '页面刷新后生成中断')
+            : task.error,
+          message: (task.status === 'generating' || task.status === 'pending') && (task.serverTaskId || (task.requestId && task.modelId))
+            ? '页面刷新导致中断，请点击继续查询'
+            : task.message,
           result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
           images
         }
@@ -1456,6 +1463,7 @@ const App: React.FC = () => {
         options: t.options, // 保存生成参数
         requestId: t.requestId, // 保存请求ID（用于超时恢复）
         modelId: t.modelId, // 保存模型ID（用于超时恢复）
+        serverTaskId: t.serverTaskId, // 保存服务端任务ID（用于超时恢复）
         message: t.message, // 保存状态消息
         result: t.result ? {
           id: t.result.id,
@@ -1568,6 +1576,12 @@ const App: React.FC = () => {
   }
 
   const handleContinuePolling = async (task: GenerationTask) => {
+    // 处理 PPIO 任务 (Video)
+    if (task.serverTaskId) {
+      console.log('[App] 继续查询 PPIO 任务:', task.serverTaskId)
+      await retryPolling(task)
+      return
+    }
 
     console.log('[App] 继续查询 fal 队列:', { requestId: task.requestId, modelId: task.modelId })
 
@@ -1971,7 +1985,7 @@ const App: React.FC = () => {
                                 </svg>
                               </div>
                               <p className="text-yellow-400 mb-2 font-medium">{task.message || '等待超时，任务依然在处理中'}</p>
-                              <p className="text-zinc-400 text-sm mb-4">图片可能还在生成中，您可以继续查询状态</p>
+                              <p className="text-zinc-400 text-sm mb-4">任务可能还在处理中，您可以继续查询状态</p>
                               <button
                                 onClick={() => handleContinuePolling(task)}
                                 disabled={isLoading}
