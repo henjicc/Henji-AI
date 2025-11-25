@@ -63,3 +63,52 @@ export function inferMimeFromPath(path: string): string {
     if (lower.endsWith('.gif')) return 'image/gif'
     return 'image/jpeg'
 }
+
+/**
+ * 从剪贴板事件中提取所有图片文件
+ * 支持两种粘贴方式:
+ * 1. 网页右击"复制图片" - clipboardData.items 包含 image blob
+ * 2. 文件管理器复制图片文件 - clipboardData.items 包含 file 对象
+ * 
+ * @param e ClipboardEvent 对象
+ * @returns Promise<File[]> 提取到的图片文件数组
+ */
+export async function extractImagesFromClipboard(e: ClipboardEvent): Promise<File[]> {
+    const files: File[] = []
+    const items = e.clipboardData?.items
+
+    if (!items) {
+        return files
+    }
+
+    // 遍历剪贴板项
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+
+        // 方式1: 处理图片 blob (网页右击复制)
+        if (item.type.startsWith('image/')) {
+            const blob = item.getAsFile()
+            if (blob) {
+                // 确保是 File 对象,如果是 Blob 则转换
+                if (blob instanceof File) {
+                    files.push(blob)
+                } else {
+                    // Blob 转 File,生成时间戳文件名
+                    const file = new File([blob], `pasted-image-${Date.now()}.${item.type.split('/')[1] || 'png'}`, {
+                        type: item.type
+                    })
+                    files.push(file)
+                }
+            }
+        }
+        // 方式2: 处理文件对象 (文件管理器复制)
+        else if (item.kind === 'file') {
+            const file = item.getAsFile()
+            if (file && file.type.startsWith('image/')) {
+                files.push(file)
+            }
+        }
+    }
+
+    return files
+}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
+import { extractImagesFromClipboard } from '@/utils/imageConversion'
 import ParamRow from './ui/ParamRow'
 import Toggle from './ui/Toggle'
 import NumberInput from './ui/NumberInput'
@@ -1220,30 +1221,83 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     })
   }
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    if ((selectedModel === 'kling-2.5-turbo' || selectedModel === 'wan-2.5-preview') && uploadedImages.length >= 1) {
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    // 音频模型不支持图片粘贴
+    if (currentModel?.type === 'audio') {
       return
     }
-    const items = e.clipboardData.items
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const blob = items[i].getAsFile()
-        if (blob) {
-          const reader = new FileReader()
-          reader.onload = (event) => {
-            if (event.target?.result) {
-              setUploadedImages(prev => {
-                if ((selectedModel === 'kling-2.5-turbo' && prev.length >= 1)) return prev
-                return [...prev, event.target?.result as string]
-              })
-            }
-          }
-          reader.readAsDataURL(blob)
-        }
-        break
+
+    try {
+      // 使用工具函数提取剪贴板中的所有图片
+      const pastedFiles = await extractImagesFromClipboard(e.nativeEvent)
+
+      if (pastedFiles.length === 0) {
+        return
       }
+
+      console.log('[MediaGenerator] 粘贴图片', { count: pastedFiles.length, files: pastedFiles.map(f => f.name) })
+
+      // 计算当前模型的最大图片数
+      let maxImageCount = 6 // 默认图片模型最多6张
+
+      if (selectedModel === 'vidu-q1') {
+        if (viduMode === 'text-image-to-video') {
+          maxImageCount = 1
+        } else if (viduMode === 'start-end-frame') {
+          maxImageCount = 2
+        } else if (viduMode === 'reference-to-video') {
+          maxImageCount = 7
+        }
+      } else if (selectedModel === 'kling-2.5-turbo') {
+        maxImageCount = 1
+      } else if (selectedModel === 'wan-2.5-preview') {
+        maxImageCount = 1
+      } else if (selectedModel === 'minimax-hailuo-2.3') {
+        maxImageCount = 1
+      } else if (selectedModel === 'minimax-hailuo-02') {
+        maxImageCount = 2
+      } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
+        maxImageCount = 2
+      }
+
+      // 检查是否已达上限
+      if (uploadedImages.length >= maxImageCount) {
+        console.log('[MediaGenerator] 已达最大图片数量', { current: uploadedImages.length, max: maxImageCount })
+        return
+      }
+
+      // 计算可添加的数量
+      const availableSlots = maxImageCount - uploadedImages.length
+      const filesToAdd = pastedFiles.slice(0, availableSlots)
+
+      console.log('[MediaGenerator] 准备添加图片', {
+        total: pastedFiles.length,
+        willAdd: filesToAdd.length,
+        current: uploadedImages.length,
+        max: maxImageCount
+      })
+
+      // 保存图片并更新状态
+      for (const file of filesToAdd) {
+        const saved = await saveUploadImage(file, 'memory')
+
+        setUploadedImages(prev => {
+          if (prev.length >= maxImageCount) return prev
+          return [...prev, saved.dataUrl]
+        })
+
+        setUploadedFilePaths(prev => {
+          if (prev.length >= maxImageCount) return prev
+          return [...prev, saved.fullPath]
+        })
+      }
+
+      console.log('[MediaGenerator] 图片粘贴完成', { added: filesToAdd.length })
+    } catch (error) {
+      console.error('[MediaGenerator] 粘贴图片失败', error)
     }
   }
+
 
   const removeImage = (index: number) => {
     const imageToRemove = uploadedImages[index]
