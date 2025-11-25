@@ -11,6 +11,7 @@ import SchemaForm from './ui/SchemaForm'
 import PriceEstimate from './ui/PriceEstimate'
 import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams, nanoBananaProParams } from '../schemas/modelParams'
 import PresetPanel from './PresetPanel'
+import { createPresetSetterMap } from '../config/presetStateMapping'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -153,75 +154,76 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   // 图片拖动状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
+
   // ============ 预设参数映射表 ============
-  // 新增模型参数只需在此添加对应的setter即可，保存时会自动序列化所有状态
-  const setterMap = useMemo<Record<string, (value: any) => void>>(() => ({
+  // 使用独立配置文件管理，新增模型参数只需在 presetStateMapping.ts 中添加
+  const setterMap = useMemo(() => createPresetSetterMap({
     // 基础参数
-    input: setInput,
-    selectedProvider: setSelectedProvider,
-    selectedModel: setSelectedModel,
-    uploadedImages: setUploadedImages,
+    setInput,
+    setSelectedProvider,
+    setSelectedModel,
+    setUploadedImages,
 
     // 图片参数
-    selectedResolution: setSelectedResolution,
-    resolutionQuality: setResolutionQuality,
-    customWidth: setCustomWidth,
-    customHeight: setCustomHeight,
-    maxImages: setMaxImages,
-    numImages: setNumImages,
-    aspectRatio: setAspectRatio,
-    resolution: setResolution, // nano-banana-pro
+    setSelectedResolution,
+    setResolutionQuality,
+    setCustomWidth,
+    setCustomHeight,
+    setMaxImages,
+    setNumImages,
+    setAspectRatio,
+    setResolution,
 
     // 视频参数
-    videoDuration: setVideoDuration,
-    videoResolution: setVideoResolution,
-    videoAspectRatio: setVideoAspectRatio,
-    videoNegativePrompt: setVideoNegativePrompt,
-    videoSeed: setVideoSeed,
+    setVideoDuration,
+    setVideoResolution,
+    setVideoAspectRatio,
+    setVideoNegativePrompt,
+    setVideoSeed,
 
     // Vidu
-    viduMode: setViduMode,
-    viduStyle: setViduStyle,
-    viduMovementAmplitude: setViduMovementAmplitude,
-    viduBgm: setViduBgm,
+    setViduMode,
+    setViduStyle,
+    setViduMovementAmplitude,
+    setViduBgm,
 
     // Kling
-    klingCfgScale: setKlingCfgScale,
+    setKlingCfgScale,
 
     // Hailuo
-    hailuoFastMode: setHailuoFastMode,
-    minimaxEnablePromptExpansion: setMinimaxEnablePromptExpansion,
+    setHailuoFastMode,
+    setMinimaxEnablePromptExpansion,
 
     // Pixverse
-    pixFastMode: setPixFastMode,
-    pixStyle: setPixStyle,
+    setPixFastMode,
+    setPixStyle,
 
     // Seedance
-    seedanceVariant: setSeedanceVariant,
-    seedanceResolution: setSeedanceResolution,
-    seedanceAspectRatio: setSeedanceAspectRatio,
-    seedanceCameraFixed: setSeedanceCameraFixed,
+    setSeedanceVariant,
+    setSeedanceResolution,
+    setSeedanceAspectRatio,
+    setSeedanceCameraFixed,
 
     // Wan25
-    wanSize: setWanSize,
-    wanResolution: setWanResolution,
-    wanPromptExtend: setWanPromptExtend,
-    wanAudio: setWanAudio,
+    setWanSize,
+    setWanResolution,
+    setWanPromptExtend,
+    setWanAudio,
 
     // 音频参数
-    voiceId: setVoiceId,
-    audioSpec: setAudioSpec,
-    audioEmotion: setAudioEmotion,
-    languageBoost: setLanguageBoost,
-    audioVol: setAudioVol,
-    audioPitch: setAudioPitch,
-    audioSpeed: setAudioSpeed,
-    audioSampleRate: setAudioSampleRate,
-    audioBitrate: setAudioBitrate,
-    audioFormat: setAudioFormat,
-    audioChannel: setAudioChannel,
-    latexRead: setLatexRead,
-    textNormalization: setTextNormalization
+    setVoiceId,
+    setAudioSpec,
+    setAudioEmotion,
+    setLanguageBoost,
+    setAudioVol,
+    setAudioPitch,
+    setAudioSpeed,
+    setAudioSampleRate,
+    setAudioBitrate,
+    setAudioFormat,
+    setAudioChannel,
+    setLatexRead,
+    setTextNormalization
   }), [])
 
   // 向 App 发送拖动状态变化事件

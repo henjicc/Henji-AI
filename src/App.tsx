@@ -15,6 +15,8 @@ import { useContextMenu, MenuItem } from './hooks/useContextMenu'
 import { providers } from './config/providers'
 import { ProgressBar } from './components/ui/ProgressBar'
 import { calculateProgress } from './utils/progress'
+import { loadPresets } from './utils/preset'
+import { canDeleteFile } from './utils/fileRefCount'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -1774,27 +1776,63 @@ const App: React.FC = () => {
 
   const clearAllHistoryFiles = async () => {
     try {
-      const files: string[] = []
+      // 加载所有预设
+      const presets = await loadPresets()
+
       const audioPaths: string[] = []
+
+      // 收集结果文件（这些不会被预设引用，直接删除）
+      const resultFiles = new Set<string>()
       tasks.forEach(t => {
         const p = t.result?.filePath
         if (p) {
-          if (p.includes('|||')) files.push(...p.split('|||'))
-          else files.push(p)
+          if (p.includes('|||')) {
+            p.split('|||').forEach(f => resultFiles.add(f))
+          } else {
+            resultFiles.add(p)
+          }
           if (t.result?.type === 'audio') {
             if (p.includes('|||')) audioPaths.push(...p.split('|||'))
             else audioPaths.push(p)
           }
         }
-        if (t.uploadedFilePaths && t.uploadedFilePaths.length) {
-          files.push(...t.uploadedFilePaths)
-        }
       })
-      for (const f of files) {
+
+      // 删除结果文件
+      for (const f of resultFiles) {
         try { await remove(f) } catch (e) { console.error('[App] 删除文件失败', f, e) }
       }
+
+      // 删除音频波形缓存
       for (const ap of audioPaths) {
         try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除波形缓存失败', ap, e) }
+      }
+
+      // 收集上传文件
+      const uploadedFiles = new Set<string>()
+      tasks.forEach(t => {
+        if (t.uploadedFilePaths) {
+          t.uploadedFilePaths.forEach(f => uploadedFiles.add(f))
+        }
+      })
+
+      // 删除上传文件 - 检查预设引用
+      for (const filePath of uploadedFiles) {
+        // 检查预设是否在使用
+        const usedByPreset = presets.some(preset =>
+          preset.images?.filePaths?.includes(filePath)
+        )
+
+        if (!usedByPreset) {
+          try {
+            await remove(filePath)
+            console.log('[App] 删除上传文件(预设未使用):', filePath)
+          } catch (e) {
+            console.error('[App] 删除文件失败', filePath, e)
+          }
+        } else {
+          console.log('[App] 保留上传文件(预设使用中):', filePath)
+        }
       }
     } finally {
       clearAllHistory()
@@ -1806,30 +1844,64 @@ const App: React.FC = () => {
     const failedTasks = tasks.filter(t => t.status === 'error' || t.status === 'timeout')
 
     try {
-      const files: string[] = []
+      // 加载所有预设
+      const presets = await loadPresets()
+
       const audioPaths: string[] = []
 
+      // 收集结果文件
+      const resultFiles = new Set<string>()
       failedTasks.forEach(t => {
         const p = t.result?.filePath
         if (p) {
-          if (p.includes('|||')) files.push(...p.split('|||'))
-          else files.push(p)
+          if (p.includes('|||')) {
+            p.split('|||').forEach(f => resultFiles.add(f))
+          } else {
+            resultFiles.add(p)
+          }
           if (t.result?.type === 'audio') {
             if (p.includes('|||')) audioPaths.push(...p.split('|||'))
             else audioPaths.push(p)
           }
         }
-        if (t.uploadedFilePaths && t.uploadedFilePaths.length) {
-          files.push(...t.uploadedFilePaths)
+      })
+
+      // 删除结果文件
+      for (const f of resultFiles) {
+        try { await remove(f) } catch (e) { console.error('[App] 删除失败记录文件失败', f, e) }
+      }
+
+      // 删除音频波形缓存
+      for (const ap of audioPaths) {
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除失败记录波形缓存失败', ap, e) }
+      }
+
+      // 收集上传文件
+      const uploadedFiles = new Set<string>()
+      failedTasks.forEach(t => {
+        if (t.uploadedFilePaths) {
+          t.uploadedFilePaths.forEach(f => uploadedFiles.add(f))
         }
       })
 
-      // 删除文件
-      for (const f of files) {
-        try { await remove(f) } catch (e) { console.error('[App] 删除失败记录文件失败', f, e) }
-      }
-      for (const ap of audioPaths) {
-        try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除失败记录波形缓存失败', ap, e) }
+      // 计算删除后剩余的任务
+      const failedTaskIds = new Set(failedTasks.map(t => t.id))
+      const remainingTasks = tasks.filter(t => !failedTaskIds.has(t.id))
+
+      // 删除上传文件 - 检查剩余历史记录和预设的引用
+      for (const filePath of uploadedFiles) {
+        const canDelete = canDeleteFile(filePath, remainingTasks, presets)
+
+        if (canDelete) {
+          try {
+            await remove(filePath)
+            console.log('[App] 删除上传文件(无引用):', filePath)
+          } catch (e) {
+            console.error('[App] 删除失败记录文件失败', filePath, e)
+          }
+        } else {
+          console.log('[App] 保留上传文件(仍有引用):', filePath)
+        }
       }
     } finally {
       // 从任务列表中移除失败的任务
@@ -1854,31 +1926,24 @@ const App: React.FC = () => {
       }
     }
 
-    // 删除上传的文件 - 使用引用计数
+    // 删除上传的文件 - 增强版引用计数（包含预设）
     if (target?.uploadedFilePaths && target.uploadedFilePaths.length) {
-      // 统计所有历史记录中上传文件的引用次数
-      const fileRefCounts = new Map<string, number>()
+      // 加载所有预设
+      const presets = await loadPresets()
 
-      for (const task of tasks) {
-        if (task.uploadedFilePaths) {
-          for (const filePath of task.uploadedFilePaths) {
-            fileRefCounts.set(filePath, (fileRefCounts.get(filePath) || 0) + 1)
-          }
-        }
-      }
+      // 检查每个文件是否可以删除
+      for (const filePath of target.uploadedFilePaths) {
+        const canDelete = canDeleteFile(filePath, tasks, presets, taskId)
 
-      // 只删除引用计数为 1 的文件(即仅被当前要删除的记录使用)
-      for (const p of target.uploadedFilePaths) {
-        const refCount = fileRefCounts.get(p) || 0
-        if (refCount === 1) {
+        if (canDelete) {
           try {
-            await remove(p)
-            console.log('[App] 删除上传文件(引用计数=1):', p)
+            await remove(filePath)
+            console.log('[App] 删除上传文件(无引用):', filePath)
           } catch (e) {
-            console.error('[App] 删除单条上传文件失败', p, e)
+            console.error('[App] 删除单条上传文件失败', filePath, e)
           }
         } else {
-          console.log('[App] 保留上传文件(引用计数=' + refCount + '):', p)
+          console.log('[App] 保留上传文件(仍有引用):', filePath)
         }
       }
     }

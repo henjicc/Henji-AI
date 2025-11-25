@@ -1,0 +1,152 @@
+/**
+ * 预设状态映射配置
+ * 新增模型参数时，只需在此文件添加对应的映射关系
+ */
+
+// 定义所有setter函数的类型
+export interface PresetSetters {
+    // 基础参数
+    setInput: (v: string) => void
+    setSelectedProvider: (v: string) => void
+    setSelectedModel: (v: string) => void
+    setUploadedImages: (v: string[]) => void
+
+    // 图片参数
+    setSelectedResolution: (v: string) => void
+    setResolutionQuality: (v: '2K' | '4K') => void
+    setCustomWidth: (v: string) => void
+    setCustomHeight: (v: string) => void
+    setMaxImages: (v: number) => void
+    setNumImages: (v: number) => void
+    setAspectRatio: (v: string) => void
+    setResolution: (v: string) => void
+
+    // 视频参数
+    setVideoDuration: (v: number) => void
+    setVideoResolution: (v: string) => void
+    setVideoAspectRatio: (v: string) => void
+    setVideoNegativePrompt: (v: string) => void
+    setVideoSeed: (v: number | undefined) => void
+
+    // Vidu
+    setViduMode: (v: any) => void
+    setViduStyle: (v: string) => void
+    setViduMovementAmplitude: (v: any) => void
+    setViduBgm: (v: boolean) => void
+
+    // Kling
+    setKlingCfgScale: (v: number) => void
+
+    // Hailuo
+    setHailuoFastMode: (v: boolean) => void
+    setMinimaxEnablePromptExpansion: (v: boolean) => void
+
+    // Pixverse
+    setPixFastMode: (v: boolean) => void
+    setPixStyle: (v: string | undefined) => void
+
+    // Seedance
+    setSeedanceVariant: (v: 'lite' | 'pro') => void
+    setSeedanceResolution: (v: string) => void
+    setSeedanceAspectRatio: (v: string) => void
+    setSeedanceCameraFixed: (v: boolean) => void
+
+    // Wan25
+    setWanSize: (v: string) => void
+    setWanResolution: (v: string) => void
+    setWanPromptExtend: (v: boolean) => void
+    setWanAudio: (v: boolean) => void
+
+    // 音频参数
+    setVoiceId: (v: string) => void
+    setAudioSpec: (v: 'hd' | 'turbo') => void
+    setAudioEmotion: (v: string) => void
+    setLanguageBoost: (v: string) => void
+    setAudioVol: (v: number) => void
+    setAudioPitch: (v: number) => void
+    setAudioSpeed: (v: number) => void
+    setAudioSampleRate: (v: number) => void
+    setAudioBitrate: (v: number) => void
+    setAudioFormat: (v: string) => void
+    setAudioChannel: (v: number) => void
+    setLatexRead: (v: boolean) => void
+    setTextNormalization: (v: boolean) => void
+}
+
+/**
+ * 创建预设状态映射表
+ * @param setters 所有setter函数的集合
+ * @returns 参数名到setter的映射表
+ */
+export function createPresetSetterMap(
+    setters: PresetSetters
+): Record<string, (value: any) => void> {
+    return {
+        // 基础参数
+        input: setters.setInput,
+        selectedProvider: setters.setSelectedProvider,
+        selectedModel: setters.setSelectedModel,
+        uploadedImages: setters.setUploadedImages,
+
+        // 图片参数
+        selectedResolution: setters.setSelectedResolution,
+        resolutionQuality: setters.setResolutionQuality,
+        customWidth: setters.setCustomWidth,
+        customHeight: setters.setCustomHeight,
+        maxImages: setters.setMaxImages,
+        numImages: setters.setNumImages,
+        aspectRatio: setters.setAspectRatio,
+        resolution: setters.setResolution,
+
+        // 视频参数
+        videoDuration: setters.setVideoDuration,
+        videoResolution: setters.setVideoResolution,
+        videoAspectRatio: setters.setVideoAspectRatio,
+        videoNegativePrompt: setters.setVideoNegativePrompt,
+        videoSeed: setters.setVideoSeed,
+
+        // Vidu
+        viduMode: setters.setViduMode,
+        viduStyle: setters.setViduStyle,
+        viduMovementAmplitude: setters.setViduMovementAmplitude,
+        viduBgm: setters.setViduBgm,
+
+        // Kling
+        klingCfgScale: setters.setKlingCfgScale,
+
+        // Hailuo
+        hailuoFastMode: setters.setHailuoFastMode,
+        minimaxEnablePromptExpansion: setters.setMinimaxEnablePromptExpansion,
+
+        // Pixverse
+        pixFastMode: setters.setPixFastMode,
+        pixStyle: setters.setPixStyle,
+
+        // Seedance
+        seedanceVariant: setters.setSeedanceVariant,
+        seedanceResolution: setters.setSeedanceResolution,
+        seedanceAspectRatio: setters.setSeedanceAspectRatio,
+        seedanceCameraFixed: setters.setSeedanceCameraFixed,
+
+        // Wan25
+        wanSize: setters.setWanSize,
+        wanResolution: setters.setWanResolution,
+        wanPromptExtend: setters.setWanPromptExtend,
+        wanAudio: setters.setWanAudio,
+
+        // 音频参数
+        voiceId: setters.setVoiceId,
+        audioSpec: setters.setAudioSpec,
+        audioEmotion: setters.setAudioEmotion,
+        languageBoost: setters.setLanguageBoost,
+        audioVol: setters.setAudioVol,
+        audioPitch: setters.setAudioPitch,
+        audioSpeed: setters.setAudioSpeed,
+        audioSampleRate: setters.setAudioSampleRate,
+        audioBitrate: setters.setAudioBitrate,
+        audioFormat: setters.setAudioFormat,
+        audioChannel: setters.setAudioChannel,
+        latexRead: setters.setLatexRead,
+        textNormalization: setters.setTextNormalization
+    }
+}

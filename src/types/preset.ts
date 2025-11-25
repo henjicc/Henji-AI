@@ -16,7 +16,8 @@ export interface Preset {
 
     // 图片 (仅 prompt-image 和 full 模式)
     images?: {
-        dataUrls: string[]         // 图片 base64 数据
+        filePaths?: string[]       // 文件路径（新格式，推荐）
+        dataUrls?: string[]        // 图片 base64 数据（旧格式，兼容）
     }
 
     // 模型和参数 (仅 full 模式)

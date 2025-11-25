@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Preset, PresetSaveMode } from '../types/preset'
-import { loadPresets, createPreset, formatTimeAgo } from '../utils/preset'
+import { loadPresets, createPreset, deletePreset, formatTimeAgo } from '../utils/preset'
+import { canDeleteFile } from '../utils/fileRefCount'
+import { readJsonFromAppData } from '../utils/save'
+import { remove } from '@tauri-apps/plugin-fs'
 import PanelTrigger from './ui/PanelTrigger'
 
 interface PresetPanelProps {
@@ -23,6 +27,10 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     const [isSaving, setIsSaving] = useState(false)
     const [saveMode, setSaveMode] = useState<PresetSaveMode | null>(null)
     const [presetName, setPresetName] = useState('')
+    const [deletingPresetId, setDeletingPresetId] = useState<string | null>(null)
+    const [deleteButtonRect, setDeleteButtonRect] = useState<DOMRect | null>(null)
+    const [deletingClosing, setDeletingClosing] = useState(false)
+    const [deletingAppearing, setDeletingAppearing] = useState(false)
 
     // 加载预设列表
     useEffect(() => {
@@ -89,6 +97,94 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
         setPresetName('')
     }
 
+    // 删除预设 - 显示确认弹窗
+    const handleDeleteClick = (presetId: string, e: React.MouseEvent<HTMLButtonElement>) => {
+        e.stopPropagation()
+        const rect = e.currentTarget.getBoundingClientRect()
+        setDeleteButtonRect(rect)
+        setDeletingPresetId(presetId)
+        setDeletingAppearing(false)
+        // 下一帧触发淡入
+        requestAnimationFrame(() => setDeletingAppearing(true))
+    }
+
+    // 确认删除预设
+    const handleConfirmDelete = async () => {
+        if (!deletingPresetId) return
+
+        const preset = presets.find(p => p.id === deletingPresetId)
+        if (!preset) return
+
+        try {
+            // 收集预设引用的文件
+            const presetFiles = preset.images?.filePaths || []
+
+            // 删除预设
+            await deletePreset(deletingPresetId)
+
+            // 重新加载预设列表
+            const updatedPresets = await loadPresets()
+            setPresets(updatedPresets)
+
+            // 检查并删除无引用的文件
+            if (presetFiles.length > 0) {
+                // 加载所有历史记录
+                const tasks = await readJsonFromAppData('Henji-AI/history.json') || []
+
+                for (const filePath of presetFiles) {
+                    // 检查文件是否还被其他预设或历史记录引用
+                    const canDelete = canDeleteFile(filePath, tasks, updatedPresets)
+
+                    if (canDelete) {
+                        try {
+                            await remove(filePath)
+                            console.log('[PresetPanel] 删除无引用文件:', filePath)
+                        } catch (error) {
+                            console.error('[PresetPanel] 删除文件失败:', filePath, error)
+                        }
+                    } else {
+                        console.log('[PresetPanel] 保留文件(仍有引用):', filePath)
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('删除预设失败:', error)
+            alert('删除预设失败')
+        } finally {
+            setDeletingClosing(true)
+            setTimeout(() => {
+                setDeletingPresetId(null)
+                setDeletingClosing(false)
+            }, 200)
+        }
+    }
+
+    // 监听外部点击，关闭确认弹窗
+    useEffect(() => {
+        if (!deletingPresetId) return
+
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement
+            // 检查是否点击在确认弹窗内
+            const clickedInDialog = target.closest('.delete-confirm-dialog')
+            // 检查是否点击在预设面板内
+            const clickedInPanel = target.closest('[data-panel-trigger-button]') || target.closest('[data-preset-item]')
+
+            if (!clickedInDialog && !clickedInPanel) {
+                // 点击在外部，先关闭确认弹窗
+                setDeletingClosing(true)
+                setTimeout(() => {
+                    setDeletingPresetId(null)
+                    setDeletingClosing(false)
+                    setDeletingAppearing(false)
+                }, 200)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [deletingPresetId])
+
     return (
         <PanelTrigger
             display="预设"
@@ -98,12 +194,14 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             panelWidth={420}
             alignment="aboveCenter"
             stableHeight={true}
-            zIndex={1001}
             closeOnPanelClick={(target) => {
-                // 如果点击的是预设项，关闭面板
+                // 如果删除确认弹窗打开，不关闭面板
+                if (deletingPresetId) return false
                 // 如果正在保存，不关闭面板
                 if (isSaving) return false
-                return !!(target as HTMLElement).closest('[data-preset-item]')
+                // 检查是否点击了预设项（用于加载预设）
+                const presetItem = (target as HTMLElement).closest('[data-preset-item]')
+                return !!presetItem
             }}
             renderPanel={() => (
                 <div className="p-4 h-full flex flex-col max-h-[500px]">
@@ -213,27 +311,87 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                 onLoadPreset(preset.params)
                                             }
                                         }}
-                                        className="px-3 py-2.5 bg-zinc-700/40 hover:bg-zinc-700/60 rounded-lg border border-zinc-700/50 cursor-pointer transition-colors duration-200"
+                                        className="px-3 py-2.5 bg-zinc-700/40 hover:bg-zinc-700/60 rounded-lg border border-zinc-700/50 cursor-pointer transition-colors duration-200 group relative"
                                     >
                                         <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
                                                 {/* 模式图标 */}
-                                                <span className="text-sm">
+                                                <span className="text-sm flex-shrink-0">
                                                     {preset.saveMode === 'prompt' && '💾'}
                                                     {preset.saveMode === 'prompt-image' && '📦'}
                                                     {preset.saveMode === 'full' && '🔧'}
                                                 </span>
-                                                <span className="text-sm font-medium truncate max-w-[200px]">{preset.name}</span>
+                                                <span className="text-sm font-medium truncate">{preset.name}</span>
                                             </div>
-                                            {/* 时间戳 */}
-                                            <span className="text-xs text-zinc-500">
-                                                {formatTimeAgo(preset.updatedAt)}
-                                            </span>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                {/* 时间戳 */}
+                                                <span className="text-xs text-zinc-500">
+                                                    {formatTimeAgo(preset.updatedAt)}
+                                                </span>
+                                                {/* 删除按钮 */}
+                                                <button
+                                                    onClick={(e) => handleDeleteClick(preset.id, e)}
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all duration-200"
+                                                    title="删除预设"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </div>
                                         {/* 预览信息 */}
                                         <div className="mt-1 text-xs text-zinc-500 truncate">
                                             {preset.prompt.substring(0, 50)}{preset.prompt.length > 50 ? '...' : ''}
                                         </div>
+
+                                        {/* 删除确认弹窗 - 使用 portal 渲染到 body */}
+                                        {deletingPresetId === preset.id && deleteButtonRect && createPortal(
+                                            <div
+                                                className={`fixed z-[9999] transition-opacity duration-200 ${deletingClosing ? 'opacity-0' : (deletingAppearing ? 'opacity-100' : 'opacity-0')
+                                                    }`}
+                                                style={{
+                                                    left: `${deleteButtonRect.right - 200}px`,
+                                                    top: `${deleteButtonRect.top - 80}px`
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                            >
+                                                <div className="delete-confirm-dialog bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl p-3 w-[200px]">
+                                                    <div className="text-sm text-white mb-3">
+                                                        确定删除预设？
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleConfirmDelete()
+                                                            }}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            className="flex-1 px-3 py-1.5 bg-red-600/80 hover:bg-red-600 rounded text-xs text-white transition-colors duration-200"
+                                                        >
+                                                            删除
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setDeletingClosing(true)
+                                                                setTimeout(() => {
+                                                                    setDeletingPresetId(null)
+                                                                    setDeletingClosing(false)
+                                                                }, 200)
+                                                            }}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            className="flex-1 px-3 py-1.5 bg-zinc-700/80 hover:bg-zinc-600 rounded text-xs text-white transition-colors duration-200"
+                                                        >
+                                                            取消
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>,
+                                            document.body
+                                        )}
                                     </div>
                                 ))}
                             </div>
