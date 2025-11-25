@@ -24,39 +24,87 @@
 
 /* 动画关键帧 */
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes scaleOut {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.95); }
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.1; }
+
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+
+  50% {
+    opacity: 0.1;
+  }
 }
 
 /* 淡入向上动画 */
@@ -65,6 +113,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -105,12 +154,30 @@
   animation: fadeInUp 0.5s ease-out forwards;
 }
 
+/* 脉动缩放动画 - 用于强调按钮 */
+@keyframes pulseScale {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-scale {
+  animation: pulseScale 1s ease-in-out infinite;
+}
+
 /* 图片滑入动画 - 简单流畅的淡入效果 */
 @keyframes imageSlideIn {
   from {
     opacity: 0;
     transform: translateX(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -123,6 +190,7 @@
     opacity: 1;
     transform: translateX(0) scale(1);
   }
+
   to {
     opacity: 0;
     transform: translateX(10px) scale(0.8);
@@ -130,7 +198,8 @@
 }
 
 /* 滚动行为控制 */
-html, body {
+html,
+body {
   scroll-behavior: auto;
 }
 
@@ -160,6 +229,7 @@ html, body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -169,6 +239,7 @@ html, body {
   from {
     opacity: 1;
   }
+
   to {
     opacity: 0;
   }
@@ -179,6 +250,7 @@ html, body {
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -190,6 +262,7 @@ html, body {
     opacity: 1;
     transform: scale(1);
   }
+
   to {
     opacity: 0;
     transform: scale(0.9);
@@ -201,6 +274,7 @@ html, body {
     opacity: 0;
     transform: translateX(50px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -212,6 +286,7 @@ html, body {
     opacity: 0;
     transform: translateX(-50px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -256,11 +331,12 @@ html, body {
   .fixed.bottom-6 {
     bottom: 1rem;
   }
-  
+
   .w-\[90\%\] {
     width: 95%;
   }
 }
+
 .dropdown-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -268,6 +344,7 @@ html, body {
 .dropdown-scroll {
   scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
 }
+
 .dropdown-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -394,7 +471,10 @@ input[type="number"] {
   width: 100%;
 }
 
-.speed-control { position: relative; }
+.speed-control {
+  position: relative;
+}
+
 .speed-display {
   font-size: 14px;
   color: white;
@@ -404,8 +484,18 @@ input[type="number"] {
   transition: all 0.2s;
   user-select: none;
 }
-.speed-display:hover { background: none; color: rgba(255, 255, 255, 0.6); }
-.speed-display svg { width: 20px; height: 20px; fill: currentColor; }
+
+.speed-display:hover {
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.speed-display svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
 .speed-menu {
   position: absolute;
   bottom: 100%;
@@ -424,7 +514,13 @@ input[type="number"] {
   pointer-events: none;
   transition: opacity 200ms ease, transform 200ms ease;
 }
-.speed-menu.active { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+
+.speed-menu.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
 .speed-option {
   padding: 8px 16px;
   color: white;
@@ -434,23 +530,87 @@ input[type="number"] {
   white-space: nowrap;
   transition: background 0.2s;
 }
-.speed-option:hover { background: rgba(255, 255, 255, 0.1); }
-.speed-option.active { background: rgba(0, 126, 255, 0.3); color: #007eff; }
-.controls-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.btn-small svg { width: 20px; height: 20px; }
-.loop-active { color: #007eff; }
 
-@media (max-width: 768px) {
-  .volume-slider { width: 60px; }
-  .time-display { font-size: 12px; min-width: 80px; }
+.speed-option:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.volume-vertical { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px; }
-.volume-percent { color: rgba(255,255,255,0.9); font-size: 14px; }
-.volume-track { position: relative; width: 8px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 4px; cursor: pointer; }
-.volume-fill { position: absolute; bottom: 0; left: 0; width: 100%; background: #007eff; border-radius: 4px; }
-.volume-thumb { position: absolute; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; background: #007eff; border-radius: 50%; }
-.volume-menu { width: 64px; }
+.speed-option.active {
+  background: rgba(0, 126, 255, 0.3);
+  color: #007eff;
+}
+
+.controls-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-small svg {
+  width: 20px;
+  height: 20px;
+}
+
+.loop-active {
+  color: #007eff;
+}
+
+@media (max-width: 768px) {
+  .volume-slider {
+    width: 60px;
+  }
+
+  .time-display {
+    font-size: 12px;
+    min-width: 80px;
+  }
+}
+
+.volume-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.volume-percent {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+}
+
+.volume-track {
+  position: relative;
+  width: 8px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.volume-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: #007eff;
+  border-radius: 4px;
+}
+
+.volume-thumb {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  background: #007eff;
+  border-radius: 50%;
+}
+
+.volume-menu {
+  width: 64px;
+}
 
 /* Context Menu Styles */
 .context-menu {
@@ -504,4 +664,3 @@ input[type="number"] {
   background: rgba(113, 113, 122, 0.3);
   margin: 0.25rem 0;
 }
-

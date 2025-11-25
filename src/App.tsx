@@ -62,6 +62,7 @@ const App: React.FC = () => {
   const [viewerOpacity, setViewerOpacity] = useState(0)
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
   const [confirmOpacity, setConfirmOpacity] = useState(0)
+  const [needsClearAllConfirm, setNeedsClearAllConfirm] = useState(false)
   const tasksEndRef = React.useRef<HTMLDivElement>(null)
   const listContainerRef = React.useRef<HTMLDivElement>(null)
   const contentRef = React.useRef<HTMLDivElement>(null)
@@ -1782,6 +1783,42 @@ const App: React.FC = () => {
     }
   }
 
+  // 仅删除失败的历史记录
+  const clearFailedHistory = async () => {
+    const failedTasks = tasks.filter(t => t.status === 'error' || t.status === 'timeout')
+
+    try {
+      const files: string[] = []
+      const audioPaths: string[] = []
+
+      failedTasks.forEach(t => {
+        const p = t.result?.filePath
+        if (p) {
+          if (p.includes('|||')) files.push(...p.split('|||'))
+          else files.push(p)
+          if (t.result?.type === 'audio') {
+            if (p.includes('|||')) audioPaths.push(...p.split('|||'))
+            else audioPaths.push(p)
+          }
+        }
+        if (t.uploadedFilePaths && t.uploadedFilePaths.length) {
+          files.push(...t.uploadedFilePaths)
+        }
+      })
+
+      // 删除文件
+      for (const f of files) {
+        try { await remove(f) } catch (e) { console.error('[App] 删除失败记录文件失败', f, e) }
+      }
+      for (const ap of audioPaths) {
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除失败记录波形缓存失败', ap, e) }
+      }
+    } finally {
+      // 从任务列表中移除失败的任务
+      setTasks(prev => prev.filter(t => t.status !== 'error' && t.status !== 'timeout'))
+    }
+  }
+
   // 删除单条历史记录
   const deleteTask = async (taskId: string) => {
     const target = tasks.find(t => t.id === taskId)
@@ -2270,22 +2307,48 @@ const App: React.FC = () => {
       </main >
       {isConfirmClearOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
-          <div className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[360px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
-            <div className="text-white text-base">确认清除历史</div>
-            <div className="text-zinc-300 text-sm mt-2">此操作会删除所有生成历史，且不可恢复。</div>
-            <div className="mt-4 flex justify-end gap-2">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setNeedsClearAllConfirm(false); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
+          <div className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
+            <div className="text-white text-base">清除历史记录</div>
+            <div className="text-zinc-300 text-sm mt-2">请选择要执行的操作</div>
+            <div className="mt-4 flex flex-col gap-2">
               <button
-                onClick={() => { setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
-                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-zinc-600/60 text-sm"
+                onClick={async () => { await clearFailedHistory(); setConfirmOpacity(0); setNeedsClearAllConfirm(false); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-yellow-600/70 hover:bg-yellow-600 text-white text-sm transition-colors"
               >
-                取消
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                仅删除失败的记录
               </button>
               <button
-                onClick={async () => { await clearAllHistoryFiles(); setConfirmOpacity(0); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
-                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-red-600/70 hover:bg-red-600 text-white text-sm"
+                onClick={async () => {
+                  if (needsClearAllConfirm) {
+                    // 第二次点击，执行删除
+                    await clearAllHistoryFiles()
+                    setConfirmOpacity(0)
+                    setNeedsClearAllConfirm(false)
+                    setTimeout(() => setIsConfirmClearOpen(false), 180)
+                  } else {
+                    // 第一次点击，要求二次确认
+                    setNeedsClearAllConfirm(true)
+                  }
+                }}
+                className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-all ${needsClearAllConfirm
+                    ? 'bg-red-700 hover:bg-red-800 animate-pulse-scale'
+                    : 'bg-red-600/70 hover:bg-red-600'
+                  }`}
               >
-                清除
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                {needsClearAllConfirm ? '再次点击确认删除' : '清除所有历史记录'}
+              </button>
+              <button
+                onClick={() => { setConfirmOpacity(0); setNeedsClearAllConfirm(false); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-zinc-600/60 text-sm transition-colors"
+              >
+                取消
               </button>
             </div>
           </div>
