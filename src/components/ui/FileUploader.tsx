@@ -17,7 +17,6 @@ type FileUploaderProps = {
     maxCount?: number
     disabled?: boolean
     className?: string
-    removingIndices?: Set<string>
 }
 
 export default function FileUploader({
@@ -31,8 +30,7 @@ export default function FileUploader({
     multiple = false,
     maxCount = 1,
     disabled = false,
-    className = '',
-    removingIndices = new Set()
+    className = ''
 }: FileUploaderProps) {
     const inputRef = useRef<HTMLInputElement>(null)
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
@@ -57,9 +55,6 @@ export default function FileUploader({
         currentX: 0,
         currentY: 0
     })
-
-    // Track newly uploaded files to apply upload animation only to them
-    const [newlyUploadedFiles, setNewlyUploadedFiles] = useState<Set<string>>(new Set())
     const dragStateRef = useRef(dragState)
     dragStateRef.current = dragState
 
@@ -91,23 +86,6 @@ export default function FileUploader({
         })
 
         if (acceptedFiles.length > 0) {
-            // Mark these files as newly uploaded to apply upload animation
-            const fileUrls = acceptedFiles.map(file => URL.createObjectURL(file))
-            setNewlyUploadedFiles(prev => {
-                const newSet = new Set(prev)
-                fileUrls.forEach(url => newSet.add(url))
-                return newSet
-            })
-
-            // Clear the newly uploaded files marker after animation duration
-            setTimeout(() => {
-                setNewlyUploadedFiles(prev => {
-                    const newSet = new Set(prev)
-                    fileUrls.forEach(url => newSet.delete(url))
-                    return newSet
-                })
-            }, 300) // Slightly longer than the animation duration
-
             onUpload(acceptedFiles)
         }
     }
@@ -404,9 +382,6 @@ export default function FileUploader({
                 const isDroppingThis = dragState.isDropping && dragState.fromIndex === index
                 const shouldShift = (dragState.isDragging || dragState.isDropping) && dragState.fromIndex !== null && dragState.toIndex !== null
 
-                // Check if this is a newly uploaded file (should apply upload animation)
-                const isNewlyUploaded = newlyUploadedFiles.has(file)
-
                 let translateX = 0
                 let scale = 1
 
@@ -467,11 +442,6 @@ export default function FileUploader({
                         ref={el => itemRefs.current[index] = el}
                         className="relative group flex-shrink-0"
                         style={{
-                            animation: removingIndices.has(file)
-                                ? 'imageSlideOut 0.25s ease-in forwards'
-                                : (isNewlyUploaded && !dragState.isDragging && !dragState.isDropping)
-                                    ? 'imageSlideIn 0.25s ease-out forwards'
-                                    : 'none',
                             transform: isDraggingThis
                                 ? `translate(${dragState.currentX - dragState.startX}px, ${dragState.currentY - dragState.startY}px) scale(1.15)`
                                 : isDroppingThis
@@ -527,9 +497,6 @@ export default function FileUploader({
                 <div
                     className={`w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed ${isDragging ? 'border-[#007eff] bg-zinc-700/90' : 'border-zinc-700/50 hover:border-zinc-700/50'} flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
-                    style={{
-                        animation: 'imageSlideIn 0.25s ease-out forwards'
-                    }}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-[#007eff]' : 'text-zinc-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

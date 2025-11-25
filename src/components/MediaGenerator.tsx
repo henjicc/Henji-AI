@@ -30,7 +30,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([])
-  const [removingImages, setRemovingImages] = useState<Set<string>>(new Set())
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [_modelDropdownClosing, setModelDropdownClosing] = useState(false)
 
@@ -1300,17 +1299,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
 
   const removeImage = (index: number) => {
-    const imageToRemove = uploadedImages[index]
-    setRemovingImages(prev => new Set(prev).add(imageToRemove))
-    setTimeout(() => {
-      setUploadedImages(prev => prev.filter((_, i) => i !== index))
-      setUploadedFilePaths(prev => prev.filter((_, i) => i !== index))
-      setRemovingImages(prev => {
-        const s = new Set(prev)
-        s.delete(imageToRemove)
-        return s
-      })
-    }, 250)
+    setUploadedImages(prev => prev.filter((_, i) => i !== index))
+    setUploadedFilePaths(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleImageReorder = (from: number, to: number) => {
@@ -1936,7 +1926,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   accept="image/*"
                   multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
                   maxCount={maxImageCount}
-                  removingIndices={removingImages}
                 />
               )
             })()}
