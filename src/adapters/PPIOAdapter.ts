@@ -1,15 +1,18 @@
 import axios, { AxiosInstance } from 'axios'
 import { saveVideoFromUrl, fileToBlobSrc } from '@/utils/save'
-import { 
-  MediaGeneratorAdapter, 
-  GenerateImageParams, 
-  GenerateVideoParams, 
-  GenerateAudioParams, 
-  ImageResult, 
-  VideoResult, 
-  AudioResult, 
-  TaskStatus 
+import {
+  MediaGeneratorAdapter,
+  GenerateImageParams,
+  GenerateVideoParams,
+  GenerateAudioParams,
+  ImageResult,
+  VideoResult,
+  AudioResult,
+  TaskStatus,
+  ProgressStatus
 } from './base/BaseAdapter'
+import { pollUntilComplete } from '@/utils/polling'
+import { getExpectedPolls } from '@/utils/modelConfig'
 
 export class PPIOAdapter implements MediaGeneratorAdapter {
   name = 'PiaoYun'
@@ -36,7 +39,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         'Authorization': `Bearer ${apiKey}`
       }
     })
-    
+
   }
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
@@ -70,11 +73,11 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         if (params.sequential_image_generation !== undefined) {
           requestData.sequential_image_generation = params.sequential_image_generation
         }
-        
+
         if (params.max_images !== undefined) {
           requestData.max_images = params.max_images
         }
-        
+
         if (params.watermark !== undefined) {
           requestData.watermark = params.watermark
         }
@@ -424,8 +427,17 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
       console.log('[PPIOAdapter] API响应:', response.data)
 
       if (response.data.task_id) {
+        const taskId = response.data.task_id
+
+        // 如果提供了 onProgress 回调，在 Adapter 内部轮询
+        if (params.onProgress) {
+          console.log('[PPIOAdapter] 开始内部轮询，taskId:', taskId)
+          return await this.pollTaskStatus(taskId, params.model, params.onProgress)
+        }
+
+        // 否则返回 taskId，让 App 层控制轮询
         return {
-          taskId: response.data.task_id,
+          taskId: taskId,
           status: 'TASK_STATUS_QUEUED'
         }
       } else {
@@ -519,7 +531,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
   async checkStatus(taskId: string): Promise<TaskStatus> {
     try {
       console.log('[PPIOAdapter] 查询任务状态:', taskId)
-      
+
       const response = await this.apiClient.get('/async/task-result', {
         params: { task_id: taskId }
       })
@@ -546,14 +558,14 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
             url: videoUrl
           } as VideoResult
           console.log('[PPIOAdapter] 视频生成成功:', videoUrl)
-          
+
           // 尝试保存到本地文件系统并生成显示用的 blob URL
           try {
             console.log('[PPIOAdapter] 开始保存视频到本地...')
             const { fullPath } = await saveVideoFromUrl(videoUrl)
             const blobSrc = await fileToBlobSrc(fullPath)
             result.result.url = blobSrc
-            ;(result.result as any).filePath = fullPath
+              ; (result.result as any).filePath = fullPath
             console.log('[PPIOAdapter] 视频已保存到本地并生成显示地址')
           } catch (e) {
             console.error('[PPIOAdapter] 视频本地保存失败，回退为远程URL', e)
@@ -585,6 +597,58 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
       throw this.handleError(error)
     }
   }
+
+  /**
+   * 轮询任务状态直到完成（Adapter 内部轮询）
+   * 
+   * @param taskId 任务ID
+   * @param modelId 模型ID
+   * @param onProgress 进度回调
+   * @returns 视频结果
+   */
+  async pollTaskStatus(
+    taskId: string,
+    modelId: string,
+    onProgress?: (status: ProgressStatus) => void
+  ): Promise<VideoResult> {
+    const estimatedPolls = getExpectedPolls(modelId)
+
+    console.log('[PPIOAdapter] 开始轮询:', { taskId, modelId, estimatedPolls })
+
+    const result = await pollUntilComplete<VideoResult>({
+      checkFn: async () => {
+        const status = await this.checkStatus(taskId)
+        return {
+          status: status.status,
+          result: status.result as VideoResult | undefined
+        }
+      },
+      isComplete: (status) => status === 'TASK_STATUS_SUCCEED' || status === 'TASK_STATUS_SUCCEEDED',
+      isFailed: (status) => status === 'TASK_STATUS_FAILED',
+      onProgress: (progress, status) => {
+        if (onProgress) {
+          let message = '生成中...'
+          if (status === 'TASK_STATUS_QUEUED') {
+            message = '排队中...'
+          } else if (status === 'TASK_STATUS_PROCESSING') {
+            message = '正在生成...'
+          }
+
+          onProgress({
+            status: status as any,
+            progress,
+            message
+          })
+        }
+      },
+      interval: 3000,
+      maxAttempts: 120,
+      estimatedAttempts: estimatedPolls
+    })
+
+    return result
+  }
+
 
   private handleError(error: any): Error {
     if (axios.isAxiosError(error)) {

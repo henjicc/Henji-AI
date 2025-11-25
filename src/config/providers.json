@@ -13,7 +13,11 @@
           "functions": [
             "图片生成",
             "图片编辑"
-          ]
+          ],
+          "progressConfig": {
+            "type": "time",
+            "expectedDuration": 20000
+          }
         },
         {
           "id": "vidu-q1",
@@ -25,7 +29,11 @@
             "图生视频",
             "首尾帧",
             "参考生视频"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
         },
         {
           "id": "kling-2.5-turbo",
@@ -35,7 +43,11 @@
           "functions": [
             "文生视频",
             "图生视频"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 35
+          }
         },
         {
           "id": "minimax-hailuo-2.3",
@@ -45,7 +57,11 @@
           "functions": [
             "文生视频",
             "图生视频"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
         },
         {
           "id": "minimax-hailuo-02",
@@ -56,7 +72,11 @@
             "文生视频",
             "图生视频",
             "首尾帧"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 35
+          }
         },
         {
           "id": "pixverse-v4.5",
@@ -66,7 +86,11 @@
           "functions": [
             "文生视频",
             "图生视频"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 25
+          }
         },
         {
           "id": "wan-2.5-preview",
@@ -76,7 +100,11 @@
           "functions": [
             "文生视频",
             "图生视频"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 40
+          }
         },
         {
           "id": "seedance-v1",
@@ -87,7 +115,11 @@
             "文生视频",
             "图生视频",
             "首尾帧"
-          ]
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 45
+          }
         },
         {
           "id": "minimax-speech-2.6",

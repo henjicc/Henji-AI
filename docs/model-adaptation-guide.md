@@ -446,7 +446,352 @@ calculator: (params) => {
 
 ---
 
+## 📊 进度条配置指南
+
+### 概述
+
+Henji AI 集成了统一的进度条系统，为用户提供实时的任务进度反馈。所有模型都应配置进度信息以提供更好的用户体验。
+
+### 进度条架构
+
+#### 核心组件
+
+1. **UI 组件**: `src/components/ui/ProgressBar.tsx`
+   - 纯展示组件，接收 `progress` (0-100) 并渲染进度条
+   - 支持自定义颜色、高度、动画时长
+
+2. **进度计算工具**: `src/utils/progress.ts`
+   - `calculateProgress(current, expected)`: 渐近式进度计算
+   - 预期范围内：快速增长到 95%
+   - 超过预期：缓慢逼近 99%（永不卡死）
+
+3. **轮询工具**: `src/utils/polling.ts`
+   - `pollUntilComplete()`: 通用异步任务轮询
+   - 自动集成 `calculateProgress` 进度计算
+   - 支持自定义轮询间隔、最大次数、完成/失败判断
+
+4. **模型配置工具**: `src/utils/modelConfig.ts`
+   - `getProgressConfig(modelId)`: 获取模型的进度配置
+   - `getExpectedPolls(modelId)`: 获取预期轮询次数
+   - `getExpectedDuration(modelId)`: 获取预期耗时
+
+### 配置步骤
+
+#### 1. 在 `providers.json` 中添加 `progressConfig`
+
+每个模型应根据其实际特性配置进度类型：
+
+##### 异步轮询模型（视频生成）
+
+**适用场景**: API 返回 `taskId`，需要轮询查询结果
+
+```json
+{
+  "id": "vidu-q1",
+  "name": "Vidu Q1",
+  "type": "video",
+  "description": "...",
+  "functions": ["文生视频", "图生视频"],
+  "progressConfig": {
+    "type": "polling",
+    "expectedPolls": 60
+  }
+}
+```
+
+**参数说明**:
+- `type: "polling"`: 基于轮询次数的进度
+- `expectedPolls`: 预期轮询次数（用于进度计算）
+  - 快速模型（如 minimax-hailuo-2.3）: 20-30
+  - 中速模型（如 kling-2.5）: 30-40
+  - 慢速模型（如 vidu-q1）: 50-60
+
+##### 同步时间模型（快速图片生成）
+
+**适用场景**: API 同步返回结果，但耗时较长（>5秒）
+
+```json
+{
+  "id": "seedream-4.0",
+  "name": "即梦图片生成 4.0",
+  "type": "image",
+  "description": "...",
+  "functions": ["图片生成", "图片编辑"],
+  "progressConfig": {
+    "type": "time",
+    "expectedDuration": 20000
+  }
+}
+```
+
+**参数说明**:
+- `type: "time"`: 基于时间的进度
+- `expectedDuration`: 预期耗时（毫秒）
+  - 快速模型: 5000-10000
+  - 中速模型: 15000-25000
+  - 慢速模型: 30000+
+
+##### 无进度反馈模型
+
+**适用场景**: API 返回极快（<2秒）或无法预估时长
+
+```json
+{
+  "id": "minimax-speech-2.6",
+  "name": "MiniMax Speech-2.6",
+  "type": "audio",
+  "description": "同步语音合成",
+  "functions": ["语音合成"],
+  "progressConfig": {
+    "type": "none"
+  }
+}
+```
+
+或直接省略 `progressConfig` 字段（默认 `type: "none"`）
+
+#### 2. Adapter 实现进度支持
+
+##### 方案 A: Adapter 内部轮询（推荐）
+
+**优势**: 
+- 职责清晰（Adapter 负责 API 细节）
+- 新增模型只需改配置，不动业务层代码
+- 与 FalAdapter、PPIOAdapter 一致
+
+**实现步骤**:
+
+1. **导入工具**:
+```typescript
+import { pollUntilComplete } from '@/utils/polling'
+import { getExpectedPolls } from '@/utils/modelConfig'
+import { ProgressStatus } from './base/BaseAdapter'
+```
+
+2. **实现 `pollTaskStatus` 方法**:
+```typescript
+async pollTaskStatus(
+  taskId: string,
+  modelId: string,
+  onProgress?: (status: ProgressStatus) => void
+): Promise<VideoResult> {
+  const estimatedPolls = getExpectedPolls(modelId)
+  
+  const result = await pollUntilComplete<VideoResult>({
+    checkFn: async () => {
+      const status = await this.checkStatus(taskId)
+      return {
+        status: status.status,
+        result: status.result as VideoResult | undefined
+      }
+    },
+    isComplete: (status) => status === 'COMPLETED' || status === 'SUCCESS',
+    isFailed: (status) => status === 'FAILED',
+    onProgress: (progress, status) => {
+      if (onProgress) {
+        onProgress({
+          status: status as any,
+          progress,
+          message: this.getStatusMessage(status)
+        })
+      }
+    },
+    interval: 3000,           // 轮询间隔（毫秒）
+    maxAttempts: 120,         // 最大轮询次数
+    estimatedAttempts: estimatedPolls
+  })
+
+  return result
+}
+```
+
+3. **修改 `generateVideo` 支持内部轮询**:
+```typescript
+async generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
+  // ... 提交任务 ...
+  const response = await this.apiClient.post(endpoint, requestData)
+  const taskId = response.data.task_id
+  
+  // 如果提供了 onProgress，Adapter 内部轮询
+  if (params.onProgress) {
+    return await this.pollTaskStatus(taskId, params.model, params.onProgress)
+  }
+  
+  // 否则返回 taskId（向后兼容）
+  return {
+    taskId: taskId,
+    status: 'QUEUED'
+  }
+}
+```
+
+4. **App.tsx 调用**:
+```typescript
+result = await apiService.generateVideo(input, model, {
+  ...options,
+  onProgress: (status: any) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? {
+        ...t,
+        progress: status.progress || 0,
+        message: status.message
+      } : t
+    ))
+  }
+})
+```
+
+##### 方案 B: 时间模拟进度（同步模型）
+
+**适用场景**: API 同步返回，但耗时较长
+
+**实现步骤**:
+
+1. **在 `App.tsx` 的 `handleGenerate` 中添加定时器**:
+```typescript
+case 'image':
+  let progressTimer: ReturnType<typeof setInterval> | null = null
+  
+  if (model === 'your-sync-model') {
+    const startTime = Date.now()
+    const expectedDuration = getExpectedDuration(model)
+
+    progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      const progress = calculateProgress(elapsed, expectedDuration)
+
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, progress } : t
+      ))
+    }, 100) // 每100ms更新一次
+  }
+
+  try {
+    result = await apiService.generateImage(input, model, options)
+  } finally {
+    if (progressTimer) {
+      clearInterval(progressTimer)
+    }
+  }
+```
+
+#### 3. UI 显示条件
+
+在 `App.tsx` 的任务渲染部分，确保进度条显示条件正确：
+
+```typescript
+{task.status === 'generating' && (
+  <div className="...">
+    {/* 进度条：视频任务 或 有进度值的图片任务 */}
+    {(task.type === 'video' ||
+      (task.type === 'image' && task.provider === 'fal') ||
+      (task.type === 'image' && task.provider === 'piaoyun' && 
+       (task.model === 'seedream-4.0' || (task.progress || 0) > 0))
+    ) && (
+      <ProgressBar
+        progress={task.progress || 0}
+        className="mt-3"
+      />
+    )}
+  </div>
+)}
+```
+
+**关键点**:
+- 视频任务默认显示进度条
+- 图片任务需要明确配置（避免卡在 0%）
+- 使用模型ID判断或 `progress > 0` 条件
+
+### 进度值含义
+
+| 进度值 | 含义 | 何时设置 |
+|--------|------|---------|
+| 0% | 任务初始化 | 任务创建时 |
+| 1-5% | 排队中 | 检测到 `IN_QUEUE` 状态 |
+| 5-95% | 生成中（预期范围内） | 按轮询次数/时间计算 |
+| 95-99% | 生成中（超出预期，渐近逼近） | 超过预期后的缓慢增长 |
+| 100% | 完成 | API 返回成功结果 |
+
+### 预期值设定指南
+
+#### 轮询次数（`expectedPolls`）
+
+根据模型实际平均完成时间和轮询间隔（通常3秒）估算：
+
+```
+expectedPolls ≈ 平均完成时间(秒) / 轮询间隔(秒) × 80%
+```
+
+**示例**:
+- 模型平均 3 分钟完成，轮询间隔 3 秒
+- `expectedPolls = 180 / 3 × 0.8 = 48`（取整到 50）
+
+**经验值**:
+- **超快**（30秒内）: 10-15
+- **快速**（1分钟）: 20-25
+- **中速**（2-3分钟）: 35-50
+- **慢速**（5分钟+）: 60-80
+
+#### 时长（`expectedDuration`）
+
+根据实际测试的平均完成时间设定：
+
+**图片生成**:
+- 轻量模型: 5000-10000ms
+- 标准模型: 15000-25000ms
+- 高质量模型: 30000-45000ms
+
+### 常见问题
+
+#### Q: 进度条一直卡在某个百分比？
+
+**A**: 检查以下几点：
+1. `expectedPolls` / `expectedDuration` 是否设置过大
+2. Adapter 是否正确调用 `onProgress` 回调
+3. `pollUntilComplete` 的 `interval` 是否过长
+
+#### Q: 进度条跳动太快/太慢？
+
+**A**: 调整 `expectedPolls` / `expectedDuration`：
+- 太快 → 增加预期值
+- 太慢 → 减少预期值
+- 建议调整幅度为 ±20%
+
+#### Q: 如何测试进度条？
+
+**A**:
+1. 在 Adapter 中添加日志：
+   ```typescript
+   console.log('[Adapter] Progress:', progress, 'Status:', status)
+   ```
+2. 在 `App.tsx` 中查看 state 更新：
+   ```typescript
+   console.log('[App] Task progress updated:', taskId, progress)
+   ```
+3. 观察实际完成时间，调整配置值
+
+#### Q: 新增异步模型时，进度条不动？
+
+**A**: 确认以下检查清单：
+- [ ] `providers.json` 中配置了 `progressConfig`
+- [ ] Adapter 实现了 `pollTaskStatus` 方法
+- [ ] `generateVideo` 中检测 `onProgress` 并调用内部轮询
+- [ ] `App.tsx` 传递了 `onProgress` 回调
+- [ ] UI 显示条件包含了该模型
+
+### 最佳实践
+
+1. **配置优先**: 优先使用 `providers.json` 配置，避免硬编码
+2. **Adapter 封装**: 让 Adapter 处理轮询，保持 App 层简洁
+3. **工具复用**: 使用 `pollUntilComplete` 和 `calculateProgress`，避免重复代码
+4. **渐进逼近**: 永远使用渐近式算法，避免进度条"卡死"
+5. **合理预期**: 根据实际测试设定 `expectedPolls`/`expectedDuration`
+6. **用户体验**: 即使超时，进度条也应继续缓慢增长
+
+---
+
 ## ⚠️ 常见陷阱与注意事项
+
 
 ### 1. UI 硬编码逻辑冲突
 
@@ -549,6 +894,22 @@ if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
 - [ ] 设置货币符号和单位
 - [ ] 如果是动态计费，实现 `calculator` 函数
 - [ ] 确保 `MediaGenerator.tsx` 传递所有计算所需的参数
+
+**进度条配置** 📊:
+- [ ] 在 `providers.json` 中添加 `progressConfig`
+  - [ ] 异步模型：配置 `type: "polling"` 和 `expectedPolls`
+  - [ ] 同步模型：配置 `type: "time"` 和 `expectedDuration`
+  - [ ] 极快模型：配置 `type: "none"` 或省略
+- [ ] Adapter 实现进度支持
+  - [ ] 异步模型：实现 `pollTaskStatus` 方法
+  - [ ] 同步模型：在 `App.tsx` 添加时间进度逻辑
+  - [ ] 导入并使用 `pollUntilComplete` / `calculateProgress` 工具
+- [ ] 更新 UI 显示条件（`App.tsx`）
+  - [ ] 确保进度条显示判断包含新模型
+- [ ] 测试进度条行为
+  - [ ] 验证进度平滑增长
+  - [ ] 验证超时后渐近逼近 99%
+  - [ ] 根据实际测试调整 `expectedPolls`/`expectedDuration`
 
 **Tauri 配置**:
 - [ ] `src-tauri/capabilities/default.json` 添加 CDN 域名

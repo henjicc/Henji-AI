@@ -10,6 +10,7 @@ export interface ProgressStatus {
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED'
   queue_position?: number
   message?: string
+  progress?: number
 }
 
 export interface GenerateImageParams {

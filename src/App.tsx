@@ -13,6 +13,8 @@ import { remove } from '@tauri-apps/plugin-fs'
 import { useDragDrop } from './contexts/DragDropContext'
 import { useContextMenu, MenuItem } from './hooks/useContextMenu'
 import { providers } from './config/providers'
+import { ProgressBar } from './components/ui/ProgressBar'
+import { calculateProgress } from './utils/progress'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -1073,7 +1075,41 @@ const App: React.FC = () => {
       let result: any
       switch (type) {
         case 'image':
-          result = await apiService.generateImage(input, model, options)
+          // 为即梦4.0添加基于时间的进度跟踪
+          let progressTimer: ReturnType<typeof setInterval> | null = null
+          if (model === 'seedream-4.0') {
+            const startTime = Date.now()
+            const expectedDuration = 20000 // 20秒预期时间
+
+            progressTimer = setInterval(() => {
+              const elapsed = Date.now() - startTime
+              const progress = calculateProgress(elapsed, expectedDuration)
+
+              setTasks(prev => prev.map(t =>
+                t.id === taskId ? { ...t, progress } : t
+              ))
+            }, 100) // 每100ms更新一次
+          }
+
+          try {
+            result = await apiService.generateImage(input, model, {
+              ...options,
+              onProgress: (status: any) => {
+                setTasks(prev => prev.map(t =>
+                  t.id === taskId ? {
+                    ...t,
+                    progress: status.progress || 0,
+                    message: status.message
+                  } : t
+                ))
+              }
+            })
+          } finally {
+            // 清除定时器
+            if (progressTimer) {
+              clearInterval(progressTimer)
+            }
+          }
 
           // 检查是否为 fal 队列超时状态
           if (result?.status === 'timeout') {
@@ -1120,7 +1156,20 @@ const App: React.FC = () => {
           }
           break
         case 'video':
-          result = await apiService.generateVideo(input, model, options)
+          result = await apiService.generateVideo(input, model, {
+            ...options,
+            onProgress: (status: any) => {
+              setTasks(prev => prev.map(t =>
+                t.id === taskId ? {
+                  ...t,
+                  progress: status.progress || 0,
+                  message: status.message
+                } : t
+              ))
+            }
+          })
+
+          // 如果返回了 taskId 而非最终结果，说明需要 App 层轮询（向后兼容）
           if (result.taskId) {
             setTasks(prev => prev.map(t => t.id === taskId ? { ...t, serverTaskId: result.taskId } : t))
             result = await pollTaskStatus(result.taskId, taskId, model)
@@ -1615,6 +1664,13 @@ const App: React.FC = () => {
         task.requestId,
         (status: any) => {
           console.log('[App] 继续查询进度:', status.message)
+          setTasks(prev => prev.map(t =>
+            t.id === task.id ? {
+              ...t,
+              progress: status.progress || 0,
+              message: status.message
+            } : t
+          ))
         }
       )
 
@@ -1951,18 +2007,16 @@ const App: React.FC = () => {
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-zinc-400 mb-3">生成中...</p>
-                              {/* 进度条仅在视频生成时显示 */}
-                              {task.type === 'video' && (
-                                <>
-                                  <div className="w-full h-2 bg-zinc-700 rounded">
-                                    <div
-                                      className="h-2 bg-[#007eff] rounded transition-all duration-[2800ms] ease-out"
-                                      style={{ width: `${Math.min(100, Math.max(0, task.progress || 0))}%` }}
-                                    ></div>
-                                  </div>
-                                  <div className="mt-2 text-sm text-zinc-400">{Math.min(100, Math.max(0, Math.floor(task.progress || 0)))}%</div>
-                                </>
-                              )}
+                              {/* 进度条：视频任务、Fal图片任务、有进度的派欧云图片任务 */}
+                              {(task.type === 'video' ||
+                                (task.type === 'image' && task.provider === 'fal') ||
+                                (task.type === 'image' && task.provider === 'piaoyun' && (task.model === 'seedream-4.0' || (task.progress || 0) > 0))
+                              ) && (
+                                  <ProgressBar
+                                    progress={task.progress || 0}
+                                    className="mt-3"
+                                  />
+                                )}
                               {task.timedOut && (
                                 <div className="mt-3 text-sm text-zinc-300">
                                   <span className="mr-2">轮询超时，任务仍在处理中。</span>

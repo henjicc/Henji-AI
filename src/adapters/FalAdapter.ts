@@ -10,6 +10,7 @@ import {
     TaskStatus,
     ProgressStatus
 } from './base/BaseAdapter'
+import { calculateProgress } from '../utils/progress'
 
 export class FalAdapter implements MediaGeneratorAdapter {
     name = 'fal'
@@ -17,7 +18,7 @@ export class FalAdapter implements MediaGeneratorAdapter {
 
     constructor(apiKey: string) {
         this.apiClient = axios.create({
-            baseURL: 'https://queue.fal.run',  // 使用队列端点
+            baseURL: 'https://queue.fal.run',
             headers: {
                 'Authorization': `Key ${apiKey}`,
                 'Content-Type': 'application/json'
@@ -123,10 +124,24 @@ export class FalAdapter implements MediaGeneratorAdapter {
                 const statusResponse = await this.apiClient.get(statusUrl)
                 const { status, queue_position, logs } = statusResponse.data
 
+                // 计算进度
+                let progress = 0
+                const estimatedAttempts = this.getEstimatedAttempts(modelId)
+
+                if (status === 'IN_QUEUE') {
+                    progress = 5
+                } else if (status === 'IN_PROGRESS') {
+                    // 使用统一的进度计算逻辑
+                    progress = calculateProgress(attempts, estimatedAttempts)
+                } else if (status === 'COMPLETED') {
+                    progress = 100
+                }
+
                 console.log('[FalAdapter] 状态更新:', {
                     status,
                     queue_position,
                     attempts,
+                    progress,
                     logs: logs?.length || 0
                 })
 
@@ -135,7 +150,8 @@ export class FalAdapter implements MediaGeneratorAdapter {
                     onProgress({
                         status,
                         queue_position,
-                        message: this.getStatusMessage(status, queue_position, logs)
+                        message: this.getStatusMessage(status, queue_position, logs),
+                        progress
                     })
                 }
 
@@ -242,6 +258,14 @@ export class FalAdapter implements MediaGeneratorAdapter {
 
     async checkStatus(_taskId: string): Promise<TaskStatus> {
         throw new Error('Task status checking is not supported by this provider')
+    }
+
+    private getEstimatedAttempts(modelId: string): number {
+        // 注意：先检查 pro 版本，因为它也包含 'nano-banana' 字符串
+        if (modelId.includes('nano-banana-pro')) return 30
+        if (modelId.includes('nano-banana')) return 10
+        if (modelId.includes('flux')) return 60
+        return 40 // 默认值
     }
 
     private handleError(error: any): Error {
