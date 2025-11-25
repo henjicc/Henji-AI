@@ -27,7 +27,7 @@ interface GenerationTask {
   provider?: string  // 保存供应商信息（用于继续查询）
   images?: string[]
   size?: string
-  status: 'pending' | 'generating' | 'success' | 'error' | 'timeout'  // 添加 timeout 状态
+  status: 'queued' | 'pending' | 'generating' | 'success' | 'error' | 'timeout'  // 添加 queued 排队状态
   result?: MediaResult
   error?: string
   uploadedFilePaths?: string[]
@@ -46,6 +46,7 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [tasks, setTasks] = useState<GenerationTask[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false) // 是否有任务正在生成
   const [error, setError] = useState<string | null>(null)
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
   const [notificationVisible, setNotificationVisible] = useState(false)
@@ -1021,47 +1022,55 @@ const App: React.FC = () => {
     }
     openImageViewer(url, imageUrls, filePaths)
   }
+  // 自动处理下一个排队的任务
+  const processNextTask = () => {
+    setTasks(currentTasks => {
+      const nextTask = currentTasks.find(t => t.status === 'queued')
 
-  const handleGenerate = async (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => {
-    if (!input.trim() && (!options || !options.images || options.images.length === 0)) {
-      setError('请输入内容或上传图片')
-      return
-    }
+      if (nextTask) {
+        console.log('[App] 自动开始下一个排队任务:', nextTask.id)
+        // 使用setTimeout确保状态更新后再执行
+        setTimeout(() => executeTask(nextTask.id, nextTask), 0)
+      }
 
-    // 创建 sanitizedOptions，移除 base64 图片数据以防止 history.json 膨胀
-    const sanitizedOptions = { ...options }
-    if (sanitizedOptions && sanitizedOptions.images) {
-      delete sanitizedOptions.images
-    }
+      return currentTasks
+    })
+  }
 
-    // 查找供应商信息
-    const providerObj = providers.find(p => p.models.some(m => m.id === model))
-    const providerId = providerObj?.id
-
-    // 创建新的生成任务
-    const taskId = Date.now().toString()
-    const newTask: GenerationTask = {
-      id: taskId,
-      type,
-      prompt: input,
-      model,  // 保存模型信息
-      provider: providerId, // 保存供应商信息
-      images: options?.images,
-      size: options?.size,
-      uploadedFilePaths: options?.uploadedFilePaths,
-      status: 'pending',
-      progress: 0,
-      options: sanitizedOptions, // 保存清洗后的参数
-    }
-
-    // 立即添加到任务列表（最新的在最后）
-    setTasks(prev => [...prev, newTask])
-    setError(null)
+  // 执行单个任务
+  const executeTask = async (taskId: string, task?: GenerationTask) => {
+    setIsGenerating(true)
 
     try {
-      setIsLoading(true)
+      let taskToExecute = task
 
-      // 动态初始化适配器（根据模型判断供应商）
+      // 如果没有传入任务对象，尝试从状态中查找（注意：这在异步更新中可能不可靠，最好总是传入）
+      if (!taskToExecute) {
+        // 这里不能使用 setTasks 的副作用来获取，因为它是异步的
+        // 我们只能依赖传入的 task 或者当前的 tasks 状态（如果是在事件循环的后续）
+        taskToExecute = tasks.find(t => t.id === taskId)
+      }
+
+      if (!taskToExecute) {
+        console.error('[App] 找不到要执行的任务:', taskId)
+        setIsGenerating(false) // 确保重置状态
+        return
+      }
+
+      const { prompt: input, model, type, options: savedOptions } = taskToExecute
+
+      // 重建 options（包含 images 等）
+      const options = savedOptions ? { ...savedOptions } : {}
+
+      // 如果任务有上传的文件路径，需要恢复 images 数据
+      if (taskToExecute.uploadedFilePaths) {
+        options.uploadedFilePaths = taskToExecute.uploadedFilePaths
+      }
+      if (taskToExecute.images) {
+        options.images = taskToExecute.images
+      }
+
+      // 动态初始化适配器  
       const providerObj = providers.find(p => p.models.some(m => m.id === model))
       if (providerObj) {
         const providerType = providerObj.id as 'piaoyun' | 'fal'
@@ -1145,7 +1154,6 @@ const App: React.FC = () => {
                 message: result.message || '等待超时，任务依然在处理中'
               } : task
             ))
-            setIsLoading(false)
             return  // 提前返回，不继续处理
           }
 
@@ -1244,8 +1252,56 @@ const App: React.FC = () => {
         } : task
       ))
     } finally {
-      setIsLoading(false)
+      setIsGenerating(false)
+      setIsGenerating(false)
+      // 自动处理下一个排队的任务
+      processNextTask()
     }
+  }
+
+  const handleGenerate = async (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => {
+    if (!input.trim() && (!options || !options.images || options.images.length === 0)) {
+      setError('请输入内容或上传图片')
+      return
+    }
+
+    // 创建 sanitizedOptions，移除 base64 图片数据以防止 history.json 膨胀
+    const sanitizedOptions = { ...options }
+    if (sanitizedOptions && sanitizedOptions.images) {
+      delete sanitizedOptions.images
+    }
+
+    // 查找供应商信息
+    const providerObj = providers.find(p => p.models.some(m => m.id === model))
+    const providerId = providerObj?.id
+
+    // 创建新的生成任务
+    const taskId = Date.now().toString()
+    const newTask: GenerationTask = {
+      id: taskId,
+      type,
+      prompt: input,
+      model,  // 保存模型信息
+      provider: providerId, // 保存供应商信息
+      images: options?.images,
+      size: options?.size,
+      uploadedFilePaths: options?.uploadedFilePaths,
+      status: isGenerating ? 'queued' : 'pending', // 如果正在生成，则排队
+      progress: 0,
+      options: sanitizedOptions, // 保存清洗后的参数
+    }
+
+    // 立即添加到任务列表（最新的在最后）
+    setTasks(prev => [...prev, newTask])
+    setError(null)
+
+
+    // 如果没有任务在执行，立即开始
+    if (!isGenerating) {
+      // 不等待任务完成，让其在后台执行，以免阻塞UI导致无法排队
+      executeTask(taskId, newTask)
+    }
+    // 否则任务会保持queued状态，等待前一个任务完成
   }
 
   const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, model?: string): Promise<any> => {
@@ -1490,13 +1546,13 @@ const App: React.FC = () => {
         }
         return {
           ...task,
-          status: (task.status === 'generating' || task.status === 'pending')
+          status: (task.status === 'generating' || task.status === 'pending' || task.status === 'queued')
             ? ((task.serverTaskId || (task.requestId && task.modelId)) ? 'timeout' : 'error')
             : task.status,
-          error: (task.status === 'generating' || task.status === 'pending')
+          error: (task.status === 'generating' || task.status === 'pending' || task.status === 'queued')
             ? ((task.serverTaskId || (task.requestId && task.modelId)) ? undefined : '页面刷新后生成中断')
             : task.error,
-          message: (task.status === 'generating' || task.status === 'pending') && (task.serverTaskId || (task.requestId && task.modelId))
+          message: (task.status === 'generating' || task.status === 'pending' || task.status === 'queued') && (task.serverTaskId || (task.requestId && task.modelId))
             ? '页面刷新导致中断，请点击继续查询'
             : task.message,
           result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
@@ -2113,6 +2169,20 @@ const App: React.FC = () => {
 
                       {/* 结果显示区域 */}
                       <div className="pt-3">
+                        {task.status === 'queued' && (
+                          <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg border-2 border-blue-500/30">
+                            <div className="text-center">
+                              <div className="inline-block mb-3">
+                                <svg className="w-12 h-12 text-blue-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <p className="text-blue-400 font-medium">排队中...</p>
+                              <p className="text-zinc-400 text-sm mt-2">等待上一个任务完成</p>
+                            </div>
+                          </div>
+                        )}
+
                         {task.status === 'pending' && (
                           <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center">
@@ -2373,6 +2443,7 @@ const App: React.FC = () => {
               <MediaGenerator
                 onGenerate={handleGenerate}
                 isLoading={isLoading}
+                isGenerating={isGenerating}
                 onOpenSettings={openSettings}
                 onOpenClearHistory={() => setIsConfirmClearOpen(true)}
                 isCollapsed={isPanelCollapsed}

@@ -20,9 +20,10 @@ interface MediaGeneratorProps {
   onOpenClearHistory: () => void
   isCollapsed?: boolean
   onToggleCollapse?: () => void
+  isGenerating?: boolean
 }
 
-const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory }) => {
+const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, onOpenSettings, onOpenClearHistory, isGenerating }) => {
   const [input, setInput] = useState('')
   const [selectedProvider, setSelectedProvider] = useState('piaoyun')
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
@@ -1927,15 +1928,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           <button
             onClick={handleGenerate}
             disabled={isLoading || (!input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0))}
+            title={isGenerating ? '加入队列' : '开始生成'}
             className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isLoading || (!input.trim() && uploadedImages.length === 0)
               ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
-              : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+              : isGenerating
+                ? 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+                : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}
           >
             {isLoading ? (
               <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : isGenerating ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
