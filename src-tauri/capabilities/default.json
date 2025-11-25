@@ -73,7 +73,7 @@
           "path": "$APPLOCALDATA/Henji-AI/**/*"
         },
         {
-          "path": "$APPLOCALDATA/**/*"
+          "path": "**/*"
         }
       ]
     },

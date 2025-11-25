@@ -809,31 +809,49 @@ const App: React.FC = () => {
 
   // 处理媒体文件下载
   const handleDownloadMedia = async (filePath: string, fromButton: boolean = false) => {
-    if (!filePath) return
+    if (!filePath) {
+      console.error('[App] 下载失败: 文件路径为空')
+      showNotification('下载失败: 文件路径无效', 'error')
+      return
+    }
 
     try {
+      console.log('[App] 开始下载:', { filePath, fromButton })
+
       const enableQuick = localStorage.getItem('enable_quick_download') === 'true'
       const buttonOnly = localStorage.getItem('quick_download_button_only') === 'true'
       const quickPath = localStorage.getItem('quick_download_path') || ''
 
+      console.log('[App] 下载设置:', { enableQuick, buttonOnly, quickPath })
+
       // 判断是否使用快速下载
       const useQuickDownload = enableQuick && (!buttonOnly || fromButton) && quickPath
 
+      console.log('[App] 使用快速下载:', useQuickDownload)
+
       if (useQuickDownload) {
-        await quickDownloadMediaFile(filePath, quickPath)
-        console.log('[App] Quick download completed')
+        console.log('[App] 执行快速下载...')
+        const savedPath = await quickDownloadMediaFile(filePath, quickPath)
+        console.log('[App] 快速下载完成:', savedPath)
         showNotification('下载成功', 'success')
       } else {
-        await downloadMediaFile(filePath)
-        console.log('[App] Manual download completed')
+        console.log('[App] 执行手动下载...')
+        const savedPath = await downloadMediaFile(filePath)
+        console.log('[App] 手动下载完成:', savedPath)
         showNotification('下载成功', 'success')
       }
     } catch (err) {
-      if (err instanceof Error && err.message !== 'cancelled') {
-        console.error('Download failed:', err)
-        // setError('下载失败: ' + err.message) // 使用顶部通知代替底部错误提示
-        showNotification('下载失败: ' + err.message, 'error')
+      console.error('[App] 下载失败:', err)
+
+      // 如果用户取消了下载，不显示错误
+      if (err instanceof Error && err.message === 'cancelled') {
+        console.log('[App] 用户取消了下载')
+        return
       }
+
+      // 显示错误信息
+      const errorMessage = err instanceof Error ? err.message : '未知错误'
+      showNotification('下载失败: ' + errorMessage, 'error')
     }
   }
 
@@ -2335,8 +2353,8 @@ const App: React.FC = () => {
                   }
                 }}
                 className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-all ${needsClearAllConfirm
-                    ? 'bg-red-700 hover:bg-red-800 animate-pulse-scale'
-                    : 'bg-red-600/70 hover:bg-red-600'
+                  ? 'bg-red-700 hover:bg-red-800 animate-pulse-scale'
+                  : 'bg-red-600/70 hover:bg-red-600'
                   }`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -69,31 +69,150 @@ export async function saveAudioFromUrl(url: string, filename?: string): Promise<
   return saved
 }
 
+// 从文件路径提取扩展名
+function getFileExtension(filePath: string): string {
+  const fileName = filePath.split(/\\|\//).pop() || ''
+  const match = fileName.match(/\.([^.]+)$/)
+  return match ? match[1].toLowerCase() : ''
+}
+
+// 确保文件名有正确的扩展名（防止重复）
+function ensureExtension(fileName: string, extension: string): string {
+  const ext = extension.startsWith('.') ? extension : `.${extension}`
+  const lowerFileName = fileName.toLowerCase()
+  const lowerExt = ext.toLowerCase()
+
+  // 如果文件名已经有这个扩展名，直接返回
+  if (lowerFileName.endsWith(lowerExt)) {
+    return fileName
+  }
+
+  // 否则追加扩展名
+  return fileName + ext
+}
+
 export async function downloadAudioFile(sourcePath: string, suggestedName?: string): Promise<string> {
   const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `audio-${Date.now()}.mp3`)
-  const target = await saveDialog({ defaultPath: name }) as string | null
+  const ext = getFileExtension(sourcePath) || 'mp3'
+
+  // 设置文件过滤器
+  const filters = [
+    {
+      name: '音频文件',
+      extensions: [ext]
+    }
+  ]
+
+  const target = await saveDialog({
+    defaultPath: name,
+    filters
+  }) as string | null
+
   if (!target) throw new Error('cancelled')
+
+  // 确保保存的文件有正确的扩展名
+  const finalTarget = ensureExtension(target, ext)
+
   const bytes = await readFile(sourcePath)
-  await writeFile(target, bytes as any)
-  return target
+  await writeFile(finalTarget, bytes as any)
+
+  console.log('[save] 音频文件已保存:', finalTarget)
+  return finalTarget
 }
 
 export async function downloadMediaFile(sourcePath: string, suggestedName?: string): Promise<string> {
   const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
-  const target = await saveDialog({ defaultPath: name }) as string | null
+  const ext = getFileExtension(sourcePath)
+
+  if (!ext) {
+    throw new Error('无法确定文件类型')
+  }
+
+  // 根据扩展名设置过滤器名称和扩展名列表
+  let filterName = '媒体文件'
+  const extensions = [ext]
+
+  // 图片格式
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
+    filterName = '图片文件'
+  }
+  // 视频格式
+  else if (['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
+    filterName = '视频文件'
+  }
+  // 音频格式
+  else if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'pcm'].includes(ext)) {
+    filterName = '音频文件'
+  }
+
+  const filters = [
+    {
+      name: filterName,
+      extensions
+    }
+  ]
+
+  const target = await saveDialog({
+    defaultPath: name,
+    filters
+  }) as string | null
+
   if (!target) throw new Error('cancelled')
+
+  // 确保保存的文件有正确的扩展名
+  const finalTarget = ensureExtension(target, ext)
+
   const bytes = await readFile(sourcePath)
-  await writeFile(target, bytes as any)
-  return target
+  await writeFile(finalTarget, bytes as any)
+
+  console.log('[save] 媒体文件已保存:', finalTarget)
+  return finalTarget
 }
 
 export async function quickDownloadMediaFile(sourcePath: string, targetDir: string, suggestedName?: string): Promise<string> {
-  const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
-  const target = await path.join(targetDir, name)
-  const bytes = await readFile(sourcePath)
-  await writeFile(target, bytes as any)
-  console.log('[save] quick download saved to:', target)
-  return target
+  try {
+    console.log('[save] 快速下载开始:', { sourcePath, targetDir, suggestedName })
+
+    // 验证源文件路径
+    if (!sourcePath) {
+      throw new Error('源文件路径为空')
+    }
+
+    // 验证目标目录
+    if (!targetDir) {
+      throw new Error('目标目录路径为空，请先在设置中配置快速下载路径')
+    }
+
+    // 生成目标文件名
+    const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
+    console.log('[save] 目标文件名:', name)
+
+    // 构建完整的目标路径
+    const target = await path.join(targetDir, name)
+    console.log('[save] 完整目标路径:', target)
+
+    // 确保目标目录存在（尝试创建，如果已存在会被忽略）
+    try {
+      // 注意：这里不能直接创建 targetDir，因为它可能是系统路径
+      // 我们只是尝试读取源文件并写入目标位置
+      const bytes = await readFile(sourcePath)
+      console.log('[save] 源文件读取成功，大小:', bytes.length, 'bytes')
+
+      await writeFile(target, bytes as any)
+      console.log('[save] 快速下载成功保存到:', target)
+
+      return target
+    } catch (error) {
+      console.error('[save] 文件操作失败:', error)
+      if (error instanceof Error) {
+        throw new Error(`文件保存失败: ${error.message}`)
+      }
+      throw new Error('文件保存失败')
+    }
+  } catch (error) {
+    console.error('[save] 快速下载失败:', error)
+    throw error // 重新抛出异常，让调用者处理
+  }
 }
 
 async function sha256HexString(input: string): Promise<string> {

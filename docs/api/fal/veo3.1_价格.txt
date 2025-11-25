@@ -1,0 +1,9 @@
+Veo 3.1 文生视频：For every second of video you generated, you will be charged $0.20 (audio off) or $0.40 (audio on). For example, a 5s video with audio on will cost $2.
+Veo 3.1 文生视频快速模式：For every second of video you generated, you will be charged $0.10 (audio off) or $0.15 (audio on). For example, a 5s video with audio on will cost $0.75.
+Veo 3.1 图生视频：For every second of video you generated, you will be charged $0.20 (audio off) or $0.40 (audio on). For example, a 5s video with audio on will cost $2.
+Veo 3.1 图生视频快速模式：For every second of video you generated, you will be charged $0.10 (audio off) or $0.15 (audio on). For example, a 5s video with audio on will cost $0.75.
+Veo 3.1 首尾帧：For every second of video you generated, you will be charged $0.20 (audio off) or $0.40 (audio on). For example, a 5s video with audio on will cost $2.
+Veo 3.1 首尾帧快速模式：For every second of video you generated, you will be charged $0.10 (audio off) or $0.15 (audio on). For example, a 5s video with audio on will cost $0.75.
+Veo 3.1 参考生视频：For every second of video you generated, you will be charged $0.20 (audio off) or $0.40 (audio on). For example, a 5s video with audio on will cost $2.
+
+当前汇率：1 美元 ≈ 7.0936 人民币，转换时保留两位小数，四舍五入
