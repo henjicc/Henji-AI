@@ -39,23 +39,23 @@ const PRICES = {
     // 视频 - Minimax Hailuo 2.3
     HAILUO_23: {
         text: {
-            '768p': { 6: 2, 10: 4 },
-            '1080p': { 6: 3.5, 10: 0 }
+            '768P': { 6: 2, 10: 4 },
+            '1080P': { 6: 3.5, 10: 0 }
         },
         image: {
-            '768p': { 6: 2, 10: 4 },
-            '1080p': { 6: 3.5, 10: 0 }
+            '768P': { 6: 2, 10: 4 },
+            '1080P': { 6: 3.5, 10: 0 }
         },
         imageFast: {
-            '768p': { 6: 1.35, 10: 2.25 },
-            '1080p': { 6: 2.3, 10: 0 }
+            '768P': { 6: 1.35, 10: 2.25 },
+            '1080P': { 6: 2.3, 10: 0 }
         }
     },
 
     // 视频 - Minimax Hailuo-02
     HAILUO_02: {
-        '768p': { 6: 1.8, 10: 3.6 },
-        '1080p': { 6: 3.15, 10: 0 }
+        '768P': { 6: 1.8, 10: 3.6 },
+        '1080P': { 6: 3.15, 10: 0 }
     },
 
     // 视频 - PixVerse V4.5
@@ -204,7 +204,7 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const hasImage = params.uploadedImages?.length > 0
             const duration = params.videoDuration || 6
-            const resolution = (params.videoResolution || '768p') as '768p' | '1080p'
+            const resolution = (params.videoResolution || '768P') as '768P' | '1080P'
             const isFast = params.hailuoFastMode
 
             let priceTable
@@ -226,7 +226,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 6
-            const resolution = (params.videoResolution || '768p') as '768p' | '1080p'
+            const resolution = (params.videoResolution || '768P') as '768P' | '1080P'
             return PRICES.HAILUO_02[resolution]?.[duration as 6 | 10] || 0
         }
     },
