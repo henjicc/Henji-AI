@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { providers } from '../config/providers'
 import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
 import ParamRow from './ui/ParamRow'
@@ -10,6 +10,7 @@ import FileUploader from './ui/FileUploader'
 import SchemaForm from './ui/SchemaForm'
 import PriceEstimate from './ui/PriceEstimate'
 import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams, nanoBananaProParams } from '../schemas/modelParams'
+import PresetPanel from './PresetPanel'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -151,6 +152,77 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
 
   // 图片拖动状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
+
+  // ============ 预设参数映射表 ============
+  // 新增模型参数只需在此添加对应的setter即可，保存时会自动序列化所有状态
+  const setterMap = useMemo<Record<string, (value: any) => void>>(() => ({
+    // 基础参数
+    input: setInput,
+    selectedProvider: setSelectedProvider,
+    selectedModel: setSelectedModel,
+    uploadedImages: setUploadedImages,
+
+    // 图片参数
+    selectedResolution: setSelectedResolution,
+    resolutionQuality: setResolutionQuality,
+    customWidth: setCustomWidth,
+    customHeight: setCustomHeight,
+    maxImages: setMaxImages,
+    numImages: setNumImages,
+    aspectRatio: setAspectRatio,
+    resolution: setResolution, // nano-banana-pro
+
+    // 视频参数
+    videoDuration: setVideoDuration,
+    videoResolution: setVideoResolution,
+    videoAspectRatio: setVideoAspectRatio,
+    videoNegativePrompt: setVideoNegativePrompt,
+    videoSeed: setVideoSeed,
+
+    // Vidu
+    viduMode: setViduMode,
+    viduStyle: setViduStyle,
+    viduMovementAmplitude: setViduMovementAmplitude,
+    viduBgm: setViduBgm,
+
+    // Kling
+    klingCfgScale: setKlingCfgScale,
+
+    // Hailuo
+    hailuoFastMode: setHailuoFastMode,
+    minimaxEnablePromptExpansion: setMinimaxEnablePromptExpansion,
+
+    // Pixverse
+    pixFastMode: setPixFastMode,
+    pixStyle: setPixStyle,
+
+    // Seedance
+    seedanceVariant: setSeedanceVariant,
+    seedanceResolution: setSeedanceResolution,
+    seedanceAspectRatio: setSeedanceAspectRatio,
+    seedanceCameraFixed: setSeedanceCameraFixed,
+
+    // Wan25
+    wanSize: setWanSize,
+    wanResolution: setWanResolution,
+    wanPromptExtend: setWanPromptExtend,
+    wanAudio: setWanAudio,
+
+    // 音频参数
+    voiceId: setVoiceId,
+    audioSpec: setAudioSpec,
+    audioEmotion: setAudioEmotion,
+    languageBoost: setLanguageBoost,
+    audioVol: setAudioVol,
+    audioPitch: setAudioPitch,
+    audioSpeed: setAudioSpeed,
+    audioSampleRate: setAudioSampleRate,
+    audioBitrate: setAudioBitrate,
+    audioFormat: setAudioFormat,
+    audioChannel: setAudioChannel,
+    latexRead: setLatexRead,
+    textNormalization: setTextNormalization
+  }), [])
 
   // 向 App 发送拖动状态变化事件
   useEffect(() => {
@@ -1896,6 +1968,69 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           </svg>
           设置
         </button>
+
+        {/* 预设按钮 */}
+        <PresetPanel
+          getCurrentState={() => ({
+            input,
+            selectedProvider,
+            selectedModel,
+            uploadedImages,
+            selectedResolution,
+            resolutionQuality,
+            customWidth,
+            customHeight,
+            maxImages,
+            numImages,
+            aspectRatio,
+            resolution,
+            videoDuration,
+            videoResolution,
+            videoAspectRatio,
+            videoNegativePrompt,
+            videoSeed,
+            viduMode,
+            viduStyle,
+            viduMovementAmplitude,
+            viduBgm,
+            klingCfgScale,
+            hailuoFastMode,
+            minimaxEnablePromptExpansion,
+            pixFastMode,
+            pixStyle,
+            seedanceVariant,
+            seedanceResolution,
+            seedanceAspectRatio,
+            seedanceCameraFixed,
+            wanSize,
+            wanResolution,
+            wanPromptExtend,
+            wanAudio,
+            voiceId,
+            audioSpec,
+            audioEmotion,
+            languageBoost,
+            audioVol,
+            audioPitch,
+            audioSpeed,
+            audioSampleRate,
+            audioBitrate,
+            audioFormat,
+            audioChannel,
+            latexRead,
+            textNormalization
+          })}
+          onLoadPreset={(params: Record<string, any>) => {
+            // 通用加载逻辑：遍历所有参数，用setterMap恢复
+            for (const [key, value] of Object.entries(params)) {
+              const setter = setterMap[key]
+              if (setter && value !== undefined && value !== null) {
+                setter(value)
+              }
+            }
+          }}
+          disabled={isLoading}
+        />
 
         {/* 价格估算 - 放在操作按钮右侧 */}
         <div className="ml-auto">
