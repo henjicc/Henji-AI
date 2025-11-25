@@ -304,6 +304,36 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }, [selectedModel, videoDuration, videoResolution])
 
+  // Seedance 时长默认值
+  useEffect(() => {
+    if (isRestoringRef.current) return
+    if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
+      if (videoDuration !== 5 && videoDuration !== 10) {
+        setVideoDuration(5)
+      }
+    }
+  }, [selectedModel, videoDuration])
+
+  // Kling 时长默认值
+  useEffect(() => {
+    if (isRestoringRef.current) return
+    if (currentModel?.type === 'video' && selectedModel === 'kling-2.5-turbo') {
+      if (videoDuration !== 5 && videoDuration !== 10) {
+        setVideoDuration(5)
+      }
+    }
+  }, [selectedModel, videoDuration])
+
+  // Wan 时长默认值
+  useEffect(() => {
+    if (isRestoringRef.current) return
+    if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
+      if (videoDuration !== 5 && videoDuration !== 10) {
+        setVideoDuration(5)
+      }
+    }
+  }, [selectedModel, videoDuration])
+
   useEffect(() => {
     if (isRestoringRef.current) return
     const first = uploadedImages[0]

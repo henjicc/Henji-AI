@@ -859,6 +859,52 @@ if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
 )}
 ```
 
+### 5. 共享状态默认值 ⚠️ 重要
+
+**问题**: 多个视频模型共享相同的 `videoDuration` state，如果某个模型设置了特殊的默认值（如 Hailuo 为 6 秒），切换到其他模型时会继承这个值。
+
+**典型场景**:
+- 用户选择 Hailuo 2.3 模型（默认 6 秒）
+- 切换到 Seedance V1 模型
+- **问题**: Seedance 显示 6 秒，但 Schema 第一项是 5 秒
+
+**根本原因**: 
+1. 所有视频模型共享 `videoDuration` state（L56: `useState(5)`）
+2. Hailuo 有专门的 useEffect 强制设置为 6 秒（L287-305）
+3. 其他模型没有对应的重置逻辑，会继承 Hailuo 的值
+
+**解决方案**: 为需要特定默认值的模型添加 useEffect
+
+```typescript
+// 示例：为 Seedance 添加时长默认值重置
+useEffect(() => {
+    if (isRestoringRef.current) return  // ⚠️ 重要：避免恢复历史时触发
+    if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
+        if (videoDuration !== 5 && videoDuration !== 10) {
+            setVideoDuration(5)  // Seedance 默认 5 秒
+        }
+    }
+}, [selectedModel, videoDuration])
+```
+
+**关键点**:
+1. **isRestoringRef 检查**: 必须检查，否则会破坏历史任务恢复功能
+2. **仅在无效值时重置**: 使用 `!== 5 && !== 10` 而不是直接 `setVideoDuration(5)`，避免覆盖用户手动选择的值
+3. **插入位置**: 紧接在现有的相关 useEffect 之后（如 Hailuo useEffect 后）
+4. **依赖项**: 仅依赖 `[selectedModel, videoDuration]`，避免不必要的触发
+
+**适用范围**: 
+- `videoDuration` (Hailuo 6秒 vs 其他 5秒)
+- `videoResolution` (不同模型的默认分辨率)
+- 其他共享的视频/音频参数
+
+**检查清单**:
+- [ ] 确认新模型的默认值与现有模型不同
+- [ ] 添加对应的 useEffect 重置逻辑
+- [ ] 包含 `isRestoringRef.current` 检查
+- [ ] 使用条件判断避免覆盖用户选择
+- [ ] 测试模型切换场景
+
 ---
 
 ## 📋 适配检查清单
@@ -944,3 +990,4 @@ if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
 5.  **防御性编程**: 对历史数据、API 响应、用户输入做好空值和错误处理。
 6.  **全面检查硬编码**: 新模型适配时必须排查现有的类型判断逻辑。
 7.  **完整性**: 单独实现模型逻辑时，不要遗漏图片上传等基础功能。
+8.  **共享状态管理**: 如果新模型的默认值与其他模型不同，添加 useEffect 重置逻辑，避免状态污染。
