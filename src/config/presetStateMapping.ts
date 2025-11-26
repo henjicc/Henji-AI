@@ -51,6 +51,15 @@ export interface PresetSetters {
     setSeedanceAspectRatio: (v: string) => void
     setSeedanceCameraFixed: (v: boolean) => void
 
+    // Veo 3.1
+    setVeoMode: (v: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video') => void
+    setVeoAspectRatio: (v: string) => void
+    setVeoResolution: (v: string) => void
+    setVeoEnhancePrompt: (v: boolean) => void
+    setVeoGenerateAudio: (v: boolean) => void
+    setVeoAutoFix: (v: boolean) => void
+    setVeoFastMode: (v: boolean) => void
+
     // Wan25
     setWanSize: (v: string) => void
     setWanResolution: (v: string) => void
@@ -127,6 +136,15 @@ export function createPresetSetterMap(
         seedanceResolution: setters.setSeedanceResolution,
         seedanceAspectRatio: setters.setSeedanceAspectRatio,
         seedanceCameraFixed: setters.setSeedanceCameraFixed,
+
+        // Veo 3.1
+        veoMode: setters.setVeoMode,
+        veoAspectRatio: setters.setVeoAspectRatio,
+        veoResolution: setters.setVeoResolution,
+        veoEnhancePrompt: setters.setVeoEnhancePrompt,
+        veoGenerateAudio: setters.setVeoGenerateAudio,
+        veoAutoFix: setters.setVeoAutoFix,
+        veoFastMode: setters.setVeoFastMode,
 
         // Wan25
         wanSize: setters.setWanSize,

@@ -10,7 +10,7 @@ import PanelTrigger from './ui/PanelTrigger'
 import FileUploader from './ui/FileUploader'
 import SchemaForm from './ui/SchemaForm'
 import PriceEstimate from './ui/PriceEstimate'
-import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams, nanoBananaProParams } from '../schemas/modelParams'
+import { wan25Params, viduParams, klingParams, hailuoParams, pixverseParams, seedanceParams, seedreamParams, minimaxSpeechBasicParams, minimaxSpeechAdvancedParams, nanoBananaParams, nanoBananaProParams, veoParams } from '../schemas/modelParams'
 import PresetPanel from './PresetPanel'
 import { createPresetSetterMap } from '../config/presetStateMapping'
 
@@ -75,6 +75,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
 
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
+  
+  // Veo 3.1 参数
+  const [veoMode, setVeoMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
+  const [veoAspectRatio, setVeoAspectRatio] = useState('16:9')
+  const [veoResolution, setVeoResolution] = useState('1080p')
+  const [veoEnhancePrompt, setVeoEnhancePrompt] = useState(true)
+  const [veoGenerateAudio, setVeoGenerateAudio] = useState(false)
+  const [veoAutoFix, setVeoAutoFix] = useState(true)
+  const [veoFastMode, setVeoFastMode] = useState(true)
 
   // Nano Banana 和 Nano Banana Pro 参数
   const [numImages, setNumImages] = useState(1)
@@ -197,6 +206,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setNumImages,
     setAspectRatio,
     setResolution,
+    
+    // Veo 3.1 参数
+    setVeoMode,
+    setVeoAspectRatio,
+    setVeoResolution,
+    setVeoEnhancePrompt,
+    setVeoGenerateAudio,
+    setVeoAutoFix,
+    setVeoFastMode,
 
     // 视频参数
     setVideoDuration,
@@ -415,7 +433,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     }
   }, [selectedModel, videoDuration, videoResolution])
 
-  // Seedance 时长默认值
+  // Seedance 时长默认值重置
   useEffect(() => {
     if (isRestoringRef.current) return
     if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
@@ -424,6 +442,50 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     }
   }, [selectedModel, videoDuration])
+
+  // Veo 3.1 时长默认值重置
+  useEffect(() => {
+    if (isRestoringRef.current) return
+    if (currentModel?.type === 'video' && selectedModel === 'veo3.1') {
+      if (![4, 6, 8].includes(videoDuration)) {
+        setVideoDuration(6)
+      }
+    }
+  }, [selectedModel, videoDuration])
+
+  // Veo 3.1 宽高比自动设置
+  useEffect(() => {
+    if (isRestoringRef.current) return
+    if (currentModel?.type === 'video' && selectedModel === 'veo3.1') {
+      if (uploadedImages.length > 0) {
+        // 有图片上传时，自动设置宽高比为自动
+        setVeoAspectRatio('auto')
+      } else {
+        // 没有图片上传时，如果当前是自动，重置为默认的16:9
+        if (veoAspectRatio === 'auto') {
+          setVeoAspectRatio('16:9')
+        }
+      }
+    }
+  }, [selectedModel, uploadedImages.length, veoAspectRatio])
+
+  // Veo 3.1 根据图片数量自动切换模式
+  useEffect(() => {
+    if (isRestoringRef.current) return
+    if (currentModel?.type === 'video' && selectedModel === 'veo3.1') {
+      const count = uploadedImages.length
+      if (count > 2) {
+        // 图片数量大于2：参考生视频
+        setVeoMode('reference-to-video')
+      } else if (count === 2) {
+        // 图片数量为2：首尾帧
+        setVeoMode('start-end-frame')
+      } else {
+        // 没有图片或只上传了一张图：文/图生视频
+        setVeoMode('text-image-to-video')
+      }
+    }
+  }, [selectedModel, uploadedImages.length])
 
   // Kling 时长默认值
   useEffect(() => {
@@ -1111,19 +1173,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
           paths.push(saved1.fullPath)
         }
-        if (selectedModel === 'seedance-v1-lite' && uploadedImages.length > 1) {
-          const last = uploadedImages[1]
-          options.lastImage = last
-          const p1 = uploadedFilePaths[1]
-          if (p1) {
-            paths.push(p1)
-          } else {
-            const blob2 = await dataUrlToBlob(last)
-            const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
-            paths.push(saved2.fullPath)
-          }
-        }
-        if (selectedModel === 'seedance-v1-pro' && uploadedImages.length > 1) {
+        if (uploadedImages.length > 1) {
           const last = uploadedImages[1]
           options.lastImage = last
           const p1 = uploadedFilePaths[1]
@@ -1137,6 +1187,31 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         }
         options.uploadedFilePaths = paths
         setUploadedFilePaths(paths)
+      }
+    } else if (currentModel?.type === 'video' && selectedModel === 'veo3.1') {
+      // Veo 3.1 参数处理
+      options.mode = veoMode
+      options.duration = videoDuration
+      options.aspectRatio = veoAspectRatio
+      options.resolution = veoResolution
+      options.veoEnhancePrompt = veoEnhancePrompt
+      options.veoGenerateAudio = veoGenerateAudio
+      options.veoAutoFix = veoAutoFix
+      options.fastMode = veoFastMode
+      
+      // 处理图片上传
+      if (uploadedImages.length > 0) {
+        options.images = uploadedImages
+        const paths: string[] = [...uploadedFilePaths]
+        for (let i = 0; i < uploadedImages.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(uploadedImages[i])
+            const saved = await saveUploadImage(blob)
+            paths[i] = saved.fullPath
+          }
+        }
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
       }
     } else if (currentModel?.type === 'audio') {
       options.speed = audioSpeed
@@ -1228,6 +1303,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         maxImageCount = 2
       } else if (selectedModel === 'seedance-v1-pro') {
         maxImageCount = 2
+      } else if (selectedModel === 'veo3.1') {
+        if (veoMode === 'start-end-frame') {
+          maxImageCount = 2
+        } else if (veoMode === 'reference-to-video') {
+          maxImageCount = 7
+        } else {
+          maxImageCount = 7 // 文/图生视频允许上传多张图片，然后自动切换模式
+        }
       }
 
       for (const file of files) {
@@ -1293,7 +1376,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
         maxImageCount = 2
       } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
         maxImageCount = 2
+      } else if (selectedModel === 'veo3.1') {
+      if (veoMode === 'start-end-frame') {
+        maxImageCount = 2
+      } else if (veoMode === 'reference-to-video') {
+        maxImageCount = 7
+      } else {
+        maxImageCount = 7 // 文/图生视频允许上传多张图片，然后自动切换模式
       }
+    }
 
       // 检查是否已达上限
       if (uploadedImages.length >= maxImageCount) {
@@ -1383,6 +1474,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       case 'seedanceResolution': setSeedanceResolution(value); break
       case 'seedanceAspectRatio': setSeedanceAspectRatio(value); break
       case 'seedanceCameraFixed': setSeedanceCameraFixed(value); break
+      // Veo 3.1
+      case 'veoMode': setVeoMode(value); break
+      case 'veoAspectRatio': setVeoAspectRatio(value); break
+      case 'veoResolution': setVeoResolution(value); break
+      case 'veoEnhancePrompt': setVeoEnhancePrompt(value); break
+      case 'veoGenerateAudio': setVeoGenerateAudio(value); break
+      case 'veoAutoFix': setVeoAutoFix(value); break
+      case 'veoFastMode': setVeoFastMode(value); break
       // Seedream
       case 'maxImages': setMaxImages(value); break
       // Minimax Speech
@@ -1420,6 +1519,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
       }
     } else if (selectedModel === 'kling-2.5-turbo') {
       maxImageCount = 1
+    } else if (selectedModel === 'veo3.1') {
+      if (veoMode === 'start-end-frame') {
+        maxImageCount = 2
+      } else if (veoMode === 'reference-to-video') {
+        maxImageCount = 7
+      } else {
+        maxImageCount = 1
+      }
     }
 
     for (const file of files) {
@@ -1916,11 +2023,30 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 onChange={handleSchemaChange}
               />
             )}
+            
+            {/* Veo 3.1 Parameters */}
+            {selectedModel === 'veo3.1' && (
+              <SchemaForm
+                schema={veoParams}
+                values={{
+                  veoMode,
+                  videoDuration,
+                  veoAspectRatio,
+                  veoResolution,
+                  veoEnhancePrompt,
+                  veoGenerateAudio,
+                  veoAutoFix,
+                  veoFastMode,
+                  uploadedImages
+                }}
+                onChange={handleSchemaChange}
+              />
+            )}
 
-            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && (
+            {selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && selectedModel !== 'veo3.1' && (
               <TextInput label="负面提示" value={videoNegativePrompt} onChange={setVideoNegativePrompt} placeholder="不希望出现的内容" className="w-auto flex-1 min-w-[200px]" inputClassName="w-full" />
             )}
-            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && (
+            {selectedModel !== 'kling-2.5-turbo' && selectedModel !== 'minimax-hailuo-2.3' && selectedModel !== 'minimax-hailuo-2.3-fast' && selectedModel !== 'minimax-hailuo-02' && selectedModel !== 'pixverse-v4.5' && selectedModel !== 'wan-2.5-preview' && selectedModel !== 'seedance-v1' && selectedModel !== 'seedance-v1-lite' && selectedModel !== 'seedance-v1-pro' && selectedModel !== 'veo3.1' && (
               <NumberInput label="随机种子" value={typeof videoSeed === 'number' ? videoSeed : 0} onChange={(v) => setVideoSeed(Math.max(0, Math.round(v)))} min={0} step={1} widthClassName="w-20" className="w-auto min-w-[120px]" />
             )}
           </>
@@ -1990,7 +2116,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                 maxImageCount = 2
               } else if (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') {
                 maxImageCount = 2
-              }
+              } else if (selectedModel === 'veo3.1') {
+        if (veoMode === 'start-end-frame') {
+          maxImageCount = 2 // 首尾帧需要2张
+        } else if (veoMode === 'reference-to-video') {
+          maxImageCount = 7 // 参考生视频最多7张
+        } else {
+          maxImageCount = 7 // 文/图生视频允许上传多张图片，然后自动切换模式
+        }
+      }
 
               return (
                 <FileUploader
@@ -1999,10 +2133,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   onRemove={removeImage}
                   onReplace={handleImageReplace}
                   onReorder={handleImageReorder}
-                  onDragStateChange={setIsDraggingImage}
                   accept="image/*"
-                  multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
+                  multiple={(selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') || selectedModel === 'minimax-hailuo-02' || (selectedModel === 'veo3.1' && veoMode === 'reference-to-video') ? true : (selectedModel === 'kling-2.5-turbo' || selectedModel === 'minimax-hailuo-2.3' || selectedModel === 'wan-2.5-preview' ? false : true)}
                   maxCount={maxImageCount}
+                  {...{ onDragStateChange: setIsDraggingImage } as any}
                 />
               )
             })()}
@@ -2184,6 +2318,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
               seedanceResolution,
               seedanceAspectRatio,
               wanResolution,
+              
+              // Veo 3.1 参数
+              mode: veoMode,
+              veoGenerateAudio,
+              veoFastMode,
+              veoAspectRatio,
+              veoResolution,
+              veoEnhancePrompt,
+              veoAutoFix,
 
               // 音频参数
               input,

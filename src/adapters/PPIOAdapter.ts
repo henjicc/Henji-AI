@@ -1,7 +1,6 @@
 import axios, { AxiosInstance } from 'axios'
-import { saveVideoFromUrl, fileToBlobSrc } from '@/utils/save'
 import {
-  MediaGeneratorAdapter,
+  BaseAdapter,
   GenerateImageParams,
   GenerateVideoParams,
   GenerateAudioParams,
@@ -14,8 +13,7 @@ import {
 import { pollUntilComplete } from '@/utils/polling'
 import { getExpectedPolls } from '@/utils/modelConfig'
 
-export class PPIOAdapter implements MediaGeneratorAdapter {
-  name = 'PiaoYun'
+export class PPIOAdapter extends BaseAdapter {
   private apiClient: AxiosInstance
 
   private normalizeHailuo(duration?: number, resolution?: string): { duration: number; resolution: string } {
@@ -32,6 +30,7 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
   }
 
   constructor(apiKey: string) {
+    super('PiaoYun') // 调用基类构造函数
     this.apiClient = axios.create({
       baseURL: 'https://api.ppinfra.com/v3',
       headers: {
@@ -39,7 +38,6 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
         'Authorization': `Bearer ${apiKey}`
       }
     })
-
   }
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
@@ -557,18 +555,15 @@ export class PPIOAdapter implements MediaGeneratorAdapter {
           result.result = {
             url: videoUrl
           } as VideoResult
-          console.log('[PPIOAdapter] 视频生成成功:', videoUrl)
+          this.log('视频生成成功:', videoUrl)
 
-          // 尝试保存到本地文件系统并生成显示用的 blob URL
+          // 使用基类的保存方法
           try {
-            console.log('[PPIOAdapter] 开始保存视频到本地...')
-            const { fullPath } = await saveVideoFromUrl(videoUrl)
-            const blobSrc = await fileToBlobSrc(fullPath)
-            result.result.url = blobSrc
-              ; (result.result as any).filePath = fullPath
-            console.log('[PPIOAdapter] 视频已保存到本地并生成显示地址')
+            const savedResult = await this.saveMediaLocally(videoUrl, 'video')
+            result.result.url = savedResult.url
+            ; (result.result as any).filePath = savedResult.filePath
           } catch (e) {
-            console.error('[PPIOAdapter] 视频本地保存失败，回退为远程URL', e)
+            this.log('视频本地保存失败，回退为远程URL', e)
           }
         } else if (response.data.audios && response.data.audios.length > 0) {
           result.result = {

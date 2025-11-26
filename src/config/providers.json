@@ -156,6 +156,22 @@
             "图片生成",
             "图片编辑"
           ]
+        },
+        {
+          "id": "veo3.1",
+          "name": "Veo 3.1",
+          "type": "video",
+          "description": "Google 最新的视频生成模型，支持文生视频、图生视频、首尾帧和参考生视频",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "首尾帧",
+            "参考生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
         }
       ]
     }

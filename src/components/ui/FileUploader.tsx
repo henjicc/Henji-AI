@@ -5,11 +5,11 @@ import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
 
-type FileUploaderProps = {
+export interface FileUploaderProps {
     files: string[]
-    onUpload: (files: File[]) => void
+    onUpload: (files: File[]) => Promise<void> | void
     onRemove: (index: number) => void
-    onReplace?: (index: number, newFile: File) => void
+    onReplace?: (index: number, newFile: File) => Promise<void> | void
     onReorder?: (from: number, to: number) => void
     onDragStateChange?: (isDragging: boolean) => void
     accept?: string

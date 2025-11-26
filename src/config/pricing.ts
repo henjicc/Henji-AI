@@ -109,6 +109,19 @@ const PRICES = {
                 '1080p': { wide: 7.1, standard: 7.34, classic: 7.3, square: 7.29 }
             }
         }
+    },
+
+    // 视频 - Veo 3.1
+    // 价格单位：人民币/秒
+    VEO31: {
+        normal: {
+            audioOff: 1.42,
+            audioOn: 2.84
+        },
+        fast: {
+            audioOff: 0.71,
+            audioOn: 1.06
+        }
     }
 } as const
 
@@ -270,6 +283,29 @@ export const pricingConfigs: PricingConfig[] = [
             const price = PRICES.SEEDANCE[variant]?.[duration]?.[resolution]?.[aspectGroup]
 
             return price || 0
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'veo3.1',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const duration = params.videoDuration || 8
+            const mode = params.mode || 'text-image-to-video'
+            const isFastMode = (params.veoFastMode || false) && mode !== 'reference-to-video' // 参考生视频模式不支持快速模式
+            const isAudioOn = params.veoGenerateAudio || false
+            
+            // 获取价格（人民币/秒）
+            const pricePerSecond = isFastMode 
+                ? (isAudioOn ? PRICES.VEO31.fast.audioOn : PRICES.VEO31.fast.audioOff)
+                : (isAudioOn ? PRICES.VEO31.normal.audioOn : PRICES.VEO31.normal.audioOff)
+            
+            // 计算总价（人民币）
+            const totalPriceCNY = pricePerSecond * duration
+            
+            // 保留两位小数
+            return parseFloat(totalPriceCNY.toFixed(2))
         }
     }
 ]

@@ -12,15 +12,9 @@
 
 Henji AI 的模型适配分为前端和后端两个部分：
 
-1.  **前端 (Frontend)**:
-    *   **配置**: `src/config/providers.json` 定义供应商和模型列表。
-    *   **Schema**: `src/schemas/modelParams.ts` 定义模型的参数表单结构（Schema-Driven UI）。
-    *   **UI**: `MediaGenerator.tsx` 根据 Schema 渲染表单，收集用户输入。
+1.  **前端 (Frontend)**:    *   **配置**: `src/config/providers.json` 定义供应商和模型列表。    *   **Schema**: `src/schemas/modelParams.ts` 定义模型的参数表单结构（Schema-Driven UI）。    *   **UI**: `MediaGenerator.tsx` 根据 Schema 渲染表单，收集用户输入。
 
-2.  **后端/适配层 (Adapter Layer)**:
-    *   **接口**: `src/adapters/base/BaseAdapter.ts` 定义统一的 `MediaGeneratorAdapter` 接口。
-    *   **实现**: 具体适配器（如 `PPIOAdapter.ts`）实现接口，负责参数转换、API 调用和结果标准化。
-    *   **工厂**: `src/adapters/index.ts` 负责实例化适配器。
+2.  **后端/适配层 (Adapter Layer)**:    *   **抽象基类**: `src/adapters/base/BaseAdapter.ts` 定义 `MediaGeneratorAdapter` 接口并提供 `BaseAdapter` 抽象基类，包含通用方法实现。    *   **实现**: 具体适配器（如 `PPIOAdapter.ts`、`FalAdapter.ts`）继承 `BaseAdapter` 抽象基类，实现特定供应商的 API 调用逻辑。    *   **通用方法**: `BaseAdapter` 提供了 `saveMediaLocally`（本地保存）、`formatError`（错误处理）和 `log`（日志记录）等通用方法。    *   **工厂**: `src/adapters/index.ts` 负责实例化适配器。
 
 ---
 
@@ -32,8 +26,9 @@ Henji AI 的模型适配分为前端和后端两个部分：
 
 1.  **定义适配器**:
     *   在 `src/adapters/` 下创建新的适配器文件。
-    *   实现 `MediaGeneratorAdapter` 接口。
+    *   继承 `BaseAdapter` 抽象基类，实现特定供应商的 API 调用逻辑。
     *   **⚠️ 注意**: 在适配器中做好**参数过滤**，API 文档中标注的某些值可能实际不被接受。
+    *   **通用方法**: 利用 `BaseAdapter` 提供的 `saveMediaLocally`（本地保存）、`formatError`（错误处理）和 `log`（日志记录）等通用方法，减少重复代码。
 
 2.  **注册适配器**:
     *   修改 `src/adapters/index.ts`，在 `AdapterType` 中添加新类型。
@@ -112,6 +107,7 @@ Henji AI 的模型适配分为前端和后端两个部分：
 *   **参数定义**: 常见参数有 `duration`, `aspect_ratio`, `camera_motion` 等。
 *   **适配重点**:
     *   **智能路由**: 根据输入图片数量（0=文生视频, 1=图生视频, 2=首尾帧）选择接口。
+    *   **自动宽高比匹配**: 当宽高比为 "auto" 且上传了图片时，可根据图片的实际宽高比自动匹配最适合的预设宽高比（如 16:9, 9:16, 1:1）。
     *   **结果查询**:
         *   **异步轮询**: 大多数视频 API 需要轮询。返回 `taskId` 并实现 `checkStatus`。
         *   **同步/其他**: 如果 API 是同步返回或使用 WebSocket，请根据实际情况实现，不强制要求轮询。
@@ -558,6 +554,7 @@ Henji AI 集成了统一的进度条系统，为用户提供实时的任务进�
 - 职责清晰（Adapter 负责 API 细节）
 - 新增模型只需改配置，不动业务层代码
 - 与 FalAdapter、PPIOAdapter 一致
+- 利用 BaseAdapter 抽象基类提供的通用方法
 
 **实现步骤**:
 
@@ -565,10 +562,22 @@ Henji AI 集成了统一的进度条系统，为用户提供实时的任务进�
 ```typescript
 import { pollUntilComplete } from '@/utils/polling'
 import { getExpectedPolls } from '@/utils/modelConfig'
-import { ProgressStatus } from './base/BaseAdapter'
+import { BaseAdapter, ProgressStatus } from './base/BaseAdapter'
 ```
 
-2. **实现 `pollTaskStatus` 方法**:
+2. **创建 Adapter 类，继承 BaseAdapter**:
+```typescript
+export class YourAdapter extends BaseAdapter {
+  constructor(apiKey: string) {
+    super('your-provider') // 调用基类构造函数，传入供应商名称
+    // 初始化 API 客户端等
+  }
+  
+  // 实现抽象方法...
+}
+```
+
+3. **实现 `pollTaskStatus` 方法**:
 ```typescript
 async pollTaskStatus(
   taskId: string,
@@ -605,7 +614,7 @@ async pollTaskStatus(
 }
 ```
 
-3. **修改 `generateVideo` 支持内部轮询**:
+4. **修改 `generateVideo` 支持内部轮询**:
 ```typescript
 async generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
   // ... 提交任务 ...
@@ -619,13 +628,22 @@ async generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
   
   // 否则返回 taskId（向后兼容）
   return {
-    taskId: taskId,
+    taskId: `${this.name}:${taskId}`, // 使用完整格式的 taskId
     status: 'QUEUED'
   }
 }
 ```
 
-4. **App.tsx 调用**:
+5. **使用 BaseAdapter 的通用方法保存媒体**:
+```typescript
+// 在获取到视频结果后
+const videoUrl = result.video.url
+const savedResult = await this.saveMediaLocally(videoUrl, 'video')
+result.url = savedResult.url
+; (result as any).filePath = savedResult.filePath
+```
+
+6. **App.tsx 调用**:
 ```typescript
 result = await apiService.generateVideo(input, model, {
   ...options,
@@ -904,6 +922,92 @@ useEffect(() => {
 - [ ] 包含 `isRestoringRef.current` 检查
 - [ ] 使用条件判断避免覆盖用户选择
 - [ ] 测试模型切换场景
+
+---
+
+## 🎯 预设功能适配指南
+
+新增模型参数后,需要在预设系统中注册才能支持保存和恢复。预设系统采用**集中式状态映射**架构,所有参数的 setter 映射关系集中在 `src/config/presetStateMapping.ts` 管理。
+
+### 适配步骤
+
+#### 1. 在 `PresetSetters` 接口中添加 setter 类型定义
+
+```typescript
+export interface PresetSetters {
+    // ... 现有参数 ...
+    
+    // 你的新参数 (按类型分类: 基础/图片/视频/音频/特定模型)
+    setYourNewParam: (v: string) => void
+}
+```
+
+#### 2. 在 `createPresetSetterMap` 返回对象中添加映射
+
+```typescript
+export function createPresetSetterMap(setters: PresetSetters) {
+    return {
+        // ... 现有映射 ...
+        yourNewParam: setters.setYourNewParam  // 键名必须与保存时一致
+    }
+}
+```
+
+#### 3. 在 `MediaGenerator.tsx` 中传入 setter
+
+```typescript
+const presetSetterMap = createPresetSetterMap({
+    setInput,
+    setSelectedModel,
+    // ... 其他 setter ...
+    setYourNewParam,  // ⚠️ 别忘了添加
+})
+```
+
+### 注意事项
+
+- **参数命名**: 使用驼峰命名,与 state 变量名保持一致
+- **键名一致**: 映射表的键名必须与预设保存时使用的参数名完全一致
+- **类型安全**: 在 `PresetSetters` 中明确定义类型,避免使用 `any`
+- **向后兼容**: setter 应能处理 `undefined`,旧预设可能不包含新参数
+
+---
+
+## 📁 本地保存机制
+
+### 概述
+
+Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地文件系统，提供更好的用户体验和离线访问能力。
+
+### 实现方式
+
+1. **BaseAdapter 通用方法**: `BaseAdapter` 抽象基类提供了 `saveMediaLocally` 通用方法，用于保存媒体到本地。
+2. **自动保存**: 当媒体生成成功后，Adapter 会自动调用 `saveMediaLocally` 方法保存媒体到本地。
+3. **无需环境检测**: 当前项目只考虑桌面环境，所以 `saveMediaLocally` 方法直接执行保存逻辑，无需检测是否在桌面环境。
+4. **支持多种媒体类型**: 支持保存图片、视频和音频三种类型的媒体。
+
+### 保存流程
+
+1. **媒体生成成功**: 当 API 返回成功结果后，Adapter 会获取媒体 URL。
+2. **调用 saveMediaLocally**: Adapter 调用 `BaseAdapter.saveMediaLocally` 方法，传入媒体 URL 和类型。
+3. **执行保存**: `saveMediaLocally` 方法调用相应的保存函数（如 `saveVideoFromUrl`）保存媒体到本地。
+4. **返回结果**: 保存成功后，返回本地文件 URL 和文件路径；保存失败时，返回原始 URL。
+5. **更新 UI**: 使用本地文件 URL 更新 UI，用户可以直接查看和使用保存的媒体。
+
+### 保存位置
+
+媒体文件默认保存在应用的本地数据目录中，具体位置由 Tauri 框架管理。
+
+### 错误处理
+
+`saveMediaLocally` 方法包含完整的异常处理逻辑，确保即使保存失败也能返回结果，不会影响整体流程。保存失败时，会记录错误日志，并返回原始 URL，保证用户体验不受影响。
+
+### 检查清单
+
+- [ ] 在 `PresetSetters` 接口中添加 setter 类型定义
+- [ ] 在 `createPresetSetterMap` 中添加映射关系
+- [ ] 在 `MediaGenerator.tsx` 调用时传入 setter
+- [ ] 测试预设保存和恢复功能
 
 ---
 
