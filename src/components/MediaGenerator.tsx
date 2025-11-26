@@ -34,7 +34,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   const [_modelDropdownClosing, setModelDropdownClosing] = useState(false)
 
   const [modelFilterProvider, setModelFilterProvider] = useState<string>('all')
-  const [modelFilterType, setModelFilterType] = useState<'all' | 'image' | 'video' | 'audio'>('all')
+  const [modelFilterType, setModelFilterType] = useState<'all' | 'favorite' | 'image' | 'video' | 'audio'>('all')
+  const [favoriteModels, setFavoriteModels] = useState<Set<string>>(new Set())
   const [modelFilterFunction, setModelFilterFunction] = useState<string>('all')
   const [isResolutionDropdownOpen, setIsResolutionDropdownOpen] = useState(false)
   const [selectedResolution, setSelectedResolution] = useState('smart')  // 默认为智能模式
@@ -155,6 +156,28 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
   // 图片拖动状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
+  // 收藏模型的保存函数
+  const saveFavorites = (favorites: Set<string>) => {
+    localStorage.setItem('favorite_models', JSON.stringify([...favorites]))
+  }
+
+  // 收藏/取消收藏模型
+  const toggleFavorite = (e: React.MouseEvent, providerId: string, modelId: string) => {
+    e.stopPropagation() // 阻止冒泡,防止触发模型选择
+
+    const key = `${providerId}-${modelId}`
+    setFavoriteModels(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(key)) {
+        newSet.delete(key)
+      } else {
+        newSet.add(key)
+      }
+      saveFavorites(newSet)
+      return newSet
+    })
+  }
+
 
   // ============ 预设参数映射表 ============
   // 使用独立配置文件管理，新增模型参数只需在 presetStateMapping.ts 中添加
@@ -226,6 +249,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
     setLatexRead,
     setTextNormalization
   }), [])
+
+  // 从 localStorage 加载收藏的模型
+  useEffect(() => {
+    const saved = localStorage.getItem('favorite_models')
+    if (saved) {
+      try {
+        const favArray = JSON.parse(saved)
+        setFavoriteModels(new Set(favArray))
+      } catch {
+        setFavoriteModels(new Set())
+      }
+    }
+  }, [])
 
   // 向 App 发送拖动状态变化事件
   useEffect(() => {
@@ -1509,24 +1545,31 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
           panelWidth={720}
           alignment="aboveCenter"
           stableHeight={true}
-          closeOnPanelClick={(t) => !!(t as HTMLElement).closest('[data-close-on-select]')}
+          closeOnPanelClick={(t) => {
+            // 如果点击的是收藏按钮或其子元素,不关闭面板
+            if ((t as HTMLElement).closest('[data-prevent-close]')) {
+              return false
+            }
+            return !!(t as HTMLElement).closest('[data-close-on-select]')
+          }}
           renderPanel={() => (
             <div className="p-4 h-full flex flex-col">
               <div className="mb-3">
                 <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setModelFilterProvider('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部供应商</button>
+                  <button onClick={() => setModelFilterProvider('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
                   {providers.map(p => (
                     <button key={p.id} onClick={() => setModelFilterProvider(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
                   ))}
                   <div className="w-px bg-zinc-600/50 mx-1"></div>
                   {[
-                    { label: '全部类型', value: 'all' },
+                    { label: '全部', value: 'all' },
+                    { label: '收藏', value: 'favorite' },
                     { label: '图片', value: 'image' },
                     { label: '视频', value: 'video' },
                     { label: '音频', value: 'audio' }
                   ].map(t => (
-                    <button key={t.value} onClick={() => setModelFilterType(t.value as 'all' | 'image' | 'video' | 'audio')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
+                    <button key={t.value} onClick={() => setModelFilterType(t.value as 'all' | 'favorite' | 'image' | 'video' | 'audio')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
                   ))}
                 </div>
               </div>
@@ -1552,15 +1595,49 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({ onGenerate, isLoading, 
                   {providers
                     .flatMap(p => p.models.map(m => ({ p, m })))
                     .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
-                    .filter(item => (modelFilterType === 'all' ? true : item.m.type === modelFilterType))
+                    .filter(item => {
+                      // 收藏筛选
+                      if (modelFilterType === 'favorite') {
+                        return favoriteModels.has(`${item.p.id}-${item.m.id}`)
+                      }
+                      // 类型筛选
+                      return modelFilterType === 'all' ? true : item.m.type === modelFilterType
+                    })
                     .filter(item => (modelFilterFunction === 'all' ? true : item.m.functions.includes(modelFilterFunction)))
                     .map(({ p, m }) => (
-                      <div key={`${p.id}-${m.id}`} data-close-on-select onClick={() => handleModelSelect(p.id, m.id)} className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${selectedProvider === p.id && selectedModel === m.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">{m.name}</span>
-                          <span className="text-[11px] text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
+                      <div key={`${p.id}-${m.id}`} data-close-on-select onClick={() => handleModelSelect(p.id, m.id)} className={`relative px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${selectedProvider === p.id && selectedModel === m.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
+                        {/* 收藏按钮 - 右侧 */}
+                        <button
+                          data-prevent-close
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            toggleFavorite(e, p.id, m.id)
+                          }}
+                          className="absolute top-1 right-1 p-1 rounded hover:bg-zinc-600/50 transition-colors z-10"
+                          title={favoriteModels.has(`${p.id}-${m.id}`) ? '取消收藏' : '收藏模型'}
+                        >
+                          <svg
+                            className={`w-3.5 h-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`)
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'fill-none text-zinc-500'
+                              }`}
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        </button>
+
+                        {/* 模型名称 */}
+                        <div className="text-sm mb-1 pr-6">{m.name}</div>
+
+                        {/* 底部信息行 */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-500">{p.name}</span>
+                          <span className="text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
                         </div>
-                        <div className="mt-1 text-[11px] text-zinc-500">{p.name}</div>
                       </div>
                     ))}
                 </div>
