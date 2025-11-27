@@ -394,7 +394,23 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   // Nano Banana
   else if (currentModel?.type === 'image' && selectedModel === 'nano-banana') {
     options.num_images = params.numImages
-    options.aspect_ratio = params.aspectRatio
+
+    // 如果是 'smart'，执行智能匹配
+    if (params.aspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        options.aspect_ratio = matches.aspect_ratio || params.aspectRatio
+        console.log('[optionsBuilder] Smart matched aspect_ratio:', options.aspect_ratio)
+      } catch (error) {
+        console.error('[optionsBuilder] Smart match failed:', error)
+        options.aspect_ratio = params.aspectRatio
+      }
+    } else {
+      options.aspect_ratio = params.aspectRatio
+    }
+
+    console.log('[optionsBuilder] Nano Banana - aspect_ratio:', options.aspect_ratio)
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
@@ -414,7 +430,22 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   else if (currentModel?.type === 'image' && selectedModel === 'nano-banana-pro') {
     options.model_id = 'nano-banana-pro'
     options.num_images = params.numImages
-    options.aspect_ratio = params.aspectRatio
+
+    // 如果是 'smart'，执行智能匹配
+    if (params.aspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        options.aspect_ratio = matches.aspect_ratio || params.aspectRatio
+        console.log('[optionsBuilder] Smart matched aspect_ratio:', options.aspect_ratio)
+      } catch (error) {
+        console.error('[optionsBuilder] Smart match failed:', error)
+        options.aspect_ratio = params.aspectRatio
+      }
+    } else {
+      options.aspect_ratio = params.aspectRatio
+    }
+
     options.resolution = params.resolution
     if (uploadedImages.length > 0) {
       options.images = uploadedImages

@@ -1,5 +1,19 @@
 export type ParamType = 'dropdown' | 'toggle' | 'number' | 'text'
 
+/**
+ * 分辨率参数配置
+ * 用于声明参数的类型和智能匹配行为
+ */
+export interface ResolutionConfig {
+    type: 'aspect_ratio' | 'size' | 'resolution'  // 参数类型
+    smartMatch: boolean                            // 是否启用智能匹配
+    visualize: boolean                             // 是否使用可视化选择器
+    extractRatio?: (value: any) => number | null   // 从参数值提取宽高比的函数
+    customInput?: boolean                          // 是否支持自定义输入
+    qualityOptions?: Array<{ value: any; label: string }>  // 质量选项（如 2K/4K）
+    qualityKey?: string                            // 质量参数的 key（默认为 'resolutionQuality'）
+}
+
 export interface BaseParam {
     id: string
     label?: string
@@ -9,6 +23,7 @@ export interface BaseParam {
         condition: (values: any) => boolean  // 触发条件
         value: any  // 切换到的值
     }
+    resolutionConfig?: ResolutionConfig  // 分辨率参数配置
     hidden?: (values: any) => boolean
     disabled?: (values: any) => boolean
     className?: string

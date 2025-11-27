@@ -8,6 +8,27 @@ export const viduQ1Params: ParamDef[] = [
         id: 'viduMode',
         type: 'dropdown',
         label: '模式',
+        defaultValue: 'text-image-to-video',
+        // 根据上传的图片数量自动切换模式
+        autoSwitch: {
+            condition: (values) => {
+                const { uploadedImages } = values
+                const count = uploadedImages?.length || 0
+                // 根据图片数量判断应该切换到哪个模式
+                if (count === 0) return values.viduMode !== 'text-image-to-video'
+                if (count === 1) return values.viduMode !== 'text-image-to-video'
+                if (count === 2) return values.viduMode !== 'start-end-frame'
+                if (count >= 3) return values.viduMode !== 'reference-to-video'
+                return false
+            },
+            value: (values: any) => {
+                const count = values.uploadedImages?.length || 0
+                if (count === 0) return 'text-image-to-video'
+                if (count === 1) return 'text-image-to-video'
+                if (count === 2) return 'start-end-frame'
+                return 'reference-to-video'
+            }
+        },
         options: [
             { value: 'text-image-to-video', label: '文/图生视频' },
             { value: 'start-end-frame', label: '首尾帧' },
@@ -18,7 +39,18 @@ export const viduQ1Params: ParamDef[] = [
     {
         id: 'viduAspectRatio',
         type: 'dropdown',
-        label: '宽高比',
+        defaultValue: '16:9',
+        // 分辨率配置：启用智能匹配和可视化
+        resolutionConfig: {
+            type: 'aspect_ratio',
+            smartMatch: true,
+            visualize: true,
+            extractRatio: (value) => {
+                if (value === 'smart') return null
+                const [w, h] = value.split(':').map(Number)
+                return w / h
+            }
+        },
         options: [
             { value: '16:9', label: '16:9' },
             { value: '9:16', label: '9:16' },
@@ -26,10 +58,12 @@ export const viduQ1Params: ParamDef[] = [
         ],
         hidden: (values) => {
             const { viduMode, uploadedImages } = values
-            // Show if: (text-image mode AND no images) OR (reference mode)
-            const isTextImageNoImg = viduMode === 'text-image-to-video' && uploadedImages.length === 0
-            const isRefMode = viduMode === 'reference-to-video'
-            return !(isTextImageNoImg || isRefMode)
+            // 首尾帧模式：隐藏
+            if (viduMode === 'start-end-frame') return true
+            // 文/图生视频模式 + 有图片：隐藏（API 不支持传比例）
+            if (viduMode === 'text-image-to-video' && uploadedImages.length > 0) return true
+            // 其他情况：显示
+            return false
         }
     },
     {

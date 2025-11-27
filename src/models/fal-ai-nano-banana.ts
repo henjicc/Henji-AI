@@ -16,35 +16,33 @@ export const falAiNanoBananaParams: ParamDef[] = [
     {
         id: 'aspect_ratio',
         type: 'dropdown',
-        label: '宽高比',
+        label: '分辨率',
         defaultValue: '1:1',  // 文生图默认 1:1
-        // 自动切换规则：上传图片时切换为 auto
-        autoSwitch: {
-            condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
-            value: 'auto'
-        },
-        // 动态选项：图生图时包含 auto，文生图时不包含
-        options: (values) => {
-            const baseOptions = [
-                { value: '1:1', label: '1:1' },
-                { value: '16:9', label: '16:9' },
-                { value: '9:16', label: '9:16' },
-                { value: '21:9', label: '21:9' },
-                { value: '3:2', label: '3:2' },
-                { value: '2:3', label: '2:3' },
-                { value: '4:3', label: '4:3' },
-                { value: '3:4', label: '3:4' },
-                { value: '5:4', label: '5:4' },
-                { value: '4:5', label: '4:5' }
-            ]
-
-            // 图生图时添加 auto 选项在最前面
-            if (values.uploadedImages && values.uploadedImages.length > 0) {
-                return [{ value: 'auto', label: '自动' }, ...baseOptions]
+        // 分辨率配置：启用智能匹配和可视化
+        resolutionConfig: {
+            type: 'aspect_ratio',
+            smartMatch: true,
+            visualize: true,
+            extractRatio: (value) => {
+                if (value === 'smart') return null
+                const [w, h] = value.split(':').map(Number)
+                return w / h
             }
-
-            return baseOptions
         },
+        // 始终显示智能选项
+        options: [
+            { value: 'smart', label: '智能' },
+            { value: '1:1', label: '1:1' },
+            { value: '16:9', label: '16:9' },
+            { value: '9:16', label: '9:16' },
+            { value: '21:9', label: '21:9' },
+            { value: '3:2', label: '3:2' },
+            { value: '2:3', label: '2:3' },
+            { value: '4:3', label: '4:3' },
+            { value: '3:4', label: '3:4' },
+            { value: '5:4', label: '5:4' },
+            { value: '4:5', label: '4:5' }
+        ],
         className: 'min-w-[100px]'
     }
 ]

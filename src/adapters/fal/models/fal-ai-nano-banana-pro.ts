@@ -25,8 +25,10 @@ export const falAiNanoBananaProRoute = {
       requestData.num_images = params.num_images
     }
 
-    // aspect_ratio: 只有在不是 'auto' 时才发送
-    if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
+    // aspect_ratio: 不发送 'auto' 或 'smart'
+    if (params.aspect_ratio !== undefined &&
+        params.aspect_ratio !== 'auto' &&
+        params.aspect_ratio !== 'smart') {
       requestData.aspect_ratio = params.aspect_ratio
     }
 

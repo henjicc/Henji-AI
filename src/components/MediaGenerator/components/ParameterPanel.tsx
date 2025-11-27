@@ -225,7 +225,12 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={seedreamParams}
         values={{
-          maxImages: values.maxImages
+          maxImages: values.maxImages,
+          selectedResolution: values.selectedResolution,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
+          resolutionQuality: values.resolutionQuality,
+          uploadedImages
         }}
         onChange={onChange}
       />

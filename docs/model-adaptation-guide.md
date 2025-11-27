@@ -196,6 +196,687 @@ Henji AI 的模型适配分为前端和后端两个部分：
 
 ---
 
+## 📐 通用分辨率选择器系统
+
+### 概述
+
+Henji AI 实现了统一的分辨率选择器系统 (`UniversalResolutionSelector`)，用于处理所有与分辨率、宽高比、尺寸相关的参数。该系统支持三种参数类型，并可将比例和质量选项整合到一个面板中。
+
+### 三种基础参数类型
+
+系统支持三种基础参数类型，可以单独使用或组合使用。
+
+#### 1. 宽高比类型 (aspect_ratio)
+
+**适用场景**: 模型支持预设宽高比选项（如 16:9、9:16、1:1）
+
+**特点**:
+- 显示可视化矩形图标
+- 支持智能匹配（根据上传图片自动选择最佳比例）
+- 可整合质量选项（2K/4K 或 1K/2K/4K）
+
+**配置示例**:
+```typescript
+{
+  id: 'aspectRatio',
+  type: 'dropdown',
+  defaultValue: '1:1',
+  resolutionConfig: {
+    type: 'aspect_ratio',
+    smartMatch: true,        // 启用智能匹配
+    visualize: true,         // 显示可视化图标
+    extractRatio: (value) => {
+      if (value === 'smart') return null
+      const [w, h] = value.split(':').map(Number)
+      return w / h
+    },
+    qualityOptions: [        // 可选：整合质量选项
+      { value: '2K', label: '2K' },
+      { value: '4K', label: '4K' }
+    ],
+    qualityKey: 'resolutionQuality'  // 质量参数的 state key
+  },
+  options: [
+    { value: 'smart', label: '智能' },
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' },
+    { value: '1:1', label: '1:1' }
+  ]
+}
+```
+
+#### 2. 尺寸类型 (size)
+
+**适用场景**: 模型使用固定尺寸值（如 1280×720、1920×1080）
+
+**特点**:
+- 显示完整的宽×高数值
+- 显示可视化矩形图标
+- 面板宽度自动加宽到 400px 以容纳完整数值
+
+**配置示例**:
+```typescript
+{
+  id: 'wanSize',
+  type: 'dropdown',
+  defaultValue: '1280*720',
+  resolutionConfig: {
+    type: 'size',
+    smartMatch: false,
+    visualize: true,
+    extractRatio: (value) => {
+      const [w, h] = value.split('*').map(Number)
+      return w / h
+    }
+  },
+  options: [
+    { value: '832*480', label: '832×480' },
+    { value: '1280*720', label: '1280×720' },
+    { value: '1920*1080', label: '1920×1080' }
+  ]
+}
+```
+
+#### 3. 分辨率类型 (resolution)
+
+**适用场景**: 模型使用分辨率等级（如 360P、540P、720P、1080P）
+
+**特点**:
+- 不显示可视化图标
+- 3列网格布局
+- 统一使用大写 P 显示（360P、720P、1080P）
+
+**配置示例**:
+```typescript
+{
+  id: 'videoResolution',
+  type: 'dropdown',
+  defaultValue: '720p',
+  resolutionConfig: {
+    type: 'resolution',
+    smartMatch: false,
+    visualize: false
+  },
+  options: [
+    { value: '360p', label: '360P' },  // API 值小写，显示大写
+    { value: '540p', label: '540P' },
+    { value: '720p', label: '720P' },
+    { value: '1080p', label: '1080P' }
+  ]
+}
+```
+
+### 智能匹配机制 ⚠️ 重要
+
+#### 前端行为
+
+当用户选择"智能"选项并上传图片时：
+- UI 显示"智能"
+- State 中存储的值为 `'smart'`
+- **不会**自动切换到具体比例（已废弃 smartMatch useEffect）
+
+#### Adapter 处理 🔴 关键
+
+**错误做法**（会导致 422 错误）:
+```typescript
+// ❌ 直接传递 'smart' 给 API
+requestData.aspect_ratio = params.aspectRatio  // 'smart'
+```
+
+**正确做法**:
+```typescript
+// ✅ 在 Adapter 中检测并转换
+let aspectRatio = params.aspectRatio
+
+// 如果是 'smart' 或 'auto'，根据第一张图片计算实际比例
+if ((aspectRatio === 'smart' || aspectRatio === 'auto') && images.length > 0) {
+  try {
+    const firstImageUrl = images[0]
+    const ratio = await getImageAspectRatio(firstImageUrl)
+    aspectRatio = matchAspectRatio(ratio)  // 匹配最接近的预设比例
+    console.log(`[Adapter] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
+  } catch (error) {
+    console.error('[Adapter] 计算图片宽高比失败:', error)
+    aspectRatio = '16:9'  // 回退默认值
+  }
+}
+
+// 只传递实际的比例值给 API
+if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+  requestData.aspect_ratio = aspectRatio
+}
+```
+
+**参考实现**: `src/adapters/fal/models/fal-ai-veo-3.1.ts`
+
+### 整合比例和质量
+
+#### 使用场景
+
+当模型同时需要宽高比和分辨率质量（如 Nano Banana Pro 需要 aspect_ratio + resolution）时，可以整合到一个面板中。
+
+#### 配置要点
+
+```typescript
+{
+  id: 'aspectRatio',
+  type: 'dropdown',
+  resolutionConfig: {
+    type: 'aspect_ratio',
+    smartMatch: true,
+    visualize: true,
+    extractRatio: (value) => { /* ... */ },
+    qualityOptions: [
+      { value: '1K', label: '1K' },
+      { value: '2K', label: '2K' },
+      { value: '4K', label: '4K' }
+    ],
+    qualityKey: 'resolution'  // ⚠️ 关键：指定质量参数的 state key
+  },
+  options: [/* 比例选项 */]
+}
+```
+
+**注意事项**:
+1. `qualityKey` 必须与 state 中的实际 key 一致
+2. 不同模型可能使用不同的 key（如 `resolutionQuality` vs `resolution`）
+3. 必须在 `SchemaForm.tsx` 的 setterMap 中包含对应的 setter
+
+### 常见组合类型 🎯
+
+实际应用中，我们经常需要组合多种功能来满足不同模型的需求。以下是系统支持的所有组合类型及其应用场景。
+
+#### 组合 1: 比例 + 质量 + 自定义输入（最完整）
+
+**代表模型**: 即梦 4.0
+
+**适用场景**: 高级图片生成模型，需要最大的灵活性
+
+**特点**:
+- 用户可以选择预设比例（16:9、1:1 等）
+- 可以选择质量等级（2K、4K）
+- 支持自定义宽高输入（如 2048×2048）
+- 智能模式根据上传图片自动匹配
+
+**完整配置示例**:
+```typescript
+{
+  id: 'selectedResolution',
+  type: 'dropdown',
+  defaultValue: 'smart',
+  resolutionConfig: {
+    type: 'aspect_ratio',
+    smartMatch: true,           // 启用智能匹配
+    visualize: true,            // 显示可视化图标
+    customInput: true,          // 启用自定义输入
+    extractRatio: (value) => {
+      if (value === 'smart') return null
+      const [w, h] = value.split(':').map(Number)
+      return w / h
+    },
+    qualityOptions: [           // 质量选项
+      { value: '2K', label: '高清 2K' },
+      { value: '4K', label: '超清 4K' }
+    ],
+    qualityKey: 'resolutionQuality'
+  },
+  options: (values) => {
+    const baseOptions = [
+      { value: '21:9', label: '21:9' },
+      { value: '16:9', label: '16:9' },
+      { value: '1:1', label: '1:1' },
+      { value: '9:16', label: '9:16' }
+    ]
+
+    // 图生图时添加智能选项
+    if (values.uploadedImages?.length > 0) {
+      return [{ value: 'smart', label: '智能' }, ...baseOptions]
+    }
+
+    return baseOptions
+  }
+}
+```
+
+**需要的 State**:
+```typescript
+const [selectedResolution, setSelectedResolution] = useState('smart')
+const [resolutionQuality, setResolutionQuality] = useState('2K')
+const [customWidth, setCustomWidth] = useState('')
+const [customHeight, setCustomHeight] = useState('')
+```
+
+**UI 效果**:
+- 面板宽度: 320px（因为有自定义输入）
+- 显示标签: "分辨率"（因为有质量选项和自定义输入）
+- 三个区域: 比例选择 + 质量选择 + 自定义输入
+
+#### 组合 2: 比例 + 质量（常用）
+
+**代表模型**: Nano Banana Pro, Veo 3.1
+
+**适用场景**: 需要同时控制比例和质量的模型
+
+**特点**:
+- 预设比例选项
+- 质量等级选择（1K/2K/4K 或 720P/1080P）
+- 不支持自定义输入
+
+**配置示例**:
+```typescript
+{
+  id: 'aspectRatio',
+  type: 'dropdown',
+  defaultValue: '1:1',
+  resolutionConfig: {
+    type: 'aspect_ratio',
+    smartMatch: true,
+    visualize: true,
+    extractRatio: (value) => {
+      if (value === 'smart') return null
+      const [w, h] = value.split(':').map(Number)
+      return w / h
+    },
+    qualityOptions: [
+      { value: '1K', label: '1K' },
+      { value: '2K', label: '2K' },
+      { value: '4K', label: '4K' }
+    ],
+    qualityKey: 'resolution'  // 注意：不同模型可能用不同的 key
+  },
+  options: [
+    { value: 'smart', label: '智能' },
+    { value: '1:1', label: '1:1' },
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' }
+  ]
+}
+```
+
+**需要的 State**:
+```typescript
+const [aspectRatio, setAspectRatio] = useState('1:1')
+const [resolution, setResolution] = useState('2K')
+```
+
+**UI 效果**:
+- 面板宽度: 280px
+- 显示标签: "分辨率"（因为有质量选项）
+- 两个区域: 比例选择 + 质量选择
+
+#### 组合 3: 尺寸 / 分辨率（模式切换）
+
+**代表模型**: Wan 2.5 Preview
+
+**适用场景**: 文生视频和图生视频使用不同的参数类型
+
+**特点**:
+- 文生视频: 使用固定尺寸（832×480、1920×1080 等）
+- 图生视频: 使用分辨率等级（480P、720P、1080P）
+- 根据是否上传图片自动切换参数
+
+**配置示例**:
+```typescript
+// 参数 1: 文生视频的尺寸选择
+{
+  id: 'wanSize',
+  type: 'dropdown',
+  defaultValue: '1280*720',
+  resolutionConfig: {
+    type: 'size',
+    smartMatch: false,
+    visualize: true,
+    extractRatio: (value) => {
+      const [w, h] = value.split('*').map(Number)
+      return w / h
+    }
+  },
+  options: [
+    { value: '832*480', label: '832×480' },
+    { value: '1280*720', label: '1280×720' },
+    { value: '1920*1080', label: '1920×1080' },
+    { value: '1632*1248', label: '1632×1248' }
+  ],
+  hidden: (values) => values.uploadedImages.length > 0  // 图生视频时隐藏
+},
+
+// 参数 2: 图生视频的分辨率选择
+{
+  id: 'wanResolution',
+  type: 'dropdown',
+  defaultValue: '720P',
+  resolutionConfig: {
+    type: 'resolution',
+    smartMatch: false,
+    visualize: false
+  },
+  options: [
+    { value: '480P', label: '480P' },
+    { value: '720P', label: '720P' },
+    { value: '1080P', label: '1080P' }
+  ],
+  hidden: (values) => values.uploadedImages.length === 0  // 文生视频时隐藏
+}
+```
+
+**需要的 State**:
+```typescript
+const [wanSize, setWanSize] = useState('1280*720')
+const [wanResolution, setWanResolution] = useState('720P')
+```
+
+**UI 效果**:
+- 文生视频: 显示尺寸面板（400px 宽，显示完整数值）
+- 图生视频: 显示分辨率面板（280px 宽，3列布局）
+- 两个参数互斥显示
+
+#### 组合 4: 纯比例（简单）
+
+**代表模型**: Kling 2.5 Turbo, Vidu Q1
+
+**适用场景**: 只需要宽高比控制的视频模型
+
+**特点**:
+- 仅预设比例选项
+- 可选智能匹配
+- 无质量选项，无自定义输入
+
+**配置示例**:
+```typescript
+{
+  id: 'videoAspectRatio',
+  type: 'dropdown',
+  defaultValue: '16:9',
+  resolutionConfig: {
+    type: 'aspect_ratio',
+    smartMatch: false,  // 某些模型不需要智能匹配
+    visualize: true,
+    extractRatio: (value) => {
+      const [w, h] = value.split(':').map(Number)
+      return w / h
+    }
+  },
+  options: [
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' },
+    { value: '1:1', label: '1:1' }
+  ]
+}
+```
+
+**需要的 State**:
+```typescript
+const [videoAspectRatio, setVideoAspectRatio] = useState('16:9')
+```
+
+**UI 效果**:
+- 面板宽度: 280px
+- 显示标签: "比例"（因为没有质量选项和自定义输入）
+- 单个区域: 比例选择
+
+#### 组合 5: 纯分辨率（简单）
+
+**代表模型**: Hailuo 2.3, PixVerse V4.5, Seedance V1
+
+**适用场景**: 只需要分辨率等级控制的视频模型
+
+**特点**:
+- 仅分辨率等级选项
+- 无可视化图标
+- 3列网格布局
+
+**配置示例**:
+```typescript
+{
+  id: 'videoResolution',
+  type: 'dropdown',
+  defaultValue: '720p',
+  resolutionConfig: {
+    type: 'resolution',
+    smartMatch: false,
+    visualize: false
+  },
+  options: [
+    { value: '360p', label: '360P' },
+    { value: '540p', label: '540P' },
+    { value: '720p', label: '720P' },
+    { value: '1080p', label: '1080P' }
+  ]
+}
+```
+
+**需要的 State**:
+```typescript
+const [videoResolution, setVideoResolution] = useState('720p')
+```
+
+**UI 效果**:
+- 面板宽度: 280px
+- 显示标签: "分辨率"
+- 单个区域: 分辨率选择（3列布局）
+
+### 组合类型选择指南
+
+| 模型需求 | 推荐组合 | 参考模型 |
+|---------|---------|---------|
+| 图片生成，需要最大灵活性 | 比例 + 质量 + 自定义输入 | 即梦 4.0 |
+| 图片生成，固定质量等级 | 比例 + 质量 | Nano Banana Pro |
+| 视频生成，需要比例和质量 | 比例 + 质量 | Veo 3.1 |
+| 视频生成，文生/图生不同参数 | 尺寸 / 分辨率（模式切换） | Wan 2.5 |
+| 视频生成，仅需比例 | 纯比例 | Kling 2.5 |
+| 视频生成，仅需分辨率等级 | 纯分辨率 | Hailuo 2.3 |
+
+### 组合类型注意事项
+
+1. **State 命名规范**:
+   - 比例参数: `aspectRatio`, `videoAspectRatio`, `selectedResolution`
+   - 质量参数: `resolution`, `resolutionQuality`
+   - 尺寸参数: `wanSize`, `customWidth`, `customHeight`
+   - 分辨率参数: `videoResolution`, `wanResolution`
+
+2. **qualityKey 映射**:
+   - 不同模型可能使用不同的质量参数 key
+   - 即梦 4.0: `resolutionQuality`
+   - Nano Banana Pro: `resolution`
+   - Veo 3.1: `veoResolution`
+
+3. **面板宽度自动调整**:
+   - 有自定义输入: 320px
+   - 尺寸类型: 400px
+   - 其他: 280px
+
+4. **标签自动检测**:
+   - 有质量选项或自定义输入: "分辨率"
+   - 纯比例: "比例"
+   - 可通过 `label` 属性手动覆盖
+
+5. **模式切换组合**:
+   - 使用 `hidden` 属性控制参数显示
+   - 确保两个参数互斥（一个显示时另一个隐藏）
+   - 在 Adapter 中根据实际情况选择使用哪个参数
+
+### 模式依赖的参数显示
+
+#### 使用场景
+
+某些模型在不同模式下支持不同的参数（如 Veo 3.1 的 reference-to-video 模式不支持 aspect_ratio）。
+
+#### 实现方式
+
+**1. 动态选项**:
+```typescript
+options: (values) => {
+  const mode = values.veoMode || 'text-image-to-video'
+
+  if (mode === 'reference-to-video') {
+    return []  // 不显示任何选项
+  }
+
+  if (mode === 'start-end-frame') {
+    return [
+      { value: 'auto', label: '自动' },
+      { value: '16:9', label: '16:9' },
+      { value: '9:16', label: '9:16' },
+      { value: '1:1', label: '1:1' }
+    ]
+  }
+
+  return [
+    { value: 'smart', label: '智能' },
+    { value: '16:9', label: '16:9' },
+    { value: '9:16', label: '9:16' },
+    { value: '1:1', label: '1:1' }
+  ]
+}
+```
+
+**2. 隐藏参数**:
+```typescript
+hidden: (values) => values.veoMode === 'reference-to-video'
+```
+
+**3. Adapter 中过滤**:
+```typescript
+// 确保 reference-to-video 模式不传递 aspect_ratio
+if (aspectRatio &&
+    aspectRatio !== 'auto' &&
+    aspectRatio !== 'smart' &&
+    mode !== 'reference-to-video') {
+  requestData.aspect_ratio = aspectRatio
+}
+```
+
+### AutoSwitch 机制
+
+#### 基础用法（静态值）
+
+```typescript
+autoSwitch: {
+  condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
+  value: 'smart'  // 上传图片时自动切换到智能模式
+}
+```
+
+#### 高级用法（函数动态值）
+
+```typescript
+autoSwitch: {
+  condition: (values) => {
+    const count = values.uploadedImages?.length || 0
+    if (count === 0) return values.viduMode !== 'text-image-to-video'
+    if (count === 1) return values.viduMode !== 'text-image-to-video'
+    if (count === 2) return values.viduMode !== 'start-end-frame'
+    if (count >= 3) return values.viduMode !== 'reference-to-video'
+    return false
+  },
+  value: (values: any) => {
+    const count = values.uploadedImages?.length || 0
+    if (count <= 1) return 'text-image-to-video'
+    if (count === 2) return 'start-end-frame'
+    return 'reference-to-video'
+  }
+}
+```
+
+**注意**: 需要在 `src/models/index.ts` 的 `getAutoSwitchValues` 中支持函数类型值。
+
+### 状态管理要点
+
+#### 1. 添加 State
+
+在 `src/components/MediaGenerator/hooks/useMediaGeneratorState.ts` 中添加：
+
+```typescript
+const [aspectRatio, setAspectRatio] = useState('1:1')
+const [resolution, setResolution] = useState('2K')
+
+return {
+  aspectRatio, setAspectRatio,
+  resolution, setResolution,
+  // ...
+}
+```
+
+#### 2. 注册 Setter
+
+在 `src/components/MediaGenerator/index.tsx` 的 `handleSchemaChange` setterMap 中：
+
+```typescript
+const setterMap: Record<string, (value: any) => void> = {
+  aspectRatio: state.setAspectRatio,
+  resolution: state.setResolution,
+  // ...
+}
+```
+
+#### 3. 预设映射
+
+在 `src/config/presetStateMapping.ts` 中添加映射：
+
+```typescript
+export interface PresetSetters {
+  setAspectRatio: (v: string) => void
+  setResolution: (v: string) => void
+}
+
+export function createPresetSetterMap(setters: PresetSetters) {
+  return {
+    aspectRatio: setters.setAspectRatio,
+    resolution: setters.setResolution,
+    // ...
+  }
+}
+```
+
+### 常见错误与解决方案
+
+#### 错误 1: 质量选项无法点击
+
+**原因**: `qualityKey` 配置错误或 setterMap 中缺少对应的 setter
+
+**解决方案**:
+1. 检查 `resolutionConfig.qualityKey` 是否与 state key 一致
+2. 确认 `handleSchemaChange` setterMap 中包含该 setter
+3. 确认 `useMediaGeneratorState` 中已定义该 state
+
+#### 错误 2: API 返回 422 错误（unexpected value）
+
+**原因**: 直接传递了 `'smart'` 或 `'auto'` 给 API
+
+**解决方案**:
+1. 在 Adapter 的 `buildVideoRequest` 或 `buildImageRequest` 中添加智能匹配逻辑
+2. 检测 `'smart'` 或 `'auto'` 值并转换为实际比例
+3. 过滤掉这些特殊值，不传递给 API
+
+#### 错误 3: 上传图片后没有自动切换到智能模式
+
+**原因**: 缺少 `autoSwitch` 配置或 preset setterMap 中缺少映射
+
+**解决方案**:
+1. 在参数定义中添加 `autoSwitch` 配置
+2. 确认 `src/config/presetStateMapping.ts` 中包含该参数的映射
+3. 确认 `MediaGenerator/index.tsx` 的 setterMap 中传入了对应的 setter
+
+#### 错误 4: 面板显示"比例"但应该显示"分辨率"
+
+**原因**: 自动标签检测逻辑判断错误
+
+**解决方案**:
+- 如果有 `qualityOptions` 或 `customInput`，会自动显示"分辨率"
+- 如果只有纯宽高比选项，会显示"比例"
+- 可以通过 `label` 属性手动指定标签
+
+### 最佳实践
+
+1. **优先使用 aspect_ratio 类型**: 对于支持预设比例的模型，使用 aspect_ratio 类型并启用可视化
+2. **智能匹配在 Adapter 中处理**: 永远不要在 UI 中自动切换具体比例，只在生成时转换
+3. **统一大写 P**: 分辨率类型的 label 统一使用大写 P（360P、720P、1080P）
+4. **整合质量选项**: 当模型同时需要比例和质量时，使用 `qualityOptions` 整合到一个面板
+5. **模式依赖参数**: 使用 `hidden` 和动态 `options` 处理不同模式下的参数差异
+6. **完整的状态映射**: 确保所有参数都在 state、setterMap 和 presetStateMapping 中正确配置
+
+---
+
 ## UI 组件与 Schema 规范
 
 ### 推荐：使用通用组件 (Schema-Driven)

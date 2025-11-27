@@ -75,7 +75,7 @@ export const useMediaGeneratorState = () => {
   // Nano Banana 参数
   const [numImages, setNumImages] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('1:1')
-  const [resolution, setResolution] = useState('1K')
+  const [resolution, setResolution] = useState('2K')  // Nano Banana Pro 默认 2K
 
   // 音频参数
   const [audioSpeed, setAudioSpeed] = useState<number>(1.0)

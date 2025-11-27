@@ -6,6 +6,7 @@ import Toggle from './Toggle'
 import NumberInput from './NumberInput'
 import TextInput from './TextInput'
 import Tooltip from './Tooltip'
+import UniversalResolutionSelector from './UniversalResolutionSelector'
 
 interface SchemaFormProps {
     schema: ParamDef[]
@@ -51,6 +52,31 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                         const p = param as import('../../types/schema').DropdownParam
                         const options = typeof p.options === 'function' ? p.options(values) : p.options
 
+                        // 如果有 resolutionConfig，使用 UniversalResolutionSelector
+                        if (p.resolutionConfig) {
+                            // 确定质量参数的 key（不同模型可能不同）
+                            // 即梦4.0 使用 resolutionQuality，Nano Banana Pro 使用 resolution
+                            const qualityKey = p.resolutionConfig.qualityKey || 'resolutionQuality'
+
+                            const component = (
+                                <UniversalResolutionSelector
+                                    label={param.label}
+                                    value={values[param.id]}
+                                    options={options}
+                                    config={p.resolutionConfig}
+                                    customWidth={values.customWidth}
+                                    customHeight={values.customHeight}
+                                    qualityValue={values[qualityKey]}
+                                    onChange={(v) => onChange(param.id, v)}
+                                    onWidthChange={p.resolutionConfig.customInput ? (v) => onChange('customWidth', v) : undefined}
+                                    onHeightChange={p.resolutionConfig.customInput ? (v) => onChange('customHeight', v) : undefined}
+                                    onQualityChange={p.resolutionConfig.qualityOptions ? (v) => onChange(qualityKey, v) : undefined}
+                                />
+                            )
+                            return wrapWithTooltip(component, param, param.id)
+                        }
+
+                        // 普通 dropdown
                         // Calculate display label if not provided
                         let displayLabel = p.display ? p.display(values[param.id]) : undefined
                         if (!displayLabel && values[param.id] !== undefined) {

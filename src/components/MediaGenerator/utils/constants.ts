@@ -26,11 +26,9 @@ export const voicePresets: { id: string; name: string; gender: 'male' | 'female'
 
 // 计算最大图片数量
 export const getMaxImageCount = (modelId: string, mode?: string): number => {
+  // Vidu Q1: 根据图片数量自动切换模式，所以始终允许上传最多 7 张
   if (modelId === 'vidu-q1') {
-    if (mode === 'text-image-to-video') return 1
-    if (mode === 'start-end-frame') return 2
-    if (mode === 'reference-to-video') return 7
-    return 1
+    return 7
   }
   if (modelId === 'kling-2.5-turbo') return 1
   if (modelId === 'minimax-hailuo-2.3') return 1

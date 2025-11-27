@@ -108,8 +108,8 @@ export const falAiVeo31Route = {
     // 优先使用veo特定的宽高比和分辨率参数
     let veoAspectRatio = params.veoAspectRatio || params.aspectRatio
 
-    // 如果宽高比为auto，根据上传的第一张图片计算宽高比
-    if (veoAspectRatio === 'auto' && hasImages) {
+    // 如果宽高比为 auto 或 smart，根据上传的第一张图片计算宽高比
+    if ((veoAspectRatio === 'auto' || veoAspectRatio === 'smart') && hasImages) {
       try {
         // 获取第一张图片的宽高比
         const firstImageUrl = images[0]
@@ -117,7 +117,7 @@ export const falAiVeo31Route = {
 
         // 匹配最适合的预设宽高比
         veoAspectRatio = matchAspectRatio(aspectRatio)
-        console.log(`[veoRoute] 自动计算宽高比: ${aspectRatio.toFixed(2)}，匹配预设: ${veoAspectRatio}`)
+        console.log(`[veoRoute] 智能计算宽高比: ${aspectRatio.toFixed(2)}，匹配预设: ${veoAspectRatio}`)
       } catch (error) {
         console.error('[veoRoute] 计算图片宽高比失败:', error)
         // 如果计算失败，使用默认宽高比
@@ -125,7 +125,9 @@ export const falAiVeo31Route = {
       }
     }
 
-    if (veoAspectRatio && veoAspectRatio !== 'auto') {
+    // 只有在宽高比不是 auto 或 smart 时才添加到请求中
+    // reference-to-video 模式不支持 aspect_ratio 参数
+    if (veoAspectRatio && veoAspectRatio !== 'auto' && veoAspectRatio !== 'smart' && mode !== 'reference-to-video') {
       requestData.aspect_ratio = veoAspectRatio
     }
 

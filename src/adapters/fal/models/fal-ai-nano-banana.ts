@@ -25,9 +25,15 @@ export const falAiNanoBananaRoute = {
       requestData.num_images = params.num_images
     }
 
-    // aspect_ratio: 只有在不是 'auto' 时才发送
-    if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
+    // aspect_ratio: 不发送 'auto' 或 'smart'
+    console.log('[fal-ai-nano-banana] params.aspect_ratio:', params.aspect_ratio)
+    if (params.aspect_ratio !== undefined &&
+        params.aspect_ratio !== 'auto' &&
+        params.aspect_ratio !== 'smart') {
+      console.log('[fal-ai-nano-banana] Adding aspect_ratio to request:', params.aspect_ratio)
       requestData.aspect_ratio = params.aspect_ratio
+    } else {
+      console.log('[fal-ai-nano-banana] Skipping aspect_ratio (undefined, auto, or smart)')
     }
 
     // 处理图生图：添加 image_urls

@@ -15,7 +15,6 @@ import { calculateSmartResolution, getActualResolution } from './utils/resolutio
 import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
-import ResolutionPanel from './components/ResolutionPanel'
 import InputArea from './components/InputArea'
 
 interface MediaGeneratorProps {
@@ -81,6 +80,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setVideoNegativePrompt: state.setVideoNegativePrompt,
     setVideoSeed: state.setVideoSeed,
     setViduMode: state.setViduMode,
+    setViduAspectRatio: state.setViduAspectRatio,
     setViduStyle: state.setViduStyle,
     setViduMovementAmplitude: state.setViduMovementAmplitude,
     setViduBgm: state.setViduBgm,
@@ -262,28 +262,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     }
   }, [state.selectedModel, state.uploadedImages.length, setterMap])
 
-  // 分辨率选择处理
-  const handleResolutionSelect = (value: string) => {
-    state.setSelectedResolution(value)
-    state.setIsManualInput(false)
-  }
+  // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
+  // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
+  // 生成时，optionsBuilder.ts 会将 'smart' 转换为实际匹配的比例值
 
-  // 质量选择处理
-  const handleQualitySelect = (value: '2K' | '4K') => {
-    state.setResolutionQuality(value)
-  }
-
-  // 手动宽度变更处理
-  const handleManualWidthChange = (value: string) => {
-    state.setCustomWidth(value)
-    state.setIsManualInput(true)
-  }
-
-  // 手动高度变更处理
-  const handleManualHeightChange = (value: string) => {
-    state.setCustomHeight(value)
-    state.setIsManualInput(true)
-  }
 
   // 模型选择处理
   const handleModelSelect = (providerId: string, modelId: string) => {
@@ -341,6 +323,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       veoFastMode: state.setVeoFastMode,
       // Seedream
       maxImages: state.setMaxImages,
+      selectedResolution: state.setSelectedResolution,
+      resolutionQuality: state.setResolutionQuality,
       // Nano Banana
       num_images: state.setNumImages,
       aspect_ratio: state.setAspectRatio,
@@ -360,6 +344,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       textNormalization: state.setTextNormalization
     }
 
+    // 直接设置值，保持界面显示为 'smart'
     const setter = setterMap[id]
     if (setter) setter(value)
   }
@@ -474,19 +459,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           )}
         />
 
-        {/* 分辨率面板 - 仅对即梦4.0显示，放在数量参数之前 */}
-        {state.selectedModel === 'seedream-4.0' && (
-          <ResolutionPanel
-            selectedResolution={state.selectedResolution}
-            resolutionQuality={state.resolutionQuality}
-            customWidth={state.customWidth}
-            customHeight={state.customHeight}
-            onResolutionSelect={handleResolutionSelect}
-            onQualitySelect={handleQualitySelect}
-            onWidthChange={handleManualWidthChange}
-            onHeightChange={handleManualHeightChange}
-          />
-        )}
 
         {/* 参数配置面板 */}
         <ParameterPanel

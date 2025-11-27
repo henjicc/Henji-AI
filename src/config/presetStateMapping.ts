@@ -30,6 +30,7 @@ export interface PresetSetters {
 
     // Vidu
     setViduMode: (v: any) => void
+    setViduAspectRatio: (v: string) => void
     setViduStyle: (v: string) => void
     setViduMovementAmplitude: (v: any) => void
     setViduBgm: (v: boolean) => void
@@ -116,6 +117,7 @@ export function createPresetSetterMap(
 
         // Vidu
         viduMode: setters.setViduMode,
+        viduAspectRatio: setters.setViduAspectRatio,
         viduStyle: setters.setViduStyle,
         viduMovementAmplitude: setters.setViduMovementAmplitude,
         viduBgm: setters.setViduBgm,

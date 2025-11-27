@@ -27,15 +27,43 @@ export const seedanceV1Params: ParamDef[] = [
     {
         id: 'seedanceResolution',
         type: 'dropdown',
-        label: '分辨率',
-        options: ['480p', '720p', '1080p'].map(v => ({ value: v, label: v }))
+        defaultValue: '720p',
+        // 分辨率配置：使用面板显示
+        resolutionConfig: {
+            type: 'resolution',
+            smartMatch: false,
+            visualize: false
+        },
+        options: [
+            { value: '480p', label: '480P' },
+            { value: '720p', label: '720P' },
+            { value: '1080p', label: '1080P' }
+        ]
     },
     {
         id: 'seedanceAspectRatio',
         type: 'dropdown',
-        label: '宽高比',
-        options: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'].map(v => ({ value: v, label: v })),
-        hidden: (values) => values.uploadedImages && values.uploadedImages.length > 0
+        defaultValue: '16:9',
+        // 分辨率配置：启用智能匹配和可视化
+        resolutionConfig: {
+            type: 'aspect_ratio',
+            smartMatch: true,
+            visualize: true,
+            extractRatio: (value) => {
+                if (value === 'smart') return null
+                const [w, h] = value.split(':').map(Number)
+                return w / h
+            }
+        },
+        // 当上传图片时自动切换到智能选项
+        autoSwitch: {
+            condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
+            value: 'smart'
+        },
+        options: [
+            { value: 'smart', label: '智能' },
+            ...['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'].map(v => ({ value: v, label: v }))
+        ]
     },
     {
         id: 'seedanceCameraFixed',

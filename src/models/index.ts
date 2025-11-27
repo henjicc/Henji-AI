@@ -108,17 +108,100 @@ export function getAutoSwitchValues(modelId: string, currentValues: any): Record
     if (param.autoSwitch) {
       const shouldSwitch = param.autoSwitch.condition(currentValues)
       if (shouldSwitch) {
+        // 获取目标值（支持函数类型）
+        const targetValue = typeof param.autoSwitch.value === 'function'
+          ? param.autoSwitch.value(currentValues)
+          : param.autoSwitch.value
+
         // 只有当前值与目标值不同时才切换
-        if (currentValues[param.id] !== param.autoSwitch.value) {
-          switches[param.id] = param.autoSwitch.value
+        if (currentValues[param.id] !== targetValue) {
+          switches[param.id] = targetValue
         }
       } else {
         // 条件不满足时，如果当前值是 autoSwitch 的值，则恢复为默认值
-        if (currentValues[param.id] === param.autoSwitch.value && param.defaultValue !== undefined) {
+        const targetValue = typeof param.autoSwitch.value === 'function'
+          ? param.autoSwitch.value(currentValues)
+          : param.autoSwitch.value
+
+        if (currentValues[param.id] === targetValue && param.defaultValue !== undefined) {
           switches[param.id] = param.defaultValue
         }
       }
     }
   }
   return switches
+}
+
+/**
+ * 获取模型中启用智能匹配的参数
+ * @param modelId 模型 ID
+ * @returns 启用智能匹配的参数列表
+ */
+export function getSmartMatchParams(modelId: string): ParamDef[] {
+  const schema = getModelSchema(modelId)
+  if (!schema) return []
+
+  return schema.filter(param => param.resolutionConfig?.smartMatch === true)
+}
+
+/**
+ * 根据上传的图片，智能匹配最接近的参数值
+ * @param modelId 模型 ID
+ * @param imageDataUrl 图片的 Data URL
+ * @param currentValues 当前参数值
+ * @returns Promise<Record<string, any>> 需要更新的参数 { paramId: newValue }
+ */
+export async function getSmartMatchValues(
+  modelId: string,
+  imageDataUrl: string,
+  currentValues: any
+): Promise<Record<string, any>> {
+  const { getImageAspectRatio, matchClosestAspectRatio } = await import('../utils/aspectRatio')
+
+  const smartMatchParams = getSmartMatchParams(modelId)
+  if (smartMatchParams.length === 0) return {}
+
+  try {
+    // 获取图片的宽高比
+    const imageRatio = await getImageAspectRatio(imageDataUrl)
+
+    const matches: Record<string, any> = {}
+    for (const param of smartMatchParams) {
+      const config = param.resolutionConfig!
+      if (!config.extractRatio) continue
+
+      // 只处理 dropdown 类型的参数
+      if (param.type !== 'dropdown') continue
+
+      // 获取当前参数的选项
+      const dropdownParam = param as any
+      let options = dropdownParam.options
+      if (typeof options === 'function') {
+        options = options(currentValues)
+      }
+
+      if (!Array.isArray(options)) continue
+
+      // 过滤掉 'auto' 或 '智能' 选项
+      const validOptions = options.filter((opt: any) => {
+        const ratio = config.extractRatio!(opt.value)
+        return ratio !== null
+      })
+
+      // 匹配最接近的值
+      const matchedValue = matchClosestAspectRatio(
+        imageRatio,
+        validOptions,
+        config.extractRatio
+      )
+
+      // 总是更新为匹配的值（智能匹配）
+      matches[param.id] = matchedValue
+    }
+
+    return matches
+  } catch (error) {
+    console.error('[Smart Match] Failed to match aspect ratio:', error)
+    return {}
+  }
 }

@@ -17,13 +17,24 @@ export const klingTurbo25Params: ParamDef[] = [
     {
         id: 'videoAspectRatio',
         type: 'dropdown',
-        label: '宽高比',
+        defaultValue: '16:9',
+        // 分辨率配置：启用可视化
+        resolutionConfig: {
+            type: 'aspect_ratio',
+            smartMatch: false,
+            visualize: true,
+            extractRatio: (value) => {
+                const [w, h] = value.split(':').map(Number)
+                return w / h
+            }
+        },
         options: [
             { value: '16:9', label: '16:9' },
             { value: '9:16', label: '9:16' },
             { value: '1:1', label: '1:1' }
         ],
-        hidden: (values) => values.uploadedImages.length > 0
+        // 图生视频时隐藏比例参数（API 不支持）
+        hidden: (values) => values.uploadedImages && values.uploadedImages.length > 0
     },
     {
         id: 'klingCfgScale',

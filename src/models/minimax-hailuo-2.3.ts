@@ -17,8 +17,13 @@ export const minimaxHailuo23Params: ParamDef[] = [
     {
         id: 'videoResolution',
         type: 'dropdown',
-        label: '分辨率',
         defaultValue: '768P',  // Hailuo 默认 768P
+        // 分辨率配置：使用面板显示
+        resolutionConfig: {
+            type: 'resolution',
+            smartMatch: false,
+            visualize: false
+        },
         options: (values) => [
             { value: '768P', label: '768P' },
             { value: '1080P', label: '1080P', disabled: values.videoDuration !== 6 }
