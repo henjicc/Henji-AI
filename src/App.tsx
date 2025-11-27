@@ -2519,6 +2519,12 @@ const App: React.FC = () => {
             onMouseMove={handleImageMouseMove}
             onMouseUp={handleImageMouseUp}
             onMouseLeave={handleImageMouseUp}
+            onClick={(e) => {
+              // 点击背景区域（不是图片内容）时关闭
+              if (e.target === e.currentTarget) {
+                closeImageViewer()
+              }
+            }}
           >
             <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
               {/* 图片容器 */}
