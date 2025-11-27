@@ -1,0 +1,435 @@
+import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
+
+/**
+ * 生成选项构建器
+ * 将原本 handleGenerate 中 370+ 行的选项构建逻辑提取出来
+ */
+
+interface BuildOptionsParams {
+  currentModel: any
+  selectedModel: string
+  uploadedImages: string[]
+  uploadedFilePaths: string[]
+  setUploadedFilePaths: (paths: string[]) => void
+
+  // 图片参数
+  selectedResolution: string
+  resolutionQuality: '2K' | '4K'
+  customWidth: string
+  customHeight: string
+  isManualInput: boolean
+  maxImages: number
+  numImages: number
+  aspectRatio: string
+  resolution: string
+
+  // 视频参数
+  videoDuration: number
+  videoAspectRatio: string
+  videoResolution: string
+  videoNegativePrompt: string
+  videoSeed?: number
+
+  // Vidu
+  viduMode: string
+  viduStyle: string
+  viduMovementAmplitude: string
+  viduBgm: boolean
+  viduAspectRatio: string
+
+  // Kling
+  klingCfgScale: number
+
+  // Hailuo
+  hailuoFastMode: boolean
+  minimaxEnablePromptExpansion: boolean
+
+  // PixVerse
+  pixFastMode: boolean
+  pixStyle?: string
+
+  // Wan
+  wanSize: string
+  wanResolution: string
+  wanPromptExtend: boolean
+  wanAudio: boolean
+
+  // Seedance
+  seedanceVariant: 'lite' | 'pro'
+  seedanceResolution: string
+  seedanceAspectRatio: string
+  seedanceCameraFixed: boolean
+
+  // Veo 3.1
+  veoMode: string
+  veoAspectRatio: string
+  veoResolution: string
+  veoEnhancePrompt: boolean
+  veoGenerateAudio: boolean
+  veoAutoFix: boolean
+  veoFastMode: boolean
+
+  // 音频
+  audioSpeed: number
+  audioEmotion: string
+  voiceId: string
+  audioSpec: 'hd' | 'turbo'
+  audioVol: number
+  audioPitch: number
+  audioSampleRate: number
+  audioBitrate: number
+  audioFormat: string
+  audioChannel: number
+  latexRead: boolean
+  textNormalization: boolean
+  languageBoost: string
+
+  // 工具函数
+  calculateSmartResolution: (imageDataUrl: string) => Promise<string>
+}
+
+export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<any> => {
+  const options: any = {}
+  const {
+    currentModel,
+    selectedModel,
+    uploadedImages,
+    uploadedFilePaths,
+    setUploadedFilePaths
+  } = params
+
+  // 图片模型处理（排除 nano-banana 系列）
+  if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro') {
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    // 分辨率处理
+    if (params.selectedResolution === 'smart') {
+      if (uploadedImages.length > 0) {
+        const smartSize = await params.calculateSmartResolution(uploadedImages[0])
+        options.size = smartSize
+      } else {
+        options.size = params.resolutionQuality === '2K' ? '2048x2048' : '4096x4096'
+      }
+    } else if (params.customWidth && params.customHeight && !params.isManualInput) {
+      options.size = `${params.customWidth}x${params.customHeight}`
+    } else if (params.isManualInput && params.customWidth && params.customHeight) {
+      options.size = `${params.customWidth}x${params.customHeight}`
+    }
+
+    // Seedream 4.0 特殊参数
+    if (selectedModel === 'seedream-4.0') {
+      if (params.maxImages > 1) {
+        options.sequential_image_generation = 'auto'
+        options.max_images = params.maxImages
+      } else {
+        options.sequential_image_generation = 'disabled'
+      }
+      options.watermark = false
+    }
+  }
+
+  // Vidu Q1 视频模型
+  if (currentModel?.type === 'video' && selectedModel === 'vidu-q1') {
+    options.mode = params.viduMode
+    options.duration = 5
+    options.movementAmplitude = params.viduMovementAmplitude
+    options.bgm = params.viduBgm
+
+    if (params.viduMode === 'text-image-to-video') {
+      if (uploadedImages.length > 0) {
+        options.images = [uploadedImages[0]]
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          options.uploadedFilePaths = [p0]
+        } else {
+          const blob = await dataUrlToBlob(uploadedImages[0])
+          const saved = await saveUploadImage(blob, 'persist')
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
+        }
+      }
+      if (uploadedImages.length === 0) {
+        options.aspectRatio = params.viduAspectRatio
+        options.style = params.viduStyle
+      }
+    } else if (params.viduMode === 'start-end-frame') {
+      if (uploadedImages.length < 2) {
+        throw new Error('首尾帧模式需要至少2张图片')
+      }
+      options.images = uploadedImages.slice(0, 2)
+      const existing = uploadedFilePaths.slice(0, 2)
+      const paths: string[] = [...existing]
+      for (let i = 0; i < options.images.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(options.images[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      options.uploadedFilePaths = paths
+      setUploadedFilePaths(paths)
+    } else if (params.viduMode === 'reference-to-video') {
+      if (uploadedImages.length < 1 || uploadedImages.length > 7) {
+        throw new Error('参考生视频模式需要1-7张图片')
+      }
+      options.images = uploadedImages.slice(0, 7)
+      const existing = uploadedFilePaths.slice(0, 7)
+      const paths: string[] = [...existing]
+      for (let i = 0; i < options.images.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(options.images[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      options.uploadedFilePaths = paths
+      setUploadedFilePaths(paths)
+      options.aspectRatio = params.viduAspectRatio
+    }
+  }
+
+  // Kling 2.5 Turbo
+  else if (currentModel?.type === 'video' && selectedModel === 'kling-2.5-turbo') {
+    options.duration = params.videoDuration
+    options.cfgScale = params.klingCfgScale
+    options.negativePrompt = params.videoNegativePrompt
+    if (uploadedImages.length === 0) {
+      options.aspectRatio = params.videoAspectRatio
+    } else {
+      options.images = [uploadedImages[0]]
+      const p0 = uploadedFilePaths[0]
+      if (p0) {
+        options.uploadedFilePaths = [p0]
+      } else {
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob, 'persist')
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+    }
+  }
+
+  // Hailuo 2.3
+  else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-2.3') {
+    options.duration = params.videoDuration || 6
+    options.resolution = params.videoResolution || '768P'
+    options.promptExtend = params.minimaxEnablePromptExpansion
+    if (uploadedImages.length > 0) {
+      options.images = [uploadedImages[0]]
+      const p0 = uploadedFilePaths[0]
+      if (p0) {
+        options.uploadedFilePaths = [p0]
+      } else {
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob, 'persist')
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+      options.hailuoFast = params.hailuoFastMode
+    }
+  }
+
+  // Hailuo 02
+  else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-02') {
+    options.duration = params.videoDuration || 6
+    options.resolution = params.videoResolution || '768P'
+    options.promptExtend = params.minimaxEnablePromptExpansion
+    if (uploadedImages.length > 0) {
+      const take = Math.min(uploadedImages.length, 2)
+      options.images = uploadedImages.slice(0, take)
+      const existing = uploadedFilePaths.slice(0, take)
+      const paths: string[] = [...existing]
+      for (let i = 0; i < options.images.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(options.images[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      options.uploadedFilePaths = paths
+      setUploadedFilePaths(paths)
+    }
+  }
+
+  // PixVerse v4.5
+  else if (currentModel?.type === 'video' && selectedModel === 'pixverse-v4.5') {
+    options.resolution = params.videoResolution
+    options.negativePrompt = params.videoNegativePrompt
+    options.fastMode = params.pixFastMode
+    options.style = params.pixStyle
+    if (uploadedImages.length === 0) {
+      options.aspectRatio = params.videoAspectRatio
+    } else {
+      options.images = [uploadedImages[0]]
+      const p0 = uploadedFilePaths[0]
+      if (p0) {
+        options.uploadedFilePaths = [p0]
+      } else {
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob, 'persist')
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+    }
+    if (params.videoSeed !== undefined) options.seed = params.videoSeed
+  }
+
+  // Wan 2.5 Preview
+  else if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
+    options.duration = params.videoDuration
+    options.promptExtend = params.wanPromptExtend
+    options.audio = params.wanAudio
+    if (uploadedImages.length > 0) {
+      options.images = [uploadedImages[0]]
+      const p0 = uploadedFilePaths[0]
+      if (p0) {
+        options.uploadedFilePaths = [p0]
+      } else {
+        const blob = await dataUrlToBlob(uploadedImages[0])
+        const saved = await saveUploadImage(blob, 'persist', { maxDimension: 2000 })
+        options.uploadedFilePaths = [saved.fullPath]
+        setUploadedFilePaths([saved.fullPath])
+      }
+      options.resolution = params.wanResolution
+    } else {
+      options.size = params.wanSize
+    }
+    options.negativePrompt = params.videoNegativePrompt
+  }
+
+  // Seedance v1 系列
+  else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
+    options.resolution = params.seedanceResolution
+    options.aspectRatio = params.seedanceAspectRatio
+    options.duration = params.videoDuration
+    options.cameraFixed = params.seedanceCameraFixed
+    if (selectedModel === 'seedance-v1') {
+      options.seedanceVariant = params.seedanceVariant
+    }
+    if (uploadedImages.length > 0) {
+      const first = uploadedImages[0]
+      options.images = [first]
+      const paths: string[] = []
+      const p0 = uploadedFilePaths[0]
+      if (p0) {
+        paths.push(p0)
+      } else {
+        const blob1 = await dataUrlToBlob(first)
+        const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
+        paths.push(saved1.fullPath)
+      }
+      if (uploadedImages.length > 1) {
+        const last = uploadedImages[1]
+        options.lastImage = last
+        const p1 = uploadedFilePaths[1]
+        if (p1) {
+          paths.push(p1)
+        } else {
+          const blob2 = await dataUrlToBlob(last)
+          const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+          paths.push(saved2.fullPath)
+        }
+      }
+      options.uploadedFilePaths = paths
+      setUploadedFilePaths(paths)
+    }
+  }
+
+  // Veo 3.1
+  else if (currentModel?.type === 'video' && selectedModel === 'veo3.1') {
+    options.mode = params.veoMode
+    options.duration = params.videoDuration
+    options.aspectRatio = params.veoAspectRatio
+    options.resolution = params.veoResolution
+    options.veoEnhancePrompt = params.veoEnhancePrompt
+    options.veoGenerateAudio = params.veoGenerateAudio
+    options.veoAutoFix = params.veoAutoFix
+    options.fastMode = params.veoFastMode
+
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+  }
+
+  // 音频模型
+  else if (currentModel?.type === 'audio') {
+    options.speed = params.audioSpeed
+    options.emotion = params.audioEmotion
+    options.voiceId = params.voiceId
+    options.output_format = 'url'
+    options.spec = params.audioSpec
+    options.vol = params.audioVol
+    options.pitch = params.audioPitch
+    options.sample_rate = params.audioSampleRate
+    options.bitrate = params.audioBitrate
+    options.format = params.audioFormat
+    options.channel = params.audioChannel
+    options.latex_read = params.latexRead
+    options.text_normalization = params.textNormalization
+    options.language_boost = params.languageBoost
+  }
+
+  // Nano Banana
+  else if (currentModel?.type === 'image' && selectedModel === 'nano-banana') {
+    options.num_images = params.numImages
+    options.aspect_ratio = params.aspectRatio
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+  }
+
+  // Nano Banana Pro
+  else if (currentModel?.type === 'image' && selectedModel === 'nano-banana-pro') {
+    options.model_id = 'nano-banana-pro'
+    options.num_images = params.numImages
+    options.aspect_ratio = params.aspectRatio
+    options.resolution = params.resolution
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+  }
+
+  return options
+}

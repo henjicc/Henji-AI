@@ -136,11 +136,13 @@ export interface ImageResult {
 export interface VideoResult {
   taskId?: string
   url?: string
+  filePath?: string
   status?: string
 }
 
 export interface AudioResult {
   url: string
+  filePath?: string
   status?: string
 }
 

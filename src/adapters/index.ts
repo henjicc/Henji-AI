@@ -1,6 +1,6 @@
 import { MediaGeneratorAdapter } from './base/BaseAdapter'
-import { PPIOAdapter } from './PPIOAdapter'
-import { FalAdapter } from './FalAdapter'
+import { PPIOAdapter } from './ppio/PPIOAdapter'
+import { FalAdapter } from './fal/FalAdapter'
 
 export type AdapterType = 'piaoyun' | 'fal' | 'openai' | 'stability' | 'midjourney'
 

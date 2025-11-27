@@ -8,13 +8,55 @@
 >
 > **文档可能有误！** 遇到 422/400 等参数错误时，以实际 API 行为为准，不要完全相信文档。
 
+## 📑 目录
+
+### 基础架构
+- [核心架构概述](#核心架构概述)
+- [接入流程](#接入流程)
+  - [添加新供应商](#1-添加新供应商-provider)
+  - [添加新模型](#2-添加新模型-model)
+
+### UI 与配置
+- [UI 组件与 Schema 规范](#ui-组件与-schema-规范)
+- [预设与重新编辑功能适配](#预设与重新编辑功能适配指南)
+
+### 增强功能
+- [价格配置指南](#价格配置指南)
+- [进度条配置指南](#进度条配置指南)
+- [本地保存机制](#本地保存机制)
+
+### 开发指南
+- [常见陷阱与注意事项](#常见陷阱与注意事项)
+- [适配检查清单](#适配检查清单)
+- [给 AI 编程助手的提示](#给-ai-编程助手的提示)
+- [最佳实践总结](#最佳实践总结)
+
+---
+
 ## 核心架构概述
 
 Henji AI 的模型适配分为前端和后端两个部分：
 
-1.  **前端 (Frontend)**:    *   **配置**: `src/config/providers.json` 定义供应商和模型列表。    *   **Schema**: `src/schemas/modelParams.ts` 定义模型的参数表单结构（Schema-Driven UI）。    *   **UI**: `MediaGenerator.tsx` 根据 Schema 渲染表单，收集用户输入。
+1.  **前端 (Frontend)**:
+    *   **配置**: `src/config/providers.json` 定义供应商和模型列表。
+    *   **Schema**: `src/models/` 目录下的各个模型参数文件（如 `kling-2.5-turbo.ts`）定义模型的参数表单结构（Schema-Driven UI）。
+    *   **UI**: `src/components/MediaGenerator/` 模块化组件根据 Schema 渲染表单，收集用户输入。
+      - `index.tsx` - 主组件协调逻辑
+      - `components/` - UI 子组件（模型选择、参数配置、输入区域）
+      - `hooks/` - 状态管理和业务逻辑 hooks
+      - `builders/` - 生成选项构建器
+      - `utils/` - 工具函数和常量
 
-2.  **后端/适配层 (Adapter Layer)**:    *   **抽象基类**: `src/adapters/base/BaseAdapter.ts` 定义 `MediaGeneratorAdapter` 接口并提供 `BaseAdapter` 抽象基类，包含通用方法实现。    *   **实现**: 具体适配器（如 `PPIOAdapter.ts`、`FalAdapter.ts`）继承 `BaseAdapter` 抽象基类，实现特定供应商的 API 调用逻辑。    *   **通用方法**: `BaseAdapter` 提供了 `saveMediaLocally`（本地保存）、`formatError`（错误处理）和 `log`（日志记录）等通用方法。    *   **工厂**: `src/adapters/index.ts` 负责实例化适配器。
+2.  **后端/适配层 (Adapter Layer)**:
+    *   **抽象基类**: `src/adapters/base/BaseAdapter.ts` 定义 `MediaGeneratorAdapter` 接口并提供 `BaseAdapter` 抽象基类，包含通用方法实现。
+    *   **模块化适配器**: 具体适配器采用模块化结构，按功能拆分：
+      - **配置**: `config.ts` - 基础配置常量
+      - **路由**: `models/` - 各模型的路由处理（如 `kling-2.5-turbo.ts`）
+      - **解析器**: `parsers/` - 响应解析器（图片、视频、音频）
+      - **状态处理**: `statusHandler.ts` - 异步任务状态轮询
+      - **主适配器**: `PPIOAdapter.ts` / `FalAdapter.ts` - 继承 `BaseAdapter`，协调各模块
+    *   **通用方法**: `BaseAdapter` 提供了 `saveMediaLocally`（本地保存）、`formatError`（错误处理）和 `log`（日志记录）等通用方法。
+    *   **工厂**: `src/adapters/index.ts` 负责实例化适配器。
 
 ---
 
@@ -24,11 +66,44 @@ Henji AI 的模型适配分为前端和后端两个部分：
 
 如果要接入一个新的 API 服务商
 
-1.  **定义适配器**:
-    *   在 `src/adapters/` 下创建新的适配器文件。
-    *   继承 `BaseAdapter` 抽象基类，实现特定供应商的 API 调用逻辑。
+1.  **定义适配器**（推荐模块化结构）:
+    *   在 `src/adapters/` 下创建新的供应商目录（如 `src/adapters/your-provider/`）
+    *   **模块化结构**（参考 PPIO 和 FAL 适配器）:
+      ```
+      src/adapters/your-provider/
+      ├── config.ts              # 基础配置（API URL、轮询间隔等）
+      ├── models/                # 模型路由处理
+      │   ├── model-a.ts        # 单个模型的请求构建逻辑
+      │   ├── model-b.ts
+      │   └── index.ts          # 导出所有模型路由
+      ├── parsers/              # 响应解析器
+      │   ├── imageParser.ts    # 图片响应解析
+      │   ├── videoParser.ts    # 视频响应解析
+      │   └── audioParser.ts    # 音频响应解析
+      ├── statusHandler.ts      # 异步任务状态轮询（如需要）
+      └── YourProviderAdapter.ts # 主适配器类
+      ```
+    *   **主适配器**: 继承 `BaseAdapter` 抽象基类，实现特定供应商的 API 调用逻辑。
+    *   **模型路由**: 每个模型文件导出一个路由对象，包含 `matches()` 和 `build*Request()` 方法。
     *   **⚠️ 注意**: 在适配器中做好**参数过滤**，API 文档中标注的某些值可能实际不被接受。
     *   **通用方法**: 利用 `BaseAdapter` 提供的 `saveMediaLocally`（本地保存）、`formatError`（错误处理）和 `log`（日志记录）等通用方法，减少重复代码。
+
+    **模型路由示例**:
+    ```typescript
+    // src/adapters/your-provider/models/model-a.ts
+    export const modelARoute = {
+      matches: (modelId: string) => modelId === 'model-a',
+      buildVideoRequest: (params: GenerateVideoParams) => {
+        const endpoint = '/v1/video/generate'
+        const requestData = {
+          prompt: params.prompt,
+          duration: params.duration || 5,
+          // ... 其他参数
+        }
+        return { endpoint, requestData }
+      }
+    }
+    ```
 
 2.  **注册适配器**:
     *   修改 `src/adapters/index.ts`，在 `AdapterType` 中添加新类型。
@@ -80,7 +155,7 @@ Henji AI 的模型适配分为前端和后端两个部分：
 }
 ```
 
-> **⚠️ 重要**: 功能标签会影响用户在模型选择面板中的筛选体验，请根据模型的实际能力准确配置。如果未来需要添加新的功能类型，需要同时更新 `MediaGenerator.tsx` 中的功能筛选器选项列表。
+> **⚠️ 重要**: 功能标签会影响用户在模型选择面板中的筛选体验，请根据模型的实际能力准确配置。如果未来需要添加新的功能类型，需要同时更新 `src/components/MediaGenerator/components/ModelSelectorPanel.tsx` 中的功能筛选器选项列表。
 
 #### 通用原则：功能合并与智能路由
 
@@ -100,7 +175,7 @@ Henji AI 的模型适配分为前端和后端两个部分：
 *   **适配重点**:
     *   **图生图**: 检查 `params.images`。注意 API 对图片格式的要求（URL vs Base64）。
     *   **参数映射**: 将前端通用参数映射为 API 特定参数。
-    *   **⚠️ 检查硬编码**: `MediaGenerator.tsx` 中有针对所有 `image` 类型的硬编码逻辑（如分辨率选择器），需要排除不适用的模型。
+    *   **⚠️ 检查硬编码**: `src/components/MediaGenerator/builders/optionsBuilder.ts` 中有针对所有 `image` 类型的硬编码逻辑（如分辨率选择器），需要排除不适用的模型。
 
 ##### 🎥 视频模型 (Video Models)
 
@@ -125,7 +200,41 @@ Henji AI 的模型适配分为前端和后端两个部分：
 
 ### 推荐：使用通用组件 (Schema-Driven)
 
-我们强烈建议使用 `src/schemas/modelParams.ts` 定义参数，由 `SchemaForm` 自动渲染 UI。
+我们强烈建议使用 `src/models/` 目录下的独立文件定义参数，由 `SchemaForm` 自动渲染 UI。
+
+**模块化 Schema 结构**:
+```
+src/models/
+├── kling-2.5-turbo.ts        # Kling 模型参数定义
+├── vidu-q1.ts                # Vidu 模型参数定义
+├── seedream-4.0.ts           # Seedream 模型参数定义
+└── index.ts                  # 统一导出所有参数
+```
+
+**参数定义示例**:
+```typescript
+// src/models/your-model.ts
+import { ParamDef } from '../types/schema'
+
+export const yourModelParams: ParamDef[] = [
+  {
+    id: 'duration',
+    type: 'dropdown',
+    label: '时长',
+    options: [
+      { value: 5, label: '5秒' },
+      { value: 10, label: '10秒' }
+    ]
+  },
+  // ... 其他参数
+]
+```
+
+**在 index.ts 中导出**:
+```typescript
+// src/models/index.ts
+export { yourModelParams } from './your-model'
+```
 
 ### 慎用：特殊面板 (Custom Panels)
 
@@ -164,16 +273,16 @@ Henji AI 的模型适配分为前端和后端两个部分：
     
     **配合 useEffect 切换默认值**:
     ```typescript
-    // 在 MediaGenerator.tsx 中
+    // 在 MediaGenerator/index.tsx 中
     useEffect(() => {
-      if (selectedModel === 'your-model') {
-        if (uploadedImages.length > 0) {
-          setAspectRatio('auto')  // 图生图模式
-        } else if (aspectRatio === 'auto') {
-          setAspectRatio('1:1')   // 文生图模式
+      if (state.selectedModel === 'your-model') {
+        if (state.uploadedImages.length > 0) {
+          state.setAspectRatio('auto')  // 图生图模式
+        } else if (state.aspectRatio === 'auto') {
+          state.setAspectRatio('1:1')   // 文生图模式
         }
       }
-    }, [uploadedImages.length, selectedModel])
+    }, [state.uploadedImages.length, state.selectedModel])
     ```
 
 3.  **值转换 (`toValue` / `fromValue`)**:
@@ -313,35 +422,35 @@ interface PricingConfig {
 
 ### 参数传递
 
-**关键**: `calculator` 函数接收的 `params` 来自 `MediaGenerator.tsx` 中传递给 `PriceEstimate` 组件的参数对象。
+**关键**: `calculator` 函数接收的 `params` 来自 `MediaGenerator/index.tsx` 中传递给 `PriceEstimate` 组件的参数对象。
 
 #### 需要确保传递的参数
 
-在 `MediaGenerator.tsx` 的 `PriceEstimate` 组件中，确保传递计算所需的所有参数：
+在 `MediaGenerator/index.tsx` 的 `PriceEstimate` 组件中，确保传递计算所需的所有参数：
 
 ```typescript
 <PriceEstimate
-  providerId={selectedProvider}
-  modelId={selectedModel}
+  providerId={state.selectedProvider}
+  modelId={state.selectedModel}
   params={{
     // 图片参数
-    num_images: numImages,
-    uploadedImages,
-    
+    num_images: state.numImages,
+    uploadedImages: state.uploadedImages,
+
     // 视频参数
-    videoDuration,
-    videoResolution,
-    viduMode,
-    hailuoFastMode,
-    pixFastMode,
-    seedanceVariant,
-    seedanceResolution,
-    seedanceAspectRatio,  // 如需按宽高比计费
-    wanResolution,
-    
+    videoDuration: state.videoDuration,
+    videoResolution: state.videoResolution,
+    viduMode: state.viduMode,
+    hailuoFastMode: state.hailuoFastMode,
+    pixFastMode: state.pixFastMode,
+    seedanceVariant: state.seedanceVariant,
+    seedanceResolution: state.seedanceResolution,
+    seedanceAspectRatio: state.seedanceAspectRatio,
+    wanResolution: state.wanResolution,
+
     // 音频参数
-    input,  // 文本内容
-    audioSpec
+    input: state.input,  // 文本内容
+    audioSpec: state.audioSpec
   }}
 />
 ```
@@ -436,7 +545,7 @@ calculator: (params) => {
 
 如果价格显示不正确，检查：
 1. `providerId` 和 `modelId` 是否与 `providers.json` 中的一致
-2. `calculator` 函数中的参数名是否与 `MediaGenerator.tsx` 传递的一致
+2. `calculator` 函数中的参数名是否与 `MediaGenerator/index.tsx` 传递的一致
 3. 在 `calculator` 中添加 `console.log(params)` 查看实际传入的参数
 4. 检查是否有类型转换问题（如字符串 vs 数字）
 
@@ -813,23 +922,28 @@ expectedPolls ≈ 平均完成时间(秒) / 轮询间隔(秒) × 80%
 
 ### 1. UI 硬编码逻辑冲突
 
-**问题**: `MediaGenerator.tsx` 中存在针对 `image`/`video`/`audio` **类型**的硬编码逻辑，新模型可能被错误应用。
+**问题**: `MediaGenerator` 模块中存在针对 `image`/`video`/`audio` **类型**的硬编码逻辑，新模型可能被错误应用。
 
-**关键位置**（行号仅供参考，请搜索关键字）:
-- 分辨率选择器: 搜索 `{/* 分辨率设置按钮`
-- 智能分辨率计算: 搜索 `if (currentModel?.type === 'image')`
-- Size 参数设置: 搜索 `options.size =`
+**关键位置**:
+- **选项构建器**: `src/components/MediaGenerator/builders/optionsBuilder.ts`
+  - 搜索 `if (currentModel?.type === 'image')`
+  - 搜索 `options.size =`
+- **参数面板**: `src/components/MediaGenerator/components/ParameterPanel.tsx`
+  - 检查是否需要为新模型添加参数渲染逻辑
+- **主组件**: `src/components/MediaGenerator/index.tsx`
+  - 搜索类型判断逻辑
 
-**解决方案**: 添加模型排除逻辑
+**解决方案**: 在 `optionsBuilder.ts` 中添加模型排除逻辑
 ```typescript
-// 不是所有图片模型都需要分辨率选择器
-{currentModel?.type === 'image' && selectedModel !== 'your-model' && (
-  <PanelTrigger label="分辨率" ... />
-)}
-
 // 不是所有图片模型都使用 size 参数
-if (currentModel?.type === 'image' && selectedModel !== 'your-model') {
+if (currentModel?.type === 'image' &&
+    selectedModel !== 'nano-banana' &&
+    selectedModel !== 'nano-banana-pro' &&
+    selectedModel !== 'your-model') {
   // 处理分辨率...
+  if (params.selectedResolution === 'smart') {
+    // ...
+  }
 }
 ```
 
@@ -837,16 +951,26 @@ if (currentModel?.type === 'image' && selectedModel !== 'your-model') {
 
 **问题**: 如果为某个模型单独实现参数处理逻辑，容易遗漏**图片上传**等基础功能。
 
-**解决方案**: 完整实现所有必要逻辑
+**解决方案**: 在 `optionsBuilder.ts` 中完整实现所有必要逻辑
 ```typescript
+// src/components/MediaGenerator/builders/optionsBuilder.ts
 else if (currentModel?.type === 'image' && selectedModel === 'your-model') {
   // 1. 模型专用参数
-  options.your_param = yourParam
-  
+  options.your_param = params.yourParam
+
   // 2. ⚠️ 不要忘记图片上传！
   if (uploadedImages.length > 0) {
     options.images = uploadedImages
-    // 保存文件路径的逻辑...
+    const paths: string[] = [...uploadedFilePaths]
+    for (let i = 0; i < uploadedImages.length; i++) {
+      if (!paths[i]) {
+        const blob = await dataUrlToBlob(uploadedImages[i])
+        const saved = await saveUploadImage(blob)
+        paths[i] = saved.fullPath
+      }
+    }
+    setUploadedFilePaths(paths)
+    options.uploadedFilePaths = paths
   }
 }
 ```
@@ -886,57 +1010,66 @@ if (params.aspect_ratio !== undefined && params.aspect_ratio !== 'auto') {
 - 切换到 Seedance V1 模型
 - **问题**: Seedance 显示 6 秒，但 Schema 第一项是 5 秒
 
-**根本原因**: 
-1. 所有视频模型共享 `videoDuration` state（L56: `useState(5)`）
-2. Hailuo 有专门的 useEffect 强制设置为 6 秒（L287-305）
-3. 其他模型没有对应的重置逻辑，会继承 Hailuo 的值
+**根本原因**:
+1. 所有视频模型共享 `videoDuration` state（在 `useMediaGeneratorState` hook 中定义）
+2. 某些模型有专门的 useEffect 强制设置特定默认值
+3. 其他模型没有对应的重置逻辑，会继承之前的值
 
-**解决方案**: 为需要特定默认值的模型添加 useEffect
+**解决方案**: 在 `MediaGenerator/index.tsx` 中为需要特定默认值的模型添加 useEffect
 
 ```typescript
+// src/components/MediaGenerator/index.tsx
 // 示例：为 Seedance 添加时长默认值重置
 useEffect(() => {
-    if (isRestoringRef.current) return  // ⚠️ 重要：避免恢复历史时触发
-    if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
-        if (videoDuration !== 5 && videoDuration !== 10) {
-            setVideoDuration(5)  // Seedance 默认 5 秒
-        }
+  if (currentModel?.type === 'video' &&
+      (state.selectedModel === 'seedance-v1' ||
+       state.selectedModel === 'seedance-v1-lite' ||
+       state.selectedModel === 'seedance-v1-pro')) {
+    if (state.videoDuration !== 5 && state.videoDuration !== 10) {
+      state.setVideoDuration(5)  // Seedance 默认 5 秒
     }
-}, [selectedModel, videoDuration])
+  }
+}, [state.selectedModel, state.videoDuration])
 ```
 
 **关键点**:
-1. **isRestoringRef 检查**: 必须检查，否则会破坏历史任务恢复功能
+1. **位置**: 在 `MediaGenerator/index.tsx` 主组件中添加
 2. **仅在无效值时重置**: 使用 `!== 5 && !== 10` 而不是直接 `setVideoDuration(5)`，避免覆盖用户手动选择的值
-3. **插入位置**: 紧接在现有的相关 useEffect 之后（如 Hailuo useEffect 后）
-4. **依赖项**: 仅依赖 `[selectedModel, videoDuration]`，避免不必要的触发
+3. **依赖项**: 仅依赖 `[state.selectedModel, state.videoDuration]`，避免不必要的触发
+4. **状态访问**: 通过 `state` 对象访问状态和 setter
 
-**适用范围**: 
+**适用范围**:
 - `videoDuration` (Hailuo 6秒 vs 其他 5秒)
 - `videoResolution` (不同模型的默认分辨率)
 - 其他共享的视频/音频参数
 
 **检查清单**:
 - [ ] 确认新模型的默认值与现有模型不同
-- [ ] 添加对应的 useEffect 重置逻辑
-- [ ] 包含 `isRestoringRef.current` 检查
+- [ ] 在 `MediaGenerator/index.tsx` 中添加对应的 useEffect 重置逻辑
 - [ ] 使用条件判断避免覆盖用户选择
 - [ ] 测试模型切换场景
 
 ---
 
-## 🎯 预设功能适配指南
+## 🎯 预设与重新编辑功能适配指南
 
-新增模型参数后,需要在预设系统中注册才能支持保存和恢复。预设系统采用**集中式状态映射**架构,所有参数的 setter 映射关系集中在 `src/config/presetStateMapping.ts` 管理。
+新增模型参数后,需要在预设系统中注册才能支持**保存预设**、**加载预设**和**重新编辑历史记录**功能。系统采用**集中式状态映射**架构,所有参数的 setter 映射关系集中在 `src/config/presetStateMapping.ts` 管理。
+
+### 核心优势
+
+- **一次配置，多处使用**: 同一个映射表同时支持预设功能和重新编辑功能
+- **自动化映射**: 通过循环自动匹配参数和 setter，无需手动编写大量 if 语句
+- **零维护成本**: 新增参数时只需在一个地方添加映射关系
 
 ### 适配步骤
 
 #### 1. 在 `PresetSetters` 接口中添加 setter 类型定义
 
 ```typescript
+// src/config/presetStateMapping.ts
 export interface PresetSetters {
     // ... 现有参数 ...
-    
+
     // 你的新参数 (按类型分类: 基础/图片/视频/音频/特定模型)
     setYourNewParam: (v: string) => void
 }
@@ -945,6 +1078,7 @@ export interface PresetSetters {
 #### 2. 在 `createPresetSetterMap` 返回对象中添加映射
 
 ```typescript
+// src/config/presetStateMapping.ts
 export function createPresetSetterMap(setters: PresetSetters) {
     return {
         // ... 现有映射 ...
@@ -953,23 +1087,51 @@ export function createPresetSetterMap(setters: PresetSetters) {
 }
 ```
 
-#### 3. 在 `MediaGenerator.tsx` 中传入 setter
+#### 3. 在 `MediaGenerator/index.tsx` 中传入 setter
 
 ```typescript
-const presetSetterMap = createPresetSetterMap({
-    setInput,
-    setSelectedModel,
+// src/components/MediaGenerator/index.tsx
+const setterMap = useMemo(() => createPresetSetterMap({
+    setInput: state.setInput,
+    setSelectedModel: state.setSelectedModel,
     // ... 其他 setter ...
-    setYourNewParam,  // ⚠️ 别忘了添加
-})
+    setYourNewParam: state.setYourNewParam,  // ⚠️ 别忘了添加
+}), [])
+```
+
+**注意**: 由于状态管理已模块化到 `useMediaGeneratorState` hook，所有 setter 都通过 `state` 对象访问。
+
+### 自动化恢复机制
+
+系统使用统一的自动化恢复逻辑，无需为每个参数编写恢复代码：
+
+```typescript
+// 预设加载 (PresetPanel.tsx)
+for (const [key, value] of Object.entries(params)) {
+  const setter = setterMap[key]
+  if (setter && value !== undefined && value !== null) {
+    setter(value)
+  }
+}
+
+// 重新编辑 (MediaGenerator/index.tsx)
+if (options) {
+  for (const [key, value] of Object.entries(options)) {
+    const setter = setterMap[key]
+    if (setter && value !== undefined && value !== null) {
+      setter(value)
+    }
+  }
+}
 ```
 
 ### 注意事项
 
 - **参数命名**: 使用驼峰命名,与 state 变量名保持一致
-- **键名一致**: 映射表的键名必须与预设保存时使用的参数名完全一致
+- **键名一致**: 映射表的键名必须与保存时使用的参数名完全一致
 - **类型安全**: 在 `PresetSetters` 中明确定义类型,避免使用 `any`
 - **向后兼容**: setter 应能处理 `undefined`,旧预设可能不包含新参数
+- **自动生效**: 添加映射后，预设和重新编辑功能会自动支持新参数
 
 ---
 
@@ -994,6 +1156,88 @@ Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地�
 4. **返回结果**: 保存成功后，返回本地文件 URL 和文件路径；保存失败时，返回原始 URL。
 5. **更新 UI**: 使用本地文件 URL 更新 UI，用户可以直接查看和使用保存的媒体。
 
+### 解析器实现要点
+
+在实现响应解析器时，需要注意以下几点：
+
+#### 1. 支持多种响应格式
+
+不同模型的 API 可能返回不同的数据结构，解析器应该灵活处理：
+
+```typescript
+// 示例：音频解析器支持多种格式
+export const parseAudioResponse = async (responseData: any): Promise<AudioResult> => {
+  // MiniMax Speech 2.6 格式: { audio: "url", extra_info: {...} }
+  if (responseData.audio) {
+    return { url: responseData.audio }
+  }
+
+  // 其他音频模型格式: { audios: [{audio_url: "url"}] }
+  if (responseData.audios && responseData.audios.length > 0) {
+    return { url: responseData.audios[0].audio_url }
+  }
+
+  throw new Error('No audio returned from API')
+}
+```
+
+#### 2. 正确设置 filePath 字段
+
+解析器在保存媒体后，必须同时设置 `url` 和 `filePath` 字段：
+
+```typescript
+// 视频解析器示例
+export const parseVideoResponse = async (
+  responseData: any,
+  adapter: BaseAdapter
+): Promise<VideoResult> => {
+  if (responseData.videos && responseData.videos.length > 0) {
+    const videoUrl = responseData.videos[0].video_url
+
+    try {
+      const savedResult = await adapter['saveMediaLocally'](videoUrl, 'video')
+      return {
+        url: savedResult.url,
+        filePath: savedResult.filePath,  // ⚠️ 必须设置 filePath
+        status: 'TASK_STATUS_SUCCEEDED'
+      }
+    } catch (e) {
+      adapter['log']('视频本地保存失败，回退为远程URL', e)
+      return {
+        url: videoUrl,
+        status: 'TASK_STATUS_SUCCEEDED'
+      }
+    }
+  }
+
+  throw new Error('No video returned from API')
+}
+```
+
+#### 3. 音频生成方法也需要保存
+
+不仅视频需要本地保存，音频也需要：
+
+```typescript
+// 在 Adapter 的 generateAudio 方法中
+async generateAudio(params: GenerateAudioParams): Promise<AudioResult> {
+  // ... 发送请求 ...
+  const audioResult = await parseAudioResponse(response.data)
+
+  // ⚠️ 保存到本地
+  try {
+    const savedResult = await this.saveMediaLocally(audioResult.url, 'audio')
+    return {
+      url: savedResult.url,
+      filePath: savedResult.filePath
+    }
+  } catch (e) {
+    this.log('音频本地保存失败，回退为远程URL', e)
+    return audioResult
+  }
+}
+```
+
 ### 保存位置
 
 媒体文件默认保存在应用的本地数据目录中，具体位置由 Tauri 框架管理。
@@ -1004,10 +1248,12 @@ Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地�
 
 ### 检查清单
 
-- [ ] 在 `PresetSetters` 接口中添加 setter 类型定义
-- [ ] 在 `createPresetSetterMap` 中添加映射关系
-- [ ] 在 `MediaGenerator.tsx` 调用时传入 setter
-- [ ] 测试预设保存和恢复功能
+- [ ] 解析器支持 API 的所有可能响应格式
+- [ ] 视频解析器正确设置 `filePath` 字段
+- [ ] 音频解析器正确设置 `filePath` 字段
+- [ ] `generateAudio` 方法调用 `saveMediaLocally` 保存音频
+- [ ] `generateVideo` 方法调用 `saveMediaLocally` 保存视频（如果是同步返回）
+- [ ] 所有保存操作都有完整的错误处理
 
 ---
 
@@ -1022,15 +1268,26 @@ Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地�
 - [ ] 完整的错误处理
 
 **配置层**:
-- [ ] `providers.json` 添加供应商和模型
+- [ ] `src/config/providers.json` 添加供应商和模型
 - [ ] **重要**: 为模型配置正确的 `type` (image/video/audio) 和 `functions` 数组
-- [ ] `modelParams.ts` 定义参数 Schema（注意动态选项）
-- [ ] `SettingsModal.tsx` 添加 API Key 输入
+- [ ] `src/components/SettingsModal.tsx` 添加 API Key 输入
+
+**Schema 定义**:
+- [ ] 在 `src/models/your-model.ts` 中定义参数 Schema（注意动态选项）
+- [ ] 在 `src/models/index.ts` 中导出参数
+
+**状态管理**:
+- [ ] 在 `src/components/MediaGenerator/hooks/useMediaGeneratorState.ts` 中添加 state 和 setter
 
 **UI 集成**:
-- [ ] `MediaGenerator.tsx` 导入 Schema、添加 state、实现 onChange
+- [ ] 在 `src/components/MediaGenerator/components/ParameterPanel.tsx` 中添加模型参数渲染逻辑
+- [ ] 在 `src/components/MediaGenerator/builders/optionsBuilder.ts` 中添加选项构建逻辑
 - [ ] **重要**: 添加图片上传处理（如果模型支持）
-- [ ] 渲染 `SchemaForm`
+
+**预设与重新编辑**:
+- [ ] 在 `src/config/presetStateMapping.ts` 的 `PresetSetters` 接口中添加 setter 类型定义
+- [ ] 在 `createPresetSetterMap` 函数中添加参数映射关系
+- [ ] 在 `MediaGenerator/index.tsx` 的 `setterMap` 中传入 setter
 
 **排查硬编码**:
 - [ ] 搜索 `currentModel?.type === 'image'` 等判断
@@ -1043,7 +1300,7 @@ Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地�
 - [ ] 选择价格类型（固定 `fixed` 或动态计算 `calculated`）
 - [ ] 设置货币符号和单位
 - [ ] 如果是动态计费，实现 `calculator` 函数
-- [ ] 确保 `MediaGenerator.tsx` 传递所有计算所需的参数
+- [ ] 确保 `MediaGenerator/index.tsx` 传递所有计算所需的参数
 
 **进度条配置** 📊:
 - [ ] 在 `providers.json` 中添加 `progressConfig`
@@ -1080,18 +1337,46 @@ Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地�
 2.  **信息补全**: 如果发现缺少必要的 API 参数说明或 Endpoint 信息，**请明确告知用户需要补充哪些信息**，而不是猜测或使用占位符。
 3.  **代码风格**: 保持与现有代码一致的风格（TypeScript, Tailwind CSS, Schema 定义方式）。
 4.  **参数校验**: 在 Adapter 中尽量做好参数的预处理和校验，避免将无效参数发送给 API。
-5.  **全面检查**: 适配新模型时，**必须检查 `MediaGenerator.tsx` 中的硬编码逻辑**，确认是否需要排除。
+5.  **全面检查**: 适配新模型时，**必须检查 `MediaGenerator` 模块中的硬编码逻辑**（特别是 `optionsBuilder.ts` 和 `ParameterPanel.tsx`），确认是否需要排除新模型或添加特殊处理。
 6.  **防御性编程**: 对历史数据、API 响应进行空值检查。
 
 ---
 
 ## 最佳实践总结
 
-1.  **以实际测试为准**: API 文档可能过时或有误，遇到参数错误时以实际 API 行为为准。
-2.  **单一模型入口**: 智能路由文生/图生接口，不拆分模型选项。
-3.  **优先 Schema**: 能用 Schema 解决的 UI 就不要写硬编码组件。
-4.  **灵活适配**: 根据 API 特性（同步/异步/流式）灵活选择适配策略，不拘泥于固定模式。
-5.  **防御性编程**: 对历史数据、API 响应、用户输入做好空值和错误处理。
-6.  **全面检查硬编码**: 新模型适配时必须排查现有的类型判断逻辑。
-7.  **完整性**: 单独实现模型逻辑时，不要遗漏图片上传等基础功能。
-8.  **共享状态管理**: 如果新模型的默认值与其他模型不同，添加 useEffect 重置逻辑，避免状态污染。
+### 架构设计原则
+
+1.  **模块化优先**: 遵循单一职责原则，将功能拆分到独立的模块中（如 hooks、builders、parsers）。
+2.  **集中式配置**: 使用配置文件（`providers.json`、`presetStateMapping.ts`）而非硬编码，便于维护和扩展。
+3.  **自动化映射**: 通过循环和映射表自动处理参数，避免为每个参数编写重复的 if 语句。
+4.  **一次配置，多处使用**: 同一个映射表同时支持预设功能和重新编辑功能，减少维护成本。
+
+### API 适配原则
+
+5.  **以实际测试为准**: API 文档可能过时或有误，遇到参数错误时以实际 API 行为为准。
+6.  **单一模型入口**: 智能路由文生/图生接口，不拆分模型选项。
+7.  **灵活适配**: 根据 API 特性（同步/异步/流式）灵活选择适配策略，不拘泥于固定模式。
+8.  **参数过滤**: 在适配器中过滤掉 API 文档中提到但实际不支持的参数值。
+
+### UI 开发原则
+
+9.  **优先 Schema**: 能用 Schema 解决的 UI 就不要写硬编码组件。
+10. **全面检查硬编码**: 新模型适配时必须排查现有的类型判断逻辑（特别是 `optionsBuilder.ts`）。
+11. **完整性**: 单独实现模型逻辑时，不要遗漏图片上传等基础功能。
+
+### 状态管理原则
+
+12. **共享状态管理**: 如果新模型的默认值与其他模型不同，添加 useEffect 重置逻辑，避免状态污染。
+13. **统一状态访问**: 通过 `state` 对象访问所有状态和 setter，保持代码一致性。
+
+### 数据处理原则
+
+14. **防御性编程**: 对历史数据、API 响应、用户输入做好空值和错误处理。
+15. **本地保存**: 所有媒体（图片、视频、音频）都应保存到本地，并正确设置 `filePath` 字段。
+16. **多格式支持**: 解析器应支持 API 的所有可能响应格式，提高兼容性。
+
+### 开发流程原则
+
+17. **先配置后实现**: 先在 `presetStateMapping.ts` 中添加映射，再实现具体功能，确保预设和重新编辑自动生效。
+18. **渐进式开发**: 先实现基础功能，再添加进度条、价格估算等增强功能。
+19. **充分测试**: 测试文生/图生/多图、参数变更、错误处理、预设保存/加载、重新编辑等所有场景。

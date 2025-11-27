@@ -4,6 +4,11 @@ export interface BaseParam {
     id: string
     label?: string
     type: ParamType
+    defaultValue?: any  // 参数的默认值（当切换到该模型时自动设置）
+    autoSwitch?: {      // 自动切换规则（当条件满足时自动切换参数值）
+        condition: (values: any) => boolean  // 触发条件
+        value: any  // 切换到的值
+    }
     hidden?: (values: any) => boolean
     disabled?: (values: any) => boolean
     className?: string
