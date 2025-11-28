@@ -22,6 +22,7 @@ export { falAiNanoBananaParams } from './fal-ai-nano-banana'
 export { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 export { falAiVeo31Params } from './fal-ai-veo-3.1'
 export { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
+export { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -50,6 +51,7 @@ import { falAiNanoBananaParams } from './fal-ai-nano-banana'
 import { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Params } from './fal-ai-veo-3.1'
 import { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
+import { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 
 /**
  * 模型 ID 到 Schema 的映射表
@@ -69,7 +71,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'nano-banana': falAiNanoBananaParams,
   'nano-banana-pro': falAiNanoBananaProParams,
   'veo3.1': falAiVeo31Params,
-  'bytedance-seedream-v4': bytedanceSeedreamV4Params
+  'bytedance-seedream-v4': bytedanceSeedreamV4Params,
+  'fal-ai-z-image-turbo': falAiZImageTurboParams
 }
 
 /**

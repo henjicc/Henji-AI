@@ -76,7 +76,12 @@ export const useMediaGeneratorState = () => {
   const [numImages, setNumImages] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('1:1')
   const [resolution, setResolution] = useState('2K')  // Nano Banana Pro 默认 2K
-  const [imageSize, setImageSize] = useState('2048*2048')  // 即梦图片生成4.0 默认分辨率
+  const [imageSize, setImageSize] = useState('1:1')  // Z-Image-Turbo 默认 1:1
+
+  // Z-Image-Turbo 参数
+  const [numInferenceSteps, setNumInferenceSteps] = useState(8)
+  const [enablePromptExpansion, setEnablePromptExpansion] = useState(false)
+  const [acceleration, setAcceleration] = useState('none')
 
   // 音频参数
   const [audioSpeed, setAudioSpeed] = useState<number>(1.0)
@@ -170,6 +175,11 @@ export const useMediaGeneratorState = () => {
     aspectRatio, setAspectRatio,
     resolution, setResolution,
     imageSize, setImageSize,
+
+    // Z-Image-Turbo
+    numInferenceSteps, setNumInferenceSteps,
+    enablePromptExpansion, setEnablePromptExpansion,
+    acceleration, setAcceleration,
 
     // 音频
     audioSpeed, setAudioSpeed,

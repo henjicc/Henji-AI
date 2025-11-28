@@ -184,6 +184,41 @@ export const pricingConfigs: PricingConfig[] = [
             return 0.2 * numImages
         }
     },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-z-image-turbo',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const numImages = params.numImages || 1
+            
+            // 映射预设分辨率到像素数量（宽x高）
+            const resolutionToPixels: Record<string, number> = {
+                'portrait_4_3': 768 * 1024,  // 竖版 4:3
+                'portrait_16_9': 1080 * 1920, // 竖版 16:9
+                'square': 1024 * 1024,        // 正方形
+                'landscape_4_3': 1024 * 768,  // 横版 4:3
+                'landscape_16_9': 1920 * 1080 // 横版 16:9
+            }
+            
+            let totalPixels = resolutionToPixels[params.imageSize] || 1024 * 768
+            
+            // 处理自定义分辨率
+            if (params.imageSize && params.imageSize.includes('*')) {
+                const [width, height] = params.imageSize.split('*').map(Number)
+                totalPixels = width * height
+            }
+            
+            // 计算百万像素数
+            const millionPixels = totalPixels / 1000000
+            
+            // 计算价格：0.0354元每百万像素，四舍五入
+            const pricePerImage = Math.round(millionPixels * 0.0354 * 100) / 100
+            
+            // 总价格
+            return pricePerImage * numImages
+        }
+    },
 
     // ===== 音频模型 =====
     {

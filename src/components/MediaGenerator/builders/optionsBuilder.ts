@@ -84,6 +84,12 @@ interface BuildOptionsParams {
   textNormalization: boolean
   languageBoost: string
 
+  // Z-Image-Turbo
+  imageSize: string
+  numInferenceSteps: number
+  enablePromptExpansion: boolean
+  acceleration: string
+
   // 工具函数
   calculateSmartResolution: (imageDataUrl: string) => Promise<string>
   calculateSeedreamSmartResolution: (imageDataUrl: string) => Promise<string>
@@ -100,8 +106,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     setUploadedFilePaths
   } = params
 
-  // 图片模型处理（排除 nano-banana 系列和 bytedance-seedream-v4）
-  if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro' && selectedModel !== 'bytedance-seedream-v4') {
+  // 图片模型处理（排除 nano-banana 系列、bytedance-seedream-v4 和 fal-ai-z-image-turbo）
+  if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro' && selectedModel !== 'bytedance-seedream-v4' && selectedModel !== 'fal-ai-z-image-turbo') {
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
@@ -521,6 +527,69 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     options.imageSize = `${width}*${height}`
 
     // 处理上传的图片 - 使用 uploadedImages 参数名以匹配适配器
+    if (uploadedImages.length > 0) {
+      options.uploadedImages = uploadedImages
+      options.images = uploadedImages  // 同时设置 images 以便历史记录显示
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+  }
+
+  // Z-Image-Turbo
+  else if (currentModel?.type === 'image' && selectedModel === 'fal-ai-z-image-turbo') {
+    // 处理 imageSize：根据 customWidth 和 customHeight 生成最终的尺寸字符串
+    let finalImageSize: string
+
+    // 优先使用 customWidth 和 customHeight（无论 imageSize 是什么）
+    if (params.customWidth && params.customHeight) {
+      const width = parseInt(params.customWidth)
+      const height = parseInt(params.customHeight)
+      if (!isNaN(width) && !isNaN(height)) {
+        finalImageSize = `${width}*${height}`
+      } else {
+        // 如果解析失败，使用默认值 1:1 = 1440*1440
+        finalImageSize = '1440*1440'
+      }
+    }
+    // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用预设尺寸
+    else if (params.imageSize && params.imageSize.includes(':')) {
+      const { presetSizes } = await import('@/models/fal-ai-z-image-turbo')
+      const size = presetSizes[params.imageSize]
+
+      if (size) {
+        finalImageSize = `${size.width}*${size.height}`
+      } else {
+        // 如果找不到预设，使用默认值
+        finalImageSize = '1440*1440'
+      }
+    }
+    // 默认值
+    else {
+      finalImageSize = '1440*1440'
+    }
+
+    options.imageSize = finalImageSize
+    options.numInferenceSteps = params.numInferenceSteps
+    options.numImages = params.numImages
+    options.enablePromptExpansion = params.enablePromptExpansion
+    options.acceleration = params.acceleration
+
+    console.log('[optionsBuilder] Z-Image-Turbo 分辨率:', {
+      原始imageSize: params.imageSize,
+      customWidth: params.customWidth,
+      customHeight: params.customHeight,
+      最终imageSize: finalImageSize
+    })
+
+    // 处理上传的图片
     if (uploadedImages.length > 0) {
       options.uploadedImages = uploadedImages
       options.images = uploadedImages  // 同时设置 images 以便历史记录显示

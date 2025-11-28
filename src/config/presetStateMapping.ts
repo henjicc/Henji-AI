@@ -22,6 +22,11 @@ export interface PresetSetters {
     setResolution: (v: string) => void
     setImageSize: (v: string) => void
 
+    // Z-Image-Turbo
+    setNumInferenceSteps: (v: number) => void
+    setEnablePromptExpansion: (v: boolean) => void
+    setAcceleration: (v: string) => void
+
     // 视频参数
     setVideoDuration: (v: number) => void
     setVideoResolution: (v: string) => void
@@ -109,6 +114,11 @@ export function createPresetSetterMap(
         aspectRatio: setters.setAspectRatio,
         resolution: setters.setResolution,
         imageSize: setters.setImageSize,
+
+        // Z-Image-Turbo
+        numInferenceSteps: setters.setNumInferenceSteps,
+        enablePromptExpansion: setters.setEnablePromptExpansion,
+        acceleration: setters.setAcceleration,
 
         // 视频参数
         videoDuration: setters.setVideoDuration,

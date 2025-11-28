@@ -17,7 +17,8 @@ import {
   nanoBananaProParams,
   bytedanceSeedreamV4Params,
   minimaxSpeechBasicParams,
-  minimaxSpeechAdvancedParams
+  minimaxSpeechAdvancedParams,
+  falAiZImageTurboParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -280,6 +281,26 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           resolutionQuality: values.resolutionQuality,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // Z-Image-Turbo 参数
+  if (selectedModel === 'fal-ai-z-image-turbo') {
+    return (
+      <SchemaForm
+        schema={falAiZImageTurboParams}
+        values={{
+          imageSize: values.imageSize,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
+          numInferenceSteps: values.numInferenceSteps,
+          numImages: values.numImages,
+          enablePromptExpansion: values.enablePromptExpansion,
+          acceleration: values.acceleration,
           uploadedImages
         }}
         onChange={onChange}

@@ -71,7 +71,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 图片上传和预览区域 */}
-      {currentModel?.type !== 'audio' && (
+      {currentModel?.type !== 'audio' && selectedModel !== 'fal-ai-z-image-turbo' && (
         <div className="mb-3">
           <FileUploader
             files={uploadedImages}
@@ -119,7 +119,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
           }}
           placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的内容'}
-          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' ? 'min-h-[140px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
+          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' ? 'min-h-[176px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
           disabled={isLoading}
         />
 

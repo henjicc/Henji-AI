@@ -16,6 +16,7 @@ import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
+import { presetSizes } from '@/models/fal-ai-z-image-turbo'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -112,7 +113,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setAudioFormat: state.setAudioFormat,
     setAudioChannel: state.setAudioChannel,
     setLatexRead: state.setLatexRead,
-    setTextNormalization: state.setTextNormalization
+    setTextNormalization: state.setTextNormalization,
+    setNumInferenceSteps: state.setNumInferenceSteps,
+    setEnablePromptExpansion: state.setEnablePromptExpansion,
+    setAcceleration: state.setAcceleration
   }), [])
 
   // 收藏模型管理
@@ -167,7 +171,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     window.dispatchEvent(event)
   }, [state.selectedModel, state.input, currentModel])
 
-  // 监听分辨率选项变化
+  // 监听分辨率选项变化（即梦 4.0 和 ByteDance Seedream v4）
   useEffect(() => {
     if (state.selectedResolution === 'smart' || state.isManualInput) return
     const resolution = getActualResolution(state.selectedResolution, state.resolutionQuality)
@@ -177,6 +181,80 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       state.setCustomHeight(h)
     }
   }, [state.selectedResolution, state.resolutionQuality])
+
+  // 监听 Z-Image-Turbo 的 imageSize 变化，自动更新 customWidth 和 customHeight
+  useEffect(() => {
+    console.log('[Z-Image-Turbo] imageSize changed:', {
+      selectedModel: state.selectedModel,
+      imageSize: state.imageSize,
+      currentWidth: state.customWidth,
+      currentHeight: state.customHeight
+    })
+
+    if (state.selectedModel !== 'fal-ai-z-image-turbo') return
+    if (!state.imageSize) return
+
+    // 如果是 "自定义"，不做任何处理，保持当前的 customWidth 和 customHeight
+    if (state.imageSize === '自定义') {
+      console.log('[Z-Image-Turbo] imageSize is 自定义, skipping update')
+      return
+    }
+
+    // 如果是比例格式（如 "4:3"），使用预计算的最大尺寸
+    if (state.imageSize.includes(':')) {
+      const size = presetSizes[state.imageSize]
+      console.log('[Z-Image-Turbo] Found preset size:', { ratio: state.imageSize, size })
+
+      if (size) {
+        // 直接更新，不检查值是否相同（与即梦 4.0 保持一致）
+        console.log('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
+        state.setCustomWidth(String(size.width))
+        state.setCustomHeight(String(size.height))
+      } else {
+        console.log('[Z-Image-Turbo] No preset size found for ratio:', state.imageSize)
+      }
+    }
+  }, [state.imageSize, state.selectedModel])
+
+  // 监听 customWidth 和 customHeight 变化，反向匹配比例（Z-Image-Turbo）
+  // 只有用户手动修改时才触发
+  useEffect(() => {
+    console.log('[Z-Image-Turbo] customWidth/Height changed:', {
+      selectedModel: state.selectedModel,
+      customWidth: state.customWidth,
+      customHeight: state.customHeight,
+      currentImageSize: state.imageSize
+    })
+
+    if (state.selectedModel !== 'fal-ai-z-image-turbo') return
+    if (!state.customWidth || !state.customHeight) return
+
+    const width = parseInt(state.customWidth)
+    const height = parseInt(state.customHeight)
+    if (isNaN(width) || isNaN(height)) return
+
+    // 检查是否完全匹配某个预设尺寸
+    let matchedRatio: string | null = null
+    for (const [ratio, size] of Object.entries(presetSizes)) {
+      if (size.width === width && size.height === height) {
+        matchedRatio = ratio
+        break
+      }
+    }
+
+    console.log('[Z-Image-Turbo] Matched ratio:', matchedRatio)
+
+    // 如果找到匹配的比例，自动选中
+    if (matchedRatio && state.imageSize !== matchedRatio) {
+      console.log('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
+      state.setImageSize(matchedRatio)
+    }
+    // 如果没有匹配的比例，设置为 "自定义"
+    else if (!matchedRatio && state.imageSize !== '自定义') {
+      console.log('[Z-Image-Turbo] Setting imageSize to 自定义')
+      state.setImageSize('自定义')
+    }
+  }, [state.customWidth, state.customHeight, state.selectedModel])
 
   // 监听重新编辑事件
   const isRestoringRef = useRef(false)
@@ -333,6 +411,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       num_images: state.setNumImages, // Nano Banana 使用 num_images
       aspect_ratio: state.setAspectRatio,
       resolution: state.setResolution,
+      // Z-Image-Turbo
+      imageSize: state.setImageSize,
+      customWidth: state.setCustomWidth,
+      customHeight: state.setCustomHeight,
+      numInferenceSteps: state.setNumInferenceSteps,
+      enablePromptExpansion: state.setEnablePromptExpansion,
+      acceleration: state.setAcceleration,
       // 音频
       audioSpec: state.setAudioSpec,
       audioEmotion: state.setAudioEmotion,
@@ -416,6 +501,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         latexRead: state.latexRead,
         textNormalization: state.textNormalization,
         languageBoost: state.languageBoost,
+        imageSize: state.imageSize,
+        numInferenceSteps: state.numInferenceSteps,
+        enablePromptExpansion: state.enablePromptExpansion,
+        acceleration: state.acceleration,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)

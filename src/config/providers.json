@@ -186,6 +186,20 @@
             "type": "time",
             "expectedDuration": 20000
           }
+        },
+        {
+          "id": "fal-ai-z-image-turbo",
+          "name": "Z-Image-Turbo",
+          "type": "image",
+          "description": "超快速的6B参数文本到图像模型，支持多种分辨率和加速级别",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ],
+          "progressConfig": {
+            "type": "time",
+            "expectedDuration": 15000
+          }
         }
       ]
     }
