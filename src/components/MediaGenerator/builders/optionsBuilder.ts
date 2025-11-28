@@ -520,6 +520,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     // 处理上传的图片 - 使用 uploadedImages 参数名以匹配适配器
     if (uploadedImages.length > 0) {
       options.uploadedImages = uploadedImages
+      options.images = uploadedImages  // 同时设置 images 以便历史记录显示
       const paths: string[] = [...uploadedFilePaths]
       for (let i = 0; i < uploadedImages.length; i++) {
         if (!paths[i]) {
