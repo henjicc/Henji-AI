@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { apiService } from './services/api'
 import MediaGenerator from './components/MediaGenerator'
 import SettingsModal from './components/SettingsModal'
@@ -45,6 +45,8 @@ const App: React.FC = () => {
   const isDraggingRef = useRef(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [tasks, setTasks] = useState<GenerationTask[]>([])
+  // 独立的进度状态 - 不触发任务列表重新渲染
+  const [taskProgress, setTaskProgress] = useState<Record<string, number>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false) // 是否有任务正在生成
   const [error, setError] = useState<string | null>(null)
@@ -1037,6 +1039,32 @@ const App: React.FC = () => {
     })
   }
 
+  // 独立的进度更新函数 - 不触发任务列表重新渲染
+  const updateProgress = useCallback((taskId: string, progress: number) => {
+    setTaskProgress(prev => {
+      if (prev[taskId] === progress) return prev
+      return { ...prev, [taskId]: progress }
+    })
+  }, [])
+
+  // 优化的任务更新函数 - 只更新指定任务，避免整个数组重新渲染
+  const updateTask = useCallback((taskId: string, updates: Partial<GenerationTask>) => {
+    // 如果只是更新进度，使用独立的进度状态
+    if (Object.keys(updates).length === 1 && 'progress' in updates) {
+      updateProgress(taskId, updates.progress!)
+      return
+    }
+
+    setTasks(prev => {
+      const taskIndex = prev.findIndex(t => t.id === taskId)
+      if (taskIndex === -1) return prev
+
+      const newTasks = [...prev]
+      newTasks[taskIndex] = { ...newTasks[taskIndex], ...updates }
+      return newTasks
+    })
+  }, [updateProgress])
+
   // 执行单个任务
   const executeTask = async (taskId: string, task?: GenerationTask) => {
     setIsGenerating(true)
@@ -1098,62 +1126,70 @@ const App: React.FC = () => {
       }
 
       // 更新任务状态为生成中
-      setTasks(prev => prev.map(task =>
-        task.id === taskId ? { ...task, status: 'generating' } : task
-      ))
+      updateTask(taskId, { status: 'generating' })
 
       let result: any
       switch (type) {
         case 'image':
           // 为即梦4.0和bytedance-seedream-v4添加基于时间的进度跟踪
-          let progressTimer: ReturnType<typeof setInterval> | null = null
+          let progressTimer: number | null = null
+          let lastUpdateTime = 0
           if (model === 'seedream-4.0' || model === 'bytedance-seedream-v4') {
             const startTime = Date.now()
             const expectedDuration = 20000 // 20秒预期时间
 
-            progressTimer = setInterval(() => {
-              const elapsed = Date.now() - startTime
+            const updateProgressLoop = () => {
+              const now = Date.now()
+              const elapsed = now - startTime
               const progress = calculateProgress(elapsed, expectedDuration)
 
-              setTasks(prev => prev.map(t =>
-                t.id === taskId ? { ...t, progress } : t
-              ))
-            }, 100) // 每100ms更新一次
+              // 使用独立的进度状态，不触发任务列表重新渲染
+              updateProgress(taskId, progress)
+
+              lastUpdateTime = now
+              if (elapsed < expectedDuration) {
+                progressTimer = requestAnimationFrame(updateProgressLoop)
+              }
+            }
+
+            progressTimer = requestAnimationFrame(updateProgressLoop)
           }
 
           try {
             result = await apiService.generateImage(input, model, {
               ...options,
               onProgress: (status: any) => {
-                setTasks(prev => prev.map(t =>
-                  t.id === taskId ? {
-                    ...t,
-                    progress: status.progress || 0,
-                    message: status.message
-                  } : t
-                ))
+                const now = Date.now()
+                // 限流：至少间隔 300ms 才更新一次
+                if (now - lastUpdateTime < 300) return
+                lastUpdateTime = now
+
+                // 使用独立的进度状态
+                updateProgress(taskId, status.progress || 0)
+
+                // 只在有 message 时才更新任务状态
+                if (status.message) {
+                  updateTask(taskId, { message: status.message })
+                }
               }
             })
           } finally {
             // 清除定时器
             if (progressTimer) {
-              clearInterval(progressTimer)
+              cancelAnimationFrame(progressTimer)
             }
           }
 
           // 检查是否为 fal 队列超时状态
           if (result?.status === 'timeout') {
             console.log('[App] 检测到队列超时:', result)
-            setTasks(prev => prev.map(task =>
-              task.id === taskId ? {
-                ...task,
-                status: 'timeout',
-                provider: providerObj?.id,
-                requestId: result.requestId,
-                modelId: result.modelId,
-                message: result.message || '等待超时，任务依然在处理中'
-              } : task
-            ))
+            updateTask(taskId, {
+              status: 'timeout',
+              provider: providerObj?.id,
+              requestId: result.requestId,
+              modelId: result.modelId,
+              message: result.message || '等待超时，任务依然在处理中'
+            })
             return  // 提前返回，不继续处理
           }
 
@@ -1185,22 +1221,28 @@ const App: React.FC = () => {
           }
           break
         case 'video':
+          let videoLastUpdateTime = 0
           result = await apiService.generateVideo(input, model, {
             ...options,
             onProgress: (status: any) => {
-              setTasks(prev => prev.map(t =>
-                t.id === taskId ? {
-                  ...t,
-                  progress: status.progress || 0,
-                  message: status.message
-                } : t
-              ))
+              const now = Date.now()
+              // 限流：至少间隔 300ms 才更新一次
+              if (now - videoLastUpdateTime < 300) return
+              videoLastUpdateTime = now
+
+              // 使用独立的进度状态
+              updateProgress(taskId, status.progress || 0)
+
+              // 只在有 message 时才更新任务状态
+              if (status.message) {
+                updateTask(taskId, { message: status.message })
+              }
             }
           })
 
           // 如果返回了 taskId 而非最终结果，说明需要 App 层轮询（向后兼容）
           if (result.taskId) {
-            setTasks(prev => prev.map(t => t.id === taskId ? { ...t, serverTaskId: result.taskId } : t))
+            updateTask(taskId, { serverTaskId: result.taskId })
             result = await pollTaskStatus(result.taskId, taskId, model)
           }
           break
@@ -1225,32 +1267,26 @@ const App: React.FC = () => {
 
       // 更新任务状态为成功
       if (result && result.url) {
-        setTasks(prev => prev.map(task =>
-          task.id === taskId ? {
-            ...task,
-            status: 'success',
-            progress: 100,
-            result: {
-              id: taskId,
-              type,
-              url: result.url,
-              filePath: (result as any).filePath,
-              prompt: input,
-              createdAt: new Date()
-            }
-          } : task
-        ))
+        updateTask(taskId, {
+          status: 'success',
+          progress: 100,
+          result: {
+            id: taskId,
+            type,
+            url: result.url,
+            filePath: (result as any).filePath,
+            prompt: input,
+            createdAt: new Date()
+          }
+        })
       }
     } catch (err) {
       console.error('[App] 生成失败:', err)
       // 更新任务状态为错误
-      setTasks(prev => prev.map(task =>
-        task.id === taskId ? {
-          ...task,
-          status: 'error',
-          error: err instanceof Error ? err.message : '生成失败'
-        } : task
-      ))
+      updateTask(taskId, {
+        status: 'error',
+        error: err instanceof Error ? err.message : '生成失败'
+      })
     } finally {
       setIsGenerating(false)
       setIsGenerating(false)
@@ -1321,7 +1357,7 @@ const App: React.FC = () => {
           if ((status.status === 'TASK_STATUS_SUCCEEDED' || status.status === 'TASK_STATUS_SUCCEED') && status.result) {
             console.log('[App] 任务完成:', status.result)
             clearInterval(interval)
-            setTasks(prev => prev.map(t => t.id === uiTaskId ? { ...t, progress: 100, timedOut: false } : t))
+            updateTask(uiTaskId, { progress: 100, timedOut: false })
             resolve(status.result)
           } else if (status.status === 'TASK_STATUS_FAILED') {
             console.error('[App] 任务失败')
@@ -1331,7 +1367,7 @@ const App: React.FC = () => {
             if (status.status === 'TASK_STATUS_PROCESSING' || status.status === 'TASK_STATUS_QUEUED') {
               console.warn('[App] 轮询超时，仍在处理中，提供重试')
               clearInterval(interval)
-              setTasks(prev => prev.map(t => t.id === uiTaskId ? { ...t, timedOut: true } : t))
+              updateTask(uiTaskId, { timedOut: true })
               resolve(null)
             } else {
               console.error('[App] 轮询超时')
@@ -1343,25 +1379,15 @@ const App: React.FC = () => {
               status: status.status,
               progress: status.progress
             })
-            if (model === 'vidu-q1') {
-              const t = pollCount / maxPolls
-              const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
-              setTasks(prev => prev.map(t => {
-                if (t.id !== uiTaskId) return t
-                const inc = Math.max(1, stepProgress)
-                const next = Math.min(95, Math.max((t.progress ?? 0) + 1, inc))
-                return { ...t, progress: next }
-              }))
-            } else {
-              const t = pollCount / maxPolls
-              const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
-              setTasks(prev => prev.map(t => {
-                if (t.id !== uiTaskId) return t
-                const inc = Math.max(1, stepProgress)
-                const next = Math.min(95, Math.max((t.progress ?? 0) + 1, inc))
-                return { ...t, progress: next }
-              }))
-            }
+            // 计算进度（vidu-q1 和其他模型使用相同逻辑）
+            const t = pollCount / maxPolls
+            const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
+
+            // 使用独立的进度状态
+            const currentProgress = taskProgress[uiTaskId] ?? 0
+            const inc = Math.max(1, stepProgress)
+            const next = Math.min(95, Math.max(currentProgress + 1, inc))
+            updateProgress(uiTaskId, next)
           }
         } catch (err) {
           console.error('[App] 轮询错误:', err)
@@ -1377,12 +1403,11 @@ const App: React.FC = () => {
       console.error('[App] 无 serverTaskId，无法重试轮询')
       return
     }
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timedOut: false, status: 'generating' } : t))
+    updateTask(task.id, { timedOut: false, status: 'generating' })
     try {
       const result = await pollTaskStatus(task.serverTaskId, task.id, task.model)
       if (result && result.url) {
-        setTasks(prev => prev.map(t => t.id === task.id ? {
-          ...t,
+        updateTask(task.id, {
           status: 'success',
           progress: 100,
           result: {
@@ -1390,10 +1415,10 @@ const App: React.FC = () => {
             type: 'video',
             url: result.url,
             filePath: (result as any).filePath,
-            prompt: t.prompt,
+            prompt: task.prompt,
             createdAt: new Date()
           }
-        } : t))
+        })
       }
     } catch (e) {
       console.error('[App] 重试轮询失败', e)
@@ -2213,10 +2238,10 @@ const App: React.FC = () => {
                               {/* 进度条：视频任务、Fal图片任务、有进度的派欧云图片任务 */}
                               {(task.type === 'video' ||
                                 (task.type === 'image' && task.provider === 'fal') ||
-                                (task.type === 'image' && task.provider === 'piaoyun' && (task.model === 'seedream-4.0' || (task.progress || 0) > 0))
+                                (task.type === 'image' && task.provider === 'piaoyun' && (task.model === 'seedream-4.0' || (taskProgress[task.id] || 0) > 0))
                               ) && (
                                   <ProgressBar
-                                    progress={task.progress || 0}
+                                    progress={taskProgress[task.id] || task.progress || 0}
                                     className="mt-3"
                                   />
                                 )}
