@@ -420,12 +420,29 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
       })
 
+      // 保留原始 UI 参数值（用于重新编辑时恢复）
+      // 这些参数可能在 buildGenerateOptions 中被智能匹配转换，但我们需要保留原始值
+      const originalUIParams: Record<string, any> = {}
+
+      // Nano Banana 和 Nano Banana Pro 的 aspectRatio
+      if (state.selectedModel === 'nano-banana' || state.selectedModel === 'nano-banana-pro') {
+        originalUIParams.aspectRatio = state.aspectRatio
+      }
+
+      // ByteDance Seedream v4 的 selectedResolution
+      if (state.selectedModel === 'bytedance-seedream-v4') {
+        originalUIParams.selectedResolution = state.selectedResolution
+      }
+
+      // 将原始 UI 参数合并到 options 中
+      const finalOptions = { ...options, ...originalUIParams }
+
       let finalInput = state.input
       if (state.selectedModel === 'seedream-4.0' && state.maxImages > 1) {
         finalInput = `生成${state.maxImages}张图片。${state.input}`
       }
 
-      onGenerate(finalInput, state.selectedModel, currentModel?.type || 'image', options)
+      onGenerate(finalInput, state.selectedModel, currentModel?.type || 'image', finalOptions)
     } catch (error: any) {
       alert(error.message)
     }

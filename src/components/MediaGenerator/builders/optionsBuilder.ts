@@ -403,21 +403,24 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   else if (currentModel?.type === 'image' && selectedModel === 'nano-banana') {
     options.num_images = params.numImages
 
+    // 保存原始的 aspect_ratio 参数（用于历史记录恢复）
+    let finalAspectRatio = params.aspectRatio
+
     // 如果是 'smart'，执行智能匹配
     if (params.aspectRatio === 'smart' && uploadedImages.length > 0) {
       const { getSmartMatchValues } = await import('@/models')
       try {
         const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
-        options.aspect_ratio = matches.aspect_ratio || params.aspectRatio
-        console.log('[optionsBuilder] Smart matched aspect_ratio:', options.aspect_ratio)
+        finalAspectRatio = matches.aspect_ratio || params.aspectRatio
+        console.log('[optionsBuilder] Smart matched aspect_ratio:', finalAspectRatio)
       } catch (error) {
         console.error('[optionsBuilder] Smart match failed:', error)
-        options.aspect_ratio = params.aspectRatio
+        finalAspectRatio = params.aspectRatio
       }
-    } else {
-      options.aspect_ratio = params.aspectRatio
     }
 
+    // 传递给 API 的是最终的比例值
+    options.aspect_ratio = finalAspectRatio
     console.log('[optionsBuilder] Nano Banana - aspect_ratio:', options.aspect_ratio)
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
