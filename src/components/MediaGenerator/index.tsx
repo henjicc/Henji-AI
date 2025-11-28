@@ -22,6 +22,7 @@ interface MediaGeneratorProps {
   isLoading: boolean
   onOpenSettings: () => void
   onOpenClearHistory: () => void
+  onImageClick?: (imageUrl: string, imageList: string[]) => void
   isCollapsed?: boolean
   onToggleCollapse?: () => void
   isGenerating?: boolean
@@ -36,6 +37,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   isLoading,
   onOpenSettings,
   onOpenClearHistory,
+  onImageClick,
   isGenerating
 }) => {
   // 使用统一的状态管理 hook
@@ -493,6 +495,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageRemove={imageUpload.removeImage}
         onImageReplace={imageUpload.handleImageReplace}
         onImageReorder={imageUpload.handleImageReorder}
+        onImageClick={onImageClick}
         onPaste={(e) => {
           const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : state.selectedModel === 'veo3.1' ? state.veoMode : undefined)
           imageUpload.handlePaste(e, maxCount)

@@ -20,6 +20,7 @@ interface InputAreaProps {
   onImageRemove: (index: number) => void
   onImageReplace: (index: number, file: File) => void
   onImageReorder: (from: number, to: number) => void
+  onImageClick?: (imageUrl: string, imageList: string[]) => void
   onPaste: (e: React.ClipboardEvent) => void
   onImageDrop: (files: File[]) => void
   onDragStateChange: (isDragging: boolean) => void
@@ -46,6 +47,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onImageRemove,
   onImageReplace,
   onImageReorder,
+  onImageClick,
   onPaste,
   onImageDrop,
   onDragStateChange,
@@ -77,6 +79,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             onRemove={onImageRemove}
             onReplace={onImageReplace}
             onReorder={onImageReorder}
+            onImageClick={onImageClick}
             accept="image/*"
             multiple={isMultiple}
             maxCount={maxImageCount}

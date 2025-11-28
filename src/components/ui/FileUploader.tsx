@@ -12,6 +12,7 @@ export interface FileUploaderProps {
     onReplace?: (index: number, newFile: File) => Promise<void> | void
     onReorder?: (from: number, to: number) => void
     onDragStateChange?: (isDragging: boolean) => void
+    onImageClick?: (imageUrl: string, imageList: string[]) => void
     accept?: string
     multiple?: boolean
     maxCount?: number
@@ -26,6 +27,7 @@ export default function FileUploader({
     onReplace,
     onReorder,
     onDragStateChange,
+    onImageClick,
     accept = 'image/*',
     multiple = false,
     maxCount = 1,
@@ -339,6 +341,11 @@ export default function FileUploader({
 
         const handleMouseUp = () => {
             if (!moved) {
+                // 如果没有移动，触发点击查看
+                const clickedIndex = dragState.fromIndex
+                if (clickedIndex !== null && onImageClick && accept.startsWith('image')) {
+                    onImageClick(files[clickedIndex], files)
+                }
                 setDragState({
                     isDragging: false,
                     isDropping: false,

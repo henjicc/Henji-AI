@@ -2072,16 +2072,29 @@ const App: React.FC = () => {
                           {task.images && task.images.length > 0 && (
                             <div className="flex gap-2">
                               {task.images.slice(0, 3).map((image, index) => (
-                                <div key={index} className="w-16 h-16 rounded border border-zinc-700/50 overflow-hidden">
+                                <div
+                                  key={index}
+                                  className="w-16 h-16 rounded cursor-pointer transition-all overflow-hidden border border-zinc-700/50 hover:brightness-75"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openImageViewer(image, task.images)
+                                  }}
+                                >
                                   <img
                                     src={image}
                                     alt={`Input ${index + 1}`}
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-cover rounded"
                                   />
                                 </div>
                               ))}
                               {task.images.length > 3 && (
-                                <div className="w-16 h-16 rounded border border-zinc-700/50 bg-zinc-700/50 flex items-center justify-center text-xs">
+                                <div
+                                  className="w-16 h-16 rounded bg-zinc-700/50 flex items-center justify-center text-xs cursor-pointer transition-all border border-zinc-700/50 hover:brightness-75"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openImageViewer(task.images![3], task.images)
+                                  }}
+                                >
                                   +{task.images.length - 3}
                                 </div>
                               )}
@@ -2446,6 +2459,7 @@ const App: React.FC = () => {
                 isGenerating={isGenerating}
                 onOpenSettings={openSettings}
                 onOpenClearHistory={() => setIsConfirmClearOpen(true)}
+                onImageClick={openImageViewer}
                 isCollapsed={isPanelCollapsed}
                 onToggleCollapse={() => {
                   if (isPanelCollapsed) {
