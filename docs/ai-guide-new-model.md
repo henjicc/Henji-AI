@@ -117,6 +117,8 @@ export const providerModelRoutes: ModelRoute[] = [
 
 **位置**: `src/models/[model-id].ts`
 
+> ⚠️ **重要提示**: 定义 Schema 后，还需要在 `ParameterPanel.tsx` 中添加渲染分支（见步骤 2.5）
+
 ```typescript
 import { ParamDef } from '../types/schema'
 
@@ -277,6 +279,86 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'your-model': yourModelParams
 }
 ```
+
+## 2.5. 添加参数面板渲染（⚠️ 关键步骤）
+
+**位置**: `src/components/MediaGenerator/components/ParameterPanel.tsx`
+
+> ⚠️ **这是最容易遗漏的步骤！** 如果不添加这一步，切换到新模型后将看不到任何参数组件。
+
+```typescript
+// 在 ParameterPanel.tsx 的 return 语句中添加模型的渲染分支
+
+// Your Model 参数
+if (selectedModel === 'your-model') {
+  return (
+    <SchemaForm
+      schema={yourModelParams}
+      values={{
+        // ⚠️ 必须传递所有参数的当前值
+        videoDuration: values.videoDuration,
+        videoAspectRatio: values.videoAspectRatio,
+        yourModelMode: values.yourModelMode,
+        yourModelParam: values.yourModelParam,
+
+        // ⚠️ 如果使用 resolutionConfig，必须传递这两个参数
+        customWidth: values.customWidth,
+        customHeight: values.customHeight,
+
+        // ⚠️ 如果支持图片上传，必须传递
+        uploadedImages
+      }}
+      onChange={onChange}
+    />
+  )
+}
+```
+
+**关键点**：
+- ✅ 必须为每个新模型添加独立的渲染分支
+- ✅ `values` 对象中必须包含 Schema 中定义的所有参数
+- ✅ 如果使用 `resolutionConfig`，必须传递 `customWidth` 和 `customHeight`
+- ✅ 如果模型支持图片上传，必须传递 `uploadedImages`
+
+**导入 Schema**：在文件顶部添加导入：
+
+```typescript
+import { yourModelParams } from '@/models'
+```
+
+## 2.6. 注册参数映射（⚠️ 关键步骤）
+
+**位置**: `src/components/MediaGenerator/index.tsx`
+
+> ⚠️ **这一步决定了参数能否被修改！** 如果不添加，用户将无法手动修改参数值。
+
+在 `handleSchemaChange` 函数的 `setterMap` 中添加所有参数的映射：
+
+```typescript
+const handleSchemaChange = (id: string, value: any) => {
+  const setterMap: Record<string, (v: any) => void> = {
+    // ... 现有映射
+
+    // Your Model 参数
+    yourModelMode: state.setYourModelMode,
+    yourModelParam: state.setYourModelParam,
+
+    // ⚠️ 如果使用 resolutionConfig，必须添加这两个
+    customWidth: state.setCustomWidth,
+    customHeight: state.setCustomHeight,
+  }
+
+  const setter = setterMap[id]
+  if (setter) {
+    setter(value)
+  }
+}
+```
+
+**关键点**：
+- ✅ 所有可编辑的参数都必须在 `setterMap` 中注册
+- ✅ 缺少映射会导致参数无法修改（看起来像是"输入框被禁用"）
+- ✅ 参数名必须与 Schema 中的 `id` 完全一致
 
 ## 3. 添加状态管理
 
@@ -616,29 +698,72 @@ if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
 
 ## 检查清单
 
+### 核心步骤（必须完成）
 - [ ] 在 `adapters/[provider]/models/` 创建模型路由文件
 - [ ] 在 `models/index.ts` 注册路由
 - [ ] 在 `src/models/` 创建参数 Schema 文件
 - [ ] 在 `src/models/index.ts` 导出并注册 Schema
+- [ ] ⚠️ **在 `ParameterPanel.tsx` 添加渲染分支**（最容易遗漏）
+- [ ] ⚠️ **在 `handleSchemaChange` 中注册参数映射**（最容易遗漏）
 - [ ] 在 `useMediaGeneratorState.ts` 添加新参数状态（如需要）
 - [ ] 在 `presetStateMapping.ts` 添加预设映射
 - [ ] 在 `MediaGenerator/index.tsx` 传入 setter
 - [ ] 在 `providers.json` 添加模型配置
-- [ ] 在 `pricing.ts` 添加价格配置（可选）
+
+### 可选步骤
+- [ ] 在 `pricing.ts` 添加价格配置
 - [ ] 检查 `optionsBuilder.ts` 中的硬编码逻辑
 - [ ] 添加默认值重置逻辑（如需要）
 - [ ] 在 Adapter 中处理智能匹配（如使用）
+
+### 测试步骤
+- [ ] 测试参数组件是否显示
+- [ ] 测试参数是否可以修改
 - [ ] 测试文生/图生/多图功能
 - [ ] 测试参数变更和预设保存/加载
 - [ ] 测试重新编辑历史记录
 
 ## 常见陷阱
 
-1. **参数命名不一致**: Schema 的 `id` 必须与状态变量名完全一致
-2. **忘记注册路由**: 创建了路由文件但未在 `models/index.ts` 导入
-3. **忘记注册 Schema**: 创建了 Schema 文件但未在 `modelSchemaMap` 添加
-4. **忘记预设映射**: 新参数未添加到 `presetStateMapping.ts`
-5. **直接传递 smart**: 在 Adapter 中直接传递 `'smart'` 给 API 导致 422 错误
-6. **状态未导出**: 在 `useMediaGeneratorState` 中创建了状态但 return 中遗漏
-7. **硬编码冲突**: 未检查 `optionsBuilder.ts` 中的类型判断逻辑
-8. **共享状态污染**: 未添加默认值重置逻辑导致切换模型时继承错误的值
+### ⚠️ 最常见的错误（90%的问题）
+
+1. **忘记添加 ParameterPanel 渲染分支** ⭐⭐⭐
+   - **症状**: 切换到新模型后看不到任何参数组件
+   - **解决**: 在 `ParameterPanel.tsx` 中添加 `if (selectedModel === 'your-model')` 分支
+
+2. **忘记在 handleSchemaChange 中注册参数** ⭐⭐⭐
+   - **症状**: 无法手动修改参数值，输入框看起来像被禁用
+   - **解决**: 在 `handleSchemaChange` 的 `setterMap` 中添加所有参数映射
+
+3. **忘记传递 customWidth 和 customHeight** ⭐⭐
+   - **症状**: 使用分辨率系统时，自定义尺寸输入框不显示数值或不更新
+   - **解决**: 在 `ParameterPanel.tsx` 的 `values` 对象中添加这两个参数
+
+### 其他常见错误
+
+4. **参数命名不一致**: Schema 的 `id` 必须与状态变量名完全一致
+5. **忘记注册路由**: 创建了路由文件但未在 `models/index.ts` 导入
+6. **忘记注册 Schema**: 创建了 Schema 文件但未在 `modelSchemaMap` 添加
+7. **忘记预设映射**: 新参数未添加到 `presetStateMapping.ts`
+8. **直接传递 smart**: 在 Adapter 中直接传递 `'smart'` 给 API 导致 422 错误
+9. **状态未导出**: 在 `useMediaGeneratorState` 中创建了状态但 return 中遗漏
+10. **硬编码冲突**: 未检查 `optionsBuilder.ts` 中的类型判断逻辑
+11. **共享状态污染**: 未添加默认值重置逻辑导致切换模型时继承错误的值
+
+### 快速诊断
+
+**问题**: 看不到参数组件
+- → 检查 `ParameterPanel.tsx` 是否有渲染分支
+- → 检查 Schema 是否在 `modelSchemaMap` 中注册
+
+**问题**: 无法修改参数
+- → 检查 `handleSchemaChange` 的 `setterMap`
+- → 检查状态是否在 `useMediaGeneratorState` 中导出
+
+**问题**: 分辨率输入框不更新
+- → 检查是否传递了 `customWidth` 和 `customHeight`
+- → 检查是否添加了对应的 useEffect
+
+**问题**: API 返回 422 错误
+- → 检查 Adapter 中的参数格式转换
+- → 检查是否直接传递了 `'smart'` 或 `'auto'`
