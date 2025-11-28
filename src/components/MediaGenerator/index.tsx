@@ -182,17 +182,29 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     }
   }, [state.selectedResolution, state.resolutionQuality])
 
+  // 使用 ref 来防止 Z-Image-Turbo 的 useEffect 死循环
+  const isUpdatingFromImageSizeRef = useRef(false)
+  const isUpdatingFromCustomSizeRef = useRef(false)
+
   // 监听 Z-Image-Turbo 的 imageSize 变化，自动更新 customWidth 和 customHeight
   useEffect(() => {
     console.log('[Z-Image-Turbo] imageSize changed:', {
       selectedModel: state.selectedModel,
       imageSize: state.imageSize,
       currentWidth: state.customWidth,
-      currentHeight: state.customHeight
+      currentHeight: state.customHeight,
+      isUpdatingFromCustomSize: isUpdatingFromCustomSizeRef.current
     })
 
     if (state.selectedModel !== 'fal-ai-z-image-turbo') return
     if (!state.imageSize) return
+
+    // 如果是从 customSize 更新触发的，跳过
+    if (isUpdatingFromCustomSizeRef.current) {
+      console.log('[Z-Image-Turbo] Skipping update (triggered by customSize change)')
+      isUpdatingFromCustomSizeRef.current = false
+      return
+    }
 
     // 如果是 "自定义"，不做任何处理，保持当前的 customWidth 和 customHeight
     if (state.imageSize === '自定义') {
@@ -206,10 +218,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       console.log('[Z-Image-Turbo] Found preset size:', { ratio: state.imageSize, size })
 
       if (size) {
-        // 直接更新，不检查值是否相同（与即梦 4.0 保持一致）
-        console.log('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
-        state.setCustomWidth(String(size.width))
-        state.setCustomHeight(String(size.height))
+        const newWidth = String(size.width)
+        const newHeight = String(size.height)
+
+        // 只有当值真的不同时才更新
+        if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
+          console.log('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
+          isUpdatingFromImageSizeRef.current = true
+          state.setCustomWidth(newWidth)
+          state.setCustomHeight(newHeight)
+        }
       } else {
         console.log('[Z-Image-Turbo] No preset size found for ratio:', state.imageSize)
       }
@@ -223,11 +241,19 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       selectedModel: state.selectedModel,
       customWidth: state.customWidth,
       customHeight: state.customHeight,
-      currentImageSize: state.imageSize
+      currentImageSize: state.imageSize,
+      isUpdatingFromImageSize: isUpdatingFromImageSizeRef.current
     })
 
     if (state.selectedModel !== 'fal-ai-z-image-turbo') return
     if (!state.customWidth || !state.customHeight) return
+
+    // 如果是从 imageSize 更新触发的，跳过
+    if (isUpdatingFromImageSizeRef.current) {
+      console.log('[Z-Image-Turbo] Skipping update (triggered by imageSize change)')
+      isUpdatingFromImageSizeRef.current = false
+      return
+    }
 
     const width = parseInt(state.customWidth)
     const height = parseInt(state.customHeight)
@@ -247,14 +273,67 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // 如果找到匹配的比例，自动选中
     if (matchedRatio && state.imageSize !== matchedRatio) {
       console.log('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
+      isUpdatingFromCustomSizeRef.current = true
       state.setImageSize(matchedRatio)
     }
     // 如果没有匹配的比例，设置为 "自定义"
     else if (!matchedRatio && state.imageSize !== '自定义') {
       console.log('[Z-Image-Turbo] Setting imageSize to 自定义')
+      isUpdatingFromCustomSizeRef.current = true
       state.setImageSize('自定义')
     }
   }, [state.customWidth, state.customHeight, state.selectedModel])
+
+  // 监听魔搭模型的 imageSize 变化，自动更新 customWidth 和 customHeight
+  useEffect(() => {
+    // 检查是否是魔搭模型
+    const isModelscopeModel =
+      state.selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
+      state.selectedModel === 'MusePublic/Qwen-image' ||
+      state.selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
+      state.selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
+      state.selectedModel === 'MusePublic/majicMIX_realistic' ||
+      state.selectedModel === 'modelscope-custom'
+
+    if (!isModelscopeModel) return
+    if (!state.imageSize) return
+
+    console.log('[ModelScope] imageSize changed:', {
+      selectedModel: state.selectedModel,
+      imageSize: state.imageSize,
+      currentWidth: state.customWidth,
+      currentHeight: state.customHeight
+    })
+
+    // 如果是 "自定义"，不做任何处理
+    if (state.imageSize === '自定义') {
+      console.log('[ModelScope] imageSize is 自定义, skipping update')
+      return
+    }
+
+    // 如果是比例格式（如 "4:3"），使用预计算的最大尺寸
+    if (state.imageSize.includes(':')) {
+      // 动态导入 modelscopePresetSizes
+      import('@/models/modelscope-common').then(({ modelscopePresetSizes }) => {
+        const size = modelscopePresetSizes[state.imageSize]
+        console.log('[ModelScope] Found preset size:', { ratio: state.imageSize, size })
+
+        if (size) {
+          const newWidth = String(size.width)
+          const newHeight = String(size.height)
+
+          // 只有当值真的不同时才更新
+          if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
+            console.log('[ModelScope] Updating customWidth and customHeight to:', size)
+            state.setCustomWidth(newWidth)
+            state.setCustomHeight(newHeight)
+          }
+        } else {
+          console.log('[ModelScope] No preset size found for ratio:', state.imageSize)
+        }
+      })
+    }
+  }, [state.imageSize, state.selectedModel, state.customWidth, state.customHeight])
 
   // 监听重新编辑事件
   const isRestoringRef = useRef(false)
@@ -418,6 +497,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       numInferenceSteps: state.setNumInferenceSteps,
       enablePromptExpansion: state.setEnablePromptExpansion,
       acceleration: state.setAcceleration,
+      // 魔搭
+      steps: state.setSteps,
+      guidance: state.setGuidance,
+      negativePrompt: state.setNegativePrompt,
+      modelscopeCustomModel: state.setModelscopeCustomModel,
       // 音频
       audioSpec: state.setAudioSpec,
       audioEmotion: state.setAudioEmotion,

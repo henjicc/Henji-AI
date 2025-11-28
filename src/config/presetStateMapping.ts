@@ -27,6 +27,12 @@ export interface PresetSetters {
     setEnablePromptExpansion: (v: boolean) => void
     setAcceleration: (v: string) => void
 
+    // 魔搭
+    setSteps: (v: number) => void
+    setGuidance: (v: number) => void
+    setNegativePrompt: (v: string) => void
+    setModelscopeCustomModel: (v: string) => void
+
     // 视频参数
     setVideoDuration: (v: number) => void
     setVideoResolution: (v: string) => void
@@ -119,6 +125,12 @@ export function createPresetSetterMap(
         numInferenceSteps: setters.setNumInferenceSteps,
         enablePromptExpansion: setters.setEnablePromptExpansion,
         acceleration: setters.setAcceleration,
+
+        // 魔搭
+        steps: setters.setSteps,
+        guidance: setters.setGuidance,
+        negativePrompt: setters.setNegativePrompt,
+        modelscopeCustomModel: setters.setModelscopeCustomModel,
 
         // 视频参数
         videoDuration: setters.setVideoDuration,

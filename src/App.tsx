@@ -1098,15 +1098,17 @@ const App: React.FC = () => {
         options.images = taskToExecute.images
       }
 
-      // 动态初始化适配器  
+      // 动态初始化适配器
       const providerObj = providers.find(p => p.models.some(m => m.id === model))
       if (providerObj) {
-        const providerType = providerObj.id as 'piaoyun' | 'fal'
+        const providerType = providerObj.id as 'piaoyun' | 'fal' | 'modelscope'
 
         // 获取对应的 API Key
         let apiKey = ''
         if (providerType === 'fal') {
           apiKey = localStorage.getItem('fal_api_key') || ''
+        } else if (providerType === 'modelscope') {
+          apiKey = localStorage.getItem('modelscope_api_key') || ''
         } else {
           apiKey = localStorage.getItem('piaoyun_api_key') || ''
         }

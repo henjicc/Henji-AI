@@ -26,7 +26,8 @@ export const presetSizes: Record<string, { width: number; height: number }> = {
   '1:1': { width: 1440, height: 1440 }, // 正方形直接使用 1440*1440
   '3:4': calculateMaxSize(3, 4),
   '2:3': calculateMaxSize(2, 3),
-  '9:16': calculateMaxSize(9, 16)
+  '9:16': calculateMaxSize(9, 16),
+  '9:21': calculateMaxSize(9, 21)
 }
 
 export const falAiZImageTurboParams: ParamDef[] = [
@@ -63,7 +64,8 @@ export const falAiZImageTurboParams: ParamDef[] = [
       { value: '1:1', label: '1:1' },
       { value: '3:4', label: '3:4' },
       { value: '2:3', label: '2:3' },
-      { value: '9:16', label: '9:16' }
+      { value: '9:16', label: '9:16' },
+      { value: '9:21', label: '9:21' }
     ]
   },
   {

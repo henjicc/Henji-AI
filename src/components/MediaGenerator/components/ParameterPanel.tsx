@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import SchemaForm from '@/components/ui/SchemaForm'
 import TextInput from '@/components/ui/TextInput'
 import Toggle from '@/components/ui/Toggle'
 import NumberInput from '@/components/ui/NumberInput'
 import PanelTrigger from '@/components/ui/PanelTrigger'
+import ModelscopeCustomModelManager from './ModelscopeCustomModelManager'
 import {
   viduParams,
   klingParams,
@@ -18,7 +19,9 @@ import {
   bytedanceSeedreamV4Params,
   minimaxSpeechBasicParams,
   minimaxSpeechAdvancedParams,
-  falAiZImageTurboParams
+  falAiZImageTurboParams,
+  modelscopeCommonParams,
+  modelscopeCustomParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -305,6 +308,79 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         }}
         onChange={onChange}
       />
+    )
+  }
+
+  // 魔搭预设模型参数
+  if (selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
+      selectedModel === 'MusePublic/Qwen-image' ||
+      selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
+      selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
+      selectedModel === 'MusePublic/majicMIX_realistic') {
+    return (
+      <SchemaForm
+        schema={modelscopeCommonParams}
+        values={{
+          imageSize: values.imageSize,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
+          steps: values.steps,
+          guidance: values.guidance,
+          negativePrompt: values.negativePrompt
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // 魔搭自定义模型参数
+  if (selectedModel === 'modelscope-custom') {
+    // 使用 state 来触发重新渲染
+    const [refreshKey, setRefreshKey] = useState(0)
+
+    return (
+      <>
+        <SchemaForm
+          key={refreshKey} // 当 refreshKey 变化时，强制重新渲染
+          schema={modelscopeCustomParams}
+          values={{
+            modelscopeCustomModel: values.modelscopeCustomModel,
+            imageSize: values.imageSize,
+            customWidth: values.customWidth,
+            customHeight: values.customHeight,
+            steps: values.steps,
+            guidance: values.guidance,
+            negativePrompt: values.negativePrompt
+          }}
+          onChange={onChange}
+        />
+
+        {/* 模型管理按钮 */}
+        <PanelTrigger
+          label="管理模型"
+          display="配置"
+          className="w-auto min-w-[100px] flex-shrink-0"
+          panelWidth={600}
+          alignment="aboveCenter"
+          closeOnPanelClick={false}
+          renderPanel={() => (
+            <div className="flex flex-col bg-white/95 dark:bg-zinc-800 rounded-lg h-[500px]">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-700">
+                <h3 className="text-sm font-medium">自定义模型管理</h3>
+                <p className="text-xs text-zinc-500 mt-1">添加或删除魔搭API的自定义模型</p>
+              </div>
+              <div className="p-4 flex-1 overflow-hidden">
+                <div className="text-xs text-zinc-400 mb-4">
+                  提示：模型ID格式通常为 "组织名/模型名"，例如：black-forest-labs/FLUX.1-dev
+                </div>
+                <ModelscopeCustomModelManager
+                  onModelsChange={() => setRefreshKey(prev => prev + 1)}
+                />
+              </div>
+            </div>
+          )}
+        />
+      </>
     )
   }
 

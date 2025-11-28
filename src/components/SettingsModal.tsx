@@ -15,10 +15,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [apiKey, setApiKey] = useState('')
   const [falApiKey, setFalApiKey] = useState('')
+  const [modelscopeApiKey, setModelscopeApiKey] = useState('')
   const [maxHistoryCount, setMaxHistoryCount] = useState(50)
   const [showPriceEstimate, setShowPriceEstimate] = useState(true)
   const [showApiKey, setShowApiKey] = useState(false)
   const [showFalApiKey, setShowFalApiKey] = useState(false)
+  const [showModelscopeApiKey, setShowModelscopeApiKey] = useState(false)
   const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
   const [collapseDelay, setCollapseDelay] = useState(500)
   const [collapseOnScrollOnly, setCollapseOnScrollOnly] = useState(true)
@@ -35,6 +37,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedFalApiKey = localStorage.getItem('fal_api_key') || ''
     setFalApiKey(savedFalApiKey)
+
+    const savedModelscopeApiKey = localStorage.getItem('modelscope_api_key') || ''
+    setModelscopeApiKey(savedModelscopeApiKey)
 
     const savedMaxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
     setMaxHistoryCount(savedMaxHistory)
@@ -98,6 +103,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const handleFalApiKeyChange = (value: string) => {
     setFalApiKey(value)
     localStorage.setItem('fal_api_key', value)
+  }
+
+  // 实时保存魔搭 API Key
+  const handleModelscopeApiKeyChange = (value: string) => {
+    setModelscopeApiKey(value)
+    localStorage.setItem('modelscope_api_key', value)
   }
 
   // 实时保存历史记录数量
@@ -440,6 +451,61 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         密钥管理页面
                       </button>
                       获取密钥
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 tracking-wider">魔搭 ModelScope</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">API 密钥</label>
+                    <div className="relative">
+                      <input
+                        type={showModelscopeApiKey ? "text" : "password"}
+                        value={modelscopeApiKey}
+                        onChange={(e) => handleModelscopeApiKeyChange(e.target.value)}
+                        placeholder="请输入您的魔搭 API 密钥"
+                        className="w-full bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 pr-10 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowModelscopeApiKey(!showModelscopeApiKey)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      >
+                        {showModelscopeApiKey ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      打开
+                      <button
+                        onClick={() => handleOpenLink('https://www.modelscope.cn/')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        魔搭官网
+                      </button>
+                      注册并登录，然后查阅
+                      <button
+                        onClick={() => handleOpenLink('https://modelscope.cn/docs/model-service/API-Inference/limits')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        相关说明
+                      </button>
+                      了解详情，最后打开
+                      <button
+                        onClick={() => handleOpenLink('https://modelscope.cn/my/myaccesstoken')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        访问令牌页面
+                      </button>
+                      来获取访问令牌
                     </p>
                   </div>
                 </div>

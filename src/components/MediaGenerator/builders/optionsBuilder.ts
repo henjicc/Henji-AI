@@ -90,6 +90,12 @@ interface BuildOptionsParams {
   enablePromptExpansion: boolean
   acceleration: string
 
+  // 魔搭
+  steps: number
+  guidance: number
+  negativePrompt: string
+  modelscopeCustomModel: string
+
   // 工具函数
   calculateSmartResolution: (imageDataUrl: string) => Promise<string>
   calculateSeedreamSmartResolution: (imageDataUrl: string) => Promise<string>
@@ -604,6 +610,66 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       setUploadedFilePaths(paths)
       options.uploadedFilePaths = paths
     }
+  }
+
+  // 魔搭模型（预设模型和自定义模型）
+  else if (currentModel?.type === 'image' && (
+    selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
+    selectedModel === 'MusePublic/Qwen-image' ||
+    selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
+    selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
+    selectedModel === 'MusePublic/majicMIX_realistic' ||
+    selectedModel === 'modelscope-custom'
+  )) {
+    // 处理分辨率：从 imageSize (宽高比) 和 customWidth/customHeight 转换为 widthxheight 格式
+    let width = 1024
+    let height = 1024
+
+    // 优先使用 customWidth 和 customHeight
+    if (params.customWidth && params.customHeight) {
+      width = parseInt(params.customWidth)
+      height = parseInt(params.customHeight)
+    }
+    // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用预设尺寸
+    else if (params.imageSize && params.imageSize.includes(':')) {
+      const { modelscopePresetSizes } = await import('@/models/modelscope-common')
+      const size = modelscopePresetSizes[params.imageSize]
+
+      if (size) {
+        width = size.width
+        height = size.height
+      }
+    }
+
+    // 设置分辨率（魔搭API格式：widthxheight）
+    options.width = width
+    options.height = height
+
+    // 设置其他参数
+    options.steps = params.steps
+    options.guidance = params.guidance
+    if (params.negativePrompt) {
+      options.negativePrompt = params.negativePrompt
+    }
+
+    // 对于自定义模型，需要设置实际的 model 值
+    if (selectedModel === 'modelscope-custom') {
+      if (!params.modelscopeCustomModel) {
+        throw new Error('请先选择或添加自定义模型')
+      }
+      options.model = params.modelscopeCustomModel
+    }
+
+    console.log('[optionsBuilder] 魔搭模型参数:', {
+      selectedModel,
+      imageSize: params.imageSize,
+      customWidth: params.customWidth,
+      customHeight: params.customHeight,
+      最终分辨率: `${width}x${height}`,
+      steps: options.steps,
+      guidance: options.guidance,
+      model: options.model
+    })
   }
 
   return options

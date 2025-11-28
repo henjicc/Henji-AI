@@ -83,6 +83,12 @@ export const useMediaGeneratorState = () => {
   const [enablePromptExpansion, setEnablePromptExpansion] = useState(false)
   const [acceleration, setAcceleration] = useState('none')
 
+  // 魔搭参数
+  const [steps, setSteps] = useState(30)
+  const [guidance, setGuidance] = useState(7.5)
+  const [negativePrompt, setNegativePrompt] = useState('')
+  const [modelscopeCustomModel, setModelscopeCustomModel] = useState('')
+
   // 音频参数
   const [audioSpeed, setAudioSpeed] = useState<number>(1.0)
   const [audioEmotion, setAudioEmotion] = useState<string>('neutral')
@@ -180,6 +186,12 @@ export const useMediaGeneratorState = () => {
     numInferenceSteps, setNumInferenceSteps,
     enablePromptExpansion, setEnablePromptExpansion,
     acceleration, setAcceleration,
+
+    // 魔搭
+    steps, setSteps,
+    guidance, setGuidance,
+    negativePrompt, setNegativePrompt,
+    modelscopeCustomModel, setModelscopeCustomModel,
 
     // 音频
     audioSpeed, setAudioSpeed,
