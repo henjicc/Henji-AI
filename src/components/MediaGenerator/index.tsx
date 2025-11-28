@@ -328,8 +328,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       maxImages: state.setMaxImages,
       selectedResolution: state.setSelectedResolution,
       resolutionQuality: state.setResolutionQuality,
-      // Nano Banana
-      num_images: state.setNumImages,
+      // Nano Banana & ByteDance Seedream v4
+      numImages: state.setNumImages,  // ByteDance Seedream v4 使用 numImages
+      num_images: state.setNumImages, // Nano Banana 使用 num_images
       aspect_ratio: state.setAspectRatio,
       resolution: state.setResolution,
       // 音频
@@ -570,7 +571,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             providerId={state.selectedProvider}
             modelId={state.selectedModel}
             params={{
-              num_images: state.numImages,
+              numImages: state.numImages,  // ByteDance Seedream v4 使用 numImages
+              num_images: state.numImages, // Nano Banana 使用 num_images
               maxImages: state.maxImages,
               uploadedImages: state.uploadedImages,
               resolution: state.resolution,

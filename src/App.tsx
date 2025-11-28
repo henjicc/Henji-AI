@@ -1136,7 +1136,11 @@ const App: React.FC = () => {
           let lastUpdateTime = 0
           if (model === 'seedream-4.0' || model === 'bytedance-seedream-v4') {
             const startTime = Date.now()
-            const expectedDuration = 20000 // 20秒预期时间
+            // 根据图片数量动态计算预期时间
+            // bytedance-seedream-v4: 基础时间 20 秒，每张图片增加 20 秒
+            const numImages = options.numImages || 1
+            const baseTime = 20000
+            const expectedDuration = baseTime * numImages
 
             const updateProgressLoop = () => {
               const now = Date.now()
