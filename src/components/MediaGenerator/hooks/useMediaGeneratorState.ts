@@ -76,6 +76,7 @@ export const useMediaGeneratorState = () => {
   const [numImages, setNumImages] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('1:1')
   const [resolution, setResolution] = useState('2K')  // Nano Banana Pro 默认 2K
+  const [imageSize, setImageSize] = useState('2048*2048')  // 即梦图片生成4.0 默认分辨率
 
   // 音频参数
   const [audioSpeed, setAudioSpeed] = useState<number>(1.0)
@@ -168,6 +169,7 @@ export const useMediaGeneratorState = () => {
     numImages, setNumImages,
     aspectRatio, setAspectRatio,
     resolution, setResolution,
+    imageSize, setImageSize,
 
     // 音频
     audioSpeed, setAudioSpeed,

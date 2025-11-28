@@ -20,6 +20,7 @@ export interface PresetSetters {
     setNumImages: (v: number) => void
     setAspectRatio: (v: string) => void
     setResolution: (v: string) => void
+    setImageSize: (v: string) => void
 
     // 视频参数
     setVideoDuration: (v: number) => void
@@ -107,6 +108,7 @@ export function createPresetSetterMap(
         numImages: setters.setNumImages,
         aspectRatio: setters.setAspectRatio,
         resolution: setters.setResolution,
+        imageSize: setters.setImageSize,
 
         // 视频参数
         videoDuration: setters.setVideoDuration,

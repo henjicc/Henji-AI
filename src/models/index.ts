@@ -21,6 +21,7 @@ export { minimaxSpeech26BasicParams, minimaxSpeech26AdvancedParams } from './min
 export { falAiNanoBananaParams } from './fal-ai-nano-banana'
 export { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 export { falAiVeo31Params } from './fal-ai-veo-3.1'
+export { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -48,6 +49,7 @@ import { minimaxSpeech26BasicParams, minimaxSpeech26AdvancedParams } from './min
 import { falAiNanoBananaParams } from './fal-ai-nano-banana'
 import { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Params } from './fal-ai-veo-3.1'
+import { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 
 /**
  * 模型 ID 到 Schema 的映射表
@@ -66,7 +68,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'minimax-speech-2.6': [...minimaxSpeech26BasicParams, ...minimaxSpeech26AdvancedParams],
   'nano-banana': falAiNanoBananaParams,
   'nano-banana-pro': falAiNanoBananaProParams,
-  'veo3.1': falAiVeo31Params
+  'veo3.1': falAiVeo31Params,
+  'bytedance-seedream-v4': bytedanceSeedreamV4Params
 }
 
 /**

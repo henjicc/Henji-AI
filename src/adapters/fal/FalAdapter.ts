@@ -14,6 +14,7 @@ import { FAL_CONFIG } from './config'
 import { findRoute } from './models'
 import { FalQueueHandler } from './queueHandler'
 import { FalStatusHandler } from './statusHandler'
+import { parseImageResponse } from './parsers'
 
 /**
  * Fal 适配器
@@ -21,13 +22,23 @@ import { FalStatusHandler } from './statusHandler'
  */
 export class FalAdapter extends BaseAdapter {
   private apiClient: AxiosInstance
+  private syncApiClient: AxiosInstance
   private queueHandler: FalQueueHandler
   private statusHandler: FalStatusHandler
 
   constructor(apiKey: string) {
     super('fal')
+    // 队列模式客户端
     this.apiClient = axios.create({
       baseURL: FAL_CONFIG.baseURL,
+      headers: {
+        'Authorization': `Key ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    // 同步模式客户端
+    this.syncApiClient = axios.create({
+      baseURL: 'https://fal.run',
       headers: {
         'Authorization': `Key ${apiKey}`,
         'Content-Type': 'application/json'
@@ -40,7 +51,8 @@ export class FalAdapter extends BaseAdapter {
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
       // 1. 查找路由
-      const modelId = params.model_id || 'nano-banana'
+      // 同时支持model和model_id参数，以兼容不同的调用方式
+      const modelId = params.model_id || params.model || 'nano-banana'
       const route = findRoute(modelId)
       if (!route || !route.buildImageRequest) {
         throw new Error(`Unsupported image model: ${modelId}`)
@@ -49,22 +61,42 @@ export class FalAdapter extends BaseAdapter {
       // 2. 构建请求
       const { submitPath, modelId: routeModelId, requestData } = route.buildImageRequest(params)
 
-      console.log('[FalAdapter] 提交队列请求:', {
+      console.log('[FalAdapter] 提交请求:', {
         submitPath,
         modelId: routeModelId,
+        syncMode: requestData.sync_mode,
         requestData: {
           ...requestData,
           image_urls: requestData.image_urls ? `[${requestData.image_urls.length} images]` : undefined
         }
       })
 
-      // 3. 提交到队列
-      const requestId = await this.queueHandler.submitImageTask(submitPath, requestData)
+      // 3. 检查是否为同步模式
+      if (requestData.sync_mode === true) {
+        // 同步模式：使用 fal.run 端点直接获取结果
+        console.log('[FalAdapter] 使用同步模式 (https://fal.run)')
 
-      console.log('[FalAdapter] 请求已提交到队列:', { request_id: requestId, submitPath, modelId: routeModelId })
+        // 移除 sync_mode 参数，因为它不是 API 参数
+        const { sync_mode, ...cleanRequestData } = requestData
 
-      // 4. 轮询状态直到完成
-      return await this.queueHandler.pollImageStatus(routeModelId, requestId, params.onProgress)
+        const response = await this.syncApiClient.post(submitPath, cleanRequestData)
+        console.log('[FalAdapter] 同步请求响应:', response.data)
+
+        // 直接解析响应数据
+        const result = await parseImageResponse(response.data)
+        return {
+          ...result,
+          status: 'completed'
+        }
+      } else {
+        // 队列模式：提交到队列并轮询
+        console.log('[FalAdapter] 使用队列模式 (https://queue.fal.run)')
+        const requestId = await this.queueHandler.submitImageTask(submitPath, requestData)
+        console.log('[FalAdapter] 请求已提交到队列:', { request_id: requestId, submitPath, modelId: routeModelId })
+
+        // 轮询状态直到完成
+        return await this.queueHandler.pollImageStatus(routeModelId, requestId, params.onProgress)
+      }
     } catch (error) {
       console.error('[FalAdapter] generateImage 错误:', error)
       if (axios.isAxiosError(error) && error.response) {

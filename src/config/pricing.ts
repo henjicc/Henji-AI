@@ -174,6 +174,16 @@ export const pricingConfigs: PricingConfig[] = [
             return basePrice * multiplier
         }
     },
+    {
+        providerId: 'fal',
+        modelId: 'bytedance-seedream-v4',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const numImages = params.numImages || 1
+            return 0.2 * numImages
+        }
+    },
 
     // ===== 音频模型 =====
     {

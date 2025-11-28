@@ -11,7 +11,7 @@ import { getModelDefaultValues, getAutoSwitchValues } from '@/models'
 import { useMediaGeneratorState } from './hooks/useMediaGeneratorState'
 import { useImageUpload } from './hooks/useImageUpload'
 import { buildGenerateOptions } from './builders/optionsBuilder'
-import { calculateSmartResolution, getActualResolution } from './utils/resolutionUtils'
+import { calculateSmartResolution, calculateSeedreamSmartResolution, calculatePPIOSeedreamSmartResolution, getActualResolution } from './utils/resolutionUtils'
 import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
@@ -67,6 +67,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setNumImages: state.setNumImages,
     setAspectRatio: state.setAspectRatio,
     setResolution: state.setResolution,
+    setImageSize: state.setImageSize,
     setVeoMode: state.setVeoMode,
     setVeoAspectRatio: state.setVeoAspectRatio,
     setVeoResolution: state.setVeoResolution,
@@ -412,7 +413,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         latexRead: state.latexRead,
         textNormalization: state.textNormalization,
         languageBoost: state.languageBoost,
-        calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality)
+        calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
+        calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
+        calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
       })
 
       let finalInput = state.input

@@ -1,6 +1,7 @@
 import { falAiNanoBananaRoute } from './fal-ai-nano-banana'
 import { falAiNanoBananaProRoute } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Route } from './fal-ai-veo-3.1'
+import { bytedanceSeedreamV4Route } from './bytedance-seedream-v4'
 
 /**
  * 模型路由接口
@@ -17,7 +18,8 @@ export interface FalModelRoute {
 export const falModelRoutes: FalModelRoute[] = [
   falAiNanoBananaRoute,
   falAiNanoBananaProRoute,
-  falAiVeo31Route
+  falAiVeo31Route,
+  bytedanceSeedreamV4Route
 ]
 
 /**

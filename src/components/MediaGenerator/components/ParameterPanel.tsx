@@ -15,6 +15,7 @@ import {
   seedreamParams,
   nanoBananaParams,
   nanoBananaProParams,
+  bytedanceSeedreamV4Params,
   minimaxSpeechBasicParams,
   minimaxSpeechAdvancedParams
 } from '@/models'
@@ -261,6 +262,24 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           num_images: values.numImages,
           aspect_ratio: values.aspectRatio,
           resolution: values.resolution,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // ByteDance Seedream v4 参数
+  if (selectedModel === 'bytedance-seedream-v4') {
+    return (
+      <SchemaForm
+        schema={bytedanceSeedreamV4Params}
+        values={{
+          numImages: values.numImages,
+          selectedResolution: values.selectedResolution,
+          resolutionQuality: values.resolutionQuality,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
           uploadedImages
         }}
         onChange={onChange}

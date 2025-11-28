@@ -110,3 +110,236 @@ export const calculateSmartResolution = (imageDataUrl: string, quality: '2K' | '
     img.src = imageDataUrl
   })
 }
+
+/**
+ * 派欧云即梦专用智能分辨率算法
+ * 支持完全精确匹配原图比例，不限制于预设比例
+ *
+ * 约束条件（派欧云限制）：
+ * - 宽高比范围：[1/16, 16]
+ * - 最小尺寸：宽度和高度都 > 14 像素
+ * - 最大总像素：严格不超过 4096×4096 = 16,777,216 像素
+ * - 2K模式：接近但不小于 2048×2048 = 4,194,304 像素，不超过 4096×4096
+ * - 4K模式：接近但不小于且不超过 4096×4096 = 16,777,216 像素
+ */
+export const calculatePPIOSeedreamSmartResolution = (imageDataUrl: string, quality: '2K' | '4K'): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const originalWidth = img.width
+      const originalHeight = img.height
+      const aspectRatio = originalWidth / originalHeight
+
+      // 检查宽高比范围 [1/16, 16]
+      if (aspectRatio < 1 / 16 || aspectRatio > 16) {
+        // 超出范围，使用默认 1:1
+        resolve(quality === '2K' ? '2048x2048' : '4096x4096')
+        return
+      }
+
+      // 目标像素数
+      const targetPixels = quality === '2K' ? 4194304 : 16777216 // 2K: 2048*2048, 4K: 4096*4096
+      const absoluteMaxPixels = 16777216 // 4096*4096 派欧云绝对上限
+
+      // 计算能达到目标像素数的理想尺寸（保持原图精确比例）
+      const targetHeight = Math.sqrt(targetPixels / aspectRatio)
+      const targetWidth = targetHeight * aspectRatio
+
+      // 直接取整（不强制8的倍数，以获得更精确的比例匹配）
+      let width = Math.round(targetWidth)
+      let height = Math.round(targetHeight)
+
+      let currentPixels = width * height
+
+      // 确保不小于目标像素数，但严格不超过绝对上限
+      while (currentPixels < targetPixels && currentPixels < absoluteMaxPixels) {
+        const withExtraWidth = (width + 1) * height
+        const withExtraHeight = width * (height + 1)
+
+        // 选择增加后更接近目标且不超过绝对上限的方案
+        if (withExtraWidth <= absoluteMaxPixels && withExtraHeight <= absoluteMaxPixels) {
+          // 两者都可以，选择更接近目标的
+          if (Math.abs(withExtraWidth - targetPixels) < Math.abs(withExtraHeight - targetPixels)) {
+            width += 1
+            currentPixels = withExtraWidth
+          } else {
+            height += 1
+            currentPixels = withExtraHeight
+          }
+        } else if (withExtraWidth <= absoluteMaxPixels) {
+          width += 1
+          currentPixels = withExtraWidth
+        } else if (withExtraHeight <= absoluteMaxPixels) {
+          height += 1
+          currentPixels = withExtraHeight
+        } else {
+          // 无法继续增加
+          break
+        }
+      }
+
+      // 严格确保不超过绝对上限
+      if (currentPixels > absoluteMaxPixels) {
+        const scale = Math.sqrt(absoluteMaxPixels / currentPixels)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+        currentPixels = width * height
+      }
+
+      // 确保最小尺寸（至少15像素，满足 > 14 的要求）
+      if (width < 15) width = 15
+      if (height < 15) height = 15
+
+      // 最终验证宽高比是否仍在范围内
+      const finalRatio = width / height
+      if (finalRatio < 1 / 16 || finalRatio > 16) {
+        // 如果调整后超出范围，回退到默认
+        resolve(quality === '2K' ? '2048x2048' : '4096x4096')
+        return
+      }
+
+      // 最终像素数检查
+      const finalPixels = width * height
+      if (finalPixels > absoluteMaxPixels) {
+        // 如果超过绝对上限，按比例缩小
+        const scale = Math.sqrt(absoluteMaxPixels / finalPixels)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+
+      console.log('[resolutionUtils] 派欧云即梦智能分辨率计算:', {
+        原图尺寸: `${originalWidth}x${originalHeight}`,
+        原图宽高比: aspectRatio.toFixed(4),
+        质量模式: quality,
+        目标像素: targetPixels,
+        计算结果: `${width}x${height}`,
+        结果宽高比: (width / height).toFixed(4),
+        比例偏差: Math.abs(aspectRatio - (width / height)).toFixed(6),
+        实际像素: width * height,
+        利用率: `${((width * height / targetPixels) * 100).toFixed(2)}%`,
+        是否达标: width * height >= targetPixels ? '是' : '否',
+        是否超限: width * height > absoluteMaxPixels ? '是（超过派欧云上限）' : '否'
+      })
+
+      resolve(`${width}x${height}`)
+    }
+    img.src = imageDataUrl
+  })
+}
+
+/**
+ * 即梦专用智能分辨率算法（fal.ai）
+ * 支持完全精确匹配原图比例，不限制于预设比例
+ *
+ * 约束条件：
+ * - 宽高比范围：[1/3, 3]
+ * - 最小尺寸：宽度和高度都 > 14 像素
+ * - 最大总像素：不超过 6000×6000 = 36,000,000 像素
+ * - 2K模式：接近但不小于 2048×2048 = 4,194,304 像素
+ * - 4K模式：接近但不小于 4096×4096 = 16,777,216 像素
+ */
+export const calculateSeedreamSmartResolution = (imageDataUrl: string, quality: '2K' | '4K'): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const originalWidth = img.width
+      const originalHeight = img.height
+      const aspectRatio = originalWidth / originalHeight
+
+      // 检查宽高比范围 [1/3, 3]
+      if (aspectRatio < 1 / 3 || aspectRatio > 3) {
+        // 超出范围，使用默认 1:1
+        resolve(quality === '2K' ? '2048x2048' : '4096x4096')
+        return
+      }
+
+      // 目标像素数
+      const targetPixels = quality === '2K' ? 4194304 : 16777216 // 2K: 2048*2048, 4K: 4096*4096
+      const absoluteMaxPixels = 36000000 // 6000*6000 绝对上限
+
+      // 计算能达到目标像素数的理想尺寸（保持原图精确比例）
+      const targetHeight = Math.sqrt(targetPixels / aspectRatio)
+      const targetWidth = targetHeight * aspectRatio
+
+      // 直接取整（不强制8的倍数，以获得更精确的比例匹配）
+      let width = Math.round(targetWidth)
+      let height = Math.round(targetHeight)
+
+      let currentPixels = width * height
+      const maxAllowedPixels = Math.min(targetPixels * 1.05, absoluteMaxPixels) // 允许超过5%，但不超过绝对上限
+
+      // 2K和4K模式：确保始终不小于目标像素数
+      // 如果当前像素数小于目标，逐步增加直到达到或超过目标
+      while (currentPixels < targetPixels && currentPixels < maxAllowedPixels) {
+        const withExtraWidth = (width + 1) * height
+        const withExtraHeight = width * (height + 1)
+
+        // 选择增加后更接近目标且不超过最大限制的方案
+        if (withExtraWidth <= maxAllowedPixels && withExtraHeight <= maxAllowedPixels) {
+          // 两者都可以，选择更接近目标的
+          if (Math.abs(withExtraWidth - targetPixels) < Math.abs(withExtraHeight - targetPixels)) {
+            width += 1
+            currentPixels = withExtraWidth
+          } else {
+            height += 1
+            currentPixels = withExtraHeight
+          }
+        } else if (withExtraWidth <= maxAllowedPixels) {
+          width += 1
+          currentPixels = withExtraWidth
+        } else if (withExtraHeight <= maxAllowedPixels) {
+          height += 1
+          currentPixels = withExtraHeight
+        } else {
+          // 无法继续增加
+          break
+        }
+      }
+
+      // 确保不超过最大允许像素
+      if (currentPixels > maxAllowedPixels) {
+        const scale = Math.sqrt(maxAllowedPixels / currentPixels)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+        currentPixels = width * height
+      }
+
+      // 确保最小尺寸（至少15像素，满足 > 14 的要求）
+      if (width < 15) width = 15
+      if (height < 15) height = 15
+
+      // 最终验证宽高比是否仍在范围内
+      const finalRatio = width / height
+      if (finalRatio < 1 / 3 || finalRatio > 3) {
+        // 如果调整后超出范围，回退到默认
+        resolve(quality === '2K' ? '2048x2048' : '4096x4096')
+        return
+      }
+
+      // 最终像素数检查
+      const finalPixels = width * height
+      if (finalPixels > absoluteMaxPixels) {
+        // 如果超过绝对上限，按比例缩小
+        const scale = Math.sqrt(absoluteMaxPixels / finalPixels)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+
+      console.log('[resolutionUtils] 即梦智能分辨率计算:', {
+        原图尺寸: `${originalWidth}x${originalHeight}`,
+        原图宽高比: aspectRatio.toFixed(4),
+        质量模式: quality,
+        目标像素: targetPixels,
+        计算结果: `${width}x${height}`,
+        结果宽高比: (width / height).toFixed(4),
+        比例偏差: Math.abs(aspectRatio - (width / height)).toFixed(6),
+        实际像素: width * height,
+        利用率: `${((width * height / targetPixels) * 100).toFixed(2)}%`,
+        超出目标: width * height > targetPixels ? `+${(((width * height / targetPixels) - 1) * 100).toFixed(2)}%` : '否'
+      })
+
+      resolve(`${width}x${height}`)
+    }
+    img.src = imageDataUrl
+  })
+}

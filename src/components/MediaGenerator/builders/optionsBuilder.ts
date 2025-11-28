@@ -86,6 +86,8 @@ interface BuildOptionsParams {
 
   // 工具函数
   calculateSmartResolution: (imageDataUrl: string) => Promise<string>
+  calculateSeedreamSmartResolution: (imageDataUrl: string) => Promise<string>
+  calculatePPIOSeedreamSmartResolution: (imageDataUrl: string) => Promise<string>
 }
 
 export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<any> => {
@@ -98,8 +100,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     setUploadedFilePaths
   } = params
 
-  // 图片模型处理（排除 nano-banana 系列）
-  if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro') {
+  // 图片模型处理（排除 nano-banana 系列和 bytedance-seedream-v4）
+  if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro' && selectedModel !== 'bytedance-seedream-v4') {
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
@@ -117,8 +119,14 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     // 分辨率处理
     if (params.selectedResolution === 'smart') {
       if (uploadedImages.length > 0) {
-        const smartSize = await params.calculateSmartResolution(uploadedImages[0])
-        options.size = smartSize
+        // 即梦模型使用专用算法，其他模型使用通用算法
+        if (selectedModel === 'seedream-4.0') {
+          const smartSize = await params.calculatePPIOSeedreamSmartResolution(uploadedImages[0])
+          options.size = smartSize
+        } else {
+          const smartSize = await params.calculateSmartResolution(uploadedImages[0])
+          options.size = smartSize
+        }
       } else {
         options.size = params.resolutionQuality === '2K' ? '2048x2048' : '4096x4096'
       }
@@ -449,6 +457,69 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     options.resolution = params.resolution
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+  }
+
+  // ByteDance Seedream v4
+  else if (currentModel?.type === 'image' && selectedModel === 'bytedance-seedream-v4') {
+    options.numImages = params.numImages
+
+    // 分辨率处理
+    let width = 2048
+    let height = 2048
+
+    // 根据分辨率质量设置默认尺寸
+    if (params.resolutionQuality === '4K') {
+      width = 4096
+      height = 4096
+    }
+
+    // 智能模式：使用即梦专用算法精确匹配原图比例
+    if (params.selectedResolution === 'smart' && uploadedImages.length > 0) {
+      // 使用即梦专用智能分辨率算法
+      const smartSize = await params.calculateSeedreamSmartResolution(uploadedImages[0])
+      const [w, h] = smartSize.split('x').map(Number)
+      width = w
+      height = h
+      console.log('[optionsBuilder] bytedance-seedream-v4 智能模式:', { smartSize, width, height })
+    }
+    // 如果不是智能模式，根据宽高比调整尺寸
+    else if (params.selectedResolution !== 'smart') {
+      const [wRatio, hRatio] = params.selectedResolution.split(':').map(Number)
+      if (wRatio > hRatio) {
+        // 横屏
+        height = Math.round(width * (hRatio / wRatio))
+      } else {
+        // 竖屏或正方形
+        width = Math.round(height * (wRatio / hRatio))
+      }
+      console.log('[optionsBuilder] bytedance-seedream-v4 预设比例模式:', { selectedResolution: params.selectedResolution, width, height })
+
+      // 如果有自定义输入，使用自定义尺寸（仅在非智能模式下生效）
+      if (params.customWidth && params.customHeight) {
+        width = parseInt(params.customWidth)
+        height = parseInt(params.customHeight)
+        console.log('[optionsBuilder] bytedance-seedream-v4 自定义尺寸:', { width, height })
+      }
+    }
+    // 智能模式但没有上传图片，使用默认尺寸（已在上面设置）
+
+    console.log('[optionsBuilder] bytedance-seedream-v4 最终分辨率:', { width, height, imageSize: `${width}*${height}` })
+    options.imageSize = `${width}*${height}`
+
+    // 处理上传的图片 - 使用 uploadedImages 参数名以匹配适配器
+    if (uploadedImages.length > 0) {
+      options.uploadedImages = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
       for (let i = 0; i < uploadedImages.length; i++) {
         if (!paths[i]) {

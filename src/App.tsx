@@ -1105,9 +1105,9 @@ const App: React.FC = () => {
       let result: any
       switch (type) {
         case 'image':
-          // 为即梦4.0添加基于时间的进度跟踪
+          // 为即梦4.0和bytedance-seedream-v4添加基于时间的进度跟踪
           let progressTimer: ReturnType<typeof setInterval> | null = null
-          if (model === 'seedream-4.0') {
+          if (model === 'seedream-4.0' || model === 'bytedance-seedream-v4') {
             const startTime = Date.now()
             const expectedDuration = 20000 // 20秒预期时间
 

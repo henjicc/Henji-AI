@@ -23,7 +23,7 @@ export class FalQueueHandler {
   ): Promise<string> {
     console.log('[FalQueueHandler] 提交图片生成任务:', { submitPath, requestData })
 
-    const response = await this.apiClient.post(`/${submitPath}`, requestData)
+    const response = await this.apiClient.post(submitPath, requestData)
     const { request_id } = response.data
 
     console.log('[FalQueueHandler] 任务已提交:', { request_id })
@@ -39,7 +39,7 @@ export class FalQueueHandler {
   ): Promise<string> {
     console.log('[FalQueueHandler] 提交视频生成任务:', { endpoint, requestData })
 
-    const response = await this.apiClient.post(`/${endpoint}`, requestData)
+    const response = await this.apiClient.post(endpoint, requestData)
     const { request_id } = response.data
 
     console.log('[FalQueueHandler] 视频任务已提交:', { request_id })
@@ -54,7 +54,7 @@ export class FalQueueHandler {
     requestId: string,
     onProgress?: (status: ProgressStatus) => void
   ): Promise<ImageResult> {
-    const statusUrl = `/${modelId}/requests/${requestId}/status`
+    const statusUrl = `${modelId}/requests/${requestId}/status`
     const maxAttempts = FAL_CONFIG.maxPollAttempts
     let attempts = 0
 
@@ -125,7 +125,7 @@ export class FalQueueHandler {
     requestId: string,
     onProgress: (status: ProgressStatus) => void
   ): Promise<VideoResult> {
-    const statusUrl = `/${modelId}/requests/${requestId}/status`
+    const statusUrl = `${modelId}/requests/${requestId}/status`
     const maxAttempts = FAL_CONFIG.maxPollAttempts
     let attempts = 0
 
@@ -185,7 +185,7 @@ export class FalQueueHandler {
     modelId: string,
     requestId: string
   ): Promise<ImageResult> {
-    const resultUrl = `/${modelId}/requests/${requestId}`
+    const resultUrl = `${modelId}/requests/${requestId}`
 
     try {
       const response = await this.apiClient.get(resultUrl)
@@ -204,7 +204,7 @@ export class FalQueueHandler {
     modelId: string,
     requestId: string
   ): Promise<VideoResult> {
-    const resultUrl = `/${modelId}/requests/${requestId}`
+    const resultUrl = `${modelId}/requests/${requestId}`
 
     try {
       const response = await this.apiClient.get(resultUrl)
