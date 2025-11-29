@@ -17,6 +17,7 @@ import { ProgressBar } from './components/ui/ProgressBar'
 import { calculateProgress } from './utils/progress'
 import { loadPresets } from './utils/preset'
 import { canDeleteFile } from './utils/fileRefCount'
+import { getMediaDimensions, getMediaDurationFormatted } from './utils/mediaDimensions'
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -27,6 +28,8 @@ interface GenerationTask {
   provider?: string  // 保存供应商信息（用于继续查询）
   images?: string[]
   size?: string
+  dimensions?: string  // 实际媒体尺寸（从文件中提取）
+  duration?: string  // 实际媒体时长（从文件中提取，格式化后的字符串如 "1:23"）
   status: 'queued' | 'pending' | 'generating' | 'success' | 'error' | 'timeout'  // 添加 queued 排队状态
   result?: MediaResult
   error?: string
@@ -1287,9 +1290,23 @@ const App: React.FC = () => {
 
       // 更新任务状态为成功
       if (result && result.url) {
+        // 获取实际媒体尺寸和时长
+        let dimensions: string | null = null
+        let duration: string | null = null
+        try {
+          const urlToCheck = (result as any).filePath || result.url
+          dimensions = await getMediaDimensions(urlToCheck, type)
+          duration = await getMediaDurationFormatted(urlToCheck, type)
+          console.log('[App] 获取媒体信息:', { dimensions, duration })
+        } catch (error) {
+          console.error('[App] 获取媒体信息失败:', error)
+        }
+
         updateTask(taskId, {
           status: 'success',
           progress: 100,
+          dimensions: dimensions || undefined,
+          duration: duration || undefined,
           result: {
             id: taskId,
             type,
@@ -1340,7 +1357,8 @@ const App: React.FC = () => {
       model,  // 保存模型信息
       provider: providerId, // 保存供应商信息
       images: options?.images,
-      size: options?.size,
+      // 不设置 size 字段，等生成完成后从实际文件中提取真实尺寸
+      // size: options?.size,
       uploadedFilePaths: options?.uploadedFilePaths,
       status: isGenerating ? 'queued' : 'pending', // 如果正在生成，则排队
       progress: 0,
@@ -1427,9 +1445,23 @@ const App: React.FC = () => {
     try {
       const result = await pollTaskStatus(task.serverTaskId, task.id, task.model)
       if (result && result.url) {
+        // 获取实际媒体尺寸和时长
+        let dimensions: string | null = null
+        let duration: string | null = null
+        try {
+          const urlToCheck = (result as any).filePath || result.url
+          dimensions = await getMediaDimensions(urlToCheck, task.type)
+          duration = await getMediaDurationFormatted(urlToCheck, task.type)
+          console.log('[App] 获取媒体信息:', { dimensions, duration })
+        } catch (error) {
+          console.error('[App] 获取媒体信息失败:', error)
+        }
+
         updateTask(task.id, {
           status: 'success',
           progress: 100,
+          dimensions: dimensions || undefined,
+          duration: duration || undefined,
           result: {
             id: task.id,
             type: 'video',
@@ -1837,11 +1869,25 @@ const App: React.FC = () => {
         }
       }
 
+      // 获取实际媒体尺寸和时长
+      let dimensions: string | null = null
+      let duration: string | null = null
+      try {
+        const urlToCheck = (result as any).filePath || result.url
+        dimensions = await getMediaDimensions(urlToCheck, task.type)
+        duration = await getMediaDurationFormatted(urlToCheck, task.type)
+        console.log('[App] 获取媒体信息:', { dimensions, duration })
+      } catch (error) {
+        console.error('[App] 获取媒体信息失败:', error)
+      }
+
       // 更新任务为成功状态
       setTasks(prev => prev.map(t =>
         t.id === task.id ? {
           ...t,
           status: 'success',
+          dimensions: dimensions || undefined,
+          duration: duration || undefined,
           result: {
             id: task.id,
             type: task.type,
@@ -2156,9 +2202,27 @@ const App: React.FC = () => {
                               <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded">
                                 {task.model}
                               </span>
-                              {task.size && (
+                              {/* 图片：显示尺寸 */}
+                              {task.type === 'image' && (task.dimensions || task.size) && (
                                 <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                                  {task.size}
+                                  {task.dimensions || task.size}
+                                </span>
+                              )}
+                              {/* 视频：显示尺寸和时长 */}
+                              {task.type === 'video' && (task.dimensions || task.size) && (
+                                <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
+                                  {task.dimensions || task.size}
+                                </span>
+                              )}
+                              {task.type === 'video' && task.duration && (
+                                <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
+                                  {task.duration}
+                                </span>
+                              )}
+                              {/* 音频：只显示时长 */}
+                              {task.type === 'audio' && task.duration && (
+                                <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
+                                  {task.duration}
                                 </span>
                               )}
                               {task.result?.createdAt && (

@@ -682,6 +682,9 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       guidance: options.guidance,
       model: options.model
     })
+
+    // 注意：魔搭模型不设置 size 字段（用于显示），只设置 width 和 height（用于 API）
+    // 这样在生成过程中不会显示尺寸，等生成完成后从实际文件中提取真实尺寸
   }
 
   return options
