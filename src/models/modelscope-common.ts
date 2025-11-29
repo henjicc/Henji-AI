@@ -80,6 +80,8 @@ export const modelscopeCommonParams: ParamDef[] = [
     type: 'text',
     label: '负面提示词',
     placeholder: '输入不希望出现的内容...',
+    className: 'flex-1',
+    inputClassName: 'w-full',
     tooltip: '描述不希望在图像中出现的元素，如：lowres, bad anatomy, blurry',
     tooltipDelay: 500
   }
@@ -97,6 +99,70 @@ const loadCustomModels = (): Array<{ id: string; name: string }> => {
   }
   return []
 }
+
+// 魔搭 Z-Image-Turbo 专用参数（移除 guidance，修改 steps 默认值）
+export const modelscopeZImageTurboParams: ParamDef[] = [
+  {
+    id: 'imageSize',
+    type: 'dropdown',
+    label: '分辨率',
+    defaultValue: '1:1',
+    resolutionConfig: {
+      type: 'aspect_ratio',
+      smartMatch: false,
+      visualize: true,
+      customInput: true,
+      baseSize: 1440,
+      baseSizeEditable: true,
+      baseSizeMin: 512,
+      baseSizeMax: 2048,
+      baseSizeStep: 8,
+      extractRatio: (value) => {
+        if (value.includes(':')) {
+          const [w, h] = value.split(':').map(Number)
+          return w / h
+        }
+        if (value === '自定义') {
+          return null
+        }
+        return null
+      }
+    },
+    options: [
+      { value: '21:9', label: '21:9' },
+      { value: '16:9', label: '16:9' },
+      { value: '3:2', label: '3:2' },
+      { value: '4:3', label: '4:3' },
+      { value: '1:1', label: '1:1' },
+      { value: '3:4', label: '3:4' },
+      { value: '2:3', label: '2:3' },
+      { value: '9:16', label: '9:16' },
+      { value: '9:21', label: '9:21' }
+    ]
+  },
+  {
+    id: 'steps',
+    type: 'number',
+    label: '采样步数',
+    min: 1,
+    max: 100,
+    step: 1,
+    defaultValue: 10,  // Z-Image-Turbo 默认为 10
+    widthClassName: 'w-24',
+    tooltip: '采样步数越多，生成的图像越精细，但耗时也越长。建议值：8-20',
+    tooltipDelay: 500
+  },
+  {
+    id: 'negativePrompt',
+    type: 'text',
+    label: '负面提示词',
+    placeholder: '输入不希望出现的内容...',
+    className: 'flex-1',
+    inputClassName: 'w-full',
+    tooltip: '描述不希望在图像中出现的元素，如：lowres, bad anatomy, blurry',
+    tooltipDelay: 500
+  }
+]
 
 // 自定义模型专用参数（在通用参数基础上添加模型选择和管理按钮）
 export const modelscopeCustomParams: ParamDef[] = [

@@ -21,7 +21,8 @@ import {
   minimaxSpeechAdvancedParams,
   falAiZImageTurboParams,
   modelscopeCommonParams,
-  modelscopeCustomParams
+  modelscopeCustomParams,
+  modelscopeZImageTurboParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -312,26 +313,65 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     )
   }
 
-  // 魔搭预设模型参数
-  if (selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
-      selectedModel === 'Qwen/Qwen-Image' ||
+  // 魔搭 Z-Image-Turbo（无 guidance 参数）
+  if (selectedModel === 'Tongyi-MAI/Z-Image-Turbo') {
+    return (
+      <>
+        {/* 分辨率、采样步数 */}
+        <SchemaForm
+          schema={modelscopeZImageTurboParams.slice(0, 2)}
+          values={{
+            imageSize: values.imageSize,
+            customWidth: values.customWidth,
+            customHeight: values.customHeight,
+            resolutionBaseSize: values.resolutionBaseSize,
+            steps: values.steps
+          }}
+          onChange={onChange}
+        />
+        {/* 负面提示词单独一行，自动占据剩余空间 */}
+        <TextInput
+          label="负面提示词"
+          value={values.negativePrompt}
+          onChange={(v) => onChange('negativePrompt', v)}
+          placeholder="输入不希望出现的内容..."
+          className="flex-1 min-w-[200px]"
+          inputClassName="w-full"
+        />
+      </>
+    )
+  }
+
+  // 魔搭其他预设模型参数（包含 guidance）
+  if (selectedModel === 'Qwen/Qwen-Image' ||
       selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
       selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
       selectedModel === 'MusePublic/majicMIX_realistic') {
     return (
-      <SchemaForm
-        schema={modelscopeCommonParams}
-        values={{
-          imageSize: values.imageSize,
-          customWidth: values.customWidth,
-          customHeight: values.customHeight,
-          resolutionBaseSize: values.resolutionBaseSize,
-          steps: values.steps,
-          guidance: values.guidance,
-          negativePrompt: values.negativePrompt
-        }}
-        onChange={onChange}
-      />
+      <>
+        {/* 分辨率、采样步数、引导系数 */}
+        <SchemaForm
+          schema={modelscopeCommonParams.slice(0, 3)}
+          values={{
+            imageSize: values.imageSize,
+            customWidth: values.customWidth,
+            customHeight: values.customHeight,
+            resolutionBaseSize: values.resolutionBaseSize,
+            steps: values.steps,
+            guidance: values.guidance
+          }}
+          onChange={onChange}
+        />
+        {/* 负面提示词单独一行，自动占据剩余空间 */}
+        <TextInput
+          label="负面提示词"
+          value={values.negativePrompt}
+          onChange={(v) => onChange('negativePrompt', v)}
+          placeholder="输入不希望出现的内容..."
+          className="flex-1 min-w-[200px]"
+          inputClassName="w-full"
+        />
+      </>
     )
   }
 
@@ -342,9 +382,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
     return (
       <>
+        {/* 模型选择、分辨率、采样步数、引导系数 */}
         <SchemaForm
           key={refreshKey} // 当 refreshKey 变化时，强制重新渲染
-          schema={modelscopeCustomParams}
+          schema={modelscopeCustomParams.slice(0, 4)}
           values={{
             modelscopeCustomModel: values.modelscopeCustomModel,
             imageSize: values.imageSize,
@@ -352,8 +393,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             customHeight: values.customHeight,
             resolutionBaseSize: values.resolutionBaseSize,
             steps: values.steps,
-            guidance: values.guidance,
-            negativePrompt: values.negativePrompt
+            guidance: values.guidance
           }}
           onChange={onChange}
         />
@@ -367,21 +407,22 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           alignment="aboveCenter"
           closeOnPanelClick={false}
           renderPanel={() => (
-            <div className="flex flex-col bg-white/95 dark:bg-zinc-800 rounded-lg h-[500px]">
-              <div className="p-4 border-b border-zinc-200 dark:border-zinc-700">
-                <h3 className="text-sm font-medium">自定义模型管理</h3>
-                <p className="text-xs text-zinc-500 mt-1">添加或删除魔搭API的自定义模型</p>
-              </div>
-              <div className="p-4 flex-1 overflow-hidden">
-                <div className="text-xs text-zinc-400 mb-4">
-                  提示：模型ID格式通常为 "组织名/模型名"，例如：black-forest-labs/FLUX.1-dev
-                </div>
-                <ModelscopeCustomModelManager
-                  onModelsChange={() => setRefreshKey(prev => prev + 1)}
-                />
-              </div>
+            <div className="flex flex-col bg-white/95 dark:bg-zinc-800 rounded-lg h-[500px] p-4">
+              <ModelscopeCustomModelManager
+                onModelsChange={() => setRefreshKey(prev => prev + 1)}
+              />
             </div>
           )}
+        />
+
+        {/* 负面提示词单独一行，自动占据剩余空间 */}
+        <TextInput
+          label="负面提示词"
+          value={values.negativePrompt}
+          onChange={(v) => onChange('negativePrompt', v)}
+          placeholder="输入不希望出现的内容..."
+          className="flex-1 min-w-[200px]"
+          inputClassName="w-full"
         />
       </>
     )

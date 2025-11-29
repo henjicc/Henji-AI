@@ -625,17 +625,18 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     let width = 1024
     let height = 1024
 
-    // 优先使用 customWidth 和 customHeight
+    // 优先使用 customWidth 和 customHeight（这些值已经由 UI 根据基数计算好了）
     if (params.customWidth && params.customHeight) {
       width = parseInt(params.customWidth)
       height = parseInt(params.customHeight)
     }
-    // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用预设尺寸
+    // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用基数动态计算
     else if (params.imageSize && params.imageSize.includes(':')) {
-      const { modelscopePresetSizes } = await import('@/models/modelscope-common')
-      const size = modelscopePresetSizes[params.imageSize]
-
-      if (size) {
+      const [w, h] = params.imageSize.split(':').map(Number)
+      if (!isNaN(w) && !isNaN(h)) {
+        const { calculateResolution } = await import('@/utils/resolutionCalculator')
+        const baseSize = params.resolutionBaseSize || 1440
+        const size = calculateResolution(baseSize, w, h)
         width = size.width
         height = size.height
       }
@@ -647,17 +648,27 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
     // 设置其他参数
     options.steps = params.steps
-    options.guidance = params.guidance
+
+    // Z-Image-Turbo 不使用 guidance 参数，其他模型才设置
+    if (selectedModel !== 'Tongyi-MAI/Z-Image-Turbo' && params.guidance !== undefined) {
+      options.guidance = params.guidance
+    }
+
     if (params.negativePrompt) {
       options.negativePrompt = params.negativePrompt
     }
 
-    // 对于自定义模型，需要设置实际的 model 值
+    // 设置 model 参数
+    // 对于预设模型，直接使用 selectedModel（如 "Tongyi-MAI/Z-Image-Turbo"）
+    // 对于自定义模型，使用用户选择的 modelscopeCustomModel
     if (selectedModel === 'modelscope-custom') {
       if (!params.modelscopeCustomModel) {
         throw new Error('请先选择或添加自定义模型')
       }
       options.model = params.modelscopeCustomModel
+    } else {
+      // 预设模型直接使用 selectedModel 作为 model 参数
+      options.model = selectedModel
     }
 
     console.log('[optionsBuilder] 魔搭模型参数:', {
@@ -665,6 +676,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       imageSize: params.imageSize,
       customWidth: params.customWidth,
       customHeight: params.customHeight,
+      resolutionBaseSize: params.resolutionBaseSize,
       最终分辨率: `${width}x${height}`,
       steps: options.steps,
       guidance: options.guidance,

@@ -72,10 +72,10 @@ export class ModelscopeAdapter extends BaseAdapter {
 
   async pollTaskStatus(taskId: string, onProgress?: any): Promise<ImageResult> {
     const { pollUntilComplete } = await import('@/utils/polling')
-    const { getExpectedPolls } = await import('@/utils/modelConfig')
 
-    // 魔搭API默认预期轮询次数
-    const estimatedPolls = getExpectedPolls('modelscope-default') || 40
+    // 魔搭API预期轮询次数设置为6
+    // PENDING和PROCESSING状态都会计入次数
+    const estimatedPolls = 6
 
     const result = await pollUntilComplete<ImageResult>({
       checkFn: async () => {

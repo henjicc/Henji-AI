@@ -25,7 +25,7 @@ export { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 export { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 
 // 魔搭模型
-export { modelscopeCommonParams, modelscopeCustomParams } from './modelscope-common'
+export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -55,7 +55,7 @@ import { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Params } from './fal-ai-veo-3.1'
 import { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 import { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
-import { modelscopeCommonParams, modelscopeCustomParams } from './modelscope-common'
+import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 
 /**
  * 模型 ID 到 Schema 的映射表
@@ -77,8 +77,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'veo3.1': falAiVeo31Params,
   'bytedance-seedream-v4': bytedanceSeedreamV4Params,
   'fal-ai-z-image-turbo': falAiZImageTurboParams,
-  // 魔搭模型（预设模型使用通用参数）
-  'Tongyi-MAI/Z-Image-Turbo': modelscopeCommonParams,
+  // 魔搭模型
+  'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,
   'black-forest-labs/FLUX.1-Krea-dev': modelscopeCommonParams,
   'MusePublic/14_ckpt_SD_XL': modelscopeCommonParams,

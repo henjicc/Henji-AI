@@ -82,11 +82,15 @@ export default function Tooltip({ children, content, delay = 500, className }: T
         </span>
     )
 
+    // Extract className from children to apply to wrapper
+    const childClassName = children.props.className || ''
+    const shouldFlex = childClassName.includes('flex-1') || childClassName.includes('flex-grow')
+
     return (
         <>
             <span
                 ref={triggerRef}
-                className="relative inline-block"
+                className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >

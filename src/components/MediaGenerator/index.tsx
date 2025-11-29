@@ -116,7 +116,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setNumInferenceSteps: state.setNumInferenceSteps,
     setEnablePromptExpansion: state.setEnablePromptExpansion,
     setAcceleration: state.setAcceleration,
-    setResolutionBaseSize: state.setResolutionBaseSize
+    setResolutionBaseSize: state.setResolutionBaseSize,
+    // 魔搭模型参数
+    setSteps: state.setSteps,
+    setGuidance: state.setGuidance,
+    setNegativePrompt: state.setNegativePrompt,
+    setModelscopeCustomModel: state.setModelscopeCustomModel
   }), [])
 
   // 收藏模型管理
@@ -606,6 +611,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         numInferenceSteps: state.numInferenceSteps,
         enablePromptExpansion: state.enablePromptExpansion,
         acceleration: state.acceleration,
+        // 魔搭模型参数
+        resolutionBaseSize: state.resolutionBaseSize,
+        steps: state.steps,
+        guidance: state.guidance,
+        negativePrompt: state.negativePrompt,
+        modelscopeCustomModel: state.modelscopeCustomModel,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
