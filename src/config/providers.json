@@ -7,7 +7,7 @@
       "models": [
         {
           "id": "seedream-4.0",
-          "name": "即梦图片生成 4.0",
+          "name": "即梦图片 4.0",
           "type": "image",
           "description": "先进的图像生成模型，支持4K分辨率",
           "functions": [
@@ -37,7 +37,7 @@
         },
         {
           "id": "kling-2.5-turbo",
-          "name": "可灵 V2.5 Turbo",
+          "name": "可灵 2.5 Turbo",
           "type": "video",
           "description": "文生/图生视频，支持宽高比与负面提示",
           "functions": [
@@ -51,7 +51,7 @@
         },
         {
           "id": "minimax-hailuo-2.3",
-          "name": "Minimax Hailuo 2.3",
+          "name": "海螺 Hailuo 2.3",
           "type": "video",
           "description": "文生/图生视频，分辨率与时长受限",
           "functions": [
@@ -65,7 +65,7 @@
         },
         {
           "id": "minimax-hailuo-02",
-          "name": "Minimax Hailuo-02",
+          "name": "海螺 Hailuo-02",
           "type": "video",
           "description": "文生/图生/首尾帧；6/10 秒与 768P/1080P",
           "functions": [
@@ -94,7 +94,7 @@
         },
         {
           "id": "wan-2.5-preview",
-          "name": "Wan 2.5 Preview",
+          "name": "万相 2.5 Preview",
           "type": "video",
           "description": "文生/图生视频，支持音频与水印选项",
           "functions": [
@@ -108,7 +108,7 @@
         },
         {
           "id": "seedance-v1",
-          "name": "Seedance V1 (Lite/Pro)",
+          "name": "即梦视频 3.0",
           "type": "video",
           "description": "文/图生视频，480p/720p/1080p，支持相机固定；Lite 支持首尾图",
           "functions": [
@@ -175,7 +175,7 @@
         },
         {
           "id": "bytedance-seedream-v4",
-          "name": "即梦图片生成4.0",
+          "name": "即梦图片 4.0",
           "type": "image",
           "description": "ByteDance 新一代图像创建模型，集成了图像生成和图像编辑功能",
           "functions": [
