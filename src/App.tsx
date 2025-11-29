@@ -1644,6 +1644,8 @@ const App: React.FC = () => {
         }
         return {
           ...task,
+          dimensions: task.dimensions, // 恢复实际媒体尺寸
+          duration: task.duration, // 恢复实际媒体时长
           status: (task.status === 'generating' || task.status === 'pending' || task.status === 'queued')
             ? ((task.serverTaskId || (task.requestId && task.modelId)) ? 'timeout' : 'error')
             : task.status,
@@ -1681,6 +1683,8 @@ const App: React.FC = () => {
         model: t.model,
         provider: t.provider, // 保存供应商信息
         size: t.size,
+        dimensions: t.dimensions, // 保存实际媒体尺寸
+        duration: t.duration, // 保存实际媒体时长
         status: t.status,
         error: t.error,
         uploadedFilePaths: t.uploadedFilePaths,
