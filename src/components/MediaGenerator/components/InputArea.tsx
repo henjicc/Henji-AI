@@ -68,10 +68,21 @@ const InputArea: React.FC<InputAreaProps> = ({
      selectedModel !== 'minimax-hailuo-2.3' &&
      selectedModel !== 'wan-2.5-preview')
 
+  // 检查是否是魔搭模型
+  const isModelscopeModel =
+    selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
+    selectedModel === 'Qwen/Qwen-Image' ||
+    selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
+    selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
+    selectedModel === 'MusePublic/majicMIX_realistic' ||
+    selectedModel === 'modelscope-custom'
+
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 图片上传和预览区域 */}
-      {currentModel?.type !== 'audio' && selectedModel !== 'fal-ai-z-image-turbo' && (
+      {currentModel?.type !== 'audio' &&
+       selectedModel !== 'fal-ai-z-image-turbo' &&
+       !isModelscopeModel && (
         <div className="mb-3">
           <FileUploader
             files={uploadedImages}
@@ -119,7 +130,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
           }}
           placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的内容'}
-          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' ? 'min-h-[176px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
+          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || isModelscopeModel ? 'min-h-[176px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
           disabled={isLoading}
         />
 

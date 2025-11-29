@@ -41,7 +41,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
 }) => {
   // 获取基数配置（使用默认值）
   const baseSize = baseSizeValue || config.baseSize || 1440
-  const baseSizeEditable = config.baseSizeEditable !== false // 默认允许编辑
+  const baseSizeEditable = config.baseSizeEditable === true // 默认不允许编辑，只有明确设置为 true 时才显示
   const baseSizeMin = config.baseSizeMin || 512
   const baseSizeMax = config.baseSizeMax || 2048
   const baseSizeStep = config.baseSizeStep || 8
