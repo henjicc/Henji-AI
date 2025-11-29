@@ -19,6 +19,24 @@ import { loadPresets } from './utils/preset'
 import { canDeleteFile } from './utils/fileRefCount'
 import { getMediaDimensions, getMediaDurationFormatted } from './utils/mediaDimensions'
 
+/**
+ * 格式化模型显示名称
+ * @param modelId 模型ID
+ * @returns 格式化后的显示名称，格式为"供应商：模型名称"
+ */
+const formatModelDisplayName = (modelId: string): string => {
+  // 遍历所有供应商
+  for (const provider of providers) {
+    // 在当前供应商的模型列表中查找匹配的模型
+    const model = provider.models.find(m => m.id === modelId)
+    if (model) {
+      return `${provider.name}：${model.name}`
+    }
+  }
+  // 如果找不到，返回原始 ID
+  return modelId
+}
+
 // 定义生成任务类型
 interface GenerationTask {
   id: string
@@ -2200,7 +2218,7 @@ const App: React.FC = () => {
                                 {task.type === 'image' ? '图片' : task.type === 'video' ? '视频' : '音频'}
                               </span>
                               <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded">
-                                {task.model}
+                                {formatModelDisplayName(task.model)}
                               </span>
                               {/* 图片：显示尺寸 */}
                               {task.type === 'image' && (task.dimensions || task.size) && (
