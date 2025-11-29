@@ -5,17 +5,6 @@ import { ParamDef } from '../types/schema'
  */
 export const seedream40Params: ParamDef[] = [
     {
-        id: 'maxImages',
-        type: 'number',
-        label: '数量',
-        min: 1,
-        max: 15,
-        step: 1,
-        widthClassName: 'w-20',
-        tooltip: '设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。',
-        tooltipDelay: 500
-    },
-    {
         id: 'selectedResolution',
         type: 'dropdown',
         label: '分辨率',
@@ -56,5 +45,16 @@ export const seedream40Params: ParamDef[] = [
             return [{ value: 'smart', label: '智能' }, ...baseOptions]
         },
         className: 'min-w-[100px]'
+    },
+    {
+        id: 'maxImages',
+        type: 'number',
+        label: '数量',
+        min: 1,
+        max: 15,
+        step: 1,
+        widthClassName: 'w-20',
+        tooltip: '设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。',
+        tooltipDelay: 500
     }
 ]
