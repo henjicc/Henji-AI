@@ -222,7 +222,7 @@
           }
         },
         {
-          "id": "MusePublic/Qwen-image",
+          "id": "Qwen/Qwen-Image",
           "name": "Qwen-image",
           "type": "image",
           "description": "通义千问图像生成模型",
@@ -239,32 +239,6 @@
           "name": "FLUX.1-Krea-dev",
           "type": "image",
           "description": "FLUX.1 Krea 开发版图像生成模型",
-          "functions": [
-            "图片生成"
-          ],
-          "progressConfig": {
-            "type": "polling",
-            "expectedPolls": 40
-          }
-        },
-        {
-          "id": "MusePublic/14_ckpt_SD_XL",
-          "name": "万象熔炉 | Anything XL",
-          "type": "image",
-          "description": "Stable Diffusion XL 万象熔炉模型",
-          "functions": [
-            "图片生成"
-          ],
-          "progressConfig": {
-            "type": "polling",
-            "expectedPolls": 40
-          }
-        },
-        {
-          "id": "MusePublic/majicMIX_realistic",
-          "name": "majicMIX realistic 麦橘写实",
-          "type": "image",
-          "description": "majicMIX 写实风格图像生成模型",
           "functions": [
             "图片生成"
           ],

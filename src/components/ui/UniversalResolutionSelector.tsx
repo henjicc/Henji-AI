@@ -11,10 +11,12 @@ interface UniversalResolutionSelectorProps {
   customWidth?: string
   customHeight?: string
   qualityValue?: any
+  baseSizeValue?: number  // 新增：基数值
   onChange: (value: any) => void
   onWidthChange?: (value: string) => void
   onHeightChange?: (value: string) => void
   onQualityChange?: (value: any) => void
+  onBaseSizeChange?: (value: number) => void  // 新增：基数变化回调
 }
 
 /**
@@ -30,11 +32,19 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   customWidth,
   customHeight,
   qualityValue,
+  baseSizeValue,
   onChange,
   onWidthChange,
   onHeightChange,
-  onQualityChange
+  onQualityChange,
+  onBaseSizeChange
 }) => {
+  // 获取基数配置（使用默认值）
+  const baseSize = baseSizeValue || config.baseSize || 1440
+  const baseSizeEditable = config.baseSizeEditable !== false // 默认允许编辑
+  const baseSizeMin = config.baseSizeMin || 512
+  const baseSizeMax = config.baseSizeMax || 2048
+  const baseSizeStep = config.baseSizeStep || 8
   // 自动判断标签：如果只有宽高比（没有质量选项和自定义输入），显示"比例"，否则显示"分辨率"
   const getDefaultLabel = () => {
     if (config.type === 'aspect_ratio' && !config.qualityOptions && !config.customInput) {
@@ -101,6 +111,37 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
       closeOnPanelClick={false}
       renderPanel={() => (
         <div className="p-4">
+          {/* 基数输入框（仅在 baseSizeEditable 为 true 时显示） */}
+          {baseSizeEditable && onBaseSizeChange && (
+            <div className="mb-3">
+              <label className="block text-xs text-zinc-400 mb-2">
+                基数（正方形边长）
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={baseSize}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === '') {
+                      onBaseSizeChange(baseSizeMin)
+                    } else {
+                      const numValue = parseInt(value)
+                      if (!isNaN(numValue)) {
+                        onBaseSizeChange(numValue)
+                      }
+                    }
+                  }}
+                  className="flex-1 bg-zinc-700/50 border border-zinc-700/50 rounded px-3 py-2 text-sm"
+                />
+                <span className="text-xs text-zinc-400 whitespace-nowrap">PX</span>
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-1">
+                推荐范围：{baseSizeMin}-{baseSizeMax} PX
+              </div>
+            </div>
+          )}
+
           {/* 选择比例/尺寸/分辨率 */}
           <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
             <label className="block text-xs text-zinc-400 mb-2">

@@ -1133,16 +1133,30 @@ const App: React.FC = () => {
       let result: any
       switch (type) {
         case 'image':
-          // 为即梦4.0和bytedance-seedream-v4添加基于时间的进度跟踪
+          // 为即梦4.0、bytedance-seedream-v4 和魔搭模型添加基于时间的进度跟踪
           let progressTimer: number | null = null
           let lastUpdateTime = 0
-          if (model === 'seedream-4.0' || model === 'bytedance-seedream-v4') {
+
+          // 检查是否是魔搭模型
+          const isModelscopeModel = providerObj?.id === 'modelscope'
+
+          if (model === 'seedream-4.0' || model === 'bytedance-seedream-v4' || isModelscopeModel) {
             const startTime = Date.now()
-            // 根据图片数量动态计算预期时间
-            // bytedance-seedream-v4: 基础时间 20 秒，每张图片增加 20 秒
-            const numImages = options.numImages || 1
-            const baseTime = 20000
-            const expectedDuration = baseTime * numImages
+            // 根据模型和图片数量动态计算预期时间
+            let expectedDuration: number
+
+            if (isModelscopeModel) {
+              // 魔搭模型：固定 15 秒
+              expectedDuration = 15000
+            } else if (model === 'bytedance-seedream-v4') {
+              // bytedance-seedream-v4: 基础时间 20 秒，每张图片增加 20 秒
+              const numImages = options.numImages || 1
+              const baseTime = 20000
+              expectedDuration = baseTime * numImages
+            } else {
+              // seedream-4.0: 默认 20 秒
+              expectedDuration = 20000
+            }
 
             const updateProgressLoop = () => {
               const now = Date.now()
@@ -2241,9 +2255,10 @@ const App: React.FC = () => {
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-zinc-400 mb-3">生成中...</p>
-                              {/* 进度条：视频任务、Fal图片任务、有进度的派欧云图片任务 */}
+                              {/* 进度条：视频任务、Fal图片任务、魔搭图片任务、有进度的派欧云图片任务 */}
                               {(task.type === 'video' ||
                                 (task.type === 'image' && task.provider === 'fal') ||
+                                (task.type === 'image' && task.provider === 'modelscope') ||
                                 (task.type === 'image' && task.provider === 'piaoyun' && (task.model === 'seedream-4.0' || (taskProgress[task.id] || 0) > 0))
                               ) && (
                                   <ProgressBar

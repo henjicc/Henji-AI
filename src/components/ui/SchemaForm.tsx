@@ -58,6 +58,9 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                             // 即梦4.0 使用 resolutionQuality，Nano Banana Pro 使用 resolution
                             const qualityKey = p.resolutionConfig.qualityKey || 'resolutionQuality'
 
+                            // 确定基数参数的 key
+                            const baseSizeKey = p.resolutionConfig.baseSizeKey || 'resolutionBaseSize'
+
                             const component = (
                                 <UniversalResolutionSelector
                                     label={param.label}
@@ -67,10 +70,12 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                                     customWidth={values.customWidth}
                                     customHeight={values.customHeight}
                                     qualityValue={values[qualityKey]}
+                                    baseSizeValue={values[baseSizeKey]}
                                     onChange={(v) => onChange(param.id, v)}
                                     onWidthChange={p.resolutionConfig.customInput ? (v) => onChange('customWidth', v) : undefined}
                                     onHeightChange={p.resolutionConfig.customInput ? (v) => onChange('customHeight', v) : undefined}
                                     onQualityChange={p.resolutionConfig.qualityOptions ? (v) => onChange(qualityKey, v) : undefined}
+                                    onBaseSizeChange={p.resolutionConfig.baseSizeEditable !== false ? (v) => onChange(baseSizeKey, v) : undefined}
                                 />
                             )
                             return wrapWithTooltip(component, param, param.id)

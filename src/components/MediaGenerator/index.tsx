@@ -16,7 +16,6 @@ import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
-import { presetSizes } from '@/models/fal-ai-z-image-turbo'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -116,7 +115,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setTextNormalization: state.setTextNormalization,
     setNumInferenceSteps: state.setNumInferenceSteps,
     setEnablePromptExpansion: state.setEnablePromptExpansion,
-    setAcceleration: state.setAcceleration
+    setAcceleration: state.setAcceleration,
+    setResolutionBaseSize: state.setResolutionBaseSize
   }), [])
 
   // 收藏模型管理
@@ -186,11 +186,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const isUpdatingFromImageSizeRef = useRef(false)
   const isUpdatingFromCustomSizeRef = useRef(false)
 
-  // 监听 Z-Image-Turbo 的 imageSize 变化，自动更新 customWidth 和 customHeight
+  // 监听 Z-Image-Turbo 的 imageSize 和 resolutionBaseSize 变化，自动更新 customWidth 和 customHeight
   useEffect(() => {
-    console.log('[Z-Image-Turbo] imageSize changed:', {
+    console.log('[Z-Image-Turbo] imageSize or baseSize changed:', {
       selectedModel: state.selectedModel,
       imageSize: state.imageSize,
+      baseSize: state.resolutionBaseSize,
       currentWidth: state.customWidth,
       currentHeight: state.customHeight,
       isUpdatingFromCustomSize: isUpdatingFromCustomSizeRef.current
@@ -212,27 +213,30 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       return
     }
 
-    // 如果是比例格式（如 "4:3"），使用预计算的最大尺寸
+    // 如果是比例格式（如 "4:3"），使用基数动态计算分辨率
     if (state.imageSize.includes(':')) {
-      const size = presetSizes[state.imageSize]
-      console.log('[Z-Image-Turbo] Found preset size:', { ratio: state.imageSize, size })
+      const [w, h] = state.imageSize.split(':').map(Number)
+      if (!isNaN(w) && !isNaN(h)) {
+        // 使用基数计算分辨率
+        import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
+          const baseSize = state.resolutionBaseSize || 1440 // 默认 1440
+          const size = calculateResolution(baseSize, w, h)
+          console.log('[Z-Image-Turbo] Calculated size:', { ratio: state.imageSize, baseSize, size })
 
-      if (size) {
-        const newWidth = String(size.width)
-        const newHeight = String(size.height)
+          const newWidth = String(size.width)
+          const newHeight = String(size.height)
 
-        // 只有当值真的不同时才更新
-        if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
-          console.log('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
-          isUpdatingFromImageSizeRef.current = true
-          state.setCustomWidth(newWidth)
-          state.setCustomHeight(newHeight)
-        }
-      } else {
-        console.log('[Z-Image-Turbo] No preset size found for ratio:', state.imageSize)
+          // 只有当值真的不同时才更新
+          if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
+            console.log('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
+            isUpdatingFromImageSizeRef.current = true
+            state.setCustomWidth(newWidth)
+            state.setCustomHeight(newHeight)
+          }
+        })
       }
     }
-  }, [state.imageSize, state.selectedModel])
+  }, [state.imageSize, state.resolutionBaseSize, state.selectedModel])
 
   // 监听 customWidth 和 customHeight 变化，反向匹配比例（Z-Image-Turbo）
   // 只有用户手动修改时才触发
@@ -259,48 +263,60 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     const height = parseInt(state.customHeight)
     if (isNaN(width) || isNaN(height)) return
 
-    // 检查是否完全匹配某个预设尺寸
+    // 检查是否完全匹配某个预设尺寸（基于当前基数动态计算）
     let matchedRatio: string | null = null
-    for (const [ratio, size] of Object.entries(presetSizes)) {
-      if (size.width === width && size.height === height) {
-        matchedRatio = ratio
-        break
+    const baseSize = state.resolutionBaseSize || 1440
+
+    // 定义所有支持的比例
+    const aspectRatios = [
+      '21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21'
+    ]
+
+    // 动态计算每个比例的分辨率并匹配
+    import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
+      for (const ratio of aspectRatios) {
+        const [w, h] = ratio.split(':').map(Number)
+        const size = calculateResolution(baseSize, w, h)
+
+        if (size.width === width && size.height === height) {
+          matchedRatio = ratio
+          break
+        }
       }
-    }
 
-    console.log('[Z-Image-Turbo] Matched ratio:', matchedRatio)
+      console.log('[Z-Image-Turbo] Matched ratio:', matchedRatio)
 
-    // 如果找到匹配的比例，自动选中
-    if (matchedRatio && state.imageSize !== matchedRatio) {
-      console.log('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
-      isUpdatingFromCustomSizeRef.current = true
-      state.setImageSize(matchedRatio)
-    }
-    // 如果没有匹配的比例，设置为 "自定义"
-    else if (!matchedRatio && state.imageSize !== '自定义') {
-      console.log('[Z-Image-Turbo] Setting imageSize to 自定义')
-      isUpdatingFromCustomSizeRef.current = true
-      state.setImageSize('自定义')
-    }
-  }, [state.customWidth, state.customHeight, state.selectedModel])
+      // 如果找到匹配的比例，自动选中
+      if (matchedRatio && state.imageSize !== matchedRatio) {
+        console.log('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
+        isUpdatingFromCustomSizeRef.current = true
+        state.setImageSize(matchedRatio)
+      }
+      // 如果没有匹配的比例，设置为 "自定义"
+      else if (!matchedRatio && state.imageSize !== '自定义') {
+        console.log('[Z-Image-Turbo] Setting imageSize to 自定义')
+        isUpdatingFromCustomSizeRef.current = true
+        state.setImageSize('自定义')
+      }
+    })
+  }, [state.customWidth, state.customHeight, state.selectedModel, state.resolutionBaseSize])
 
-  // 监听魔搭模型的 imageSize 变化，自动更新 customWidth 和 customHeight
+  // 监听魔搭模型的 imageSize 和 resolutionBaseSize 变化，自动更新 customWidth 和 customHeight
   useEffect(() => {
     // 检查是否是魔搭模型
     const isModelscopeModel =
       state.selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
-      state.selectedModel === 'MusePublic/Qwen-image' ||
+      state.selectedModel === 'Qwen/Qwen-Image' ||
       state.selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
-      state.selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
-      state.selectedModel === 'MusePublic/majicMIX_realistic' ||
       state.selectedModel === 'modelscope-custom'
 
     if (!isModelscopeModel) return
     if (!state.imageSize) return
 
-    console.log('[ModelScope] imageSize changed:', {
+    console.log('[ModelScope] imageSize or baseSize changed:', {
       selectedModel: state.selectedModel,
       imageSize: state.imageSize,
+      baseSize: state.resolutionBaseSize,
       currentWidth: state.customWidth,
       currentHeight: state.customHeight
     })
@@ -311,14 +327,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       return
     }
 
-    // 如果是比例格式（如 "4:3"），使用预计算的最大尺寸
+    // 如果是比例格式（如 "4:3"），使用基数动态计算分辨率
     if (state.imageSize.includes(':')) {
-      // 动态导入 modelscopePresetSizes
-      import('@/models/modelscope-common').then(({ modelscopePresetSizes }) => {
-        const size = modelscopePresetSizes[state.imageSize]
-        console.log('[ModelScope] Found preset size:', { ratio: state.imageSize, size })
+      const [w, h] = state.imageSize.split(':').map(Number)
+      if (!isNaN(w) && !isNaN(h)) {
+        // 使用基数计算分辨率
+        import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
+          const baseSize = state.resolutionBaseSize || 1024 // 默认 1024
+          const size = calculateResolution(baseSize, w, h)
+          console.log('[ModelScope] Calculated size:', { ratio: state.imageSize, baseSize, size })
 
-        if (size) {
           const newWidth = String(size.width)
           const newHeight = String(size.height)
 
@@ -328,12 +346,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             state.setCustomWidth(newWidth)
             state.setCustomHeight(newHeight)
           }
-        } else {
-          console.log('[ModelScope] No preset size found for ratio:', state.imageSize)
-        }
-      })
+        })
+      }
     }
-  }, [state.imageSize, state.selectedModel, state.customWidth, state.customHeight])
+  }, [state.imageSize, state.resolutionBaseSize, state.selectedModel])
 
   // 监听重新编辑事件
   const isRestoringRef = useRef(false)
@@ -494,6 +510,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       imageSize: state.setImageSize,
       customWidth: state.setCustomWidth,
       customHeight: state.setCustomHeight,
+      resolutionBaseSize: state.setResolutionBaseSize,
       numInferenceSteps: state.setNumInferenceSteps,
       enablePromptExpansion: state.setEnablePromptExpansion,
       acceleration: state.setAcceleration,

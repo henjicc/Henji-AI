@@ -79,7 +79,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'fal-ai-z-image-turbo': falAiZImageTurboParams,
   // 魔搭模型（预设模型使用通用参数）
   'Tongyi-MAI/Z-Image-Turbo': modelscopeCommonParams,
-  'MusePublic/Qwen-image': modelscopeCommonParams,
+  'Qwen/Qwen-Image': modelscopeCommonParams,
   'black-forest-labs/FLUX.1-Krea-dev': modelscopeCommonParams,
   'MusePublic/14_ckpt_SD_XL': modelscopeCommonParams,
   'MusePublic/majicMIX_realistic': modelscopeCommonParams,

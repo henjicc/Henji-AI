@@ -25,6 +25,7 @@ export const useMediaGeneratorState = () => {
   const [customHeight, setCustomHeight] = useState('')
   const [isManualInput, setIsManualInput] = useState(false)
   const [maxImages, setMaxImages] = useState<number>(1)
+  const [resolutionBaseSize, setResolutionBaseSize] = useState<number>(1440)  // 基数，默认 1440
 
   // Vidu Q1 参数
   const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
@@ -129,6 +130,7 @@ export const useMediaGeneratorState = () => {
     customHeight, setCustomHeight,
     isManualInput, setIsManualInput,
     maxImages, setMaxImages,
+    resolutionBaseSize, setResolutionBaseSize,
 
     // Vidu
     viduMode, setViduMode,

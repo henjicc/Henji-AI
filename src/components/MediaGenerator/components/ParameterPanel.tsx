@@ -300,6 +300,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           imageSize: values.imageSize,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
+          resolutionBaseSize: values.resolutionBaseSize,
           numInferenceSteps: values.numInferenceSteps,
           numImages: values.numImages,
           enablePromptExpansion: values.enablePromptExpansion,
@@ -313,7 +314,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
   // 魔搭预设模型参数
   if (selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
-      selectedModel === 'MusePublic/Qwen-image' ||
+      selectedModel === 'Qwen/Qwen-Image' ||
       selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
       selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
       selectedModel === 'MusePublic/majicMIX_realistic') {
@@ -324,6 +325,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           imageSize: values.imageSize,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
+          resolutionBaseSize: values.resolutionBaseSize,
           steps: values.steps,
           guidance: values.guidance,
           negativePrompt: values.negativePrompt
@@ -348,6 +350,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             imageSize: values.imageSize,
             customWidth: values.customWidth,
             customHeight: values.customHeight,
+            resolutionBaseSize: values.resolutionBaseSize,
             steps: values.steps,
             guidance: values.guidance,
             negativePrompt: values.negativePrompt

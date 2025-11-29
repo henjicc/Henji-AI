@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import { invoke } from '@tauri-apps/api/core'
 import {
   BaseAdapter,
   GenerateImageParams,
@@ -6,62 +6,64 @@ import {
 } from '../base/BaseAdapter'
 import { MODELSCOPE_CONFIG } from './config'
 import { findRoute } from './models'
-import { parseImageResponse } from './parsers'
+
+interface ModelscopeTaskResponse {
+  task_id: string
+  request_id: string
+}
+
+interface ModelscopeTaskStatus {
+  task_status: string
+  output_images?: string[]
+  request_id: string
+}
 
 export class ModelscopeAdapter extends BaseAdapter {
-  private apiClient: AxiosInstance
+  private apiKey: string
 
   constructor(apiKey: string) {
     super('ModelScope')
-    this.apiClient = axios.create({
-      baseURL: MODELSCOPE_CONFIG.baseURL,
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    this.apiKey = apiKey
   }
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
+    // 1. 查找路由
+    const route = findRoute(params.model)
+    if (!route || !route.buildImageRequest) {
+      throw new Error(`Unsupported ModelScope model: ${params.model}`)
+    }
+
+    // 2. 构建请求
+    const { requestData } = route.buildImageRequest(params)
+
     try {
-      // 1. 查找路由
-      const route = findRoute(params.model)
-      if (!route || !route.buildImageRequest) {
-        throw new Error(`Unsupported ModelScope model: ${params.model}`)
-      }
+      this.log('发送魔搭API请求（通过后端）:', requestData)
 
-      // 2. 构建请求
-      const { endpoint, requestData } = route.buildImageRequest(params)
+      // 3. 通过 Tauri 后端发送异步请求
+      const response = await invoke<ModelscopeTaskResponse>('modelscope_submit_task', {
+        apiKey: this.apiKey,
+        request: requestData
+      })
 
-      this.log('发送魔搭API请求:', { endpoint, requestData })
+      this.log('魔搭API响应:', response)
 
-      // 3. 发送请求（不使用自定义请求头，避免 CORS 问题）
-      const response = await this.apiClient.post(endpoint, requestData)
-
-      this.log('魔搭API响应:', response.data)
-
-      // 4. 解析响应（返回 taskId）
-      const result = parseImageResponse(response.data)
-
-      // 5. 如果有进度回调，开始轮询
-      if (result.taskId && params.onProgress) {
-        return await this.pollTaskStatus(result.taskId, params.onProgress)
-      }
-
-      return result
+      // 4. 开始轮询任务状态
+      return await this.pollTaskStatus(response.task_id, params.onProgress)
     } catch (error) {
       console.error('[ModelscopeAdapter] generateImage 错误:', error)
-      if (axios.isAxiosError(error) && error.response) {
-        console.error('[ModelscopeAdapter] 错误响应数据:', error.response.data)
-      }
+      console.error('[ModelscopeAdapter] 请求数据:', JSON.stringify(requestData, null, 2))
       throw this.formatError(error)
     }
   }
 
   async checkStatus(taskId: string): Promise<any> {
     try {
-      const response = await this.apiClient.get(`${MODELSCOPE_CONFIG.statusEndpoint}/${taskId}`)
-      return response.data
+      // 通过 Tauri 后端查询任务状态
+      const response = await invoke<ModelscopeTaskStatus>('modelscope_check_status', {
+        apiKey: this.apiKey,
+        taskId: taskId
+      })
+      return response
     } catch (error) {
       console.error('[ModelscopeAdapter] checkStatus 错误:', error)
       throw this.formatError(error)
@@ -79,6 +81,9 @@ export class ModelscopeAdapter extends BaseAdapter {
       checkFn: async () => {
         const status = await this.checkStatus(taskId)
 
+        // 记录完整的状态响应，便于调试
+        this.log('任务状态查询结果:', status)
+
         // 如果任务完成，返回图片URL
         if (status.task_status === 'SUCCEED' && status.output_images) {
           const urls = status.output_images
@@ -89,6 +94,11 @@ export class ModelscopeAdapter extends BaseAdapter {
               status: 'COMPLETED'
             }
           }
+        }
+
+        // 如果任务失败，记录详细错误信息
+        if (status.task_status === 'FAILED') {
+          console.error('[ModelscopeAdapter] 任务失败，完整响应:', JSON.stringify(status, null, 2))
         }
 
         return {

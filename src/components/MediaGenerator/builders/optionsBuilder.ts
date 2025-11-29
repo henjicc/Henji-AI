@@ -615,7 +615,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   // 魔搭模型（预设模型和自定义模型）
   else if (currentModel?.type === 'image' && (
     selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
-    selectedModel === 'MusePublic/Qwen-image' ||
+    selectedModel === 'Qwen/Qwen-Image' ||
     selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
     selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
     selectedModel === 'MusePublic/majicMIX_realistic' ||

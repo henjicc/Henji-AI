@@ -38,8 +38,12 @@ export const modelscopeUnifiedRoute: ModelRoute = {
       requestData.guidance = params.guidance
     }
 
-    // 随机种子（自动生成）
-    requestData.seed = Math.floor(Math.random() * 2147483647)
+    // 随机种子（可选，某些模型不支持）
+    // 注意：Qwen-image 等模型可能不支持 seed 参数，导致 400 错误
+    // 因此只在明确需要时才添加
+    if (params.seed !== undefined) {
+      requestData.seed = params.seed
+    }
 
     return {
       endpoint: '/v1/images/generations',
