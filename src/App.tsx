@@ -1290,7 +1290,8 @@ const App: React.FC = () => {
         case 'audio':
           console.log('[App] generateAudio 调用参数:', { input, model, options })
           result = await apiService.generateAudio(input, model, options)
-          if (result && result.url && isDesktop()) {
+          // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
+          if (result && result.url && isDesktop() && !(result as any).filePath) {
             try {
               const { fullPath } = await saveAudioFromUrl(result.url)
               const blobSrc = await fileToBlobSrc(fullPath, 'audio/mpeg')
@@ -1300,6 +1301,8 @@ const App: React.FC = () => {
             } catch (e) {
               console.error('[App] 本地保存失败，回退在线地址', e)
             }
+          } else if ((result as any).filePath) {
+            console.log('[App] 适配器已处理本地保存，跳过重复保存')
           }
           break
         default:

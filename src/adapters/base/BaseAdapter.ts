@@ -16,9 +16,9 @@ export abstract class BaseAdapter {
   protected async saveMediaLocally(url: string, type: 'image' | 'video' | 'audio'): Promise<{ url: string; filePath?: string }> {
     // 项目只考虑桌面环境，直接执行保存逻辑
     try {
-      this.log(`开始保存${type}到本地...`)
+      this.log(`开始保存${type}到本地...`, url)
       const { saveImageFromUrl, saveVideoFromUrl, saveAudioFromUrl } = await import('../../utils/save')
-      
+
       let saveFn: any
       switch (type) {
         case 'image':
@@ -31,9 +31,9 @@ export abstract class BaseAdapter {
           saveFn = saveAudioFromUrl
           break
       }
-      
+
       const savedResult = await saveFn(url)
-      this.log(`${type}已保存到本地并生成显示地址`)
+      this.log(`${type}已保存到本地并生成显示地址`, { webSrc: savedResult.webSrc, fullPath: savedResult.fullPath })
       return { url: savedResult.webSrc, filePath: savedResult.fullPath }
     } catch (e) {
       this.log(`${type}本地保存失败，回退为远程URL`, e)
