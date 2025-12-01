@@ -32,7 +32,7 @@ export const falAiZImageTurboRoute: FalModelRoute = {
 
     // 根据输入类型选择端点
     if (images.length === 0) {
-      // 文生图
+      // 文生图（异步模式，支持进度回调）
       return {
         submitPath: fullPath,
         modelId: fullPath,
@@ -42,14 +42,13 @@ export const falAiZImageTurboRoute: FalModelRoute = {
           num_inference_steps: numInferenceSteps,
           num_images: numImages,
           enable_safety_checker: false,
-          sync_mode: true,
           output_format: 'png',
           enable_prompt_expansion: enablePromptExpansion,
           acceleration: acceleration
         }
       }
     } else {
-      // 图生图/编辑
+      // 图生图/编辑（异步模式，支持进度回调）
       return {
         submitPath: fullPath,
         modelId: fullPath,
@@ -59,7 +58,6 @@ export const falAiZImageTurboRoute: FalModelRoute = {
           num_inference_steps: numInferenceSteps,
           num_images: numImages,
           enable_safety_checker: false,
-          sync_mode: true,
           output_format: 'png',
           enable_prompt_expansion: enablePromptExpansion,
           acceleration: acceleration,

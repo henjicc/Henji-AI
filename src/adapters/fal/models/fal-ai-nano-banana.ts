@@ -37,13 +37,9 @@ export const falAiNanoBananaRoute = {
     }
 
     // 处理图生图：添加 image_urls
+    // 注意：FalAdapter 已经将图片上传到 fal CDN，这里直接使用 URL
     if (hasImages) {
-      requestData.image_urls = params.images!.map(img => {
-        if (typeof img === 'string') {
-          return img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
-        }
-        return img
-      })
+      requestData.image_urls = params.images
     }
 
     return { submitPath, modelId, requestData }

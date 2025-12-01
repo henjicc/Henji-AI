@@ -8,9 +8,14 @@ export const parseVideoResponse = async (
   responseData: any,
   adapter: BaseAdapter
 ): Promise<VideoResult> => {
-  // 队列API返回的结构：{ video: { url: "..." } }
-  if (responseData.video) {
-    const videoUrl = responseData.video.url
+  // 官方 SDK 返回的结构：{ data: { video: { url: "..." } }, requestId: "..." }
+  // 或旧的队列 API 结构：{ video: { url: "..." } }
+
+  // 优先检查官方 SDK 格式
+  const data = responseData.data || responseData
+
+  if (data.video) {
+    const videoUrl = data.video.url
     let result: VideoResult = {
       url: videoUrl,
       status: 'COMPLETED'

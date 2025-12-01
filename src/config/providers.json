@@ -183,8 +183,8 @@
             "图片编辑"
           ],
           "progressConfig": {
-            "type": "time",
-            "expectedDuration": 20000
+            "type": "polling",
+            "expectedPolls": 30
           }
         },
         {
@@ -197,8 +197,8 @@
             "图片编辑"
           ],
           "progressConfig": {
-            "type": "time",
-            "expectedDuration": 15000
+            "type": "polling",
+            "expectedPolls": 5
           }
         }
       ]

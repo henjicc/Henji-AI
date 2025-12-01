@@ -21,7 +21,7 @@ export const bytedanceSeedreamV4Route: FalModelRoute = {
 
     // 根据输入类型选择端点
     if (images.length === 0) {
-      // 文生图
+      // 文生图（异步模式，支持进度回调）
       const fullPath = 'fal-ai/bytedance/seedream/v4/text-to-image'
       return {
         submitPath: fullPath,
@@ -30,12 +30,11 @@ export const bytedanceSeedreamV4Route: FalModelRoute = {
           prompt,
           image_size: imageSize,
           num_images: numImages,
-          enable_safety_checker: false,
-          sync_mode: true
+          enable_safety_checker: false
         }
       }
     } else {
-      // 图生图/编辑
+      // 图生图/编辑（异步模式，支持进度回调）
       const fullPath = 'fal-ai/bytedance/seedream/v4/edit'
       return {
         submitPath: fullPath,
@@ -45,8 +44,7 @@ export const bytedanceSeedreamV4Route: FalModelRoute = {
           image_size: imageSize,
           num_images: numImages,
           image_urls: images,
-          enable_safety_checker: false,
-          sync_mode: true
+          enable_safety_checker: false
         }
       }
     }

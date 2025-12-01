@@ -565,19 +565,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         finalImageSize = '1440*1440'
       }
     }
-    // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用预设尺寸
-    else if (params.imageSize && params.imageSize.includes(':')) {
-      const { presetSizes } = await import('@/models/fal-ai-z-image-turbo')
-      const size = presetSizes[params.imageSize]
-
-      if (size) {
-        finalImageSize = `${size.width}*${size.height}`
-      } else {
-        // 如果找不到预设，使用默认值
-        finalImageSize = '1440*1440'
-      }
-    }
-    // 默认值
+    // 默认值（Z-Image-Turbo 使用基于基数的动态计算，不需要预设尺寸）
     else {
       finalImageSize = '1440*1440'
     }
