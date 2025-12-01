@@ -15,6 +15,8 @@ pub struct ModelscopeRequest {
     pub guidance: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

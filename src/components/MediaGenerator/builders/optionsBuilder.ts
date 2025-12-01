@@ -604,6 +604,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   else if (currentModel?.type === 'image' && (
     selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
     selectedModel === 'Qwen/Qwen-Image' ||
+    selectedModel === 'Qwen/Qwen-Image-Edit-2509' ||
     selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
     selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
     selectedModel === 'MusePublic/majicMIX_realistic' ||
@@ -613,20 +614,54 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     let width = 1024
     let height = 1024
 
-    // 优先使用 customWidth 和 customHeight（这些值已经由 UI 根据基数计算好了）
-    if (params.customWidth && params.customHeight) {
-      width = parseInt(params.customWidth)
-      height = parseInt(params.customHeight)
+    // Qwen-Image-Edit-2509 使用专用计算器
+    if (selectedModel === 'Qwen/Qwen-Image-Edit-2509') {
+      // 智能模式：根据上传的第一张图片保持原图比例计算分辨率
+      if (params.imageSize === 'smart' && uploadedImages.length > 0) {
+        const { smartMatchQwenResolution } = await import('@/utils/qwenResolutionCalculator')
+        const img = new Image()
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = uploadedImages[0]
+        })
+        const resolution = smartMatchQwenResolution(img.width, img.height)
+        width = resolution.width
+        height = resolution.height
+      }
+      // 比例格式（如 "4:3"），使用 Qwen 专用计算器
+      else if (params.imageSize && params.imageSize.includes(':')) {
+        const [w, h] = params.imageSize.split(':').map(Number)
+        if (!isNaN(w) && !isNaN(h)) {
+          const { calculateQwenResolution } = await import('@/utils/qwenResolutionCalculator')
+          const size = calculateQwenResolution(w, h)
+          width = size.width
+          height = size.height
+        }
+      }
+      // 最后才使用 customWidth 和 customHeight（用户手动输入的自定义尺寸）
+      else if (params.customWidth && params.customHeight) {
+        width = parseInt(params.customWidth)
+        height = parseInt(params.customHeight)
+      }
     }
-    // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用基数动态计算
-    else if (params.imageSize && params.imageSize.includes(':')) {
-      const [w, h] = params.imageSize.split(':').map(Number)
-      if (!isNaN(w) && !isNaN(h)) {
-        const { calculateResolution } = await import('@/utils/resolutionCalculator')
-        const baseSize = params.resolutionBaseSize || 1440
-        const size = calculateResolution(baseSize, w, h)
-        width = size.width
-        height = size.height
+    // 其他魔搭模型使用基数系统
+    else {
+      // 优先使用 customWidth 和 customHeight（这些值已经由 UI 根据基数计算好了）
+      if (params.customWidth && params.customHeight) {
+        width = parseInt(params.customWidth)
+        height = parseInt(params.customHeight)
+      }
+      // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用基数动态计算
+      else if (params.imageSize && params.imageSize.includes(':')) {
+        const [w, h] = params.imageSize.split(':').map(Number)
+        if (!isNaN(w) && !isNaN(h)) {
+          const { calculateResolution } = await import('@/utils/resolutionCalculator')
+          const baseSize = params.resolutionBaseSize || 1440
+          const size = calculateResolution(baseSize, w, h)
+          width = size.width
+          height = size.height
+        }
       }
     }
 

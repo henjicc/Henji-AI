@@ -22,7 +22,8 @@ import {
   falAiZImageTurboParams,
   modelscopeCommonParams,
   modelscopeCustomParams,
-  modelscopeZImageTurboParams
+  modelscopeZImageTurboParams,
+  qwenImageEdit2509Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -339,6 +340,24 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           inputClassName="w-full"
         />
       </>
+    )
+  }
+
+  // Qwen-Image-Edit-2509 参数（支持图片编辑，最多3张图片）
+  if (selectedModel === 'Qwen/Qwen-Image-Edit-2509') {
+    return (
+      <SchemaForm
+        schema={qwenImageEdit2509Params}
+        values={{
+          imageSize: values.imageSize,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
+          resolutionBaseSize: values.resolutionBaseSize,
+          steps: values.steps,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
     )
   }
 

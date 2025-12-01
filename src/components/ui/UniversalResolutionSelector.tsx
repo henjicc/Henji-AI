@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import PanelTrigger from './PanelTrigger'
 import { ResolutionConfig } from '@/types/schema'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
@@ -45,6 +45,38 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   const baseSizeMin = config.baseSizeMin || 512
   const baseSizeMax = config.baseSizeMax || 2048
   const baseSizeStep = config.baseSizeStep || 8
+
+  // 当宽高比变化时，自动更新自定义尺寸
+  useEffect(() => {
+    // 只在以下条件下自动更新：
+    // 1. 启用了自定义输入
+    // 2. 有宽高变化回调
+    // 3. 当前值不是智能模式
+    // 4. 当前值是宽高比格式
+    if (!config.customInput || !onWidthChange || !onHeightChange) return
+    if (value === 'smart' || value === 'auto' || value === '智能') return
+    if (!value || !value.includes(':')) return
+
+    const [w, h] = value.split(':').map(Number)
+    if (isNaN(w) || isNaN(h)) return
+
+    // 使用 Qwen 计算器（如果启用）
+    if (config.useQwenCalculator) {
+      import('@/utils/qwenResolutionCalculator').then(({ calculateQwenResolution }) => {
+        const size = calculateQwenResolution(w, h)
+        onWidthChange(String(size.width))
+        onHeightChange(String(size.height))
+      })
+    }
+    // 使用基数系统计算器
+    else {
+      import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
+        const size = calculateResolution(baseSize, w, h)
+        onWidthChange(String(size.width))
+        onHeightChange(String(size.height))
+      })
+    }
+  }, [value, baseSize, config.customInput, config.useQwenCalculator, onWidthChange, onHeightChange])
   // 自动判断标签：如果只有宽高比（没有质量选项和自定义输入），显示"比例"，否则显示"分辨率"
   const getDefaultLabel = () => {
     if (config.type === 'aspect_ratio' && !config.qualityOptions && !config.customInput) {

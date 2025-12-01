@@ -20,20 +20,41 @@ interface ModelscopeTaskStatus {
 
 export class ModelscopeAdapter extends BaseAdapter {
   private apiKey: string
+  private falApiKey?: string
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, falApiKey?: string) {
     super('ModelScope')
     this.apiKey = apiKey
+    this.falApiKey = falApiKey
   }
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
-    // 1. 查找路由
+    // 1. 如果有图片且需要上传到 CDN，使用 fal 上传
+    if (params.images && params.images.length > 0 && !params.imageUrls) {
+      if (this.falApiKey) {
+        try {
+          this.log('检测到图片，开始上传到 fal CDN...')
+          const { uploadMultipleToFalCDN } = await import('@/utils/falUpload')
+
+          const uploadedUrls = await uploadMultipleToFalCDN(params.images, this.falApiKey)
+          params.imageUrls = uploadedUrls
+          this.log('图片上传完成，获得 URL:', uploadedUrls)
+        } catch (error) {
+          this.log('图片上传失败，将尝试直接使用原始图片:', error)
+          // 上传失败时，不设置 imageUrls，让模型路由决定如何处理
+        }
+      } else {
+        this.log('未配置 fal API key，跳过图片上传')
+      }
+    }
+
+    // 2. 查找路由
     const route = findRoute(params.model)
     if (!route || !route.buildImageRequest) {
       throw new Error(`Unsupported ModelScope model: ${params.model}`)
     }
 
-    // 2. 构建请求
+    // 3. 构建请求
     const { requestData } = route.buildImageRequest(params)
 
     try {

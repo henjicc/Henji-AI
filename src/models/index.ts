@@ -26,6 +26,7 @@ export { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 
 // 魔搭模型
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
+export { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -56,6 +57,7 @@ import { falAiVeo31Params } from './fal-ai-veo-3.1'
 import { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 import { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
+import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
 /**
  * 模型 ID 到 Schema 的映射表
@@ -80,6 +82,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,
+  'Qwen/Qwen-Image-Edit-2509': qwenImageEdit2509Params,  // Qwen 图片编辑模型（支持最多3张图片）
   'black-forest-labs/FLUX.1-Krea-dev': modelscopeCommonParams,
   'MusePublic/14_ckpt_SD_XL': modelscopeCommonParams,
   'MusePublic/majicMIX_realistic': modelscopeCommonParams,

@@ -76,7 +76,8 @@ export interface GenerateImageParams {
   prompt: string
   model: string
   model_id?: string  // 用于区分不同的 fal 模型（nano-banana vs nano-banana-pro）
-  images?: string[]
+  images?: string[]  // 原始图片（base64 或 URL）
+  imageUrls?: string[]  // 上传到 CDN 后的 URL（用于魔搭等需要 URL 的模型）
   size?: string
   sequential_image_generation?: 'auto' | 'disabled'
   max_images?: number

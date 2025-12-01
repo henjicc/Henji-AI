@@ -18,11 +18,6 @@ export const modelscopeUnifiedRoute: ModelRoute = {
       prompt: params.prompt || ''
     }
 
-    // 负面提示词
-    if (params.negativePrompt) {
-      requestData.negative_prompt = params.negativePrompt
-    }
-
     // 分辨率（从宽高比+质量转换为 widthxheight 格式）
     if (params.width && params.height) {
       requestData.size = `${params.width}x${params.height}`
@@ -33,8 +28,13 @@ export const modelscopeUnifiedRoute: ModelRoute = {
       requestData.steps = params.steps
     }
 
-    // 提示词引导系数
-    if (params.guidance !== undefined) {
+    // 负面提示词（仅非 Qwen-Image-Edit-2509 模型使用）
+    if (params.negativePrompt && params.model !== 'Qwen/Qwen-Image-Edit-2509') {
+      requestData.negative_prompt = params.negativePrompt
+    }
+
+    // 提示词引导系数（仅非 Qwen-Image-Edit-2509 模型使用）
+    if (params.guidance !== undefined && params.model !== 'Qwen/Qwen-Image-Edit-2509') {
       requestData.guidance = params.guidance
     }
 
@@ -43,6 +43,17 @@ export const modelscopeUnifiedRoute: ModelRoute = {
     // 因此只在明确需要时才添加
     if (params.seed !== undefined) {
       requestData.seed = params.seed
+    }
+
+    // 图片编辑：添加 image_url 参数（支持最多3张图片）
+    // 注意：params.imageUrls 是已经上传到 fal CDN 的 URL 数组
+    // ⚠️ 重要：根据魔搭 API 文档，image_url 必须是数组格式，即使只有一张图片
+    if (params.imageUrls && params.imageUrls.length > 0) {
+      // Qwen-Image-Edit-2509 支持最多3张图片
+      const imageUrls = params.imageUrls.slice(0, 3)
+
+      // 始终使用数组格式（符合魔搭 API 规范）
+      requestData.image_url = imageUrls
     }
 
     return {

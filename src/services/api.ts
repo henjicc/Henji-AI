@@ -15,9 +15,19 @@ export class ApiService {
       throw new Error('API key is not set')
     }
 
+    // 如果是魔搭适配器，尝试获取 fal API key 用于文件上传
+    let falApiKey: string | undefined
+    if (config.type === 'modelscope') {
+      falApiKey = localStorage.getItem('fal_api_key') || undefined
+      if (falApiKey) {
+        console.log('[ApiService] 魔搭适配器将使用 fal API key 进行文件上传')
+      }
+    }
+
     const fullConfig: AdapterConfig = {
       ...config,
-      apiKey: this.apiKey
+      apiKey: this.apiKey,
+      falApiKey
     }
 
     this.adapter = AdapterFactory.createAdapter(fullConfig)

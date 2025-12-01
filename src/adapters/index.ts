@@ -9,6 +9,7 @@ export interface AdapterConfig {
   type: AdapterType
   apiKey: string
   modelName: string
+  falApiKey?: string  // 用于文件上传（魔搭等需要 URL 的适配器）
 }
 
 export class AdapterFactory {
@@ -19,7 +20,7 @@ export class AdapterFactory {
       case 'fal':
         return new FalAdapter(config.apiKey)
       case 'modelscope':
-        return new ModelscopeAdapter(config.apiKey)
+        return new ModelscopeAdapter(config.apiKey, config.falApiKey)
       default:
         throw new Error(`Unsupported adapter type: ${config.type}`)
     }
