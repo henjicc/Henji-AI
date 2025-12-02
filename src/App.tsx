@@ -1232,8 +1232,9 @@ const App: React.FC = () => {
             return  // 提前返回，不继续处理
           }
 
+          // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
           console.log('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
-          if (result?.url && isDesktop()) {
+          if (result?.url && isDesktop() && !(result as any).filePath) {
             try {
               if (result.url.includes('|||')) {
                 const urls = result.url.split('|||')
@@ -1257,6 +1258,8 @@ const App: React.FC = () => {
             } catch (e) {
               console.error('[App] 本地保存失败，回退在线地址', e)
             }
+          } else if ((result as any).filePath) {
+            console.log('[App] 适配器已处理本地保存，跳过重复保存')
           }
           break
         case 'video':
@@ -1670,6 +1673,7 @@ const App: React.FC = () => {
   }, [isTasksLoaded])
 
   // 保存历史到文件（避免本地存储配额）
+  // 重要：只保存 filePath，不保存 url 字段，防止 base64 数据膨胀 history.json
   useEffect(() => {
     if (!isTasksLoaded) return
     if (!isDesktop()) return
@@ -1694,7 +1698,8 @@ const App: React.FC = () => {
         result: t.result ? {
           id: t.result.id,
           type: t.result.type,
-          filePath: t.result.filePath,
+          filePath: t.result.filePath, // 只保存文件路径
+          // 明确不保存 url 字段，防止 base64 数据或远程 URL 被保存
           prompt: t.result.prompt,
           createdAt: t.result.createdAt
         } : undefined

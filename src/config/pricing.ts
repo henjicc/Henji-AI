@@ -16,12 +16,17 @@ export interface PricingConfig {
 
 export type PriceResult = number | { min: number; max: number } | null
 
+// ===== 汇率常量 =====
+const USD_TO_CNY = 7.071 // 1 美元 ≈ 7.071 人民币
+
 // ===== 价格常量（便于批量调整）=====
 const PRICES = {
     // 图片
     SEEDREAM: 0.2,
-    NANO_BANANA: 0.277, // CNY
-    NANO_BANANA_PRO: 1.07, // CNY
+
+    // fal 模型价格（美元）
+    NANO_BANANA: 0.039, // USD
+    NANO_BANANA_PRO: 0.15, // USD
 
     // 音频（每万字符）
     SPEECH_HD: 3.5,
@@ -112,15 +117,15 @@ const PRICES = {
     },
 
     // 视频 - Veo 3.1
-    // 价格单位：人民币/秒
+    // 价格单位：美元/秒
     VEO31: {
         normal: {
-            audioOff: 1.42,
-            audioOn: 2.84
+            audioOff: 0.2,  // USD
+            audioOn: 0.4    // USD
         },
         fast: {
-            audioOff: 0.71,
-            audioOn: 1.06
+            audioOff: 0.1,  // USD
+            audioOn: 0.15    // USD
         }
     }
 } as const
@@ -158,7 +163,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.num_images || 1
-            return PRICES.NANO_BANANA * numImages
+            return PRICES.NANO_BANANA * USD_TO_CNY * numImages
         }
     },
     {
@@ -168,7 +173,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.num_images || 1
-            const basePrice = PRICES.NANO_BANANA_PRO * numImages
+            const basePrice = PRICES.NANO_BANANA_PRO * USD_TO_CNY * numImages
             // 4K 分辨率时价格为 2 倍
             const multiplier = params.resolution === '4K' ? 2 : 1
             return basePrice * multiplier
@@ -181,7 +186,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.numImages || 1
-            return 0.2 * numImages
+            return 0.0283 * USD_TO_CNY * numImages
         }
     },
     {
@@ -191,7 +196,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.numImages || 1
-            
+
             // 映射预设分辨率到像素数量（宽x高）
             const resolutionToPixels: Record<string, number> = {
                 'portrait_4_3': 768 * 1024,  // 竖版 4:3
@@ -200,21 +205,21 @@ export const pricingConfigs: PricingConfig[] = [
                 'landscape_4_3': 1024 * 768,  // 横版 4:3
                 'landscape_16_9': 1920 * 1080 // 横版 16:9
             }
-            
+
             let totalPixels = resolutionToPixels[params.imageSize] || 1024 * 768
-            
+
             // 处理自定义分辨率
             if (params.imageSize && params.imageSize.includes('*')) {
                 const [width, height] = params.imageSize.split('*').map(Number)
                 totalPixels = width * height
             }
-            
+
             // 计算百万像素数
             const millionPixels = totalPixels / 1000000
-            
-            // 计算价格：0.0354元每百万像素，四舍五入
-            const pricePerImage = Math.round(millionPixels * 0.0354 * 100) / 100
-            
+
+            // 计算价格：0.005美元每百万像素，转换为人民币后四舍五入
+            const pricePerImage = Math.round(millionPixels * 0.005 * USD_TO_CNY * 100) / 100
+
             // 总价格
             return pricePerImage * numImages
         }
@@ -340,15 +345,15 @@ export const pricingConfigs: PricingConfig[] = [
             const mode = params.mode || 'text-image-to-video'
             const isFastMode = (params.veoFastMode || false) && mode !== 'reference-to-video' // 参考生视频模式不支持快速模式
             const isAudioOn = params.veoGenerateAudio || false
-            
-            // 获取价格（人民币/秒）
-            const pricePerSecond = isFastMode 
+
+            // 获取价格（美元/秒）
+            const pricePerSecondUSD = isFastMode
                 ? (isAudioOn ? PRICES.VEO31.fast.audioOn : PRICES.VEO31.fast.audioOff)
                 : (isAudioOn ? PRICES.VEO31.normal.audioOn : PRICES.VEO31.normal.audioOff)
-            
-            // 计算总价（人民币）
-            const totalPriceCNY = pricePerSecond * duration
-            
+
+            // 计算总价（转换为人民币）
+            const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
+
             // 保留两位小数
             return parseFloat(totalPriceCNY.toFixed(2))
         }

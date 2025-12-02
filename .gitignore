@@ -110,3 +110,4 @@ jspm_packages/
 *.tsbuildinfo
 src-tauri/target/
 src-tauri/gen/
+nul

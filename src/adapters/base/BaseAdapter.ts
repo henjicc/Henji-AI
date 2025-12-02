@@ -16,6 +16,40 @@ export abstract class BaseAdapter {
   protected async saveMediaLocally(url: string, type: 'image' | 'video' | 'audio'): Promise<{ url: string; filePath?: string }> {
     // 项目只考虑桌面环境，直接执行保存逻辑
     try {
+      // 检查是否是多个URL（用 ||| 分隔）
+      if (url.includes('|||')) {
+        this.log(`检测到多个${type}，开始批量保存...`, url)
+        const { saveImageFromUrl, saveVideoFromUrl, saveAudioFromUrl, fileToBlobSrc } = await import('../../utils/save')
+
+        let saveFn: any
+        switch (type) {
+          case 'image':
+            saveFn = saveImageFromUrl
+            break
+          case 'video':
+            saveFn = saveVideoFromUrl
+            break
+          case 'audio':
+            saveFn = saveAudioFromUrl
+            break
+        }
+
+        const urls = url.split('|||')
+        const displayUrls: string[] = []
+        const filePaths: string[] = []
+
+        for (const singleUrl of urls) {
+          const savedResult = await saveFn(singleUrl)
+          const blobSrc = await fileToBlobSrc(savedResult.fullPath, type === 'image' ? 'image/png' : type === 'video' ? 'video/mp4' : 'audio/mpeg')
+          displayUrls.push(blobSrc)
+          filePaths.push(savedResult.fullPath)
+        }
+
+        this.log(`所有${type}已保存到本地`, { count: urls.length })
+        return { url: displayUrls.join('|||'), filePath: filePaths.join('|||') }
+      }
+
+      // 单个URL的处理
       this.log(`开始保存${type}到本地...`, url)
       const { saveImageFromUrl, saveVideoFromUrl, saveAudioFromUrl } = await import('../../utils/save')
 

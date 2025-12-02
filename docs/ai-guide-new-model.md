@@ -749,6 +749,13 @@ if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
 9. **状态未导出**: 在 `useMediaGeneratorState` 中创建了状态但 return 中遗漏
 10. **硬编码冲突**: 未检查 `optionsBuilder.ts` 中的类型判断逻辑
 11. **共享状态污染**: 未添加默认值重置逻辑导致切换模型时继承错误的值
+12. **忘记设置 filePath 导致历史记录丢失** ⭐⭐
+    - **症状**: 生成的媒体在当前会话可以查看，但重启应用后历史记录中的媒体无法显示
+    - **原因**: Adapter 返回的 result 中没有 `filePath` 字段，历史记录无法恢复媒体
+    - **解决**:
+      1. 确保 Adapter 调用 `saveMediaLocally` 保存媒体
+      2. 确保返回的 result 包含 `filePath` 字段
+      3. 多图场景下，使用 `|||` 分隔符连接多个路径
 
 ### 快速诊断
 

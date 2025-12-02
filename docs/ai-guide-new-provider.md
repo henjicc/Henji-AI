@@ -275,12 +275,13 @@ export const parseVideoResponse = async (
   if (responseData.video_url) {
     const videoUrl = responseData.video_url
 
-    // 保存到本地
+    // ⚠️ 关键：保存到本地并设置 filePath
+    // 历史记录只保存 filePath，不保存 url，防止 base64 数据膨胀
     try {
       const savedResult = await adapter['saveMediaLocally'](videoUrl, 'video')
       return {
         url: savedResult.url,
-        filePath: savedResult.filePath,
+        filePath: savedResult.filePath,  // ⚠️ 必须设置，用于历史记录
         status: 'COMPLETED'
       }
     } catch (e) {
@@ -300,6 +301,10 @@ export const parseVideoResponse = async (
 ```typescript
 import { ImageResult } from '@/adapters/base/BaseAdapter'
 
+// ⚠️ 注意：图片解析器通常不直接保存到本地
+// 图片保存由 App.tsx 统一处理（检查 filePath 是否存在）
+// 但如果你的 Adapter 需要在解析器中保存，参考视频解析器的实现
+
 export const parseImageResponse = (responseData: any): ImageResult => {
   // 单图
   if (responseData.image_url) {
@@ -313,7 +318,7 @@ export const parseImageResponse = (responseData: any): ImageResult => {
   if (responseData.images && Array.isArray(responseData.images)) {
     const urls = responseData.images.map((img: any) => img.url)
     return {
-      url: urls.join('|||'),  // 多图用 ||| 分隔
+      url: urls.join('|||'),  // ⚠️ 多图用 ||| 分隔
       status: 'COMPLETED'
     }
   }
@@ -325,6 +330,9 @@ export const parseImageResponse = (responseData: any): ImageResult => {
 **`parsers/audioParser.ts`**:
 ```typescript
 import { AudioResult } from '@/adapters/base/BaseAdapter'
+
+// ⚠️ 注意：音频解析器只返回 URL
+// 实际保存由 Adapter 的 generateAudio 方法处理
 
 export const parseAudioResponse = (responseData: any): AudioResult => {
   if (responseData.audio_url) {

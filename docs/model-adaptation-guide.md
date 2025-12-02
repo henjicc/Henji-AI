@@ -1837,6 +1837,94 @@ Henji AI 支持将生成的媒体（图片、视频、音频）保存到本地�
 4. **返回结果**: 保存成功后，返回本地文件 URL 和文件路径；保存失败时，返回原始 URL。
 5. **更新 UI**: 使用本地文件 URL 更新 UI，用户可以直接查看和使用保存的媒体。
 
+### 历史记录存储策略 ⚠️ 核心原则
+
+**关键设计**: 历史记录 (`history.json`) **只保存 `filePath`，绝对不保存 `url` 字段**。
+
+#### 为什么这样设计？
+
+1. **防止文件膨胀**: `url` 可能包含 base64 数据（数十 KB 到数 MB），会导致 `history.json` 文件过大
+2. **避免 URL 失效**: 远程 URL 可能过期失效，本地文件路径更可靠且永久有效
+3. **数据安全**: 本地文件路径不会泄露敏感信息
+
+#### 实现要求
+
+**Adapter 层**:
+- 所有 Adapter 的 `generateImage/Video/Audio` 方法必须返回包含 `filePath` 的 result
+- 调用 `BaseAdapter.saveMediaLocally` 保存媒体到本地
+- 多图场景下，使用 `|||` 分隔符连接多个路径（如 `path1|||path2|||path3`）
+
+**历史记录保存** (`App.tsx`):
+```typescript
+// ✅ 正确：只保存 filePath
+result: t.result ? {
+  id: t.result.id,
+  type: t.result.type,
+  filePath: t.result.filePath,  // 只保存文件路径
+  // 明确不保存 url 字段，防止 base64 数据或远程 URL 被保存
+  prompt: t.result.prompt,
+  createdAt: t.result.createdAt
+} : undefined
+```
+
+**历史记录加载** (`App.tsx`):
+```typescript
+// 根据 filePath 重新生成本地 blob URL
+if (result && result.filePath && isDesktop()) {
+  try {
+    if (typeof result.filePath === 'string' && result.filePath.includes('|||')) {
+      // 多图处理
+      const paths = result.filePath.split('|||')
+      const display = paths.map((p: string) => convertFileSrc(p)).join('|||')
+      result = { ...result, url: display }
+    } else {
+      // 单图处理
+      result = { ...result, url: convertFileSrc(result.filePath) }
+    }
+  } catch { }
+}
+```
+
+#### 常见错误
+
+❌ **错误 1**: Adapter 没有调用 `saveMediaLocally`
+```typescript
+// 错误：直接返回远程 URL，没有 filePath
+return {
+  url: responseData.video_url,
+  status: 'COMPLETED'
+}
+```
+
+✅ **正确做法**:
+```typescript
+// 正确：保存到本地并返回 filePath
+const savedResult = await this.saveMediaLocally(responseData.video_url, 'video')
+return {
+  url: savedResult.url,
+  filePath: savedResult.filePath,  // ⚠️ 必须设置
+  status: 'COMPLETED'
+}
+```
+
+❌ **错误 2**: 历史记录保存了 `url` 字段
+```typescript
+// 错误：保存了 url，可能包含 base64 数据
+result: {
+  url: t.result.url,  // ❌ 不要保存
+  filePath: t.result.filePath
+}
+```
+
+✅ **正确做法**:
+```typescript
+// 正确：只保存 filePath
+result: {
+  filePath: t.result.filePath,  // ✅ 只保存路径
+  // url 字段不保存
+}
+```
+
 ### 解析器实现要点
 
 在实现响应解析器时，需要注意以下几点：
@@ -1947,6 +2035,8 @@ async generateAudio(params: GenerateAudioParams): Promise<AudioResult> {
 - [ ] 处理图片格式（base64/URL）
 - [ ] 参数过滤（API 可能不接受文档中的所有值）
 - [ ] 完整的错误处理
+- [ ] ⚠️ **关键**: 所有媒体生成方法必须调用 `saveMediaLocally` 并返回 `filePath`
+- [ ] ⚠️ **关键**: 多图场景使用 `|||` 分隔符连接路径
 
 **配置层**:
 - [ ] `src/config/providers.json` 添加供应商和模型

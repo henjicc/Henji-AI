@@ -108,11 +108,30 @@ export class ModelscopeAdapter extends BaseAdapter {
         // 如果任务完成，返回图片URL
         if (status.task_status === 'SUCCEED' && status.output_images) {
           const urls = status.output_images
-          return {
-            status: 'SUCCEED',
-            result: {
-              url: Array.isArray(urls) && urls.length > 1 ? urls.join('|||') : urls[0],
-              status: 'COMPLETED'
+          const combinedUrl = Array.isArray(urls) && urls.length > 1 ? urls.join('|||') : urls[0]
+
+          // 保存图片到本地
+          try {
+            this.log('开始保存图片到本地...')
+            const savedResult = await this.saveMediaLocally(combinedUrl, 'image')
+            this.log('图片保存成功:', savedResult)
+
+            return {
+              status: 'SUCCEED',
+              result: {
+                url: savedResult.url,
+                filePath: savedResult.filePath,
+                status: 'COMPLETED'
+              }
+            }
+          } catch (error) {
+            this.log('图片保存失败，使用远程URL:', error)
+            return {
+              status: 'SUCCEED',
+              result: {
+                url: combinedUrl,
+                status: 'COMPLETED'
+              }
             }
           }
         }
