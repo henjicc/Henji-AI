@@ -1,0 +1,190 @@
+# Kling O1 Edit Video
+
+> Edit an existing video using natural-language instructions, transforming subjects, settings, and style while retaining the original motion structure.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/kling-video/o1/video-to-video/edit`
+- **Model ID**: `fal-ai/kling-video/o1/video-to-video/edit`
+- **Category**: video-to-video
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  Use @Element1, @Element2 to reference elements and @Image1, @Image2 to reference images in order.
+  - Examples: "Replace the character in the video with @Element1, maintaining the same movements and camera angles. Transform the landscape into @Image1"
+
+- **`video_url`** (`string`, _required_):
+  Reference video URL. Only .mp4/.mov formats supported, 3-10 seconds duration, 720-2160px resolution, max 200MB.
+  - Examples: "https://v3b.fal.media/files/b/rabbit/ku8_Wdpf-oTbGRq4lB5DU_output.mp4"
+
+- **`keep_audio`** (`boolean`, _optional_):
+  Whether to keep the original audio from the video.
+  - Default: `false`
+
+- **`image_urls`** (`list<string>`, _optional_):
+  Reference images for style/appearance. Reference in prompt as @Image1, @Image2, etc. Maximum 4 total (elements + reference images) when using video.
+  - Array of string
+  - Examples: ["https://v3b.fal.media/files/b/lion/MKvhFko5_wYnfORYacNII_AgPt8v25Wt4oyKhjnhVK5.png"]
+
+- **`elements`** (`list<OmniVideoElementInput>`, _optional_):
+  Elements (characters/objects) to include. Reference in prompt as @Element1, @Element2, etc. Maximum 4 total (elements + reference images) when using video.
+  - Array of OmniVideoElementInput
+  - Examples: [{"reference_image_urls":["https://v3b.fal.media/files/b/zebra/YvRbjNmoauvqs0ltcXiXJ.png"],"frontal_image_url":"https://v3b.fal.media/files/b/rabbit/Jdn8H24frD9Cd31GiJuk3.png"}]
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "Replace the character in the video with @Element1, maintaining the same movements and camera angles. Transform the landscape into @Image1",
+  "video_url": "https://v3b.fal.media/files/b/rabbit/ku8_Wdpf-oTbGRq4lB5DU_output.mp4"
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "Replace the character in the video with @Element1, maintaining the same movements and camera angles. Transform the landscape into @Image1",
+  "video_url": "https://v3b.fal.media/files/b/rabbit/ku8_Wdpf-oTbGRq4lB5DU_output.mp4",
+  "image_urls": [
+    "https://v3b.fal.media/files/b/lion/MKvhFko5_wYnfORYacNII_AgPt8v25Wt4oyKhjnhVK5.png"
+  ],
+  "elements": [
+    {
+      "reference_image_urls": [
+        "https://v3b.fal.media/files/b/zebra/YvRbjNmoauvqs0ltcXiXJ.png"
+      ],
+      "frontal_image_url": "https://v3b.fal.media/files/b/rabbit/Jdn8H24frD9Cd31GiJuk3.png"
+    }
+  ]
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`File`, _required_):
+  The generated video.
+  - Examples: {"file_size":19428322,"file_name":"output.mp4","content_type":"video/mp4","url":"https://v3b.fal.media/files/b/elephant/Q2xFMHVTHFFNCFdlMcQiZ_output.mp4"}
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "file_size": 19428322,
+    "file_name": "output.mp4",
+    "content_type": "video/mp4",
+    "url": "https://v3b.fal.media/files/b/elephant/Q2xFMHVTHFFNCFdlMcQiZ_output.mp4"
+  }
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/kling-video/o1/video-to-video/edit \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "Replace the character in the video with @Element1, maintaining the same movements and camera angles. Transform the landscape into @Image1",
+     "video_url": "https://v3b.fal.media/files/b/rabbit/ku8_Wdpf-oTbGRq4lB5DU_output.mp4"
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/kling-video/o1/video-to-video/edit",
+    arguments={
+        "prompt": "Replace the character in the video with @Element1, maintaining the same movements and camera angles. Transform the landscape into @Image1",
+        "video_url": "https://v3b.fal.media/files/b/rabbit/ku8_Wdpf-oTbGRq4lB5DU_output.mp4"
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/kling-video/o1/video-to-video/edit", {
+  input: {
+    prompt: "Replace the character in the video with @Element1, maintaining the same movements and camera angles. Transform the landscape into @Image1",
+    video_url: "https://v3b.fal.media/files/b/rabbit/ku8_Wdpf-oTbGRq4lB5DU_output.mp4"
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/edit)
+- [API Documentation](https://fal.ai/models/fal-ai/kling-video/o1/video-to-video/edit/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/o1/video-to-video/edit)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

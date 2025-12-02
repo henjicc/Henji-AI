@@ -1,0 +1,197 @@
+# Kling O1 Reference Image to Video
+
+> Transform images, elements, and text into consistent, high-quality video scenes, ensuring stable character identity, object details, and environments.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/kling-video/o1/reference-to-video`
+- **Model ID**: `fal-ai/kling-video/o1/reference-to-video`
+- **Category**: image-to-video
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  Take @Element1, @Element2 to reference elements and @Image1, @Image2 to reference images in order.
+  - Examples: "Take @Image1 as the start frame. Start with a high-angle satellite view of the ancient greenhouse ruin surrounded by nature. The camera swoops down and flies inside the building, revealing the character from @Element1 standing in the sun-drenched center. The camera then seamlessly transitions into a smooth 180-degree orbit around the character, moving to the back view. As the open backpack comes into focus, the camera continues to push forward, zooming deep inside the bag to reveal the glowing stone from @Element2 nestled inside. Cinematic lighting, hopeful atmosphere, 35mm lens. Make sure to keep it as the style of @Image2."
+
+- **`image_urls`** (`list<string>`, _optional_):
+  Additional reference images for style/appearance. Reference in prompt as @Image1, @Image2, etc. Maximum 7 total (elements + reference images + start image).
+  - Array of string
+  - Examples: ["https://v3b.fal.media/files/b/koala/v9COzzH23FGBYdGLgbK3u.png","https://v3b.fal.media/files/b/elephant/5Is2huKQFSE7A7c5uUeUF.png"]
+
+- **`elements`** (`list<OmniVideoElementInput>`, _optional_):
+  Elements (characters/objects) to include in the video. Reference in prompt as @Element1, @Element2, etc. Maximum 7 total (elements + reference images + start image).
+  - Array of OmniVideoElementInput
+  - Examples: [{"reference_image_urls":["https://v3b.fal.media/files/b/kangaroo/YMpmQkYt9xugpOTQyZW0O.png","https://v3b.fal.media/files/b/zebra/d6ywajNyJ6bnpa_xBue-K.png"],"frontal_image_url":"https://v3b.fal.media/files/b/panda/MQp-ghIqshvMZROKh9lW3.png"},{"reference_image_urls":["https://v3b.fal.media/files/b/kangaroo/EBF4nWihspyv4pp6hgj7D.png"],"frontal_image_url":"https://v3b.fal.media/files/b/koala/gSnsA7HJlgcaTyR5Ujj2H.png"}]
+
+- **`duration`** (`DurationEnum`, _optional_):
+  Video duration in seconds. Only 5 and 10 are supported. Default value: `"5"`
+  - Default: `"5"`
+  - Options: `"5"`, `"10"`
+
+- **`aspect_ratio`** (`AspectRatioEnum`, _optional_):
+  The aspect ratio of the generated video frame. Default value: `"16:9"`
+  - Default: `"16:9"`
+  - Options: `"16:9"`, `"9:16"`, `"1:1"`
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "Take @Image1 as the start frame. Start with a high-angle satellite view of the ancient greenhouse ruin surrounded by nature. The camera swoops down and flies inside the building, revealing the character from @Element1 standing in the sun-drenched center. The camera then seamlessly transitions into a smooth 180-degree orbit around the character, moving to the back view. As the open backpack comes into focus, the camera continues to push forward, zooming deep inside the bag to reveal the glowing stone from @Element2 nestled inside. Cinematic lighting, hopeful atmosphere, 35mm lens. Make sure to keep it as the style of @Image2."
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "Take @Image1 as the start frame. Start with a high-angle satellite view of the ancient greenhouse ruin surrounded by nature. The camera swoops down and flies inside the building, revealing the character from @Element1 standing in the sun-drenched center. The camera then seamlessly transitions into a smooth 180-degree orbit around the character, moving to the back view. As the open backpack comes into focus, the camera continues to push forward, zooming deep inside the bag to reveal the glowing stone from @Element2 nestled inside. Cinematic lighting, hopeful atmosphere, 35mm lens. Make sure to keep it as the style of @Image2.",
+  "image_urls": [
+    "https://v3b.fal.media/files/b/koala/v9COzzH23FGBYdGLgbK3u.png",
+    "https://v3b.fal.media/files/b/elephant/5Is2huKQFSE7A7c5uUeUF.png"
+  ],
+  "elements": [
+    {
+      "reference_image_urls": [
+        "https://v3b.fal.media/files/b/kangaroo/YMpmQkYt9xugpOTQyZW0O.png",
+        "https://v3b.fal.media/files/b/zebra/d6ywajNyJ6bnpa_xBue-K.png"
+      ],
+      "frontal_image_url": "https://v3b.fal.media/files/b/panda/MQp-ghIqshvMZROKh9lW3.png"
+    },
+    {
+      "reference_image_urls": [
+        "https://v3b.fal.media/files/b/kangaroo/EBF4nWihspyv4pp6hgj7D.png"
+      ],
+      "frontal_image_url": "https://v3b.fal.media/files/b/koala/gSnsA7HJlgcaTyR5Ujj2H.png"
+    }
+  ],
+  "duration": "5",
+  "aspect_ratio": "16:9"
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`File`, _required_):
+  The generated video.
+  - Examples: {"file_size":47359974,"file_name":"output.mp4","content_type":"video/mp4","url":"https://v3b.fal.media/files/b/panda/oVdiICFXY03Vbam-08Aj8_output.mp4"}
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "file_size": 47359974,
+    "file_name": "output.mp4",
+    "content_type": "video/mp4",
+    "url": "https://v3b.fal.media/files/b/panda/oVdiICFXY03Vbam-08Aj8_output.mp4"
+  }
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/kling-video/o1/reference-to-video \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "Take @Image1 as the start frame. Start with a high-angle satellite view of the ancient greenhouse ruin surrounded by nature. The camera swoops down and flies inside the building, revealing the character from @Element1 standing in the sun-drenched center. The camera then seamlessly transitions into a smooth 180-degree orbit around the character, moving to the back view. As the open backpack comes into focus, the camera continues to push forward, zooming deep inside the bag to reveal the glowing stone from @Element2 nestled inside. Cinematic lighting, hopeful atmosphere, 35mm lens. Make sure to keep it as the style of @Image2."
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/kling-video/o1/reference-to-video",
+    arguments={
+        "prompt": "Take @Image1 as the start frame. Start with a high-angle satellite view of the ancient greenhouse ruin surrounded by nature. The camera swoops down and flies inside the building, revealing the character from @Element1 standing in the sun-drenched center. The camera then seamlessly transitions into a smooth 180-degree orbit around the character, moving to the back view. As the open backpack comes into focus, the camera continues to push forward, zooming deep inside the bag to reveal the glowing stone from @Element2 nestled inside. Cinematic lighting, hopeful atmosphere, 35mm lens. Make sure to keep it as the style of @Image2."
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/kling-video/o1/reference-to-video", {
+  input: {
+    prompt: "Take @Image1 as the start frame. Start with a high-angle satellite view of the ancient greenhouse ruin surrounded by nature. The camera swoops down and flies inside the building, revealing the character from @Element1 standing in the sun-drenched center. The camera then seamlessly transitions into a smooth 180-degree orbit around the character, moving to the back view. As the open backpack comes into focus, the camera continues to push forward, zooming deep inside the bag to reveal the glowing stone from @Element2 nestled inside. Cinematic lighting, hopeful atmosphere, 35mm lens. Make sure to keep it as the style of @Image2."
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/kling-video/o1/reference-to-video)
+- [API Documentation](https://fal.ai/models/fal-ai/kling-video/o1/reference-to-video/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/o1/reference-to-video)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

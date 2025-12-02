@@ -1,0 +1,178 @@
+# Kling v2.5 Text to Video
+
+> Kling 2.5 Turbo Pro: Top-tier text-to-video generation with unparalleled motion fluidity, cinematic visuals, and exceptional prompt precision.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/kling-video/v2.5-turbo/pro/text-to-video`
+- **Model ID**: `fal-ai/kling-video/v2.5-turbo/pro/text-to-video`
+- **Category**: text-to-video
+- **Kind**: inference
+**Tags**: animation, stylized
+
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_)
+  - Examples: "A noble lord walks among his people, his presence a comforting reassurance. He greets them with a gentle smile, embodying their hopes and earning their respect through simple interactions. The atmosphere is intimate and sincere, highlighting the bond between the leader and community."
+
+- **`duration`** (`DurationEnum`, _optional_):
+  The duration of the generated video in seconds Default value: `"5"`
+  - Default: `"5"`
+  - Options: `"5"`, `"10"`
+
+- **`aspect_ratio`** (`AspectRatioEnum`, _optional_):
+  The aspect ratio of the generated video frame Default value: `"16:9"`
+  - Default: `"16:9"`
+  - Options: `"16:9"`, `"9:16"`, `"1:1"`
+
+- **`negative_prompt`** (`string`, _optional_):
+   Default value: `"blur, distort, and low quality"`
+  - Default: `"blur, distort, and low quality"`
+
+- **`cfg_scale`** (`float`, _optional_):
+  The CFG (Classifier Free Guidance) scale is a measure of how close you want
+  the model to stick to your prompt. Default value: `0.5`
+  - Default: `0.5`
+  - Range: `0` to `1`
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "A noble lord walks among his people, his presence a comforting reassurance. He greets them with a gentle smile, embodying their hopes and earning their respect through simple interactions. The atmosphere is intimate and sincere, highlighting the bond between the leader and community."
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "A noble lord walks among his people, his presence a comforting reassurance. He greets them with a gentle smile, embodying their hopes and earning their respect through simple interactions. The atmosphere is intimate and sincere, highlighting the bond between the leader and community.",
+  "duration": "5",
+  "aspect_ratio": "16:9",
+  "negative_prompt": "blur, distort, and low quality",
+  "cfg_scale": 0.5
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`File`, _required_):
+  The generated video
+  - Examples: {"url":"https://storage.googleapis.com/falserverless/model_tests/kling/kling-v2.5-turbo-pro-text-to-video-output.mp4"}
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "url": "https://storage.googleapis.com/falserverless/model_tests/kling/kling-v2.5-turbo-pro-text-to-video-output.mp4"
+  }
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/kling-video/v2.5-turbo/pro/text-to-video \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "A noble lord walks among his people, his presence a comforting reassurance. He greets them with a gentle smile, embodying their hopes and earning their respect through simple interactions. The atmosphere is intimate and sincere, highlighting the bond between the leader and community."
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/kling-video/v2.5-turbo/pro/text-to-video",
+    arguments={
+        "prompt": "A noble lord walks among his people, his presence a comforting reassurance. He greets them with a gentle smile, embodying their hopes and earning their respect through simple interactions. The atmosphere is intimate and sincere, highlighting the bond between the leader and community."
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/kling-video/v2.5-turbo/pro/text-to-video", {
+  input: {
+    prompt: "A noble lord walks among his people, his presence a comforting reassurance. He greets them with a gentle smile, embodying their hopes and earning their respect through simple interactions. The atmosphere is intimate and sincere, highlighting the bond between the leader and community."
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/pro/text-to-video)
+- [API Documentation](https://fal.ai/models/fal-ai/kling-video/v2.5-turbo/pro/text-to-video/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/v2.5-turbo/pro/text-to-video)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)
