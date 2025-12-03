@@ -1,0 +1,189 @@
+# Bytedance
+
+> A new-generation image creation model ByteDance, Seedream 4.5 integrates image generation and image editing capabilities into a single, unified architecture.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/bytedance/seedream/v4.5/text-to-image`
+- **Model ID**: `fal-ai/bytedance/seedream/v4.5/text-to-image`
+- **Category**: text-to-image
+- **Kind**: inference
+**Tags**: stylized, transform
+
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  The text prompt used to generate the image
+  - Examples: "A selfie of a cat, with the cat as the protagonist. The setting is twilight at the Eiffel Tower. The cat is happy, holding a piece of baklava in its paw. The photo has a slight motion blur and is slightly overexposed. From a selfie angle, with a bit of motion blur, the overall image presents a sense of calm madness. The text \"Seedream 4.5 is on fal\" should be written on the picture at the top in clearly visible font and crisp lettering. The image has a 4:3 aspect ratio"
+
+- **`image_size`** (`ImageSize | Enum`, _optional_):
+  The size of the generated image. Width and height must be between 1920 and 4096, or total number of pixels must be between 2560*1440 and 4096*4096.
+  - Default: `{"height":2048,"width":2048}`
+  - One of: ImageSize | Enum
+  - Examples: "auto_2K"
+
+- **`num_images`** (`integer`, _optional_):
+  Number of separate model generations to be run with the prompt. Default value: `1`
+  - Default: `1`
+  - Range: `1` to `6`
+
+- **`max_images`** (`integer`, _optional_):
+  If set to a number greater than one, enables multi-image generation. The model will potentially return up to `max_images` images every generation, and in total, `num_images` generations will be carried out. In total, the number of images generated will be between `num_images` and `max_images*num_images`. Default value: `1`
+  - Default: `1`
+  - Range: `1` to `6`
+
+- **`seed`** (`integer`, _optional_):
+  Random seed to control the stochasticity of image generation.
+
+- **`sync_mode`** (`boolean`, _optional_):
+  If `True`, the media will be returned as a data URI and the output data won't be available in the request history.
+  - Default: `false`
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "A selfie of a cat, with the cat as the protagonist. The setting is twilight at the Eiffel Tower. The cat is happy, holding a piece of baklava in its paw. The photo has a slight motion blur and is slightly overexposed. From a selfie angle, with a bit of motion blur, the overall image presents a sense of calm madness. The text \"Seedream 4.5 is on fal\" should be written on the picture at the top in clearly visible font and crisp lettering. The image has a 4:3 aspect ratio"
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "A selfie of a cat, with the cat as the protagonist. The setting is twilight at the Eiffel Tower. The cat is happy, holding a piece of baklava in its paw. The photo has a slight motion blur and is slightly overexposed. From a selfie angle, with a bit of motion blur, the overall image presents a sense of calm madness. The text \"Seedream 4.5 is on fal\" should be written on the picture at the top in clearly visible font and crisp lettering. The image has a 4:3 aspect ratio",
+  "image_size": "auto_2K",
+  "num_images": 1,
+  "max_images": 1
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`images`** (`list<Image>`, _required_):
+  Generated images
+  - Array of Image
+  - Examples: [{"url":"https://storage.googleapis.com/falserverless/example_outputs/seedreamv45/seedream_v45_t2i_output.png"}]
+
+- **`seed`** (`integer`, _required_):
+  Seed used for generation
+  - Examples: 42
+
+
+
+**Example Response**:
+
+```json
+{
+  "images": [
+    {
+      "url": "https://storage.googleapis.com/falserverless/example_outputs/seedreamv45/seedream_v45_t2i_output.png"
+    }
+  ],
+  "seed": 42
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/bytedance/seedream/v4.5/text-to-image \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "A selfie of a cat, with the cat as the protagonist. The setting is twilight at the Eiffel Tower. The cat is happy, holding a piece of baklava in its paw. The photo has a slight motion blur and is slightly overexposed. From a selfie angle, with a bit of motion blur, the overall image presents a sense of calm madness. The text \"Seedream 4.5 is on fal\" should be written on the picture at the top in clearly visible font and crisp lettering. The image has a 4:3 aspect ratio"
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/bytedance/seedream/v4.5/text-to-image",
+    arguments={
+        "prompt": "A selfie of a cat, with the cat as the protagonist. The setting is twilight at the Eiffel Tower. The cat is happy, holding a piece of baklava in its paw. The photo has a slight motion blur and is slightly overexposed. From a selfie angle, with a bit of motion blur, the overall image presents a sense of calm madness. The text \"Seedream 4.5 is on fal\" should be written on the picture at the top in clearly visible font and crisp lettering. The image has a 4:3 aspect ratio"
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/bytedance/seedream/v4.5/text-to-image", {
+  input: {
+    prompt: "A selfie of a cat, with the cat as the protagonist. The setting is twilight at the Eiffel Tower. The cat is happy, holding a piece of baklava in its paw. The photo has a slight motion blur and is slightly overexposed. From a selfie angle, with a bit of motion blur, the overall image presents a sense of calm madness. The text \"Seedream 4.5 is on fal\" should be written on the picture at the top in clearly visible font and crisp lettering. The image has a 4:3 aspect ratio"
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/bytedance/seedream/v4.5/text-to-image)
+- [API Documentation](https://fal.ai/models/fal-ai/bytedance/seedream/v4.5/text-to-image/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/bytedance/seedream/v4.5/text-to-image)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

@@ -191,6 +191,16 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
+        modelId: 'bytedance-seedream-v4.5',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const numImages = params.numImages || 1
+            return 0.04 * USD_TO_CNY * numImages
+        }
+    },
+    {
+        providerId: 'fal',
         modelId: 'fal-ai-z-image-turbo',
         currency: '¥',
         type: 'calculated',

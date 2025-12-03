@@ -276,7 +276,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // ByteDance Seedream v4 参数
-  if (selectedModel === 'bytedance-seedream-v4') {
+  if (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5') {
     return (
       <SchemaForm
         schema={bytedanceSeedreamV4Params}

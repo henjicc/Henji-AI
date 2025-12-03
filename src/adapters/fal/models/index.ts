@@ -2,6 +2,7 @@ import { falAiNanoBananaRoute } from './fal-ai-nano-banana'
 import { falAiNanoBananaProRoute } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Route } from './fal-ai-veo-3.1'
 import { bytedanceSeedreamV4Route } from './bytedance-seedream-v4'
+import { bytedanceSeedreamV45Route } from './bytedance-seedream-v4.5'
 import { falAiZImageTurboRoute } from './fal-ai-z-image-turbo'
 
 /**
@@ -21,6 +22,7 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiNanoBananaProRoute,
   falAiVeo31Route,
   bytedanceSeedreamV4Route,
+  bytedanceSeedreamV45Route,
   falAiZImageTurboRoute
 ]
 

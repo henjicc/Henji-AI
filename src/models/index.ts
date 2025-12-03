@@ -78,6 +78,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'nano-banana-pro': falAiNanoBananaProParams,
   'veo3.1': falAiVeo31Params,
   'bytedance-seedream-v4': bytedanceSeedreamV4Params,
+  'bytedance-seedream-v4.5': bytedanceSeedreamV4Params,
   'fal-ai-z-image-turbo': falAiZImageTurboParams,
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）

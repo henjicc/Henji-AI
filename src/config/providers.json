@@ -188,6 +188,20 @@
           }
         },
         {
+          "id": "bytedance-seedream-v4.5",
+          "name": "即梦图片 4.5",
+          "type": "image",
+          "description": "ByteDance 新一代图像创建模型，集成了图像生成和图像编辑功能",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
+        },
+        {
           "id": "fal-ai-z-image-turbo",
           "name": "Z-Image-Turbo",
           "type": "image",
