@@ -2,7 +2,7 @@ import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
 
 /**
  * Kling Image O1 模型路由
- * 特点：图片编辑模型，必须上传图片，支持多图参考控制
+ * 特点：支持图片编辑和无图文字生成，支持多图参考控制
  */
 export const falAiKlingImageO1Route = {
   // 模型ID识别
@@ -15,17 +15,12 @@ export const falAiKlingImageO1Route = {
   buildImageRequest: async (params: GenerateImageParams) => {
     const images = params.images || []
 
-    // Kling Image O1 必须有图片输入（根据 API 文档，image_urls 是必需参数）
-    if (images.length === 0) {
-      throw new Error('可灵图片 O1 需要至少上传一张图片才能使用')
-    }
-
     const submitPath = 'fal-ai/kling-image/o1'
     const modelId = 'fal-ai/kling-image/o1'
 
     const requestData: any = {
       prompt: params.prompt,
-      image_urls: images  // 必需参数，已上传到 fal CDN
+      image_urls: images  // 已上传到 fal CDN，允许为空数组
     }
 
     // 添加图片数量参数（只有在有值且不为默认值时才添加）
@@ -46,6 +41,9 @@ export const falAiKlingImageO1Route = {
         console.error('[Kling O1] 计算图片宽高比失败:', error)
         aspectRatio = '1:1'  // 回退默认值
       }
+    } else if (aspectRatio === 'auto') {
+      // 没有图片时，auto 宽高比回退到默认值
+      aspectRatio = '1:1'
     }
 
     // 只传递实际的比例值（不传递 'auto'、undefined、null、空字符串）

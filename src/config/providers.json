@@ -220,6 +220,7 @@
           "type": "image",
           "description": "快手可灵图片编辑模型，支持精确的图片编辑和多图参考控制（需上传图片）",
           "functions": [
+            "图片生成",
             "图片编辑"
           ],
           "progressConfig": {
