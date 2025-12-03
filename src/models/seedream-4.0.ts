@@ -1,7 +1,17 @@
 import { ParamDef } from '../types/schema'
 
 /**
- * 即梦 4.0 模型参数定义
+ * 派欧云即梦 4.0 模型参数定义
+ *
+ * 分辨率约束（派欧云限制）：
+ * - 宽高比范围：[1/16, 16]
+ * - 最小尺寸：宽度和高度都 > 14 像素
+ * - 最大总像素：严格不超过 4096×4096 = 16,777,216 像素
+ * - 2K模式：目标像素 2048×2048 = 4,194,304，宽高相乘尽可能接近且不小于此值，不超过 4096×4096
+ * - 4K模式：目标像素 4096×4096 = 16,777,216，宽高相乘尽可能接近且不小于且不超过此值
+ *
+ * 重要：此模型不使用基数系统（baseSize），而是使用质量模式（2K/4K）直接计算分辨率
+ * 注意：派欧云的约束与 fal.ai 不同，宽高比范围更宽 [1/16, 16]，但总像素限制更严格
  */
 export const seedream40Params: ParamDef[] = [
     {
@@ -15,6 +25,10 @@ export const seedream40Params: ParamDef[] = [
             smartMatch: true,
             visualize: true,
             customInput: true,
+            // 派欧云即梦模型专用：不使用基数系统，使用派欧云专用计算器
+            useSeedreamCalculator: true,  // 标记使用即梦专用计算器
+            seedreamProvider: 'ppio',     // 派欧云版本（宽高比 [1/16, 16]，最大 16,777,216 像素）
+            baseSizeEditable: false,      // 禁用基数编辑
             extractRatio: (value) => {
                 if (value === 'smart') return null
                 const [w, h] = value.split(':').map(Number)

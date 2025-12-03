@@ -1,5 +1,16 @@
 import { ParamDef } from '../types/schema'
 
+/**
+ * ByteDance Seedream v4/v4.5 模型参数定义
+ *
+ * 分辨率约束（fal.ai 即梦模型）：
+ * - 宽高比范围：[1/3, 3]
+ * - 最大总像素：6000×6000 = 36,000,000 像素
+ * - 2K模式：目标像素 2048×2048 = 4,194,304，宽高相乘尽可能接近且不小于此值
+ * - 4K模式：目标像素 4096×4096 = 16,777,216，宽高相乘尽可能接近且不小于此值
+ *
+ * 重要：此模型不使用基数系统（baseSize），而是使用质量模式（2K/4K）直接计算分辨率
+ */
 export const bytedanceSeedreamV4Params: ParamDef[] = [
   {
     id: 'selectedResolution',
@@ -12,6 +23,10 @@ export const bytedanceSeedreamV4Params: ParamDef[] = [
       smartMatch: true,
       visualize: true,
       customInput: true,
+      // 即梦模型专用：不使用基数系统，禁用基数编辑
+      useSeedreamCalculator: true,  // 标记使用即梦专用计算器
+      seedreamProvider: 'fal',      // fal.ai 版本（宽高比 [1/3, 3]，最大 36,000,000 像素）
+      baseSizeEditable: false,      // 禁用基数编辑
       extractRatio: (value) => {
         if (value === 'smart') return null
         const [w, h] = value.split(':').map(Number)

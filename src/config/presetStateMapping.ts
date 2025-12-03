@@ -32,6 +32,7 @@ export interface PresetSetters {
     setGuidance: (v: number) => void
     setNegativePrompt: (v: string) => void
     setModelscopeCustomModel: (v: string) => void
+    setResolutionBaseSize: (v: number) => void
 
     // 视频参数
     setVideoDuration: (v: number) => void
@@ -131,6 +132,7 @@ export function createPresetSetterMap(
         guidance: setters.setGuidance,
         negativePrompt: setters.setNegativePrompt,
         modelscopeCustomModel: setters.setModelscopeCustomModel,
+        resolutionBaseSize: setters.setResolutionBaseSize,
 
         // 视频参数
         videoDuration: setters.setVideoDuration,

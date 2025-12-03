@@ -13,13 +13,18 @@ export interface ResolutionConfig {
     qualityOptions?: Array<{ value: any; label: string }>  // 质量选项（如 2K/4K）
     qualityKey?: string                            // 质量参数的 key（默认为 'resolutionQuality'）
 
-    // 基数配置（新增）
+    // 基数配置
     baseSize?: number                              // 基数（正方形时的边长，默认 1440）
     baseSizeEditable?: boolean                     // 是否允许用户编辑基数（默认 false）
     baseSizeMin?: number                           // 基数最小值（默认 512）
     baseSizeMax?: number                           // 基数最大值（默认 2048）
     baseSizeStep?: number                          // 基数步进值（默认 8，必须是8的倍数）
     baseSizeKey?: string                           // 基数参数的 key（默认为 'resolutionBaseSize'）
+
+    // 专用计算器标记（互斥，只能启用一个）
+    useSeedreamCalculator?: boolean                // 使用即梦专用计算器（fal.ai 或派欧云即梦模型）
+    seedreamProvider?: 'fal' | 'ppio'              // 即梦模型提供商：fal.ai 或派欧云（默认 fal）
+    useQwenCalculator?: boolean                    // 使用 Qwen 专用计算器（魔搭 Qwen 模型）
 }
 
 export interface BaseParam {

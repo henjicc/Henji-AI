@@ -95,6 +95,7 @@ interface BuildOptionsParams {
   guidance: number
   negativePrompt: string
   modelscopeCustomModel: string
+  resolutionBaseSize: number
 
   // 工具函数
   calculateSmartResolution: (imageDataUrl: string) => Promise<string>
@@ -112,8 +113,13 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     setUploadedFilePaths
   } = params
 
-  // 图片模型处理（排除 nano-banana 系列、bytedance-seedream-v4 和 fal-ai-z-image-turbo）
-  if (currentModel?.type === 'image' && selectedModel !== 'nano-banana' && selectedModel !== 'nano-banana-pro' && selectedModel !== 'bytedance-seedream-v4' && selectedModel !== 'fal-ai-z-image-turbo') {
+  // 图片模型处理（排除 nano-banana 系列、bytedance-seedream-v4/v4.5 和 fal-ai-z-image-turbo）
+  if (currentModel?.type === 'image' &&
+      selectedModel !== 'nano-banana' &&
+      selectedModel !== 'nano-banana-pro' &&
+      selectedModel !== 'bytedance-seedream-v4' &&
+      selectedModel !== 'bytedance-seedream-v4.5' &&
+      selectedModel !== 'fal-ai-z-image-turbo') {
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
@@ -131,8 +137,9 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     // 分辨率处理
     if (params.selectedResolution === 'smart') {
       if (uploadedImages.length > 0) {
-        // 即梦模型使用专用算法，其他模型使用通用算法
+        // ⚠️ 派欧云即梦模型（seedream-4.0）使用专用算法，其他模型使用通用算法
         if (selectedModel === 'seedream-4.0') {
+          // 派欧云即梦专用算法：宽高比 [1/16, 16]，最大 4096×4096
           const smartSize = await params.calculatePPIOSeedreamSmartResolution(uploadedImages[0])
           options.size = smartSize
         } else {
@@ -148,7 +155,13 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       options.size = `${params.customWidth}x${params.customHeight}`
     }
 
-    // Seedream 4.0 特殊参数
+    // Seedream 4.0 (派欧云) 特殊参数
+    // ⚠️ 重要：派欧云即梦模型使用专用分辨率计算，不使用基数系统
+    // 分辨率约束：
+    // - 宽高比范围：[1/16, 16]
+    // - 最大总像素：严格不超过 4096×4096 = 16,777,216 像素
+    // - 2K模式：目标 2048×2048 = 4,194,304 像素
+    // - 4K模式：目标 4096×4096 = 16,777,216 像素
     if (selectedModel === 'seedream-4.0') {
       if (params.maxImages > 1) {
         options.sequential_image_generation = 'auto'
@@ -485,8 +498,14 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     }
   }
 
-  // ByteDance Seedream v4
-  else if (currentModel?.type === 'image' && selectedModel === 'bytedance-seedream-v4') {
+  // ByteDance Seedream v4/v4.5 (fal.ai 即梦模型)
+  // ⚠️ 重要：此模型使用即梦专用分辨率计算，不使用基数系统（baseSize）
+  // 分辨率约束：
+  // - 宽高比范围：[1/3, 3]
+  // - 最大总像素：6000×6000 = 36,000,000 像素
+  // - 2K模式：目标 2048×2048 = 4,194,304 像素，尽可能接近且不小于此值
+  // - 4K模式：目标 4096×4096 = 16,777,216 像素，尽可能接近且不小于此值
+  else if (currentModel?.type === 'image' && (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5')) {
     options.numImages = params.numImages
 
     // 分辨率处理
@@ -501,7 +520,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
     // 智能模式：使用即梦专用算法精确匹配原图比例
     if (params.selectedResolution === 'smart' && uploadedImages.length > 0) {
-      // 使用即梦专用智能分辨率算法
+      // ⚠️ 使用即梦专用智能分辨率算法（calculateSeedreamSmartResolution）
+      // 此算法会根据质量模式（2K/4K）和原图比例计算最优分辨率
       const smartSize = await params.calculateSeedreamSmartResolution(uploadedImages[0])
       const [w, h] = smartSize.split('x').map(Number)
       width = w
@@ -511,16 +531,58 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     // 如果不是智能模式，根据宽高比调整尺寸
     else if (params.selectedResolution !== 'smart') {
       const [wRatio, hRatio] = params.selectedResolution.split(':').map(Number)
-      if (wRatio > hRatio) {
-        // 横屏
-        height = Math.round(width * (hRatio / wRatio))
-      } else {
-        // 竖屏或正方形
-        width = Math.round(height * (wRatio / hRatio))
+
+      // ⚠️ 重要：这里的计算逻辑必须与 UniversalResolutionSelector 中的即梦计算器保持一致
+      // 不能使用基数系统（baseSize），而是直接从质量模式的目标像素开始计算
+      const targetPixels = params.resolutionQuality === '2K' ? 4194304 : 16777216
+      const aspectRatio = wRatio / hRatio
+
+      // 计算能达到目标像素数的理想尺寸
+      const targetHeight = Math.sqrt(targetPixels / aspectRatio)
+      const targetWidth = targetHeight * aspectRatio
+
+      width = Math.round(targetWidth)
+      height = Math.round(targetHeight)
+
+      // 确保不小于目标像素数
+      let currentPixels = width * height
+      const maxAllowedPixels = Math.min(targetPixels * 1.05, 36000000)
+
+      while (currentPixels < targetPixels && currentPixels < maxAllowedPixels) {
+        const withExtraWidth = (width + 1) * height
+        const withExtraHeight = width * (height + 1)
+
+        if (withExtraWidth <= maxAllowedPixels && withExtraHeight <= maxAllowedPixels) {
+          if (Math.abs(withExtraWidth - targetPixels) < Math.abs(withExtraHeight - targetPixels)) {
+            width += 1
+            currentPixels = withExtraWidth
+          } else {
+            height += 1
+            currentPixels = withExtraHeight
+          }
+        } else if (withExtraWidth <= maxAllowedPixels) {
+          width += 1
+          currentPixels = withExtraWidth
+        } else if (withExtraHeight <= maxAllowedPixels) {
+          height += 1
+          currentPixels = withExtraHeight
+        } else {
+          break
+        }
       }
-      console.log('[optionsBuilder] bytedance-seedream-v4 预设比例模式:', { selectedResolution: params.selectedResolution, width, height })
+
+      console.log('[optionsBuilder] bytedance-seedream-v4 预设比例模式:', {
+        selectedResolution: params.selectedResolution,
+        质量模式: params.resolutionQuality,
+        目标像素: targetPixels,
+        width,
+        height,
+        实际像素: width * height,
+        利用率: `${((width * height / targetPixels) * 100).toFixed(2)}%`
+      })
 
       // 如果有自定义输入，使用自定义尺寸（仅在非智能模式下生效）
+      // ⚠️ 注意：自定义尺寸会覆盖上面的计算结果，用户需要自己确保符合约束
       if (params.customWidth && params.customHeight) {
         width = parseInt(params.customWidth)
         height = parseInt(params.customHeight)

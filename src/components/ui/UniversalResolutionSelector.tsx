@@ -44,7 +44,6 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   const baseSizeEditable = config.baseSizeEditable === true // 默认不允许编辑，只有明确设置为 true 时才显示
   const baseSizeMin = config.baseSizeMin || 512
   const baseSizeMax = config.baseSizeMax || 2048
-  const baseSizeStep = config.baseSizeStep || 8
 
   // 当宽高比变化时，自动更新自定义尺寸
   useEffect(() => {
@@ -60,8 +59,105 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
     const [w, h] = value.split(':').map(Number)
     if (isNaN(w) || isNaN(h)) return
 
+    // ⚠️ 性能优化：避免不必要的计算
+    // 只有当真正影响计算结果的参数变化时才重新计算
+
+    // 使用即梦专用计算器（如果启用）
+    if (config.useSeedreamCalculator) {
+      // 即梦模型：根据质量模式（2K/4K）和宽高比计算分辨率
+      const quality = qualityValue || '2K'
+      const targetPixels = quality === '2K' ? 4194304 : 16777216 // 2K: 2048*2048, 4K: 4096*4096
+      const aspectRatio = w / h
+      const provider = config.seedreamProvider || 'fal'
+
+      // 根据提供商设置约束条件
+      const constraints = provider === 'ppio'
+        ? {
+            minRatio: 1/16,
+            maxRatio: 16,
+            absoluteMaxPixels: 16777216, // 派欧云：严格不超过 4096*4096
+            allowOvershoot: false,       // 派欧云：不允许超过目标像素
+            name: '派欧云'
+          }
+        : {
+            minRatio: 1/3,
+            maxRatio: 3,
+            absoluteMaxPixels: 36000000, // fal.ai：不超过 6000*6000
+            allowOvershoot: true,        // fal.ai：允许超过目标像素5%
+            name: 'fal.ai'
+          }
+
+      // 计算能达到目标像素数的理想尺寸
+      const targetHeight = Math.sqrt(targetPixels / aspectRatio)
+      const targetWidth = targetHeight * aspectRatio
+
+      // 取整（不强制8的倍数，以获得更精确的比例匹配）
+      let width = Math.round(targetWidth)
+      let height = Math.round(targetHeight)
+
+      // 确保不小于目标像素数
+      let currentPixels = width * height
+      const maxAllowedPixels = constraints.allowOvershoot
+        ? Math.min(targetPixels * 1.05, constraints.absoluteMaxPixels)
+        : Math.min(targetPixels, constraints.absoluteMaxPixels)
+
+      while (currentPixels < targetPixels && currentPixels < maxAllowedPixels) {
+        const withExtraWidth = (width + 1) * height
+        const withExtraHeight = width * (height + 1)
+
+        if (withExtraWidth <= maxAllowedPixels && withExtraHeight <= maxAllowedPixels) {
+          if (Math.abs(withExtraWidth - targetPixels) < Math.abs(withExtraHeight - targetPixels)) {
+            width += 1
+            currentPixels = withExtraWidth
+          } else {
+            height += 1
+            currentPixels = withExtraHeight
+          }
+        } else if (withExtraWidth <= maxAllowedPixels) {
+          width += 1
+          currentPixels = withExtraWidth
+        } else if (withExtraHeight <= maxAllowedPixels) {
+          height += 1
+          currentPixels = withExtraHeight
+        } else {
+          break
+        }
+      }
+
+      // 确保不超过最大允许像素
+      if (currentPixels > maxAllowedPixels) {
+        const scale = Math.sqrt(maxAllowedPixels / currentPixels)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+
+      // 确保最小尺寸（至少15像素）
+      if (width < 15) width = 15
+      if (height < 15) height = 15
+
+      // 最终验证宽高比是否在范围内
+      const finalRatio = width / height
+      if (finalRatio >= constraints.minRatio && finalRatio <= constraints.maxRatio) {
+        onWidthChange(String(width))
+        onHeightChange(String(height))
+
+        console.log(`[UniversalResolutionSelector] ${constraints.name}即梦分辨率计算:`, {
+          提供商: provider,
+          比例: `${w}:${h}`,
+          质量模式: quality,
+          目标像素: targetPixels,
+          计算结果: `${width}x${height}`,
+          实际像素: width * height,
+          利用率: `${((width * height / targetPixels) * 100).toFixed(2)}%`,
+          宽高比范围: `[${constraints.minRatio}, ${constraints.maxRatio}]`,
+          最大像素限制: constraints.absoluteMaxPixels
+        })
+      } else {
+        console.warn(`[UniversalResolutionSelector] 宽高比 ${finalRatio.toFixed(4)} 超出 ${constraints.name} 允许范围 [${constraints.minRatio}, ${constraints.maxRatio}]`)
+      }
+    }
     // 使用 Qwen 计算器（如果启用）
-    if (config.useQwenCalculator) {
+    else if (config.useQwenCalculator) {
       import('@/utils/qwenResolutionCalculator').then(({ calculateQwenResolution }) => {
         const size = calculateQwenResolution(w, h)
         onWidthChange(String(size.width))
@@ -76,7 +172,18 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
         onHeightChange(String(size.height))
       })
     }
-  }, [value, baseSize, config.customInput, config.useQwenCalculator, onWidthChange, onHeightChange])
+  }, [
+    value,                              // 宽高比变化时重新计算
+    baseSize,                           // 基数变化时重新计算（基数系统）
+    qualityValue,                       // 质量模式变化时重新计算（即梦/Qwen）
+    config.customInput,                 // 配置变化
+    config.useQwenCalculator,           // 计算器类型变化
+    config.useSeedreamCalculator,       // 计算器类型变化
+    config.seedreamProvider             // 即梦提供商变化（fal/ppio）
+    // ⚠️ 注意：不要添加 onWidthChange 和 onHeightChange 到依赖数组
+    // 这两个回调函数的引用会频繁变化，但不影响计算结果
+    // 添加它们会导致每次父组件渲染都触发重新计算，严重影响性能
+  ])
   // 自动判断标签：如果只有宽高比（没有质量选项和自定义输入），显示"比例"，否则显示"分辨率"
   const getDefaultLabel = () => {
     if (config.type === 'aspect_ratio' && !config.qualityOptions && !config.customInput) {
