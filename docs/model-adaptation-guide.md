@@ -35,6 +35,19 @@
 
 ## 核心架构概述
 
+### 供应商前缀命名规范
+
+为了确保代码库的一致性和避免命名冲突，**所有供应商的模型必须使用统一的前缀规范**：
+
+- **文件名**: 使用 `[provider]-` 前缀，例如：`fal-ai-kling-image-o1.ts`、`ppio-seedream-4.0.ts`
+- **变量名**: 使用 `[provider]` 前缀，例如：`falAiKlingImageO1Route`、`ppioSeedreamParams`
+- **模型 ID**: 在 `providers.json` 中使用 `[provider]-` 前缀，例如：`fal-ai-kling-image-o1`、`ppio-seedream-4.0`
+- **配置引用**: 所有配置文件中的模型 ID 引用也必须使用带前缀的格式
+
+**重要**: 前缀应用于该供应商所有模型相关的代码元素，确保整个代码库中模型命名的一致性，避免不同供应商之间的命名冲突。
+
+### 适配架构
+
 Henji AI 的模型适配分为前端和后端两个部分：
 
 1.  **前端 (Frontend)**:

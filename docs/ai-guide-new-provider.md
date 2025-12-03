@@ -202,6 +202,14 @@ export class YourProviderAdapter extends BaseAdapter {
 
 ## 4. 实现模型路由
 
+### 供应商前缀命名要求
+
+所有模型路由文件和变量必须使用供应商前缀，以确保代码库的一致性和避免命名冲突：
+
+- **路由文件名**: 使用 `[provider]-[model-id].ts` 格式，例如：`your-provider-model-1.ts`
+- **变量名**: 使用 `[provider][Model]Route` 格式，例如：`yourProviderModel1Route`
+- **模型 ID**: 使用 `[provider]-[model-id]` 格式，例如：`your-provider-model-1`
+
 **`models/index.ts`**:
 ```typescript
 import { model1Route } from './model-1'

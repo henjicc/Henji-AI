@@ -8,6 +8,14 @@
 
 ## 1. 添加模型路由
 
+### 供应商前缀命名要求
+
+为了确保代码库的一致性和避免命名冲突，**新模型必须使用供应商前缀规范**：
+
+- **路由文件名**: 使用 `[provider]-[model-id].ts` 格式，例如：`fal-ai-new-model.ts`、`ppio-new-model.ts`
+- **变量名**: 使用 `[provider][Model]Route` 格式，例如：`falAiNewModelRoute`、`ppioNewModelRoute`
+- **模型 ID**: 使用 `[provider]-[model-id]` 格式，例如：`fal-ai-new-model`、`ppio-new-model`
+
 **位置**: `src/adapters/[provider]/models/[model-id].ts`
 
 ```typescript
