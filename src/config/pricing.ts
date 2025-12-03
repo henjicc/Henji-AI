@@ -130,6 +130,12 @@ const PRICES = {
     }
 } as const
 
+// ===== 辅助函数：格式化价格（最多2位小数）=====
+function formatPrice(price: number): number {
+    // 四舍五入到2位小数，自动去除不必要的尾随零
+    return Math.round(price * 100) / 100
+}
+
 // ===== 辅助函数：获取Seedance宽高比分组 =====
 function getSeedanceAspectGroup(aspect: string): 'wide' | 'standard' | 'classic' | 'square' {
     // 移除可能存在的空格
@@ -153,7 +159,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const maxImages = params.maxImages || 1
-            return PRICES.SEEDREAM * maxImages
+            return formatPrice(PRICES.SEEDREAM * maxImages)
         }
     },
     {
@@ -163,7 +169,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.num_images || 1
-            return PRICES.NANO_BANANA * USD_TO_CNY * numImages
+            return formatPrice(PRICES.NANO_BANANA * USD_TO_CNY * numImages)
         }
     },
     {
@@ -176,7 +182,7 @@ export const pricingConfigs: PricingConfig[] = [
             const basePrice = PRICES.NANO_BANANA_PRO * USD_TO_CNY * numImages
             // 4K 分辨率时价格为 2 倍
             const multiplier = params.resolution === '4K' ? 2 : 1
-            return basePrice * multiplier
+            return formatPrice(basePrice * multiplier)
         }
     },
     {
@@ -186,7 +192,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.numImages || 1
-            return 0.0283 * USD_TO_CNY * numImages
+            return formatPrice(0.0283 * USD_TO_CNY * numImages)
         }
     },
     {
@@ -196,7 +202,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const numImages = params.numImages || 1
-            return 0.04 * USD_TO_CNY * numImages
+            return formatPrice(0.04 * USD_TO_CNY * numImages)
         }
     },
     {
@@ -227,11 +233,11 @@ export const pricingConfigs: PricingConfig[] = [
             // 计算百万像素数
             const millionPixels = totalPixels / 1000000
 
-            // 计算价格：0.005美元每百万像素，转换为人民币后四舍五入
-            const pricePerImage = Math.round(millionPixels * 0.005 * USD_TO_CNY * 100) / 100
+            // 计算价格：0.005美元每百万像素
+            const pricePerImage = millionPixels * 0.005 * USD_TO_CNY
 
-            // 总价格
-            return pricePerImage * numImages
+            // 总价格，格式化为最多2位小数
+            return formatPrice(pricePerImage * numImages)
         }
     },
 
@@ -247,7 +253,7 @@ export const pricingConfigs: PricingConfig[] = [
             const pricePerChar = params.audioSpec === 'audio-pro'
                 ? PRICES.SPEECH_HD
                 : PRICES.SPEECH_TURBO
-            return charsIn10k * pricePerChar
+            return formatPrice(charsIn10k * pricePerChar)
         }
     },
 
@@ -364,8 +370,8 @@ export const pricingConfigs: PricingConfig[] = [
             // 计算总价（转换为人民币）
             const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
 
-            // 保留两位小数
-            return parseFloat(totalPriceCNY.toFixed(2))
+            // 格式化为最多2位小数
+            return formatPrice(totalPriceCNY)
         }
     }
 ]
