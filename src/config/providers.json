@@ -207,8 +207,7 @@
           "type": "image",
           "description": "超快速的6B参数文本到图像模型，支持多种分辨率和加速级别",
           "functions": [
-            "图片生成",
-            "图片编辑"
+            "图片生成"
           ],
           "progressConfig": {
             "type": "polling",
@@ -237,7 +236,7 @@
         },
         {
           "id": "Qwen/Qwen-Image",
-          "name": "Qwen-image",
+          "name": "Qwen-Image",
           "type": "image",
           "description": "通义千问图像生成模型",
           "functions": [

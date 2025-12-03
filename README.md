@@ -20,7 +20,7 @@
 
 ## 功能特性
 
-- 多家供应商可选，目前已适配：[派欧云](https://ppio.com/user/register?invited_by=MLBDS6)、[fal](https://fal.ai/)
+- 多家供应商可选，目前已适配：[派欧云](https://ppio.com/user/register?invited_by=MLBDS6)、[fal](https://fal.ai/)、[魔搭](https://modelscope.cn/)
 - 还算是比较简洁美观的界面，基础功能也比较完善
 
 ## 适配列表
@@ -29,21 +29,30 @@
 
 | 供应商 | 模型 | 功能 |
 |--------|------|------|
-| 派欧云 | 即梦图片生成 4.0 | 图片生成、图片编辑 |
+| 派欧云 | 即梦图片 4.0 | 图片生成、图片编辑 |
 | fal | Nano Banana | 图片生成、图片编辑 |
 | fal | Nano Banana Pro | 图片生成、图片编辑 |
+| fal | 即梦图片 4.0 | 图片生成、图片编辑 |
+| fal | 即梦图片 4.5 | 图片生成、图片编辑 |
+| fal | Z-Image-Turbo | 图片生成 |
+| 魔搭 | Z-Image-Turbo | 图片生成 |
+| 魔搭 | FLUX.1-Krea-dev | 图片生成 |
+| 魔搭 | Qwen-Image | 图片生成 |
+| 魔搭 | Qwen-Image-Edit-2509 | 图片编辑 |
+| 魔搭 | 魔搭API自定义 | 图片生成、图片编辑 |
 
 ### 视频
 
 | 供应商 | 模型 | 功能 |
 |--------|------|------|
 | 派欧云 | Vidu Q1 | 文生视频、图生视频、首尾帧、参考生视频 |
-| 派欧云 | 可灵 V2.5 Turbo | 文生视频、图生视频 |
-| 派欧云 | Minimax Hailuo 2.3 | 文生视频、图生视频 |
-| 派欧云 | Minimax Hailuo-02 | 文生视频、图生视频、首尾帧 |
+| 派欧云 | 可灵 2.5 Turbo | 文生视频、图生视频 |
+| 派欧云 | 海螺 Hailuo 2.3 | 文生视频、图生视频 |
+| 派欧云 | 海螺 Hailuo-02 | 文生视频、图生视频、首尾帧 |
 | 派欧云 | PixVerse V4.5 | 文生视频、图生视频 |
-| 派欧云 | Wan 2.5 Preview | 文生视频、图生视频 |
-| 派欧云 | Seedance V1 (Lite/Pro) | 文生视频、图生视频、首尾帧 |
+| 派欧云 | 万相 2.5 Preview | 文生视频、图生视频 |
+| 派欧云 | 即梦视频 3.0 | 文生视频、图生视频、首尾帧 |
+| fal | Veo 3.1 | 文生视频、图生视频、首尾帧、参考生视频 |
 
 ### 音频
 
@@ -65,7 +74,7 @@
 ```
 Henji-AI/
 ├── src/                      # 前端源码
-│   ├── adapters/            # API 适配器（派欧云、fal）
+│   ├── adapters/            # API 适配器（派欧云、fal、魔搭）
 │   ├── components/          # React 组件
 │   ├── config/              # 供应商和模型配置
 │   ├── services/            # 业务逻辑层
@@ -126,7 +135,7 @@ npm run tauri:build:mac
 项目采用适配器模式统一不同 AI 供应商的 API：
 
 ```
-MediaGenerator → AdapterFactory → 具体适配器 (PPIOAdapter / FalAdapter)
+MediaGenerator → AdapterFactory → 具体适配器 (PPIOAdapter / FalAdapter / ModelscopeAdapter)
 ```
 
 每个适配器实现统一的接口，支持图片、视频、音频生成。
