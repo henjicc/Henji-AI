@@ -5,7 +5,7 @@ import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
  */
 export const falAiNanoBananaProRoute = {
   // 模型ID识别
-  matches: (modelId: string) => modelId === 'fal-ai/nano-banana-pro' || modelId === 'nano-banana-pro',
+  matches: (modelId: string) => modelId === 'fal-ai/nano-banana-pro' || modelId === 'nano-banana-pro' || modelId === 'fal-ai-nano-banana-pro',
 
   // 构建图片生成请求
   buildImageRequest: (params: GenerateImageParams) => {

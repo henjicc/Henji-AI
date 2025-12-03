@@ -4,7 +4,7 @@ import { ParamDef } from '../types/schema'
  * Kling Image O1 模型参数定义
  * 特点：必须有图片输入，融合 aspect_ratio 和 resolution
  */
-export const klingImageO1Params: ParamDef[] = [
+export const falAiKlingImageO1Params: ParamDef[] = [
   {
     id: 'num_images',
     type: 'number',

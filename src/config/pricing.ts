@@ -165,7 +165,7 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
-        modelId: 'nano-banana',
+        modelId: 'fal-ai-nano-banana',
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
@@ -175,7 +175,7 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
-        modelId: 'nano-banana-pro',
+        modelId: 'fal-ai-nano-banana-pro',
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
@@ -188,7 +188,7 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
-        modelId: 'bytedance-seedream-v4',
+        modelId: 'fal-ai-bytedance-seedream-v4',
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
@@ -198,7 +198,7 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
-        modelId: 'bytedance-seedream-v4.5',
+        modelId: 'fal-ai-bytedance-seedream-v4.5',
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
@@ -243,17 +243,7 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
-        modelId: 'kling-image-o1',
-        currency: '¥',
-        type: 'calculated',
-        calculator: (params) => {
-            const numImages = params.num_images || 1
-            return formatPrice(PRICES.KLING_IMAGE_O1 * USD_TO_CNY * numImages)
-        }
-    },
-    {
-        providerId: 'fal',
-        modelId: 'kling-o1',
+        modelId: 'fal-ai-kling-image-o1',
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
@@ -374,7 +364,7 @@ export const pricingConfigs: PricingConfig[] = [
     },
     {
         providerId: 'fal',
-        modelId: 'veo3.1',
+        modelId: 'fal-ai-veo-3.1',
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {

@@ -1360,12 +1360,6 @@ const App: React.FC = () => {
       return
     }
 
-    // 创建 sanitizedOptions，移除 base64 图片数据以防止 history.json 膨胀
-    const sanitizedOptions = { ...options }
-    if (sanitizedOptions && sanitizedOptions.images) {
-      delete sanitizedOptions.images
-    }
-
     // 查找供应商信息
     const providerObj = providers.find(p => p.models.some(m => m.id === model))
     const providerId = providerObj?.id
@@ -1384,7 +1378,7 @@ const App: React.FC = () => {
       uploadedFilePaths: options?.uploadedFilePaths,
       status: isGenerating ? 'queued' : 'pending', // 如果正在生成，则排队
       progress: 0,
-      options: sanitizedOptions, // 保存清洗后的参数
+      options: options, // 保存完整参数（任务执行时需要）
     }
 
     // 立即添加到任务列表（最新的在最后）
@@ -1678,32 +1672,43 @@ const App: React.FC = () => {
     if (!isTasksLoaded) return
     if (!isDesktop()) return
     const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'timeout' || t.status === 'pending' || t.status === 'generating')
-      .map(t => ({
-        id: t.id,
-        type: t.type,
-        prompt: t.prompt,
-        model: t.model,
-        provider: t.provider, // 保存供应商信息
-        size: t.size,
-        dimensions: t.dimensions, // 保存实际媒体尺寸
-        duration: t.duration, // 保存实际媒体时长
-        status: t.status,
-        error: t.error,
-        uploadedFilePaths: t.uploadedFilePaths,
-        options: t.options, // 保存生成参数
-        requestId: t.requestId, // 保存请求ID（用于超时恢复）
-        modelId: t.modelId, // 保存模型ID（用于超时恢复）
-        serverTaskId: t.serverTaskId, // 保存服务端任务ID（用于超时恢复）
-        message: t.message, // 保存状态消息
-        result: t.result ? {
-          id: t.result.id,
-          type: t.result.type,
-          filePath: t.result.filePath, // 只保存文件路径
-          // 明确不保存 url 字段，防止 base64 数据或远程 URL 被保存
-          prompt: t.result.prompt,
-          createdAt: t.result.createdAt
-        } : undefined
-      }))
+      .map(t => {
+        // 清理 options 中的 base64 图片数据，防止 history.json 膨胀
+        const sanitizedOptions = t.options ? { ...t.options } : undefined
+        if (sanitizedOptions) {
+          // 删除 images 字段（包含 base64 数据）
+          delete sanitizedOptions.images
+          // 删除 uploadedImages 字段（某些模型如 bytedance-seedream-v4/v4.5 使用此字段）
+          delete sanitizedOptions.uploadedImages
+        }
+
+        return {
+          id: t.id,
+          type: t.type,
+          prompt: t.prompt,
+          model: t.model,
+          provider: t.provider, // 保存供应商信息
+          size: t.size,
+          dimensions: t.dimensions, // 保存实际媒体尺寸
+          duration: t.duration, // 保存实际媒体时长
+          status: t.status,
+          error: t.error,
+          uploadedFilePaths: t.uploadedFilePaths,
+          options: sanitizedOptions, // 保存清理后的生成参数（不含 base64 数据）
+          requestId: t.requestId, // 保存请求ID（用于超时恢复）
+          modelId: t.modelId, // 保存模型ID（用于超时恢复）
+          serverTaskId: t.serverTaskId, // 保存服务端任务ID（用于超时恢复）
+          message: t.message, // 保存状态消息
+          result: t.result ? {
+            id: t.result.id,
+            type: t.result.type,
+            filePath: t.result.filePath, // 只保存文件路径
+            // 明确不保存 url 字段，防止 base64 数据或远程 URL 被保存
+            prompt: t.result.prompt,
+            createdAt: t.result.createdAt
+          } : undefined
+        }
+      })
     const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
     const limitedTasks = tasksToSave.slice(-maxHistory)
     writeJsonToAppData('Henji-AI/history.json', limitedTasks).catch(e => console.error('write history failed', e))

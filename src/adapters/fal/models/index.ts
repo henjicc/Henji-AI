@@ -1,17 +1,17 @@
 import { falAiNanoBananaRoute } from './fal-ai-nano-banana'
 import { falAiNanoBananaProRoute } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Route } from './fal-ai-veo-3.1'
-import { bytedanceSeedreamV4Route } from './bytedance-seedream-v4'
-import { bytedanceSeedreamV45Route } from './bytedance-seedream-v4.5'
+import { falAiBytedanceSeedreamV4Route } from './fal-ai-bytedance-seedream-v4'
+import { falAiBytedanceSeedreamV45Route } from './fal-ai-bytedance-seedream-v4.5'
 import { falAiZImageTurboRoute } from './fal-ai-z-image-turbo'
-import { klingImageO1Route } from './kling-image-o1'
+import { falAiKlingImageO1Route } from './fal-ai-kling-image-o1'
 
 /**
  * 模型路由接口
  */
 export interface FalModelRoute {
   matches: (modelId: string) => boolean
-  buildImageRequest?: (params: any) => { submitPath: string; modelId: string; requestData: any }
+  buildImageRequest?: (params: any) => Promise<{ submitPath: string; modelId: string; requestData: any }> | { submitPath: string; modelId: string; requestData: any }
   buildVideoRequest?: (params: any) => Promise<{ endpoint: string; modelId: string; requestData: any }>
 }
 
@@ -22,10 +22,10 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiNanoBananaRoute,
   falAiNanoBananaProRoute,
   falAiVeo31Route,
-  bytedanceSeedreamV4Route,
-  bytedanceSeedreamV45Route,
+  falAiBytedanceSeedreamV4Route,
+  falAiBytedanceSeedreamV45Route,
   falAiZImageTurboRoute,
-  klingImageO1Route
+  falAiKlingImageO1Route
 ]
 
 /**

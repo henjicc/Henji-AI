@@ -648,12 +648,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       const originalUIParams: Record<string, any> = {}
 
       // Nano Banana 和 Nano Banana Pro 的 aspectRatio
-      if (state.selectedModel === 'nano-banana' || state.selectedModel === 'nano-banana-pro') {
+      if (state.selectedModel === 'nano-banana' || state.selectedModel === 'nano-banana-pro' ||
+          state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
         originalUIParams.aspectRatio = state.aspectRatio
       }
 
       // ByteDance Seedream v4 的 selectedResolution
-      if (state.selectedModel === 'bytedance-seedream-v4') {
+      if (state.selectedModel === 'bytedance-seedream-v4' || state.selectedModel === 'fal-ai-bytedance-seedream-v4') {
         originalUIParams.selectedResolution = state.selectedResolution
       }
 
@@ -730,7 +731,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         veoMode={state.veoMode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
-          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : state.selectedModel === 'veo3.1' ? state.veoMode : undefined)
+          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
           imageUpload.handleImageFileUpload(files, maxCount)
         }}
         onImageRemove={imageUpload.removeImage}
@@ -738,11 +739,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageReorder={imageUpload.handleImageReorder}
         onImageClick={onImageClick}
         onPaste={(e) => {
-          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : state.selectedModel === 'veo3.1' ? state.veoMode : undefined)
+          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
           imageUpload.handlePaste(e, maxCount)
         }}
         onImageDrop={(files) => {
-          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : state.selectedModel === 'veo3.1' ? state.veoMode : undefined)
+          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
           imageUpload.handleImageFileDrop(files, maxCount)
         }}
         onDragStateChange={imageUpload.setIsDraggingImage}

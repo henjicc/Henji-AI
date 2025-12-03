@@ -8,10 +8,10 @@ export const FAL_CONFIG = {
     'fal-ai/z-image/turbo': 5,
     'fal-ai/bytedance/seedream/v4/text-to-image': 30,
     'fal-ai/bytedance/seedream/v4/edit': 30,
-    'nano-banana-pro': 30,
-    'nano-banana': 10,
-    'veo3.1': 60,
-    'kling-image-o1': 25
+    'fal-ai-nano-banana-pro': 30,
+    'fal-ai-nano-banana': 10,
+    'fal-ai-veo-3.1': 60,
+    'fal-ai-kling-image-o1': 25
   } as Record<string, number>,
 
   // 默认预估轮询次数
@@ -27,13 +27,13 @@ export function getEstimatedPolls(modelId: string): number {
     return FAL_CONFIG.modelEstimatedPolls[modelId]
   }
 
-  // 模糊匹配
+  // 模糊匹配（支持旧的不带前缀的 ID 和完整路径）
   if (modelId.includes('z-image/turbo')) return FAL_CONFIG.modelEstimatedPolls['fal-ai/z-image/turbo']
   if (modelId.includes('seedream/v4')) return FAL_CONFIG.modelEstimatedPolls['fal-ai/bytedance/seedream/v4/text-to-image']
-  if (modelId.includes('nano-banana-pro')) return FAL_CONFIG.modelEstimatedPolls['nano-banana-pro']
-  if (modelId.includes('nano-banana')) return FAL_CONFIG.modelEstimatedPolls['nano-banana']
-  if (modelId.includes('veo3.1')) return FAL_CONFIG.modelEstimatedPolls['veo3.1']
-  if (modelId.includes('kling-image')) return FAL_CONFIG.modelEstimatedPolls['kling-image-o1']
+  if (modelId.includes('nano-banana-pro')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-nano-banana-pro']
+  if (modelId.includes('nano-banana')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-nano-banana']
+  if (modelId.includes('veo')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-veo-3.1']
+  if (modelId.includes('kling-image')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-kling-image-o1']
 
   return FAL_CONFIG.defaultEstimatedPolls
 }

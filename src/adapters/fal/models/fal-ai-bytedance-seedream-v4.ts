@@ -1,7 +1,7 @@
 import { FalModelRoute } from './index'
 
-export const bytedanceSeedreamV4Route: FalModelRoute = {
-  matches: (modelId: string) => modelId === 'bytedance-seedream-v4',
+export const falAiBytedanceSeedreamV4Route: FalModelRoute = {
+  matches: (modelId: string) => modelId === 'bytedance-seedream-v4' || modelId === 'fal-ai-bytedance-seedream-v4',
 
   buildImageRequest: (params: any) => {
     const images = params.uploadedImages || []

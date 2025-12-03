@@ -11,7 +11,7 @@ import { ParamDef } from '../types/schema'
  *
  * 重要：此模型不使用基数系统（baseSize），而是使用质量模式（2K/4K）直接计算分辨率
  */
-export const bytedanceSeedreamV4Params: ParamDef[] = [
+export const falAiBytedanceSeedreamV4Params: ParamDef[] = [
   {
     id: 'selectedResolution',
     type: 'dropdown',

@@ -4,11 +4,11 @@ import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
  * Kling Image O1 模型路由
  * 特点：图片编辑模型，必须上传图片，支持多图参考控制
  */
-export const klingImageO1Route = {
+export const falAiKlingImageO1Route = {
   // 模型ID识别
   matches: (modelId: string) =>
     modelId === 'fal-ai/kling-image/o1' ||
-    modelId === 'kling-image-o1' ||
+    modelId === 'fal-ai-kling-image-o1' ||
     modelId === 'kling-o1',
 
   // 构建图片生成请求
@@ -38,9 +38,9 @@ export const klingImageO1Route = {
 
     if (aspectRatio === 'auto' && images.length > 0) {
       try {
-        const { getImageAspectRatio, matchAspectRatio } = await import('@/utils/aspectRatio')
+        const { getImageAspectRatio, formatAspectRatio } = await import('@/utils/aspectRatio')
         const ratio = await getImageAspectRatio(images[0])
-        aspectRatio = matchAspectRatio(ratio)
+        aspectRatio = formatAspectRatio(ratio)
         console.log(`[Kling O1] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
       } catch (error) {
         console.error('[Kling O1] 计算图片宽高比失败:', error)

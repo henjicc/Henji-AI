@@ -16,7 +16,7 @@ import {
   seedreamParams,
   nanoBananaParams,
   nanoBananaProParams,
-  bytedanceSeedreamV4Params,
+  falAiBytedanceSeedreamV4Params,
   minimaxSpeechBasicParams,
   minimaxSpeechAdvancedParams,
   falAiZImageTurboParams,
@@ -24,7 +24,7 @@ import {
   modelscopeCustomParams,
   modelscopeZImageTurboParams,
   qwenImageEdit2509Params,
-  klingImageO1Params
+  falAiKlingImageO1Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -168,7 +168,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         )}
 
         {/* Veo 3.1 参数 */}
-        {selectedModel === 'veo3.1' && (
+        {(selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1') && (
           <SchemaForm
             schema={veoParams}
             values={{
@@ -193,7 +193,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'seedance-v1' &&
          selectedModel !== 'seedance-v1-lite' &&
          selectedModel !== 'seedance-v1-pro' &&
-         selectedModel !== 'veo3.1' && (
+         selectedModel !== 'veo3.1' &&
+         selectedModel !== 'fal-ai-veo-3.1' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -212,7 +213,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'seedance-v1' &&
          selectedModel !== 'seedance-v1-lite' &&
          selectedModel !== 'seedance-v1-pro' &&
-         selectedModel !== 'veo3.1' && (
+         selectedModel !== 'veo3.1' &&
+         selectedModel !== 'fal-ai-veo-3.1' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
@@ -246,7 +248,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // Nano Banana 参数
-  if (selectedModel === 'nano-banana') {
+  if (selectedModel === 'nano-banana' || selectedModel === 'fal-ai-nano-banana') {
     return (
       <SchemaForm
         schema={nanoBananaParams}
@@ -261,7 +263,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // Nano Banana Pro 参数
-  if (selectedModel === 'nano-banana-pro') {
+  if (selectedModel === 'nano-banana-pro' || selectedModel === 'fal-ai-nano-banana-pro') {
     return (
       <SchemaForm
         schema={nanoBananaProParams}
@@ -277,10 +279,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // ByteDance Seedream v4 参数
-  if (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5') {
+  if (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5' || selectedModel === 'fal-ai-bytedance-seedream-v4' || selectedModel === 'fal-ai-bytedance-seedream-v4.5') {
     return (
       <SchemaForm
-        schema={bytedanceSeedreamV4Params}
+        schema={falAiBytedanceSeedreamV4Params}
         values={{
           numImages: values.numImages,
           selectedResolution: values.selectedResolution,
@@ -316,10 +318,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // Kling Image O1 参数
-  if (selectedModel === 'kling-image-o1' || selectedModel === 'kling-o1') {
+  if (selectedModel === 'fal-ai-kling-image-o1') {
     return (
       <SchemaForm
-        schema={klingImageO1Params}
+        schema={falAiKlingImageO1Params}
         values={{
           num_images: values.numImages,
           aspectRatio: values.aspectRatio,

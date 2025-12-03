@@ -138,7 +138,7 @@
       "type": "multi",
       "models": [
         {
-          "id": "nano-banana",
+          "id": "fal-ai-nano-banana",
           "name": "Nano Banana",
           "type": "image",
           "description": "Google 最先进的图像生成和编辑模型",
@@ -148,7 +148,7 @@
           ]
         },
         {
-          "id": "nano-banana-pro",
+          "id": "fal-ai-nano-banana-pro",
           "name": "Nano Banana Pro",
           "type": "image",
           "description": "Google 最新的图像生成和编辑模型，支持高分辨率输出",
@@ -158,7 +158,7 @@
           ]
         },
         {
-          "id": "veo3.1",
+          "id": "fal-ai-veo-3.1",
           "name": "Veo 3.1",
           "type": "video",
           "description": "Google 最新的视频生成模型，支持文生视频、图生视频、首尾帧和参考生视频",
@@ -174,7 +174,7 @@
           }
         },
         {
-          "id": "bytedance-seedream-v4",
+          "id": "fal-ai-bytedance-seedream-v4",
           "name": "即梦图片 4.0",
           "type": "image",
           "description": "ByteDance 新一代图像创建模型，集成了图像生成和图像编辑功能",
@@ -188,7 +188,7 @@
           }
         },
         {
-          "id": "bytedance-seedream-v4.5",
+          "id": "fal-ai-bytedance-seedream-v4.5",
           "name": "即梦图片 4.5",
           "type": "image",
           "description": "ByteDance 新一代图像创建模型，集成了图像生成和图像编辑功能",
@@ -215,7 +215,7 @@
           }
         },
         {
-          "id": "kling-image-o1",
+          "id": "fal-ai-kling-image-o1",
           "name": "可灵图片 O1",
           "type": "image",
           "description": "快手可灵图片编辑模型，支持精确的图片编辑和多图参考控制（需上传图片）",

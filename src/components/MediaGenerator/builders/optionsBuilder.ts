@@ -117,9 +117,15 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   if (currentModel?.type === 'image' &&
       selectedModel !== 'nano-banana' &&
       selectedModel !== 'nano-banana-pro' &&
+      selectedModel !== 'fal-ai-nano-banana' &&
+      selectedModel !== 'fal-ai-nano-banana-pro' &&
       selectedModel !== 'bytedance-seedream-v4' &&
       selectedModel !== 'bytedance-seedream-v4.5' &&
-      selectedModel !== 'fal-ai-z-image-turbo') {
+      selectedModel !== 'fal-ai-bytedance-seedream-v4' &&
+      selectedModel !== 'fal-ai-bytedance-seedream-v4.5' &&
+      selectedModel !== 'fal-ai-z-image-turbo' &&
+      selectedModel !== 'fal-ai-kling-image-o1' &&
+      selectedModel !== 'kling-o1') {
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
@@ -381,7 +387,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   }
 
   // Veo 3.1
-  else if (currentModel?.type === 'video' && selectedModel === 'veo3.1') {
+  else if (currentModel?.type === 'video' && (selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1')) {
     options.mode = params.veoMode
     options.duration = params.videoDuration
     options.aspectRatio = params.veoAspectRatio
@@ -425,7 +431,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   }
 
   // Nano Banana
-  else if (currentModel?.type === 'image' && selectedModel === 'nano-banana') {
+  else if (currentModel?.type === 'image' && (selectedModel === 'nano-banana' || selectedModel === 'fal-ai-nano-banana')) {
     options.num_images = params.numImages
 
     // 保存原始的 aspect_ratio 参数（用于历史记录恢复）
@@ -463,7 +469,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   }
 
   // Nano Banana Pro
-  else if (currentModel?.type === 'image' && selectedModel === 'nano-banana-pro') {
+  else if (currentModel?.type === 'image' && (selectedModel === 'nano-banana-pro' || selectedModel === 'fal-ai-nano-banana-pro')) {
     options.model_id = 'nano-banana-pro'
     options.num_images = params.numImages
 
@@ -505,7 +511,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   // - 最大总像素：6000×6000 = 36,000,000 像素
   // - 2K模式：目标 2048×2048 = 4,194,304 像素，尽可能接近且不小于此值
   // - 4K模式：目标 4096×4096 = 16,777,216 像素，尽可能接近且不小于此值
-  else if (currentModel?.type === 'image' && (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5')) {
+  else if (currentModel?.type === 'image' && (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5' || selectedModel === 'fal-ai-bytedance-seedream-v4' || selectedModel === 'fal-ai-bytedance-seedream-v4.5')) {
     options.numImages = params.numImages
 
     // 分辨率处理
@@ -612,7 +618,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   }
 
   // Kling Image O1
-  else if (currentModel?.type === 'image' && (selectedModel === 'kling-image-o1' || selectedModel === 'kling-o1')) {
+  else if (currentModel?.type === 'image' && (selectedModel === 'fal-ai-kling-image-o1' || selectedModel === 'kling-o1')) {
     options.num_images = params.numImages
 
     // 如果是 'auto'，执行智能匹配

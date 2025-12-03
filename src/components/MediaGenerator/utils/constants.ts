@@ -35,7 +35,7 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
   if (modelId === 'minimax-hailuo-02') return 2
   if (modelId === 'wan-2.5-preview') return 1
   if (modelId === 'seedance-v1' || modelId === 'seedance-v1-lite' || modelId === 'seedance-v1-pro') return 2
-  if (modelId === 'veo3.1') {
+  if (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') {
     if (mode === 'start-end-frame') return 2
     if (mode === 'reference-to-video') return 7
     return 7 // 文/图生视频允许上传多张图片，然后自动切换模式
