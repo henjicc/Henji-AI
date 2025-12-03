@@ -10,7 +10,8 @@ export const FAL_CONFIG = {
     'fal-ai/bytedance/seedream/v4/edit': 30,
     'nano-banana-pro': 30,
     'nano-banana': 10,
-    'veo3.1': 60
+    'veo3.1': 60,
+    'kling-image-o1': 25
   } as Record<string, number>,
 
   // 默认预估轮询次数
@@ -32,6 +33,7 @@ export function getEstimatedPolls(modelId: string): number {
   if (modelId.includes('nano-banana-pro')) return FAL_CONFIG.modelEstimatedPolls['nano-banana-pro']
   if (modelId.includes('nano-banana')) return FAL_CONFIG.modelEstimatedPolls['nano-banana']
   if (modelId.includes('veo3.1')) return FAL_CONFIG.modelEstimatedPolls['veo3.1']
+  if (modelId.includes('kling-image')) return FAL_CONFIG.modelEstimatedPolls['kling-image-o1']
 
   return FAL_CONFIG.defaultEstimatedPolls
 }

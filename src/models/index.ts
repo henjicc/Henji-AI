@@ -23,6 +23,7 @@ export { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 export { falAiVeo31Params } from './fal-ai-veo-3.1'
 export { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 export { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
+export { klingImageO1Params } from './kling-image-o1'
 
 // 魔搭模型
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
@@ -56,6 +57,7 @@ import { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Params } from './fal-ai-veo-3.1'
 import { bytedanceSeedreamV4Params } from './bytedance-seedream-v4'
 import { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
+import { klingImageO1Params } from './kling-image-o1'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
@@ -80,6 +82,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'bytedance-seedream-v4': bytedanceSeedreamV4Params,
   'bytedance-seedream-v4.5': bytedanceSeedreamV4Params,
   'fal-ai-z-image-turbo': falAiZImageTurboParams,
+  'kling-image-o1': klingImageO1Params,
+  'kling-o1': klingImageO1Params,
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,

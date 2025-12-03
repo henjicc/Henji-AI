@@ -611,6 +611,50 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     }
   }
 
+  // Kling Image O1
+  else if (currentModel?.type === 'image' && (selectedModel === 'kling-image-o1' || selectedModel === 'kling-o1')) {
+    options.num_images = params.numImages
+
+    // 如果是 'auto'，执行智能匹配
+    if (params.aspectRatio === 'auto' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        options.aspect_ratio = matches.aspectRatio || params.aspectRatio
+        console.log('[optionsBuilder] Kling O1 Smart matched aspect_ratio:', options.aspect_ratio)
+      } catch (error) {
+        console.error('[optionsBuilder] Kling O1 Smart match failed:', error)
+        options.aspect_ratio = params.aspectRatio
+      }
+    } else {
+      options.aspect_ratio = params.aspectRatio
+    }
+
+    options.resolution = params.resolution
+
+    // 处理上传的图片
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    console.log('[optionsBuilder] Kling Image O1 参数:', {
+      num_images: options.num_images,
+      aspect_ratio: options.aspect_ratio,
+      resolution: options.resolution,
+      images: options.images?.length || 0
+    })
+  }
+
   // Z-Image-Turbo
   else if (currentModel?.type === 'image' && selectedModel === 'fal-ai-z-image-turbo') {
     // 处理 imageSize：根据 customWidth 和 customHeight 生成最终的尺寸字符串

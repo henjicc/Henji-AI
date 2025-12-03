@@ -134,7 +134,7 @@ export class FalAdapter extends BaseAdapter {
       }
 
       // 3. 构建请求
-      const { submitPath, modelId: routeModelId, requestData } = route.buildImageRequest(params)
+      const { submitPath, modelId: routeModelId, requestData } = await route.buildImageRequest(params)
 
       console.log('[FalAdapter] 提交请求:', {
         submitPath,

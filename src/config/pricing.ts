@@ -27,6 +27,7 @@ const PRICES = {
     // fal 模型价格（美元）
     NANO_BANANA: 0.039, // USD
     NANO_BANANA_PRO: 0.15, // USD
+    KLING_IMAGE_O1: 0.028, // USD
 
     // 音频（每万字符）
     SPEECH_HD: 3.5,
@@ -238,6 +239,26 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 总价格，格式化为最多2位小数
             return formatPrice(pricePerImage * numImages)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'kling-image-o1',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const numImages = params.num_images || 1
+            return formatPrice(PRICES.KLING_IMAGE_O1 * USD_TO_CNY * numImages)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'kling-o1',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const numImages = params.num_images || 1
+            return formatPrice(PRICES.KLING_IMAGE_O1 * USD_TO_CNY * numImages)
         }
     },
 

@@ -23,7 +23,8 @@ import {
   modelscopeCommonParams,
   modelscopeCustomParams,
   modelscopeZImageTurboParams,
-  qwenImageEdit2509Params
+  qwenImageEdit2509Params,
+  klingImageO1Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -307,6 +308,22 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           numImages: values.numImages,
           enablePromptExpansion: values.enablePromptExpansion,
           acceleration: values.acceleration,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // Kling Image O1 参数
+  if (selectedModel === 'kling-image-o1' || selectedModel === 'kling-o1') {
+    return (
+      <SchemaForm
+        schema={klingImageO1Params}
+        values={{
+          num_images: values.numImages,
+          aspectRatio: values.aspectRatio,
+          resolution: values.resolution,
           uploadedImages
         }}
         onChange={onChange}

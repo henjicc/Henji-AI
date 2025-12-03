@@ -4,6 +4,7 @@ import { falAiVeo31Route } from './fal-ai-veo-3.1'
 import { bytedanceSeedreamV4Route } from './bytedance-seedream-v4'
 import { bytedanceSeedreamV45Route } from './bytedance-seedream-v4.5'
 import { falAiZImageTurboRoute } from './fal-ai-z-image-turbo'
+import { klingImageO1Route } from './kling-image-o1'
 
 /**
  * 模型路由接口
@@ -23,7 +24,8 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiVeo31Route,
   bytedanceSeedreamV4Route,
   bytedanceSeedreamV45Route,
-  falAiZImageTurboRoute
+  falAiZImageTurboRoute,
+  klingImageO1Route
 ]
 
 /**
