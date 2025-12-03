@@ -509,7 +509,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // Nano Banana & ByteDance Seedream v4
       numImages: state.setNumImages,  // ByteDance Seedream v4 使用 numImages
       num_images: state.setNumImages, // Nano Banana 使用 num_images
-      aspect_ratio: state.setAspectRatio,
+      aspectRatio: state.setAspectRatio,
       resolution: state.setResolution,
       // Z-Image-Turbo
       imageSize: state.setImageSize,

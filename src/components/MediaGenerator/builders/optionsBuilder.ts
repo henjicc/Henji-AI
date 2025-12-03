@@ -436,7 +436,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       const { getSmartMatchValues } = await import('@/models')
       try {
         const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
-        finalAspectRatio = matches.aspect_ratio || params.aspectRatio
+        finalAspectRatio = matches.aspectRatio || params.aspectRatio
         console.log('[optionsBuilder] Smart matched aspect_ratio:', finalAspectRatio)
       } catch (error) {
         console.error('[optionsBuilder] Smart match failed:', error)
@@ -472,7 +472,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       const { getSmartMatchValues } = await import('@/models')
       try {
         const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
-        options.aspect_ratio = matches.aspect_ratio || params.aspectRatio
+        options.aspect_ratio = matches.aspectRatio || params.aspectRatio
         console.log('[optionsBuilder] Smart matched aspect_ratio:', options.aspect_ratio)
       } catch (error) {
         console.error('[optionsBuilder] Smart match failed:', error)

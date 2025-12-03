@@ -14,7 +14,7 @@ export const falAiNanoBananaParams: ParamDef[] = [
         widthClassName: 'w-20'
     },
     {
-        id: 'aspect_ratio',
+        id: 'aspectRatio',
         type: 'dropdown',
         label: '分辨率',
         defaultValue: '1:1',  // 文生图默认 1:1
@@ -28,6 +28,11 @@ export const falAiNanoBananaParams: ParamDef[] = [
                 const [w, h] = value.split(':').map(Number)
                 return w / h
             }
+        },
+        // 当上传图片时自动切换到智能选项
+        autoSwitch: {
+            condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
+            value: 'smart'
         },
         // 始终显示智能选项
         options: [

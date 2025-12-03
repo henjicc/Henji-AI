@@ -119,6 +119,7 @@ export function createPresetSetterMap(
         maxImages: setters.setMaxImages,
         numImages: setters.setNumImages,
         aspectRatio: setters.setAspectRatio,
+        aspect_ratio: setters.setAspectRatio,  // Nano Banana 使用下划线命名
         resolution: setters.setResolution,
         imageSize: setters.setImageSize,
 

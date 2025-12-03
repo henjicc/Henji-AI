@@ -251,7 +251,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         schema={nanoBananaParams}
         values={{
           num_images: values.numImages,
-          aspect_ratio: values.aspectRatio,
+          aspectRatio: values.aspectRatio,
           uploadedImages
         }}
         onChange={onChange}
@@ -266,7 +266,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         schema={nanoBananaProParams}
         values={{
           num_images: values.numImages,
-          aspect_ratio: values.aspectRatio,
+          aspectRatio: values.aspectRatio,
           resolution: values.resolution,
           uploadedImages
         }}

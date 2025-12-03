@@ -14,7 +14,7 @@ export const falAiNanoBananaProParams: ParamDef[] = [
         widthClassName: 'w-20'
     },
     {
-        id: 'aspect_ratio',
+        id: 'aspectRatio',
         type: 'dropdown',
         defaultValue: '1:1',  // 文生图默认 1:1
         // 分辨率配置：启用智能匹配、可视化和质量选项
@@ -33,6 +33,11 @@ export const falAiNanoBananaProParams: ParamDef[] = [
                 { value: '4K', label: '4K' }
             ],
             qualityKey: 'resolution'  // Nano Banana Pro 使用 'resolution' 作为质量参数
+        },
+        // 当上传图片时自动切换到智能选项
+        autoSwitch: {
+            condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
+            value: 'smart'
         },
         options: [
             { value: 'smart', label: '智能' },
