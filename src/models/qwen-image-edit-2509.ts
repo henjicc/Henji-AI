@@ -7,7 +7,7 @@ export const qwenImageEdit2509Params: ParamDef[] = [
     id: 'imageSize',
     type: 'dropdown',
     label: '分辨率',
-    defaultValue: '1:1',
+    defaultValue: 'smart',  // 默认为智能模式
     resolutionConfig: {
       type: 'aspect_ratio',
       smartMatch: true,  // 启用智能匹配
@@ -38,17 +38,8 @@ export const qwenImageEdit2509Params: ParamDef[] = [
         { value: '9:21', label: '9:21' }
       ]
 
-      // 如果有上传图片，添加智能选项
-      if (values.uploadedImages?.length > 0) {
-        return [{ value: 'smart', label: '智能' }, ...baseOptions]
-      }
-
-      return baseOptions
-    },
-    // 上传图片时自动切换到智能模式
-    autoSwitch: {
-      condition: (values) => values.uploadedImages?.length > 0,
-      value: 'smart'
+      // 智能选项始终显示
+      return [{ value: 'smart', label: '智能' }, ...baseOptions]
     }
   },
   {

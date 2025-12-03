@@ -77,6 +77,22 @@ const InputArea: React.FC<InputAreaProps> = ({
     selectedModel === 'MusePublic/majicMIX_realistic' ||
     selectedModel === 'modelscope-custom'
 
+  // 检查是否是 Qwen-Image-Edit-2509
+  const isQwenImageEdit = selectedModel === 'Qwen/Qwen-Image-Edit-2509'
+
+  // 计算生成按钮是否禁用
+  const isGenerateDisabled = () => {
+    if (isLoading) return true
+
+    // Qwen-Image-Edit-2509 必须同时有提示词和图片
+    if (isQwenImageEdit) {
+      return !input.trim() || uploadedImages.length === 0
+    }
+
+    // 其他模型的逻辑保持不变
+    return !input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0)
+  }
+
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 图片上传和预览区域 */}
@@ -137,10 +153,10 @@ const InputArea: React.FC<InputAreaProps> = ({
         {/* 生成按钮 */}
         <button
           onClick={onGenerate}
-          disabled={isLoading || (!input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0))}
+          disabled={isGenerateDisabled()}
           title={isGenerating ? '加入队列' : '开始生成'}
           className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-            isLoading || (!input.trim() && uploadedImages.length === 0)
+            isGenerateDisabled()
               ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
               : isGenerating
                 ? 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
