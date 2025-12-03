@@ -88,16 +88,34 @@ export const modelscopeCommonParams: ParamDef[] = [
 ]
 
 // 从 localStorage 加载自定义模型列表
-const loadCustomModels = (): Array<{ id: string; name: string }> => {
+const loadCustomModels = (): Array<{
+  id: string
+  name: string
+  modelType: {
+    imageGeneration: boolean
+    imageEditing: boolean
+  }
+}> => {
   try {
     const stored = localStorage.getItem('modelscope_custom_models')
     if (stored) {
-      return JSON.parse(stored)
+      const models = JSON.parse(stored)
+      // 兼容旧数据：如果没有 modelType 字段，默认为图片生成
+      return models.map((m: any) => ({
+        ...m,
+        modelType: m.modelType || { imageGeneration: true, imageEditing: false }
+      }))
     }
   } catch (e) {
     console.error('Failed to load custom models:', e)
   }
   return []
+}
+
+// 获取当前选中的自定义模型信息
+const getCurrentCustomModel = (modelId: string) => {
+  const models = loadCustomModels()
+  return models.find(m => m.id === modelId)
 }
 
 // 魔搭 Z-Image-Turbo 专用参数（移除 guidance，修改 steps 默认值）
@@ -180,5 +198,95 @@ export const modelscopeCustomParams: ParamDef[] = [
     },
     placeholder: '选择模型'
   },
-  ...modelscopeCommonParams
+  {
+    id: 'imageSize',
+    type: 'dropdown',
+    label: '分辨率',
+    defaultValue: '1:1',
+    resolutionConfig: {
+      type: 'aspect_ratio',
+      smartMatch: false,
+      visualize: true,
+      customInput: true,
+      // 基数配置
+      baseSize: 1440,
+      baseSizeEditable: true,
+      baseSizeMin: 512,
+      baseSizeMax: 2048,
+      baseSizeStep: 8,
+      // 边界限制配置（新增）
+      minSize: 64,   // 最小边长
+      maxSize: 2048, // 最大边长
+      extractRatio: (value) => {
+        if (value === 'smart') return null
+        if (value.includes(':')) {
+          const [w, h] = value.split(':').map(Number)
+          return w / h
+        }
+        if (value === '自定义') {
+          return null
+        }
+        return null
+      }
+    },
+    options: (values) => {
+      const baseOptions = [
+        { value: '21:9', label: '21:9' },
+        { value: '16:9', label: '16:9' },
+        { value: '3:2', label: '3:2' },
+        { value: '4:3', label: '4:3' },
+        { value: '1:1', label: '1:1' },
+        { value: '3:4', label: '3:4' },
+        { value: '2:3', label: '2:3' },
+        { value: '9:16', label: '9:16' },
+        { value: '9:21', label: '9:21' }
+      ]
+
+      // 检查当前选中的模型是否支持图片编辑
+      const currentModel = getCurrentCustomModel(values.modelscopeCustomModel)
+      const supportsImageEditing = currentModel?.modelType?.imageEditing || false
+
+      // 如果支持图片编辑，始终显示智能选项
+      if (supportsImageEditing) {
+        return [{ value: 'smart', label: '智能' }, ...baseOptions]
+      }
+
+      return baseOptions
+    },
+    // 选择图片编辑模型时自动切换到智能模式
+    autoSwitch: {
+      condition: (values) => {
+        const currentModel = getCurrentCustomModel(values.modelscopeCustomModel)
+        const supportsImageEditing = currentModel?.modelType?.imageEditing || false
+        // 只要是图片编辑模型就切换到智能模式
+        return supportsImageEditing
+      },
+      value: 'smart'
+    }
+  },
+  {
+    id: 'steps',
+    type: 'number',
+    label: '采样步数',
+    min: 1,
+    max: 100,
+    step: 1,
+    defaultValue: 30,
+    widthClassName: 'w-24',
+    tooltip: '采样步数越多，生成的图像越精细，但耗时也越长。建议值：20-50',
+    tooltipDelay: 500
+  },
+  {
+    id: 'guidance',
+    type: 'number',
+    label: '提示词引导系数',
+    min: 1.5,
+    max: 20,
+    step: 0.5,
+    precision: 1,
+    defaultValue: 7.5,
+    widthClassName: 'w-24',
+    tooltip: '控制生成结果与提示词的匹配程度。值越高，越严格遵循提示词。建议值：5-10',
+    tooltipDelay: 500
+  }
 ]

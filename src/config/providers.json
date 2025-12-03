@@ -262,11 +262,12 @@
         },
         {
           "id": "modelscope-custom",
-          "name": "魔搭API文生图",
+          "name": "魔搭API自定义",
           "type": "image",
-          "description": "自定义魔搭模型，可自行配置 model 参数",
+          "description": "自定义魔搭模型，支持图片生成和图片编辑",
           "functions": [
-            "图片生成"
+            "图片生成",
+            "图片编辑"
           ],
           "progressConfig": {
             "type": "polling",

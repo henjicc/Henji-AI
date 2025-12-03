@@ -15,6 +15,9 @@ interface InputAreaProps {
   viduMode?: string
   veoMode?: string
 
+  // 魔搭自定义模型 ID
+  modelscopeCustomModel?: string
+
   // 图片处理回调
   onImageUpload: (files: File[]) => void
   onImageRemove: (index: number) => void
@@ -43,6 +46,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   isGenerating,
   viduMode,
   veoMode,
+  modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
   onImageReplace,
@@ -68,14 +72,32 @@ const InputArea: React.FC<InputAreaProps> = ({
      selectedModel !== 'minimax-hailuo-2.3' &&
      selectedModel !== 'wan-2.5-preview')
 
-  // 检查是否是魔搭模型
+  // 检查是否是魔搭模型（不包括自定义模型，因为自定义模型需要单独判断）
   const isModelscopeModel =
     selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
     selectedModel === 'Qwen/Qwen-Image' ||
     selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
     selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
-    selectedModel === 'MusePublic/majicMIX_realistic' ||
-    selectedModel === 'modelscope-custom'
+    selectedModel === 'MusePublic/majicMIX_realistic'
+
+  // 检查自定义模型是否支持图片编辑
+  const isModelscopeCustomWithImageEditing = selectedModel === 'modelscope-custom' && (() => {
+    if (!modelscopeCustomModel) return false
+
+    try {
+      const stored = localStorage.getItem('modelscope_custom_models')
+      if (stored) {
+        const models = JSON.parse(stored)
+        const currentModel = models.find((m: any) => m.id === modelscopeCustomModel)
+        if (currentModel && currentModel.modelType) {
+          return currentModel.modelType.imageEditing === true
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check custom model type:', e)
+    }
+    return false
+  })()
 
   // 检查是否是 Qwen-Image-Edit-2509
   const isQwenImageEdit = selectedModel === 'Qwen/Qwen-Image-Edit-2509'
@@ -98,7 +120,9 @@ const InputArea: React.FC<InputAreaProps> = ({
       {/* 图片上传和预览区域 */}
       {currentModel?.type !== 'audio' &&
        selectedModel !== 'fal-ai-z-image-turbo' &&
-       !isModelscopeModel && (
+       !isModelscopeModel &&
+       // 自定义模型：只有支持图片编辑的才显示图片上传
+       !(selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing) && (
         <div className="mb-3">
           <FileUploader
             files={uploadedImages}
@@ -146,7 +170,12 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
           }}
           placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的内容'}
-          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || isModelscopeModel ? 'min-h-[176px]' : 'min-h-[100px]'} resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
+          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${
+            // 音频模型或没有图片上传组件的模型：使用较大高度
+            currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || isModelscopeModel || (selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing)
+              ? 'min-h-[176px]'
+              : 'min-h-[100px]'
+          } resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
           disabled={isLoading}
         />
 

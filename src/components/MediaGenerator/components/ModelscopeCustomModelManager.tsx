@@ -5,6 +5,10 @@ import { open } from '@tauri-apps/plugin-shell'
 interface CustomModel {
   id: string
   name: string
+  modelType: {
+    imageGeneration: boolean  // 图片生成
+    imageEditing: boolean      // 图片编辑
+  }
 }
 
 interface ModelscopeCustomModelManagerProps {
@@ -15,8 +19,10 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const [models, setModels] = useState<CustomModel[]>([])
   const [newModelId, setNewModelId] = useState('')
   const [newModelName, setNewModelName] = useState('')
+  const [newModelType, setNewModelType] = useState({ imageGeneration: true, imageEditing: false })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editModelType, setEditModelType] = useState({ imageGeneration: true, imageEditing: false })
   const [isAddingNew, setIsAddingNew] = useState(false)
 
   // 加载模型列表
@@ -28,7 +34,13 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     try {
       const stored = localStorage.getItem('modelscope_custom_models')
       if (stored) {
-        setModels(JSON.parse(stored))
+        const loadedModels = JSON.parse(stored)
+        // 兼容旧数据：如果没有 modelType 字段，默认为图片生成
+        const migratedModels = loadedModels.map((m: any) => ({
+          ...m,
+          modelType: m.modelType || { imageGeneration: true, imageEditing: false }
+        }))
+        setModels(migratedModels)
       }
     } catch (e) {
       console.error('Failed to load custom models:', e)
@@ -51,16 +63,27 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       return
     }
 
+    // 检查至少选择一个类型
+    if (!newModelType.imageGeneration && !newModelType.imageEditing) {
+      alert('请至少选择一个模型类型')
+      return
+    }
+
     // 检查是否已存在
     if (models.some(m => m.id === newModelId.trim())) {
       alert('该模型ID已存在')
       return
     }
 
-    const newModels = [...models, { id: newModelId.trim(), name: newModelName.trim() }]
+    const newModels = [...models, {
+      id: newModelId.trim(),
+      name: newModelName.trim(),
+      modelType: { ...newModelType }
+    }]
     saveModels(newModels)
     setNewModelId('')
     setNewModelName('')
+    setNewModelType({ imageGeneration: true, imageEditing: false })
     setIsAddingNew(false)
   }
 
@@ -82,6 +105,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const handleStartEdit = (model: CustomModel) => {
     setEditingId(model.id)
     setEditName(model.name)
+    setEditModelType({ ...model.modelType })
   }
 
   const handleSaveEdit = (id: string) => {
@@ -90,17 +114,25 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       return
     }
 
+    // 检查至少选择一个类型
+    if (!editModelType.imageGeneration && !editModelType.imageEditing) {
+      alert('请至少选择一个模型类型')
+      return
+    }
+
     const newModels = models.map(m =>
-      m.id === id ? { ...m, name: editName.trim() } : m
+      m.id === id ? { ...m, name: editName.trim(), modelType: { ...editModelType } } : m
     )
     saveModels(newModels)
     setEditingId(null)
     setEditName('')
+    setEditModelType({ imageGeneration: true, imageEditing: false })
   }
 
   const handleCancelEdit = () => {
     setEditingId(null)
     setEditName('')
+    setEditModelType({ imageGeneration: true, imageEditing: false })
   }
 
   return (
@@ -108,7 +140,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       {/* 提示信息 */}
       <div className="mb-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
         <div className="text-xs text-blue-700 dark:text-blue-300">
-          仅支持文生图，可在
+          支持图片生成和图片编辑，可在
           <button
             onClick={handleOpenModelLibrary}
             className="mx-1 text-[#007eff] hover:underline font-medium"
@@ -164,6 +196,29 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               className="w-full"
               inputClassName="w-full text-sm"
             />
+            <div className="flex flex-col gap-1.5">
+              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型（至少选一个）</div>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newModelType.imageGeneration}
+                    onChange={(e) => setNewModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
+                    className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">图片生成</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newModelType.imageEditing}
+                    onChange={(e) => setNewModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
+                    className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">图片编辑</span>
+                </label>
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleAdd}
@@ -176,6 +231,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                   setIsAddingNew(false)
                   setNewModelId('')
                   setNewModelName('')
+                  setNewModelType({ imageGeneration: true, imageEditing: false })
                 }}
                 className="px-4 py-2 bg-zinc-300 dark:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-sm rounded hover:bg-zinc-400 dark:hover:bg-zinc-500 transition-colors"
               >
@@ -212,6 +268,29 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       className="w-full"
                       inputClassName="w-full text-sm"
                     />
+                    <div className="flex flex-col gap-1.5">
+                      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型（至少选一个）</div>
+                      <div className="flex gap-3">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editModelType.imageGeneration}
+                            onChange={(e) => setEditModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
+                            className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
+                          />
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300">图片生成</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editModelType.imageEditing}
+                            onChange={(e) => setEditModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
+                            className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
+                          />
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300">图片编辑</span>
+                        </label>
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSaveEdit(model.id)}
@@ -237,12 +316,24 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 break-all">
                         {model.id}
                       </div>
+                      <div className="flex gap-2 mt-1.5">
+                        {model.modelType.imageGeneration && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                            图片生成
+                          </span>
+                        )}
+                        {model.modelType.imageEditing && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                            图片编辑
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button
                         onClick={() => handleStartEdit(model)}
                         className="px-2.5 py-1 text-xs text-[#007eff] hover:bg-[#007eff]/10 rounded transition-colors"
-                        title="编辑名称"
+                        title="编辑"
                       >
                         编辑
                       </button>

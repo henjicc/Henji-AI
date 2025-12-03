@@ -155,3 +155,55 @@ export const PRESET_BASE_SIZES = {
   large: 1440,
   xlarge: 2048
 } as const
+
+/**
+ * 根据基数和宽高比计算分辨率，并确保结果在边界范围内
+ *
+ * @param baseSize - 基数（正方形时的边长）
+ * @param widthRatio - 宽度比例
+ * @param heightRatio - 高度比例
+ * @param minSize - 最小边长（默认 64）
+ * @param maxSize - 最大边长（默认 2048）
+ * @returns 计算后的宽度和高度
+ *
+ * @example
+ * calculateResolutionWithBounds(1440, 16, 9, 64, 2048) // { width: 2048, height: 1152 }
+ */
+export function calculateResolutionWithBounds(
+  baseSize: number,
+  widthRatio: number,
+  heightRatio: number,
+  minSize: number = 64,
+  maxSize: number = 2048
+): ResolutionSize {
+  // 先使用标准方法计算
+  let { width, height } = calculateResolution(baseSize, widthRatio, heightRatio)
+
+  // 检查是否超出边界
+  const maxDimension = Math.max(width, height)
+  const minDimension = Math.min(width, height)
+
+  // 如果最大边超出限制，按比例缩小
+  if (maxDimension > maxSize) {
+    const scale = maxSize / maxDimension
+    width = Math.floor((width * scale) / 16) * 16
+    height = Math.floor((height * scale) / 16) * 16
+  }
+
+  // 如果最小边小于限制，按比例放大
+  if (minDimension < minSize) {
+    const scale = minSize / minDimension
+    width = Math.floor((width * scale) / 16) * 16
+    height = Math.floor((height * scale) / 16) * 16
+  }
+
+  // 最终确保在范围内
+  width = Math.max(minSize, Math.min(maxSize, width))
+  height = Math.max(minSize, Math.min(maxSize, height))
+
+  // 确保是 16 的倍数
+  width = Math.floor(width / 16) * 16
+  height = Math.floor(height / 16) * 16
+
+  return { width, height }
+}

@@ -614,6 +614,22 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     let width = 1024
     let height = 1024
 
+    // 检查自定义模型是否支持图片编辑
+    const isCustomModelWithImageEditing = selectedModel === 'modelscope-custom' && (() => {
+      if (!params.modelscopeCustomModel) return false
+      try {
+        const stored = localStorage.getItem('modelscope_custom_models')
+        if (stored) {
+          const models = JSON.parse(stored)
+          const currentModel = models.find((m: any) => m.id === params.modelscopeCustomModel)
+          return currentModel?.modelType?.imageEditing === true
+        }
+      } catch (e) {
+        console.error('Failed to check custom model type:', e)
+      }
+      return false
+    })()
+
     // Qwen-Image-Edit-2509 使用专用计算器
     if (selectedModel === 'Qwen/Qwen-Image-Edit-2509') {
       // 智能模式：根据上传的第一张图片保持原图比例计算分辨率
@@ -645,20 +661,52 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         height = parseInt(params.customHeight)
       }
     }
-    // 其他魔搭模型使用基数系统
+    // 自定义模型支持图片编辑：使用带边界限制的计算器
+    else if (isCustomModelWithImageEditing) {
+      // 智能模式：根据上传的第一张图片保持原图比例计算分辨率
+      if (params.imageSize === 'smart' && uploadedImages.length > 0) {
+        const { smartMatchQwenResolution } = await import('@/utils/qwenResolutionCalculator')
+        const img = new Image()
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = uploadedImages[0]
+        })
+        const resolution = smartMatchQwenResolution(img.width, img.height)
+        width = resolution.width
+        height = resolution.height
+      }
+      // 比例格式（如 "4:3"），使用带边界限制的计算器
+      else if (params.imageSize && params.imageSize.includes(':')) {
+        const [w, h] = params.imageSize.split(':').map(Number)
+        if (!isNaN(w) && !isNaN(h)) {
+          const { calculateResolutionWithBounds } = await import('@/utils/resolutionCalculator')
+          const baseSize = params.resolutionBaseSize || 1440
+          const size = calculateResolutionWithBounds(baseSize, w, h, 64, 2048)
+          width = size.width
+          height = size.height
+        }
+      }
+      // 最后才使用 customWidth 和 customHeight
+      else if (params.customWidth && params.customHeight) {
+        width = parseInt(params.customWidth)
+        height = parseInt(params.customHeight)
+      }
+    }
+    // 其他魔搭模型使用基数系统（带边界限制）
     else {
       // 优先使用 customWidth 和 customHeight（这些值已经由 UI 根据基数计算好了）
       if (params.customWidth && params.customHeight) {
         width = parseInt(params.customWidth)
         height = parseInt(params.customHeight)
       }
-      // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用基数动态计算
+      // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用基数动态计算（带边界限制）
       else if (params.imageSize && params.imageSize.includes(':')) {
         const [w, h] = params.imageSize.split(':').map(Number)
         if (!isNaN(w) && !isNaN(h)) {
-          const { calculateResolution } = await import('@/utils/resolutionCalculator')
+          const { calculateResolutionWithBounds } = await import('@/utils/resolutionCalculator')
           const baseSize = params.resolutionBaseSize || 1440
-          const size = calculateResolution(baseSize, w, h)
+          const size = calculateResolutionWithBounds(baseSize, w, h, 64, 2048)
           width = size.width
           height = size.height
         }
@@ -694,6 +742,26 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       options.model = selectedModel
     }
 
+    // 处理图片编辑：上传图片到 fal CDN（Qwen-Image-Edit-2509 和支持图片编辑的自定义模型）
+    if ((selectedModel === 'Qwen/Qwen-Image-Edit-2509' || isCustomModelWithImageEditing) && uploadedImages.length > 0) {
+      // 上传图片到 fal CDN
+      // 注意：这里不需要在 optionsBuilder 中上传，因为 ModelscopeAdapter 会自动处理
+      // 我们只需要设置 images 参数，适配器会检测并上传
+      options.images = uploadedImages
+
+      // 保存本地文件路径（用于重新编辑）
+      const paths = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
     console.log('[optionsBuilder] 魔搭模型参数:', {
       selectedModel,
       imageSize: params.imageSize,
@@ -703,7 +771,9 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       最终分辨率: `${width}x${height}`,
       steps: options.steps,
       guidance: options.guidance,
-      model: options.model
+      model: options.model,
+      isCustomModelWithImageEditing,
+      imageUrls: options.imageUrls?.length || 0
     })
 
     // 注意：魔搭模型不设置 size 字段（用于显示），只设置 width 和 height（用于 API）

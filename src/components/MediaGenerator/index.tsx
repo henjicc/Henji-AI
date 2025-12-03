@@ -441,7 +441,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         setter(value)
       }
     }
-  }, [state.selectedModel, state.uploadedImages.length, setterMap])
+  }, [state.selectedModel, state.uploadedImages.length, state.modelscopeCustomModel, setterMap])
 
   // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
   // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
@@ -542,6 +542,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // 直接设置值，保持界面显示为 'smart'
     const setter = setterMap[id]
     if (setter) setter(value)
+
+    // 特殊处理：当切换自定义模型时，检查是否需要清空图片
+    if (id === 'modelscopeCustomModel' && value) {
+      try {
+        const stored = localStorage.getItem('modelscope_custom_models')
+        if (stored) {
+          const models = JSON.parse(stored)
+          const selectedModel = models.find((m: any) => m.id === value)
+
+          // 如果切换到的是图片生成模型（不支持图片编辑），清空已上传的图片
+          if (selectedModel && selectedModel.modelType && !selectedModel.modelType.imageEditing) {
+            if (state.uploadedImages.length > 0) {
+              state.setUploadedImages([])
+              state.setUploadedFilePaths([])
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to check model type:', e)
+      }
+    }
   }
 
   // 生成处理
@@ -707,6 +728,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         isGenerating={isGenerating}
         viduMode={state.viduMode}
         veoMode={state.veoMode}
+        modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : state.selectedModel === 'veo3.1' ? state.veoMode : undefined)
           imageUpload.handleImageFileUpload(files, maxCount)
