@@ -196,26 +196,36 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               className="w-full"
               inputClassName="w-full text-sm"
             />
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型（至少选一个）</div>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newModelType.imageGeneration}
-                    onChange={(e) => setNewModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
-                    className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">图片生成</span>
+              <div className="flex gap-2">
+                <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={newModelType.imageGeneration}
+                      onChange={(e) => setNewModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
+                      className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                    />
+                    <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片生成</span>
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newModelType.imageEditing}
-                    onChange={(e) => setNewModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
-                    className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">图片编辑</span>
+                <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={newModelType.imageEditing}
+                      onChange={(e) => setNewModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
+                      className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                    />
+                    <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片编辑</span>
                 </label>
               </div>
             </div>
@@ -268,26 +278,36 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       className="w-full"
                       inputClassName="w-full text-sm"
                     />
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-2">
                       <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型（至少选一个）</div>
-                      <div className="flex gap-3">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={editModelType.imageGeneration}
-                            onChange={(e) => setEditModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
-                            className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
-                          />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">图片生成</span>
+                      <div className="flex gap-2">
+                        <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
+                          <div className="relative flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={editModelType.imageGeneration}
+                              onChange={(e) => setEditModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
+                              className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                            />
+                            <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片生成</span>
                         </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={editModelType.imageEditing}
-                            onChange={(e) => setEditModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
-                            className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-[#007eff] focus:ring-[#007eff] focus:ring-offset-0"
-                          />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300">图片编辑</span>
+                        <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/10">
+                          <div className="relative flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={editModelType.imageEditing}
+                              onChange={(e) => setEditModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
+                              className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                            />
+                            <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片编辑</span>
                         </label>
                       </div>
                     </div>
