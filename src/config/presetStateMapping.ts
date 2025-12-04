@@ -93,6 +93,11 @@ export interface PresetSetters {
     setKlingV26GenerateAudio: (v: boolean) => void
     setKlingV26CfgScale: (v: number) => void
 
+    // Sora 2
+    setSoraMode: (v: 'standard' | 'pro') => void
+    setSoraAspectRatio: (v: string) => void
+    setSoraResolution: (v: string) => void
+
     // 音频参数
     setVoiceId: (v: string) => void
     setAudioSpec: (v: 'hd' | 'turbo') => void
@@ -207,6 +212,11 @@ export function createPresetSetterMap(
         klingV26AspectRatio: setters.setKlingV26AspectRatio,
         klingV26GenerateAudio: setters.setKlingV26GenerateAudio,
         klingV26CfgScale: setters.setKlingV26CfgScale,
+
+        // Sora 2
+        soraMode: setters.setSoraMode,
+        soraAspectRatio: setters.setSoraAspectRatio,
+        soraResolution: setters.setSoraResolution,
 
         // 音频参数
         voiceId: setters.setVoiceId,

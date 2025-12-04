@@ -195,14 +195,17 @@ export class FalAdapter extends BaseAdapter {
         : params
       const { submitPath, modelId: routeModelId, requestData } = await route.buildImageRequest(requestParams)
 
+      // 构建日志对象，只包含有值的字段
+      const logRequestData: any = { ...requestData }
+      if (requestData.image_urls) {
+        logRequestData.image_urls = `[${requestData.image_urls.length} images]`
+      }
+
       console.log('[FalAdapter] 提交请求:', {
         submitPath,
         modelId: routeModelId,
         syncMode: requestData.sync_mode,
-        requestData: {
-          ...requestData,
-          image_urls: requestData.image_urls ? `[${requestData.image_urls.length} images]` : undefined
-        }
+        requestData: logRequestData
       })
 
       // 3. 检查是否为同步模式
@@ -334,14 +337,19 @@ export class FalAdapter extends BaseAdapter {
       }
       const { endpoint, modelId, requestData } = await route.buildVideoRequest(requestParams)
 
+      // 构建日志对象，只包含有值的字段
+      const logRequestData: any = { ...requestData }
+      if (requestData.image_url) {
+        logRequestData.image_url = 'Image URL provided'
+      }
+      if (requestData.image_urls) {
+        logRequestData.image_urls = `[${requestData.image_urls.length} images]`
+      }
+
       console.log('[FalAdapter] 提交视频生成请求:', {
         endpoint,
         modelId,
-        requestData: {
-          ...requestData,
-          image_url: requestData.image_url ? 'Image URL provided' : undefined,
-          image_urls: requestData.image_urls ? `[${requestData.image_urls.length} images]` : undefined
-        }
+        requestData: logRequestData
       })
 
       // 3. 如果提供了 onProgress 回调，使用 subscribe 自动轮询

@@ -256,6 +256,20 @@
             "type": "polling",
             "expectedPolls": 45
           }
+        },
+        {
+          "id": "fal-ai-sora-2",
+          "name": "Sora 2",
+          "type": "video",
+          "description": "OpenAI 最新的视频生成模型，支持文生视频和图生视频，具有丰富的细节和动态效果，支持音频生成",
+          "functions": [
+            "文生视频",
+            "图生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 50
+          }
         }
       ]
     },

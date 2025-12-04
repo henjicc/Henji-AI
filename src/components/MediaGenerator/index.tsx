@@ -118,6 +118,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKlingV26AspectRatio: state.setKlingV26AspectRatio,
     setKlingV26GenerateAudio: state.setKlingV26GenerateAudio,
     setKlingV26CfgScale: state.setKlingV26CfgScale,
+    setSoraMode: state.setSoraMode,
+    setSoraAspectRatio: state.setSoraAspectRatio,
+    setSoraResolution: state.setSoraResolution,
     setVoiceId: state.setVoiceId,
     setAudioSpec: state.setAudioSpec,
     setAudioEmotion: state.setAudioEmotion,
@@ -528,6 +531,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       veoGenerateAudio: state.setVeoGenerateAudio,
       veoAutoFix: state.setVeoAutoFix,
       veoFastMode: state.setVeoFastMode,
+      // Sora 2
+      soraMode: state.setSoraMode,
+      soraAspectRatio: state.setSoraAspectRatio,
+      soraResolution: state.setSoraResolution,
       // Seedream
       maxImages: state.setMaxImages,
       selectedResolution: state.setSelectedResolution,
@@ -650,6 +657,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         klingV26AspectRatio: state.klingV26AspectRatio,
         klingV26GenerateAudio: state.klingV26GenerateAudio,
         klingV26CfgScale: state.klingV26CfgScale,
+        soraMode: state.soraMode,
+        soraAspectRatio: state.soraAspectRatio,
+        soraResolution: state.soraResolution,
         audioSpeed: state.audioSpeed,
         audioEmotion: state.audioEmotion,
         voiceId: state.voiceId,
@@ -858,6 +868,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               veoAutoFix: state.veoAutoFix,
               klingMode: state.klingMode,
               klingV26GenerateAudio: state.klingV26GenerateAudio,
+              soraMode: state.soraMode,
+              soraResolution: state.soraResolution,
               input: state.input,
               audioSpec: state.audioSpec
             }}

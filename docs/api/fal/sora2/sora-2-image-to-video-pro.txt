@@ -1,0 +1,199 @@
+# Sora 2
+
+> Image-to-video endpoint for Sora 2 Pro, OpenAI's state-of-the-art video model capable of creating richly detailed, dynamic clips with audio from natural language or images.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/sora-2/image-to-video/pro`
+- **Model ID**: `fal-ai/sora-2/image-to-video/pro`
+- **Category**: image-to-video
+- **Kind**: inference
+**Tags**: image-to-video, audio, sora-2-pro
+
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  The text prompt describing the video you want to generate
+  - Examples: "Front-facing 'invisible' action-cam on a skydiver in freefall above bright clouds; camera locked on his face. He speaks over the wind with clear lipsync: 'This is insanely fun! You've got to try it—book a tandem and go!' Natural wind roar, voice close-mic'd and slightly compressed so it's intelligible. Midday sun, goggles and jumpsuit flutter, altimeter visible, parachute rig on shoulders. Energetic but stable framing with subtle shake; brief horizon roll. End on first tug of canopy and wind noise dropping."
+
+- **`resolution`** (`ResolutionEnum`, _optional_):
+  The resolution of the generated video Default value: `"auto"`
+  - Default: `"auto"`
+  - Options: `"auto"`, `"720p"`, `"1080p"`
+
+- **`aspect_ratio`** (`AspectRatioEnum`, _optional_):
+  The aspect ratio of the generated video Default value: `"auto"`
+  - Default: `"auto"`
+  - Options: `"auto"`, `"9:16"`, `"16:9"`
+
+- **`duration`** (`DurationEnum`, _optional_):
+  Duration of the generated video in seconds Default value: `"4"`
+  - Default: `4`
+  - Options: `4`, `8`, `12`
+
+- **`delete_video`** (`boolean`, _optional_):
+  Whether to delete the video after generation for privacy reasons. If True, the video cannot be used for remixing and will be permanently deleted. Default value: `true`
+  - Default: `true`
+
+- **`image_url`** (`string`, _required_):
+  The URL of the image to use as the first frame
+  - Examples: "https://storage.googleapis.com/falserverless/example_inputs/sora-2-i2v-input.png"
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "Front-facing 'invisible' action-cam on a skydiver in freefall above bright clouds; camera locked on his face. He speaks over the wind with clear lipsync: 'This is insanely fun! You've got to try it—book a tandem and go!' Natural wind roar, voice close-mic'd and slightly compressed so it's intelligible. Midday sun, goggles and jumpsuit flutter, altimeter visible, parachute rig on shoulders. Energetic but stable framing with subtle shake; brief horizon roll. End on first tug of canopy and wind noise dropping.",
+  "image_url": "https://storage.googleapis.com/falserverless/example_inputs/sora-2-i2v-input.png"
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "Front-facing 'invisible' action-cam on a skydiver in freefall above bright clouds; camera locked on his face. He speaks over the wind with clear lipsync: 'This is insanely fun! You've got to try it—book a tandem and go!' Natural wind roar, voice close-mic'd and slightly compressed so it's intelligible. Midday sun, goggles and jumpsuit flutter, altimeter visible, parachute rig on shoulders. Energetic but stable framing with subtle shake; brief horizon roll. End on first tug of canopy and wind noise dropping.",
+  "resolution": "auto",
+  "aspect_ratio": "auto",
+  "duration": 4,
+  "delete_video": true,
+  "image_url": "https://storage.googleapis.com/falserverless/example_inputs/sora-2-i2v-input.png"
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`VideoFile`, _required_):
+  The generated video
+  - Examples: {"content_type":"video/mp4","url":"https://storage.googleapis.com/falserverless/example_outputs/sora-2-pro-i2v-output.mp4"}
+
+- **`video_id`** (`string`, _required_):
+  The ID of the generated video
+  - Examples: "video_123"
+
+- **`thumbnail`** (`ImageFile`, _optional_):
+  Thumbnail image for the video
+
+- **`spritesheet`** (`ImageFile`, _optional_):
+  Spritesheet image for the video
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "content_type": "video/mp4",
+    "url": "https://storage.googleapis.com/falserverless/example_outputs/sora-2-pro-i2v-output.mp4"
+  },
+  "video_id": "video_123"
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/sora-2/image-to-video/pro \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "Front-facing 'invisible' action-cam on a skydiver in freefall above bright clouds; camera locked on his face. He speaks over the wind with clear lipsync: 'This is insanely fun! You've got to try it—book a tandem and go!' Natural wind roar, voice close-mic'd and slightly compressed so it's intelligible. Midday sun, goggles and jumpsuit flutter, altimeter visible, parachute rig on shoulders. Energetic but stable framing with subtle shake; brief horizon roll. End on first tug of canopy and wind noise dropping.",
+     "image_url": "https://storage.googleapis.com/falserverless/example_inputs/sora-2-i2v-input.png"
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/sora-2/image-to-video/pro",
+    arguments={
+        "prompt": "Front-facing 'invisible' action-cam on a skydiver in freefall above bright clouds; camera locked on his face. He speaks over the wind with clear lipsync: 'This is insanely fun! You've got to try it—book a tandem and go!' Natural wind roar, voice close-mic'd and slightly compressed so it's intelligible. Midday sun, goggles and jumpsuit flutter, altimeter visible, parachute rig on shoulders. Energetic but stable framing with subtle shake; brief horizon roll. End on first tug of canopy and wind noise dropping.",
+        "image_url": "https://storage.googleapis.com/falserverless/example_inputs/sora-2-i2v-input.png"
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/sora-2/image-to-video/pro", {
+  input: {
+    prompt: "Front-facing 'invisible' action-cam on a skydiver in freefall above bright clouds; camera locked on his face. He speaks over the wind with clear lipsync: 'This is insanely fun! You've got to try it—book a tandem and go!' Natural wind roar, voice close-mic'd and slightly compressed so it's intelligible. Midday sun, goggles and jumpsuit flutter, altimeter visible, parachute rig on shoulders. Energetic but stable framing with subtle shake; brief horizon roll. End on first tug of canopy and wind noise dropping.",
+    image_url: "https://storage.googleapis.com/falserverless/example_inputs/sora-2-i2v-input.png"
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/sora-2/image-to-video/pro)
+- [API Documentation](https://fal.ai/models/fal-ai/sora-2/image-to-video/pro/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/sora-2/image-to-video/pro)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

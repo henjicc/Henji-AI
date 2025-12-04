@@ -13,7 +13,8 @@ export const FAL_CONFIG = {
     'fal-ai-veo-3.1': 60,
     'fal-ai-kling-image-o1': 25,
     'fal-ai-kling-video-o1': 40,
-    'fal-ai-kling-video-v2.6-pro': 45
+    'fal-ai-kling-video-v2.6-pro': 45,
+    'fal-ai-sora-2': 50
   } as Record<string, number>,
 
   // 默认预估轮询次数
@@ -34,6 +35,7 @@ export function getEstimatedPolls(modelId: string): number {
   if (modelId.includes('seedream/v4')) return FAL_CONFIG.modelEstimatedPolls['fal-ai/bytedance/seedream/v4/text-to-image']
   if (modelId.includes('nano-banana-pro')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-nano-banana-pro']
   if (modelId.includes('nano-banana')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-nano-banana']
+  if (modelId.includes('sora-2') || modelId.includes('sora2')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-sora-2']
   if (modelId.includes('veo')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-veo-3.1']
   if (modelId.includes('kling-video/v2.6') || modelId.includes('kling-video-v2.6')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-kling-video-v2.6-pro']
   if (modelId.includes('kling-video')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-kling-video-o1']

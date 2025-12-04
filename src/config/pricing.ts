@@ -140,6 +140,16 @@ const PRICES = {
             audioOff: 0.1,  // USD
             audioOn: 0.15    // USD
         }
+    },
+
+    // 视频 - Sora 2
+    // 价格单位：美元/秒
+    SORA2: {
+        standard: 0.1,  // USD/s - 标准版
+        pro: {
+            '720p': 0.30,  // USD/s - 专业版 720p
+            '1080p': 0.50  // USD/s - 专业版 1080p
+        }
     }
 } as const
 
@@ -426,6 +436,34 @@ export const pricingConfigs: PricingConfig[] = [
             const pricePerSecondUSD = isFastMode
                 ? (isAudioOn ? PRICES.VEO31.fast.audioOn : PRICES.VEO31.fast.audioOff)
                 : (isAudioOn ? PRICES.VEO31.normal.audioOn : PRICES.VEO31.normal.audioOff)
+
+            // 计算总价（转换为人民币）
+            const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
+
+            // 格式化为最多2位小数
+            return formatPrice(totalPriceCNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-sora-2',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const duration = params.videoDuration || 4
+            const mode = params.soraMode || 'standard'
+
+            // 获取价格（美元/秒）
+            let pricePerSecondUSD: number
+            if (mode === 'standard') {
+                pricePerSecondUSD = PRICES.SORA2.standard
+            } else {
+                // 专业模式：根据分辨率选择价格
+                const resolution = params.soraResolution || '720p'
+                pricePerSecondUSD = resolution === '1080p'
+                    ? PRICES.SORA2.pro['1080p']
+                    : PRICES.SORA2.pro['720p']
+            }
 
             // 计算总价（转换为人民币）
             const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration

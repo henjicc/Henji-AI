@@ -61,12 +61,23 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                             // 确定基数参数的 key
                             const baseSizeKey = p.resolutionConfig.baseSizeKey || 'resolutionBaseSize'
 
+                            // 处理动态 qualityOptions（如果是函数，则调用它）
+                            const resolvedQualityOptions = typeof p.resolutionConfig.qualityOptions === 'function'
+                                ? p.resolutionConfig.qualityOptions(values)
+                                : p.resolutionConfig.qualityOptions
+
+                            // 创建一个新的 config 对象，包含解析后的 qualityOptions
+                            const resolvedConfig = {
+                                ...p.resolutionConfig,
+                                qualityOptions: resolvedQualityOptions
+                            }
+
                             const component = (
                                 <UniversalResolutionSelector
                                     label={param.label}
                                     value={values[param.id]}
                                     options={options}
-                                    config={p.resolutionConfig}
+                                    config={resolvedConfig}
                                     customWidth={values.customWidth}
                                     customHeight={values.customHeight}
                                     qualityValue={values[qualityKey]}
@@ -74,7 +85,7 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                                     onChange={(v) => onChange(param.id, v)}
                                     onWidthChange={p.resolutionConfig.customInput ? (v) => onChange('customWidth', v) : undefined}
                                     onHeightChange={p.resolutionConfig.customInput ? (v) => onChange('customHeight', v) : undefined}
-                                    onQualityChange={p.resolutionConfig.qualityOptions ? (v) => onChange(qualityKey, v) : undefined}
+                                    onQualityChange={resolvedQualityOptions ? (v) => onChange(qualityKey, v) : undefined}
                                     onBaseSizeChange={p.resolutionConfig.baseSizeEditable !== false ? (v) => onChange(baseSizeKey, v) : undefined}
                                 />
                             )

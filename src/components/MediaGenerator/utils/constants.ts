@@ -32,6 +32,7 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
   }
   if (modelId === 'kling-2.5-turbo') return 1
   if (modelId === 'fal-ai-kling-video-v2.6-pro') return 1 // Kling Video v2.6 Pro 最多 1 张图片
+  if (modelId === 'fal-ai-sora-2' || modelId === 'sora-2') return 1 // Sora 2 最多 1 张图片
   if (modelId === 'minimax-hailuo-2.3') return 1
   if (modelId === 'minimax-hailuo-02') return 2
   if (modelId === 'wan-2.5-preview') return 1

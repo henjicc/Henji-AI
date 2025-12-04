@@ -119,6 +119,11 @@ export const useMediaGeneratorState = () => {
   const [klingV26GenerateAudio, setKlingV26GenerateAudio] = useState(true)
   const [klingV26CfgScale, setKlingV26CfgScale] = useState(0.5)
 
+  // Sora 2 参数
+  const [soraMode, setSoraMode] = useState<'standard' | 'pro'>('standard')
+  const [soraAspectRatio, setSoraAspectRatio] = useState('16:9')
+  const [soraResolution, setSoraResolution] = useState('720p')
+
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
@@ -236,6 +241,11 @@ export const useMediaGeneratorState = () => {
     klingV26AspectRatio, setKlingV26AspectRatio,
     klingV26GenerateAudio, setKlingV26GenerateAudio,
     klingV26CfgScale, setKlingV26CfgScale,
+
+    // Sora 2
+    soraMode, setSoraMode,
+    soraAspectRatio, setSoraAspectRatio,
+    soraResolution, setSoraResolution,
 
     // UI
     isDraggingImage, setIsDraggingImage

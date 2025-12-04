@@ -425,6 +425,28 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     }
   }
 
+  // Sora 2
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-sora-2' || selectedModel === 'sora-2')) {
+    options.soraMode = params.soraMode
+    options.duration = params.videoDuration
+    options.soraAspectRatio = params.soraAspectRatio
+    options.soraResolution = params.soraResolution
+
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+  }
+
   // Kling Video O1
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1')) {
     options.mode = params.klingMode || 'image-to-video'

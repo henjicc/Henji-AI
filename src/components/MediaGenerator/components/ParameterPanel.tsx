@@ -26,7 +26,8 @@ import {
   qwenImageEdit2509Params,
   falAiKlingImageO1Params,
   klingVideoO1Params,
-  falAiKlingVideoV26ProParams
+  falAiKlingVideoV26ProParams,
+  falAiSora2Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -218,6 +219,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Sora 2 参数 */}
+        {(selectedModel === 'fal-ai-sora-2' || selectedModel === 'sora-2') && (
+          <SchemaForm
+            schema={falAiSora2Params}
+            values={{
+              soraMode: values.soraMode,
+              soraAspectRatio: values.soraAspectRatio,
+              soraResolution: values.soraResolution,
+              videoDuration: values.videoDuration,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -230,7 +246,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-kling-video-o1' &&
          selectedModel !== 'kling-video-o1' &&
          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
-         selectedModel !== 'kling-video-v2.6-pro' && (
+         selectedModel !== 'kling-video-v2.6-pro' &&
+         selectedModel !== 'fal-ai-sora-2' &&
+         selectedModel !== 'sora-2' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -254,7 +272,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-kling-video-o1' &&
          selectedModel !== 'kling-video-o1' &&
          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
-         selectedModel !== 'kling-video-v2.6-pro' && (
+         selectedModel !== 'kling-video-v2.6-pro' &&
+         selectedModel !== 'fal-ai-sora-2' &&
+         selectedModel !== 'sora-2' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
