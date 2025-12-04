@@ -33,6 +33,13 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
   if (modelId === 'kling-2.5-turbo') return 1
   if (modelId === 'fal-ai-kling-video-v2.6-pro') return 1 // Kling Video v2.6 Pro 最多 1 张图片
   if (modelId === 'fal-ai-sora-2' || modelId === 'sora-2') return 1 // Sora 2 最多 1 张图片
+  if (modelId === 'fal-ai-ltx-2' || modelId === 'ltx-2') {
+    // LTX-2: 支持自动切换模式，始终允许上传 1 张图片
+    // - 文生视频模式：上传图片后自动切换到图生视频
+    // - 图生视频模式：最多 1 张图片
+    // - 视频编辑模式：不支持图片（由 needsVideoUpload 控制）
+    return 1
+  }
   if (modelId === 'minimax-hailuo-2.3') return 1
   if (modelId === 'minimax-hailuo-02') return 2
   if (modelId === 'wan-2.5-preview') return 1

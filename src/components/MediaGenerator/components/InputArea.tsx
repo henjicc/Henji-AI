@@ -11,10 +11,11 @@ interface InputAreaProps {
   isLoading: boolean
   isGenerating?: boolean
 
-  // Vidu/Veo/Kling 模式（用于计算最大图片数）
+  // Vidu/Veo/Kling/LTX-2 模式（用于计算最大图片数）
   viduMode?: string
   veoMode?: string
   klingMode?: string
+  mode?: string  // LTX-2 模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -54,6 +55,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   viduMode,
   veoMode,
   klingMode,
+  mode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -127,9 +129,18 @@ const InputArea: React.FC<InputAreaProps> = ({
     return !input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0)
   }
 
-  // 检查是否需要显示视频上传（Kling Video O1 的视频编辑和视频参考模式）
-  const needsVideoUpload = (selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
-    (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')
+  // 检查是否需要显示视频上传
+  // 1. Kling Video O1 的视频编辑和视频参考模式（支持视频+图片）
+  // 2. LTX-2 的视频编辑模式（仅支持视频）
+  const needsVideoUpload =
+    ((selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
+     (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')) ||
+    ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
+     mode === 'retake-video')
+
+  // 检查是否只需要视频（LTX-2 视频编辑模式）
+  const needsVideoOnly = (selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
+    mode === 'retake-video'
 
   // 处理混合文件上传（视频+图片）
   const handleMixedFileUpload = (files: File[]) => {
@@ -141,8 +152,8 @@ const InputArea: React.FC<InputAreaProps> = ({
       onVideoUpload([videoFiles[0]])
     }
 
-    // 再处理图片
-    if (imageFiles.length > 0) {
+    // 再处理图片（如果不是只需要视频的模式）
+    if (imageFiles.length > 0 && !needsVideoOnly) {
       onImageUpload(imageFiles)
     }
   }
@@ -177,10 +188,14 @@ const InputArea: React.FC<InputAreaProps> = ({
   }
 
   // 合并视频和图片文件列表
-  const mixedFiles = needsVideoUpload ? [...uploadedVideos, ...uploadedImages] : uploadedImages
+  const mixedFiles = needsVideoUpload
+    ? (needsVideoOnly ? uploadedVideos : [...uploadedVideos, ...uploadedImages])
+    : uploadedImages
 
   // 计算混合上传的最大文件数
-  const mixedMaxCount = needsVideoUpload ? 1 + maxImageCount : maxImageCount
+  const mixedMaxCount = needsVideoUpload
+    ? (needsVideoOnly ? 1 : 1 + maxImageCount)
+    : maxImageCount
 
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
@@ -193,7 +208,9 @@ const InputArea: React.FC<InputAreaProps> = ({
         <div className="mb-3">
           {needsVideoUpload && (
             <div className="text-xs text-zinc-400 mb-2">
-              上传视频和图片（视频1个 + 图片最多{maxImageCount}张）
+              {needsVideoOnly
+                ? '上传视频（仅支持1个视频）'
+                : `上传视频和图片（视频1个 + 图片最多${maxImageCount}张）`}
             </div>
           )}
           <FileUploader
@@ -203,8 +220,8 @@ const InputArea: React.FC<InputAreaProps> = ({
             onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
             onReorder={needsVideoUpload ? () => {} : onImageReorder}
             onImageClick={onImageClick}
-            accept={needsVideoUpload ? "video/*,image/*" : "image/*"}
-            multiple={needsVideoUpload ? true : isMultiple}
+            accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
+            multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
             maxCount={mixedMaxCount}
             {...{ onDragStateChange } as any}
           />

@@ -82,6 +82,21 @@ interface BuildOptionsParams {
   klingV26GenerateAudio?: boolean
   klingV26CfgScale?: number
 
+  // Sora 2
+  soraMode?: string
+  soraAspectRatio?: string
+  soraResolution?: string
+
+  // LTX-2
+  mode?: string  // LTX-2 模式
+  ltxResolution?: string
+  ltxFps?: number
+  ltxGenerateAudio?: boolean
+  ltxFastMode?: boolean
+  ltxRetakeDuration?: number
+  ltxRetakeStartTime?: number
+  ltxRetakeMode?: string
+
   // 音频
   audioSpeed: number
   audioEmotion: string
@@ -445,6 +460,65 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       setUploadedFilePaths(paths)
       options.uploadedFilePaths = paths
     }
+  }
+
+  // LTX-2
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2')) {
+    options.mode = params.mode || 'text-to-video'
+    options.ltxResolution = params.ltxResolution
+    options.ltxFps = params.ltxFps
+    options.ltxGenerateAudio = params.ltxGenerateAudio
+    options.ltxFastMode = params.ltxFastMode
+
+    // 视频编辑模式的特殊参数
+    if (options.mode === 'retake-video') {
+      options.duration = params.ltxRetakeDuration || 5  // 视频编辑模式使用专用时长
+      options.ltxRetakeStartTime = params.ltxRetakeStartTime
+      options.ltxRetakeMode = params.ltxRetakeMode
+
+      // 处理视频上传
+      if (params.uploadedVideoFiles && params.uploadedVideoFiles.length > 0) {
+        const videoFile = params.uploadedVideoFiles[0]
+        // 将 File 对象转换为 base64
+        const videoDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = (e) => resolve(e.target?.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(videoFile)
+        })
+        options.videos = [videoDataUrl]
+      }
+    }
+    // 文生视频和图生视频模式：使用通用时长
+    else {
+      options.duration = params.videoDuration || 6
+
+      // 图生视频模式：处理图片上传
+      if (options.mode === 'image-to-video' && uploadedImages.length > 0) {
+        options.images = uploadedImages
+        const paths: string[] = [...uploadedFilePaths]
+        for (let i = 0; i < uploadedImages.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(uploadedImages[i])
+            const saved = await saveUploadImage(blob, 'persist')
+            paths[i] = saved.fullPath
+          }
+        }
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
+      }
+    }
+
+    console.log('[optionsBuilder] LTX-2 参数:', {
+      mode: options.mode,
+      duration: options.duration,
+      resolution: options.ltxResolution,
+      fps: options.ltxFps,
+      generateAudio: options.ltxGenerateAudio,
+      fastMode: options.ltxFastMode,
+      hasImages: options.images?.length || 0,
+      hasVideos: options.videos?.length || 0
+    })
   }
 
   // Kling Video O1

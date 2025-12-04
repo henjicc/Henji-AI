@@ -1,0 +1,6 @@
+Ltx 2 Text To Video & Ltx 2 Image To Video:
+Your request will cost $0.06 per second for 1080p, $0.12 per second for 1440p or $0.24 per second for 2160p.
+
+Ltx 2 Image To Video Fast & Ltx 2 Text To Video Fast:
+Your request will cost $0.04 per second for 1080p, $0.08 per second for 1440p or $0.16 per second for 2160p.
+

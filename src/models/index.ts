@@ -27,6 +27,7 @@ export { falAiKlingImageO1Params } from './fal-ai-kling-image-o1'
 export { klingVideoO1Params } from './kling-video-o1'
 export { falAiKlingVideoV26ProParams } from './fal-ai-kling-video-v2.6-pro'
 export { falAiSora2Params } from './fal-ai-sora-2'
+export { falAiLtx2Params } from './fal-ai-ltx-2'
 
 // 魔搭模型
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
@@ -64,6 +65,7 @@ import { falAiKlingImageO1Params } from './fal-ai-kling-image-o1'
 import { klingVideoO1Params } from './kling-video-o1'
 import { falAiKlingVideoV26ProParams } from './fal-ai-kling-video-v2.6-pro'
 import { falAiSora2Params } from './fal-ai-sora-2'
+import { falAiLtx2Params } from './fal-ai-ltx-2'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
@@ -102,6 +104,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'kling-video-v2.6-pro': falAiKlingVideoV26ProParams,
   'fal-ai-sora-2': falAiSora2Params,
   'sora-2': falAiSora2Params,
+  'fal-ai-ltx-2': falAiLtx2Params,
+  'ltx-2': falAiLtx2Params,
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,

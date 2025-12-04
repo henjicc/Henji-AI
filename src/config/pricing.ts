@@ -150,6 +150,22 @@ const PRICES = {
             '720p': 0.30,  // USD/s - 专业版 720p
             '1080p': 0.50  // USD/s - 专业版 1080p
         }
+    },
+
+    // 视频 - LTX-2
+    // 价格单位：美元/秒
+    LTX2: {
+        pro: {
+            '1080p': 0.06,  // USD/s - Pro 1080p
+            '1440p': 0.12,  // USD/s - Pro 1440p
+            '2160p': 0.24   // USD/s - Pro 2160p
+        },
+        fast: {
+            '1080p': 0.04,  // USD/s - Fast 1080p
+            '1440p': 0.08,  // USD/s - Fast 1440p
+            '2160p': 0.16   // USD/s - Fast 2160p
+        },
+        retake: 0.10  // USD/s - Retake 模式
     }
 } as const
 
@@ -428,7 +444,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 8
-            const mode = params.mode || 'text-image-to-video'
+            const mode = params.veoMode || 'text-image-to-video'  // 使用 veoMode
             const isFastMode = (params.veoFastMode || false) && mode !== 'reference-to-video' // 参考生视频模式不支持快速模式
             const isAudioOn = params.veoGenerateAudio || false
 
@@ -463,6 +479,45 @@ export const pricingConfigs: PricingConfig[] = [
                 pricePerSecondUSD = resolution === '1080p'
                     ? PRICES.SORA2.pro['1080p']
                     : PRICES.SORA2.pro['720p']
+            }
+
+            // 计算总价（转换为人民币）
+            const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
+
+            // 格式化为最多2位小数
+            return formatPrice(totalPriceCNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-ltx-2',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const mode = params.ltxMode || 'text-to-video'  // 使用 ltxMode
+            const resolution = params.ltxResolution || '1080p'
+            const fastMode = params.ltxFastMode !== undefined ? params.ltxFastMode : true
+
+            // 根据模式选择时长参数
+            let duration: number
+            if (mode === 'retake-video') {
+                // 视频编辑模式：使用 ltxRetakeDuration
+                duration = params.ltxRetakeDuration || 5
+            } else {
+                // 文生视频和图生视频模式：使用 videoDuration
+                duration = params.videoDuration || 6
+            }
+
+            // 获取价格（美元/秒）
+            let pricePerSecondUSD: number
+
+            if (mode === 'retake-video') {
+                // 视频编辑模式：固定价格 0.1 美元/秒
+                pricePerSecondUSD = PRICES.LTX2.retake
+            } else {
+                // 文生视频和图生视频模式：根据快速模式和分辨率选择价格
+                const priceTable = fastMode ? PRICES.LTX2.fast : PRICES.LTX2.pro
+                pricePerSecondUSD = priceTable[resolution as '1080p' | '1440p' | '2160p'] || priceTable['1080p']
             }
 
             // 计算总价（转换为人民币）

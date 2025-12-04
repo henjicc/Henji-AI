@@ -270,6 +270,21 @@
             "type": "polling",
             "expectedPolls": 50
           }
+        },
+        {
+          "id": "fal-ai-ltx-2",
+          "name": "LTX-2",
+          "type": "video",
+          "description": "Lightricks 最新的视频生成模型，支持文生视频、图生视频和视频编辑，具有高保真度和音频生成能力",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "视频编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 35
+          }
         }
       ]
     },

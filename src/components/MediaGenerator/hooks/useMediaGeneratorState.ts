@@ -124,6 +124,16 @@ export const useMediaGeneratorState = () => {
   const [soraAspectRatio, setSoraAspectRatio] = useState('16:9')
   const [soraResolution, setSoraResolution] = useState('720p')
 
+  // LTX-2 参数
+  const [mode, setMode] = useState<'text-to-video' | 'image-to-video' | 'retake-video'>('text-to-video')
+  const [ltxResolution, setLtxResolution] = useState('1080p')
+  const [ltxFps, setLtxFps] = useState(25)
+  const [ltxGenerateAudio, setLtxGenerateAudio] = useState(true)
+  const [ltxFastMode, setLtxFastMode] = useState(true)
+  const [ltxRetakeDuration, setLtxRetakeDuration] = useState(5)  // 视频编辑模式的时长
+  const [ltxRetakeStartTime, setLtxRetakeStartTime] = useState(0)
+  const [ltxRetakeMode, setLtxRetakeMode] = useState<'replace_audio' | 'replace_video' | 'replace_audio_and_video'>('replace_audio_and_video')
+
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
@@ -246,6 +256,16 @@ export const useMediaGeneratorState = () => {
     soraMode, setSoraMode,
     soraAspectRatio, setSoraAspectRatio,
     soraResolution, setSoraResolution,
+
+    // LTX-2
+    mode, setMode,
+    ltxResolution, setLtxResolution,
+    ltxFps, setLtxFps,
+    ltxGenerateAudio, setLtxGenerateAudio,
+    ltxFastMode, setLtxFastMode,
+    ltxRetakeDuration, setLtxRetakeDuration,
+    ltxRetakeStartTime, setLtxRetakeStartTime,
+    ltxRetakeMode, setLtxRetakeMode,
 
     // UI
     isDraggingImage, setIsDraggingImage

@@ -8,6 +8,7 @@ import { falAiKlingImageO1Route } from './fal-ai-kling-image-o1'
 import { falAiKlingVideoO1Route } from './fal-ai-kling-video-o1'
 import { falAiKlingVideoV26ProRoute } from './fal-ai-kling-video-v2.6-pro'
 import { falAiSora2Route } from './fal-ai-sora-2'
+import { falAiLtx2Route } from './fal-ai-ltx-2'
 
 /**
  * 模型路由接口
@@ -29,6 +30,7 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiKlingVideoO1Route,  // Kling Video O1 必须在 Veo 3.1 之前
   falAiKlingImageO1Route,
   falAiSora2Route,  // Sora 2
+  falAiLtx2Route,  // LTX-2
   falAiVeo31Route,
   falAiBytedanceSeedreamV4Route,
   falAiBytedanceSeedreamV45Route,

@@ -98,6 +98,17 @@ export interface PresetSetters {
     setSoraAspectRatio: (v: string) => void
     setSoraResolution: (v: string) => void
 
+    // LTX-2
+    setMode: (v: 'text-to-video' | 'image-to-video' | 'retake-video') => void
+    setLtxResolution: (v: string) => void
+    setLtxFps: (v: number) => void
+    setLtxGenerateAudio: (v: boolean) => void
+    setLtxFastMode: (v: boolean) => void
+    setLtxRetakeDuration: (v: number) => void
+    setLtxRetakeStartTime: (v: number) => void
+    setLtxRetakeMode: (v: 'replace_audio' | 'replace_video' | 'replace_audio_and_video') => void
+    setUploadedVideoFilePaths: (v: string[]) => void
+
     // 音频参数
     setVoiceId: (v: string) => void
     setAudioSpec: (v: 'hd' | 'turbo') => void
@@ -217,6 +228,17 @@ export function createPresetSetterMap(
         soraMode: setters.setSoraMode,
         soraAspectRatio: setters.setSoraAspectRatio,
         soraResolution: setters.setSoraResolution,
+
+        // LTX-2
+        mode: setters.setMode,
+        ltxResolution: setters.setLtxResolution,
+        ltxFps: setters.setLtxFps,
+        ltxGenerateAudio: setters.setLtxGenerateAudio,
+        ltxFastMode: setters.setLtxFastMode,
+        ltxRetakeDuration: setters.setLtxRetakeDuration,
+        ltxRetakeStartTime: setters.setLtxRetakeStartTime,
+        ltxRetakeMode: setters.setLtxRetakeMode,
+        uploadedVideoFilePaths: setters.setUploadedVideoFilePaths,
 
         // 音频参数
         voiceId: setters.setVoiceId,

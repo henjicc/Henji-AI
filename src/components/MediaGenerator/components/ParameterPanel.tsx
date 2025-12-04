@@ -27,7 +27,8 @@ import {
   falAiKlingImageO1Params,
   klingVideoO1Params,
   falAiKlingVideoV26ProParams,
-  falAiSora2Params
+  falAiSora2Params,
+  falAiLtx2Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -234,6 +235,27 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* LTX-2 参数 */}
+        {(selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') && (
+          <SchemaForm
+            schema={falAiLtx2Params}
+            values={{
+              mode: values.mode,
+              ltxResolution: values.ltxResolution,
+              videoDuration: values.videoDuration,
+              ltxFps: values.ltxFps,
+              ltxGenerateAudio: values.ltxGenerateAudio,
+              ltxFastMode: values.ltxFastMode,
+              ltxRetakeDuration: values.ltxRetakeDuration,
+              ltxRetakeStartTime: values.ltxRetakeStartTime,
+              ltxRetakeMode: values.ltxRetakeMode,
+              uploadedImages,
+              uploadedVideos: values.uploadedVideos
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -248,7 +270,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
          selectedModel !== 'kling-video-v2.6-pro' &&
          selectedModel !== 'fal-ai-sora-2' &&
-         selectedModel !== 'sora-2' && (
+         selectedModel !== 'sora-2' &&
+         selectedModel !== 'fal-ai-ltx-2' &&
+         selectedModel !== 'ltx-2' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -274,7 +298,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
          selectedModel !== 'kling-video-v2.6-pro' &&
          selectedModel !== 'fal-ai-sora-2' &&
-         selectedModel !== 'sora-2' && (
+         selectedModel !== 'sora-2' &&
+         selectedModel !== 'fal-ai-ltx-2' &&
+         selectedModel !== 'ltx-2' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}

@@ -121,6 +121,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setSoraMode: state.setSoraMode,
     setSoraAspectRatio: state.setSoraAspectRatio,
     setSoraResolution: state.setSoraResolution,
+    setMode: state.setMode,
+    setLtxAspectRatio: state.setLtxAspectRatio,
+    setLtxResolution: state.setLtxResolution,
+    setLtxFps: state.setLtxFps,
+    setLtxGenerateAudio: state.setLtxGenerateAudio,
+    setLtxFastMode: state.setLtxFastMode,
+    setLtxRetakeStartTime: state.setLtxRetakeStartTime,
+    setLtxRetakeMode: state.setLtxRetakeMode,
     setVoiceId: state.setVoiceId,
     setAudioSpec: state.setAudioSpec,
     setAudioEmotion: state.setAudioEmotion,
@@ -475,7 +483,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.setSelectedModel(modelId)
 
     // 根据模型截断图片
-    const max = getMaxImageCount(modelId, modelId === 'vidu-q1' ? state.viduMode : modelId === 'veo3.1' ? state.veoMode : undefined)
+    const max = getMaxImageCount(
+      modelId,
+      modelId === 'vidu-q1' ? state.viduMode :
+      modelId === 'veo3.1' ? state.veoMode :
+      undefined
+    )
     if (state.uploadedImages.length > max) {
       state.setUploadedImages(prev => prev.slice(0, max))
       state.setUploadedFilePaths(prev => prev.slice(0, max))
@@ -535,6 +548,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       soraMode: state.setSoraMode,
       soraAspectRatio: state.setSoraAspectRatio,
       soraResolution: state.setSoraResolution,
+      // LTX-2
+      mode: state.setMode,
+      ltxResolution: state.setLtxResolution,
+      ltxFps: state.setLtxFps,
+      ltxGenerateAudio: state.setLtxGenerateAudio,
+      ltxFastMode: state.setLtxFastMode,
+      ltxRetakeDuration: state.setLtxRetakeDuration,
+      ltxRetakeStartTime: state.setLtxRetakeStartTime,
+      ltxRetakeMode: state.setLtxRetakeMode,
       // Seedream
       maxImages: state.setMaxImages,
       selectedResolution: state.setSelectedResolution,
@@ -660,6 +682,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         soraMode: state.soraMode,
         soraAspectRatio: state.soraAspectRatio,
         soraResolution: state.soraResolution,
+        // LTX-2 参数
+        mode: state.mode,
+        ltxResolution: state.ltxResolution,
+        ltxFps: state.ltxFps,
+        ltxGenerateAudio: state.ltxGenerateAudio,
+        ltxFastMode: state.ltxFastMode,
+        ltxRetakeDuration: state.ltxRetakeDuration,
+        ltxRetakeStartTime: state.ltxRetakeStartTime,
+        ltxRetakeMode: state.ltxRetakeMode,
         audioSpeed: state.audioSpeed,
         audioEmotion: state.audioEmotion,
         voiceId: state.voiceId,
@@ -775,9 +806,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         viduMode={state.viduMode}
         veoMode={state.veoMode}
         klingMode={state.klingMode}
+        mode={state.mode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
-          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
+          const maxCount = getMaxImageCount(
+            state.selectedModel,
+            state.selectedModel === 'vidu-q1' ? state.viduMode :
+            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
+            undefined
+          )
           imageUpload.handleImageFileUpload(files, maxCount)
         }}
         onImageRemove={imageUpload.removeImage}
@@ -785,11 +822,21 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageReorder={imageUpload.handleImageReorder}
         onImageClick={onImageClick}
         onPaste={(e) => {
-          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
+          const maxCount = getMaxImageCount(
+            state.selectedModel,
+            state.selectedModel === 'vidu-q1' ? state.viduMode :
+            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
+            undefined
+          )
           imageUpload.handlePaste(e, maxCount)
         }}
         onImageDrop={(files) => {
-          const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
+          const maxCount = getMaxImageCount(
+            state.selectedModel,
+            state.selectedModel === 'vidu-q1' ? state.viduMode :
+            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
+            undefined
+          )
           imageUpload.handleImageFileDrop(files, maxCount)
         }}
         onDragStateChange={imageUpload.setIsDraggingImage}
@@ -859,7 +906,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               seedanceResolution: state.seedanceResolution,
               seedanceAspectRatio: state.seedanceAspectRatio,
               wanResolution: state.wanResolution,
-              mode: state.veoMode,
+              veoMode: state.veoMode,  // Veo 3.1 模式
               veoGenerateAudio: state.veoGenerateAudio,
               veoFastMode: state.veoFastMode,
               veoAspectRatio: state.veoAspectRatio,
@@ -870,6 +917,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               klingV26GenerateAudio: state.klingV26GenerateAudio,
               soraMode: state.soraMode,
               soraResolution: state.soraResolution,
+              // LTX-2 参数
+              ltxMode: state.mode,  // LTX-2 模式（使用 ltxMode 避免冲突）
+              ltxResolution: state.ltxResolution,
+              ltxFastMode: state.ltxFastMode,
+              ltxRetakeDuration: state.ltxRetakeDuration,  // 视频编辑模式的时长
               input: state.input,
               audioSpec: state.audioSpec
             }}
