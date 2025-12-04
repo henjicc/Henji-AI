@@ -31,6 +31,7 @@ Fal 适配器使用官方 `@fal-ai/client` SDK，与其他适配器（PPIO、Mod
 2. **不保存媒体**: Fal 图片解析器**不调用** `saveMediaLocally`，由 App.tsx 统一处理
 3. **轮询进度**: 必须配置 `"type": "polling"` 和 `expectedPolls`
 4. **智能匹配**: 永远不要传递 `'smart'` 或 `'auto'` 给 API
+5. **⚠️ 禁止修改原始 params**: FalAdapter 已经正确处理图片上传，模型路由**不要修改** `params` 对象，避免 base64 数据泄漏到 history.json
 
 ---
 
@@ -181,6 +182,11 @@ export const yourVideoModelRoute: FalModelRoute = {
 4. **参数过滤**:
    - 使用 `!== undefined` 检查参数是否存在
    - 不要传递 `undefined` 或 `null` 给 API
+
+5. **⚠️ 禁止修改原始 params 对象**（重要！）:
+   - **错误做法**: `params.images = uploadedUrls` - 会污染原始数据，导致 base64 泄漏到 history.json
+   - **正确做法**: 直接使用 `params.images`，FalAdapter 已经处理好上传
+   - 模型路由只负责构建 API 请求，不负责上传或修改数据
 
 ### 步骤 2: 注册路由
 
@@ -548,18 +554,101 @@ if (images.length > 0) {
   requestData.image_urls = images  // FalAdapter 已上传到 CDN
 }
 
-// 错误：不要手动转换
+// ❌ 错误：不要手动转换
 requestData.image_urls = images.map(img =>
   img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
 )
 
-// 错误：不要尝试上传
+// ❌ 错误：不要尝试上传
 const uploadedUrls = await uploadToFalCDN(images)  // 不需要！
 ```
 
 ---
 
-### 3. 智能匹配处理，重要
+### 3. ⚠️ 禁止修改原始 params 对象（防止 base64 泄漏），极其重要
+
+**问题背景**：如果在模型路由中修改 `params.images` 或 `params.videos`，当上传失败时会回退到 base64 数据，这些 base64 数据会被保存到 `history.json`，导致文件体积暴增（几 MB 到几十 MB）。
+
+**FalAdapter 的正确实现**（已修复）：
+
+```typescript
+// ✅ 正确：FalAdapter.generateImage() 中的实现
+async generateImage(params: GenerateImageParams): Promise<ImageResult> {
+  // 1. 创建新变量存储上传后的 URL，不修改原始 params
+  let uploadedImages: string[] = []
+  if (params.images && params.images.length > 0) {
+    uploadedImages = await this.uploadImagesToFalCDN(params.images)
+  }
+
+  // 2. 只在构建请求时使用上传后的 URL
+  const requestParams = uploadedImages.length > 0
+    ? { ...params, images: uploadedImages }  // 创建新对象
+    : params
+
+  const { submitPath, modelId, requestData } = await route.buildImageRequest(requestParams)
+  // ...
+}
+
+// ❌ 错误：直接修改原始 params（旧代码，已修复）
+async generateImage(params: GenerateImageParams): Promise<ImageResult> {
+  // 这会污染原始 params，导致 base64 泄漏到 history.json
+  params.images = await this.uploadImagesToFalCDN(params.images)
+  // ...
+}
+```
+
+**模型路由的正确实现**：
+
+```typescript
+// ✅ 正确：模型路由只负责构建请求，不修改 params
+export const yourFalModelRoute: FalModelRoute = {
+  buildImageRequest: (params: GenerateImageParams) => {
+    // 直接使用 params.images，已经是 fal CDN URL
+    const images = params.images || []
+
+    const requestData: any = {
+      prompt: params.prompt
+    }
+
+    if (images.length > 0) {
+      requestData.image_urls = images  // 直接使用，不修改
+    }
+
+    return { submitPath, modelId, requestData }
+  }
+}
+
+// ❌ 错误：在模型路由中修改 params
+export const wrongFalModelRoute: FalModelRoute = {
+  buildImageRequest: async (params: GenerateImageParams) => {
+    // 错误！不要在路由中上传或修改 params
+    params.images = await uploadToFalCDN(params.images)
+
+    // 错误！不要修改原始数组
+    params.images = params.images.map(img => processImage(img))
+
+    // ...
+  }
+}
+```
+
+**关键原则**：
+
+1. **FalAdapter 负责上传**：`generateImage()` 和 `generateVideo()` 方法会自动上传图片/视频到 fal CDN
+2. **模型路由只读取**：路由收到的 `params.images` 已经是 URL，直接使用即可
+3. **不修改原始对象**：任何需要修改的地方，都应该创建新对象（使用展开运算符 `{ ...params }`）
+4. **保护历史记录**：原始 params 会被保存到 history.json，必须保持干净（只包含文件路径，不包含 base64）
+
+**检查清单**：
+
+- [ ] 模型路由中没有 `params.images = ...` 或 `params.videos = ...` 这样的赋值语句
+- [ ] 模型路由中没有调用任何上传函数（如 `uploadToFalCDN`、`fal.storage.upload`）
+- [ ] 模型路由中没有修改 `params` 对象的任何属性
+- [ ] 只使用 `const images = params.images || []` 读取图片，然后直接传递给 `requestData`
+
+---
+
+### 4. 智能匹配处理，重要
 
 永远不要传递 `'smart'` 或 `'auto'` 给 API：
 
@@ -639,6 +728,11 @@ if (images.length >= 2) {
   - [ ] 直接使用 `params.images`（已上传到 CDN）
   - [ ] 过滤掉 `'smart'` 和 `'auto'`，不传递给 API
   - [ ] 添加智能匹配处理（如果支持）
+  - [ ] **⚠️ 关键**: 确认没有修改 `params` 对象（防止 base64 泄漏到 history.json）
+    - [ ] 没有 `params.images = ...` 赋值语句
+    - [ ] 没有 `params.videos = ...` 赋值语句
+    - [ ] 没有调用上传函数（`uploadToFalCDN`、`fal.storage.upload` 等）
+    - [ ] 只使用 `const images = params.images || []` 读取，不修改
 
 - [ ] **步骤 2**: 注册路由 (`adapters/fal/models/index.ts`)
   - [ ] 导入新路由

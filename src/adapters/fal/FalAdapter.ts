@@ -176,9 +176,10 @@ export class FalAdapter extends BaseAdapter {
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
-      // 1. 如果有图片，先上传到 fal CDN
+      // 1. 如果有图片，先上传到 fal CDN（不修改原始 params）
+      let uploadedImages: string[] = []
       if (params.images && params.images.length > 0) {
-        params.images = await this.uploadImagesToFalCDN(params.images)
+        uploadedImages = await this.uploadImagesToFalCDN(params.images)
       }
 
       // 2. 查找路由
@@ -188,8 +189,11 @@ export class FalAdapter extends BaseAdapter {
         throw new Error(`Unsupported image model: ${modelId}`)
       }
 
-      // 3. 构建请求
-      const { submitPath, modelId: routeModelId, requestData } = await route.buildImageRequest(params)
+      // 3. 构建请求（使用上传后的图片 URL）
+      const requestParams = uploadedImages.length > 0
+        ? { ...params, images: uploadedImages }
+        : params
+      const { submitPath, modelId: routeModelId, requestData } = await route.buildImageRequest(requestParams)
 
       console.log('[FalAdapter] 提交请求:', {
         submitPath,
@@ -304,14 +308,16 @@ export class FalAdapter extends BaseAdapter {
     try {
       console.log('[FalAdapter] generateVideo 调用参数:', params)
 
-      // 1. 如果有图片，先上传到 fal CDN
+      // 1. 如果有图片，先上传到 fal CDN（不修改原始 params）
+      let uploadedImages: string[] = []
       if (params.images && params.images.length > 0) {
-        params.images = await this.uploadImagesToFalCDN(params.images)
+        uploadedImages = await this.uploadImagesToFalCDN(params.images)
       }
 
-      // 2. 如果有视频，先上传到 fal CDN
+      // 2. 如果有视频，先上传到 fal CDN（不修改原始 params）
+      let uploadedVideos: string[] = []
       if (params.videos && params.videos.length > 0) {
-        params.videos = await this.uploadVideosToFalCDN(params.videos)
+        uploadedVideos = await this.uploadVideosToFalCDN(params.videos)
       }
 
       // 3. 查找路由
@@ -320,8 +326,13 @@ export class FalAdapter extends BaseAdapter {
         throw new Error(`Unsupported video model: ${params.model}`)
       }
 
-      // 3. 构建请求
-      const { endpoint, modelId, requestData } = await route.buildVideoRequest(params)
+      // 4. 构建请求（使用上传后的图片和视频 URL）
+      const requestParams = {
+        ...params,
+        ...(uploadedImages.length > 0 && { images: uploadedImages }),
+        ...(uploadedVideos.length > 0 && { videos: uploadedVideos })
+      }
+      const { endpoint, modelId, requestData } = await route.buildVideoRequest(requestParams)
 
       console.log('[FalAdapter] 提交视频生成请求:', {
         endpoint,
