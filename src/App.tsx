@@ -44,14 +44,16 @@ interface GenerationTask {
   prompt: string
   model: string  // 保存使用的模型
   provider?: string  // 保存供应商信息（用于继续查询）
-  images?: string[]
+  images?: string[]  // 上传的图片（用于显示）
+  videos?: string[]  // 上传的视频（用于显示）
   size?: string
   dimensions?: string  // 实际媒体尺寸（从文件中提取）
   duration?: string  // 实际媒体时长（从文件中提取，格式化后的字符串如 "1:23"）
   status: 'queued' | 'pending' | 'generating' | 'success' | 'error' | 'timeout'  // 添加 queued 排队状态
   result?: MediaResult
   error?: string
-  uploadedFilePaths?: string[]
+  uploadedFilePaths?: string[]  // 上传的图片文件路径
+  uploadedVideoFilePaths?: string[]  // 上传的视频文件路径
   progress?: number
   requestId?: string
   modelId?: string
@@ -1376,6 +1378,7 @@ const App: React.FC = () => {
       // 不设置 size 字段，等生成完成后从实际文件中提取真实尺寸
       // size: options?.size,
       uploadedFilePaths: options?.uploadedFilePaths,
+      uploadedVideoFilePaths: options?.uploadedVideoFilePaths,  // 保存视频文件路径
       status: isGenerating ? 'queued' : 'pending', // 如果正在生成，则排队
       progress: 0,
       options: options, // 保存完整参数（任务执行时需要）
@@ -1637,8 +1640,17 @@ const App: React.FC = () => {
             images = task.uploadedFilePaths.map((p: string) => convertFileSrc(p))
           } catch { }
         }
+        // 恢复视频缩略图（从 uploadedVideoFilePaths 生成）
+        let videos: string[] | undefined = undefined
+        if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length && isDesktop()) {
+          try {
+            videos = task.uploadedVideoFilePaths.map((p: string) => convertFileSrc(p))
+          } catch { }
+        }
         return {
           ...task,
+          ...(images && { images }),  // 只有当 images 存在时才覆盖
+          ...(videos && { videos }),  // 只有当 videos 存在时才添加
           dimensions: task.dimensions, // 恢复实际媒体尺寸
           duration: task.duration, // 恢复实际媒体时长
           status: (task.status === 'generating' || task.status === 'pending' || task.status === 'queued')
@@ -1673,13 +1685,15 @@ const App: React.FC = () => {
     if (!isDesktop()) return
     const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'timeout' || t.status === 'pending' || t.status === 'generating')
       .map(t => {
-        // 清理 options 中的 base64 图片数据，防止 history.json 膨胀
+        // 清理 options 中的 base64 数据，防止 history.json 膨胀
         const sanitizedOptions = t.options ? { ...t.options } : undefined
         if (sanitizedOptions) {
-          // 删除 images 字段（包含 base64 数据）
+          // 删除 images 字段（包含 base64 图片数据）
           delete sanitizedOptions.images
           // 删除 uploadedImages 字段（某些模型如 bytedance-seedream-v4/v4.5 使用此字段）
           delete sanitizedOptions.uploadedImages
+          // 删除 videos 字段（包含 base64 视频数据）
+          delete sanitizedOptions.videos
         }
 
         return {
@@ -1694,6 +1708,7 @@ const App: React.FC = () => {
           status: t.status,
           error: t.error,
           uploadedFilePaths: t.uploadedFilePaths,
+          uploadedVideoFilePaths: t.uploadedVideoFilePaths,  // 保存视频文件路径
           options: sanitizedOptions, // 保存清理后的生成参数（不含 base64 数据）
           requestId: t.requestId, // 保存请求ID（用于超时恢复）
           modelId: t.modelId, // 保存模型ID（用于超时恢复）
@@ -1761,6 +1776,25 @@ const App: React.FC = () => {
       }
     }
 
+    // 如果有 uploadedVideoFilePaths，需要重建 base64 视频数据
+    if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length > 0) {
+      options.uploadedVideoFilePaths = task.uploadedVideoFilePaths
+      // 尝试重建 base64
+      if (!options.videos) {
+        try {
+          const arr: string[] = []
+          for (const p of task.uploadedVideoFilePaths) {
+            const data = await fileToDataUrl(p)
+            arr.push(data)
+          }
+          options.videos = arr
+          console.log('[App] 重建 videos 成功，数量:', arr.length)
+        } catch (e) {
+          console.error('[App] 重建 videos 失败:', e)
+        }
+      }
+    }
+
     console.log('[App] 重新生成任务:', {
       model: task.model,
       type: task.type,
@@ -1799,11 +1833,26 @@ const App: React.FC = () => {
       }
     }
 
+    // 恢复视频（与图片逻辑相同）
+    let videos: string[] | undefined = undefined
+    if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length) {
+      try {
+        const arr: string[] = []
+        for (const p of task.uploadedVideoFilePaths) {
+          const data = await fileToDataUrl(p)
+          arr.push(data)
+        }
+        videos = arr
+      } catch { }
+    }
+
     window.dispatchEvent(new CustomEvent('reedit-content', {
       detail: {
         prompt: task.prompt,
         images,
         uploadedFilePaths: task.uploadedFilePaths,
+        videos,
+        uploadedVideoFilePaths: task.uploadedVideoFilePaths,
         model: task.model,
         provider: task.provider,
         options: task.options
@@ -1988,7 +2037,7 @@ const App: React.FC = () => {
         try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除波形缓存失败', ap, e) }
       }
 
-      // 收集上传文件
+      // 收集上传文件（图片）
       const uploadedFiles = new Set<string>()
       tasks.forEach(t => {
         if (t.uploadedFilePaths) {
@@ -1996,7 +2045,15 @@ const App: React.FC = () => {
         }
       })
 
-      // 删除上传文件 - 检查预设引用
+      // 收集上传文件（视频）
+      const uploadedVideoFiles = new Set<string>()
+      tasks.forEach(t => {
+        if (t.uploadedVideoFilePaths) {
+          t.uploadedVideoFilePaths.forEach(f => uploadedVideoFiles.add(f))
+        }
+      })
+
+      // 删除上传文件（图片） - 检查预设引用
       for (const filePath of uploadedFiles) {
         // 检查预设是否在使用
         const usedByPreset = presets.some(preset =>
@@ -2012,6 +2069,16 @@ const App: React.FC = () => {
           }
         } else {
           console.log('[App] 保留上传文件(预设使用中):', filePath)
+        }
+      }
+
+      // 删除上传文件（视频） - 视频不会被预设引用，直接删除
+      for (const filePath of uploadedVideoFiles) {
+        try {
+          await remove(filePath)
+          console.log('[App] 删除上传视频文件:', filePath)
+        } catch (e) {
+          console.error('[App] 删除视频文件失败', filePath, e)
         }
       }
     } finally {
@@ -2056,7 +2123,7 @@ const App: React.FC = () => {
         try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除失败记录波形缓存失败', ap, e) }
       }
 
-      // 收集上传文件
+      // 收集上传文件（图片）
       const uploadedFiles = new Set<string>()
       failedTasks.forEach(t => {
         if (t.uploadedFilePaths) {
@@ -2064,11 +2131,19 @@ const App: React.FC = () => {
         }
       })
 
+      // 收集上传文件（视频）
+      const uploadedVideoFiles = new Set<string>()
+      failedTasks.forEach(t => {
+        if (t.uploadedVideoFilePaths) {
+          t.uploadedVideoFilePaths.forEach(f => uploadedVideoFiles.add(f))
+        }
+      })
+
       // 计算删除后剩余的任务
       const failedTaskIds = new Set(failedTasks.map(t => t.id))
       const remainingTasks = tasks.filter(t => !failedTaskIds.has(t.id))
 
-      // 删除上传文件 - 检查剩余历史记录和预设的引用
+      // 删除上传文件（图片） - 检查剩余历史记录和预设的引用
       for (const filePath of uploadedFiles) {
         const canDelete = canDeleteFile(filePath, remainingTasks, presets)
 
@@ -2081,6 +2156,25 @@ const App: React.FC = () => {
           }
         } else {
           console.log('[App] 保留上传文件(仍有引用):', filePath)
+        }
+      }
+
+      // 删除上传文件（视频） - 检查剩余历史记录的引用
+      for (const filePath of uploadedVideoFiles) {
+        // 检查剩余任务是否在使用
+        const usedByRemaining = remainingTasks.some(t =>
+          t.uploadedVideoFilePaths?.includes(filePath)
+        )
+
+        if (!usedByRemaining) {
+          try {
+            await remove(filePath)
+            console.log('[App] 删除上传视频文件(无引用):', filePath)
+          } catch (e) {
+            console.error('[App] 删除视频文件失败', filePath, e)
+          }
+        } else {
+          console.log('[App] 保留上传视频文件(仍有引用):', filePath)
         }
       }
     } finally {
@@ -2106,7 +2200,7 @@ const App: React.FC = () => {
       }
     }
 
-    // 删除上传的文件 - 增强版引用计数（包含预设）
+    // 删除上传的文件（图片） - 增强版引用计数（包含预设）
     if (target?.uploadedFilePaths && target.uploadedFilePaths.length) {
       // 加载所有预设
       const presets = await loadPresets()
@@ -2124,6 +2218,28 @@ const App: React.FC = () => {
           }
         } else {
           console.log('[App] 保留上传文件(仍有引用):', filePath)
+        }
+      }
+    }
+
+    // 删除上传的文件（视频） - 检查引用计数
+    if (target?.uploadedVideoFilePaths && target.uploadedVideoFilePaths.length) {
+      // 检查每个视频文件是否可以删除
+      for (const filePath of target.uploadedVideoFilePaths) {
+        // 检查其他任务是否在使用（排除当前任务）
+        const usedByOthers = tasks.some(t =>
+          t.id !== taskId && t.uploadedVideoFilePaths?.includes(filePath)
+        )
+
+        if (!usedByOthers) {
+          try {
+            await remove(filePath)
+            console.log('[App] 删除上传视频文件(无引用):', filePath)
+          } catch (e) {
+            console.error('[App] 删除单条上传视频文件失败', filePath, e)
+          }
+        } else {
+          console.log('[App] 保留上传视频文件(仍有引用):', filePath)
         }
       }
     }
@@ -2220,6 +2336,43 @@ const App: React.FC = () => {
                                   }}
                                 >
                                   +{task.images.length - 3}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 原始视频缩略图 */}
+                          {task.videos && task.videos.length > 0 && (
+                            <div className="flex gap-2">
+                              {task.videos.slice(0, 3).map((video, index) => (
+                                <div
+                                  key={index}
+                                  className="w-16 h-16 rounded cursor-pointer transition-all overflow-hidden border border-zinc-700/50 hover:brightness-75 relative"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                  }}
+                                >
+                                  <video
+                                    src={video}
+                                    className="w-full h-full object-cover rounded"
+                                    muted
+                                  />
+                                  {/* 视频图标标识 */}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                                    </svg>
+                                  </div>
+                                </div>
+                              ))}
+                              {task.videos.length > 3 && (
+                                <div
+                                  className="w-16 h-16 rounded bg-zinc-700/50 flex items-center justify-center text-xs cursor-pointer transition-all border border-zinc-700/50 hover:brightness-75"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                  }}
+                                >
+                                  +{task.videos.length - 3}
                                 </div>
                               )}
                             </div>

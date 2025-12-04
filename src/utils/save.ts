@@ -342,6 +342,55 @@ export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 
   }
 }
 
+/**
+ * 保存上传的视频文件到 Uploads 目录
+ * 与 saveUploadImage 类似，但不进行压缩处理
+ */
+export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = 'persist'): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
+  // 获取视频的 MIME 类型和扩展名
+  const mime = file.type || 'video/mp4'
+  const ext = mime.includes('webm') ? 'webm' : 'mp4'
+
+  // 读取文件内容并计算哈希
+  const originalBuf = await file.arrayBuffer()
+  const bytes = new Uint8Array(originalBuf)
+  const hash = await sha256Hex(originalBuf)
+
+  // 生成文件名和路径
+  const name = `upload-video-${hash}.${ext}`
+  const rel = await path.join('Henji-AI', 'Uploads', name)
+  const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Uploads', name)
+
+  if (mode === 'persist') {
+    // 确保目录存在
+    await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+
+    // 检查文件是否已存在
+    let exists = false
+    try {
+      await readFile(full)
+      exists = true
+    } catch { }
+
+    // 如果文件不存在，写入文件
+    if (!exists) {
+      await writeFile(rel, bytes, { baseDir: BaseDirectory.AppLocalData })
+    }
+
+    // 生成显示用的 blob URL 和 data URL
+    const displaySrc = await fileToBlobSrc(full, mime)
+    const dataUrl = await fileToDataUrl(full, mime)
+
+    console.log('[save] upload video persisted', full)
+    return { fullPath: full, displaySrc, dataUrl }
+  } else {
+    // memory 模式：只生成临时 URL
+    const dataUrl = bytesToDataUrl(bytes, mime)
+    const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
+    return { fullPath: full, displaySrc, dataUrl }
+  }
+}
+
 export async function deleteUploads(paths: string[]): Promise<void> {
   for (const p of paths) {
     try { await remove(p) } catch (e) { console.error('[save] delete upload failed', p, e) }

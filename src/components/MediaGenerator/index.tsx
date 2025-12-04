@@ -389,7 +389,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const isRestoringRef = useRef(false)
   useEffect(() => {
     const handleReedit = (event: CustomEvent) => {
-      const { prompt, images, uploadedFilePaths, model, provider, options } = event.detail as any
+      const { prompt, images, uploadedFilePaths, videos, uploadedVideoFilePaths, model, provider, options } = event.detail as any
 
       // 标记正在恢复状态，防止 useEffect 重置参数
       isRestoringRef.current = true
@@ -418,6 +418,31 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         state.setUploadedFilePaths(uploadedFilePaths)
       } else {
         state.setUploadedFilePaths([])
+      }
+
+      // 恢复视频
+      if (videos && Array.isArray(videos)) {
+        state.setUploadedVideos(videos)
+        // 将 base64 视频转换为 File 对象（用于后续上传）
+        Promise.all(videos.map(async (videoDataUrl: string, index: number) => {
+          try {
+            const response = await fetch(videoDataUrl)
+            const blob = await response.blob()
+            const file = new File([blob], `video-${index}.mp4`, { type: blob.type || 'video/mp4' })
+            return file
+          } catch (e) {
+            console.error('[MediaGenerator] Failed to convert video to File:', e)
+            return null
+          }
+        })).then(files => {
+          const validFiles = files.filter(f => f !== null) as File[]
+          state.setUploadedVideoFiles(validFiles)
+        })
+      }
+      if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths)) {
+        state.setUploadedVideoFilePaths(uploadedVideoFilePaths)
+      } else {
+        state.setUploadedVideoFilePaths([])
       }
 
       // 恢复参数 - 使用 setterMap 自动映射
@@ -631,6 +656,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         uploadedImages: state.uploadedImages,
         uploadedFilePaths: state.uploadedFilePaths,
         setUploadedFilePaths: state.setUploadedFilePaths,
+        uploadedVideoFilePaths: state.uploadedVideoFilePaths,
+        setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
         selectedResolution: state.selectedResolution,
         resolutionQuality: state.resolutionQuality,
         customWidth: state.customWidth,

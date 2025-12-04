@@ -1,4 +1,4 @@
-import { saveUploadImage, dataUrlToBlob } from '@/utils/save'
+import { saveUploadImage, saveUploadVideo, dataUrlToBlob } from '@/utils/save'
 
 /**
  * 生成选项构建器
@@ -11,6 +11,8 @@ interface BuildOptionsParams {
   uploadedImages: string[]
   uploadedFilePaths: string[]
   setUploadedFilePaths: (paths: string[]) => void
+  uploadedVideoFilePaths: string[]
+  setUploadedVideoFilePaths: (paths: string[]) => void
 
   // 图片参数
   selectedResolution: string
@@ -138,7 +140,9 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     selectedModel,
     uploadedImages,
     uploadedFilePaths,
-    setUploadedFilePaths
+    setUploadedFilePaths,
+    uploadedVideoFilePaths,
+    setUploadedVideoFilePaths
   } = params
 
   // 图片模型处理（排除 nano-banana 系列、bytedance-seedream-v4/v4.5 和 fal-ai-z-image-turbo）
@@ -476,10 +480,21 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       options.ltxRetakeStartTime = params.ltxRetakeStartTime
       options.ltxRetakeMode = params.ltxRetakeMode
 
-      // 处理视频上传
+      // 处理视频上传：保存到 Uploads 目录并记录路径
       if (params.uploadedVideoFiles && params.uploadedVideoFiles.length > 0) {
         const videoFile = params.uploadedVideoFiles[0]
-        // 将 File 对象转换为 base64
+        const paths: string[] = [...params.uploadedVideoFilePaths]
+
+        // 如果还没有保存过，保存视频文件
+        if (!paths[0]) {
+          const saved = await saveUploadVideo(videoFile, 'persist')
+          paths[0] = saved.fullPath
+        }
+
+        setUploadedVideoFilePaths(paths)
+        options.uploadedVideoFilePaths = paths
+
+        // 将 File 对象转换为 base64（仅用于 API 请求，不保存到历史记录）
         const videoDataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader()
           reader.onload = (e) => resolve(e.target?.result as string)
@@ -543,11 +558,21 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       options.uploadedFilePaths = paths
     }
 
-    // 处理视频上传（如果有）
-    // 注意：uploadedVideoFiles 存储的是 File 对象，这里需要转换为 base64
+    // 处理视频上传（如果有）：保存到 Uploads 目录并记录路径
     if (params.uploadedVideoFiles && params.uploadedVideoFiles.length > 0) {
       const videoFile = params.uploadedVideoFiles[0]
-      // 将 File 对象转换为 base64
+      const paths: string[] = [...params.uploadedVideoFilePaths]
+
+      // 如果还没有保存过，保存视频文件
+      if (!paths[0]) {
+        const saved = await saveUploadVideo(videoFile, 'persist')
+        paths[0] = saved.fullPath
+      }
+
+      setUploadedVideoFilePaths(paths)
+      options.uploadedVideoFilePaths = paths
+
+      // 将 File 对象转换为 base64（仅用于 API 请求，不保存到历史记录）
       const videoDataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = (e) => resolve(e.target?.result as string)

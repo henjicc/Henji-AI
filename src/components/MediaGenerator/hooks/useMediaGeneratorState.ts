@@ -113,6 +113,7 @@ export const useMediaGeneratorState = () => {
   const [klingElements, setKlingElements] = useState<any[]>([])  // Element[] 类型稍后定义
   const [uploadedVideos, setUploadedVideos] = useState<string[]>([])  // 视频缩略图（用于 UI 预览）
   const [uploadedVideoFiles, setUploadedVideoFiles] = useState<File[]>([])  // 视频 File 对象（延迟读取）
+  const [uploadedVideoFilePaths, setUploadedVideoFilePaths] = useState<string[]>([])  // 视频文件路径（持久化存储）
 
   // Kling v2.6 Pro 参数
   const [klingV26AspectRatio, setKlingV26AspectRatio] = useState('16:9')
@@ -246,6 +247,7 @@ export const useMediaGeneratorState = () => {
     klingElements, setKlingElements,
     uploadedVideos, setUploadedVideos,
     uploadedVideoFiles, setUploadedVideoFiles,
+    uploadedVideoFilePaths, setUploadedVideoFilePaths,
 
     // Kling v2.6 Pro
     klingV26AspectRatio, setKlingV26AspectRatio,
