@@ -88,6 +88,11 @@ export interface PresetSetters {
     setUploadedVideos: (v: string[]) => void
     // 注意：setUploadedVideoFiles 不在这里定义，因为 File 对象无法序列化
 
+    // Kling v2.6 Pro
+    setKlingV26AspectRatio: (v: string) => void
+    setKlingV26GenerateAudio: (v: boolean) => void
+    setKlingV26CfgScale: (v: number) => void
+
     // 音频参数
     setVoiceId: (v: string) => void
     setAudioSpec: (v: 'hd' | 'turbo') => void
@@ -197,6 +202,11 @@ export function createPresetSetterMap(
         uploadedVideos: setters.setUploadedVideos,
         // 注意：视频 File 对象无法序列化，不支持保存到预设
         // uploadedVideoFiles 不添加到映射中
+
+        // Kling v2.6 Pro
+        klingV26AspectRatio: setters.setKlingV26AspectRatio,
+        klingV26GenerateAudio: setters.setKlingV26GenerateAudio,
+        klingV26CfgScale: setters.setKlingV26CfgScale,
 
         // 音频参数
         voiceId: setters.setVoiceId,

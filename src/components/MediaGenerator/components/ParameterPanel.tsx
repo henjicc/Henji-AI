@@ -25,7 +25,8 @@ import {
   modelscopeZImageTurboParams,
   qwenImageEdit2509Params,
   falAiKlingImageO1Params,
-  klingVideoO1Params
+  klingVideoO1Params,
+  falAiKlingVideoV26ProParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -202,6 +203,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Kling Video v2.6 Pro 参数 */}
+        {(selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && (
+          <SchemaForm
+            schema={falAiKlingVideoV26ProParams}
+            values={{
+              videoDuration: values.videoDuration,
+              klingV26AspectRatio: values.klingV26AspectRatio,
+              klingV26GenerateAudio: values.klingV26GenerateAudio,
+              klingV26CfgScale: values.klingV26CfgScale,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -212,7 +228,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'veo3.1' &&
          selectedModel !== 'fal-ai-veo-3.1' &&
          selectedModel !== 'fal-ai-kling-video-o1' &&
-         selectedModel !== 'kling-video-o1' && (
+         selectedModel !== 'kling-video-o1' &&
+         selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
+         selectedModel !== 'kling-video-v2.6-pro' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -234,7 +252,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'veo3.1' &&
          selectedModel !== 'fal-ai-veo-3.1' &&
          selectedModel !== 'fal-ai-kling-video-o1' &&
-         selectedModel !== 'kling-video-o1' && (
+         selectedModel !== 'kling-video-o1' &&
+         selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
+         selectedModel !== 'kling-video-v2.6-pro' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}

@@ -35,6 +35,12 @@ const PRICES = {
         VIDEO_VIDEO: 0.168   // video-to-video-edit & video-to-video-reference
     },
 
+    // Kling Video v2.6 Pro 价格（美元/秒）
+    KLING_VIDEO_V26_PRO: {
+        AUDIO_OFF: 0.07,  // 音频关闭
+        AUDIO_ON: 0.14    // 音频开启
+    },
+
     // 音频（每万字符）
     SPEECH_HD: 3.5,
     SPEECH_TURBO: 2,
@@ -271,6 +277,24 @@ export const pricingConfigs: PricingConfig[] = [
                 mode === 'video-to-video-edit' || mode === 'video-to-video-reference'
                     ? PRICES.KLING_VIDEO_O1.VIDEO_VIDEO
                     : PRICES.KLING_VIDEO_O1.IMAGE_VIDEO
+
+            const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
+            return formatPrice(totalPriceCNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-kling-video-v2.6-pro',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const duration = params.videoDuration || 5
+            const generateAudio = params.klingV26GenerateAudio !== undefined ? params.klingV26GenerateAudio : true
+
+            // 根据音频开关选择价格
+            const pricePerSecondUSD = generateAudio
+                ? PRICES.KLING_VIDEO_V26_PRO.AUDIO_ON
+                : PRICES.KLING_VIDEO_V26_PRO.AUDIO_OFF
 
             const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
             return formatPrice(totalPriceCNY)

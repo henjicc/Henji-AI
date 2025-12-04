@@ -77,6 +77,11 @@ interface BuildOptionsParams {
   uploadedVideos?: string[]  // 视频缩略图（用于 UI）
   uploadedVideoFiles?: File[]  // 视频 File 对象（延迟读取）
 
+  // Kling v2.6 Pro
+  klingV26AspectRatio?: string
+  klingV26GenerateAudio?: boolean
+  klingV26CfgScale?: number
+
   // 音频
   audioSpeed: number
   audioEmotion: string
@@ -460,6 +465,37 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     if (params.klingElements && params.klingElements.length > 0) {
       options.elements = params.klingElements
     }
+  }
+
+  // Kling Video v2.6 Pro
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro')) {
+    options.duration = params.videoDuration
+    options.aspectRatio = params.klingV26AspectRatio
+    options.klingV26GenerateAudio = params.klingV26GenerateAudio
+    options.klingV26CfgScale = params.klingV26CfgScale
+
+    // 处理图片上传
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    console.log('[optionsBuilder] Kling v2.6 Pro 参数:', {
+      duration: options.duration,
+      aspectRatio: options.aspectRatio,
+      generateAudio: options.klingV26GenerateAudio,
+      cfgScale: options.klingV26CfgScale,
+      images: options.images?.length || 0
+    })
   }
 
   // 音频模型

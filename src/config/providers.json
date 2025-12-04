@@ -242,6 +242,20 @@
             "type": "polling",
             "expectedPolls": 40
           }
+        },
+        {
+          "id": "fal-ai-kling-video-v2.6-pro",
+          "name": "可灵 2.6 Pro",
+          "type": "video",
+          "description": "快手可灵 2.6 Pro 视频生成模型，支持文生视频和图生视频，具有电影级视觉效果和原生音频生成",
+          "functions": [
+            "文生视频",
+            "图生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 45
+          }
         }
       ]
     },

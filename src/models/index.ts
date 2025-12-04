@@ -25,6 +25,7 @@ export { falAiBytedanceSeedreamV4Params } from './fal-ai-bytedance-seedream-v4'
 export { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 export { falAiKlingImageO1Params } from './fal-ai-kling-image-o1'
 export { klingVideoO1Params } from './kling-video-o1'
+export { falAiKlingVideoV26ProParams } from './fal-ai-kling-video-v2.6-pro'
 
 // 魔搭模型
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
@@ -60,6 +61,7 @@ import { falAiBytedanceSeedreamV4Params } from './fal-ai-bytedance-seedream-v4'
 import { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 import { falAiKlingImageO1Params } from './fal-ai-kling-image-o1'
 import { klingVideoO1Params } from './kling-video-o1'
+import { falAiKlingVideoV26ProParams } from './fal-ai-kling-video-v2.6-pro'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
@@ -94,6 +96,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'kling-o1': falAiKlingImageO1Params,
   'fal-ai-kling-video-o1': klingVideoO1Params,
   'kling-video-o1': klingVideoO1Params,
+  'fal-ai-kling-video-v2.6-pro': falAiKlingVideoV26ProParams,
+  'kling-video-v2.6-pro': falAiKlingVideoV26ProParams,
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,

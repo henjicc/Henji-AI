@@ -114,6 +114,11 @@ export const useMediaGeneratorState = () => {
   const [uploadedVideos, setUploadedVideos] = useState<string[]>([])  // 视频缩略图（用于 UI 预览）
   const [uploadedVideoFiles, setUploadedVideoFiles] = useState<File[]>([])  // 视频 File 对象（延迟读取）
 
+  // Kling v2.6 Pro 参数
+  const [klingV26AspectRatio, setKlingV26AspectRatio] = useState('16:9')
+  const [klingV26GenerateAudio, setKlingV26GenerateAudio] = useState(true)
+  const [klingV26CfgScale, setKlingV26CfgScale] = useState(0.5)
+
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
@@ -226,6 +231,11 @@ export const useMediaGeneratorState = () => {
     klingElements, setKlingElements,
     uploadedVideos, setUploadedVideos,
     uploadedVideoFiles, setUploadedVideoFiles,
+
+    // Kling v2.6 Pro
+    klingV26AspectRatio, setKlingV26AspectRatio,
+    klingV26GenerateAudio, setKlingV26GenerateAudio,
+    klingV26CfgScale, setKlingV26CfgScale,
 
     // UI
     isDraggingImage, setIsDraggingImage

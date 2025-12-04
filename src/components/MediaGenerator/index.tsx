@@ -115,6 +115,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKlingElements: state.setKlingElements,
     setUploadedVideos: state.setUploadedVideos,
     setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
+    setKlingV26AspectRatio: state.setKlingV26AspectRatio,
+    setKlingV26GenerateAudio: state.setKlingV26GenerateAudio,
+    setKlingV26CfgScale: state.setKlingV26CfgScale,
     setVoiceId: state.setVoiceId,
     setAudioSpec: state.setAudioSpec,
     setAudioEmotion: state.setAudioEmotion,
@@ -497,6 +500,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       klingMode: state.setKlingMode,
       klingAspectRatio: state.setKlingAspectRatio,
       klingKeepAudio: state.setKlingKeepAudio,
+      // Kling v2.6 Pro
+      klingV26AspectRatio: state.setKlingV26AspectRatio,
+      klingV26GenerateAudio: state.setKlingV26GenerateAudio,
+      klingV26CfgScale: state.setKlingV26CfgScale,
       // Hailuo
       hailuoFastMode: state.setHailuoFastMode,
       minimaxEnablePromptExpansion: state.setMinimaxEnablePromptExpansion,
@@ -640,6 +647,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         klingElements: state.klingElements,
         uploadedVideos: state.uploadedVideos,
         uploadedVideoFiles: state.uploadedVideoFiles,
+        klingV26AspectRatio: state.klingV26AspectRatio,
+        klingV26GenerateAudio: state.klingV26GenerateAudio,
+        klingV26CfgScale: state.klingV26CfgScale,
         audioSpeed: state.audioSpeed,
         audioEmotion: state.audioEmotion,
         voiceId: state.voiceId,
@@ -846,6 +856,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               veoResolution: state.veoResolution,
               veoEnhancePrompt: state.veoEnhancePrompt,
               veoAutoFix: state.veoAutoFix,
+              klingMode: state.klingMode,
+              klingV26GenerateAudio: state.klingV26GenerateAudio,
               input: state.input,
               audioSpec: state.audioSpec
             }}

@@ -1,0 +1,180 @@
+# Kling Video v2.6 Image to Video
+
+> Kling 2.6 Pro: Top-tier image-to-video with cinematic visuals, fluid motion, and native audio generation.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/kling-video/v2.6/pro/image-to-video`
+- **Model ID**: `fal-ai/kling-video/v2.6/pro/image-to-video`
+- **Category**: image-to-video
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_)
+  - Examples: "A king walks slowly and says \"My people, here I am! I am here to save you all\""
+
+- **`image_url`** (`string`, _required_):
+  URL of the image to be used for the video
+  - Examples: "https://v3b.fal.media/files/b/0a84ab29/BSJXz9Ht-jgRgMf4IGxLU_upscaled.png"
+
+- **`duration`** (`DurationEnum`, _optional_):
+  The duration of the generated video in seconds Default value: `"5"`
+  - Default: `"5"`
+  - Options: `"5"`, `"10"`
+
+- **`negative_prompt`** (`string`, _optional_):
+   Default value: `"blur, distort, and low quality"`
+  - Default: `"blur, distort, and low quality"`
+
+- **`generate_audio`** (`boolean`, _optional_):
+  Whether to generate native audio for the video. Supports Chinese and English voice output. Other languages are automatically translated to English. For English speech, use lowercase letters; for acronyms or proper nouns, use uppercase. Default value: `true`
+  - Default: `true`
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "A king walks slowly and says \"My people, here I am! I am here to save you all\"",
+  "image_url": "https://v3b.fal.media/files/b/0a84ab29/BSJXz9Ht-jgRgMf4IGxLU_upscaled.png"
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "A king walks slowly and says \"My people, here I am! I am here to save you all\"",
+  "image_url": "https://v3b.fal.media/files/b/0a84ab29/BSJXz9Ht-jgRgMf4IGxLU_upscaled.png",
+  "duration": "5",
+  "negative_prompt": "blur, distort, and low quality",
+  "generate_audio": true
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`File`, _required_):
+  The generated video
+  - Examples: {"file_size":11814817,"file_name":"output.mp4","content_type":"video/mp4","url":"https://v3b.fal.media/files/b/0a84ab51/Qr1twf8UgtD5rZHpNXC2P_output.mp4"}
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "file_size": 11814817,
+    "file_name": "output.mp4",
+    "content_type": "video/mp4",
+    "url": "https://v3b.fal.media/files/b/0a84ab51/Qr1twf8UgtD5rZHpNXC2P_output.mp4"
+  }
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/kling-video/v2.6/pro/image-to-video \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "A king walks slowly and says \"My people, here I am! I am here to save you all\"",
+     "image_url": "https://v3b.fal.media/files/b/0a84ab29/BSJXz9Ht-jgRgMf4IGxLU_upscaled.png"
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/kling-video/v2.6/pro/image-to-video",
+    arguments={
+        "prompt": "A king walks slowly and says \"My people, here I am! I am here to save you all\"",
+        "image_url": "https://v3b.fal.media/files/b/0a84ab29/BSJXz9Ht-jgRgMf4IGxLU_upscaled.png"
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/kling-video/v2.6/pro/image-to-video", {
+  input: {
+    prompt: "A king walks slowly and says \"My people, here I am! I am here to save you all\"",
+    image_url: "https://v3b.fal.media/files/b/0a84ab29/BSJXz9Ht-jgRgMf4IGxLU_upscaled.png"
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/kling-video/v2.6/pro/image-to-video)
+- [API Documentation](https://fal.ai/models/fal-ai/kling-video/v2.6/pro/image-to-video/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/kling-video/v2.6/pro/image-to-video)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)
