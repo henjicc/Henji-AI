@@ -871,6 +871,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onVideoUpload={videoUpload.handleVideoUpload}
         onVideoRemove={videoUpload.handleVideoRemove}
         onVideoReplace={videoUpload.handleVideoReplace}
+        onVideoClick={(videoUrl: string) => {
+          // 打开视频查看器，传递视频 URL 和文件路径（如果有）
+          const index = state.uploadedVideos.indexOf(videoUrl)
+          const filePath = index >= 0 ? state.uploadedVideoFilePaths[index] : undefined
+          // 触发自定义事件，让 App.tsx 打开视频查看器
+          window.dispatchEvent(new CustomEvent('open-video-viewer', {
+            detail: { url: videoUrl, filePath }
+          }))
+        }}
         onGenerate={handleGenerate}
       />
 

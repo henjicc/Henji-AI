@@ -35,6 +35,7 @@ interface InputAreaProps {
   onVideoUpload?: (files: File[]) => void
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
+  onVideoClick?: (videoUrl: string) => void
 
   // 生成回调
   onGenerate: () => void
@@ -69,6 +70,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onVideoUpload,
   onVideoRemove,
   onVideoReplace,
+  onVideoClick,
   onGenerate
 }) => {
   // 计算最大图片数
@@ -187,6 +189,22 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
   }
 
+  // 处理混合文件点击（视频+图片）
+  const handleMixedFileClick = (fileUrl: string, fileList: string[]) => {
+    const index = fileList.indexOf(fileUrl)
+    if (index < uploadedVideos.length) {
+      // 点击视频
+      if (onVideoClick) {
+        onVideoClick(fileUrl)
+      }
+    } else {
+      // 点击图片
+      if (onImageClick) {
+        onImageClick(fileUrl, fileList.slice(uploadedVideos.length))
+      }
+    }
+  }
+
   // 合并视频和图片文件列表
   const mixedFiles = needsVideoUpload
     ? (needsVideoOnly ? uploadedVideos : [...uploadedVideos, ...uploadedImages])
@@ -219,7 +237,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
             onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
             onReorder={needsVideoUpload ? () => {} : onImageReorder}
-            onImageClick={onImageClick}
+            onImageClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
             accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
             multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
             maxCount={mixedMaxCount}

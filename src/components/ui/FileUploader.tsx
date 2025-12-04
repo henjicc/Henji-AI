@@ -343,7 +343,8 @@ export default function FileUploader({
             if (!moved) {
                 // 如果没有移动，触发点击查看
                 const clickedIndex = dragState.fromIndex
-                if (clickedIndex !== null && onImageClick && accept.startsWith('image')) {
+                if (clickedIndex !== null && onImageClick) {
+                    // 支持图片、视频和混合模式的点击
                     onImageClick(files[clickedIndex], files)
                 }
                 setDragState({
@@ -472,16 +473,17 @@ export default function FileUploader({
                                     className="w-full h-full object-cover rounded-lg border-2 border-white"
                                     draggable={false}
                                 />
-                            ) : accept.startsWith('video') ? (
+                            ) : accept.startsWith('video') || accept.includes('video') ? (
                                 <div className="relative w-full h-full">
-                                    <img
+                                    <video
                                         src={file}
-                                        alt={`Video ${index + 1}`}
                                         className="w-full h-full object-cover rounded-lg border-2 border-white"
-                                        draggable={false}
+                                        muted
+                                        playsInline
+                                        preload="metadata"
                                     />
                                     {/* 播放图标覆盖层 */}
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M8 5v14l11-7z" />
                                         </svg>

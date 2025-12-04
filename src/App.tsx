@@ -1678,6 +1678,19 @@ const App: React.FC = () => {
     }
   }, [isTasksLoaded])
 
+  // 监听打开视频查看器的事件（来自 MediaGenerator）
+  useEffect(() => {
+    const handleOpenVideoViewer = (event: CustomEvent) => {
+      const { url, filePath } = event.detail
+      openVideoViewer(url, filePath)
+    }
+
+    window.addEventListener('open-video-viewer', handleOpenVideoViewer as EventListener)
+    return () => {
+      window.removeEventListener('open-video-viewer', handleOpenVideoViewer as EventListener)
+    }
+  }, [])
+
   // 保存历史到文件（避免本地存储配额）
   // 重要：只保存 filePath，不保存 url 字段，防止 base64 数据膨胀 history.json
   useEffect(() => {
@@ -2350,6 +2363,9 @@ const App: React.FC = () => {
                                   className="w-16 h-16 rounded cursor-pointer transition-all overflow-hidden border border-zinc-700/50 hover:brightness-75 relative"
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    // 打开视频查看器，传递视频 URL 和文件路径（如果有）
+                                    const filePath = task.uploadedVideoFilePaths?.[index]
+                                    openVideoViewer(video, filePath)
                                   }}
                                 >
                                   <video
@@ -2370,6 +2386,10 @@ const App: React.FC = () => {
                                   className="w-16 h-16 rounded bg-zinc-700/50 flex items-center justify-center text-xs cursor-pointer transition-all border border-zinc-700/50 hover:brightness-75"
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    // 点击 "+N" 时打开第4个视频
+                                    const video = task.videos![3]
+                                    const filePath = task.uploadedVideoFilePaths?.[3]
+                                    openVideoViewer(video, filePath)
                                   }}
                                 >
                                   +{task.videos.length - 3}
