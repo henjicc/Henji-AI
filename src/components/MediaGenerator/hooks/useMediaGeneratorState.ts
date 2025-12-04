@@ -106,6 +106,14 @@ export const useMediaGeneratorState = () => {
   const [languageBoost, setLanguageBoost] = useState<string>('auto')
   const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
 
+  // Kling O1 参数
+  const [klingMode, setKlingMode] = useState<'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference'>('image-to-video')
+  const [klingAspectRatio, setKlingAspectRatio] = useState('16:9')
+  const [klingKeepAudio, setKlingKeepAudio] = useState(false)
+  const [klingElements, setKlingElements] = useState<any[]>([])  // Element[] 类型稍后定义
+  const [uploadedVideos, setUploadedVideos] = useState<string[]>([])  // 视频缩略图（用于 UI 预览）
+  const [uploadedVideoFiles, setUploadedVideoFiles] = useState<File[]>([])  // 视频 File 对象（延迟读取）
+
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
@@ -210,6 +218,14 @@ export const useMediaGeneratorState = () => {
     textNormalization, setTextNormalization,
     languageBoost, setLanguageBoost,
     audioSpec, setAudioSpec,
+
+    // Kling O1
+    klingMode, setKlingMode,
+    klingAspectRatio, setKlingAspectRatio,
+    klingKeepAudio, setKlingKeepAudio,
+    klingElements, setKlingElements,
+    uploadedVideos, setUploadedVideos,
+    uploadedVideoFiles, setUploadedVideoFiles,
 
     // UI
     isDraggingImage, setIsDraggingImage

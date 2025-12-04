@@ -29,6 +29,12 @@ const PRICES = {
     NANO_BANANA_PRO: 0.15, // USD
     KLING_IMAGE_O1: 0.028, // USD
 
+    // Kling Video O1 价格（美元/秒）
+    KLING_VIDEO_O1: {
+        IMAGE_VIDEO: 0.112,  // image-to-video & reference-to-video
+        VIDEO_VIDEO: 0.168   // video-to-video-edit & video-to-video-reference
+    },
+
     // 音频（每万字符）
     SPEECH_HD: 3.5,
     SPEECH_TURBO: 2,
@@ -249,6 +255,25 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const numImages = params.num_images || 1
             return formatPrice(PRICES.KLING_IMAGE_O1 * USD_TO_CNY * numImages)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-kling-video-o1',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const duration = params.videoDuration || 5
+            const mode = params.klingMode || 'image-to-video'
+
+            // 根据模式选择价格
+            const pricePerSecondUSD =
+                mode === 'video-to-video-edit' || mode === 'video-to-video-reference'
+                    ? PRICES.KLING_VIDEO_O1.VIDEO_VIDEO
+                    : PRICES.KLING_VIDEO_O1.IMAGE_VIDEO
+
+            const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
+            return formatPrice(totalPriceCNY)
         }
     },
 

@@ -10,6 +10,7 @@ import { getModelDefaultValues, getAutoSwitchValues } from '@/models'
 // 导入提取的模块
 import { useMediaGeneratorState } from './hooks/useMediaGeneratorState'
 import { useImageUpload } from './hooks/useImageUpload'
+import { useVideoUpload } from './hooks/useVideoUpload'
 import { buildGenerateOptions } from './builders/optionsBuilder'
 import { calculateSmartResolution, calculateSeedreamSmartResolution, calculatePPIOSeedreamSmartResolution, getActualResolution } from './utils/resolutionUtils'
 import { getMaxImageCount } from './utils/constants'
@@ -49,6 +50,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.setUploadedImages,
     state.uploadedFilePaths,
     state.setUploadedFilePaths
+  )
+
+  // 使用视频上传 hook
+  const videoUpload = useVideoUpload(
+    state.uploadedVideos,
+    state.setUploadedVideos,
+    state.uploadedVideoFiles,
+    state.setUploadedVideoFiles
   )
 
   // 获取当前选择的供应商和模型
@@ -100,6 +109,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setWanResolution: state.setWanResolution,
     setWanPromptExtend: state.setWanPromptExtend,
     setWanAudio: state.setWanAudio,
+    setKlingMode: state.setKlingMode,
+    setKlingAspectRatio: state.setKlingAspectRatio,
+    setKlingKeepAudio: state.setKlingKeepAudio,
+    setKlingElements: state.setKlingElements,
+    setUploadedVideos: state.setUploadedVideos,
+    setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
     setVoiceId: state.setVoiceId,
     setAudioSpec: state.setAudioSpec,
     setAudioEmotion: state.setAudioEmotion,
@@ -478,6 +493,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       viduBgm: state.setViduBgm,
       // Kling
       klingCfgScale: state.setKlingCfgScale,
+      // Kling Video O1
+      klingMode: state.setKlingMode,
+      klingAspectRatio: state.setKlingAspectRatio,
+      klingKeepAudio: state.setKlingKeepAudio,
       // Hailuo
       hailuoFastMode: state.setHailuoFastMode,
       minimaxEnablePromptExpansion: state.setMinimaxEnablePromptExpansion,
@@ -615,6 +634,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         veoGenerateAudio: state.veoGenerateAudio,
         veoAutoFix: state.veoAutoFix,
         veoFastMode: state.veoFastMode,
+        klingMode: state.klingMode,
+        klingAspectRatio: state.klingAspectRatio,
+        klingKeepAudio: state.klingKeepAudio,
+        klingElements: state.klingElements,
+        uploadedVideos: state.uploadedVideos,
+        uploadedVideoFiles: state.uploadedVideoFiles,
         audioSpeed: state.audioSpeed,
         audioEmotion: state.audioEmotion,
         voiceId: state.voiceId,
@@ -729,6 +754,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         isGenerating={isGenerating}
         viduMode={state.viduMode}
         veoMode={state.veoMode}
+        klingMode={state.klingMode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(state.selectedModel, state.selectedModel === 'vidu-q1' ? state.viduMode : (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode : undefined)
@@ -747,6 +773,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           imageUpload.handleImageFileDrop(files, maxCount)
         }}
         onDragStateChange={imageUpload.setIsDraggingImage}
+        uploadedVideos={state.uploadedVideos}
+        onVideoUpload={videoUpload.handleVideoUpload}
+        onVideoRemove={videoUpload.handleVideoRemove}
+        onVideoReplace={videoUpload.handleVideoReplace}
         onGenerate={handleGenerate}
       />
 

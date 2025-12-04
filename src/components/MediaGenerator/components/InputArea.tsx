@@ -11,9 +11,10 @@ interface InputAreaProps {
   isLoading: boolean
   isGenerating?: boolean
 
-  // Vidu/Veo 模式（用于计算最大图片数）
+  // Vidu/Veo/Kling 模式（用于计算最大图片数）
   viduMode?: string
   veoMode?: string
+  klingMode?: string
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -27,6 +28,12 @@ interface InputAreaProps {
   onPaste: (e: React.ClipboardEvent) => void
   onImageDrop: (files: File[]) => void
   onDragStateChange: (isDragging: boolean) => void
+
+  // 视频处理回调
+  uploadedVideos?: string[]
+  onVideoUpload?: (files: File[]) => void
+  onVideoRemove?: (index: number) => void
+  onVideoReplace?: (index: number, file: File) => void
 
   // 生成回调
   onGenerate: () => void
@@ -46,6 +53,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   isGenerating,
   viduMode,
   veoMode,
+  klingMode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -55,6 +63,10 @@ const InputArea: React.FC<InputAreaProps> = ({
   onPaste,
   onImageDrop,
   onDragStateChange,
+  uploadedVideos = [],
+  onVideoUpload,
+  onVideoRemove,
+  onVideoReplace,
   onGenerate
 }) => {
   // 计算最大图片数
@@ -115,25 +127,85 @@ const InputArea: React.FC<InputAreaProps> = ({
     return !input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0)
   }
 
+  // 检查是否需要显示视频上传（Kling Video O1 的视频编辑和视频参考模式）
+  const needsVideoUpload = (selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
+    (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')
+
+  // 处理混合文件上传（视频+图片）
+  const handleMixedFileUpload = (files: File[]) => {
+    const videoFiles = files.filter(f => f.type.startsWith('video/'))
+    const imageFiles = files.filter(f => f.type.startsWith('image/'))
+
+    // 先处理视频（只取第一个）
+    if (videoFiles.length > 0 && onVideoUpload) {
+      onVideoUpload([videoFiles[0]])
+    }
+
+    // 再处理图片
+    if (imageFiles.length > 0) {
+      onImageUpload(imageFiles)
+    }
+  }
+
+  // 处理混合文件移除
+  const handleMixedFileRemove = (index: number) => {
+    // 视频在前，图片在后
+    if (index < uploadedVideos.length) {
+      // 移除视频
+      if (onVideoRemove) {
+        onVideoRemove(index)
+      }
+    } else {
+      // 移除图片
+      const imageIndex = index - uploadedVideos.length
+      onImageRemove(imageIndex)
+    }
+  }
+
+  // 处理混合文件替换
+  const handleMixedFileReplace = (index: number, file: File) => {
+    if (index < uploadedVideos.length) {
+      // 替换视频
+      if (onVideoReplace) {
+        onVideoReplace(index, file)
+      }
+    } else {
+      // 替换图片
+      const imageIndex = index - uploadedVideos.length
+      onImageReplace(imageIndex, file)
+    }
+  }
+
+  // 合并视频和图片文件列表
+  const mixedFiles = needsVideoUpload ? [...uploadedVideos, ...uploadedImages] : uploadedImages
+
+  // 计算混合上传的最大文件数
+  const mixedMaxCount = needsVideoUpload ? 1 + maxImageCount : maxImageCount
+
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
-      {/* 图片上传和预览区域 */}
+      {/* 统一的文件上传区域（支持视频+图片混合上传） */}
       {currentModel?.type !== 'audio' &&
        selectedModel !== 'fal-ai-z-image-turbo' &&
        !isModelscopeModel &&
        // 自定义模型：只有支持图片编辑的才显示图片上传
        !(selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing) && (
         <div className="mb-3">
+          {needsVideoUpload && (
+            <div className="text-xs text-zinc-400 mb-2">
+              上传视频和图片（视频1个 + 图片最多{maxImageCount}张）
+            </div>
+          )}
           <FileUploader
-            files={uploadedImages}
-            onUpload={onImageUpload}
-            onRemove={onImageRemove}
-            onReplace={onImageReplace}
-            onReorder={onImageReorder}
+            files={mixedFiles}
+            onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
+            onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
+            onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
+            onReorder={needsVideoUpload ? () => {} : onImageReorder}
             onImageClick={onImageClick}
-            accept="image/*"
-            multiple={isMultiple}
-            maxCount={maxImageCount}
+            accept={needsVideoUpload ? "video/*,image/*" : "image/*"}
+            multiple={needsVideoUpload ? true : isMultiple}
+            maxCount={mixedMaxCount}
             {...{ onDragStateChange } as any}
           />
         </div>

@@ -69,6 +69,14 @@ interface BuildOptionsParams {
   veoAutoFix: boolean
   veoFastMode: boolean
 
+  // Kling Video O1
+  klingMode?: string
+  klingAspectRatio?: string
+  klingKeepAudio?: boolean
+  klingElements?: any[]
+  uploadedVideos?: string[]  // 视频缩略图（用于 UI）
+  uploadedVideoFiles?: File[]  // 视频 File 对象（延迟读取）
+
   // 音频
   audioSpeed: number
   audioEmotion: string
@@ -409,6 +417,48 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       }
       setUploadedFilePaths(paths)
       options.uploadedFilePaths = paths
+    }
+  }
+
+  // Kling Video O1
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1')) {
+    options.mode = params.klingMode || 'image-to-video'
+    options.duration = params.videoDuration
+    options.aspectRatio = params.klingAspectRatio
+    options.keepAudio = params.klingKeepAudio
+
+    // 处理图片上传
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    // 处理视频上传（如果有）
+    // 注意：uploadedVideoFiles 存储的是 File 对象，这里需要转换为 base64
+    if (params.uploadedVideoFiles && params.uploadedVideoFiles.length > 0) {
+      const videoFile = params.uploadedVideoFiles[0]
+      // 将 File 对象转换为 base64
+      const videoDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(videoFile)
+      })
+      options.videos = [videoDataUrl]
+    }
+
+    // 处理 Elements（如果有）
+    if (params.klingElements && params.klingElements.length > 0) {
+      options.elements = params.klingElements
     }
   }
 

@@ -24,7 +24,8 @@ import {
   modelscopeCustomParams,
   modelscopeZImageTurboParams,
   qwenImageEdit2509Params,
-  falAiKlingImageO1Params
+  falAiKlingImageO1Params,
+  klingVideoO1Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -186,6 +187,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Kling Video O1 参数 */}
+        {(selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') && (
+          <SchemaForm
+            schema={klingVideoO1Params}
+            values={{
+              klingMode: values.klingMode,
+              videoDuration: values.videoDuration,
+              klingAspectRatio: values.klingAspectRatio,
+              klingKeepAudio: values.klingKeepAudio,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -194,7 +210,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'seedance-v1-lite' &&
          selectedModel !== 'seedance-v1-pro' &&
          selectedModel !== 'veo3.1' &&
-         selectedModel !== 'fal-ai-veo-3.1' && (
+         selectedModel !== 'fal-ai-veo-3.1' &&
+         selectedModel !== 'fal-ai-kling-video-o1' &&
+         selectedModel !== 'kling-video-o1' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -214,7 +232,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'seedance-v1-lite' &&
          selectedModel !== 'seedance-v1-pro' &&
          selectedModel !== 'veo3.1' &&
-         selectedModel !== 'fal-ai-veo-3.1' && (
+         selectedModel !== 'fal-ai-veo-3.1' &&
+         selectedModel !== 'fal-ai-kling-video-o1' &&
+         selectedModel !== 'kling-video-o1' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}

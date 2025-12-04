@@ -80,6 +80,14 @@ export interface PresetSetters {
     setWanPromptExtend: (v: boolean) => void
     setWanAudio: (v: boolean) => void
 
+    // Kling Video O1
+    setKlingMode: (v: 'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference') => void
+    setKlingAspectRatio: (v: string) => void
+    setKlingKeepAudio: (v: boolean) => void
+    setKlingElements: (v: any[]) => void
+    setUploadedVideos: (v: string[]) => void
+    // 注意：setUploadedVideoFiles 不在这里定义，因为 File 对象无法序列化
+
     // 音频参数
     setVoiceId: (v: string) => void
     setAudioSpec: (v: 'hd' | 'turbo') => void
@@ -180,6 +188,15 @@ export function createPresetSetterMap(
         wanResolution: setters.setWanResolution,
         wanPromptExtend: setters.setWanPromptExtend,
         wanAudio: setters.setWanAudio,
+
+        // Kling Video O1
+        klingMode: setters.setKlingMode,
+        klingAspectRatio: setters.setKlingAspectRatio,
+        klingKeepAudio: setters.setKlingKeepAudio,
+        klingElements: setters.setKlingElements,
+        uploadedVideos: setters.setUploadedVideos,
+        // 注意：视频 File 对象无法序列化，不支持保存到预设
+        // uploadedVideoFiles 不添加到映射中
 
         // 音频参数
         voiceId: setters.setVoiceId,

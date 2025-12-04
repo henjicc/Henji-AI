@@ -119,6 +119,61 @@ export class FalAdapter extends BaseAdapter {
     return uploadedUrls
   }
 
+  /**
+   * 上传单个视频到 fal CDN（如果需要）
+   * @param video - 视频（可能是 base64 data URI 或 URL）
+   * @returns fal CDN URL
+   */
+  private async uploadVideoToFalCDN(video: string): Promise<string> {
+    // 1. 如果已经是 HTTP/HTTPS URL，直接返回
+    if (video.startsWith('http://') || video.startsWith('https://')) {
+      this.log('视频已是 URL，跳过上传', video.substring(0, 50) + '...')
+      return video
+    }
+
+    // 2. 如果是 base64 data URI，转换为 Blob 后上传到 fal CDN
+    if (video.startsWith('data:')) {
+      try {
+        this.log('检测到 base64 视频，开始上传到 fal CDN...')
+        // 转换为 Blob 以保留正确的 MIME 类型
+        const blob = this.dataURItoBlob(video)
+        const url = await fal.storage.upload(blob)
+        this.log('视频上传成功，获得 URL:', url)
+        return url
+      } catch (error) {
+        this.log('视频上传失败', error)
+        throw new Error('视频上传失败，请重试')
+      }
+    }
+
+    // 3. 其他情况，抛出错误
+    throw new Error('不支持的视频格式')
+  }
+
+  /**
+   * 批量上传视频到 fal CDN
+   * @param videos - 视频数组
+   * @returns fal CDN URL 数组
+   */
+  private async uploadVideosToFalCDN(videos: string[]): Promise<string[]> {
+    if (!videos || videos.length === 0) {
+      return []
+    }
+
+    this.log(`准备上传 ${videos.length} 个视频到 fal CDN...`)
+
+    // 并行上传所有视频
+    const uploadedUrls = await Promise.all(
+      videos.map((video, index) => {
+        this.log(`上传第 ${index + 1}/${videos.length} 个视频...`)
+        return this.uploadVideoToFalCDN(video)
+      })
+    )
+
+    this.log(`所有视频上传完成，共 ${uploadedUrls.length} 个`)
+    return uploadedUrls
+  }
+
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
       // 1. 如果有图片，先上传到 fal CDN
@@ -254,10 +309,15 @@ export class FalAdapter extends BaseAdapter {
         params.images = await this.uploadImagesToFalCDN(params.images)
       }
 
-      // 2. 查找路由
-      const route = findRoute('veo3.1')
+      // 2. 如果有视频，先上传到 fal CDN
+      if (params.videos && params.videos.length > 0) {
+        params.videos = await this.uploadVideosToFalCDN(params.videos)
+      }
+
+      // 3. 查找路由
+      const route = findRoute(params.model)
       if (!route || !route.buildVideoRequest) {
-        throw new Error('Unsupported video model')
+        throw new Error(`Unsupported video model: ${params.model}`)
       }
 
       // 3. 构建请求

@@ -472,6 +472,21 @@ export default function FileUploader({
                                     className="w-full h-full object-cover rounded-lg border-2 border-white"
                                     draggable={false}
                                 />
+                            ) : accept.startsWith('video') ? (
+                                <div className="relative w-full h-full">
+                                    <img
+                                        src={file}
+                                        alt={`Video ${index + 1}`}
+                                        className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                        draggable={false}
+                                    />
+                                    {/* 播放图标覆盖层 */}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-lg">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                    </div>
+                                </div>
                             ) : (
                                 <div className="w-full h-full bg-zinc-800 rounded-lg border-2 border-zinc-600 flex items-center justify-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

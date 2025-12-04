@@ -5,6 +5,7 @@ import { falAiBytedanceSeedreamV4Route } from './fal-ai-bytedance-seedream-v4'
 import { falAiBytedanceSeedreamV45Route } from './fal-ai-bytedance-seedream-v4.5'
 import { falAiZImageTurboRoute } from './fal-ai-z-image-turbo'
 import { falAiKlingImageO1Route } from './fal-ai-kling-image-o1'
+import { falAiKlingVideoO1Route } from './fal-ai-kling-video-o1'
 
 /**
  * 模型路由接口
@@ -17,15 +18,17 @@ export interface FalModelRoute {
 
 /**
  * 所有 Fal 模型路由
+ * 注意：路由顺序很重要！更具体的路由应该放在前面
  */
 export const falModelRoutes: FalModelRoute[] = [
   falAiNanoBananaRoute,
   falAiNanoBananaProRoute,
+  falAiKlingVideoO1Route,  // Kling Video O1 必须在 Veo 3.1 之前
+  falAiKlingImageO1Route,
   falAiVeo31Route,
   falAiBytedanceSeedreamV4Route,
   falAiBytedanceSeedreamV45Route,
-  falAiZImageTurboRoute,
-  falAiKlingImageO1Route
+  falAiZImageTurboRoute
 ]
 
 /**

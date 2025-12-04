@@ -227,6 +227,21 @@
             "type": "polling",
             "expectedPolls": 25
           }
+        },
+        {
+          "id": "fal-ai-kling-video-o1",
+          "name": "可灵视频 O1",
+          "type": "video",
+          "description": "快手可灵视频生成模型，支持图生视频、参考生视频、视频编辑和视频参考",
+          "functions": [
+            "图生视频",
+            "参考生视频",
+            "视频编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 40
+          }
         }
       ]
     },
