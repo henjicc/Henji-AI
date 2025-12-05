@@ -68,6 +68,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             { label: '首尾帧', value: '首尾帧' },
             { label: '参考生视频', value: '参考生视频' },
             { label: '视频编辑', value: '视频编辑' },
+            { label: '视频延长', value: '视频延长' },
             { label: '语音合成', value: '语音合成' }
           ].map(f => (
             <button key={f.value} onClick={() => onFilterFunctionChange(f.value)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterFunction === f.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{f.label}</button>
