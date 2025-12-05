@@ -12,6 +12,7 @@ interface UniversalResolutionSelectorProps {
   customHeight?: string
   qualityValue?: any
   baseSizeValue?: number  // 新增：基数值
+  values?: Record<string, any>  // 新增：完整的参数值对象，用于 hideAspectRatio 判断
   onChange: (value: any) => void
   onWidthChange?: (value: string) => void
   onHeightChange?: (value: string) => void
@@ -33,6 +34,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   customHeight,
   qualityValue,
   baseSizeValue,
+  values,
   onChange,
   onWidthChange,
   onHeightChange,
@@ -282,31 +284,34 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           )}
 
           {/* 选择比例/尺寸/分辨率 */}
-          <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
-            <label className="block text-xs text-zinc-400 mb-2">
-              {config.type === 'aspect_ratio' ? '选择比例' :
-               config.type === 'size' ? '选择尺寸' :
-               '选择分辨率'}
-            </label>
-            <div className={`grid gap-2 ${
-              config.type === 'resolution' ? 'grid-cols-3' : 'grid-cols-4'
-            }`}>
-              {options.map(option => (
-                <button
-                  key={String(option.value)}
-                  onClick={() => onChange(option.value)}
-                  className={`px-2 py-3 ${config.type === 'resolution' ? 'text-sm' : 'text-xs'} rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
-                    value === option.value
-                      ? 'bg-[#007eff] text-white'
-                      : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                  }`}
-                >
-                  {config.visualize && config.type !== 'resolution' && renderVisualization(option.value)}
-                  <span className="font-medium">{option.label}</span>
-                </button>
-              ))}
+          {/* 当 hideAspectRatio 为 true 且 options 为空时，隐藏此部分 */}
+          {!(config.hideAspectRatio && typeof config.hideAspectRatio === 'function' && values && config.hideAspectRatio(values) && options.length === 0) && (
+            <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
+              <label className="block text-xs text-zinc-400 mb-2">
+                {config.type === 'aspect_ratio' ? '选择比例' :
+                 config.type === 'size' ? '选择尺寸' :
+                 '选择分辨率'}
+              </label>
+              <div className={`grid gap-2 ${
+                config.type === 'resolution' ? 'grid-cols-3' : 'grid-cols-4'
+              }`}>
+                {options.map(option => (
+                  <button
+                    key={String(option.value)}
+                    onClick={() => onChange(option.value)}
+                    className={`px-2 py-3 ${config.type === 'resolution' ? 'text-sm' : 'text-xs'} rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
+                      value === option.value
+                        ? 'bg-[#007eff] text-white'
+                        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                    }`}
+                  >
+                    {config.visualize && config.type !== 'resolution' && renderVisualization(option.value)}
+                    <span className="font-medium">{option.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 质量选项（如 2K/4K 或 1K/2K/4K） */}
           {config.qualityOptions && onQualityChange && (

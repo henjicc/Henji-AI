@@ -57,5 +57,15 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
     if (mode === 'reference-to-video') return 7
     return 7 // 文/图生视频允许上传多张图片，然后自动切换模式
   }
+
+  // Vidu Q2: 根据模式动态限制图片数量
+  if (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') {
+    if (mode === 'reference-to-video') return 7  // 参考生视频：最多 7 张
+    if (mode === 'image-to-video') return 1      // 图生视频：最多 1 张
+    if (mode === 'video-extension') return 0     // 视频延长：不支持图片
+    if (mode === 'text-to-video') return 1       // 文生视频：最多 1 张，上传后自动切换到图生视频
+    return 1  // 默认最多 1 张
+  }
+
   return 6 // 默认图片模型最多6张
 }

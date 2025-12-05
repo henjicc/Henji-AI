@@ -82,6 +82,7 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                                     customHeight={values.customHeight}
                                     qualityValue={values[qualityKey]}
                                     baseSizeValue={values[baseSizeKey]}
+                                    values={values}
                                     onChange={(v) => onChange(param.id, v)}
                                     onWidthChange={p.resolutionConfig.customInput ? (v) => onChange('customWidth', v) : undefined}
                                     onHeightChange={p.resolutionConfig.customInput ? (v) => onChange('customHeight', v) : undefined}

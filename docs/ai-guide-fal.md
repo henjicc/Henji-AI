@@ -9,7 +9,7 @@ Fal 适配器使用官方 `@fal-ai/client` SDK，与其他适配器（PPIO、Mod
 可参考 src/adapters/fal 目录下的代码实现。
 一个模型相同版本的不同端点，合并为一个路由，既可以根据用户的输入动态选择不同的端点，在参数面板上设置“模式”选项，用户也可以手动切换端点
 禁止添加与传输负面提示、随机种子参数
-所有与 Fal 模型相关的文件名、变量名、模型 ID 都必须加上供应商前缀，以确保代码一致性和避免命名冲突：
+所有与 Fal 模型相关的文件名、变量名、模型 ID 都必须加上供应商前缀，以确保代码一致性和避免命名冲突，除此以外还需要携带模型版本号：
 
 - **文件名**: 使用 `fal-ai-` 前缀，例如：`fal-ai-kling-image-o1.ts`、`fal-ai-nano-banana.ts`
 - **变量名**: 使用 `falAi` 前缀，例如：`falAiKlingImageO1Route`、`falAiNanoBananaParams`

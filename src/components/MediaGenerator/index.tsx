@@ -132,6 +132,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setLtxFastMode: state.setLtxFastMode,
     setLtxRetakeStartTime: state.setLtxRetakeStartTime,
     setLtxRetakeMode: state.setLtxRetakeMode,
+    setViduQ2Mode: state.setViduQ2Mode,
+    setViduQ2AspectRatio: state.setViduQ2AspectRatio,
+    setViduQ2Resolution: state.setViduQ2Resolution,
+    setViduQ2MovementAmplitude: state.setViduQ2MovementAmplitude,
+    setViduQ2Bgm: state.setViduQ2Bgm,
+    setViduQ2FastMode: state.setViduQ2FastMode,
     setVoiceId: state.setVoiceId,
     setAudioSpec: state.setAudioSpec,
     setAudioEmotion: state.setAudioEmotion,
@@ -489,6 +495,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const prevAutoSwitchStateRef = useRef({
     selectedModel: state.selectedModel,
     uploadedImagesLength: state.uploadedImages.length,
+    uploadedVideosLength: state.uploadedVideos.length,
     modelscopeCustomModel: state.modelscopeCustomModel,
     seedanceMode: state.seedanceMode
   })
@@ -501,6 +508,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     const hasChanged =
       prev.selectedModel !== state.selectedModel ||
       prev.uploadedImagesLength !== state.uploadedImages.length ||
+      prev.uploadedVideosLength !== state.uploadedVideos.length ||
       prev.modelscopeCustomModel !== state.modelscopeCustomModel ||
       prev.seedanceMode !== state.seedanceMode
 
@@ -511,6 +519,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     prevAutoSwitchStateRef.current = {
       selectedModel: state.selectedModel,
       uploadedImagesLength: state.uploadedImages.length,
+      uploadedVideosLength: state.uploadedVideos.length,
       modelscopeCustomModel: state.modelscopeCustomModel,
       seedanceMode: state.seedanceMode
     }
@@ -525,7 +534,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedModel, state.uploadedImages.length, state.modelscopeCustomModel, state.seedanceMode])
+  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.seedanceMode])
 
   // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
   // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
@@ -543,6 +552,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       modelId === 'vidu-q1' ? state.viduMode :
       (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.veoMode :
       (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.seedanceMode :
+      (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.viduQ2Mode :
       undefined
     )
     if (state.uploadedImages.length > max) {
@@ -617,6 +627,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       ltxRetakeDuration: state.setLtxRetakeDuration,
       ltxRetakeStartTime: state.setLtxRetakeStartTime,
       ltxRetakeMode: state.setLtxRetakeMode,
+      // Vidu Q2
+      viduQ2Mode: state.setViduQ2Mode,
+      viduQ2AspectRatio: state.setViduQ2AspectRatio,
+      viduQ2Resolution: state.setViduQ2Resolution,
+      viduQ2MovementAmplitude: state.setViduQ2MovementAmplitude,
+      viduQ2Bgm: state.setViduQ2Bgm,
+      viduQ2FastMode: state.setViduQ2FastMode,
       // Seedream
       maxImages: state.setMaxImages,
       selectedResolution: state.setSelectedResolution,
@@ -773,6 +790,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         ltxRetakeDuration: state.ltxRetakeDuration,
         ltxRetakeStartTime: state.ltxRetakeStartTime,
         ltxRetakeMode: state.ltxRetakeMode,
+        // Vidu Q2 参数
+        viduQ2Mode: state.viduQ2Mode,
+        viduQ2AspectRatio: state.viduQ2AspectRatio,
+        viduQ2Resolution: state.viduQ2Resolution,
+        viduQ2MovementAmplitude: state.viduQ2MovementAmplitude,
+        viduQ2Bgm: state.viduQ2Bgm,
+        viduQ2FastMode: state.viduQ2FastMode,
         audioSpeed: state.audioSpeed,
         audioEmotion: state.audioEmotion,
         voiceId: state.voiceId,
@@ -890,6 +914,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         klingMode={state.klingMode}
         mode={state.mode}
         seedanceMode={state.seedanceMode}
+        viduQ2Mode={state.viduQ2Mode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
@@ -897,6 +922,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             state.selectedModel === 'vidu-q1' ? state.viduMode :
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.viduQ2Mode :
             undefined
           )
           imageUpload.handleImageFileUpload(files, maxCount)
@@ -911,6 +937,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             state.selectedModel === 'vidu-q1' ? state.viduMode :
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.viduQ2Mode :
             undefined
           )
           imageUpload.handlePaste(e, maxCount)
@@ -921,6 +948,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             state.selectedModel === 'vidu-q1' ? state.viduMode :
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.viduQ2Mode :
             undefined
           )
           imageUpload.handleImageFileDrop(files, maxCount)
@@ -1022,6 +1050,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               ltxResolution: state.ltxResolution,
               ltxFastMode: state.ltxFastMode,
               ltxRetakeDuration: state.ltxRetakeDuration,  // 视频编辑模式的时长
+              // Vidu Q2 参数
+              viduQ2Mode: state.viduQ2Mode,
+              viduQ2AspectRatio: state.viduQ2AspectRatio,
+              viduQ2Resolution: state.viduQ2Resolution,
+              viduQ2MovementAmplitude: state.viduQ2MovementAmplitude,
+              viduQ2Bgm: state.viduQ2Bgm,
+              viduQ2FastMode: state.viduQ2FastMode,
               input: state.input,
               audioSpec: state.audioSpec
             }}

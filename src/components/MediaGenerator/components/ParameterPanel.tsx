@@ -29,7 +29,8 @@ import {
   klingVideoO1Params,
   falAiKlingVideoV26ProParams,
   falAiSora2Params,
-  falAiLtx2Params
+  falAiLtx2Params,
+  falAiViduQ2Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -275,6 +276,25 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Vidu Q2 参数 */}
+        {(selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') && (
+          <SchemaForm
+            schema={falAiViduQ2Params}
+            values={{
+              viduQ2Mode: values.viduQ2Mode,
+              viduQ2AspectRatio: values.viduQ2AspectRatio,
+              viduQ2Resolution: values.viduQ2Resolution,
+              videoDuration: values.videoDuration,
+              viduQ2MovementAmplitude: values.viduQ2MovementAmplitude,
+              viduQ2Bgm: values.viduQ2Bgm,
+              viduQ2FastMode: values.viduQ2FastMode,
+              uploadedImages,
+              uploadedVideos: values.uploadedVideos
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -293,7 +313,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-sora-2' &&
          selectedModel !== 'sora-2' &&
          selectedModel !== 'fal-ai-ltx-2' &&
-         selectedModel !== 'ltx-2' && (
+         selectedModel !== 'ltx-2' &&
+         selectedModel !== 'fal-ai-vidu-q2' &&
+         selectedModel !== 'vidu-q2' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}

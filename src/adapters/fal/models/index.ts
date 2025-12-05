@@ -10,6 +10,7 @@ import { falAiKlingVideoO1Route } from './fal-ai-kling-video-o1'
 import { falAiKlingVideoV26ProRoute } from './fal-ai-kling-video-v2.6-pro'
 import { falAiSora2Route } from './fal-ai-sora-2'
 import { falAiLtx2Route } from './fal-ai-ltx-2'
+import { falAiViduQ2Route } from './fal-ai-vidu-q2'
 
 /**
  * 模型路由接口
@@ -32,6 +33,7 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiKlingImageO1Route,
   falAiSora2Route,  // Sora 2
   falAiLtx2Route,  // LTX-2
+  falAiViduQ2Route,  // Vidu Q2
   falAiVeo31Route,
   falAiBytedanceSeedreamV4Route,
   falAiBytedanceSeedreamV45Route,

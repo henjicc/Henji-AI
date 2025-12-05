@@ -301,6 +301,22 @@
             "type": "polling",
             "expectedPolls": 45
           }
+        },
+        {
+          "id": "fal-ai-vidu-q2",
+          "name": "Vidu Q2",
+          "type": "video",
+          "description": "Vidu Q2 视频生成模型，支持文生视频、图生视频、参考生视频和视频延长四种模式",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "参考生视频",
+            "视频延长"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 50
+          }
         }
       ]
     },

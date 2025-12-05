@@ -140,6 +140,14 @@ export const useMediaGeneratorState = () => {
   const [ltxRetakeStartTime, setLtxRetakeStartTime] = useState(0)
   const [ltxRetakeMode, setLtxRetakeMode] = useState<'replace_audio' | 'replace_video' | 'replace_audio_and_video'>('replace_audio_and_video')
 
+  // Vidu Q2 参数
+  const [viduQ2Mode, setViduQ2Mode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video' | 'video-extension'>('text-to-video')
+  const [viduQ2AspectRatio, setViduQ2AspectRatio] = useState('16:9')
+  const [viduQ2Resolution, setViduQ2Resolution] = useState('720p')
+  const [viduQ2MovementAmplitude, setViduQ2MovementAmplitude] = useState('auto')
+  const [viduQ2Bgm, setViduQ2Bgm] = useState(false)
+  const [viduQ2FastMode, setViduQ2FastMode] = useState(true)
+
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
@@ -278,6 +286,14 @@ export const useMediaGeneratorState = () => {
     ltxRetakeDuration, setLtxRetakeDuration,
     ltxRetakeStartTime, setLtxRetakeStartTime,
     ltxRetakeMode, setLtxRetakeMode,
+
+    // Vidu Q2
+    viduQ2Mode, setViduQ2Mode,
+    viduQ2AspectRatio, setViduQ2AspectRatio,
+    viduQ2Resolution, setViduQ2Resolution,
+    viduQ2MovementAmplitude, setViduQ2MovementAmplitude,
+    viduQ2Bgm, setViduQ2Bgm,
+    viduQ2FastMode, setViduQ2FastMode,
 
     // UI
     isDraggingImage, setIsDraggingImage

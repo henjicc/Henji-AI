@@ -114,6 +114,14 @@ export interface PresetSetters {
     setLtxRetakeMode: (v: 'replace_audio' | 'replace_video' | 'replace_audio_and_video') => void
     setUploadedVideoFilePaths: (v: string[]) => void
 
+    // Vidu Q2
+    setViduQ2Mode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video' | 'video-extension') => void
+    setViduQ2AspectRatio: (v: string) => void
+    setViduQ2Resolution: (v: string) => void
+    setViduQ2MovementAmplitude: (v: string) => void
+    setViduQ2Bgm: (v: boolean) => void
+    setViduQ2FastMode: (v: boolean) => void
+
     // 音频参数
     setVoiceId: (v: string) => void
     setAudioSpec: (v: 'hd' | 'turbo') => void
@@ -249,6 +257,14 @@ export function createPresetSetterMap(
         ltxRetakeStartTime: setters.setLtxRetakeStartTime,
         ltxRetakeMode: setters.setLtxRetakeMode,
         uploadedVideoFilePaths: setters.setUploadedVideoFilePaths,
+
+        // Vidu Q2
+        viduQ2Mode: setters.setViduQ2Mode,
+        viduQ2AspectRatio: setters.setViduQ2AspectRatio,
+        viduQ2Resolution: setters.setViduQ2Resolution,
+        viduQ2MovementAmplitude: setters.setViduQ2MovementAmplitude,
+        viduQ2Bgm: setters.setViduQ2Bgm,
+        viduQ2FastMode: setters.setViduQ2FastMode,
 
         // 音频参数
         voiceId: setters.setVoiceId,

@@ -104,6 +104,14 @@ interface BuildOptionsParams {
   ltxRetakeStartTime?: number
   ltxRetakeMode?: string
 
+  // Vidu Q2
+  viduQ2Mode?: string
+  viduQ2AspectRatio?: string
+  viduQ2Resolution?: string
+  viduQ2MovementAmplitude?: string
+  viduQ2Bgm?: boolean
+  viduQ2FastMode?: boolean
+
   // 音频
   audioSpeed: number
   audioEmotion: string
@@ -658,6 +666,68 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       generateAudio: options.klingV26GenerateAudio,
       cfgScale: options.klingV26CfgScale,
       images: options.images?.length || 0
+    })
+  }
+
+  // Vidu Q2
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2')) {
+    options.viduQ2Mode = params.viduQ2Mode || 'text-to-video'
+    options.viduQ2AspectRatio = params.viduQ2AspectRatio
+    options.viduQ2Resolution = params.viduQ2Resolution || '720p'
+    options.viduQ2MovementAmplitude = params.viduQ2MovementAmplitude
+    options.viduQ2Bgm = params.viduQ2Bgm
+    options.viduQ2FastMode = params.viduQ2FastMode
+    options.videoDuration = params.videoDuration || 4
+
+    // 处理图片上传
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    // 处理视频上传（视频延长模式）
+    if (params.uploadedVideoFiles && params.uploadedVideoFiles.length > 0 && options.viduQ2Mode === 'video-extension') {
+      const videoFile = params.uploadedVideoFiles[0]
+      const paths: string[] = [...params.uploadedVideoFilePaths]
+
+      // 如果还没有保存过，保存视频文件
+      if (!paths[0]) {
+        const saved = await saveUploadVideo(videoFile, 'persist')
+        paths[0] = saved.fullPath
+      }
+
+      setUploadedVideoFilePaths(paths)
+      options.uploadedVideoFilePaths = paths
+
+      // 将 File 对象转换为 base64（仅用于 API 请求，不保存到历史记录）
+      const videoDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(videoFile)
+      })
+      options.videos = [videoDataUrl]
+    }
+
+    console.log('[optionsBuilder] Vidu Q2 参数:', {
+      mode: options.viduQ2Mode,
+      aspectRatio: options.viduQ2AspectRatio,
+      resolution: options.viduQ2Resolution,
+      duration: options.videoDuration,
+      movementAmplitude: options.viduQ2MovementAmplitude,
+      bgm: options.viduQ2Bgm,
+      fastMode: options.viduQ2FastMode,
+      images: options.images?.length || 0,
+      videos: options.videos?.length || 0
     })
   }
 

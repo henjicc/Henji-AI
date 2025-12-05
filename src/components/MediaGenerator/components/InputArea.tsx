@@ -11,12 +11,13 @@ interface InputAreaProps {
   isLoading: boolean
   isGenerating?: boolean
 
-  // Vidu/Veo/Kling/LTX-2/Seedance 模式（用于计算最大图片数）
+  // Vidu/Veo/Kling/LTX-2/Seedance/Vidu Q2 模式（用于计算最大图片数）
   viduMode?: string
   veoMode?: string
   klingMode?: string
   mode?: string  // LTX-2 模式
   seedanceMode?: string  // Seedance v1 模式
+  viduQ2Mode?: string  // Vidu Q2 模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -59,6 +60,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   klingMode,
   mode,
   seedanceMode,
+  viduQ2Mode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -81,6 +83,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     selectedModel === 'vidu-q1' ? viduMode :
     (selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1') ? veoMode :
     (selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1') ? seedanceMode :
+    (selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') ? viduQ2Mode :
     undefined
   )
 
@@ -89,6 +92,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     (selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') ||
     selectedModel === 'minimax-hailuo-02' ||
     (selectedModel === 'veo3.1' && veoMode === 'reference-to-video') ||
+    ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') && viduQ2Mode === 'reference-to-video') ||
     (selectedModel !== 'kling-2.5-turbo' &&
      selectedModel !== 'minimax-hailuo-2.3' &&
      selectedModel !== 'wan-2.5-preview')
@@ -139,15 +143,19 @@ const InputArea: React.FC<InputAreaProps> = ({
   // 检查是否需要显示视频上传
   // 1. Kling Video O1 的视频编辑和视频参考模式（支持视频+图片）
   // 2. LTX-2 的视频编辑模式（仅支持视频）
+  // 3. Vidu Q2 的视频延长模式（仅支持视频）
   const needsVideoUpload =
     ((selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
      (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')) ||
     ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
-     mode === 'retake-video')
+     mode === 'retake-video') ||
+    ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
+     viduQ2Mode === 'video-extension')
 
-  // 检查是否只需要视频（LTX-2 视频编辑模式）
-  const needsVideoOnly = (selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
-    mode === 'retake-video'
+  // 检查是否只需要视频（LTX-2 视频编辑模式 和 Vidu Q2 视频延长模式）
+  const needsVideoOnly =
+    ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') && mode === 'retake-video') ||
+    ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') && viduQ2Mode === 'video-extension')
 
   // 处理混合文件上传（视频+图片）
   const handleMixedFileUpload = (files: File[]) => {

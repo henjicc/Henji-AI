@@ -193,6 +193,36 @@ const PRICES = {
         lite: {
             perMillionTokens: 1.8  // $1.8 per million tokens
         }
+    },
+
+    // 视频 - Vidu Q2
+    // 价格单位：美元
+    VIDU_Q2: {
+        // Reference To Video & Text To Video: $0.1/图
+        referenceToVideo: 0.1,
+        textToVideo: {
+            '360p': 0.1,
+            '520p': 0.2,
+            '720p': 0.3,
+            '1080p': { base: 0.2, perSecond: 0.1 }  // $0.2 基础 + $0.1/秒
+        },
+        // Image To Video Turbo: $0.05/秒（720p），$0.2基础+$0.05/秒（1080p）
+        imageToVideoTurbo: {
+            '720p': 0.05,  // USD/s
+            '1080p': { base: 0.2, perSecond: 0.05 }
+        },
+        // Image To Video Pro: $0.1基础+$0.05/秒（720p），$0.3基础+$0.1/秒（1080p）
+        imageToVideoPro: {
+            '720p': { base: 0.1, perSecond: 0.05 },
+            '1080p': { base: 0.3, perSecond: 0.1 }
+        },
+        // Video Extension Pro: 按分辨率和时长计费
+        videoExtension: {
+            '360p': 0.15,
+            '520p': 0.22,
+            '720p': 0.075,  // USD/s
+            '1080p': { base: 0.28, perSecond: 0.075 }
+        }
     }
 } as const
 
@@ -661,6 +691,79 @@ export const pricingConfigs: PricingConfig[] = [
                     // 其他分辨率：使用 token 计价
                     totalPriceUSD = millionTokens * PRICES.SEEDANCE_V1_FAL.lite.perMillionTokens
                 }
+            }
+
+            // 转换为人民币并格式化
+            return formatPrice(totalPriceUSD * USD_TO_CNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-vidu-q2',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const mode = params.viduQ2Mode || 'text-to-video'
+            const resolution = params.viduQ2Resolution || '720p'
+            const duration = params.videoDuration || 4
+            const isTurbo = params.viduQ2FastMode !== undefined ? params.viduQ2FastMode : true
+
+            let totalPriceUSD: number
+
+            if (mode === 'reference-to-video') {
+                // 参考生视频：固定 $0.1
+                totalPriceUSD = PRICES.VIDU_Q2.referenceToVideo
+            } else if (mode === 'text-to-video') {
+                // 文生视频：按分辨率计费
+                const pricing = PRICES.VIDU_Q2.textToVideo[resolution as '360p' | '520p' | '720p' | '1080p']
+                if (!pricing) {
+                    // 如果分辨率不支持，使用默认值
+                    totalPriceUSD = 0
+                } else if (typeof pricing === 'number') {
+                    totalPriceUSD = pricing
+                } else {
+                    // 1080p: 基础价格 + 每秒价格
+                    totalPriceUSD = pricing.base + pricing.perSecond * duration
+                }
+            } else if (mode === 'image-to-video') {
+                // 图生视频：Turbo 或 Pro（仅支持 720p 和 1080p）
+                // 如果分辨率不是 720p 或 1080p，默认使用 720p
+                const validResolution = (resolution === '720p' || resolution === '1080p') ? resolution : '720p'
+
+                const pricing = isTurbo
+                    ? PRICES.VIDU_Q2.imageToVideoTurbo[validResolution]
+                    : PRICES.VIDU_Q2.imageToVideoPro[validResolution]
+
+                if (typeof pricing === 'number') {
+                    // 720p Turbo: 按秒计费
+                    totalPriceUSD = pricing * duration
+                } else if (pricing) {
+                    // 其他：基础价格 + 每秒价格
+                    totalPriceUSD = pricing.base + pricing.perSecond * duration
+                } else {
+                    // 安全回退
+                    totalPriceUSD = 0
+                }
+            } else if (mode === 'video-extension') {
+                // 视频延长：按分辨率计费
+                const pricing = PRICES.VIDU_Q2.videoExtension[resolution as '360p' | '520p' | '720p' | '1080p']
+                if (!pricing) {
+                    // 如果分辨率不支持，使用默认值
+                    totalPriceUSD = 0
+                } else if (typeof pricing === 'number') {
+                    if (resolution === '360p' || resolution === '520p') {
+                        // 360p/520p: 固定价格
+                        totalPriceUSD = pricing
+                    } else {
+                        // 720p: 按秒计费
+                        totalPriceUSD = pricing * duration
+                    }
+                } else {
+                    // 1080p: 基础价格 + 每秒价格
+                    totalPriceUSD = pricing.base + pricing.perSecond * duration
+                }
+            } else {
+                totalPriceUSD = 0
             }
 
             // 转换为人民币并格式化

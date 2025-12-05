@@ -1,0 +1,14 @@
+Vidu Q2 Reference To Image & Vidu Q2 Text To Image & Fal Ai Vidu Reference To Image:
+Your request will cost $0.1 per image.
+
+Q2 Video Extension Pro:
+Each 360 p video will cost 0.15 $, each 520p video will cost 0.22 $. For 720 p each video second will cost 0.075 $. For 1080 p each video will cost 0.28 $ along with 0.075 $ per video second.
+
+Q2 Image To Video Turbo:
+For 720 p each video second will cost 0.05 $. For 1080 p each request will cost 0.2 $ along with 0.05 $ for every video second.
+
+Q2 Image To Video Pro:
+For 720 p your video request would cost 0.1 $ along with a 0.05 $ for every video second. For 1080 p each request will cost 0.3 $ along with 0.1 $ for every video second.
+
+Vidu Q2 Text To Video:
+The model will cost 0.1 $ for every 360p video, 0.2 $ for every 520p video, 0.3 $ for 720 p video. For 1080 p the cost would be 0.2 $ along with 0.1 $ for every video second.
