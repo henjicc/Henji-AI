@@ -105,6 +105,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setSeedanceResolution: state.setSeedanceResolution,
     setSeedanceAspectRatio: state.setSeedanceAspectRatio,
     setSeedanceCameraFixed: state.setSeedanceCameraFixed,
+    setSeedanceMode: state.setSeedanceMode,
+    setSeedanceVersion: state.setSeedanceVersion,
+    setSeedanceFastMode: state.setSeedanceFastMode,
     setWanSize: state.setWanSize,
     setWanResolution: state.setWanResolution,
     setWanPromptExtend: state.setWanPromptExtend,
@@ -482,9 +485,35 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     }
   }, [state.selectedModel, setterMap])
 
+  // 使用 ref 追踪上一次的关键状态，避免无限循环
+  const prevAutoSwitchStateRef = useRef({
+    selectedModel: state.selectedModel,
+    uploadedImagesLength: state.uploadedImages.length,
+    modelscopeCustomModel: state.modelscopeCustomModel,
+    seedanceMode: state.seedanceMode
+  })
+
   // 自动应用模型 Schema 中定义的自动切换规则
   useEffect(() => {
     if (isRestoringRef.current) return // 重新编辑时不切换
+
+    const prev = prevAutoSwitchStateRef.current
+    const hasChanged =
+      prev.selectedModel !== state.selectedModel ||
+      prev.uploadedImagesLength !== state.uploadedImages.length ||
+      prev.modelscopeCustomModel !== state.modelscopeCustomModel ||
+      prev.seedanceMode !== state.seedanceMode
+
+    // 只有当关键状态真正改变时才执行自动切换
+    if (!hasChanged) return
+
+    // 更新 ref
+    prevAutoSwitchStateRef.current = {
+      selectedModel: state.selectedModel,
+      uploadedImagesLength: state.uploadedImages.length,
+      modelscopeCustomModel: state.modelscopeCustomModel,
+      seedanceMode: state.seedanceMode
+    }
 
     const switches = getAutoSwitchValues(state.selectedModel, state)
 
@@ -495,7 +524,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         setter(value)
       }
     }
-  }, [state.selectedModel, state.uploadedImages.length, state.modelscopeCustomModel, setterMap])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.selectedModel, state.uploadedImages.length, state.modelscopeCustomModel, state.seedanceMode])
 
   // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
   // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
@@ -511,7 +541,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     const max = getMaxImageCount(
       modelId,
       modelId === 'vidu-q1' ? state.viduMode :
-      modelId === 'veo3.1' ? state.veoMode :
+      (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.veoMode :
+      (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.seedanceMode :
       undefined
     )
     if (state.uploadedImages.length > max) {
@@ -556,11 +587,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       wanResolution: state.setWanResolution,
       wanPromptExtend: state.setWanPromptExtend,
       wanAudio: state.setWanAudio,
-      // Seedance
+      // Seedance（派欧云）
       seedanceVariant: state.setSeedanceVariant,
       seedanceResolution: state.setSeedanceResolution,
       seedanceAspectRatio: state.setSeedanceAspectRatio,
       seedanceCameraFixed: state.setSeedanceCameraFixed,
+      // Seedance v1（Fal）
+      seedanceMode: state.setSeedanceMode,
+      seedanceVersion: state.setSeedanceVersion,
+      seedanceFastMode: state.setSeedanceFastMode,
       // Veo
       veoMode: state.setVeoMode,
       veoAspectRatio: state.setVeoAspectRatio,
@@ -645,9 +680,25 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     }
   }
 
+  // 弹窗状态
+  const [isWarningDialogOpen, setIsWarningDialogOpen] = React.useState(false)
+  const [warningOpacity, setWarningOpacity] = React.useState(0)
+
   // 生成处理
   const handleGenerate = async () => {
     if ((!state.input.trim() && state.uploadedImages.length === 0) || isLoading) return
+
+    // 检查 Seedance v1 Fast 模式的限制
+    if ((state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') &&
+        state.seedanceVersion === 'pro' &&
+        state.seedanceFastMode &&
+        state.seedanceMode === 'image-to-video' &&
+        state.uploadedImages.length >= 2) {
+      // 显示警告弹窗
+      setIsWarningDialogOpen(true)
+      setTimeout(() => setWarningOpacity(1), 10)
+      return
+    }
 
     try {
       const options = await buildGenerateOptions({
@@ -690,6 +741,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         seedanceResolution: state.seedanceResolution,
         seedanceAspectRatio: state.seedanceAspectRatio,
         seedanceCameraFixed: state.seedanceCameraFixed,
+        // Seedance v1（Fal）参数
+        seedanceMode: state.seedanceMode,
+        seedanceVersion: state.seedanceVersion,
+        seedanceFastMode: state.seedanceFastMode,
         veoMode: state.veoMode,
         veoAspectRatio: state.veoAspectRatio,
         veoResolution: state.veoResolution,
@@ -834,12 +889,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         veoMode={state.veoMode}
         klingMode={state.klingMode}
         mode={state.mode}
+        seedanceMode={state.seedanceMode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
             state.selectedModel,
             state.selectedModel === 'vidu-q1' ? state.viduMode :
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
+            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
             undefined
           )
           imageUpload.handleImageFileUpload(files, maxCount)
@@ -853,6 +910,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             state.selectedModel,
             state.selectedModel === 'vidu-q1' ? state.viduMode :
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
+            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
             undefined
           )
           imageUpload.handlePaste(e, maxCount)
@@ -862,6 +920,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             state.selectedModel,
             state.selectedModel === 'vidu-q1' ? state.viduMode :
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
+            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
             undefined
           )
           imageUpload.handleImageFileDrop(files, maxCount)
@@ -938,9 +997,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               viduMode: state.viduMode,
               hailuoFastMode: state.hailuoFastMode,
               pixFastMode: state.pixFastMode,
+              // Seedance（派欧云）
               seedanceVariant: state.seedanceVariant,
               seedanceResolution: state.seedanceResolution,
               seedanceAspectRatio: state.seedanceAspectRatio,
+              // Seedance v1（Fal）
+              seedanceMode: state.seedanceMode,
+              seedanceVersion: state.seedanceVersion,
+              seedanceFastMode: state.seedanceFastMode,
               wanResolution: state.wanResolution,
               veoMode: state.veoMode,  // Veo 3.1 模式
               veoGenerateAudio: state.veoGenerateAudio,
@@ -964,6 +1028,75 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           />
         </div>
       </div>
+
+      {/* 警告弹窗 */}
+      {isWarningDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            style={{ opacity: warningOpacity, transition: 'opacity 180ms ease' }}
+            onClick={() => {
+              setWarningOpacity(0)
+              setTimeout(() => setIsWarningDialogOpen(false), 180)
+            }}
+          />
+          <div
+            className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+            style={{
+              opacity: warningOpacity,
+              transform: `scale(${0.97 + 0.03 * warningOpacity})`,
+              transition: 'opacity 180ms ease, transform 180ms ease'
+            }}
+          >
+            <div className="text-white text-base">不支持的参数组合</div>
+            <div className="text-zinc-300 text-sm mt-2">
+              Pro模型的快速模式不支持结束帧（首尾帧）
+              <br />
+              <br />
+              请选择以下操作之一：
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  // 切换到 Lite 版本
+                  state.setSeedanceVersion('lite')
+                  setWarningOpacity(0)
+                  setTimeout(() => setIsWarningDialogOpen(false), 180)
+                }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-blue-600/70 hover:bg-blue-600 text-white text-sm transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                切换到Lite模型
+              </button>
+              <button
+                onClick={() => {
+                  // 关闭快速模式
+                  state.setSeedanceFastMode(false)
+                  setWarningOpacity(0)
+                  setTimeout(() => setIsWarningDialogOpen(false), 180)
+                }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-yellow-600/70 hover:bg-yellow-600 text-white text-sm transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                关闭快速模式
+              </button>
+              <button
+                onClick={() => {
+                  setWarningOpacity(0)
+                  setTimeout(() => setIsWarningDialogOpen(false), 180)
+                }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-zinc-600/60 text-sm transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

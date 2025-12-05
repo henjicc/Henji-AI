@@ -22,6 +22,7 @@ export { falAiNanoBananaParams } from './fal-ai-nano-banana'
 export { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 export { falAiVeo31Params } from './fal-ai-veo-3.1'
 export { falAiBytedanceSeedreamV4Params } from './fal-ai-bytedance-seedream-v4'
+export { falAiBytedanceSeedanceV1Params } from './fal-ai-bytedance-seedance-v1'
 export { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 export { falAiKlingImageO1Params } from './fal-ai-kling-image-o1'
 export { klingVideoO1Params } from './kling-video-o1'
@@ -60,6 +61,7 @@ import { falAiNanoBananaParams } from './fal-ai-nano-banana'
 import { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Params } from './fal-ai-veo-3.1'
 import { falAiBytedanceSeedreamV4Params } from './fal-ai-bytedance-seedream-v4'
+import { falAiBytedanceSeedanceV1Params } from './fal-ai-bytedance-seedance-v1'
 import { falAiZImageTurboParams } from './fal-ai-z-image-turbo'
 import { falAiKlingImageO1Params } from './fal-ai-kling-image-o1'
 import { klingVideoO1Params } from './kling-video-o1'
@@ -95,6 +97,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'fal-ai-bytedance-seedream-v4': falAiBytedanceSeedreamV4Params,
   'bytedance-seedream-v4.5': falAiBytedanceSeedreamV4Params,
   'fal-ai-bytedance-seedream-v4.5': falAiBytedanceSeedreamV4Params,
+  'bytedance-seedance-v1': falAiBytedanceSeedanceV1Params,
+  'fal-ai-bytedance-seedance-v1': falAiBytedanceSeedanceV1Params,
   'fal-ai-z-image-turbo': falAiZImageTurboParams,
   'fal-ai-kling-image-o1': falAiKlingImageO1Params,
   'kling-o1': falAiKlingImageO1Params,
@@ -167,6 +171,11 @@ export function getAutoSwitchValues(modelId: string, currentValues: any): Record
         }
       } else {
         // 条件不满足时，如果当前值是 autoSwitch 的值，则恢复为默认值
+        // 但如果设置了 noRestore，则不恢复
+        if (param.autoSwitch.noRestore) {
+          continue
+        }
+
         const targetValue = typeof param.autoSwitch.value === 'function'
           ? param.autoSwitch.value(currentValues)
           : param.autoSwitch.value

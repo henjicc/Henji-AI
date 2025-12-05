@@ -56,11 +56,16 @@ interface BuildOptionsParams {
   wanPromptExtend: boolean
   wanAudio: boolean
 
-  // Seedance
+  // Seedance（派欧云）
   seedanceVariant: 'lite' | 'pro'
   seedanceResolution: string
   seedanceAspectRatio: string
   seedanceCameraFixed: boolean
+
+  // Seedance v1（Fal）
+  seedanceMode?: 'text-to-video' | 'image-to-video' | 'reference-to-video'
+  seedanceVersion?: 'lite' | 'pro'
+  seedanceFastMode?: boolean
 
   // Veo 3.1
   veoMode: string
@@ -380,7 +385,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     options.negativePrompt = params.videoNegativePrompt
   }
 
-  // Seedance v1 系列
+  // Seedance v1 系列（派欧云）
   else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
     options.resolution = params.seedanceResolution
     options.aspectRatio = params.seedanceAspectRatio
@@ -416,6 +421,43 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       options.uploadedFilePaths = paths
       setUploadedFilePaths(paths)
     }
+  }
+
+  // Bytedance Seedance v1（Fal）
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1')) {
+    options.seedanceMode = params.seedanceMode
+    options.seedanceVersion = params.seedanceVersion
+    options.seedanceAspectRatio = params.seedanceAspectRatio
+    options.seedanceResolution = params.seedanceResolution
+    options.videoDuration = params.videoDuration
+    options.seedanceCameraFixed = params.seedanceCameraFixed
+    options.seedanceFastMode = params.seedanceFastMode
+
+    // 处理图片上传
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    console.log('[optionsBuilder] Bytedance Seedance v1 参数:', {
+      mode: options.seedanceMode,
+      version: options.seedanceVersion,
+      aspectRatio: options.seedanceAspectRatio,
+      resolution: options.seedanceResolution,
+      duration: options.videoDuration,
+      cameraFixed: options.seedanceCameraFixed,
+      fastMode: options.seedanceFastMode,
+      images: options.images?.length || 0
+    })
   }
 
   // Veo 3.1

@@ -3,6 +3,7 @@ import { falAiNanoBananaProRoute } from './fal-ai-nano-banana-pro'
 import { falAiVeo31Route } from './fal-ai-veo-3.1'
 import { falAiBytedanceSeedreamV4Route } from './fal-ai-bytedance-seedream-v4'
 import { falAiBytedanceSeedreamV45Route } from './fal-ai-bytedance-seedream-v4.5'
+import { falAiBytedanceSeedanceRoute } from './fal-ai-bytedance-seedance'
 import { falAiZImageTurboRoute } from './fal-ai-z-image-turbo'
 import { falAiKlingImageO1Route } from './fal-ai-kling-image-o1'
 import { falAiKlingVideoO1Route } from './fal-ai-kling-video-o1'
@@ -34,6 +35,7 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiVeo31Route,
   falAiBytedanceSeedreamV4Route,
   falAiBytedanceSeedreamV45Route,
+  falAiBytedanceSeedanceRoute,  // Bytedance Seedance
   falAiZImageTurboRoute
 ]
 

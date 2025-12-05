@@ -15,7 +15,8 @@ export const FAL_CONFIG = {
     'fal-ai-kling-video-o1': 40,
     'fal-ai-kling-video-v2.6-pro': 45,
     'fal-ai-sora-2': 50,
-    'fal-ai-ltx-2': 35  // LTX-2 视频生成，中等速度
+    'fal-ai-ltx-2': 35,  // LTX-2 视频生成，中等速度
+    'fal-ai/bytedance/seedance/v1': 45  // Seedance v1 视频生成，中等速度
   } as Record<string, number>,
 
   // 默认预估轮询次数
@@ -34,6 +35,7 @@ export function getEstimatedPolls(modelId: string): number {
   // 模糊匹配（支持旧的不带前缀的 ID 和完整路径）
   if (modelId.includes('z-image/turbo')) return FAL_CONFIG.modelEstimatedPolls['fal-ai/z-image/turbo']
   if (modelId.includes('seedream/v4')) return FAL_CONFIG.modelEstimatedPolls['fal-ai/bytedance/seedream/v4/text-to-image']
+  if (modelId.includes('seedance/v1') || modelId.includes('seedance-v1')) return FAL_CONFIG.modelEstimatedPolls['fal-ai/bytedance/seedance/v1']
   if (modelId.includes('nano-banana-pro')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-nano-banana-pro']
   if (modelId.includes('nano-banana')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-nano-banana']
   if (modelId.includes('sora-2') || modelId.includes('sora2')) return FAL_CONFIG.modelEstimatedPolls['fal-ai-sora-2']

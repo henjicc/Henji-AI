@@ -44,6 +44,14 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
   if (modelId === 'minimax-hailuo-02') return 2
   if (modelId === 'wan-2.5-preview') return 1
   if (modelId === 'seedance-v1' || modelId === 'seedance-v1-lite' || modelId === 'seedance-v1-pro') return 2
+
+  // Bytedance Seedance v1 (Fal): 根据模式动态限制图片数量
+  if (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') {
+    if (mode === 'reference-to-video') return 12  // 参考生视频：最多 12 张
+    if (mode === 'image-to-video') return 2       // 图生视频：最多 2 张（首尾帧）
+    return 2  // 文生视频：最多 2 张，上传后自动切换到图生视频
+  }
+
   if (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') {
     if (mode === 'start-end-frame') return 2
     if (mode === 'reference-to-video') return 7

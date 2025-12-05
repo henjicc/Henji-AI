@@ -59,11 +59,16 @@ export interface PresetSetters {
     setPixFastMode: (v: boolean) => void
     setPixStyle: (v: string | undefined) => void
 
-    // Seedance
+    // Seedance (派欧云)
     setSeedanceVariant: (v: 'lite' | 'pro') => void
     setSeedanceResolution: (v: string) => void
     setSeedanceAspectRatio: (v: string) => void
     setSeedanceCameraFixed: (v: boolean) => void
+
+    // Seedance v1 (Fal)
+    setSeedanceMode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video') => void
+    setSeedanceVersion: (v: 'lite' | 'pro') => void
+    setSeedanceFastMode: (v: boolean) => void
 
     // Veo 3.1
     setVeoMode: (v: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video') => void
@@ -189,11 +194,16 @@ export function createPresetSetterMap(
         pixFastMode: setters.setPixFastMode,
         pixStyle: setters.setPixStyle,
 
-        // Seedance
+        // Seedance (派欧云)
         seedanceVariant: setters.setSeedanceVariant,
         seedanceResolution: setters.setSeedanceResolution,
         seedanceAspectRatio: setters.setSeedanceAspectRatio,
         seedanceCameraFixed: setters.setSeedanceCameraFixed,
+
+        // Seedance v1 (Fal)
+        seedanceMode: setters.setSeedanceMode,
+        seedanceVersion: setters.setSeedanceVersion,
+        seedanceFastMode: setters.setSeedanceFastMode,
 
         // Veo 3.1
         veoMode: setters.setVeoMode,

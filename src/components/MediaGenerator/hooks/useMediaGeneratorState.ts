@@ -58,11 +58,16 @@ export const useMediaGeneratorState = () => {
   const [wanPromptExtend, setWanPromptExtend] = useState(true)
   const [wanAudio, setWanAudio] = useState(true)
 
-  // Seedance 参数
+  // Seedance 参数（派欧云）
   const [seedanceResolution, setSeedanceResolution] = useState('720p')
   const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
   const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
   const [seedanceVariant, setSeedanceVariant] = useState<'lite' | 'pro'>('lite')
+
+  // Seedance v1 参数（Fal）
+  const [seedanceMode, setSeedanceMode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video'>('text-to-video')
+  const [seedanceVersion, setSeedanceVersion] = useState<'lite' | 'pro'>('lite')
+  const [seedanceFastMode, setSeedanceFastMode] = useState(true)
 
   // Veo 3.1 参数
   const [veoMode, setVeoMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
@@ -192,11 +197,16 @@ export const useMediaGeneratorState = () => {
     wanPromptExtend, setWanPromptExtend,
     wanAudio, setWanAudio,
 
-    // Seedance
+    // Seedance（派欧云）
     seedanceResolution, setSeedanceResolution,
     seedanceAspectRatio, setSeedanceAspectRatio,
     seedanceCameraFixed, setSeedanceCameraFixed,
     seedanceVariant, setSeedanceVariant,
+
+    // Seedance v1（Fal）
+    seedanceMode, setSeedanceMode,
+    seedanceVersion, setSeedanceVersion,
+    seedanceFastMode, setSeedanceFastMode,
 
     // Veo 3.1
     veoMode, setVeoMode,

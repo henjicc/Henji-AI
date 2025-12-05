@@ -1,0 +1,15 @@
+Pro Fast Text To Video:
+Each 1080p 5 second video costs roughly $0.245. For other resolutions, 1 million video tokens costs $1. tokens(video)  = (height x width x FPS x duration) / 1024.
+
+Pro Fast Image To Video:
+Each 1080p 5 second video costs roughly $0.243. For other resolutions, 1 million video tokens costs $1.0. tokens(video)  = (height x width x FPS x duration) / 1024.
+
+Lite Reference To Video:
+Each 720p 5 second video costs $0.18. For other resolutions, 1 million video tokens costs $1.8. tokens(video)  = (height x width x FPS x duration) / 1024. Image tokens costs will be included.
+
+Pro Image To Video & Pro Text To Video:
+Each 1080p 5 second video costs roughly $0.62. For other resolutions, 1 million video tokens costs $2.5. tokens(video)  = (height x width x FPS x duration) / 1024.
+
+Lite Image To Video & Lite Text To Video:
+Each 720p 5 second video costs $0.18. For other resolutions, 1 million video tokens costs $1.8. tokens(video)  = (height x width x FPS x duration) / 1024.
+

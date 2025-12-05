@@ -166,6 +166,33 @@ const PRICES = {
             '2160p': 0.16   // USD/s - Fast 2160p
         },
         retake: 0.10  // USD/s - Retake 模式
+    },
+
+    // 视频 - Bytedance Seedance v1 (Fal)
+    // 价格单位：美元/百万 tokens
+    // tokens(video) = (总像素 x FPS x duration) / 1024
+    // 注意：同一分辨率等级下，不同宽高比的总像素数近似相同
+    SEEDANCE_V1_FAL: {
+        // 标准分辨率的总像素数（用于 token 计算）
+        resolutionPixels: {
+            '480p': 409600,    // 约 640×640
+            '720p': 921600,    // 约 960×960
+            '1080p': 2073600   // 约 1440×1440
+        },
+        // Pro Fast 模式（固定价格，基于 1080p 5秒）
+        proFast: {
+            textToVideo: 0.245,  // 1080p 5秒 $0.245
+            imageToVideo: 0.243,  // 1080p 5秒 $0.243
+            perMillionTokens: 1.0  // 其他分辨率：$1 per million tokens
+        },
+        // Pro 模式（非快速）
+        pro: {
+            perMillionTokens: 2.5  // $2.5 per million tokens
+        },
+        // Lite 模式
+        lite: {
+            perMillionTokens: 1.8  // $1.8 per million tokens
+        }
     }
 } as const
 
@@ -186,6 +213,45 @@ function getSeedanceAspectGroup(aspect: string): 'wide' | 'standard' | 'classic'
     if (['1:1'].includes(ratio)) return 'square'
 
     return 'standard' // 默认
+}
+
+// ===== 辅助函数：解析分辨率为宽高 =====
+function parseResolution(resolution: string, aspectRatio: string): { width: number; height: number } {
+    // 标准分辨率映射（基于 16:9）
+    const standardResolutions: Record<string, { width: number; height: number }> = {
+        '480p': { width: 854, height: 480 },
+        '720p': { width: 1280, height: 720 },
+        '1080p': { width: 1920, height: 1080 }
+    }
+
+    // 获取基础分辨率
+    const baseRes = standardResolutions[resolution] || standardResolutions['720p']
+
+    // 如果是标准 16:9 比例，直接返回
+    if (aspectRatio === '16:9') {
+        return baseRes
+    }
+
+    // 根据宽高比调整分辨率
+    const [w, h] = aspectRatio.split(':').map(Number)
+    const targetRatio = w / h
+
+    // 保持高度不变，调整宽度
+    if (targetRatio > 16 / 9) {
+        // 更宽的比例（如 21:9）
+        return {
+            width: Math.round(baseRes.height * targetRatio),
+            height: baseRes.height
+        }
+    } else if (targetRatio < 16 / 9) {
+        // 更窄的比例（如 9:16, 4:3, 1:1）
+        return {
+            width: Math.round(baseRes.height * targetRatio),
+            height: baseRes.height
+        }
+    }
+
+    return baseRes
 }
 
 // ===== 模型价格配置 =====
@@ -426,7 +492,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const variant = (params.seedanceVariant || 'lite') as 'lite' | 'pro'
-            const duration = (params.seedanceDuration || 5) as 5 | 10
+            const duration = (params.videoDuration || 5) as 5 | 10  // 使用通用的 videoDuration
             const resolution = (params.seedanceResolution || '720p') as '480p' | '720p' | '1080p'
             const aspect = params.seedanceAspectRatio || '16:9'
             const aspectGroup = getSeedanceAspectGroup(aspect)
@@ -525,6 +591,80 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 格式化为最多2位小数
             return formatPrice(totalPriceCNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-bytedance-seedance-v1',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const version = params.seedanceVersion || 'lite'
+            const mode = params.seedanceMode || 'text-to-video'
+            const fastMode = params.seedanceFastMode !== undefined ? params.seedanceFastMode : true
+            const duration = params.videoDuration || 5
+            const resolution = params.seedanceResolution || '720p'
+
+            // 获取分辨率对应的总像素数（不考虑宽高比）
+            const totalPixels = PRICES.SEEDANCE_V1_FAL.resolutionPixels[resolution as '480p' | '720p' | '1080p'] || PRICES.SEEDANCE_V1_FAL.resolutionPixels['720p']
+
+            // 假设 FPS 为 24（标准视频帧率）
+            const fps = 24
+
+            // 计算视频 tokens: (总像素 x FPS x duration) / 1024
+            const videoTokens = (totalPixels * fps * duration) / 1024
+
+            // 转换为百万 tokens
+            const millionTokens = videoTokens / 1000000
+
+            let totalPriceUSD: number
+
+            // Pro Fast 模式（仅文生视频和图生视频支持）
+            if (version === 'pro' && fastMode && mode !== 'reference-to-video') {
+                // 检查是否是 1080p 5秒的标准情况
+                const is1080p5s = resolution === '1080p' && duration === 5
+
+                if (is1080p5s) {
+                    // 使用固定价格
+                    if (mode === 'text-to-video') {
+                        totalPriceUSD = PRICES.SEEDANCE_V1_FAL.proFast.textToVideo
+                    } else {
+                        totalPriceUSD = PRICES.SEEDANCE_V1_FAL.proFast.imageToVideo
+                    }
+                } else {
+                    // 其他分辨率：使用 token 计价
+                    totalPriceUSD = millionTokens * PRICES.SEEDANCE_V1_FAL.proFast.perMillionTokens
+                }
+            }
+            // Pro 模式（非快速）
+            else if (version === 'pro' && !fastMode) {
+                // 检查是否是 1080p 5秒的标准情况
+                const is1080p5s = resolution === '1080p' && duration === 5
+
+                if (is1080p5s) {
+                    // 使用固定价格 $0.62
+                    totalPriceUSD = 0.62
+                } else {
+                    // 其他分辨率：使用 token 计价
+                    totalPriceUSD = millionTokens * PRICES.SEEDANCE_V1_FAL.pro.perMillionTokens
+                }
+            }
+            // Lite 模式
+            else {
+                // 检查是否是 720p 5秒的标准情况
+                const is720p5s = resolution === '720p' && duration === 5
+
+                if (is720p5s) {
+                    // 使用固定价格 $0.18
+                    totalPriceUSD = 0.18
+                } else {
+                    // 其他分辨率：使用 token 计价
+                    totalPriceUSD = millionTokens * PRICES.SEEDANCE_V1_FAL.lite.perMillionTokens
+                }
+            }
+
+            // 转换为人民币并格式化
+            return formatPrice(totalPriceUSD * USD_TO_CNY)
         }
     }
 ]

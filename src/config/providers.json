@@ -285,6 +285,22 @@
             "type": "polling",
             "expectedPolls": 35
           }
+        },
+        {
+          "id": "fal-ai-bytedance-seedance-v1",
+          "name": "即梦视频 3.0",
+          "type": "video",
+          "description": "ByteDance 即梦视频 3.0，支持 Lite/Pro 版本，文生视频、图生视频、参考生视频三种模式，支持首尾帧和固定相机",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "参考生视频",
+            "首尾帧"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 45
+          }
         }
       ]
     },

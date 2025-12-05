@@ -17,6 +17,7 @@ import {
   nanoBananaParams,
   nanoBananaProParams,
   falAiBytedanceSeedreamV4Params,
+  falAiBytedanceSeedanceV1Params,
   minimaxSpeechBasicParams,
   minimaxSpeechAdvancedParams,
   falAiZImageTurboParams,
@@ -154,7 +155,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           </>
         )}
 
-        {/* Seedance 参数 */}
+        {/* Seedance 参数（派欧云） */}
         {(selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro') && (
           <SchemaForm
             schema={seedanceParams}
@@ -165,6 +166,24 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               seedanceAspectRatio: values.seedanceAspectRatio,
               seedanceCameraFixed: values.seedanceCameraFixed,
               selectedModel,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
+        {/* Bytedance Seedance v1 参数（Fal） */}
+        {(selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1') && (
+          <SchemaForm
+            schema={falAiBytedanceSeedanceV1Params}
+            values={{
+              seedanceMode: values.seedanceMode,
+              seedanceVersion: values.seedanceVersion,
+              seedanceAspectRatio: values.seedanceAspectRatio,
+              seedanceResolution: values.seedanceResolution,
+              videoDuration: values.videoDuration,
+              seedanceCameraFixed: values.seedanceCameraFixed,
+              seedanceFastMode: values.seedanceFastMode,
               uploadedImages
             }}
             onChange={onChange}
@@ -263,6 +282,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'seedance-v1' &&
          selectedModel !== 'seedance-v1-lite' &&
          selectedModel !== 'seedance-v1-pro' &&
+         selectedModel !== 'fal-ai-bytedance-seedance-v1' &&
+         selectedModel !== 'bytedance-seedance-v1' &&
          selectedModel !== 'veo3.1' &&
          selectedModel !== 'fal-ai-veo-3.1' &&
          selectedModel !== 'fal-ai-kling-video-o1' &&
@@ -291,6 +312,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'seedance-v1' &&
          selectedModel !== 'seedance-v1-lite' &&
          selectedModel !== 'seedance-v1-pro' &&
+         selectedModel !== 'fal-ai-bytedance-seedance-v1' &&
+         selectedModel !== 'bytedance-seedance-v1' &&
          selectedModel !== 'veo3.1' &&
          selectedModel !== 'fal-ai-veo-3.1' &&
          selectedModel !== 'fal-ai-kling-video-o1' &&

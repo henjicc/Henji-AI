@@ -1,0 +1,189 @@
+# Seedance 1.0 Pro
+
+> Seedance 1.0 Pro, a high quality video generation model developed by Bytedance.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/bytedance/seedance/v1/pro/text-to-video`
+- **Model ID**: `fal-ai/bytedance/seedance/v1/pro/text-to-video`
+- **Category**: text-to-video
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  The text prompt used to generate the video
+  - Examples: "A bright blue race car speeds along a snowy racetrack. [Low-angle shot] Captures several cars speeding along the racetrack through a harsh snowstorm. [Overhead shot] The camera gradually pulls upward, revealing the full race scene illuminated by storm lights"
+
+- **`aspect_ratio`** (`AspectRatioEnum`, _optional_):
+  The aspect ratio of the generated video Default value: `"16:9"`
+  - Default: `"16:9"`
+  - Options: `"21:9"`, `"16:9"`, `"4:3"`, `"1:1"`, `"3:4"`, `"9:16"`
+
+- **`resolution`** (`ResolutionEnum`, _optional_):
+  Video resolution - 480p for faster generation, 720p for balance, 1080p for higher quality Default value: `"1080p"`
+  - Default: `"1080p"`
+  - Options: `"480p"`, `"720p"`, `"1080p"`
+
+- **`duration`** (`DurationEnum`, _optional_):
+  Duration of the video in seconds Default value: `"5"`
+  - Default: `"5"`
+  - Options: `"2"`, `"3"`, `"4"`, `"5"`, `"6"`, `"7"`, `"8"`, `"9"`, `"10"`, `"11"`, `"12"`
+
+- **`camera_fixed`** (`boolean`, _optional_):
+  Whether to fix the camera position
+  - Default: `false`
+
+- **`seed`** (`integer`, _optional_):
+  Random seed to control video generation. Use -1 for random.
+
+- **`enable_safety_checker`** (`boolean`, _optional_):
+  If set to true, the safety checker will be enabled. Default value: `true`
+  - Default: `true`
+  - Examples: true
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "A bright blue race car speeds along a snowy racetrack. [Low-angle shot] Captures several cars speeding along the racetrack through a harsh snowstorm. [Overhead shot] The camera gradually pulls upward, revealing the full race scene illuminated by storm lights"
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "A bright blue race car speeds along a snowy racetrack. [Low-angle shot] Captures several cars speeding along the racetrack through a harsh snowstorm. [Overhead shot] The camera gradually pulls upward, revealing the full race scene illuminated by storm lights",
+  "aspect_ratio": "16:9",
+  "resolution": "1080p",
+  "duration": "5",
+  "enable_safety_checker": true
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`File`, _required_):
+  Generated video file
+  - Examples: {"url":"https://storage.googleapis.com/falserverless/example_inputs/seedance_pro_t2v.mp4"}
+
+- **`seed`** (`integer`, _required_):
+  Seed used for generation
+  - Examples: 42
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "url": "https://storage.googleapis.com/falserverless/example_inputs/seedance_pro_t2v.mp4"
+  },
+  "seed": 42
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/bytedance/seedance/v1/pro/text-to-video \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "A bright blue race car speeds along a snowy racetrack. [Low-angle shot] Captures several cars speeding along the racetrack through a harsh snowstorm. [Overhead shot] The camera gradually pulls upward, revealing the full race scene illuminated by storm lights"
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/bytedance/seedance/v1/pro/text-to-video",
+    arguments={
+        "prompt": "A bright blue race car speeds along a snowy racetrack. [Low-angle shot] Captures several cars speeding along the racetrack through a harsh snowstorm. [Overhead shot] The camera gradually pulls upward, revealing the full race scene illuminated by storm lights"
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/bytedance/seedance/v1/pro/text-to-video", {
+  input: {
+    prompt: "A bright blue race car speeds along a snowy racetrack. [Low-angle shot] Captures several cars speeding along the racetrack through a harsh snowstorm. [Overhead shot] The camera gradually pulls upward, revealing the full race scene illuminated by storm lights"
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/text-to-video)
+- [API Documentation](https://fal.ai/models/fal-ai/bytedance/seedance/v1/pro/text-to-video/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/bytedance/seedance/v1/pro/text-to-video)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

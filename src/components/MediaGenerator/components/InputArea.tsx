@@ -11,11 +11,12 @@ interface InputAreaProps {
   isLoading: boolean
   isGenerating?: boolean
 
-  // Vidu/Veo/Kling/LTX-2 模式（用于计算最大图片数）
+  // Vidu/Veo/Kling/LTX-2/Seedance 模式（用于计算最大图片数）
   viduMode?: string
   veoMode?: string
   klingMode?: string
   mode?: string  // LTX-2 模式
+  seedanceMode?: string  // Seedance v1 模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -57,6 +58,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   veoMode,
   klingMode,
   mode,
+  seedanceMode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -76,7 +78,10 @@ const InputArea: React.FC<InputAreaProps> = ({
   // 计算最大图片数
   const maxImageCount = getMaxImageCount(
     selectedModel,
-    selectedModel === 'vidu-q1' ? viduMode : selectedModel === 'veo3.1' ? veoMode : undefined
+    selectedModel === 'vidu-q1' ? viduMode :
+    (selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1') ? veoMode :
+    (selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1') ? seedanceMode :
+    undefined
   )
 
   // 是否允许多选
