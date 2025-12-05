@@ -33,52 +33,55 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   onToggleFavorite
 }) => {
   return (
-    <div className="p-4 h-full flex flex-col">
-      {/* 供应商 / 类型筛选 */}
-      <div className="mb-3">
-        <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => onFilterProviderChange('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
-          {providers.map(p => (
-            <button key={p.id} onClick={() => onFilterProviderChange(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
-          ))}
-          <div className="w-px bg-zinc-600/50 mx-1"></div>
-          {[
-            { label: '全部', value: 'all' },
-            { label: '收藏', value: 'favorite' },
-            { label: '图片', value: 'image' },
-            { label: '视频', value: 'video' },
-            { label: '音频', value: 'audio' }
-          ].map(t => (
-            <button key={t.value} onClick={() => onFilterTypeChange(t.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
-          ))}
+    <div className="flex flex-col h-full min-h-0">
+      {/* 筛选区域 - 固定在顶部 */}
+      <div className="flex-shrink-0 p-4 pb-0">
+        {/* 供应商 / 类型筛选 */}
+        <div className="mb-3">
+          <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => onFilterProviderChange('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
+            {providers.map(p => (
+              <button key={p.id} onClick={() => onFilterProviderChange(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
+            ))}
+            <div className="w-px bg-zinc-600/50 mx-1"></div>
+            {[
+              { label: '全部', value: 'all' },
+              { label: '收藏', value: 'favorite' },
+              { label: '图片', value: 'image' },
+              { label: '视频', value: 'video' },
+              { label: '音频', value: 'audio' }
+            ].map(t => (
+              <button key={t.value} onClick={() => onFilterTypeChange(t.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* 功能筛选 */}
+        <div className="mb-3">
+          <div className="text-xs text-zinc-400 mb-2">功能</div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: '全部', value: 'all' },
+              { label: '图片生成', value: '图片生成' },
+              { label: '图片编辑', value: '图片编辑' },
+              { label: '文生视频', value: '文生视频' },
+              { label: '图生视频', value: '图生视频' },
+              { label: '首尾帧', value: '首尾帧' },
+              { label: '参考生视频', value: '参考生视频' },
+              { label: '视频编辑', value: '视频编辑' },
+              { label: '视频延长', value: '视频延长' },
+              { label: '语音合成', value: '语音合成' }
+            ].map(f => (
+              <button key={f.value} onClick={() => onFilterFunctionChange(f.value)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterFunction === f.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{f.label}</button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 功能筛选 */}
-      <div className="mb-3">
-        <div className="text-xs text-zinc-400 mb-2">功能</div>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { label: '全部', value: 'all' },
-            { label: '图片生成', value: '图片生成' },
-            { label: '图片编辑', value: '图片编辑' },
-            { label: '文生视频', value: '文生视频' },
-            { label: '图生视频', value: '图生视频' },
-            { label: '首尾帧', value: '首尾帧' },
-            { label: '参考生视频', value: '参考生视频' },
-            { label: '视频编辑', value: '视频编辑' },
-            { label: '视频延长', value: '视频延长' },
-            { label: '语音合成', value: '语音合成' }
-          ].map(f => (
-            <button key={f.value} onClick={() => onFilterFunctionChange(f.value)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterFunction === f.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{f.label}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* 模型列表 */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-3 gap-2">
+      {/* 模型列表 - 可滚动区域 */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           {providers
             .flatMap(p => p.models.map(m => ({ p, m })))
             .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))

@@ -240,7 +240,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}
-          className={`bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl text-white overflow-y-auto ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={`bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl text-white flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
           style={{
             position: 'fixed',
             top: pos.top,
