@@ -195,6 +195,16 @@ const PRICES = {
         }
     },
 
+    // 视频 - Pixverse V5.5
+    // 价格单位：美元
+    // 基础价格（5秒，单镜头，无音频）
+    PIXVERSE_V55: {
+        '360p': 0.15,
+        '540p': 0.15,
+        '720p': 0.20,
+        '1080p': 0.40
+    },
+
     // 视频 - Vidu Q2
     // 价格单位：美元
     VIDU_Q2: {
@@ -690,6 +700,55 @@ export const pricingConfigs: PricingConfig[] = [
                 } else {
                     // 其他分辨率：使用 token 计价
                     totalPriceUSD = millionTokens * PRICES.SEEDANCE_V1_FAL.lite.perMillionTokens
+                }
+            }
+
+            // 转换为人民币并格式化
+            return formatPrice(totalPriceUSD * USD_TO_CNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-pixverse-v5.5',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const resolution = params.pixverseResolution || '720p'
+            const duration = params.videoDuration || 5
+            const generateAudio = params.pixverseGenerateAudio || false
+            const multiClip = params.pixverseMultiClip || false
+
+            // 获取基础价格（5秒，单镜头，无音频）
+            const basePrice5s = PRICES.PIXVERSE_V55[resolution as '360p' | '540p' | '720p' | '1080p'] || PRICES.PIXVERSE_V55['720p']
+
+            // 计算时长倍数
+            let durationMultiplier = 1
+            if (duration === 8) {
+                durationMultiplier = 2  // 8秒：2倍价格
+            } else if (duration === 10) {
+                // 10秒：2.2倍价格（1080p不支持10秒）
+                if (resolution === '1080p') {
+                    // 1080p不支持10秒，回退到8秒价格
+                    durationMultiplier = 2
+                } else {
+                    durationMultiplier = 2.2
+                }
+            }
+
+            // 计算基础价格（含时长）
+            let totalPriceUSD = basePrice5s * durationMultiplier
+
+            // 添加音频费用
+            if (generateAudio) {
+                totalPriceUSD += 0.05
+            }
+
+            // 添加多镜头费用
+            if (multiClip) {
+                if (generateAudio) {
+                    totalPriceUSD += 0.15  // 多镜头+音频：+$0.15
+                } else {
+                    totalPriceUSD += 0.10  // 仅多镜头：+$0.10
                 }
             }
 

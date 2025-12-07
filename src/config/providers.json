@@ -317,6 +317,21 @@
             "type": "polling",
             "expectedPolls": 50
           }
+        },
+        {
+          "id": "fal-ai-pixverse-v5.5",
+          "name": "Pixverse V5.5",
+          "type": "video",
+          "description": "Pixverse V5.5 视频生成模型，支持文生视频、图生视频和首尾帧三种模式，支持多种风格和音频生成",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "首尾帧"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
         }
       ]
     },

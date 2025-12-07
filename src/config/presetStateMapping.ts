@@ -122,6 +122,14 @@ export interface PresetSetters {
     setViduQ2Bgm: (v: boolean) => void
     setViduQ2FastMode: (v: boolean) => void
 
+    // Pixverse V5.5
+    setPixverseAspectRatio: (v: string) => void
+    setPixverseResolution: (v: string) => void
+    setPixverseStyle: (v: string) => void
+    setPixverseThinkingType: (v: string) => void
+    setPixverseGenerateAudio: (v: boolean) => void
+    setPixverseMultiClip: (v: boolean) => void
+
     // 音频参数
     setVoiceId: (v: string) => void
     setAudioSpec: (v: 'hd' | 'turbo') => void
@@ -265,6 +273,14 @@ export function createPresetSetterMap(
         viduQ2MovementAmplitude: setters.setViduQ2MovementAmplitude,
         viduQ2Bgm: setters.setViduQ2Bgm,
         viduQ2FastMode: setters.setViduQ2FastMode,
+
+        // Pixverse V5.5
+        pixverseAspectRatio: setters.setPixverseAspectRatio,
+        pixverseResolution: setters.setPixverseResolution,
+        pixverseStyle: setters.setPixverseStyle,
+        pixverseThinkingType: setters.setPixverseThinkingType,
+        pixverseGenerateAudio: setters.setPixverseGenerateAudio,
+        pixverseMultiClip: setters.setPixverseMultiClip,
 
         // 音频参数
         voiceId: setters.setVoiceId,

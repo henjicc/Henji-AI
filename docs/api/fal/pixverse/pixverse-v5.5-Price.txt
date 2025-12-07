@@ -1,0 +1,2 @@
+Pixverse V5.5 Transition & Pixverse V5.5 Image To Video & Pixverse V5.5 Text To Video:
+For a 5s video in single-clip mode without audio, your request will cost $0.15 for 360p and 540p, $0.2 for 720p, and $0.4 for 1080p. Enabling audio adds $0.05, and multi-clip mode adds $0.10 (or $0.15 with audio). For 8-second videos, costs double; for 10-second videos, costs are 2.2x the 5-second base (1080p not supported for 10s). For $1 you can run this model with approximately 2 times.

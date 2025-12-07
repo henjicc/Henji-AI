@@ -148,6 +148,14 @@ export const useMediaGeneratorState = () => {
   const [viduQ2Bgm, setViduQ2Bgm] = useState(false)
   const [viduQ2FastMode, setViduQ2FastMode] = useState(true)
 
+  // Pixverse V5.5 参数
+  const [pixverseAspectRatio, setPixverseAspectRatio] = useState('16:9')
+  const [pixverseResolution, setPixverseResolution] = useState('720p')
+  const [pixverseStyle, setPixverseStyle] = useState('none')
+  const [pixverseThinkingType, setPixverseThinkingType] = useState('auto')
+  const [pixverseGenerateAudio, setPixverseGenerateAudio] = useState(false)
+  const [pixverseMultiClip, setPixverseMultiClip] = useState(false)
+
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
@@ -294,6 +302,14 @@ export const useMediaGeneratorState = () => {
     viduQ2MovementAmplitude, setViduQ2MovementAmplitude,
     viduQ2Bgm, setViduQ2Bgm,
     viduQ2FastMode, setViduQ2FastMode,
+
+    // Pixverse V5.5
+    pixverseAspectRatio, setPixverseAspectRatio,
+    pixverseResolution, setPixverseResolution,
+    pixverseStyle, setPixverseStyle,
+    pixverseThinkingType, setPixverseThinkingType,
+    pixverseGenerateAudio, setPixverseGenerateAudio,
+    pixverseMultiClip, setPixverseMultiClip,
 
     // UI
     isDraggingImage, setIsDraggingImage

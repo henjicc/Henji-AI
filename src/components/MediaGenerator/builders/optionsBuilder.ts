@@ -112,6 +112,14 @@ interface BuildOptionsParams {
   viduQ2Bgm?: boolean
   viduQ2FastMode?: boolean
 
+  // Pixverse V5.5
+  pixverseAspectRatio?: string
+  pixverseResolution?: string
+  pixverseStyle?: string
+  pixverseThinkingType?: string
+  pixverseGenerateAudio?: boolean
+  pixverseMultiClip?: boolean
+
   // 音频
   audioSpeed: number
   audioEmotion: string
@@ -728,6 +736,43 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       fastMode: options.viduQ2FastMode,
       images: options.images?.length || 0,
       videos: options.videos?.length || 0
+    })
+  }
+
+  // Pixverse V5.5
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-pixverse-v5.5' || selectedModel === 'pixverse-v5.5')) {
+    options.pixverseAspectRatio = params.pixverseAspectRatio
+    options.pixverseResolution = params.pixverseResolution
+    options.videoDuration = params.videoDuration || 5
+    options.pixverseStyle = params.pixverseStyle
+    options.pixverseThinkingType = params.pixverseThinkingType
+    options.pixverseGenerateAudio = params.pixverseGenerateAudio
+    options.pixverseMultiClip = params.pixverseMultiClip
+
+    // 处理图片上传
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    console.log('[optionsBuilder] Pixverse V5.5 参数:', {
+      aspectRatio: options.pixverseAspectRatio,
+      resolution: options.pixverseResolution,
+      duration: options.videoDuration,
+      style: options.pixverseStyle,
+      thinkingType: options.pixverseThinkingType,
+      generateAudio: options.pixverseGenerateAudio,
+      multiClip: options.pixverseMultiClip,
+      images: options.images?.length || 0
     })
   }
 

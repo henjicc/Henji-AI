@@ -67,5 +67,13 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
     return 1  // 默认最多 1 张
   }
 
+  // Pixverse V5.5: 最多 2 张图片
+  // - 0 张图片：文生视频
+  // - 1 张图片：图生视频
+  // - 2 张图片：首尾帧（transition）
+  if (modelId === 'fal-ai-pixverse-v5.5' || modelId === 'pixverse-v5.5') {
+    return 2
+  }
+
   return 6 // 默认图片模型最多6张
 }

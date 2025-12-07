@@ -30,7 +30,8 @@ import {
   falAiKlingVideoV26ProParams,
   falAiSora2Params,
   falAiLtx2Params,
-  falAiViduQ2Params
+  falAiViduQ2Params,
+  falAiPixverseV55Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -295,6 +296,24 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Pixverse V5.5 参数 */}
+        {(selectedModel === 'fal-ai-pixverse-v5.5' || selectedModel === 'pixverse-v5.5') && (
+          <SchemaForm
+            schema={falAiPixverseV55Params}
+            values={{
+              pixverseAspectRatio: values.pixverseAspectRatio,
+              pixverseResolution: values.pixverseResolution,
+              videoDuration: values.videoDuration,
+              pixverseStyle: values.pixverseStyle,
+              pixverseThinkingType: values.pixverseThinkingType,
+              pixverseGenerateAudio: values.pixverseGenerateAudio,
+              pixverseMultiClip: values.pixverseMultiClip,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -315,7 +334,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-ltx-2' &&
          selectedModel !== 'ltx-2' &&
          selectedModel !== 'fal-ai-vidu-q2' &&
-         selectedModel !== 'vidu-q2' && (
+         selectedModel !== 'vidu-q2' &&
+         selectedModel !== 'fal-ai-pixverse-v5.5' &&
+         selectedModel !== 'pixverse-v5.5' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -345,7 +366,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-sora-2' &&
          selectedModel !== 'sora-2' &&
          selectedModel !== 'fal-ai-ltx-2' &&
-         selectedModel !== 'ltx-2' && (
+         selectedModel !== 'ltx-2' &&
+         selectedModel !== 'fal-ai-pixverse-v5.5' &&
+         selectedModel !== 'pixverse-v5.5' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}

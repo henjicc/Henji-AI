@@ -11,6 +11,7 @@ import { falAiKlingVideoV26ProRoute } from './fal-ai-kling-video-v2.6-pro'
 import { falAiSora2Route } from './fal-ai-sora-2'
 import { falAiLtx2Route } from './fal-ai-ltx-2'
 import { falAiViduQ2Route } from './fal-ai-vidu-q2'
+import { falAiPixverseV55Route } from './fal-ai-pixverse-v5.5'
 
 /**
  * 模型路由接口
@@ -28,6 +29,7 @@ export interface FalModelRoute {
 export const falModelRoutes: FalModelRoute[] = [
   falAiNanoBananaRoute,
   falAiNanoBananaProRoute,
+  falAiPixverseV55Route,  // Pixverse V5.5
   falAiKlingVideoV26ProRoute,  // Kling Video v2.6 Pro
   falAiKlingVideoO1Route,  // Kling Video O1 必须在 Veo 3.1 之前
   falAiKlingImageO1Route,
