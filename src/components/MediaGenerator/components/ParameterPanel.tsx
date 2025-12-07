@@ -31,7 +31,8 @@ import {
   falAiSora2Params,
   falAiLtx2Params,
   falAiViduQ2Params,
-  falAiPixverseV55Params
+  falAiPixverseV55Params,
+  falAiWan25PreviewParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -314,6 +315,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Fal Wan 2.5 Preview 参数 */}
+        {(selectedModel === 'fal-ai-wan-25-preview' || selectedModel === 'wan-25-preview') && (
+          <SchemaForm
+            schema={falAiWan25PreviewParams}
+            values={{
+              videoDuration: values.videoDuration,
+              wanAspectRatio: values.wanAspectRatio,
+              wanResolution: values.wanResolution,
+              wanPromptExpansion: values.wanPromptExpansion,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
@@ -336,7 +352,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-vidu-q2' &&
          selectedModel !== 'vidu-q2' &&
          selectedModel !== 'fal-ai-pixverse-v5.5' &&
-         selectedModel !== 'pixverse-v5.5' && (
+         selectedModel !== 'pixverse-v5.5' &&
+         selectedModel !== 'fal-ai-wan-25-preview' &&
+         selectedModel !== 'wan-25-preview' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -368,7 +386,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-ltx-2' &&
          selectedModel !== 'ltx-2' &&
          selectedModel !== 'fal-ai-pixverse-v5.5' &&
-         selectedModel !== 'pixverse-v5.5' && (
+         selectedModel !== 'pixverse-v5.5' &&
+         selectedModel !== 'fal-ai-wan-25-preview' &&
+         selectedModel !== 'wan-25-preview' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}

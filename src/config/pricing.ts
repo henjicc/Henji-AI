@@ -233,6 +233,14 @@ const PRICES = {
             '720p': 0.075,  // USD/s
             '1080p': { base: 0.28, perSecond: 0.075 }
         }
+    },
+
+    // 视频 - Wan 2.5 Preview (Fal)
+    // 价格单位：美元/秒
+    WAN_25_FAL: {
+        '480p': 0.05,  // USD/s
+        '720p': 0.10,  // USD/s
+        '1080p': 0.15  // USD/s
     }
 } as const
 
@@ -827,6 +835,25 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 转换为人民币并格式化
             return formatPrice(totalPriceUSD * USD_TO_CNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-wan-25-preview',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const duration = params.videoDuration || 5
+            const resolution = (params.wanResolution || '1080p').toLowerCase() as '480p' | '720p' | '1080p'
+
+            // 获取价格（美元/秒）
+            const pricePerSecondUSD = PRICES.WAN_25_FAL[resolution] || PRICES.WAN_25_FAL['1080p']
+
+            // 计算总价（转换为人民币）
+            const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
+
+            // 格式化为最多2位小数
+            return formatPrice(totalPriceCNY)
         }
     }
 ]

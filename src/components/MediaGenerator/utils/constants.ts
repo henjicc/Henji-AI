@@ -42,7 +42,8 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
   }
   if (modelId === 'minimax-hailuo-2.3') return 1
   if (modelId === 'minimax-hailuo-02') return 2
-  if (modelId === 'wan-2.5-preview') return 1
+  if (modelId === 'wan-2.5-preview') return 1  // 派欧云 Wan 2.5 Preview
+  if (modelId === 'fal-ai-wan-25-preview' || modelId === 'wan-25-preview') return 1  // Fal Wan 2.5 Preview：最多 1 张图片
   if (modelId === 'seedance-v1' || modelId === 'seedance-v1-lite' || modelId === 'seedance-v1-pro') return 2
 
   // Bytedance Seedance v1 (Fal): 根据模式动态限制图片数量

@@ -52,11 +52,15 @@ export const useMediaGeneratorState = () => {
   const [minimaxEnablePromptExpansion, setMinimaxEnablePromptExpansion] = useState(true)
   const [hailuoFastMode, setHailuoFastMode] = useState(false)
 
-  // Wan 参数
+  // Wan 参数（派欧云）
   const [wanSize, setWanSize] = useState('1920*1080')
-  const [wanResolution, setWanResolution] = useState('1080P')
   const [wanPromptExtend, setWanPromptExtend] = useState(true)
   const [wanAudio, setWanAudio] = useState(true)
+
+  // Wan 参数（Fal）
+  const [wanAspectRatio, setWanAspectRatio] = useState('16:9')
+  const [wanResolution, setWanResolution] = useState('1080p')
+  const [wanPromptExpansion, setWanPromptExpansion] = useState(true)
 
   // Seedance 参数（派欧云）
   const [seedanceResolution, setSeedanceResolution] = useState('720p')
@@ -207,11 +211,15 @@ export const useMediaGeneratorState = () => {
     minimaxEnablePromptExpansion, setMinimaxEnablePromptExpansion,
     hailuoFastMode, setHailuoFastMode,
 
-    // Wan
+    // Wan（派欧云）
     wanSize, setWanSize,
-    wanResolution, setWanResolution,
     wanPromptExtend, setWanPromptExtend,
     wanAudio, setWanAudio,
+
+    // Wan（Fal）
+    wanAspectRatio, setWanAspectRatio,
+    wanResolution, setWanResolution,
+    wanPromptExpansion, setWanPromptExpansion,
 
     // Seedance（派欧云）
     seedanceResolution, setSeedanceResolution,

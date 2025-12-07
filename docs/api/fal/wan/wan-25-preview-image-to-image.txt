@@ -1,0 +1,214 @@
+# Wan 2.5 Image to Image
+
+> Wan 2.5 image-to-image model.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/wan-25-preview/image-to-image`
+- **Model ID**: `fal-ai/wan-25-preview/image-to-image`
+- **Category**: image-to-image
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  The text prompt describing how to edit the image. Max 2000 characters.
+  - Examples: "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light."
+
+- **`image_urls`** (`list<string>`, _required_):
+  URLs of images to edit. For single-image editing, provide 1 URL. For multi-reference generation, provide up to 2 URLs. If more than 2 URLs are provided, only the first 2 will be used.
+  - Array of string
+  - Examples: ["https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"]
+
+- **`negative_prompt`** (`string`, _optional_):
+  Negative prompt to describe content to avoid. Max 500 characters.
+  - Examples: "low resolution, error, worst quality, low quality, defects"
+
+- **`image_size`** (`ImageSize | Enum`, _optional_):
+  The size of the generated image. Width and height must be between 384 and 1440 pixels. Default value: `square`
+  - Default: `"square"`
+  - One of: ImageSize | Enum
+  - Examples: "square", "landscape_16_9", "portrait_16_9", {"height":1280,"width":1280}
+
+- **`num_images`** (`integer`, _optional_):
+  Number of images to generate. Values from 1 to 4. Default value: `1`
+  - Default: `1`
+  - Range: `1` to `4`
+  - Examples: 1
+
+- **`seed`** (`integer`, _optional_):
+  Random seed for reproducibility. If None, a random seed is chosen.
+
+- **`enable_safety_checker`** (`boolean`, _optional_):
+  If set to true, the safety checker will be enabled. Default value: `true`
+  - Default: `true`
+  - Examples: true
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light.",
+  "image_urls": [
+    "https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"
+  ]
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light.",
+  "image_urls": [
+    "https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"
+  ],
+  "negative_prompt": "low resolution, error, worst quality, low quality, defects",
+  "image_size": "square",
+  "num_images": 1,
+  "enable_safety_checker": true
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`images`** (`list<ImageFile>`, _required_):
+  The edited images
+  - Array of ImageFile
+  - Examples: [{"content_type":"image/png","url":"https://v3.fal.media/files/rabbit/BM4J8xpV5ogtOQE9xGtft.png"}]
+
+- **`seeds`** (`list<integer>`, _required_):
+  The seeds used for each generated image
+  - Array of integer
+  - Examples: [175932751]
+
+- **`actual_prompt`** (`string`, _optional_):
+  The original prompt (prompt expansion is not available for image editing)
+  - Examples: "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light."
+
+
+
+**Example Response**:
+
+```json
+{
+  "images": [
+    {
+      "content_type": "image/png",
+      "url": "https://v3.fal.media/files/rabbit/BM4J8xpV5ogtOQE9xGtft.png"
+    }
+  ],
+  "seeds": [
+    175932751
+  ],
+  "actual_prompt": "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light."
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/wan-25-preview/image-to-image \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light.",
+     "image_urls": [
+       "https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"
+     ]
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/wan-25-preview/image-to-image",
+    arguments={
+        "prompt": "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light.",
+        "image_urls": ["https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"]
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/wan-25-preview/image-to-image", {
+  input: {
+    prompt: "Reimagine the scene under a raging thunderstorm at night: lightning forks across the sky, illuminating the samurai in stark flashes of white light.",
+    image_urls: ["https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"]
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/wan-25-preview/image-to-image)
+- [API Documentation](https://fal.ai/models/fal-ai/wan-25-preview/image-to-image/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/wan-25-preview/image-to-image)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

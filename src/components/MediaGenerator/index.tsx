@@ -109,9 +109,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setSeedanceVersion: state.setSeedanceVersion,
     setSeedanceFastMode: state.setSeedanceFastMode,
     setWanSize: state.setWanSize,
-    setWanResolution: state.setWanResolution,
     setWanPromptExtend: state.setWanPromptExtend,
     setWanAudio: state.setWanAudio,
+    setWanAspectRatio: state.setWanAspectRatio,
+    setWanResolution: state.setWanResolution,
+    setWanPromptExpansion: state.setWanPromptExpansion,
     setKlingMode: state.setKlingMode,
     setKlingAspectRatio: state.setKlingAspectRatio,
     setKlingKeepAudio: state.setKlingKeepAudio,
@@ -598,11 +600,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // PixVerse
       pixFastMode: state.setPixFastMode,
       pixStyle: state.setPixStyle,
-      // Wan
+      // Wan（派欧云）
       wanSize: state.setWanSize,
-      wanResolution: state.setWanResolution,
       wanPromptExtend: state.setWanPromptExtend,
       wanAudio: state.setWanAudio,
+      // Wan（Fal）
+      wanAspectRatio: state.setWanAspectRatio,
+      wanResolution: state.setWanResolution,
+      wanPromptExpansion: state.setWanPromptExpansion,
       // Seedance（派欧云）
       seedanceVariant: state.setSeedanceVariant,
       seedanceResolution: state.setSeedanceResolution,
@@ -763,10 +768,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         minimaxEnablePromptExpansion: state.minimaxEnablePromptExpansion,
         pixFastMode: state.pixFastMode,
         pixStyle: state.pixStyle,
+        // Wan（派欧云）
         wanSize: state.wanSize,
-        wanResolution: state.wanResolution,
         wanPromptExtend: state.wanPromptExtend,
         wanAudio: state.wanAudio,
+        // Wan（Fal）
+        wanAspectRatio: state.wanAspectRatio,
+        wanResolution: state.wanResolution,
+        wanPromptExpansion: state.wanPromptExpansion,
         seedanceVariant: state.seedanceVariant,
         seedanceResolution: state.seedanceResolution,
         seedanceAspectRatio: state.seedanceAspectRatio,

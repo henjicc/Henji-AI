@@ -79,11 +79,15 @@ export interface PresetSetters {
     setVeoAutoFix: (v: boolean) => void
     setVeoFastMode: (v: boolean) => void
 
-    // Wan25
+    // Wan25 (派欧云)
     setWanSize: (v: string) => void
-    setWanResolution: (v: string) => void
     setWanPromptExtend: (v: boolean) => void
     setWanAudio: (v: boolean) => void
+
+    // Wan25 (Fal)
+    setWanAspectRatio: (v: string) => void
+    setWanResolution: (v: string) => void
+    setWanPromptExpansion: (v: boolean) => void
 
     // Kling Video O1
     setKlingMode: (v: 'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference') => void
@@ -230,11 +234,15 @@ export function createPresetSetterMap(
         veoAutoFix: setters.setVeoAutoFix,
         veoFastMode: setters.setVeoFastMode,
 
-        // Wan25
+        // Wan25 (派欧云)
         wanSize: setters.setWanSize,
-        wanResolution: setters.setWanResolution,
         wanPromptExtend: setters.setWanPromptExtend,
         wanAudio: setters.setWanAudio,
+
+        // Wan25 (Fal)
+        wanAspectRatio: setters.setWanAspectRatio,
+        wanResolution: setters.setWanResolution,
+        wanPromptExpansion: setters.setWanPromptExpansion,
 
         // Kling Video O1
         klingMode: setters.setKlingMode,

@@ -1,0 +1,203 @@
+# Wan 2.5 Text to Image
+
+> Wan 2.5 text-to-image model.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/wan-25-preview/text-to-image`
+- **Model ID**: `fal-ai/wan-25-preview/text-to-image`
+- **Category**: text-to-image
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  The prompt for image generation. Supports Chinese and English, max 2000 characters.
+  - Examples: "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+
+- **`negative_prompt`** (`string`, _optional_):
+  Negative prompt to describe content to avoid. Max 500 characters.
+  - Examples: "low resolution, error, worst quality, low quality, defects"
+
+- **`num_images`** (`integer`, _optional_):
+  Number of images to generate. Values from 1 to 4. Default value: `1`
+  - Default: `1`
+  - Range: `1` to `4`
+  - Examples: 1
+
+- **`image_size`** (`ImageSize | Enum`, _optional_):
+  The size of the generated image. Can use preset names like 'square', 'landscape_16_9', etc., or specific dimensions. Total pixels must be between 768×768 and 1440×1440, with aspect ratio between [1:4, 4:1]. Default value: `square`
+  - Default: `"square"`
+  - One of: ImageSize | Enum
+  - Examples: "square", "landscape_16_9", "portrait_16_9", {"height":1280,"width":1280}
+
+- **`enable_prompt_expansion`** (`boolean`, _optional_):
+  Whether to enable prompt rewriting using LLM. Improves results for short prompts but increases processing time. Default value: `true`
+  - Default: `true`
+
+- **`seed`** (`integer`, _optional_):
+  Random seed for reproducibility. If None, a random seed is chosen.
+
+- **`enable_safety_checker`** (`boolean`, _optional_):
+  If set to true, the safety checker will be enabled. Default value: `true`
+  - Default: `true`
+  - Examples: true
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth.",
+  "negative_prompt": "low resolution, error, worst quality, low quality, defects",
+  "num_images": 1,
+  "image_size": "square",
+  "enable_prompt_expansion": true,
+  "enable_safety_checker": true
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`images`** (`list<ImageFile>`, _required_):
+  The generated images
+  - Array of ImageFile
+  - Examples: [{"content_type":"image/png","url":"https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"}]
+
+- **`seeds`** (`list<integer>`, _required_):
+  The seeds used for each generated image
+  - Array of integer
+  - Examples: [175932751]
+
+- **`actual_prompt`** (`string`, _optional_):
+  The actual prompt used if prompt rewriting was enabled
+  - Examples: "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+
+
+
+**Example Response**:
+
+```json
+{
+  "images": [
+    {
+      "content_type": "image/png",
+      "url": "https://v3.fal.media/files/penguin/4VZ7I1ZK5XNv33LV2JBxg.png"
+    }
+  ],
+  "seeds": [
+    175932751
+  ],
+  "actual_prompt": "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/wan-25-preview/text-to-image \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/wan-25-preview/text-to-image",
+    arguments={
+        "prompt": "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/wan-25-preview/text-to-image", {
+  input: {
+    prompt: "A lone samurai standing on the edge of a cliff at twilight, overlooking a vast valley shrouded in mist. The sky burns with deep orange and purple hues from the setting sun, casting long, dramatic shadows. The samurai’s silhouette glows against the horizon, with their sword reflecting a glint of fading light. The overall style is hyper-realistic, cinematic, and moody, with dramatic contrast and atmospheric depth."
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/wan-25-preview/text-to-image)
+- [API Documentation](https://fal.ai/models/fal-ai/wan-25-preview/text-to-image/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/wan-25-preview/text-to-image)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)

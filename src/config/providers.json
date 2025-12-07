@@ -332,6 +332,20 @@
             "type": "polling",
             "expectedPolls": 30
           }
+        },
+        {
+          "id": "fal-ai-wan-25-preview",
+          "name": "万相 2.5 Preview",
+          "type": "video",
+          "description": "万相 2.5 Preview 视频生成模型，支持文生视频和图生视频，支持提示词扩展",
+          "functions": [
+            "文生视频",
+            "图生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 40
+          }
         }
       ]
     },

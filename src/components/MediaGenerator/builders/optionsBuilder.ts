@@ -50,11 +50,15 @@ interface BuildOptionsParams {
   pixFastMode: boolean
   pixStyle?: string
 
-  // Wan
+  // Wan（派欧云）
   wanSize: string
-  wanResolution: string
   wanPromptExtend: boolean
   wanAudio: boolean
+
+  // Wan（Fal）
+  wanAspectRatio?: string
+  wanResolution?: string
+  wanPromptExpansion?: boolean
 
   // Seedance（派欧云）
   seedanceVariant: 'lite' | 'pro'
@@ -378,7 +382,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     if (params.videoSeed !== undefined) options.seed = params.videoSeed
   }
 
-  // Wan 2.5 Preview
+  // Wan 2.5 Preview（派欧云）
   else if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
     options.duration = params.videoDuration
     options.promptExtend = params.wanPromptExtend
@@ -399,6 +403,37 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       options.size = params.wanSize
     }
     options.negativePrompt = params.videoNegativePrompt
+  }
+
+  // Wan 2.5 Preview（Fal）
+  else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-wan-25-preview' || selectedModel === 'wan-25-preview')) {
+    options.duration = params.videoDuration || 5
+    options.wanAspectRatio = params.wanAspectRatio
+    options.wanResolution = params.wanResolution
+    options.wanPromptExpansion = params.wanPromptExpansion
+
+    // 处理图片上传
+    if (uploadedImages.length > 0) {
+      options.images = uploadedImages
+      const paths: string[] = [...uploadedFilePaths]
+      for (let i = 0; i < uploadedImages.length; i++) {
+        if (!paths[i]) {
+          const blob = await dataUrlToBlob(uploadedImages[i])
+          const saved = await saveUploadImage(blob, 'persist')
+          paths[i] = saved.fullPath
+        }
+      }
+      setUploadedFilePaths(paths)
+      options.uploadedFilePaths = paths
+    }
+
+    console.log('[optionsBuilder] Fal Wan 2.5 Preview 参数:', {
+      duration: options.duration,
+      wanAspectRatio: options.wanAspectRatio,
+      wanResolution: options.wanResolution,
+      wanPromptExpansion: options.wanPromptExpansion,
+      images: options.images?.length || 0
+    })
   }
 
   // Seedance v1 系列（派欧云）

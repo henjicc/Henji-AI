@@ -31,6 +31,7 @@ export { falAiSora2Params } from './fal-ai-sora-2'
 export { falAiLtx2Params } from './fal-ai-ltx-2'
 export { falAiViduQ2Params } from './fal-ai-vidu-q2'
 export { falAiPixverseV55Params } from './fal-ai-pixverse-v5.5'
+export { falAiWan25PreviewParams } from './fal-ai-wan-25-preview'
 
 // 魔搭模型
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
@@ -72,6 +73,7 @@ import { falAiSora2Params } from './fal-ai-sora-2'
 import { falAiLtx2Params } from './fal-ai-ltx-2'
 import { falAiViduQ2Params } from './fal-ai-vidu-q2'
 import { falAiPixverseV55Params } from './fal-ai-pixverse-v5.5'
+import { falAiWan25PreviewParams } from './fal-ai-wan-25-preview'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
@@ -118,6 +120,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'vidu-q2': falAiViduQ2Params,
   'fal-ai-pixverse-v5.5': falAiPixverseV55Params,
   'pixverse-v5.5': falAiPixverseV55Params,
+  'fal-ai-wan-25-preview': falAiWan25PreviewParams,
+  'wan-25-preview': falAiWan25PreviewParams,
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,

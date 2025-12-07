@@ -1,0 +1,218 @@
+# Wan 2.5 Image to Video
+
+> Wan 2.5 image-to-video model.
+
+
+## Overview
+
+- **Endpoint**: `https://fal.run/fal-ai/wan-25-preview/image-to-video`
+- **Model ID**: `fal-ai/wan-25-preview/image-to-video`
+- **Category**: image-to-video
+- **Kind**: inference
+
+
+## API Information
+
+This model can be used via our HTTP API or more conveniently via our client libraries.
+See the input and output schema below, as well as the usage examples.
+
+
+### Input Schema
+
+The API accepts the following input parameters:
+
+
+- **`prompt`** (`string`, _required_):
+  The text prompt describing the desired video motion. Max 800 characters.
+  - Examples: "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character."
+
+- **`image_url`** (`string`, _required_):
+  URL of the image to use as the first frame. Must be publicly accessible or base64 data URI.
+  
+  Max file size: 25.0MB, Min width: 360px, Min height: 360px, Max width: 2000px, Max height: 2000px, Timeout: 20.0s
+  - Examples: "https://storage.googleapis.com/falserverless/model_tests/wan/dragon-warrior.jpg"
+
+- **`audio_url`** (`string`, _optional_):
+  URL of the audio to use as the background music. Must be publicly accessible.
+  Limit handling: If the audio duration exceeds the duration value (5 or 10 seconds),
+  the audio is truncated to the first 5 or 10 seconds, and the rest is discarded. If
+  the audio is shorter than the video, the remaining part of the video will be silent.
+  For example, if the audio is 3 seconds long and the video duration is 5 seconds, the
+  first 3 seconds of the output video will have sound, and the last 2 seconds will be silent.
+  - Format: WAV, MP3.
+  - Duration: 3 to 30 s.
+  - File size: Up to 15 MB.
+
+- **`resolution`** (`ResolutionEnum`, _optional_):
+  Video resolution. Valid values: 480p, 720p, 1080p Default value: `"1080p"`
+  - Default: `"1080p"`
+  - Options: `"480p"`, `"720p"`, `"1080p"`
+
+- **`duration`** (`DurationEnum`, _optional_):
+  Duration of the generated video in seconds. Choose between 5 or 10 seconds. Default value: `"5"`
+  - Default: `"5"`
+  - Options: `"5"`, `"10"`
+  - Examples: "5", "10"
+
+- **`negative_prompt`** (`string`, _optional_):
+  Negative prompt to describe content to avoid. Max 500 characters.
+  - Examples: "low resolution, error, worst quality, low quality, defects"
+
+- **`enable_prompt_expansion`** (`boolean`, _optional_):
+  Whether to enable prompt rewriting using LLM. Default value: `true`
+  - Default: `true`
+
+- **`seed`** (`integer`, _optional_):
+  Random seed for reproducibility. If None, a random seed is chosen.
+
+- **`enable_safety_checker`** (`boolean`, _optional_):
+  If set to true, the safety checker will be enabled. Default value: `true`
+  - Default: `true`
+  - Examples: true
+
+
+
+**Required Parameters Example**:
+
+```json
+{
+  "prompt": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+  "image_url": "https://storage.googleapis.com/falserverless/model_tests/wan/dragon-warrior.jpg"
+}
+```
+
+**Full Example**:
+
+```json
+{
+  "prompt": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+  "image_url": "https://storage.googleapis.com/falserverless/model_tests/wan/dragon-warrior.jpg",
+  "resolution": "1080p",
+  "duration": "5",
+  "negative_prompt": "low resolution, error, worst quality, low quality, defects",
+  "enable_prompt_expansion": true,
+  "enable_safety_checker": true
+}
+```
+
+
+### Output Schema
+
+The API returns the following output format:
+
+- **`video`** (`VideoFile`, _required_):
+  The generated video file
+  - Examples: {"content_type":"video/mp4","url":"https://storage.googleapis.com/falserverless/example_outputs/wan-25-i2v-output.mp4"}
+
+- **`seed`** (`integer`, _required_):
+  The seed used for generation
+  - Examples: 175932751
+
+- **`actual_prompt`** (`string`, _optional_):
+  The actual prompt used if prompt rewriting was enabled
+  - Examples: "The white dragon warrior stands still in a grand cathedral-like structure, its glowing golden eyes fixed forward. The camera slowly moves closer, focusing on the warrior's armored chest and face. It then begins to circle around the warrior, capturing the intricate details of the white scale armor with gold accents. The warrior maintains a strong, determined posture. Ambient sounds and soft choral tones fill the background, enhancing the majestic atmosphere. The camera continues its slow circular motion, emphasizing the warrior's heroic presence before ending with a close-up of the face."
+
+
+
+**Example Response**:
+
+```json
+{
+  "video": {
+    "content_type": "video/mp4",
+    "url": "https://storage.googleapis.com/falserverless/example_outputs/wan-25-i2v-output.mp4"
+  },
+  "seed": 175932751,
+  "actual_prompt": "The white dragon warrior stands still in a grand cathedral-like structure, its glowing golden eyes fixed forward. The camera slowly moves closer, focusing on the warrior's armored chest and face. It then begins to circle around the warrior, capturing the intricate details of the white scale armor with gold accents. The warrior maintains a strong, determined posture. Ambient sounds and soft choral tones fill the background, enhancing the majestic atmosphere. The camera continues its slow circular motion, emphasizing the warrior's heroic presence before ending with a close-up of the face."
+}
+```
+
+
+## Usage Examples
+
+### cURL
+
+```bash
+curl --request POST \
+  --url https://fal.run/fal-ai/wan-25-preview/image-to-video \
+  --header "Authorization: Key $FAL_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+     "prompt": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+     "image_url": "https://storage.googleapis.com/falserverless/model_tests/wan/dragon-warrior.jpg"
+   }'
+```
+
+### Python
+
+Ensure you have the Python client installed:
+
+```bash
+pip install fal-client
+```
+
+Then use the API client to make requests:
+
+```python
+import fal_client
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+           print(log["message"])
+
+result = fal_client.subscribe(
+    "fal-ai/wan-25-preview/image-to-video",
+    arguments={
+        "prompt": "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+        "image_url": "https://storage.googleapis.com/falserverless/model_tests/wan/dragon-warrior.jpg"
+    },
+    with_logs=True,
+    on_queue_update=on_queue_update,
+)
+print(result)
+```
+
+### JavaScript
+
+Ensure you have the JavaScript client installed:
+
+```bash
+npm install --save @fal-ai/client
+```
+
+Then use the API client to make requests:
+
+```javascript
+import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/wan-25-preview/image-to-video", {
+  input: {
+    prompt: "The white dragon warrior stands still, eyes full of determination and strength. The camera slowly moves closer or circles around the warrior, highlighting the powerful presence and heroic spirit of the character.",
+    image_url: "https://storage.googleapis.com/falserverless/model_tests/wan/dragon-warrior.jpg"
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    if (update.status === "IN_PROGRESS") {
+      update.logs.map((log) => log.message).forEach(console.log);
+    }
+  },
+});
+console.log(result.data);
+console.log(result.requestId);
+```
+
+
+## Additional Resources
+
+### Documentation
+
+- [Model Playground](https://fal.ai/models/fal-ai/wan-25-preview/image-to-video)
+- [API Documentation](https://fal.ai/models/fal-ai/wan-25-preview/image-to-video/api)
+- [OpenAPI Schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=fal-ai/wan-25-preview/image-to-video)
+
+### fal.ai Platform
+
+- [Platform Documentation](https://docs.fal.ai)
+- [Python Client](https://docs.fal.ai/clients/python)
+- [JavaScript Client](https://docs.fal.ai/clients/javascript)
