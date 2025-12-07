@@ -84,7 +84,7 @@ export const falAiPixverseV55Route: FalModelRoute = {
     }
 
     // 时长（注意：API 需要字符串格式）
-    const duration = params.videoDuration || params.duration || 5
+    const duration = params.falPixverse55VideoDuration || params.duration || 5
     requestData.duration = String(duration)
 
     // 风格（可选）

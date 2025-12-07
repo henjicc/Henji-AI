@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiSora2Params: ParamDef[] = [
   {
-    id: 'soraMode',
+    id: 'falSora2Mode',
     type: 'dropdown',
     label: '模式',
     defaultValue: 'standard',
@@ -16,7 +16,7 @@ export const falAiSora2Params: ParamDef[] = [
     className: 'min-w-[100px]'
   },
   {
-    id: 'soraAspectRatio',
+    id: 'falSora2AspectRatio',
     type: 'dropdown',
     defaultValue: '16:9',
     // 分辨率配置：整合比例和分辨率到统一面板
@@ -31,7 +31,7 @@ export const falAiSora2Params: ParamDef[] = [
       },
       // 动态质量选项：根据模式显示不同的分辨率选项
       qualityOptions: (values) => {
-        const mode = values.soraMode || 'standard'
+        const mode = values.falSora2Mode || 'standard'
         if (mode === 'standard') {
           // 标准模式：只有 720p
           return [{ value: '720p', label: '720P' }]
@@ -69,7 +69,7 @@ export const falAiSora2Params: ParamDef[] = [
     className: 'min-w-[100px]'
   },
   {
-    id: 'videoDuration',
+    id: 'falSora2VideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 4,

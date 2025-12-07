@@ -8,7 +8,7 @@ import { ParamDef } from '../types/schema'
 export const falAiKlingVideoV26ProParams: ParamDef[] = [
   // 时长
   {
-    id: 'videoDuration',
+    id: 'falKlingV26ProVideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 5,
@@ -20,7 +20,7 @@ export const falAiKlingVideoV26ProParams: ParamDef[] = [
 
   // 宽高比（仅文生视频显示）
   {
-    id: 'klingV26AspectRatio',
+    id: 'falKlingV26ProAspectRatio',
     type: 'dropdown',
     label: '比例',
     defaultValue: '16:9',
@@ -46,7 +46,7 @@ export const falAiKlingVideoV26ProParams: ParamDef[] = [
 
   // CFG Scale（仅文生视频显示）
   {
-    id: 'klingV26CfgScale',
+    id: 'falKlingV26ProCfgScale',
     type: 'number',
     label: 'CFG Scale',
     defaultValue: 0.5,
@@ -63,7 +63,7 @@ export const falAiKlingVideoV26ProParams: ParamDef[] = [
 
   // 音频生成
   {
-    id: 'klingV26GenerateAudio',
+    id: 'falKlingV26ProGenerateAudio',
     type: 'toggle',
     label: '生成音频',
     defaultValue: true,

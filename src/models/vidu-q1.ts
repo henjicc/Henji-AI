@@ -1,11 +1,11 @@
 import { ParamDef } from '../types/schema'
 
 /**
- * Vidu Q1 模型参数定义
+ * Vidu Q1 模型参数定义（派欧云）
  */
 export const viduQ1Params: ParamDef[] = [
     {
-        id: 'viduMode',
+        id: 'ppioViduQ1Mode',
         type: 'dropdown',
         label: '模式',
         defaultValue: 'text-image-to-video',
@@ -15,10 +15,10 @@ export const viduQ1Params: ParamDef[] = [
                 const { uploadedImages } = values
                 const count = uploadedImages?.length || 0
                 // 根据图片数量判断应该切换到哪个模式
-                if (count === 0) return values.viduMode !== 'text-image-to-video'
-                if (count === 1) return values.viduMode !== 'text-image-to-video'
-                if (count === 2) return values.viduMode !== 'start-end-frame'
-                if (count >= 3) return values.viduMode !== 'reference-to-video'
+                if (count === 0) return values.ppioViduQ1Mode !== 'text-image-to-video'
+                if (count === 1) return values.ppioViduQ1Mode !== 'text-image-to-video'
+                if (count === 2) return values.ppioViduQ1Mode !== 'start-end-frame'
+                if (count >= 3) return values.ppioViduQ1Mode !== 'reference-to-video'
                 return false
             },
             value: (values: any) => {
@@ -37,7 +37,17 @@ export const viduQ1Params: ParamDef[] = [
         className: 'min-w-[120px]'
     },
     {
-        id: 'viduAspectRatio',
+        id: 'ppioViduQ1VideoDuration',
+        type: 'dropdown',
+        label: '时长',
+        defaultValue: 4,
+        options: [
+            { value: 4, label: '4秒' },
+            { value: 8, label: '8秒' }
+        ]
+    },
+    {
+        id: 'ppioViduQ1AspectRatio',
         type: 'dropdown',
         defaultValue: '16:9',
         // 分辨率配置：启用智能匹配和可视化
@@ -57,17 +67,17 @@ export const viduQ1Params: ParamDef[] = [
             { value: '1:1', label: '1:1' }
         ],
         hidden: (values) => {
-            const { viduMode, uploadedImages } = values
+            const { ppioViduQ1Mode, uploadedImages } = values
             // 首尾帧模式：隐藏
-            if (viduMode === 'start-end-frame') return true
+            if (ppioViduQ1Mode === 'start-end-frame') return true
             // 文/图生视频模式 + 有图片：隐藏（API 不支持传比例）
-            if (viduMode === 'text-image-to-video' && uploadedImages.length > 0) return true
+            if (ppioViduQ1Mode === 'text-image-to-video' && uploadedImages.length > 0) return true
             // 其他情况：显示
             return false
         }
     },
     {
-        id: 'viduStyle',
+        id: 'ppioViduQ1Style',
         type: 'dropdown',
         label: '风格',
         options: [
@@ -76,11 +86,11 @@ export const viduQ1Params: ParamDef[] = [
         ],
         hidden: (values) => {
             // Show only if: text-image mode AND no images
-            return !(values.viduMode === 'text-image-to-video' && values.uploadedImages.length === 0)
+            return !(values.ppioViduQ1Mode === 'text-image-to-video' && values.uploadedImages.length === 0)
         }
     },
     {
-        id: 'viduMovementAmplitude',
+        id: 'ppioViduQ1MovementAmplitude',
         type: 'dropdown',
         label: '运动幅度',
         options: [
@@ -91,12 +101,8 @@ export const viduQ1Params: ParamDef[] = [
         ]
     },
     {
-        id: 'viduBgm',
-        type: 'dropdown',
-        label: 'BGM',
-        options: [
-            { value: false, label: '关闭' },
-            { value: true, label: '开启' }
-        ]
+        id: 'ppioViduQ1Bgm',
+        type: 'toggle',
+        label: '生成音频'
     }
 ]

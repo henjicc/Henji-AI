@@ -78,95 +78,126 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setNumImages: state.setNumImages,
     setAspectRatio: state.setAspectRatio,
     setResolution: state.setResolution,
-    setImageSize: state.setImageSize,
-    setVeoMode: state.setVeoMode,
-    setVeoAspectRatio: state.setVeoAspectRatio,
-    setVeoResolution: state.setVeoResolution,
-    setVeoEnhancePrompt: state.setVeoEnhancePrompt,
-    setVeoGenerateAudio: state.setVeoGenerateAudio,
-    setVeoAutoFix: state.setVeoAutoFix,
-    setVeoFastMode: state.setVeoFastMode,
+    setModelscopeImageSize: state.setModelscopeImageSize,
+    setFalVeo31Mode: state.setFalVeo31Mode,
+    setFalVeo31AspectRatio: state.setFalVeo31AspectRatio,
+    setFalVeo31Resolution: state.setFalVeo31Resolution,
+    setFalVeo31EnhancePrompt: state.setFalVeo31EnhancePrompt,
+    setFalVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
+    setFalVeo31AutoFix: state.setFalVeo31AutoFix,
+    setFalVeo31FastMode: state.setFalVeo31FastMode,
     setVideoDuration: state.setVideoDuration,
     setVideoResolution: state.setVideoResolution,
     setVideoAspectRatio: state.setVideoAspectRatio,
     setVideoNegativePrompt: state.setVideoNegativePrompt,
     setVideoSeed: state.setVideoSeed,
-    setViduMode: state.setViduMode,
-    setViduAspectRatio: state.setViduAspectRatio,
-    setViduStyle: state.setViduStyle,
-    setViduMovementAmplitude: state.setViduMovementAmplitude,
-    setViduBgm: state.setViduBgm,
-    setKlingCfgScale: state.setKlingCfgScale,
-    setHailuoFastMode: state.setHailuoFastMode,
-    setMinimaxEnablePromptExpansion: state.setMinimaxEnablePromptExpansion,
-    setPixFastMode: state.setPixFastMode,
-    setPixStyle: state.setPixStyle,
-    setSeedanceVariant: state.setSeedanceVariant,
-    setSeedanceResolution: state.setSeedanceResolution,
-    setSeedanceAspectRatio: state.setSeedanceAspectRatio,
-    setSeedanceCameraFixed: state.setSeedanceCameraFixed,
-    setSeedanceMode: state.setSeedanceMode,
-    setSeedanceVersion: state.setSeedanceVersion,
-    setSeedanceFastMode: state.setSeedanceFastMode,
-    setWanSize: state.setWanSize,
-    setWanPromptExtend: state.setWanPromptExtend,
-    setWanAudio: state.setWanAudio,
-    setWanAspectRatio: state.setWanAspectRatio,
-    setWanResolution: state.setWanResolution,
-    setWanPromptExpansion: state.setWanPromptExpansion,
-    setKlingMode: state.setKlingMode,
-    setKlingAspectRatio: state.setKlingAspectRatio,
-    setKlingKeepAudio: state.setKlingKeepAudio,
-    setKlingElements: state.setKlingElements,
+    // 模型特定参数 - 派欧云
+    setPpioKling25VideoDuration: state.setPpioKling25VideoDuration,
+    setPpioKling25VideoAspectRatio: state.setPpioKling25VideoAspectRatio,
+    setPpioHailuo23VideoDuration: state.setPpioHailuo23VideoDuration,
+    setPpioHailuo23VideoResolution: state.setPpioHailuo23VideoResolution,
+    setPpioPixverse45VideoAspectRatio: state.setPpioPixverse45VideoAspectRatio,
+    setPpioPixverse45VideoResolution: state.setPpioPixverse45VideoResolution,
+    setPpioWan25VideoDuration: state.setPpioWan25VideoDuration,
+    setPpioSeedanceV1VideoDuration: state.setPpioSeedanceV1VideoDuration,
+    // 模型特定参数 - Fal
+    setFalNanoBananaAspectRatio: state.setFalNanoBananaAspectRatio,
+    setFalNanoBananaNumImages: state.setFalNanoBananaNumImages,
+    setFalNanoBananaProAspectRatio: state.setFalNanoBananaProAspectRatio,
+    setFalNanoBananaProNumImages: state.setFalNanoBananaProNumImages,
+    setFalNanoBananaProResolution: state.setFalNanoBananaProResolution,
+    setFalKlingImageO1AspectRatio: state.setFalKlingImageO1AspectRatio,
+    setFalKlingImageO1NumImages: state.setFalKlingImageO1NumImages,
+    setFalKlingImageO1Resolution: state.setFalKlingImageO1Resolution,
+    setFalZImageTurboImageSize: state.setFalZImageTurboImageSize,
+    setFalZImageTurboNumImages: state.setFalZImageTurboNumImages,
+    setFalSeedream40NumImages: state.setFalSeedream40NumImages,
+    setFalWan25VideoDuration: state.setFalWan25VideoDuration,
+    setFalSeedanceV1VideoDuration: state.setFalSeedanceV1VideoDuration,
+    setFalVeo31VideoDuration: state.setFalVeo31VideoDuration,
+    setFalSora2VideoDuration: state.setFalSora2VideoDuration,
+    setFalLtx2VideoDuration: state.setFalLtx2VideoDuration,
+    setFalViduQ2VideoDuration: state.setFalViduQ2VideoDuration,
+    setFalPixverse55VideoDuration: state.setFalPixverse55VideoDuration,
+    setFalKlingV26ProVideoDuration: state.setFalKlingV26ProVideoDuration,
+    setFalKlingVideoO1VideoDuration: state.setFalKlingVideoO1VideoDuration,
+    setFalKlingVideoO1Mode: state.setFalKlingVideoO1Mode,
+    setFalKlingVideoO1AspectRatio: state.setFalKlingVideoO1AspectRatio,
+    setFalKlingVideoO1KeepAudio: state.setFalKlingVideoO1KeepAudio,
+    setFalKlingVideoO1Elements: state.setFalKlingVideoO1Elements,
+    setPpioViduQ1VideoDuration: state.setPpioViduQ1VideoDuration,
+    setPpioViduQ1Mode: state.setPpioViduQ1Mode,
+    setPpioViduQ1AspectRatio: state.setPpioViduQ1AspectRatio,
+    setPpioViduQ1Style: state.setPpioViduQ1Style,
+    setPpioViduQ1MovementAmplitude: state.setPpioViduQ1MovementAmplitude,
+    setPpioViduQ1Bgm: state.setPpioViduQ1Bgm,
+    setPpioKling25CfgScale: state.setPpioKling25CfgScale,
+    setPpioHailuo23FastMode: state.setPpioHailuo23FastMode,
+    setPpioHailuo23EnablePromptExpansion: state.setPpioHailuo23EnablePromptExpansion,
+    setPpioPixverse45FastMode: state.setPpioPixverse45FastMode,
+    setPpioPixverse45Style: state.setPpioPixverse45Style,
+    setPpioSeedanceV1Variant: state.setPpioSeedanceV1Variant,
+    setPpioSeedanceV1Resolution: state.setPpioSeedanceV1Resolution,
+    setPpioSeedanceV1AspectRatio: state.setPpioSeedanceV1AspectRatio,
+    setPpioSeedanceV1CameraFixed: state.setPpioSeedanceV1CameraFixed,
+    setFalSeedanceV1Mode: state.setFalSeedanceV1Mode,
+    setFalSeedanceV1Version: state.setFalSeedanceV1Version,
+    setFalSeedanceV1FastMode: state.setFalSeedanceV1FastMode,
+    setPpioWan25Size: state.setPpioWan25Size,
+    setPpioWan25PromptExtend: state.setPpioWan25PromptExtend,
+    setPpioWan25Audio: state.setPpioWan25Audio,
+    setFalWan25AspectRatio: state.setFalWan25AspectRatio,
+    setFalWan25Resolution: state.setFalWan25Resolution,
+    setFalWan25PromptExpansion: state.setFalWan25PromptExpansion,
     setUploadedVideos: state.setUploadedVideos,
     setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
-    setKlingV26AspectRatio: state.setKlingV26AspectRatio,
-    setKlingV26GenerateAudio: state.setKlingV26GenerateAudio,
-    setKlingV26CfgScale: state.setKlingV26CfgScale,
-    setSoraMode: state.setSoraMode,
-    setSoraAspectRatio: state.setSoraAspectRatio,
-    setSoraResolution: state.setSoraResolution,
-    setMode: state.setMode,
-    setLtxAspectRatio: state.setLtxAspectRatio,
-    setLtxResolution: state.setLtxResolution,
-    setLtxFps: state.setLtxFps,
-    setLtxGenerateAudio: state.setLtxGenerateAudio,
-    setLtxFastMode: state.setLtxFastMode,
-    setLtxRetakeStartTime: state.setLtxRetakeStartTime,
-    setLtxRetakeMode: state.setLtxRetakeMode,
-    setViduQ2Mode: state.setViduQ2Mode,
-    setViduQ2AspectRatio: state.setViduQ2AspectRatio,
-    setViduQ2Resolution: state.setViduQ2Resolution,
-    setViduQ2MovementAmplitude: state.setViduQ2MovementAmplitude,
-    setViduQ2Bgm: state.setViduQ2Bgm,
-    setViduQ2FastMode: state.setViduQ2FastMode,
-    setPixverseAspectRatio: state.setPixverseAspectRatio,
-    setPixverseResolution: state.setPixverseResolution,
-    setPixverseStyle: state.setPixverseStyle,
-    setPixverseThinkingType: state.setPixverseThinkingType,
-    setPixverseGenerateAudio: state.setPixverseGenerateAudio,
-    setPixverseMultiClip: state.setPixverseMultiClip,
-    setVoiceId: state.setVoiceId,
-    setAudioSpec: state.setAudioSpec,
-    setAudioEmotion: state.setAudioEmotion,
-    setLanguageBoost: state.setLanguageBoost,
-    setAudioVol: state.setAudioVol,
-    setAudioPitch: state.setAudioPitch,
-    setAudioSpeed: state.setAudioSpeed,
-    setAudioSampleRate: state.setAudioSampleRate,
-    setAudioBitrate: state.setAudioBitrate,
-    setAudioFormat: state.setAudioFormat,
-    setAudioChannel: state.setAudioChannel,
-    setLatexRead: state.setLatexRead,
-    setTextNormalization: state.setTextNormalization,
-    setNumInferenceSteps: state.setNumInferenceSteps,
-    setEnablePromptExpansion: state.setEnablePromptExpansion,
-    setAcceleration: state.setAcceleration,
+    setFalKlingV26ProAspectRatio: state.setFalKlingV26ProAspectRatio,
+    setFalKlingV26ProGenerateAudio: state.setFalKlingV26ProGenerateAudio,
+    setFalKlingV26ProCfgScale: state.setFalKlingV26ProCfgScale,
+    setFalSora2Mode: state.setFalSora2Mode,
+    setFalSora2AspectRatio: state.setFalSora2AspectRatio,
+    setFalSora2Resolution: state.setFalSora2Resolution,
+    setFalLtx2Mode: state.setFalLtx2Mode,
+    setFalLtx2Resolution: state.setFalLtx2Resolution,
+    setFalLtx2Fps: state.setFalLtx2Fps,
+    setFalLtx2GenerateAudio: state.setFalLtx2GenerateAudio,
+    setFalLtx2FastMode: state.setFalLtx2FastMode,
+    setFalLtx2RetakeDuration: state.setFalLtx2RetakeDuration,
+    setFalLtx2RetakeStartTime: state.setFalLtx2RetakeStartTime,
+    setFalLtx2RetakeMode: state.setFalLtx2RetakeMode,
+    setFalViduQ2Mode: state.setFalViduQ2Mode,
+    setFalViduQ2AspectRatio: state.setFalViduQ2AspectRatio,
+    setFalViduQ2Resolution: state.setFalViduQ2Resolution,
+    setFalViduQ2MovementAmplitude: state.setFalViduQ2MovementAmplitude,
+    setFalViduQ2Bgm: state.setFalViduQ2Bgm,
+    setFalViduQ2FastMode: state.setFalViduQ2FastMode,
+    setFalPixverse55AspectRatio: state.setFalPixverse55AspectRatio,
+    setFalPixverse55Resolution: state.setFalPixverse55Resolution,
+    setFalPixverse55Style: state.setFalPixverse55Style,
+    setFalPixverse55ThinkingType: state.setFalPixverse55ThinkingType,
+    setFalPixverse55GenerateAudio: state.setFalPixverse55GenerateAudio,
+    setFalPixverse55MultiClip: state.setFalPixverse55MultiClip,
+    setMinimaxVoiceId: state.setMinimaxVoiceId,
+    setMinimaxAudioSpec: state.setMinimaxAudioSpec,
+    setMinimaxAudioEmotion: state.setMinimaxAudioEmotion,
+    setMinimaxLanguageBoost: state.setMinimaxLanguageBoost,
+    setMinimaxAudioVol: state.setMinimaxAudioVol,
+    setMinimaxAudioPitch: state.setMinimaxAudioPitch,
+    setMinimaxAudioSpeed: state.setMinimaxAudioSpeed,
+    setMinimaxAudioSampleRate: state.setMinimaxAudioSampleRate,
+    setMinimaxAudioBitrate: state.setMinimaxAudioBitrate,
+    setMinimaxAudioFormat: state.setMinimaxAudioFormat,
+    setMinimaxAudioChannel: state.setMinimaxAudioChannel,
+    setMinimaxLatexRead: state.setMinimaxLatexRead,
+    setMinimaxTextNormalization: state.setMinimaxTextNormalization,
+    setFalZImageTurboNumInferenceSteps: state.setFalZImageTurboNumInferenceSteps,
+    setFalZImageTurboEnablePromptExpansion: state.setFalZImageTurboEnablePromptExpansion,
+    setFalZImageTurboAcceleration: state.setFalZImageTurboAcceleration,
     setResolutionBaseSize: state.setResolutionBaseSize,
     // 魔搭模型参数
-    setSteps: state.setSteps,
-    setGuidance: state.setGuidance,
-    setNegativePrompt: state.setNegativePrompt,
+    setModelscopeSteps: state.setModelscopeSteps,
+    setModelscopeGuidance: state.setModelscopeGuidance,
+    setModelscopeNegativePrompt: state.setModelscopeNegativePrompt,
     setModelscopeCustomModel: state.setModelscopeCustomModel
   }), [])
 
@@ -241,7 +272,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   useEffect(() => {
     console.log('[Z-Image-Turbo] imageSize or baseSize changed:', {
       selectedModel: state.selectedModel,
-      imageSize: state.imageSize,
+      modelscopeImageSize: state.modelscopeImageSize,
       baseSize: state.resolutionBaseSize,
       currentWidth: state.customWidth,
       currentHeight: state.customHeight,
@@ -249,7 +280,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     })
 
     if (state.selectedModel !== 'fal-ai-z-image-turbo') return
-    if (!state.imageSize) return
+    if (!state.modelscopeImageSize) return
 
     // 如果是从 customSize 更新触发的，跳过
     if (isUpdatingFromCustomSizeRef.current) {
@@ -259,20 +290,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     }
 
     // 如果是 "自定义"，不做任何处理，保持当前的 customWidth 和 customHeight
-    if (state.imageSize === '自定义') {
+    if (state.modelscopeImageSize === '自定义') {
       console.log('[Z-Image-Turbo] imageSize is 自定义, skipping update')
       return
     }
 
     // 如果是比例格式（如 "4:3"），使用基数动态计算分辨率
-    if (state.imageSize.includes(':')) {
-      const [w, h] = state.imageSize.split(':').map(Number)
+    if (state.modelscopeImageSize.includes(':')) {
+      const [w, h] = state.modelscopeImageSize.split(':').map(Number)
       if (!isNaN(w) && !isNaN(h)) {
         // 使用基数计算分辨率
         import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
           const baseSize = state.resolutionBaseSize || 1440 // 默认 1440
           const size = calculateResolution(baseSize, w, h)
-          console.log('[Z-Image-Turbo] Calculated size:', { ratio: state.imageSize, baseSize, size })
+          console.log('[Z-Image-Turbo] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
 
           const newWidth = String(size.width)
           const newHeight = String(size.height)
@@ -287,7 +318,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         })
       }
     }
-  }, [state.imageSize, state.resolutionBaseSize, state.selectedModel])
+  }, [state.modelscopeImageSize, state.resolutionBaseSize, state.selectedModel])
 
   // 监听 customWidth 和 customHeight 变化，反向匹配比例（Z-Image-Turbo）
   // 只有用户手动修改时才触发
@@ -296,7 +327,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       selectedModel: state.selectedModel,
       customWidth: state.customWidth,
       customHeight: state.customHeight,
-      currentImageSize: state.imageSize,
+      currentImageSize: state.modelscopeImageSize,
       isUpdatingFromImageSize: isUpdatingFromImageSizeRef.current
     })
 
@@ -338,16 +369,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       console.log('[Z-Image-Turbo] Matched ratio:', matchedRatio)
 
       // 如果找到匹配的比例，自动选中
-      if (matchedRatio && state.imageSize !== matchedRatio) {
+      if (matchedRatio && state.modelscopeImageSize !== matchedRatio) {
         console.log('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
         isUpdatingFromCustomSizeRef.current = true
-        state.setImageSize(matchedRatio)
+        state.setModelscopeImageSize(matchedRatio)
       }
       // 如果没有匹配的比例，设置为 "自定义"
-      else if (!matchedRatio && state.imageSize !== '自定义') {
+      else if (!matchedRatio && state.modelscopeImageSize !== '自定义') {
         console.log('[Z-Image-Turbo] Setting imageSize to 自定义')
         isUpdatingFromCustomSizeRef.current = true
-        state.setImageSize('自定义')
+        state.setModelscopeImageSize('自定义')
       }
     })
   }, [state.customWidth, state.customHeight, state.selectedModel, state.resolutionBaseSize])
@@ -362,31 +393,31 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       state.selectedModel === 'modelscope-custom'
 
     if (!isModelscopeModel) return
-    if (!state.imageSize) return
+    if (!state.modelscopeImageSize) return
 
     console.log('[ModelScope] imageSize or baseSize changed:', {
       selectedModel: state.selectedModel,
-      imageSize: state.imageSize,
+      modelscopeImageSize: state.modelscopeImageSize,
       baseSize: state.resolutionBaseSize,
       currentWidth: state.customWidth,
       currentHeight: state.customHeight
     })
 
     // 如果是 "自定义"，不做任何处理
-    if (state.imageSize === '自定义') {
+    if (state.modelscopeImageSize === '自定义') {
       console.log('[ModelScope] imageSize is 自定义, skipping update')
       return
     }
 
     // 如果是比例格式（如 "4:3"），使用基数动态计算分辨率
-    if (state.imageSize.includes(':')) {
-      const [w, h] = state.imageSize.split(':').map(Number)
+    if (state.modelscopeImageSize.includes(':')) {
+      const [w, h] = state.modelscopeImageSize.split(':').map(Number)
       if (!isNaN(w) && !isNaN(h)) {
         // 使用基数计算分辨率
         import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
           const baseSize = state.resolutionBaseSize || 1024 // 默认 1024
           const size = calculateResolution(baseSize, w, h)
-          console.log('[ModelScope] Calculated size:', { ratio: state.imageSize, baseSize, size })
+          console.log('[ModelScope] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
 
           const newWidth = String(size.width)
           const newHeight = String(size.height)
@@ -400,7 +431,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         })
       }
     }
-  }, [state.imageSize, state.resolutionBaseSize, state.selectedModel])
+  }, [state.modelscopeImageSize, state.resolutionBaseSize, state.selectedModel])
 
   // 监听重新编辑事件
   const isRestoringRef = useRef(false)
@@ -505,7 +536,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uploadedImagesLength: state.uploadedImages.length,
     uploadedVideosLength: state.uploadedVideos.length,
     modelscopeCustomModel: state.modelscopeCustomModel,
-    seedanceMode: state.seedanceMode
+    falSeedanceV1Mode: state.falSeedanceV1Mode
   })
 
   // 自动应用模型 Schema 中定义的自动切换规则
@@ -518,7 +549,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       prev.uploadedImagesLength !== state.uploadedImages.length ||
       prev.uploadedVideosLength !== state.uploadedVideos.length ||
       prev.modelscopeCustomModel !== state.modelscopeCustomModel ||
-      prev.seedanceMode !== state.seedanceMode
+      prev.falSeedanceV1Mode !== state.falSeedanceV1Mode
 
     // 只有当关键状态真正改变时才执行自动切换
     if (!hasChanged) return
@@ -529,7 +560,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uploadedImagesLength: state.uploadedImages.length,
       uploadedVideosLength: state.uploadedVideos.length,
       modelscopeCustomModel: state.modelscopeCustomModel,
-      seedanceMode: state.seedanceMode
+      falSeedanceV1Mode: state.falSeedanceV1Mode
     }
 
     const switches = getAutoSwitchValues(state.selectedModel, state)
@@ -542,7 +573,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.seedanceMode])
+  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.falSeedanceV1Mode])
 
   // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
   // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
@@ -557,10 +588,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // 根据模型截断图片
     const max = getMaxImageCount(
       modelId,
-      modelId === 'vidu-q1' ? state.viduMode :
-      (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.veoMode :
-      (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.seedanceMode :
-      (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.viduQ2Mode :
+      modelId === 'vidu-q1' ? state.ppioViduQ1Mode :
+      (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+      (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+      (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.falViduQ2Mode :
       undefined
     )
     if (state.uploadedImages.length > max) {
@@ -572,121 +603,153 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 参数变更处理
   const handleSchemaChange = (id: string, value: any) => {
     const setterMap: Record<string, (v: any) => void> = {
-      // 视频参数
+      // 通用视频参数（向后兼容）
       videoDuration: state.setVideoDuration,
       videoAspectRatio: state.setVideoAspectRatio,
       videoResolution: state.setVideoResolution,
       videoNegativePrompt: state.setVideoNegativePrompt,
       videoSeed: state.setVideoSeed,
+      // 模型特定参数 - 派欧云
+      ppioKling25VideoDuration: state.setPpioKling25VideoDuration,
+      ppioKling25VideoAspectRatio: state.setPpioKling25VideoAspectRatio,
+      ppioHailuo23VideoDuration: state.setPpioHailuo23VideoDuration,
+      ppioHailuo23VideoResolution: state.setPpioHailuo23VideoResolution,
+      ppioPixverse45VideoAspectRatio: state.setPpioPixverse45VideoAspectRatio,
+      ppioPixverse45VideoResolution: state.setPpioPixverse45VideoResolution,
+      ppioWan25VideoDuration: state.setPpioWan25VideoDuration,
+      ppioSeedanceV1VideoDuration: state.setPpioSeedanceV1VideoDuration,
+      // 模型特定参数 - Fal
+      falNanoBananaAspectRatio: state.setFalNanoBananaAspectRatio,
+      falNanoBananaNumImages: state.setFalNanoBananaNumImages,
+      falNanoBananaProAspectRatio: state.setFalNanoBananaProAspectRatio,
+      falNanoBananaProNumImages: state.setFalNanoBananaProNumImages,
+      falNanoBananaProResolution: state.setFalNanoBananaProResolution,
+      falKlingImageO1AspectRatio: state.setFalKlingImageO1AspectRatio,
+      falKlingImageO1NumImages: state.setFalKlingImageO1NumImages,
+      falKlingImageO1Resolution: state.setFalKlingImageO1Resolution,
+      falZImageTurboImageSize: state.setFalZImageTurboImageSize,
+      falZImageTurboNumImages: state.setFalZImageTurboNumImages,
+      falSeedream40NumImages: state.setFalSeedream40NumImages,
+      falWan25VideoDuration: state.setFalWan25VideoDuration,
+      falSeedanceV1VideoDuration: state.setFalSeedanceV1VideoDuration,
+      falVeo31VideoDuration: state.setFalVeo31VideoDuration,
+      falSora2VideoDuration: state.setFalSora2VideoDuration,
+      falLtx2VideoDuration: state.setFalLtx2VideoDuration,
+      falViduQ2VideoDuration: state.setFalViduQ2VideoDuration,
+      falPixverse55VideoDuration: state.setFalPixverse55VideoDuration,
+      falKlingV26ProVideoDuration: state.setFalKlingV26ProVideoDuration,
+      falKlingVideoO1VideoDuration: state.setFalKlingVideoO1VideoDuration,
       // Vidu
-      viduMode: state.setViduMode,
-      viduAspectRatio: state.setViduAspectRatio,
-      viduStyle: state.setViduStyle,
-      viduMovementAmplitude: state.setViduMovementAmplitude,
-      viduBgm: state.setViduBgm,
+      ppioViduQ1VideoDuration: state.setPpioViduQ1VideoDuration,
+      ppioViduQ1Mode: state.setPpioViduQ1Mode,
+      ppioViduQ1AspectRatio: state.setPpioViduQ1AspectRatio,
+      ppioViduQ1Style: state.setPpioViduQ1Style,
+      ppioViduQ1MovementAmplitude: state.setPpioViduQ1MovementAmplitude,
+      ppioViduQ1Bgm: state.setPpioViduQ1Bgm,
       // Kling
-      klingCfgScale: state.setKlingCfgScale,
+      ppioKling25CfgScale: state.setPpioKling25CfgScale,
       // Kling Video O1
-      klingMode: state.setKlingMode,
-      klingAspectRatio: state.setKlingAspectRatio,
-      klingKeepAudio: state.setKlingKeepAudio,
+      falKlingVideoO1Mode: state.setFalKlingVideoO1Mode,
+      falKlingVideoO1AspectRatio: state.setFalKlingVideoO1AspectRatio,
+      falKlingVideoO1KeepAudio: state.setFalKlingVideoO1KeepAudio,
       // Kling v2.6 Pro
-      klingV26AspectRatio: state.setKlingV26AspectRatio,
-      klingV26GenerateAudio: state.setKlingV26GenerateAudio,
-      klingV26CfgScale: state.setKlingV26CfgScale,
+      falKlingV26ProAspectRatio: state.setFalKlingV26ProAspectRatio,
+      falKlingV26ProGenerateAudio: state.setFalKlingV26ProGenerateAudio,
+      falKlingV26ProCfgScale: state.setFalKlingV26ProCfgScale,
       // Hailuo
-      hailuoFastMode: state.setHailuoFastMode,
-      minimaxEnablePromptExpansion: state.setMinimaxEnablePromptExpansion,
+      ppioHailuo23FastMode: state.setPpioHailuo23FastMode,
+      ppioHailuo23EnablePromptExpansion: state.setPpioHailuo23EnablePromptExpansion,
       // PixVerse
-      pixFastMode: state.setPixFastMode,
-      pixStyle: state.setPixStyle,
+      ppioPixverse45FastMode: state.setPpioPixverse45FastMode,
+      ppioPixverse45Style: state.setPpioPixverse45Style,
       // Wan（派欧云）
-      wanSize: state.setWanSize,
-      wanPromptExtend: state.setWanPromptExtend,
-      wanAudio: state.setWanAudio,
+      ppioWan25Size: state.setPpioWan25Size,
+      ppioWan25PromptExtend: state.setPpioWan25PromptExtend,
+      ppioWan25Audio: state.setPpioWan25Audio,
       // Wan（Fal）
-      wanAspectRatio: state.setWanAspectRatio,
-      wanResolution: state.setWanResolution,
-      wanPromptExpansion: state.setWanPromptExpansion,
+      falWan25AspectRatio: state.setFalWan25AspectRatio,
+      falWan25Resolution: state.setFalWan25Resolution,
+      falWan25PromptExpansion: state.setFalWan25PromptExpansion,
       // Seedance（派欧云）
-      seedanceVariant: state.setSeedanceVariant,
-      seedanceResolution: state.setSeedanceResolution,
-      seedanceAspectRatio: state.setSeedanceAspectRatio,
-      seedanceCameraFixed: state.setSeedanceCameraFixed,
+      ppioSeedanceV1Variant: state.setPpioSeedanceV1Variant,
+      ppioSeedanceV1Resolution: state.setPpioSeedanceV1Resolution,
+      ppioSeedanceV1AspectRatio: state.setPpioSeedanceV1AspectRatio,
+      ppioSeedanceV1CameraFixed: state.setPpioSeedanceV1CameraFixed,
       // Seedance v1（Fal）
-      seedanceMode: state.setSeedanceMode,
-      seedanceVersion: state.setSeedanceVersion,
-      seedanceFastMode: state.setSeedanceFastMode,
+      falSeedanceV1Mode: state.setFalSeedanceV1Mode,
+      falSeedanceV1Version: state.setFalSeedanceV1Version,
+      falSeedanceV1FastMode: state.setFalSeedanceV1FastMode,
       // Veo
-      veoMode: state.setVeoMode,
-      veoAspectRatio: state.setVeoAspectRatio,
-      veoResolution: state.setVeoResolution,
-      veoEnhancePrompt: state.setVeoEnhancePrompt,
-      veoGenerateAudio: state.setVeoGenerateAudio,
-      veoAutoFix: state.setVeoAutoFix,
-      veoFastMode: state.setVeoFastMode,
+      falVeo31Mode: state.setFalVeo31Mode,
+      falVeo31AspectRatio: state.setFalVeo31AspectRatio,
+      falVeo31Resolution: state.setFalVeo31Resolution,
+      falVeo31EnhancePrompt: state.setFalVeo31EnhancePrompt,
+      falVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
+      falVeo31AutoFix: state.setFalVeo31AutoFix,
+      falVeo31FastMode: state.setFalVeo31FastMode,
       // Sora 2
-      soraMode: state.setSoraMode,
-      soraAspectRatio: state.setSoraAspectRatio,
-      soraResolution: state.setSoraResolution,
+      falSora2Mode: state.setFalSora2Mode,
+      falSora2AspectRatio: state.setFalSora2AspectRatio,
+      falSora2Resolution: state.setFalSora2Resolution,
       // LTX-2
-      mode: state.setMode,
-      ltxResolution: state.setLtxResolution,
-      ltxFps: state.setLtxFps,
-      ltxGenerateAudio: state.setLtxGenerateAudio,
-      ltxFastMode: state.setLtxFastMode,
-      ltxRetakeDuration: state.setLtxRetakeDuration,
-      ltxRetakeStartTime: state.setLtxRetakeStartTime,
-      ltxRetakeMode: state.setLtxRetakeMode,
+      falLtx2Mode: state.setFalLtx2Mode,
+      falLtx2Resolution: state.setFalLtx2Resolution,
+      falLtx2Fps: state.setFalLtx2Fps,
+      falLtx2GenerateAudio: state.setFalLtx2GenerateAudio,
+      falLtx2FastMode: state.setFalLtx2FastMode,
+      falLtx2RetakeDuration: state.setFalLtx2RetakeDuration,
+      falLtx2RetakeStartTime: state.setFalLtx2RetakeStartTime,
+      falLtx2RetakeMode: state.setFalLtx2RetakeMode,
       // Vidu Q2
-      viduQ2Mode: state.setViduQ2Mode,
-      viduQ2AspectRatio: state.setViduQ2AspectRatio,
-      viduQ2Resolution: state.setViduQ2Resolution,
-      viduQ2MovementAmplitude: state.setViduQ2MovementAmplitude,
-      viduQ2Bgm: state.setViduQ2Bgm,
-      viduQ2FastMode: state.setViduQ2FastMode,
+      falViduQ2Mode: state.setFalViduQ2Mode,
+      falViduQ2AspectRatio: state.setFalViduQ2AspectRatio,
+      falViduQ2Resolution: state.setFalViduQ2Resolution,
+      falViduQ2MovementAmplitude: state.setFalViduQ2MovementAmplitude,
+      falViduQ2Bgm: state.setFalViduQ2Bgm,
+      falViduQ2FastMode: state.setFalViduQ2FastMode,
       // Pixverse V5.5
-      pixverseAspectRatio: state.setPixverseAspectRatio,
-      pixverseResolution: state.setPixverseResolution,
-      pixverseStyle: state.setPixverseStyle,
-      pixverseThinkingType: state.setPixverseThinkingType,
-      pixverseGenerateAudio: state.setPixverseGenerateAudio,
-      pixverseMultiClip: state.setPixverseMultiClip,
+      falPixverse55AspectRatio: state.setFalPixverse55AspectRatio,
+      falPixverse55Resolution: state.setFalPixverse55Resolution,
+      falPixverse55Style: state.setFalPixverse55Style,
+      falPixverse55ThinkingType: state.setFalPixverse55ThinkingType,
+      falPixverse55GenerateAudio: state.setFalPixverse55GenerateAudio,
+      falPixverse55MultiClip: state.setFalPixverse55MultiClip,
       // Seedream
       maxImages: state.setMaxImages,
       selectedResolution: state.setSelectedResolution,
       resolutionQuality: state.setResolutionQuality,
-      // Nano Banana & ByteDance Seedream v4
-      numImages: state.setNumImages,  // ByteDance Seedream v4 使用 numImages
-      num_images: state.setNumImages, // Nano Banana 使用 num_images
+      // 通用图片参数（向后兼容）
+      numImages: state.setNumImages,
+      num_images: state.setNumImages,
       aspectRatio: state.setAspectRatio,
       resolution: state.setResolution,
       // Z-Image-Turbo
-      imageSize: state.setImageSize,
+      modelscopeImageSize: state.setModelscopeImageSize,
       customWidth: state.setCustomWidth,
       customHeight: state.setCustomHeight,
       resolutionBaseSize: state.setResolutionBaseSize,
-      numInferenceSteps: state.setNumInferenceSteps,
-      enablePromptExpansion: state.setEnablePromptExpansion,
-      acceleration: state.setAcceleration,
+      falZImageTurboNumInferenceSteps: state.setFalZImageTurboNumInferenceSteps,
+      falZImageTurboEnablePromptExpansion: state.setFalZImageTurboEnablePromptExpansion,
+      falZImageTurboAcceleration: state.setFalZImageTurboAcceleration,
       // 魔搭
-      steps: state.setSteps,
-      guidance: state.setGuidance,
-      negativePrompt: state.setNegativePrompt,
+      modelscopeSteps: state.setModelscopeSteps,
+      modelscopeGuidance: state.setModelscopeGuidance,
+      modelscopeNegativePrompt: state.setModelscopeNegativePrompt,
       modelscopeCustomModel: state.setModelscopeCustomModel,
       // 音频
-      audioSpec: state.setAudioSpec,
-      audioEmotion: state.setAudioEmotion,
-      languageBoost: state.setLanguageBoost,
-      audioVol: state.setAudioVol,
-      audioPitch: state.setAudioPitch,
-      audioSpeed: state.setAudioSpeed,
-      audioSampleRate: state.setAudioSampleRate,
-      audioBitrate: state.setAudioBitrate,
-      audioFormat: state.setAudioFormat,
-      audioChannel: state.setAudioChannel,
-      latexRead: state.setLatexRead,
-      textNormalization: state.setTextNormalization
+      minimaxVoiceId: state.setMinimaxVoiceId,
+      minimaxAudioSpec: state.setMinimaxAudioSpec,
+      minimaxAudioEmotion: state.setMinimaxAudioEmotion,
+      minimaxLanguageBoost: state.setMinimaxLanguageBoost,
+      minimaxAudioVol: state.setMinimaxAudioVol,
+      minimaxAudioPitch: state.setMinimaxAudioPitch,
+      minimaxAudioSpeed: state.setMinimaxAudioSpeed,
+      minimaxAudioSampleRate: state.setMinimaxAudioSampleRate,
+      minimaxAudioBitrate: state.setMinimaxAudioBitrate,
+      minimaxAudioFormat: state.setMinimaxAudioFormat,
+      minimaxAudioChannel: state.setMinimaxAudioChannel,
+      minimaxLatexRead: state.setMinimaxLatexRead,
+      minimaxTextNormalization: state.setMinimaxTextNormalization
     }
 
     // 直接设置值，保持界面显示为 'smart'
@@ -725,9 +788,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 检查 Seedance v1 Fast 模式的限制
     if ((state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') &&
-        state.seedanceVersion === 'pro' &&
-        state.seedanceFastMode &&
-        state.seedanceMode === 'image-to-video' &&
+        state.falSeedanceV1Version === 'pro' &&
+        state.falSeedanceV1FastMode &&
+        state.falSeedanceV1Mode === 'image-to-video' &&
         state.uploadedImages.length >= 2) {
       // 显示警告弹窗
       setIsWarningDialogOpen(true)
@@ -758,96 +821,124 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         videoResolution: state.videoResolution,
         videoNegativePrompt: state.videoNegativePrompt,
         videoSeed: state.videoSeed,
-        viduMode: state.viduMode,
-        viduStyle: state.viduStyle,
-        viduMovementAmplitude: state.viduMovementAmplitude,
-        viduBgm: state.viduBgm,
-        viduAspectRatio: state.viduAspectRatio,
-        klingCfgScale: state.klingCfgScale,
-        hailuoFastMode: state.hailuoFastMode,
-        minimaxEnablePromptExpansion: state.minimaxEnablePromptExpansion,
-        pixFastMode: state.pixFastMode,
-        pixStyle: state.pixStyle,
+        // 模型特定参数 - 派欧云
+        ppioKling25VideoDuration: state.ppioKling25VideoDuration,
+        ppioKling25VideoAspectRatio: state.ppioKling25VideoAspectRatio,
+        ppioHailuo23VideoDuration: state.ppioHailuo23VideoDuration,
+        ppioHailuo23VideoResolution: state.ppioHailuo23VideoResolution,
+        ppioPixverse45VideoAspectRatio: state.ppioPixverse45VideoAspectRatio,
+        ppioPixverse45VideoResolution: state.ppioPixverse45VideoResolution,
+        ppioWan25VideoDuration: state.ppioWan25VideoDuration,
+        ppioSeedanceV1VideoDuration: state.ppioSeedanceV1VideoDuration,
+        // 模型特定参数 - Fal
+        falNanoBananaAspectRatio: state.falNanoBananaAspectRatio,
+        falNanoBananaNumImages: state.falNanoBananaNumImages,
+        falNanoBananaProAspectRatio: state.falNanoBananaProAspectRatio,
+        falNanoBananaProNumImages: state.falNanoBananaProNumImages,
+        falKlingImageO1AspectRatio: state.falKlingImageO1AspectRatio,
+        falKlingImageO1NumImages: state.falKlingImageO1NumImages,
+        falZImageTurboImageSize: state.falZImageTurboImageSize,
+        falZImageTurboNumImages: state.falZImageTurboNumImages,
+        falSeedream40NumImages: state.falSeedream40NumImages,
+        falWan25VideoDuration: state.falWan25VideoDuration,
+        falSeedanceV1VideoDuration: state.falSeedanceV1VideoDuration,
+        falVeo31VideoDuration: state.falVeo31VideoDuration,
+        falSora2VideoDuration: state.falSora2VideoDuration,
+        falLtx2VideoDuration: state.falLtx2VideoDuration,
+        falViduQ2VideoDuration: state.falViduQ2VideoDuration,
+        falPixverse55VideoDuration: state.falPixverse55VideoDuration,
+        falKlingV26ProVideoDuration: state.falKlingV26ProVideoDuration,
+        falKlingVideoO1VideoDuration: state.falKlingVideoO1VideoDuration,
+        ppioViduQ1Mode: state.ppioViduQ1Mode,
+        ppioViduQ1Style: state.ppioViduQ1Style,
+        ppioViduQ1MovementAmplitude: state.ppioViduQ1MovementAmplitude,
+        ppioViduQ1Bgm: state.ppioViduQ1Bgm,
+        ppioViduQ1AspectRatio: state.ppioViduQ1AspectRatio,
+        ppioKling25CfgScale: state.ppioKling25CfgScale,
+        ppioHailuo23FastMode: state.ppioHailuo23FastMode,
+        ppioHailuo23EnablePromptExpansion: state.ppioHailuo23EnablePromptExpansion,
+        ppioPixverse45FastMode: state.ppioPixverse45FastMode,
+        ppioPixverse45Style: state.ppioPixverse45Style,
         // Wan（派欧云）
-        wanSize: state.wanSize,
-        wanPromptExtend: state.wanPromptExtend,
-        wanAudio: state.wanAudio,
+        ppioWan25Size: state.ppioWan25Size,
+        ppioWan25PromptExtend: state.ppioWan25PromptExtend,
+        ppioWan25Audio: state.ppioWan25Audio,
         // Wan（Fal）
-        wanAspectRatio: state.wanAspectRatio,
-        wanResolution: state.wanResolution,
-        wanPromptExpansion: state.wanPromptExpansion,
-        seedanceVariant: state.seedanceVariant,
-        seedanceResolution: state.seedanceResolution,
-        seedanceAspectRatio: state.seedanceAspectRatio,
-        seedanceCameraFixed: state.seedanceCameraFixed,
+        falWan25AspectRatio: state.falWan25AspectRatio,
+        falWan25Resolution: state.falWan25Resolution,
+        falWan25PromptExpansion: state.falWan25PromptExpansion,
+        ppioSeedanceV1Variant: state.ppioSeedanceV1Variant,
+        ppioSeedanceV1Resolution: state.ppioSeedanceV1Resolution,
+        ppioSeedanceV1AspectRatio: state.ppioSeedanceV1AspectRatio,
+        ppioSeedanceV1CameraFixed: state.ppioSeedanceV1CameraFixed,
         // Seedance v1（Fal）参数
-        seedanceMode: state.seedanceMode,
-        seedanceVersion: state.seedanceVersion,
-        seedanceFastMode: state.seedanceFastMode,
-        veoMode: state.veoMode,
-        veoAspectRatio: state.veoAspectRatio,
-        veoResolution: state.veoResolution,
-        veoEnhancePrompt: state.veoEnhancePrompt,
-        veoGenerateAudio: state.veoGenerateAudio,
-        veoAutoFix: state.veoAutoFix,
-        veoFastMode: state.veoFastMode,
-        klingMode: state.klingMode,
-        klingAspectRatio: state.klingAspectRatio,
-        klingKeepAudio: state.klingKeepAudio,
-        klingElements: state.klingElements,
+        falSeedanceV1Mode: state.falSeedanceV1Mode,
+        falSeedanceV1Version: state.falSeedanceV1Version,
+        falSeedanceV1FastMode: state.falSeedanceV1FastMode,
+        falVeo31Mode: state.falVeo31Mode,
+        falVeo31AspectRatio: state.falVeo31AspectRatio,
+        falVeo31Resolution: state.falVeo31Resolution,
+        falVeo31EnhancePrompt: state.falVeo31EnhancePrompt,
+        falVeo31GenerateAudio: state.falVeo31GenerateAudio,
+        falVeo31AutoFix: state.falVeo31AutoFix,
+        falVeo31FastMode: state.falVeo31FastMode,
+        falKlingVideoO1Mode: state.falKlingVideoO1Mode,
+        falKlingVideoO1AspectRatio: state.falKlingVideoO1AspectRatio,
+        falKlingVideoO1KeepAudio: state.falKlingVideoO1KeepAudio,
+        falKlingVideoO1Elements: state.falKlingVideoO1Elements,
         uploadedVideos: state.uploadedVideos,
         uploadedVideoFiles: state.uploadedVideoFiles,
-        klingV26AspectRatio: state.klingV26AspectRatio,
-        klingV26GenerateAudio: state.klingV26GenerateAudio,
-        klingV26CfgScale: state.klingV26CfgScale,
-        soraMode: state.soraMode,
-        soraAspectRatio: state.soraAspectRatio,
-        soraResolution: state.soraResolution,
+        falKlingV26ProAspectRatio: state.falKlingV26ProAspectRatio,
+        falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
+        falKlingV26ProCfgScale: state.falKlingV26ProCfgScale,
+        falSora2Mode: state.falSora2Mode,
+        falSora2AspectRatio: state.falSora2AspectRatio,
+        falSora2Resolution: state.falSora2Resolution,
         // LTX-2 参数
-        mode: state.mode,
-        ltxResolution: state.ltxResolution,
-        ltxFps: state.ltxFps,
-        ltxGenerateAudio: state.ltxGenerateAudio,
-        ltxFastMode: state.ltxFastMode,
-        ltxRetakeDuration: state.ltxRetakeDuration,
-        ltxRetakeStartTime: state.ltxRetakeStartTime,
-        ltxRetakeMode: state.ltxRetakeMode,
+        falLtx2Mode: state.falLtx2Mode,
+        falLtx2Resolution: state.falLtx2Resolution,
+        falLtx2Fps: state.falLtx2Fps,
+        falLtx2GenerateAudio: state.falLtx2GenerateAudio,
+        falLtx2FastMode: state.falLtx2FastMode,
+        falLtx2RetakeDuration: state.falLtx2RetakeDuration,
+        falLtx2RetakeStartTime: state.falLtx2RetakeStartTime,
+        falLtx2RetakeMode: state.falLtx2RetakeMode,
         // Vidu Q2 参数
-        viduQ2Mode: state.viduQ2Mode,
-        viduQ2AspectRatio: state.viduQ2AspectRatio,
-        viduQ2Resolution: state.viduQ2Resolution,
-        viduQ2MovementAmplitude: state.viduQ2MovementAmplitude,
-        viduQ2Bgm: state.viduQ2Bgm,
-        viduQ2FastMode: state.viduQ2FastMode,
+        falViduQ2Mode: state.falViduQ2Mode,
+        falViduQ2AspectRatio: state.falViduQ2AspectRatio,
+        falViduQ2Resolution: state.falViduQ2Resolution,
+        falViduQ2MovementAmplitude: state.falViduQ2MovementAmplitude,
+        falViduQ2Bgm: state.falViduQ2Bgm,
+        falViduQ2FastMode: state.falViduQ2FastMode,
         // Pixverse V5.5 参数
-        pixverseAspectRatio: state.pixverseAspectRatio,
-        pixverseResolution: state.pixverseResolution,
-        pixverseStyle: state.pixverseStyle,
-        pixverseThinkingType: state.pixverseThinkingType,
-        pixverseGenerateAudio: state.pixverseGenerateAudio,
-        pixverseMultiClip: state.pixverseMultiClip,
-        audioSpeed: state.audioSpeed,
-        audioEmotion: state.audioEmotion,
-        voiceId: state.voiceId,
-        audioSpec: state.audioSpec,
-        audioVol: state.audioVol,
-        audioPitch: state.audioPitch,
-        audioSampleRate: state.audioSampleRate,
-        audioBitrate: state.audioBitrate,
-        audioFormat: state.audioFormat,
-        audioChannel: state.audioChannel,
-        latexRead: state.latexRead,
-        textNormalization: state.textNormalization,
-        languageBoost: state.languageBoost,
-        imageSize: state.imageSize,
-        numInferenceSteps: state.numInferenceSteps,
-        enablePromptExpansion: state.enablePromptExpansion,
-        acceleration: state.acceleration,
+        falPixverse55AspectRatio: state.falPixverse55AspectRatio,
+        falPixverse55Resolution: state.falPixverse55Resolution,
+        falPixverse55Style: state.falPixverse55Style,
+        falPixverse55ThinkingType: state.falPixverse55ThinkingType,
+        falPixverse55GenerateAudio: state.falPixverse55GenerateAudio,
+        falPixverse55MultiClip: state.falPixverse55MultiClip,
+        minimaxAudioSpeed: state.minimaxAudioSpeed,
+        minimaxAudioEmotion: state.minimaxAudioEmotion,
+        minimaxVoiceId: state.minimaxVoiceId,
+        minimaxAudioSpec: state.minimaxAudioSpec,
+        minimaxAudioVol: state.minimaxAudioVol,
+        minimaxAudioPitch: state.minimaxAudioPitch,
+        minimaxAudioSampleRate: state.minimaxAudioSampleRate,
+        minimaxAudioBitrate: state.minimaxAudioBitrate,
+        minimaxAudioFormat: state.minimaxAudioFormat,
+        minimaxAudioChannel: state.minimaxAudioChannel,
+        minimaxLatexRead: state.minimaxLatexRead,
+        minimaxTextNormalization: state.minimaxTextNormalization,
+        minimaxLanguageBoost: state.minimaxLanguageBoost,
+        modelscopeImageSize: state.modelscopeImageSize,
+        falZImageTurboNumInferenceSteps: state.falZImageTurboNumInferenceSteps,
+        falZImageTurboEnablePromptExpansion: state.falZImageTurboEnablePromptExpansion,
+        falZImageTurboAcceleration: state.falZImageTurboAcceleration,
         // 魔搭模型参数
         resolutionBaseSize: state.resolutionBaseSize,
-        steps: state.steps,
-        guidance: state.guidance,
-        negativePrompt: state.negativePrompt,
+        modelscopeSteps: state.modelscopeSteps,
+        modelscopeGuidance: state.modelscopeGuidance,
+        modelscopeNegativePrompt: state.modelscopeNegativePrompt,
         modelscopeCustomModel: state.modelscopeCustomModel,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
@@ -938,20 +1029,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         uploadedImages={state.uploadedImages}
         isLoading={isLoading}
         isGenerating={isGenerating}
-        viduMode={state.viduMode}
-        veoMode={state.veoMode}
-        klingMode={state.klingMode}
-        mode={state.mode}
-        seedanceMode={state.seedanceMode}
-        viduQ2Mode={state.viduQ2Mode}
+        viduMode={state.ppioViduQ1Mode}
+        veoMode={state.falVeo31Mode}
+        klingMode={state.falKlingVideoO1Mode}
+        mode={state.falLtx2Mode}
+        seedanceMode={state.falSeedanceV1Mode}
+        viduQ2Mode={state.falViduQ2Mode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
             state.selectedModel,
-            state.selectedModel === 'vidu-q1' ? state.viduMode :
-            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
-            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.viduQ2Mode :
+            state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
+            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
             undefined
           )
           imageUpload.handleImageFileUpload(files, maxCount)
@@ -963,10 +1054,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onPaste={(e) => {
           const maxCount = getMaxImageCount(
             state.selectedModel,
-            state.selectedModel === 'vidu-q1' ? state.viduMode :
-            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
-            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.viduQ2Mode :
+            state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
+            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
             undefined
           )
           imageUpload.handlePaste(e, maxCount)
@@ -974,10 +1065,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageDrop={(files) => {
           const maxCount = getMaxImageCount(
             state.selectedModel,
-            state.selectedModel === 'vidu-q1' ? state.viduMode :
-            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.veoMode :
-            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.seedanceMode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.viduQ2Mode :
+            state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
+            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
             undefined
           )
           imageUpload.handleImageFileDrop(files, maxCount)
@@ -1044,57 +1135,81 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             providerId={state.selectedProvider}
             modelId={state.selectedModel}
             params={{
-              numImages: state.numImages,  // ByteDance Seedream v4 使用 numImages
-              num_images: state.numImages, // Nano Banana 使用 num_images
+              // 通用参数（作为回退值）
+              numImages: state.numImages,
+              num_images: state.numImages,
               maxImages: state.maxImages,
               uploadedImages: state.uploadedImages,
               resolution: state.resolution,
               videoDuration: state.videoDuration,
               videoResolution: state.videoResolution,
-              viduMode: state.viduMode,
-              hailuoFastMode: state.hailuoFastMode,
-              pixFastMode: state.pixFastMode,
+              // 模型特定参数 - 派欧云
+              ppioKling25VideoDuration: state.ppioKling25VideoDuration,
+              ppioHailuo23VideoDuration: state.ppioHailuo23VideoDuration,
+              ppioHailuo23VideoResolution: state.ppioHailuo23VideoResolution,
+              ppioPixverse45VideoResolution: state.ppioPixverse45VideoResolution,
+              ppioWan25VideoDuration: state.ppioWan25VideoDuration,
+              ppioSeedanceV1VideoDuration: state.ppioSeedanceV1VideoDuration,
+              // 模型特定参数 - Fal
+              falNanoBananaNumImages: state.falNanoBananaNumImages,
+              falNanoBananaProNumImages: state.falNanoBananaProNumImages,
+              falKlingImageO1NumImages: state.falKlingImageO1NumImages,
+              falZImageTurboNumImages: state.falZImageTurboNumImages,
+              falSeedream40NumImages: state.falSeedream40NumImages,
+              falWan25VideoDuration: state.falWan25VideoDuration,
+              falSeedanceV1VideoDuration: state.falSeedanceV1VideoDuration,
+              falVeo31VideoDuration: state.falVeo31VideoDuration,
+              falSora2VideoDuration: state.falSora2VideoDuration,
+              falLtx2VideoDuration: state.falLtx2VideoDuration,
+              falViduQ2VideoDuration: state.falViduQ2VideoDuration,
+              falPixverse55VideoDuration: state.falPixverse55VideoDuration,
+              falKlingV26ProVideoDuration: state.falKlingV26ProVideoDuration,
+              falKlingVideoO1VideoDuration: state.falKlingVideoO1VideoDuration,
+              ppioViduQ1VideoDuration: state.ppioViduQ1VideoDuration,
+              ppioViduQ1Mode: state.ppioViduQ1Mode,
+              ppioHailuo23FastMode: state.ppioHailuo23FastMode,
+              ppioPixverse45FastMode: state.ppioPixverse45FastMode,
               // Seedance（派欧云）
-              seedanceVariant: state.seedanceVariant,
-              seedanceResolution: state.seedanceResolution,
-              seedanceAspectRatio: state.seedanceAspectRatio,
+              ppioSeedanceV1Variant: state.ppioSeedanceV1Variant,
+              ppioSeedanceV1Resolution: state.ppioSeedanceV1Resolution,
+              ppioSeedanceV1AspectRatio: state.ppioSeedanceV1AspectRatio,
               // Seedance v1（Fal）
-              seedanceMode: state.seedanceMode,
-              seedanceVersion: state.seedanceVersion,
-              seedanceFastMode: state.seedanceFastMode,
-              wanResolution: state.wanResolution,
-              veoMode: state.veoMode,  // Veo 3.1 模式
-              veoGenerateAudio: state.veoGenerateAudio,
-              veoFastMode: state.veoFastMode,
-              veoAspectRatio: state.veoAspectRatio,
-              veoResolution: state.veoResolution,
-              veoEnhancePrompt: state.veoEnhancePrompt,
-              veoAutoFix: state.veoAutoFix,
-              klingMode: state.klingMode,
-              klingV26GenerateAudio: state.klingV26GenerateAudio,
-              soraMode: state.soraMode,
-              soraResolution: state.soraResolution,
+              falSeedanceV1Mode: state.falSeedanceV1Mode,
+              falSeedanceV1Version: state.falSeedanceV1Version,
+              falSeedanceV1FastMode: state.falSeedanceV1FastMode,
+              falWan25Resolution: state.falWan25Resolution,
+              falVeo31Mode: state.falVeo31Mode,  // Veo 3.1 模式
+              falVeo31GenerateAudio: state.falVeo31GenerateAudio,
+              falVeo31FastMode: state.falVeo31FastMode,
+              falVeo31AspectRatio: state.falVeo31AspectRatio,
+              falVeo31Resolution: state.falVeo31Resolution,
+              falVeo31EnhancePrompt: state.falVeo31EnhancePrompt,
+              falVeo31AutoFix: state.falVeo31AutoFix,
+              falKlingVideoO1Mode: state.falKlingVideoO1Mode,
+              falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
+              falSora2Mode: state.falSora2Mode,
+              falSora2Resolution: state.falSora2Resolution,
               // LTX-2 参数
-              ltxMode: state.mode,  // LTX-2 模式（使用 ltxMode 避免冲突）
-              ltxResolution: state.ltxResolution,
-              ltxFastMode: state.ltxFastMode,
-              ltxRetakeDuration: state.ltxRetakeDuration,  // 视频编辑模式的时长
+              ltxMode: state.falLtx2Mode,  // LTX-2 模式（使用 ltxMode 避免冲突）
+              falLtx2Resolution: state.falLtx2Resolution,
+              falLtx2FastMode: state.falLtx2FastMode,
+              falLtx2RetakeDuration: state.falLtx2RetakeDuration,  // 视频编辑模式的时长
               // Vidu Q2 参数
-              viduQ2Mode: state.viduQ2Mode,
-              viduQ2AspectRatio: state.viduQ2AspectRatio,
-              viduQ2Resolution: state.viduQ2Resolution,
-              viduQ2MovementAmplitude: state.viduQ2MovementAmplitude,
-              viduQ2Bgm: state.viduQ2Bgm,
-              viduQ2FastMode: state.viduQ2FastMode,
+              falViduQ2Mode: state.falViduQ2Mode,
+              falViduQ2AspectRatio: state.falViduQ2AspectRatio,
+              falViduQ2Resolution: state.falViduQ2Resolution,
+              falViduQ2MovementAmplitude: state.falViduQ2MovementAmplitude,
+              falViduQ2Bgm: state.falViduQ2Bgm,
+              falViduQ2FastMode: state.falViduQ2FastMode,
               // Pixverse V5.5 参数
-              pixverseAspectRatio: state.pixverseAspectRatio,
-              pixverseResolution: state.pixverseResolution,
-              pixverseStyle: state.pixverseStyle,
-              pixverseThinkingType: state.pixverseThinkingType,
-              pixverseGenerateAudio: state.pixverseGenerateAudio,
-              pixverseMultiClip: state.pixverseMultiClip,
+              falPixverse55AspectRatio: state.falPixverse55AspectRatio,
+              falPixverse55Resolution: state.falPixverse55Resolution,
+              falPixverse55Style: state.falPixverse55Style,
+              falPixverse55ThinkingType: state.falPixverse55ThinkingType,
+              falPixverse55GenerateAudio: state.falPixverse55GenerateAudio,
+              falPixverse55MultiClip: state.falPixverse55MultiClip,
               input: state.input,
-              audioSpec: state.audioSpec
+              minimaxAudioSpec: state.minimaxAudioSpec
             }}
           />
         </div>
@@ -1130,7 +1245,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               <button
                 onClick={() => {
                   // 切换到 Lite 版本
-                  state.setSeedanceVersion('lite')
+                  state.setFalSeedanceV1Version('lite')
                   setWarningOpacity(0)
                   setTimeout(() => setIsWarningDialogOpen(false), 180)
                 }}
@@ -1144,7 +1259,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               <button
                 onClick={() => {
                   // 关闭快速模式
-                  state.setSeedanceFastMode(false)
+                  state.setFalSeedanceV1FastMode(false)
                   setWarningOpacity(0)
                   setTimeout(() => setIsWarningDialogOpen(false), 180)
                 }}

@@ -24,8 +24,8 @@ export const falAiKlingImageO1Route = {
     }
 
     // 添加图片数量参数（只有在有值且不为默认值时才添加）
-    if (params.num_images !== undefined && params.num_images !== null && params.num_images > 0) {
-      requestData.num_images = params.num_images
+    if (params.falKlingImageO1NumImages !== undefined && params.falKlingImageO1NumImages !== null && params.falKlingImageO1NumImages > 0) {
+      requestData.num_images = params.falKlingImageO1NumImages
     }
 
     // 处理 aspect_ratio：auto 需要智能匹配
@@ -52,8 +52,9 @@ export const falAiKlingImageO1Route = {
     }
 
     // 添加 resolution 参数（只有在有值且不为空时才添加）
-    if (params.resolution !== undefined && params.resolution !== null && params.resolution.trim() !== '') {
-      requestData.resolution = params.resolution
+    const resolution = params.falKlingImageO1Resolution ?? params.resolution
+    if (resolution !== undefined && resolution !== null && resolution.trim() !== '') {
+      requestData.resolution = resolution
     }
 
     return { submitPath, modelId, requestData }

@@ -27,138 +27,209 @@ export const useMediaGeneratorState = () => {
   const [maxImages, setMaxImages] = useState<number>(1)
   const [resolutionBaseSize, setResolutionBaseSize] = useState<number>(1440)  // 基数，默认 1440
 
-  // Vidu Q1 参数
-  const [viduMode, setViduMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
-  const [viduAspectRatio, setViduAspectRatio] = useState('16:9')
-  const [viduStyle, setViduStyle] = useState('general')
-  const [viduMovementAmplitude, setViduMovementAmplitude] = useState('auto')
-  const [viduBgm, setViduBgm] = useState(false)
+  // Vidu Q1 参数（派欧云）
+  const [ppioViduQ1VideoDuration, setPpioViduQ1VideoDuration] = useState(4)
+  const [ppioViduQ1Mode, setPpioViduQ1Mode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
+  const [ppioViduQ1AspectRatio, setPpioViduQ1AspectRatio] = useState('16:9')
+  const [ppioViduQ1Style, setPpioViduQ1Style] = useState('general')
+  const [ppioViduQ1MovementAmplitude, setPpioViduQ1MovementAmplitude] = useState('auto')
+  const [ppioViduQ1Bgm, setPpioViduQ1Bgm] = useState(false)
 
-  // 视频通用参数
+  // 视频通用参数（保留用于向后兼容）
   const [videoDuration, setVideoDuration] = useState(5)
   const [videoAspectRatio, setVideoAspectRatio] = useState('16:9')
   const [videoResolution, setVideoResolution] = useState('540p')
   const [videoSeed, setVideoSeed] = useState<number | undefined>(undefined)
   const [videoNegativePrompt, setVideoNegativePrompt] = useState('')
 
-  // Kling 参数
-  const [klingCfgScale, setKlingCfgScale] = useState(0.5)
+  // 模型特定参数 - 派欧云 Kling 2.5 Turbo
+  const [ppioKling25VideoDuration, setPpioKling25VideoDuration] = useState(5)
+  const [ppioKling25VideoAspectRatio, setPpioKling25VideoAspectRatio] = useState('16:9')
 
-  // PixVerse 参数
-  const [pixFastMode, setPixFastMode] = useState(false)
-  const [pixStyle, setPixStyle] = useState<string | undefined>(undefined)
+  // 模型特定参数 - 派欧云 Hailuo 2.3
+  const [ppioHailuo23VideoDuration, setPpioHailuo23VideoDuration] = useState(5)
+  const [ppioHailuo23VideoResolution, setPpioHailuo23VideoResolution] = useState('540p')
 
-  // Hailuo 参数
-  const [minimaxEnablePromptExpansion, setMinimaxEnablePromptExpansion] = useState(true)
-  const [hailuoFastMode, setHailuoFastMode] = useState(false)
+  // 模型特定参数 - 派欧云 Pixverse 4.5
+  const [ppioPixverse45VideoAspectRatio, setPpioPixverse45VideoAspectRatio] = useState('16:9')
+  const [ppioPixverse45VideoResolution, setPpioPixverse45VideoResolution] = useState('540p')
 
-  // Wan 参数（派欧云）
-  const [wanSize, setWanSize] = useState('1920*1080')
-  const [wanPromptExtend, setWanPromptExtend] = useState(true)
-  const [wanAudio, setWanAudio] = useState(true)
+  // 模型特定参数 - 派欧云 Wan 2.5
+  const [ppioWan25VideoDuration, setPpioWan25VideoDuration] = useState(5)
 
-  // Wan 参数（Fal）
-  const [wanAspectRatio, setWanAspectRatio] = useState('16:9')
-  const [wanResolution, setWanResolution] = useState('1080p')
-  const [wanPromptExpansion, setWanPromptExpansion] = useState(true)
+  // 模型特定参数 - 派欧云 Seedance V1
+  const [ppioSeedanceV1VideoDuration, setPpioSeedanceV1VideoDuration] = useState(5)
 
-  // Seedance 参数（派欧云）
-  const [seedanceResolution, setSeedanceResolution] = useState('720p')
-  const [seedanceAspectRatio, setSeedanceAspectRatio] = useState('16:9')
-  const [seedanceCameraFixed, setSeedanceCameraFixed] = useState(false)
-  const [seedanceVariant, setSeedanceVariant] = useState<'lite' | 'pro'>('lite')
+  // 模型特定参数 - Fal Wan 2.5
+  const [falWan25VideoDuration, setFalWan25VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Seedance V1
+  const [falSeedanceV1VideoDuration, setFalSeedanceV1VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Veo 3.1
+  const [falVeo31VideoDuration, setFalVeo31VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Sora 2
+  const [falSora2VideoDuration, setFalSora2VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal LTX-2
+  const [falLtx2VideoDuration, setFalLtx2VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Vidu Q2
+  const [falViduQ2VideoDuration, setFalViduQ2VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Pixverse 5.5
+  const [falPixverse55VideoDuration, setFalPixverse55VideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Kling V2.6 Pro
+  const [falKlingV26ProVideoDuration, setFalKlingV26ProVideoDuration] = useState(5)
+
+  // 模型特定参数 - Fal Kling Video O1
+  const [falKlingVideoO1VideoDuration, setFalKlingVideoO1VideoDuration] = useState(5)
+
+  // Kling 2.5 Turbo 参数（派欧云）
+  const [ppioKling25CfgScale, setPpioKling25CfgScale] = useState(0.5)
+
+  // PixVerse v4.5 参数（派欧云）
+  const [ppioPixverse45FastMode, setPpioPixverse45FastMode] = useState(false)
+  const [ppioPixverse45Style, setPpioPixverse45Style] = useState<string | undefined>(undefined)
+
+  // Hailuo 2.3 参数（派欧云）
+  const [ppioHailuo23EnablePromptExpansion, setPpioHailuo23EnablePromptExpansion] = useState(true)
+  const [ppioHailuo23FastMode, setPpioHailuo23FastMode] = useState(false)
+
+  // Wan 2.5 参数（派欧云）
+  const [ppioWan25Size, setPpioWan25Size] = useState('1920*1080')
+  const [ppioWan25PromptExtend, setPpioWan25PromptExtend] = useState(true)
+  const [ppioWan25Audio, setPpioWan25Audio] = useState(true)
+
+  // Wan 2.5 参数（Fal）
+  const [falWan25AspectRatio, setFalWan25AspectRatio] = useState('16:9')
+  const [falWan25Resolution, setFalWan25Resolution] = useState('1080p')
+  const [falWan25PromptExpansion, setFalWan25PromptExpansion] = useState(true)
+
+  // Seedance v1 参数（派欧云）
+  const [ppioSeedanceV1Resolution, setPpioSeedanceV1Resolution] = useState('720p')
+  const [ppioSeedanceV1AspectRatio, setPpioSeedanceV1AspectRatio] = useState('16:9')
+  const [ppioSeedanceV1CameraFixed, setPpioSeedanceV1CameraFixed] = useState(false)
+  const [ppioSeedanceV1Variant, setPpioSeedanceV1Variant] = useState<'lite' | 'pro'>('lite')
 
   // Seedance v1 参数（Fal）
-  const [seedanceMode, setSeedanceMode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video'>('text-to-video')
-  const [seedanceVersion, setSeedanceVersion] = useState<'lite' | 'pro'>('lite')
-  const [seedanceFastMode, setSeedanceFastMode] = useState(true)
+  const [falSeedanceV1Mode, setFalSeedanceV1Mode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video'>('text-to-video')
+  const [falSeedanceV1Version, setFalSeedanceV1Version] = useState<'lite' | 'pro'>('lite')
+  const [falSeedanceV1FastMode, setFalSeedanceV1FastMode] = useState(true)
 
-  // Veo 3.1 参数
-  const [veoMode, setVeoMode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
-  const [veoAspectRatio, setVeoAspectRatio] = useState('16:9')
-  const [veoResolution, setVeoResolution] = useState('1080p')
-  const [veoEnhancePrompt, setVeoEnhancePrompt] = useState(true)
-  const [veoGenerateAudio, setVeoGenerateAudio] = useState(false)
-  const [veoAutoFix, setVeoAutoFix] = useState(true)
-  const [veoFastMode, setVeoFastMode] = useState(true)
+  // Veo 3.1 参数（Fal）
+  const [falVeo31Mode, setFalVeo31Mode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video'>('text-image-to-video')
+  const [falVeo31AspectRatio, setFalVeo31AspectRatio] = useState('16:9')
+  const [falVeo31Resolution, setFalVeo31Resolution] = useState('1080p')
+  const [falVeo31EnhancePrompt, setFalVeo31EnhancePrompt] = useState(true)
+  const [falVeo31GenerateAudio, setFalVeo31GenerateAudio] = useState(false)
+  const [falVeo31AutoFix, setFalVeo31AutoFix] = useState(true)
+  const [falVeo31FastMode, setFalVeo31FastMode] = useState(true)
 
-  // Nano Banana 参数
+  // Nano Banana 参数（保留旧参数用于向后兼容，但新增模型特定参数）
   const [numImages, setNumImages] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('1:1')
-  const [resolution, setResolution] = useState('2K')  // Nano Banana Pro 默认 2K
-  const [imageSize, setImageSize] = useState('1:1')  // Z-Image-Turbo 默认 1:1
+  const [resolution, setResolution] = useState('2K')  // 保留用于向后兼容
+  const [modelscopeImageSize, setModelscopeImageSize] = useState('1:1')  // 魔搭模型默认 1:1
+
+  // 模型特定参数 - Fal Nano Banana
+  const [falNanoBananaAspectRatio, setFalNanoBananaAspectRatio] = useState('1:1')
+  const [falNanoBananaNumImages, setFalNanoBananaNumImages] = useState(1)
+
+  // 模型特定参数 - Fal Nano Banana Pro
+  const [falNanoBananaProResolution, setFalNanoBananaProResolution] = useState('2K')
+
+  // 模型特定参数 - Fal Kling Image O1
+  const [falKlingImageO1Resolution, setFalKlingImageO1Resolution] = useState('2K')
+
+  // 模型特定参数 - Fal Nano Banana Pro
+  const [falNanoBananaProAspectRatio, setFalNanoBananaProAspectRatio] = useState('1:1')
+  const [falNanoBananaProNumImages, setFalNanoBananaProNumImages] = useState(1)
+
+  // 模型特定参数 - Fal Kling Image O1
+  const [falKlingImageO1AspectRatio, setFalKlingImageO1AspectRatio] = useState('1:1')
+  const [falKlingImageO1NumImages, setFalKlingImageO1NumImages] = useState(1)
+
+  // 模型特定参数 - Fal Z-Image-Turbo
+  const [falZImageTurboImageSize, setFalZImageTurboImageSize] = useState('1:1')
+  const [falZImageTurboNumImages, setFalZImageTurboNumImages] = useState(1)
+
+  // 模型特定参数 - Fal Seedream 4.0
+  const [falSeedream40NumImages, setFalSeedream40NumImages] = useState(1)
 
   // Z-Image-Turbo 参数
-  const [numInferenceSteps, setNumInferenceSteps] = useState(8)
-  const [enablePromptExpansion, setEnablePromptExpansion] = useState(false)
-  const [acceleration, setAcceleration] = useState('none')
+  const [falZImageTurboNumInferenceSteps, setFalZImageTurboNumInferenceSteps] = useState(8)
+  const [falZImageTurboEnablePromptExpansion, setFalZImageTurboEnablePromptExpansion] = useState(false)
+  const [falZImageTurboAcceleration, setFalZImageTurboAcceleration] = useState('none')
 
   // 魔搭参数
-  const [steps, setSteps] = useState(30)
-  const [guidance, setGuidance] = useState(7.5)
-  const [negativePrompt, setNegativePrompt] = useState('')
+  const [modelscopeSteps, setModelscopeSteps] = useState(30)
+  const [modelscopeGuidance, setModelscopeGuidance] = useState(7.5)
+  const [modelscopeNegativePrompt, setModelscopeNegativePrompt] = useState('')
   const [modelscopeCustomModel, setModelscopeCustomModel] = useState('')
 
   // 音频参数
-  const [audioSpeed, setAudioSpeed] = useState<number>(1.0)
-  const [audioEmotion, setAudioEmotion] = useState<string>('neutral')
-  const [voiceId, setVoiceId] = useState<string>('male-qn-jingying')
+  const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
+  const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
+  const [minimaxVoiceId, setMinimaxVoiceId] = useState<string>('male-qn-jingying')
   const [voiceFilterGender, setVoiceFilterGender] = useState<'all' | 'male' | 'female' | 'child' | 'other'>('all')
-  const [audioVol, setAudioVol] = useState<number>(1.0)
-  const [audioPitch, setAudioPitch] = useState<number>(0)
-  const [audioSampleRate, setAudioSampleRate] = useState<number>(32000)
-  const [audioBitrate, setAudioBitrate] = useState<number>(128000)
-  const [audioFormat, setAudioFormat] = useState<string>('mp3')
-  const [audioChannel, setAudioChannel] = useState<number>(1)
-  const [latexRead, setLatexRead] = useState<boolean>(false)
-  const [textNormalization, setTextNormalization] = useState<boolean>(false)
-  const [languageBoost, setLanguageBoost] = useState<string>('auto')
-  const [audioSpec, setAudioSpec] = useState<'hd' | 'turbo'>('hd')
+  const [minimaxAudioVol, setMinimaxAudioVol] = useState<number>(1.0)
+  const [minimaxAudioPitch, setMinimaxAudioPitch] = useState<number>(0)
+  const [minimaxAudioSampleRate, setMinimaxAudioSampleRate] = useState<number>(32000)
+  const [minimaxAudioBitrate, setMinimaxAudioBitrate] = useState<number>(128000)
+  const [minimaxAudioFormat, setMinimaxAudioFormat] = useState<string>('mp3')
+  const [minimaxAudioChannel, setMinimaxAudioChannel] = useState<number>(1)
+  const [minimaxLatexRead, setMinimaxLatexRead] = useState<boolean>(false)
+  const [minimaxTextNormalization, setMinimaxTextNormalization] = useState<boolean>(false)
+  const [minimaxLanguageBoost, setMinimaxLanguageBoost] = useState<string>('auto')
+  const [minimaxAudioSpec, setMinimaxAudioSpec] = useState<'hd' | 'turbo'>('hd')
 
-  // Kling O1 参数
-  const [klingMode, setKlingMode] = useState<'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference'>('image-to-video')
-  const [klingAspectRatio, setKlingAspectRatio] = useState('16:9')
-  const [klingKeepAudio, setKlingKeepAudio] = useState(false)
-  const [klingElements, setKlingElements] = useState<any[]>([])  // Element[] 类型稍后定义
+  // Kling Video O1 参数（Fal）
+  const [falKlingVideoO1Mode, setFalKlingVideoO1Mode] = useState<'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference'>('image-to-video')
+  const [falKlingVideoO1AspectRatio, setFalKlingVideoO1AspectRatio] = useState('16:9')
+  const [falKlingVideoO1KeepAudio, setFalKlingVideoO1KeepAudio] = useState(false)
+  const [falKlingVideoO1Elements, setFalKlingVideoO1Elements] = useState<any[]>([])  // Element[] 类型稍后定义
   const [uploadedVideos, setUploadedVideos] = useState<string[]>([])  // 视频缩略图（用于 UI 预览）
   const [uploadedVideoFiles, setUploadedVideoFiles] = useState<File[]>([])  // 视频 File 对象（延迟读取）
   const [uploadedVideoFilePaths, setUploadedVideoFilePaths] = useState<string[]>([])  // 视频文件路径（持久化存储）
 
-  // Kling v2.6 Pro 参数
-  const [klingV26AspectRatio, setKlingV26AspectRatio] = useState('16:9')
-  const [klingV26GenerateAudio, setKlingV26GenerateAudio] = useState(true)
-  const [klingV26CfgScale, setKlingV26CfgScale] = useState(0.5)
+  // Kling v2.6 Pro 参数（Fal）
+  const [falKlingV26ProAspectRatio, setFalKlingV26ProAspectRatio] = useState('16:9')
+  const [falKlingV26ProGenerateAudio, setFalKlingV26ProGenerateAudio] = useState(true)
+  const [falKlingV26ProCfgScale, setFalKlingV26ProCfgScale] = useState(0.5)
 
-  // Sora 2 参数
-  const [soraMode, setSoraMode] = useState<'standard' | 'pro'>('standard')
-  const [soraAspectRatio, setSoraAspectRatio] = useState('16:9')
-  const [soraResolution, setSoraResolution] = useState('720p')
+  // Sora 2 参数（Fal）
+  const [falSora2Mode, setFalSora2Mode] = useState<'standard' | 'pro'>('standard')
+  const [falSora2AspectRatio, setFalSora2AspectRatio] = useState('16:9')
+  const [falSora2Resolution, setFalSora2Resolution] = useState('720p')
 
-  // LTX-2 参数
-  const [mode, setMode] = useState<'text-to-video' | 'image-to-video' | 'retake-video'>('text-to-video')
-  const [ltxResolution, setLtxResolution] = useState('1080p')
-  const [ltxFps, setLtxFps] = useState(25)
-  const [ltxGenerateAudio, setLtxGenerateAudio] = useState(true)
-  const [ltxFastMode, setLtxFastMode] = useState(true)
-  const [ltxRetakeDuration, setLtxRetakeDuration] = useState(5)  // 视频编辑模式的时长
-  const [ltxRetakeStartTime, setLtxRetakeStartTime] = useState(0)
-  const [ltxRetakeMode, setLtxRetakeMode] = useState<'replace_audio' | 'replace_video' | 'replace_audio_and_video'>('replace_audio_and_video')
+  // LTX-2 参数（Fal）
+  const [falLtx2Mode, setFalLtx2Mode] = useState<'text-to-video' | 'image-to-video' | 'retake-video'>('text-to-video')
+  const [falLtx2Resolution, setFalLtx2Resolution] = useState('1080p')
+  const [falLtx2Fps, setFalLtx2Fps] = useState(25)
+  const [falLtx2GenerateAudio, setFalLtx2GenerateAudio] = useState(true)
+  const [falLtx2FastMode, setFalLtx2FastMode] = useState(true)
+  const [falLtx2RetakeDuration, setFalLtx2RetakeDuration] = useState(5)  // 视频编辑模式的时长
+  const [falLtx2RetakeStartTime, setFalLtx2RetakeStartTime] = useState(0)
+  const [falLtx2RetakeMode, setFalLtx2RetakeMode] = useState<'replace_audio' | 'replace_video' | 'replace_audio_and_video'>('replace_audio_and_video')
 
-  // Vidu Q2 参数
-  const [viduQ2Mode, setViduQ2Mode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video' | 'video-extension'>('text-to-video')
-  const [viduQ2AspectRatio, setViduQ2AspectRatio] = useState('16:9')
-  const [viduQ2Resolution, setViduQ2Resolution] = useState('720p')
-  const [viduQ2MovementAmplitude, setViduQ2MovementAmplitude] = useState('auto')
-  const [viduQ2Bgm, setViduQ2Bgm] = useState(false)
-  const [viduQ2FastMode, setViduQ2FastMode] = useState(true)
+  // Vidu Q2 参数（Fal）
+  const [falViduQ2Mode, setFalViduQ2Mode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video' | 'video-extension'>('text-to-video')
+  const [falViduQ2AspectRatio, setFalViduQ2AspectRatio] = useState('16:9')
+  const [falViduQ2Resolution, setFalViduQ2Resolution] = useState('720p')
+  const [falViduQ2MovementAmplitude, setFalViduQ2MovementAmplitude] = useState('auto')
+  const [falViduQ2Bgm, setFalViduQ2Bgm] = useState(false)
+  const [falViduQ2FastMode, setFalViduQ2FastMode] = useState(true)
 
-  // Pixverse V5.5 参数
-  const [pixverseAspectRatio, setPixverseAspectRatio] = useState('16:9')
-  const [pixverseResolution, setPixverseResolution] = useState('720p')
-  const [pixverseStyle, setPixverseStyle] = useState('none')
-  const [pixverseThinkingType, setPixverseThinkingType] = useState('auto')
-  const [pixverseGenerateAudio, setPixverseGenerateAudio] = useState(false)
-  const [pixverseMultiClip, setPixverseMultiClip] = useState(false)
+  // Pixverse V5.5 参数（Fal）
+  const [falPixverse55AspectRatio, setFalPixverse55AspectRatio] = useState('16:9')
+  const [falPixverse55Resolution, setFalPixverse55Resolution] = useState('720p')
+  const [falPixverse55Style, setFalPixverse55Style] = useState('none')
+  const [falPixverse55ThinkingType, setFalPixverse55ThinkingType] = useState('auto')
+  const [falPixverse55GenerateAudio, setFalPixverse55GenerateAudio] = useState(false)
+  const [falPixverse55MultiClip, setFalPixverse55MultiClip] = useState(false)
 
   // UI 状态
   const [isDraggingImage, setIsDraggingImage] = useState(false)
@@ -186,12 +257,13 @@ export const useMediaGeneratorState = () => {
     maxImages, setMaxImages,
     resolutionBaseSize, setResolutionBaseSize,
 
-    // Vidu
-    viduMode, setViduMode,
-    viduAspectRatio, setViduAspectRatio,
-    viduStyle, setViduStyle,
-    viduMovementAmplitude, setViduMovementAmplitude,
-    viduBgm, setViduBgm,
+    // Vidu Q1（派欧云）
+    ppioViduQ1VideoDuration, setPpioViduQ1VideoDuration,
+    ppioViduQ1Mode, setPpioViduQ1Mode,
+    ppioViduQ1AspectRatio, setPpioViduQ1AspectRatio,
+    ppioViduQ1Style, setPpioViduQ1Style,
+    ppioViduQ1MovementAmplitude, setPpioViduQ1MovementAmplitude,
+    ppioViduQ1Bgm, setPpioViduQ1Bgm,
 
     // 视频通用
     videoDuration, setVideoDuration,
@@ -200,124 +272,154 @@ export const useMediaGeneratorState = () => {
     videoSeed, setVideoSeed,
     videoNegativePrompt, setVideoNegativePrompt,
 
-    // Kling
-    klingCfgScale, setKlingCfgScale,
+    // Kling 2.5 Turbo（派欧云）
+    ppioKling25CfgScale, setPpioKling25CfgScale,
 
-    // PixVerse
-    pixFastMode, setPixFastMode,
-    pixStyle, setPixStyle,
+    // PixVerse v4.5（派欧云）
+    ppioPixverse45FastMode, setPpioPixverse45FastMode,
+    ppioPixverse45Style, setPpioPixverse45Style,
 
-    // Hailuo
-    minimaxEnablePromptExpansion, setMinimaxEnablePromptExpansion,
-    hailuoFastMode, setHailuoFastMode,
+    // Hailuo 2.3（派欧云）
+    ppioHailuo23EnablePromptExpansion, setPpioHailuo23EnablePromptExpansion,
+    ppioHailuo23FastMode, setPpioHailuo23FastMode,
 
-    // Wan（派欧云）
-    wanSize, setWanSize,
-    wanPromptExtend, setWanPromptExtend,
-    wanAudio, setWanAudio,
+    // Wan 2.5（派欧云）
+    ppioWan25Size, setPpioWan25Size,
+    ppioWan25PromptExtend, setPpioWan25PromptExtend,
+    ppioWan25Audio, setPpioWan25Audio,
 
-    // Wan（Fal）
-    wanAspectRatio, setWanAspectRatio,
-    wanResolution, setWanResolution,
-    wanPromptExpansion, setWanPromptExpansion,
+    // Wan 2.5（Fal）
+    falWan25AspectRatio, setFalWan25AspectRatio,
+    falWan25Resolution, setFalWan25Resolution,
+    falWan25PromptExpansion, setFalWan25PromptExpansion,
 
-    // Seedance（派欧云）
-    seedanceResolution, setSeedanceResolution,
-    seedanceAspectRatio, setSeedanceAspectRatio,
-    seedanceCameraFixed, setSeedanceCameraFixed,
-    seedanceVariant, setSeedanceVariant,
+    // Seedance v1（派欧云）
+    ppioSeedanceV1Resolution, setPpioSeedanceV1Resolution,
+    ppioSeedanceV1AspectRatio, setPpioSeedanceV1AspectRatio,
+    ppioSeedanceV1CameraFixed, setPpioSeedanceV1CameraFixed,
+    ppioSeedanceV1Variant, setPpioSeedanceV1Variant,
 
     // Seedance v1（Fal）
-    seedanceMode, setSeedanceMode,
-    seedanceVersion, setSeedanceVersion,
-    seedanceFastMode, setSeedanceFastMode,
+    falSeedanceV1Mode, setFalSeedanceV1Mode,
+    falSeedanceV1Version, setFalSeedanceV1Version,
+    falSeedanceV1FastMode, setFalSeedanceV1FastMode,
 
-    // Veo 3.1
-    veoMode, setVeoMode,
-    veoAspectRatio, setVeoAspectRatio,
-    veoResolution, setVeoResolution,
-    veoEnhancePrompt, setVeoEnhancePrompt,
-    veoGenerateAudio, setVeoGenerateAudio,
-    veoAutoFix, setVeoAutoFix,
-    veoFastMode, setVeoFastMode,
+    // Veo 3.1（Fal）
+    falVeo31Mode, setFalVeo31Mode,
+    falVeo31AspectRatio, setFalVeo31AspectRatio,
+    falVeo31Resolution, setFalVeo31Resolution,
+    falVeo31EnhancePrompt, setFalVeo31EnhancePrompt,
+    falVeo31GenerateAudio, setFalVeo31GenerateAudio,
+    falVeo31AutoFix, setFalVeo31AutoFix,
+    falVeo31FastMode, setFalVeo31FastMode,
 
-    // Nano Banana
+    // Nano Banana（旧参数，保留向后兼容）
     numImages, setNumImages,
     aspectRatio, setAspectRatio,
     resolution, setResolution,
-    imageSize, setImageSize,
+    modelscopeImageSize, setModelscopeImageSize,
+
+    // 模型特定参数
+    falNanoBananaAspectRatio, setFalNanoBananaAspectRatio,
+    falNanoBananaNumImages, setFalNanoBananaNumImages,
+    falNanoBananaProAspectRatio, setFalNanoBananaProAspectRatio,
+    falNanoBananaProNumImages, setFalNanoBananaProNumImages,
+    falNanoBananaProResolution, setFalNanoBananaProResolution,
+    falKlingImageO1AspectRatio, setFalKlingImageO1AspectRatio,
+    falKlingImageO1NumImages, setFalKlingImageO1NumImages,
+    falKlingImageO1Resolution, setFalKlingImageO1Resolution,
+    falZImageTurboImageSize, setFalZImageTurboImageSize,
+    falZImageTurboNumImages, setFalZImageTurboNumImages,
+    falSeedream40NumImages, setFalSeedream40NumImages,
+    ppioKling25VideoDuration, setPpioKling25VideoDuration,
+    ppioKling25VideoAspectRatio, setPpioKling25VideoAspectRatio,
+    ppioHailuo23VideoDuration, setPpioHailuo23VideoDuration,
+    ppioHailuo23VideoResolution, setPpioHailuo23VideoResolution,
+    ppioPixverse45VideoAspectRatio, setPpioPixverse45VideoAspectRatio,
+    ppioPixverse45VideoResolution, setPpioPixverse45VideoResolution,
+    ppioWan25VideoDuration, setPpioWan25VideoDuration,
+    ppioSeedanceV1VideoDuration, setPpioSeedanceV1VideoDuration,
+    falWan25VideoDuration, setFalWan25VideoDuration,
+    falSeedanceV1VideoDuration, setFalSeedanceV1VideoDuration,
+    falVeo31VideoDuration, setFalVeo31VideoDuration,
+    falSora2VideoDuration, setFalSora2VideoDuration,
+    falLtx2VideoDuration, setFalLtx2VideoDuration,
+    falViduQ2VideoDuration, setFalViduQ2VideoDuration,
+    falPixverse55VideoDuration, setFalPixverse55VideoDuration,
+    falKlingV26ProVideoDuration, setFalKlingV26ProVideoDuration,
+    falKlingVideoO1VideoDuration, setFalKlingVideoO1VideoDuration,
 
     // Z-Image-Turbo
-    numInferenceSteps, setNumInferenceSteps,
-    enablePromptExpansion, setEnablePromptExpansion,
-    acceleration, setAcceleration,
+    falZImageTurboNumInferenceSteps, setFalZImageTurboNumInferenceSteps,
+    falZImageTurboEnablePromptExpansion, setFalZImageTurboEnablePromptExpansion,
+    falZImageTurboAcceleration, setFalZImageTurboAcceleration,
 
     // 魔搭
-    steps, setSteps,
-    guidance, setGuidance,
-    negativePrompt, setNegativePrompt,
+    modelscopeSteps, setModelscopeSteps,
+    modelscopeGuidance, setModelscopeGuidance,
+    modelscopeNegativePrompt, setModelscopeNegativePrompt,
     modelscopeCustomModel, setModelscopeCustomModel,
 
     // 音频
-    audioSpeed, setAudioSpeed,
-    audioEmotion, setAudioEmotion,
-    voiceId, setVoiceId,
+    minimaxAudioSpeed, setMinimaxAudioSpeed,
+    minimaxAudioEmotion, setMinimaxAudioEmotion,
+    minimaxVoiceId, setMinimaxVoiceId,
     voiceFilterGender, setVoiceFilterGender,
-    audioVol, setAudioVol,
-    audioPitch, setAudioPitch,
-    audioSampleRate, setAudioSampleRate,
-    audioBitrate, setAudioBitrate,
-    audioFormat, setAudioFormat,
-    audioChannel, setAudioChannel,
-    latexRead, setLatexRead,
-    textNormalization, setTextNormalization,
-    languageBoost, setLanguageBoost,
-    audioSpec, setAudioSpec,
+    minimaxAudioVol, setMinimaxAudioVol,
+    minimaxAudioPitch, setMinimaxAudioPitch,
+    minimaxAudioSampleRate, setMinimaxAudioSampleRate,
+    minimaxAudioBitrate, setMinimaxAudioBitrate,
+    minimaxAudioFormat, setMinimaxAudioFormat,
+    minimaxAudioChannel, setMinimaxAudioChannel,
+    minimaxLatexRead, setMinimaxLatexRead,
+    minimaxTextNormalization, setMinimaxTextNormalization,
+    minimaxLanguageBoost, setMinimaxLanguageBoost,
+    minimaxAudioSpec, setMinimaxAudioSpec,
 
-    // Kling O1
-    klingMode, setKlingMode,
-    klingAspectRatio, setKlingAspectRatio,
-    klingKeepAudio, setKlingKeepAudio,
-    klingElements, setKlingElements,
+    // Kling Video O1（Fal）
+    falKlingVideoO1Mode, setFalKlingVideoO1Mode,
+    falKlingVideoO1AspectRatio, setFalKlingVideoO1AspectRatio,
+    falKlingVideoO1KeepAudio, setFalKlingVideoO1KeepAudio,
+    falKlingVideoO1Elements, setFalKlingVideoO1Elements,
     uploadedVideos, setUploadedVideos,
     uploadedVideoFiles, setUploadedVideoFiles,
     uploadedVideoFilePaths, setUploadedVideoFilePaths,
 
-    // Kling v2.6 Pro
-    klingV26AspectRatio, setKlingV26AspectRatio,
-    klingV26GenerateAudio, setKlingV26GenerateAudio,
-    klingV26CfgScale, setKlingV26CfgScale,
+    // Kling v2.6 Pro（Fal）
+    falKlingV26ProAspectRatio, setFalKlingV26ProAspectRatio,
+    falKlingV26ProGenerateAudio, setFalKlingV26ProGenerateAudio,
+    falKlingV26ProCfgScale, setFalKlingV26ProCfgScale,
 
-    // Sora 2
-    soraMode, setSoraMode,
-    soraAspectRatio, setSoraAspectRatio,
-    soraResolution, setSoraResolution,
+    // Sora 2（Fal）
+    falSora2Mode, setFalSora2Mode,
+    falSora2AspectRatio, setFalSora2AspectRatio,
+    falSora2Resolution, setFalSora2Resolution,
 
-    // LTX-2
-    mode, setMode,
-    ltxResolution, setLtxResolution,
-    ltxFps, setLtxFps,
-    ltxGenerateAudio, setLtxGenerateAudio,
-    ltxFastMode, setLtxFastMode,
-    ltxRetakeDuration, setLtxRetakeDuration,
-    ltxRetakeStartTime, setLtxRetakeStartTime,
-    ltxRetakeMode, setLtxRetakeMode,
+    // LTX-2（Fal）
+    falLtx2Mode, setFalLtx2Mode,
+    falLtx2Resolution, setFalLtx2Resolution,
+    falLtx2Fps, setFalLtx2Fps,
+    falLtx2GenerateAudio, setFalLtx2GenerateAudio,
+    falLtx2FastMode, setFalLtx2FastMode,
+    falLtx2RetakeDuration, setFalLtx2RetakeDuration,
+    falLtx2RetakeStartTime, setFalLtx2RetakeStartTime,
+    falLtx2RetakeMode, setFalLtx2RetakeMode,
 
-    // Vidu Q2
-    viduQ2Mode, setViduQ2Mode,
-    viduQ2AspectRatio, setViduQ2AspectRatio,
-    viduQ2Resolution, setViduQ2Resolution,
-    viduQ2MovementAmplitude, setViduQ2MovementAmplitude,
-    viduQ2Bgm, setViduQ2Bgm,
-    viduQ2FastMode, setViduQ2FastMode,
+    // Vidu Q2（Fal）
+    falViduQ2Mode, setFalViduQ2Mode,
+    falViduQ2AspectRatio, setFalViduQ2AspectRatio,
+    falViduQ2Resolution, setFalViduQ2Resolution,
+    falViduQ2MovementAmplitude, setFalViduQ2MovementAmplitude,
+    falViduQ2Bgm, setFalViduQ2Bgm,
+    falViduQ2FastMode, setFalViduQ2FastMode,
 
-    // Pixverse V5.5
-    pixverseAspectRatio, setPixverseAspectRatio,
-    pixverseResolution, setPixverseResolution,
-    pixverseStyle, setPixverseStyle,
-    pixverseThinkingType, setPixverseThinkingType,
-    pixverseGenerateAudio, setPixverseGenerateAudio,
-    pixverseMultiClip, setPixverseMultiClip,
+    // Pixverse V5.5（Fal）
+    falPixverse55AspectRatio, setFalPixverse55AspectRatio,
+    falPixverse55Resolution, setFalPixverse55Resolution,
+    falPixverse55Style, setFalPixverse55Style,
+    falPixverse55ThinkingType, setFalPixverse55ThinkingType,
+    falPixverse55GenerateAudio, setFalPixverse55GenerateAudio,
+    falPixverse55MultiClip, setFalPixverse55MultiClip,
 
     // UI
     isDraggingImage, setIsDraggingImage

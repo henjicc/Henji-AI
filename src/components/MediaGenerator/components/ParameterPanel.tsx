@@ -65,11 +65,12 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={viduParams}
         values={{
-          viduMode: values.viduMode,
-          viduAspectRatio: values.viduAspectRatio,
-          viduStyle: values.viduStyle,
-          viduMovementAmplitude: values.viduMovementAmplitude,
-          viduBgm: values.viduBgm,
+          ppioViduQ1VideoDuration: values.ppioViduQ1VideoDuration,
+          ppioViduQ1Mode: values.ppioViduQ1Mode,
+          ppioViduQ1AspectRatio: values.ppioViduQ1AspectRatio,
+          ppioViduQ1Style: values.ppioViduQ1Style,
+          ppioViduQ1MovementAmplitude: values.ppioViduQ1MovementAmplitude,
+          ppioViduQ1Bgm: values.ppioViduQ1Bgm,
           uploadedImages
         }}
         onChange={onChange}
@@ -87,9 +88,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             <SchemaForm
               schema={hailuoParams}
               values={{
-                videoDuration: values.videoDuration,
-                videoResolution: values.videoResolution,
-                hailuoFastMode: values.hailuoFastMode,
+                ppioHailuo23VideoDuration: values.ppioHailuo23VideoDuration,
+                ppioHailuo23VideoResolution: values.ppioHailuo23VideoResolution,
+                ppioHailuo23FastMode: values.ppioHailuo23FastMode,
                 selectedModel,
                 uploadedImages
               }}
@@ -97,8 +98,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             />
             <Toggle
               label="提示词优化"
-              checked={values.minimaxEnablePromptExpansion}
-              onChange={(v) => onChange('minimaxEnablePromptExpansion', v)}
+              checked={values.ppioHailuo23EnablePromptExpansion}
+              onChange={(v) => onChange('ppioHailuo23EnablePromptExpansion', v)}
               className="w-auto"
             />
           </>
@@ -109,9 +110,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={pixverseParams}
             values={{
-              videoAspectRatio: values.videoAspectRatio,
-              videoResolution: values.videoResolution,
-              pixFastMode: values.pixFastMode,
+              ppioPixverse45VideoAspectRatio: values.ppioPixverse45VideoAspectRatio,
+              ppioPixverse45VideoResolution: values.ppioPixverse45VideoResolution,
+              ppioPixverse45FastMode: values.ppioPixverse45FastMode,
               uploadedImages
             }}
             onChange={onChange}
@@ -123,9 +124,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={klingParams}
             values={{
-              videoDuration: values.videoDuration,
-              videoAspectRatio: values.videoAspectRatio,
-              klingCfgScale: values.klingCfgScale,
+              ppioKling25VideoDuration: values.ppioKling25VideoDuration,
+              ppioKling25VideoAspectRatio: values.ppioKling25VideoAspectRatio,
+              ppioKling25CfgScale: values.ppioKling25CfgScale,
               uploadedImages
             }}
             onChange={onChange}
@@ -138,11 +139,11 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             <SchemaForm
               schema={wan25Params}
               values={{
-                wanSize: values.wanSize,
-                wanResolution: values.wanResolution,
-                videoDuration: values.videoDuration,
-                wanPromptExtend: values.wanPromptExtend,
-                wanAudio: values.wanAudio,
+                ppioWan25Size: values.ppioWan25Size,
+                falWan25Resolution: values.falWan25Resolution,
+                ppioWan25VideoDuration: values.ppioWan25VideoDuration,
+                ppioWan25PromptExtend: values.ppioWan25PromptExtend,
+                ppioWan25Audio: values.ppioWan25Audio,
                 uploadedImages
               }}
               onChange={onChange}
@@ -163,11 +164,11 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={seedanceParams}
             values={{
-              seedanceVariant: values.seedanceVariant,
-              videoDuration: values.videoDuration,
-              seedanceResolution: values.seedanceResolution,
-              seedanceAspectRatio: values.seedanceAspectRatio,
-              seedanceCameraFixed: values.seedanceCameraFixed,
+              ppioSeedanceV1Variant: values.ppioSeedanceV1Variant,
+              ppioSeedanceV1VideoDuration: values.ppioSeedanceV1VideoDuration,
+              ppioSeedanceV1Resolution: values.ppioSeedanceV1Resolution,
+              ppioSeedanceV1AspectRatio: values.ppioSeedanceV1AspectRatio,
+              ppioSeedanceV1CameraFixed: values.ppioSeedanceV1CameraFixed,
               selectedModel,
               uploadedImages
             }}
@@ -180,13 +181,13 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiBytedanceSeedanceV1Params}
             values={{
-              seedanceMode: values.seedanceMode,
-              seedanceVersion: values.seedanceVersion,
-              seedanceAspectRatio: values.seedanceAspectRatio,
-              seedanceResolution: values.seedanceResolution,
-              videoDuration: values.videoDuration,
-              seedanceCameraFixed: values.seedanceCameraFixed,
-              seedanceFastMode: values.seedanceFastMode,
+              falSeedanceV1Mode: values.falSeedanceV1Mode,
+              falSeedanceV1Version: values.falSeedanceV1Version,
+              ppioSeedanceV1AspectRatio: values.ppioSeedanceV1AspectRatio,
+              ppioSeedanceV1Resolution: values.ppioSeedanceV1Resolution,
+              falSeedanceV1VideoDuration: values.falSeedanceV1VideoDuration,
+              ppioSeedanceV1CameraFixed: values.ppioSeedanceV1CameraFixed,
+              falSeedanceV1FastMode: values.falSeedanceV1FastMode,
               uploadedImages
             }}
             onChange={onChange}
@@ -198,14 +199,14 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={veoParams}
             values={{
-              veoMode: values.veoMode,
-              videoDuration: values.videoDuration,
-              veoAspectRatio: values.veoAspectRatio,
-              veoResolution: values.veoResolution,
-              veoEnhancePrompt: values.veoEnhancePrompt,
-              veoGenerateAudio: values.veoGenerateAudio,
-              veoAutoFix: values.veoAutoFix,
-              veoFastMode: values.veoFastMode,
+              falVeo31Mode: values.falVeo31Mode,
+              falVeo31VideoDuration: values.falVeo31VideoDuration,
+              falVeo31AspectRatio: values.falVeo31AspectRatio,
+              falVeo31Resolution: values.falVeo31Resolution,
+              falVeo31EnhancePrompt: values.falVeo31EnhancePrompt,
+              falVeo31GenerateAudio: values.falVeo31GenerateAudio,
+              falVeo31AutoFix: values.falVeo31AutoFix,
+              falVeo31FastMode: values.falVeo31FastMode,
               uploadedImages
             }}
             onChange={onChange}
@@ -217,10 +218,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={klingVideoO1Params}
             values={{
-              klingMode: values.klingMode,
-              videoDuration: values.videoDuration,
-              klingAspectRatio: values.klingAspectRatio,
-              klingKeepAudio: values.klingKeepAudio,
+              falKlingVideoO1Mode: values.falKlingVideoO1Mode,
+              falKlingVideoO1VideoDuration: values.falKlingVideoO1VideoDuration,
+              falKlingVideoO1AspectRatio: values.falKlingVideoO1AspectRatio,
+              falKlingVideoO1KeepAudio: values.falKlingVideoO1KeepAudio,
               uploadedImages
             }}
             onChange={onChange}
@@ -232,10 +233,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiKlingVideoV26ProParams}
             values={{
-              videoDuration: values.videoDuration,
-              klingV26AspectRatio: values.klingV26AspectRatio,
-              klingV26GenerateAudio: values.klingV26GenerateAudio,
-              klingV26CfgScale: values.klingV26CfgScale,
+              falKlingV26ProVideoDuration: values.falKlingV26ProVideoDuration,
+              falKlingV26ProAspectRatio: values.falKlingV26ProAspectRatio,
+              falKlingV26ProGenerateAudio: values.falKlingV26ProGenerateAudio,
+              falKlingV26ProCfgScale: values.falKlingV26ProCfgScale,
               uploadedImages
             }}
             onChange={onChange}
@@ -247,10 +248,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiSora2Params}
             values={{
-              soraMode: values.soraMode,
-              soraAspectRatio: values.soraAspectRatio,
-              soraResolution: values.soraResolution,
-              videoDuration: values.videoDuration,
+              falSora2Mode: values.falSora2Mode,
+              falSora2AspectRatio: values.falSora2AspectRatio,
+              falSora2Resolution: values.falSora2Resolution,
+              falSora2VideoDuration: values.falSora2VideoDuration,
               uploadedImages
             }}
             onChange={onChange}
@@ -262,15 +263,15 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiLtx2Params}
             values={{
-              mode: values.mode,
-              ltxResolution: values.ltxResolution,
-              videoDuration: values.videoDuration,
-              ltxFps: values.ltxFps,
-              ltxGenerateAudio: values.ltxGenerateAudio,
-              ltxFastMode: values.ltxFastMode,
-              ltxRetakeDuration: values.ltxRetakeDuration,
-              ltxRetakeStartTime: values.ltxRetakeStartTime,
-              ltxRetakeMode: values.ltxRetakeMode,
+              falLtx2Mode: values.falLtx2Mode,
+              falLtx2Resolution: values.falLtx2Resolution,
+              falLtx2VideoDuration: values.falLtx2VideoDuration,
+              falLtx2Fps: values.falLtx2Fps,
+              falLtx2GenerateAudio: values.falLtx2GenerateAudio,
+              falLtx2FastMode: values.falLtx2FastMode,
+              falLtx2RetakeDuration: values.falLtx2RetakeDuration,
+              falLtx2RetakeStartTime: values.falLtx2RetakeStartTime,
+              falLtx2RetakeMode: values.falLtx2RetakeMode,
               uploadedImages,
               uploadedVideos: values.uploadedVideos
             }}
@@ -283,13 +284,13 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiViduQ2Params}
             values={{
-              viduQ2Mode: values.viduQ2Mode,
-              viduQ2AspectRatio: values.viduQ2AspectRatio,
-              viduQ2Resolution: values.viduQ2Resolution,
-              videoDuration: values.videoDuration,
-              viduQ2MovementAmplitude: values.viduQ2MovementAmplitude,
-              viduQ2Bgm: values.viduQ2Bgm,
-              viduQ2FastMode: values.viduQ2FastMode,
+              falViduQ2Mode: values.falViduQ2Mode,
+              falViduQ2AspectRatio: values.falViduQ2AspectRatio,
+              falViduQ2Resolution: values.falViduQ2Resolution,
+              falViduQ2VideoDuration: values.falViduQ2VideoDuration,
+              falViduQ2MovementAmplitude: values.falViduQ2MovementAmplitude,
+              falViduQ2Bgm: values.falViduQ2Bgm,
+              falViduQ2FastMode: values.falViduQ2FastMode,
               uploadedImages,
               uploadedVideos: values.uploadedVideos
             }}
@@ -302,13 +303,13 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiPixverseV55Params}
             values={{
-              pixverseAspectRatio: values.pixverseAspectRatio,
-              pixverseResolution: values.pixverseResolution,
-              videoDuration: values.videoDuration,
-              pixverseStyle: values.pixverseStyle,
-              pixverseThinkingType: values.pixverseThinkingType,
-              pixverseGenerateAudio: values.pixverseGenerateAudio,
-              pixverseMultiClip: values.pixverseMultiClip,
+              falPixverse55AspectRatio: values.falPixverse55AspectRatio,
+              falPixverse55Resolution: values.falPixverse55Resolution,
+              falPixverse55VideoDuration: values.falPixverse55VideoDuration,
+              falPixverse55Style: values.falPixverse55Style,
+              falPixverse55ThinkingType: values.falPixverse55ThinkingType,
+              falPixverse55GenerateAudio: values.falPixverse55GenerateAudio,
+              falPixverse55MultiClip: values.falPixverse55MultiClip,
               uploadedImages
             }}
             onChange={onChange}
@@ -320,10 +321,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiWan25PreviewParams}
             values={{
-              videoDuration: values.videoDuration,
-              wanAspectRatio: values.wanAspectRatio,
-              wanResolution: values.wanResolution,
-              wanPromptExpansion: values.wanPromptExpansion,
+              falWan25VideoDuration: values.falWan25VideoDuration,
+              falWan25AspectRatio: values.falWan25AspectRatio,
+              falWan25Resolution: values.falWan25Resolution,
+              falWan25PromptExpansion: values.falWan25PromptExpansion,
               uploadedImages
             }}
             onChange={onChange}
@@ -427,8 +428,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={nanoBananaParams}
         values={{
-          num_images: values.numImages,
-          aspectRatio: values.aspectRatio,
+          falNanoBananaNumImages: values.falNanoBananaNumImages,
+          falNanoBananaAspectRatio: values.falNanoBananaAspectRatio,
           uploadedImages
         }}
         onChange={onChange}
@@ -442,8 +443,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={nanoBananaProParams}
         values={{
-          num_images: values.numImages,
-          aspectRatio: values.aspectRatio,
+          falNanoBananaProNumImages: values.falNanoBananaProNumImages,
+          falNanoBananaProAspectRatio: values.falNanoBananaProAspectRatio,
           resolution: values.resolution,
           uploadedImages
         }}
@@ -458,7 +459,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={falAiBytedanceSeedreamV4Params}
         values={{
-          numImages: values.numImages,
+          falSeedream40NumImages: values.falSeedream40NumImages,
           selectedResolution: values.selectedResolution,
           resolutionQuality: values.resolutionQuality,
           customWidth: values.customWidth,
@@ -476,14 +477,14 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={falAiZImageTurboParams}
         values={{
-          imageSize: values.imageSize,
+          falZImageTurboImageSize: values.falZImageTurboImageSize,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
           resolutionBaseSize: values.resolutionBaseSize,
-          numInferenceSteps: values.numInferenceSteps,
-          numImages: values.numImages,
-          enablePromptExpansion: values.enablePromptExpansion,
-          acceleration: values.acceleration,
+          falZImageTurboNumInferenceSteps: values.falZImageTurboNumInferenceSteps,
+          falZImageTurboNumImages: values.falZImageTurboNumImages,
+          falZImageTurboEnablePromptExpansion: values.falZImageTurboEnablePromptExpansion,
+          falZImageTurboAcceleration: values.falZImageTurboAcceleration,
           uploadedImages
         }}
         onChange={onChange}
@@ -497,8 +498,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={falAiKlingImageO1Params}
         values={{
-          num_images: values.numImages,
-          aspectRatio: values.aspectRatio,
+          falKlingImageO1NumImages: values.falKlingImageO1NumImages,
+          falKlingImageO1AspectRatio: values.falKlingImageO1AspectRatio,
           resolution: values.resolution,
           uploadedImages
         }}
@@ -515,19 +516,19 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         <SchemaForm
           schema={modelscopeZImageTurboParams.slice(0, 2)}
           values={{
-            imageSize: values.imageSize,
+            modelscopeImageSize: values.modelscopeImageSize,
             customWidth: values.customWidth,
             customHeight: values.customHeight,
             resolutionBaseSize: values.resolutionBaseSize,
-            steps: values.steps
+            modelscopeSteps: values.modelscopeSteps
           }}
           onChange={onChange}
         />
         {/* 负面提示词单独一行，自动占据剩余空间 */}
         <TextInput
           label="负面提示词"
-          value={values.negativePrompt}
-          onChange={(v) => onChange('negativePrompt', v)}
+          value={values.modelscopeNegativePrompt}
+          onChange={(v) => onChange('modelscopeNegativePrompt', v)}
           placeholder="输入不希望出现的内容..."
           className="flex-1 min-w-[200px]"
           inputClassName="w-full"
@@ -542,11 +543,11 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={qwenImageEdit2509Params}
         values={{
-          imageSize: values.imageSize,
+          modelscopeImageSize: values.modelscopeImageSize,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
           resolutionBaseSize: values.resolutionBaseSize,
-          steps: values.steps,
+          modelscopeSteps: values.modelscopeSteps,
           uploadedImages
         }}
         onChange={onChange}
@@ -565,20 +566,20 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         <SchemaForm
           schema={modelscopeCommonParams.slice(0, 3)}
           values={{
-            imageSize: values.imageSize,
+            modelscopeImageSize: values.modelscopeImageSize,
             customWidth: values.customWidth,
             customHeight: values.customHeight,
             resolutionBaseSize: values.resolutionBaseSize,
-            steps: values.steps,
-            guidance: values.guidance
+            modelscopeSteps: values.modelscopeSteps,
+            modelscopeGuidance: values.modelscopeGuidance
           }}
           onChange={onChange}
         />
         {/* 负面提示词单独一行，自动占据剩余空间 */}
         <TextInput
           label="负面提示词"
-          value={values.negativePrompt}
-          onChange={(v) => onChange('negativePrompt', v)}
+          value={values.modelscopeNegativePrompt}
+          onChange={(v) => onChange('modelscopeNegativePrompt', v)}
           placeholder="输入不希望出现的内容..."
           className="flex-1 min-w-[200px]"
           inputClassName="w-full"
@@ -600,12 +601,12 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           schema={modelscopeCustomParams.slice(0, 4)}
           values={{
             modelscopeCustomModel: values.modelscopeCustomModel,
-            imageSize: values.imageSize,
+            modelscopeImageSize: values.modelscopeImageSize,
             customWidth: values.customWidth,
             customHeight: values.customHeight,
             resolutionBaseSize: values.resolutionBaseSize,
-            steps: values.steps,
-            guidance: values.guidance
+            modelscopeSteps: values.modelscopeSteps,
+            modelscopeGuidance: values.modelscopeGuidance
           }}
           onChange={onChange}
         />
@@ -630,8 +631,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         {/* 负面提示词单独一行，自动占据剩余空间 */}
         <TextInput
           label="负面提示词"
-          value={values.negativePrompt}
-          onChange={(v) => onChange('negativePrompt', v)}
+          value={values.modelscopeNegativePrompt}
+          onChange={(v) => onChange('modelscopeNegativePrompt', v)}
           placeholder="输入不希望出现的内容..."
           className="flex-1 min-w-[200px]"
           inputClassName="w-full"
@@ -647,14 +648,14 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         {/* 规格参数 */}
         <SchemaForm
           schema={minimaxSpeechBasicParams.slice(0, 1)}
-          values={{ audioSpec: values.audioSpec }}
+          values={{ minimaxAudioSpec: values.minimaxAudioSpec }}
           onChange={onChange}
         />
 
         {/* 音色选择面板 */}
         <PanelTrigger
           label="音色"
-          display={voicePresets.find(v => v.id === values.voiceId)?.name || values.voiceId}
+          display={voicePresets.find(v => v.id === values.minimaxVoiceId)?.name || values.minimaxVoiceId}
           className="w-auto min-w-[140px] flex-shrink-0"
           panelWidth={720}
           alignment="aboveCenter"
@@ -695,9 +696,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
                       <div
                         key={v.id}
                         data-close-on-select
-                        onClick={() => onChange('voiceId', v.id)}
+                        onClick={() => onChange('minimaxVoiceId', v.id)}
                         className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${
-                          values.voiceId === v.id
+                          values.minimaxVoiceId === v.id
                             ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30'
                             : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'
                         }`}
@@ -718,8 +719,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         <SchemaForm
           schema={minimaxSpeechBasicParams.slice(1, 3)}
           values={{
-            audioEmotion: values.audioEmotion,
-            languageBoost: values.languageBoost
+            minimaxAudioEmotion: values.minimaxAudioEmotion,
+            minimaxLanguageBoost: values.minimaxLanguageBoost
           }}
           onChange={onChange}
         />
@@ -739,9 +740,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
                   <SchemaForm
                     schema={minimaxSpeechAdvancedParams.slice(0, 3)}
                     values={{
-                      audioVol: values.audioVol,
-                      audioPitch: values.audioPitch,
-                      audioSpeed: values.audioSpeed
+                      minimaxAudioVol: values.minimaxAudioVol,
+                      minimaxAudioPitch: values.minimaxAudioPitch,
+                      minimaxAudioSpeed: values.minimaxAudioSpeed
                     }}
                     onChange={onChange}
                   />
@@ -750,10 +751,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
                   <SchemaForm
                     schema={minimaxSpeechAdvancedParams.slice(3, 7)}
                     values={{
-                      audioSampleRate: values.audioSampleRate,
-                      audioBitrate: values.audioBitrate,
-                      audioFormat: values.audioFormat,
-                      audioChannel: values.audioChannel
+                      minimaxAudioSampleRate: values.minimaxAudioSampleRate,
+                      minimaxAudioBitrate: values.minimaxAudioBitrate,
+                      minimaxAudioFormat: values.minimaxAudioFormat,
+                      minimaxAudioChannel: values.minimaxAudioChannel
                     }}
                     onChange={onChange}
                   />
@@ -762,8 +763,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
                   <SchemaForm
                     schema={minimaxSpeechAdvancedParams.slice(7, 9)}
                     values={{
-                      latexRead: values.latexRead,
-                      textNormalization: values.textNormalization
+                      minimaxLatexRead: values.minimaxLatexRead,
+                      minimaxTextNormalization: values.minimaxTextNormalization
                     }}
                     onChange={onChange}
                   />

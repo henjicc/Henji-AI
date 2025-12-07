@@ -45,7 +45,7 @@ const languageBoostZhMap: Record<string, string> = {
  */
 export const minimaxSpeech26BasicParams: ParamDef[] = [
     {
-        id: 'audioSpec',
+        id: 'minimaxAudioSpec',
         type: 'dropdown',
         label: '规格',
         options: [
@@ -55,7 +55,7 @@ export const minimaxSpeech26BasicParams: ParamDef[] = [
         className: 'min-w-[70px]'
     },
     {
-        id: 'audioEmotion',
+        id: 'minimaxAudioEmotion',
         type: 'dropdown',
         label: '情绪',
         options: ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgusted', 'surprised']
@@ -63,7 +63,7 @@ export const minimaxSpeech26BasicParams: ParamDef[] = [
         className: 'min-w-[70px]'
     },
     {
-        id: 'languageBoost',
+        id: 'minimaxLanguageBoost',
         type: 'dropdown',
         label: '语言增强',
         options: ['auto', 'Chinese', 'Chinese,Yue', 'English', 'Arabic', 'Russian', 'Spanish',
@@ -80,7 +80,7 @@ export const minimaxSpeech26BasicParams: ParamDef[] = [
  */
 export const minimaxSpeech26AdvancedParams: ParamDef[] = [
     {
-        id: 'audioVol',
+        id: 'minimaxAudioVol',
         type: 'number',
         label: '音量',
         min: 0.1,
@@ -90,7 +90,7 @@ export const minimaxSpeech26AdvancedParams: ParamDef[] = [
         widthClassName: 'w-[100px]'
     },
     {
-        id: 'audioPitch',
+        id: 'minimaxAudioPitch',
         type: 'number',
         label: '语调',
         min: -12,
@@ -99,7 +99,7 @@ export const minimaxSpeech26AdvancedParams: ParamDef[] = [
         widthClassName: 'w-[100px]'
     },
     {
-        id: 'audioSpeed',
+        id: 'minimaxAudioSpeed',
         type: 'number',
         label: '速度',
         min: 0.5,
@@ -109,40 +109,40 @@ export const minimaxSpeech26AdvancedParams: ParamDef[] = [
         widthClassName: 'w-[100px]'
     },
     {
-        id: 'audioSampleRate',
+        id: 'minimaxAudioSampleRate',
         type: 'dropdown',
         label: '采样率',
         options: [8000, 16000, 22050, 24000, 32000, 44100]
             .map(r => ({ value: r, label: String(r) }))
     },
     {
-        id: 'audioBitrate',
+        id: 'minimaxAudioBitrate',
         type: 'dropdown',
         label: '比特率',
         options: [32000, 64000, 128000, 256000]
             .map(r => ({ value: r, label: String(r) }))
     },
     {
-        id: 'audioFormat',
+        id: 'minimaxAudioFormat',
         type: 'dropdown',
         label: '格式',
         options: ['mp3', 'pcm', 'flac', 'wav']
             .map(f => ({ value: f, label: f }))
     },
     {
-        id: 'audioChannel',
+        id: 'minimaxAudioChannel',
         type: 'dropdown',
         label: '声道',
         options: [1, 2]
             .map(c => ({ value: c, label: String(c) }))
     },
     {
-        id: 'latexRead',
+        id: 'minimaxLatexRead',
         type: 'toggle',
         label: '朗读 LaTeX'
     },
     {
-        id: 'textNormalization',
+        id: 'minimaxTextNormalization',
         type: 'toggle',
         label: '英文规范化'
     }

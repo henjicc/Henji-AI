@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiViduQ2Params: ParamDef[] = [
     {
-        id: 'viduQ2Mode',
+        id: 'falViduQ2Mode',
         type: 'dropdown',
         label: '模式',
         defaultValue: 'text-to-video',
@@ -51,12 +51,12 @@ export const falAiViduQ2Params: ParamDef[] = [
         className: 'min-w-[120px]'
     },
     {
-        id: 'viduQ2AspectRatio',
+        id: 'falViduQ2AspectRatio',
         type: 'dropdown',
         defaultValue: '16:9',
         // 文生视频和参考生视频模式下显示（带比例选择）
         hidden: (values) => {
-            const mode = values.viduQ2Mode || 'text-to-video'
+            const mode = values.falViduQ2Mode || 'text-to-video'
             return mode === 'image-to-video' || mode === 'video-extension'
         },
         // 分辨率配置：整合比例和分辨率到统一面板
@@ -80,7 +80,7 @@ export const falAiViduQ2Params: ParamDef[] = [
         // 当上传图片时自动切换到智能选项
         autoSwitch: {
             condition: (values) => {
-                const mode = values.viduQ2Mode || 'text-to-video'
+                const mode = values.falViduQ2Mode || 'text-to-video'
                 const imageCount = values.uploadedImages?.length || 0
                 // 仅在参考生视频模式下，有图片时自动切换到智能
                 // 图生视频模式不需要切换，因为它不显示比例选择器
@@ -90,7 +90,7 @@ export const falAiViduQ2Params: ParamDef[] = [
         },
         // 根据模式动态生成选项
         options: (values) => {
-            const mode = values.viduQ2Mode || 'text-to-video'
+            const mode = values.falViduQ2Mode || 'text-to-video'
             const imageCount = values.uploadedImages?.length || 0
 
             // 文生视频和参考生视频模式：包含智能选项和三个比例
@@ -110,13 +110,13 @@ export const falAiViduQ2Params: ParamDef[] = [
         className: 'min-w-[100px]'
     },
     {
-        id: 'viduQ2Resolution',
+        id: 'falViduQ2Resolution',
         type: 'dropdown',
         defaultValue: '720p',
         label: '分辨率',
         // 仅在图生视频和视频延长模式下显示（不带比例选择）
         hidden: (values) => {
-            const mode = values.viduQ2Mode || 'text-to-video'
+            const mode = values.falViduQ2Mode || 'text-to-video'
             return mode !== 'image-to-video' && mode !== 'video-extension'
         },
         // 使用特殊的分辨率面板样式（只显示质量选择，不显示比例）
@@ -132,12 +132,12 @@ export const falAiViduQ2Params: ParamDef[] = [
         className: 'min-w-[100px]'
     },
     {
-        id: 'videoDuration',
+        id: 'falViduQ2VideoDuration',
         type: 'dropdown',
         label: '时长',
         defaultValue: 4,
         options: (values) => {
-            const mode = values.viduQ2Mode || 'text-to-video'
+            const mode = values.falViduQ2Mode || 'text-to-video'
 
             // 视频延长模式：支持 2-7 秒
             if (mode === 'video-extension') {
@@ -164,7 +164,7 @@ export const falAiViduQ2Params: ParamDef[] = [
         }
     },
     {
-        id: 'viduQ2MovementAmplitude',
+        id: 'falViduQ2MovementAmplitude',
         type: 'dropdown',
         label: '运动幅度',
         defaultValue: 'auto',
@@ -175,10 +175,10 @@ export const falAiViduQ2Params: ParamDef[] = [
             { value: 'large', label: '大' }
         ],
         // 视频延长模式隐藏运动幅度选项
-        hidden: (values) => values.viduQ2Mode === 'video-extension'
+        hidden: (values) => values.falViduQ2Mode === 'video-extension'
     },
     {
-        id: 'viduQ2Bgm',
+        id: 'falViduQ2Bgm',
         type: 'toggle',
         label: '背景音乐',
         defaultValue: false,
@@ -186,13 +186,13 @@ export const falAiViduQ2Params: ParamDef[] = [
         tooltipDelay: 500
     },
     {
-        id: 'viduQ2FastMode',
+        id: 'falViduQ2FastMode',
         type: 'toggle',
         label: '快速模式',
         defaultValue: true,
         tooltip: '开启后使用 Turbo 版本，速度更快但质量略低',
         tooltipDelay: 500,
         // 仅在图生视频模式下显示
-        hidden: (values) => values.viduQ2Mode !== 'image-to-video'
+        hidden: (values) => values.falViduQ2Mode !== 'image-to-video'
     }
 ]

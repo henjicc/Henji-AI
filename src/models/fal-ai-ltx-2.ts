@@ -7,7 +7,7 @@ import { ParamDef } from '../types/schema'
 export const falAiLtx2Params: ParamDef[] = [
   // 第一个参数：模式选择
   {
-    id: 'mode',
+    id: 'falLtx2Mode',
     type: 'dropdown',
     label: '模式',
     defaultValue: 'text-to-video',
@@ -42,7 +42,7 @@ export const falAiLtx2Params: ParamDef[] = [
 
   // 第二个参数：分辨率（只显示分辨率选择，不显示比例）
   {
-    id: 'ltxResolution',
+    id: 'falLtx2Resolution',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: '1080p',
@@ -52,19 +52,19 @@ export const falAiLtx2Params: ParamDef[] = [
       { value: '2160p', label: '2160P' }
     ],
     // 视频编辑模式隐藏分辨率选项
-    hidden: (values) => values.mode === 'retake-video',
+    hidden: (values) => values.falLtx2Mode === 'retake-video',
     className: 'min-w-[100px]'
   },
 
   // 第三个参数：时长（视频编辑模式使用手动输入，其他模式使用下拉框）
   {
-    id: 'videoDuration',
+    id: 'falLtx2VideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 6,
     // 根据模式动态生成选项
     options: (values) => {
-      const mode = values.mode || 'text-to-video'
+      const mode = values.falLtx2Mode || 'text-to-video'
 
       // 视频编辑模式：不显示（使用单独的手动输入框）
       if (mode === 'retake-video') {
@@ -79,12 +79,12 @@ export const falAiLtx2Params: ParamDef[] = [
       ]
     },
     // 视频编辑模式隐藏下拉框
-    hidden: (values) => values.mode === 'retake-video'
+    hidden: (values) => values.falLtx2Mode === 'retake-video'
   },
 
   // 视频编辑模式的时长输入框（手动输入，整数步进）
   {
-    id: 'ltxRetakeDuration',
+    id: 'falLtx2RetakeDuration',
     type: 'number',
     label: '时长',
     defaultValue: 5,
@@ -93,12 +93,12 @@ export const falAiLtx2Params: ParamDef[] = [
     step: 1,
     widthClassName: 'w-24',
     // 只在视频编辑模式下显示
-    hidden: (values) => values.mode !== 'retake-video'
+    hidden: (values) => values.falLtx2Mode !== 'retake-video'
   },
 
   // 第四个参数：帧率
   {
-    id: 'ltxFps',
+    id: 'falLtx2Fps',
     type: 'dropdown',
     label: '帧率',
     defaultValue: 25,
@@ -107,34 +107,34 @@ export const falAiLtx2Params: ParamDef[] = [
       { value: 50, label: '50 FPS' }
     ],
     // 视频编辑模式隐藏帧率选项
-    hidden: (values) => values.mode === 'retake-video'
+    hidden: (values) => values.falLtx2Mode === 'retake-video'
   },
 
   // 第五个参数：生成音频
   {
-    id: 'ltxGenerateAudio',
+    id: 'falLtx2GenerateAudio',
     type: 'toggle',
     label: '生成音频',
     defaultValue: true,
     // 视频编辑模式隐藏音频选项
-    hidden: (values) => values.mode === 'retake-video'
+    hidden: (values) => values.falLtx2Mode === 'retake-video'
   },
 
   // 第六个参数：快速模式（仅在文生视频和图生视频模式下显示）
   {
-    id: 'ltxFastMode',
+    id: 'falLtx2FastMode',
     type: 'toggle',
     label: '快速模式',
     defaultValue: true,
     tooltip: '使用 Fast 端点，支持更长的时长（最长 20 秒）',
     tooltipDelay: 500,
     // 视频编辑模式隐藏快速模式选项
-    hidden: (values) => values.mode === 'retake-video'
+    hidden: (values) => values.falLtx2Mode === 'retake-video'
   },
 
   // 视频编辑模式的特殊参数：开始时间（整数步进）
   {
-    id: 'ltxRetakeStartTime',
+    id: 'falLtx2RetakeStartTime',
     type: 'number',
     label: '开始时间',
     defaultValue: 0,
@@ -143,12 +143,12 @@ export const falAiLtx2Params: ParamDef[] = [
     step: 1,
     widthClassName: 'w-24',
     // 只在视频编辑模式下显示
-    hidden: (values) => values.mode !== 'retake-video'
+    hidden: (values) => values.falLtx2Mode !== 'retake-video'
   },
 
   // 视频编辑模式的特殊参数：编辑模式
   {
-    id: 'ltxRetakeMode',
+    id: 'falLtx2RetakeMode',
     type: 'dropdown',
     label: '编辑模式',
     defaultValue: 'replace_audio_and_video',
@@ -159,6 +159,6 @@ export const falAiLtx2Params: ParamDef[] = [
     ],
     className: 'min-w-[140px]',
     // 只在视频编辑模式下显示
-    hidden: (values) => values.mode !== 'retake-video'
+    hidden: (values) => values.falLtx2Mode !== 'retake-video'
   }
 ]

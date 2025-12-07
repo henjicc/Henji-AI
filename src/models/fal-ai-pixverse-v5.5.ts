@@ -6,7 +6,7 @@ import { ParamDef } from '../types/schema'
 export const falAiPixverseV55Params: ParamDef[] = [
   // 第一个参数：分辨率特殊面板（参考 Veo 3.1）
   {
-    id: 'pixverseAspectRatio',
+    id: 'falPixverse55AspectRatio',
     type: 'dropdown',
     defaultValue: '16:9',
     // 分辨率配置：整合比例和分辨率到统一面板
@@ -57,7 +57,7 @@ export const falAiPixverseV55Params: ParamDef[] = [
 
   // 第二个参数：时长下拉框
   {
-    id: 'videoDuration',
+    id: 'falPixverse55VideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 5,
@@ -70,7 +70,7 @@ export const falAiPixverseV55Params: ParamDef[] = [
 
   // 第三个参数：风格下拉框
   {
-    id: 'pixverseStyle',
+    id: 'falPixverse55Style',
     type: 'dropdown',
     label: '风格',
     defaultValue: 'none',
@@ -86,7 +86,7 @@ export const falAiPixverseV55Params: ParamDef[] = [
 
   // 第四个参数：思考模式下拉框
   {
-    id: 'pixverseThinkingType',
+    id: 'falPixverse55ThinkingType',
     type: 'dropdown',
     label: '思考模式',
     defaultValue: 'auto',
@@ -101,7 +101,7 @@ export const falAiPixverseV55Params: ParamDef[] = [
 
   // 第五个参数：生成音频开关
   {
-    id: 'pixverseGenerateAudio',
+    id: 'falPixverse55GenerateAudio',
     type: 'toggle',
     label: '生成音频',
     tooltip: '启用音频生成（BGM、音效、对话）',
@@ -110,7 +110,7 @@ export const falAiPixverseV55Params: ParamDef[] = [
 
   // 第六个参数：多镜头开关
   {
-    id: 'pixverseMultiClip',
+    id: 'falPixverse55MultiClip',
     type: 'toggle',
     label: '多镜头',
     tooltip: '启用多镜头生成，包含动态镜头变化',

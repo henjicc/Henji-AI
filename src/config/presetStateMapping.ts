@@ -20,17 +20,17 @@ export interface PresetSetters {
     setNumImages: (v: number) => void
     setAspectRatio: (v: string) => void
     setResolution: (v: string) => void
-    setImageSize: (v: string) => void
+    setModelscopeImageSize: (v: string) => void
 
     // Z-Image-Turbo
-    setNumInferenceSteps: (v: number) => void
-    setEnablePromptExpansion: (v: boolean) => void
-    setAcceleration: (v: string) => void
+    setFalZImageTurboNumInferenceSteps: (v: number) => void
+    setFalZImageTurboEnablePromptExpansion: (v: boolean) => void
+    setFalZImageTurboAcceleration: (v: string) => void
 
     // 魔搭
-    setSteps: (v: number) => void
-    setGuidance: (v: number) => void
-    setNegativePrompt: (v: string) => void
+    setModelscopeSteps: (v: number) => void
+    setModelscopeGuidance: (v: number) => void
+    setModelscopeNegativePrompt: (v: string) => void
     setModelscopeCustomModel: (v: string) => void
     setResolutionBaseSize: (v: number) => void
 
@@ -42,112 +42,144 @@ export interface PresetSetters {
     setVideoSeed: (v: number | undefined) => void
 
     // Vidu
-    setViduMode: (v: any) => void
-    setViduAspectRatio: (v: string) => void
-    setViduStyle: (v: string) => void
-    setViduMovementAmplitude: (v: any) => void
-    setViduBgm: (v: boolean) => void
+    setPpioViduQ1VideoDuration: (v: number) => void
+    setPpioViduQ1Mode: (v: any) => void
+    setPpioViduQ1AspectRatio: (v: string) => void
+    setPpioViduQ1Style: (v: string) => void
+    setPpioViduQ1MovementAmplitude: (v: any) => void
+    setPpioViduQ1Bgm: (v: boolean) => void
 
     // Kling
-    setKlingCfgScale: (v: number) => void
+    setPpioKling25CfgScale: (v: number) => void
 
     // Hailuo
-    setHailuoFastMode: (v: boolean) => void
-    setMinimaxEnablePromptExpansion: (v: boolean) => void
+    setPpioHailuo23FastMode: (v: boolean) => void
+    setPpioHailuo23EnablePromptExpansion: (v: boolean) => void
 
     // Pixverse
-    setPixFastMode: (v: boolean) => void
-    setPixStyle: (v: string | undefined) => void
+    setPpioPixverse45FastMode: (v: boolean) => void
+    setPpioPixverse45Style: (v: string | undefined) => void
 
     // Seedance (派欧云)
-    setSeedanceVariant: (v: 'lite' | 'pro') => void
-    setSeedanceResolution: (v: string) => void
-    setSeedanceAspectRatio: (v: string) => void
-    setSeedanceCameraFixed: (v: boolean) => void
+    setPpioSeedanceV1Variant: (v: 'lite' | 'pro') => void
+    setPpioSeedanceV1Resolution: (v: string) => void
+    setPpioSeedanceV1AspectRatio: (v: string) => void
+    setPpioSeedanceV1CameraFixed: (v: boolean) => void
 
     // Seedance v1 (Fal)
-    setSeedanceMode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video') => void
-    setSeedanceVersion: (v: 'lite' | 'pro') => void
-    setSeedanceFastMode: (v: boolean) => void
+    setFalSeedanceV1Mode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video') => void
+    setFalSeedanceV1Version: (v: 'lite' | 'pro') => void
+    setFalSeedanceV1FastMode: (v: boolean) => void
 
     // Veo 3.1
-    setVeoMode: (v: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video') => void
-    setVeoAspectRatio: (v: string) => void
-    setVeoResolution: (v: string) => void
-    setVeoEnhancePrompt: (v: boolean) => void
-    setVeoGenerateAudio: (v: boolean) => void
-    setVeoAutoFix: (v: boolean) => void
-    setVeoFastMode: (v: boolean) => void
+    setFalVeo31Mode: (v: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video') => void
+    setFalVeo31AspectRatio: (v: string) => void
+    setFalVeo31Resolution: (v: string) => void
+    setFalVeo31EnhancePrompt: (v: boolean) => void
+    setFalVeo31GenerateAudio: (v: boolean) => void
+    setFalVeo31AutoFix: (v: boolean) => void
+    setFalVeo31FastMode: (v: boolean) => void
 
     // Wan25 (派欧云)
-    setWanSize: (v: string) => void
-    setWanPromptExtend: (v: boolean) => void
-    setWanAudio: (v: boolean) => void
+    setPpioWan25Size: (v: string) => void
+    setPpioWan25PromptExtend: (v: boolean) => void
+    setPpioWan25Audio: (v: boolean) => void
 
     // Wan25 (Fal)
-    setWanAspectRatio: (v: string) => void
-    setWanResolution: (v: string) => void
-    setWanPromptExpansion: (v: boolean) => void
+    setFalWan25AspectRatio: (v: string) => void
+    setFalWan25Resolution: (v: string) => void
+    setFalWan25PromptExpansion: (v: boolean) => void
 
     // Kling Video O1
-    setKlingMode: (v: 'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference') => void
-    setKlingAspectRatio: (v: string) => void
-    setKlingKeepAudio: (v: boolean) => void
-    setKlingElements: (v: any[]) => void
+    setFalKlingVideoO1Mode: (v: 'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference') => void
+    setFalKlingVideoO1AspectRatio: (v: string) => void
+    setFalKlingVideoO1KeepAudio: (v: boolean) => void
+    setFalKlingVideoO1Elements: (v: any[]) => void
     setUploadedVideos: (v: string[]) => void
     // 注意：setUploadedVideoFiles 不在这里定义，因为 File 对象无法序列化
 
     // Kling v2.6 Pro
-    setKlingV26AspectRatio: (v: string) => void
-    setKlingV26GenerateAudio: (v: boolean) => void
-    setKlingV26CfgScale: (v: number) => void
+    setFalKlingV26ProAspectRatio: (v: string) => void
+    setFalKlingV26ProGenerateAudio: (v: boolean) => void
+    setFalKlingV26ProCfgScale: (v: number) => void
 
     // Sora 2
-    setSoraMode: (v: 'standard' | 'pro') => void
-    setSoraAspectRatio: (v: string) => void
-    setSoraResolution: (v: string) => void
+    setFalSora2Mode: (v: 'standard' | 'pro') => void
+    setFalSora2AspectRatio: (v: string) => void
+    setFalSora2Resolution: (v: string) => void
 
     // LTX-2
-    setMode: (v: 'text-to-video' | 'image-to-video' | 'retake-video') => void
-    setLtxResolution: (v: string) => void
-    setLtxFps: (v: number) => void
-    setLtxGenerateAudio: (v: boolean) => void
-    setLtxFastMode: (v: boolean) => void
-    setLtxRetakeDuration: (v: number) => void
-    setLtxRetakeStartTime: (v: number) => void
-    setLtxRetakeMode: (v: 'replace_audio' | 'replace_video' | 'replace_audio_and_video') => void
+    setFalLtx2Mode: (v: 'text-to-video' | 'image-to-video' | 'retake-video') => void
+    setFalLtx2Resolution: (v: string) => void
+    setFalLtx2Fps: (v: number) => void
+    setFalLtx2GenerateAudio: (v: boolean) => void
+    setFalLtx2FastMode: (v: boolean) => void
+    setFalLtx2RetakeDuration: (v: number) => void
+    setFalLtx2RetakeStartTime: (v: number) => void
+    setFalLtx2RetakeMode: (v: 'replace_audio' | 'replace_video' | 'replace_audio_and_video') => void
     setUploadedVideoFilePaths: (v: string[]) => void
 
     // Vidu Q2
-    setViduQ2Mode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video' | 'video-extension') => void
-    setViduQ2AspectRatio: (v: string) => void
-    setViduQ2Resolution: (v: string) => void
-    setViduQ2MovementAmplitude: (v: string) => void
-    setViduQ2Bgm: (v: boolean) => void
-    setViduQ2FastMode: (v: boolean) => void
+    setFalViduQ2Mode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video' | 'video-extension') => void
+    setFalViduQ2AspectRatio: (v: string) => void
+    setFalViduQ2Resolution: (v: string) => void
+    setFalViduQ2MovementAmplitude: (v: string) => void
+    setFalViduQ2Bgm: (v: boolean) => void
+    setFalViduQ2FastMode: (v: boolean) => void
 
     // Pixverse V5.5
-    setPixverseAspectRatio: (v: string) => void
-    setPixverseResolution: (v: string) => void
-    setPixverseStyle: (v: string) => void
-    setPixverseThinkingType: (v: string) => void
-    setPixverseGenerateAudio: (v: boolean) => void
-    setPixverseMultiClip: (v: boolean) => void
+    setFalPixverse55AspectRatio: (v: string) => void
+    setFalPixverse55Resolution: (v: string) => void
+    setFalPixverse55Style: (v: string) => void
+    setFalPixverse55ThinkingType: (v: string) => void
+    setFalPixverse55GenerateAudio: (v: boolean) => void
+    setFalPixverse55MultiClip: (v: boolean) => void
 
     // 音频参数
-    setVoiceId: (v: string) => void
-    setAudioSpec: (v: 'hd' | 'turbo') => void
-    setAudioEmotion: (v: string) => void
-    setLanguageBoost: (v: string) => void
-    setAudioVol: (v: number) => void
-    setAudioPitch: (v: number) => void
-    setAudioSpeed: (v: number) => void
-    setAudioSampleRate: (v: number) => void
-    setAudioBitrate: (v: number) => void
-    setAudioFormat: (v: string) => void
-    setAudioChannel: (v: number) => void
-    setLatexRead: (v: boolean) => void
-    setTextNormalization: (v: boolean) => void
+    setMinimaxVoiceId: (v: string) => void
+    setMinimaxAudioSpec: (v: 'hd' | 'turbo') => void
+    setMinimaxAudioEmotion: (v: string) => void
+    setMinimaxLanguageBoost: (v: string) => void
+    setMinimaxAudioVol: (v: number) => void
+    setMinimaxAudioPitch: (v: number) => void
+    setMinimaxAudioSpeed: (v: number) => void
+    setMinimaxAudioSampleRate: (v: number) => void
+    setMinimaxAudioBitrate: (v: number) => void
+    setMinimaxAudioFormat: (v: string) => void
+    setMinimaxAudioChannel: (v: number) => void
+    setMinimaxLatexRead: (v: boolean) => void
+    setMinimaxTextNormalization: (v: boolean) => void
+
+
+    // 重构后的参数 setters
+    setFalSeedanceV1VideoDuration: (v: number) => void
+    setFalSeedream40NumImages: (v: number) => void
+    setFalKlingImageO1AspectRatio: (v: string) => void
+    setFalKlingImageO1NumImages: (v: number) => void
+    setFalKlingImageO1Resolution: (v: string) => void
+    setFalKlingVideoO1VideoDuration: (v: number) => void
+    setFalKlingV26ProVideoDuration: (v: number) => void
+    setFalLtx2VideoDuration: (v: number) => void
+    setFalNanoBananaProAspectRatio: (v: string) => void
+    setFalNanoBananaProNumImages: (v: number) => void
+    setFalNanoBananaProResolution: (v: string) => void
+    setFalNanoBananaAspectRatio: (v: string) => void
+    setFalNanoBananaNumImages: (v: number) => void
+    setFalPixverse55VideoDuration: (v: number) => void
+    setFalSora2VideoDuration: (v: number) => void
+    setFalVeo31VideoDuration: (v: number) => void
+    setFalViduQ2VideoDuration: (v: number) => void
+    setFalWan25VideoDuration: (v: number) => void
+    setFalZImageTurboImageSize: (v: string) => void
+    setFalZImageTurboNumImages: (v: number) => void
+    setPpioKling25VideoDuration: (v: number) => void
+    setPpioKling25VideoAspectRatio: (v: string) => void
+    setPpioHailuo23VideoDuration: (v: number) => void
+    setPpioHailuo23VideoResolution: (v: string) => void
+    setPpioPixverse45VideoAspectRatio: (v: string) => void
+    setPpioPixverse45VideoResolution: (v: string) => void
+    setPpioSeedanceV1VideoDuration: (v: number) => void
+    setPpioWan25VideoDuration: (v: number) => void
 }
 
 /**
@@ -175,17 +207,17 @@ export function createPresetSetterMap(
         aspectRatio: setters.setAspectRatio,
         aspect_ratio: setters.setAspectRatio,  // Nano Banana 使用下划线命名
         resolution: setters.setResolution,
-        imageSize: setters.setImageSize,
+        modelscopeImageSize: setters.setModelscopeImageSize,
 
         // Z-Image-Turbo
-        numInferenceSteps: setters.setNumInferenceSteps,
-        enablePromptExpansion: setters.setEnablePromptExpansion,
-        acceleration: setters.setAcceleration,
+        falZImageTurboNumInferenceSteps: setters.setFalZImageTurboNumInferenceSteps,
+        falZImageTurboEnablePromptExpansion: setters.setFalZImageTurboEnablePromptExpansion,
+        falZImageTurboAcceleration: setters.setFalZImageTurboAcceleration,
 
         // 魔搭
-        steps: setters.setSteps,
-        guidance: setters.setGuidance,
-        negativePrompt: setters.setNegativePrompt,
+        modelscopeSteps: setters.setModelscopeSteps,
+        modelscopeGuidance: setters.setModelscopeGuidance,
+        modelscopeNegativePrompt: setters.setModelscopeNegativePrompt,
         modelscopeCustomModel: setters.setModelscopeCustomModel,
         resolutionBaseSize: setters.setResolutionBaseSize,
 
@@ -197,112 +229,143 @@ export function createPresetSetterMap(
         videoSeed: setters.setVideoSeed,
 
         // Vidu
-        viduMode: setters.setViduMode,
-        viduAspectRatio: setters.setViduAspectRatio,
-        viduStyle: setters.setViduStyle,
-        viduMovementAmplitude: setters.setViduMovementAmplitude,
-        viduBgm: setters.setViduBgm,
+        ppioViduQ1VideoDuration: setters.setPpioViduQ1VideoDuration,
+        ppioViduQ1Mode: setters.setPpioViduQ1Mode,
+        ppioViduQ1AspectRatio: setters.setPpioViduQ1AspectRatio,
+        ppioViduQ1Style: setters.setPpioViduQ1Style,
+        ppioViduQ1MovementAmplitude: setters.setPpioViduQ1MovementAmplitude,
+        ppioViduQ1Bgm: setters.setPpioViduQ1Bgm,
 
         // Kling
-        klingCfgScale: setters.setKlingCfgScale,
+        ppioKling25CfgScale: setters.setPpioKling25CfgScale,
 
         // Hailuo
-        hailuoFastMode: setters.setHailuoFastMode,
-        minimaxEnablePromptExpansion: setters.setMinimaxEnablePromptExpansion,
+        ppioHailuo23FastMode: setters.setPpioHailuo23FastMode,
+        ppioHailuo23EnablePromptExpansion: setters.setPpioHailuo23EnablePromptExpansion,
 
         // Pixverse
-        pixFastMode: setters.setPixFastMode,
-        pixStyle: setters.setPixStyle,
+        ppioPixverse45FastMode: setters.setPpioPixverse45FastMode,
+        ppioPixverse45Style: setters.setPpioPixverse45Style,
 
         // Seedance (派欧云)
-        seedanceVariant: setters.setSeedanceVariant,
-        seedanceResolution: setters.setSeedanceResolution,
-        seedanceAspectRatio: setters.setSeedanceAspectRatio,
-        seedanceCameraFixed: setters.setSeedanceCameraFixed,
+        ppioSeedanceV1Variant: setters.setPpioSeedanceV1Variant,
+        ppioSeedanceV1Resolution: setters.setPpioSeedanceV1Resolution,
+        ppioSeedanceV1AspectRatio: setters.setPpioSeedanceV1AspectRatio,
+        ppioSeedanceV1CameraFixed: setters.setPpioSeedanceV1CameraFixed,
 
         // Seedance v1 (Fal)
-        seedanceMode: setters.setSeedanceMode,
-        seedanceVersion: setters.setSeedanceVersion,
-        seedanceFastMode: setters.setSeedanceFastMode,
+        falSeedanceV1Mode: setters.setFalSeedanceV1Mode,
+        falSeedanceV1Version: setters.setFalSeedanceV1Version,
+        falSeedanceV1FastMode: setters.setFalSeedanceV1FastMode,
 
         // Veo 3.1
-        veoMode: setters.setVeoMode,
-        veoAspectRatio: setters.setVeoAspectRatio,
-        veoResolution: setters.setVeoResolution,
-        veoEnhancePrompt: setters.setVeoEnhancePrompt,
-        veoGenerateAudio: setters.setVeoGenerateAudio,
-        veoAutoFix: setters.setVeoAutoFix,
-        veoFastMode: setters.setVeoFastMode,
+        falVeo31Mode: setters.setFalVeo31Mode,
+        falVeo31AspectRatio: setters.setFalVeo31AspectRatio,
+        falVeo31Resolution: setters.setFalVeo31Resolution,
+        falVeo31EnhancePrompt: setters.setFalVeo31EnhancePrompt,
+        falVeo31GenerateAudio: setters.setFalVeo31GenerateAudio,
+        falVeo31AutoFix: setters.setFalVeo31AutoFix,
+        falVeo31FastMode: setters.setFalVeo31FastMode,
 
         // Wan25 (派欧云)
-        wanSize: setters.setWanSize,
-        wanPromptExtend: setters.setWanPromptExtend,
-        wanAudio: setters.setWanAudio,
+        ppioWan25Size: setters.setPpioWan25Size,
+        ppioWan25PromptExtend: setters.setPpioWan25PromptExtend,
+        ppioWan25Audio: setters.setPpioWan25Audio,
 
         // Wan25 (Fal)
-        wanAspectRatio: setters.setWanAspectRatio,
-        wanResolution: setters.setWanResolution,
-        wanPromptExpansion: setters.setWanPromptExpansion,
+        falWan25AspectRatio: setters.setFalWan25AspectRatio,
+        falWan25Resolution: setters.setFalWan25Resolution,
+        falWan25PromptExpansion: setters.setFalWan25PromptExpansion,
 
         // Kling Video O1
-        klingMode: setters.setKlingMode,
-        klingAspectRatio: setters.setKlingAspectRatio,
-        klingKeepAudio: setters.setKlingKeepAudio,
-        klingElements: setters.setKlingElements,
+        falKlingVideoO1Mode: setters.setFalKlingVideoO1Mode,
+        falKlingVideoO1AspectRatio: setters.setFalKlingVideoO1AspectRatio,
+        falKlingVideoO1KeepAudio: setters.setFalKlingVideoO1KeepAudio,
+        falKlingVideoO1Elements: setters.setFalKlingVideoO1Elements,
         uploadedVideos: setters.setUploadedVideos,
         // 注意：视频 File 对象无法序列化，不支持保存到预设
         // uploadedVideoFiles 不添加到映射中
 
         // Kling v2.6 Pro
-        klingV26AspectRatio: setters.setKlingV26AspectRatio,
-        klingV26GenerateAudio: setters.setKlingV26GenerateAudio,
-        klingV26CfgScale: setters.setKlingV26CfgScale,
+        falKlingV26ProAspectRatio: setters.setFalKlingV26ProAspectRatio,
+        falKlingV26ProGenerateAudio: setters.setFalKlingV26ProGenerateAudio,
+        falKlingV26ProCfgScale: setters.setFalKlingV26ProCfgScale,
 
         // Sora 2
-        soraMode: setters.setSoraMode,
-        soraAspectRatio: setters.setSoraAspectRatio,
-        soraResolution: setters.setSoraResolution,
+        falSora2Mode: setters.setFalSora2Mode,
+        falSora2AspectRatio: setters.setFalSora2AspectRatio,
+        falSora2Resolution: setters.setFalSora2Resolution,
 
         // LTX-2
-        mode: setters.setMode,
-        ltxResolution: setters.setLtxResolution,
-        ltxFps: setters.setLtxFps,
-        ltxGenerateAudio: setters.setLtxGenerateAudio,
-        ltxFastMode: setters.setLtxFastMode,
-        ltxRetakeDuration: setters.setLtxRetakeDuration,
-        ltxRetakeStartTime: setters.setLtxRetakeStartTime,
-        ltxRetakeMode: setters.setLtxRetakeMode,
+        falLtx2Mode: setters.setFalLtx2Mode,
+        falLtx2Resolution: setters.setFalLtx2Resolution,
+        falLtx2Fps: setters.setFalLtx2Fps,
+        falLtx2GenerateAudio: setters.setFalLtx2GenerateAudio,
+        falLtx2FastMode: setters.setFalLtx2FastMode,
+        falLtx2RetakeDuration: setters.setFalLtx2RetakeDuration,
+        falLtx2RetakeStartTime: setters.setFalLtx2RetakeStartTime,
+        falLtx2RetakeMode: setters.setFalLtx2RetakeMode,
         uploadedVideoFilePaths: setters.setUploadedVideoFilePaths,
 
         // Vidu Q2
-        viduQ2Mode: setters.setViduQ2Mode,
-        viduQ2AspectRatio: setters.setViduQ2AspectRatio,
-        viduQ2Resolution: setters.setViduQ2Resolution,
-        viduQ2MovementAmplitude: setters.setViduQ2MovementAmplitude,
-        viduQ2Bgm: setters.setViduQ2Bgm,
-        viduQ2FastMode: setters.setViduQ2FastMode,
+        falViduQ2Mode: setters.setFalViduQ2Mode,
+        falViduQ2AspectRatio: setters.setFalViduQ2AspectRatio,
+        falViduQ2Resolution: setters.setFalViduQ2Resolution,
+        falViduQ2MovementAmplitude: setters.setFalViduQ2MovementAmplitude,
+        falViduQ2Bgm: setters.setFalViduQ2Bgm,
+        falViduQ2FastMode: setters.setFalViduQ2FastMode,
 
         // Pixverse V5.5
-        pixverseAspectRatio: setters.setPixverseAspectRatio,
-        pixverseResolution: setters.setPixverseResolution,
-        pixverseStyle: setters.setPixverseStyle,
-        pixverseThinkingType: setters.setPixverseThinkingType,
-        pixverseGenerateAudio: setters.setPixverseGenerateAudio,
-        pixverseMultiClip: setters.setPixverseMultiClip,
+        falPixverse55AspectRatio: setters.setFalPixverse55AspectRatio,
+        falPixverse55Resolution: setters.setFalPixverse55Resolution,
+        falPixverse55Style: setters.setFalPixverse55Style,
+        falPixverse55ThinkingType: setters.setFalPixverse55ThinkingType,
+        falPixverse55GenerateAudio: setters.setFalPixverse55GenerateAudio,
+        falPixverse55MultiClip: setters.setFalPixverse55MultiClip,
 
         // 音频参数
-        voiceId: setters.setVoiceId,
-        audioSpec: setters.setAudioSpec,
-        audioEmotion: setters.setAudioEmotion,
-        languageBoost: setters.setLanguageBoost,
-        audioVol: setters.setAudioVol,
-        audioPitch: setters.setAudioPitch,
-        audioSpeed: setters.setAudioSpeed,
-        audioSampleRate: setters.setAudioSampleRate,
-        audioBitrate: setters.setAudioBitrate,
-        audioFormat: setters.setAudioFormat,
-        audioChannel: setters.setAudioChannel,
-        latexRead: setters.setLatexRead,
-        textNormalization: setters.setTextNormalization
+        minimaxVoiceId: setters.setMinimaxVoiceId,
+        minimaxAudioSpec: setters.setMinimaxAudioSpec,
+        minimaxAudioEmotion: setters.setMinimaxAudioEmotion,
+        minimaxLanguageBoost: setters.setMinimaxLanguageBoost,
+        minimaxAudioVol: setters.setMinimaxAudioVol,
+        minimaxAudioPitch: setters.setMinimaxAudioPitch,
+        minimaxAudioSpeed: setters.setMinimaxAudioSpeed,
+        minimaxAudioSampleRate: setters.setMinimaxAudioSampleRate,
+        minimaxAudioBitrate: setters.setMinimaxAudioBitrate,
+        minimaxAudioFormat: setters.setMinimaxAudioFormat,
+        minimaxAudioChannel: setters.setMinimaxAudioChannel,
+        minimaxLatexRead: setters.setMinimaxLatexRead,
+        minimaxTextNormalization: setters.setMinimaxTextNormalization,
+
+        // 重构后的参数映射
+        falSeedanceV1VideoDuration: setters.setFalSeedanceV1VideoDuration,
+        falSeedream40NumImages: setters.setFalSeedream40NumImages,
+        falKlingImageO1NumImages: setters.setFalKlingImageO1NumImages,
+        falKlingImageO1AspectRatio: setters.setFalKlingImageO1AspectRatio,
+        falKlingImageO1Resolution: setters.setFalKlingImageO1Resolution,
+        falKlingVideoO1VideoDuration: setters.setFalKlingVideoO1VideoDuration,
+        falKlingV26ProVideoDuration: setters.setFalKlingV26ProVideoDuration,
+        falLtx2VideoDuration: setters.setFalLtx2VideoDuration,
+        falNanoBananaProNumImages: setters.setFalNanoBananaProNumImages,
+        falNanoBananaProAspectRatio: setters.setFalNanoBananaProAspectRatio,
+        falNanoBananaProResolution: setters.setFalNanoBananaProResolution,
+        falNanoBananaNumImages: setters.setFalNanoBananaNumImages,
+        falNanoBananaAspectRatio: setters.setFalNanoBananaAspectRatio,
+        falPixverse55VideoDuration: setters.setFalPixverse55VideoDuration,
+        falSora2VideoDuration: setters.setFalSora2VideoDuration,
+        falVeo31VideoDuration: setters.setFalVeo31VideoDuration,
+        falViduQ2VideoDuration: setters.setFalViduQ2VideoDuration,
+        falWan25VideoDuration: setters.setFalWan25VideoDuration,
+        falZImageTurboImageSize: setters.setFalZImageTurboImageSize,
+        falZImageTurboNumImages: setters.setFalZImageTurboNumImages,
+        ppioKling25VideoDuration: setters.setPpioKling25VideoDuration,
+        ppioKling25VideoAspectRatio: setters.setPpioKling25VideoAspectRatio,
+        ppioHailuo23VideoDuration: setters.setPpioHailuo23VideoDuration,
+        ppioHailuo23VideoResolution: setters.setPpioHailuo23VideoResolution,
+        ppioPixverse45VideoAspectRatio: setters.setPpioPixverse45VideoAspectRatio,
+        ppioPixverse45VideoResolution: setters.setPpioPixverse45VideoResolution,
+        ppioSeedanceV1VideoDuration: setters.setPpioSeedanceV1VideoDuration,
+        ppioWan25VideoDuration: setters.setPpioWan25VideoDuration,
     }
 }

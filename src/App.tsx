@@ -18,6 +18,7 @@ import { calculateProgress } from './utils/progress'
 import { loadPresets } from './utils/preset'
 import { canDeleteFile } from './utils/fileRefCount'
 import { getMediaDimensions, getMediaDurationFormatted } from './utils/mediaDimensions'
+import { migrateAllData } from './utils/parameterMigration'
 
 /**
  * 格式化模型显示名称
@@ -150,6 +151,11 @@ const App: React.FC = () => {
 
   // 图片拖动状态 - 用于动态调整底部面板 z-index
   const [isImageDragging, setIsImageDragging] = useState(false)
+
+  // 数据迁移 - 在应用启动时执行一次
+  useEffect(() => {
+    migrateAllData()
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {

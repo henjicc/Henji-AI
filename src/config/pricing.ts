@@ -410,7 +410,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 5
-            const mode = params.klingMode || 'image-to-video'
+            const mode = params.falKlingVideoO1Mode || 'image-to-video'
 
             // 根据模式选择价格
             const pricePerSecondUSD =
@@ -429,7 +429,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 5
-            const generateAudio = params.klingV26GenerateAudio !== undefined ? params.klingV26GenerateAudio : true
+            const generateAudio = params.falKlingV26ProGenerateAudio !== undefined ? params.falKlingV26ProGenerateAudio : true
 
             // 根据音频开关选择价格
             const pricePerSecondUSD = generateAudio
@@ -450,7 +450,7 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const textLength = params.input?.length || 0
             const charsIn10k = textLength / 10000
-            const pricePerChar = params.audioSpec === 'audio-pro'
+            const pricePerChar = params.minimaxAudioSpec === 'audio-pro'
                 ? PRICES.SPEECH_HD
                 : PRICES.SPEECH_TURBO
             return formatPrice(charsIn10k * pricePerChar)
@@ -471,7 +471,7 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const duration = (params.videoDuration || 5) as 5 | 10
+            const duration = (params.ppioKling25VideoDuration || params.videoDuration || 5) as 5 | 10
             return PRICES.KLING[duration] || PRICES.KLING[5]
         }
     },
@@ -482,9 +482,9 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const hasImage = params.uploadedImages?.length > 0
-            const duration = params.videoDuration || 6
-            const resolution = (params.videoResolution || '768P') as '768P' | '1080P'
-            const isFast = params.hailuoFastMode
+            const duration = params.ppioHailuo23VideoDuration || params.videoDuration || 6
+            const resolution = (params.ppioHailuo23VideoResolution || params.videoResolution || '768P') as '768P' | '1080P'
+            const isFast = params.ppioHailuo23FastMode
 
             let priceTable
             if (hasImage && isFast) {
@@ -504,8 +504,8 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const duration = params.videoDuration || 6
-            const resolution = (params.videoResolution || '768P') as '768P' | '1080P'
+            const duration = params.ppioHailuo23VideoDuration || params.videoDuration || 6
+            const resolution = (params.ppioHailuo23VideoResolution || params.videoResolution || '768P') as '768P' | '1080P'
             return PRICES.HAILUO_02[resolution]?.[duration as 6 | 10] || 0
         }
     },
@@ -515,8 +515,8 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const resolution = (params.videoResolution || '540p') as '360p' | '540p' | '720p' | '1080p'
-            const isFast = params.pixFastMode
+            const resolution = (params.ppioPixverse45VideoResolution || params.videoResolution || '540p') as '360p' | '540p' | '720p' | '1080p'
+            const isFast = params.ppioPixverse45FastMode
             const priceTable = isFast ? PRICES.PIXVERSE.fast : PRICES.PIXVERSE.normal
             return priceTable[resolution] || 0
         }
@@ -527,9 +527,29 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const duration = params.videoDuration || 5
-            // wanResolution 格式为 "1080P"，需要转换为 "1080p"
-            const resolution = (params.wanResolution || '1080P').toLowerCase() as '480p' | '720p' | '1080p'
+            const duration = params.ppioWan25VideoDuration || params.videoDuration || 5
+
+            // 处理两种分辨率参数：
+            // 1. falWan25Resolution: 图生视频模式，格式为 "1080P"
+            // 2. ppioWan25Size: 文生视频模式，格式为 "1280*720"
+            let resolution: '480p' | '720p' | '1080p' = '720p'
+
+            if (params.falWan25Resolution) {
+                // 图生视频：直接使用分辨率参数
+                resolution = params.falWan25Resolution.toLowerCase() as '480p' | '720p' | '1080p'
+            } else if (params.ppioWan25Size) {
+                // 文生视频：根据尺寸计算分辨率等级
+                const [w, h] = params.ppioWan25Size.split('*').map(Number)
+                const pixels = w * h
+                if (pixels <= 400000) {
+                    resolution = '480p'
+                } else if (pixels <= 1000000) {
+                    resolution = '720p'
+                } else {
+                    resolution = '1080p'
+                }
+            }
+
             return PRICES.WAN[resolution]?.[duration as 5 | 10] || 0
         }
     },
@@ -539,10 +559,10 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const variant = (params.seedanceVariant || 'lite') as 'lite' | 'pro'
-            const duration = (params.videoDuration || 5) as 5 | 10  // 使用通用的 videoDuration
-            const resolution = (params.seedanceResolution || '720p') as '480p' | '720p' | '1080p'
-            const aspect = params.seedanceAspectRatio || '16:9'
+            const variant = (params.ppioSeedanceV1Variant || 'lite') as 'lite' | 'pro'
+            const duration = (params.ppioSeedanceV1VideoDuration || params.videoDuration || 5) as 5 | 10
+            const resolution = (params.ppioSeedanceV1Resolution || '720p') as '480p' | '720p' | '1080p'
+            const aspect = params.ppioSeedanceV1AspectRatio || '16:9'
             const aspectGroup = getSeedanceAspectGroup(aspect)
 
             // Seedance的价格结构：Variant -> Duration -> Resolution -> AspectGroup
@@ -558,9 +578,9 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 8
-            const mode = params.veoMode || 'text-image-to-video'  // 使用 veoMode
-            const isFastMode = (params.veoFastMode || false) && mode !== 'reference-to-video' // 参考生视频模式不支持快速模式
-            const isAudioOn = params.veoGenerateAudio || false
+            const mode = params.falVeo31Mode || 'text-image-to-video'  // 使用 veoMode
+            const isFastMode = (params.falVeo31FastMode || false) && mode !== 'reference-to-video' // 参考生视频模式不支持快速模式
+            const isAudioOn = params.falVeo31GenerateAudio || false
 
             // 获取价格（美元/秒）
             const pricePerSecondUSD = isFastMode
@@ -581,7 +601,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 4
-            const mode = params.soraMode || 'standard'
+            const mode = params.falSora2Mode || 'standard'
 
             // 获取价格（美元/秒）
             let pricePerSecondUSD: number
@@ -589,7 +609,7 @@ export const pricingConfigs: PricingConfig[] = [
                 pricePerSecondUSD = PRICES.SORA2.standard
             } else {
                 // 专业模式：根据分辨率选择价格
-                const resolution = params.soraResolution || '720p'
+                const resolution = params.falSora2Resolution || '720p'
                 pricePerSecondUSD = resolution === '1080p'
                     ? PRICES.SORA2.pro['1080p']
                     : PRICES.SORA2.pro['720p']
@@ -609,14 +629,14 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const mode = params.ltxMode || 'text-to-video'  // 使用 ltxMode
-            const resolution = params.ltxResolution || '1080p'
-            const fastMode = params.ltxFastMode !== undefined ? params.ltxFastMode : true
+            const resolution = params.falLtx2Resolution || '1080p'
+            const fastMode = params.falLtx2FastMode !== undefined ? params.falLtx2FastMode : true
 
             // 根据模式选择时长参数
             let duration: number
             if (mode === 'retake-video') {
                 // 视频编辑模式：使用 ltxRetakeDuration
-                duration = params.ltxRetakeDuration || 5
+                duration = params.falLtx2RetakeDuration || 5
             } else {
                 // 文生视频和图生视频模式：使用 videoDuration
                 duration = params.videoDuration || 6
@@ -647,11 +667,11 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const version = params.seedanceVersion || 'lite'
-            const mode = params.seedanceMode || 'text-to-video'
-            const fastMode = params.seedanceFastMode !== undefined ? params.seedanceFastMode : true
+            const version = params.falSeedanceV1Version || 'lite'
+            const mode = params.falSeedanceV1Mode || 'text-to-video'
+            const fastMode = params.falSeedanceV1FastMode !== undefined ? params.falSeedanceV1FastMode : true
             const duration = params.videoDuration || 5
-            const resolution = params.seedanceResolution || '720p'
+            const resolution = params.ppioSeedanceV1Resolution || '720p'
 
             // 获取分辨率对应的总像素数（不考虑宽高比）
             const totalPixels = PRICES.SEEDANCE_V1_FAL.resolutionPixels[resolution as '480p' | '720p' | '1080p'] || PRICES.SEEDANCE_V1_FAL.resolutionPixels['720p']
@@ -721,10 +741,10 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const resolution = params.pixverseResolution || '720p'
+            const resolution = params.falPixverse55Resolution || '720p'
             const duration = params.videoDuration || 5
-            const generateAudio = params.pixverseGenerateAudio || false
-            const multiClip = params.pixverseMultiClip || false
+            const generateAudio = params.falPixverse55GenerateAudio || false
+            const multiClip = params.falPixverse55MultiClip || false
 
             // 获取基础价格（5秒，单镜头，无音频）
             const basePrice5s = PRICES.PIXVERSE_V55[resolution as '360p' | '540p' | '720p' | '1080p'] || PRICES.PIXVERSE_V55['720p']
@@ -770,10 +790,10 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const mode = params.viduQ2Mode || 'text-to-video'
-            const resolution = params.viduQ2Resolution || '720p'
+            const mode = params.falViduQ2Mode || 'text-to-video'
+            const resolution = params.falViduQ2Resolution || '720p'
             const duration = params.videoDuration || 4
-            const isTurbo = params.viduQ2FastMode !== undefined ? params.viduQ2FastMode : true
+            const isTurbo = params.falViduQ2FastMode !== undefined ? params.falViduQ2FastMode : true
 
             let totalPriceUSD: number
 
@@ -844,7 +864,7 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             const duration = params.videoDuration || 5
-            const resolution = (params.wanResolution || '1080p').toLowerCase() as '480p' | '720p' | '1080p'
+            const resolution = (params.falWan25Resolution || '1080p').toLowerCase() as '480p' | '720p' | '1080p'
 
             // 获取价格（美元/秒）
             const pricePerSecondUSD = PRICES.WAN_25_FAL[resolution] || PRICES.WAN_25_FAL['1080p']

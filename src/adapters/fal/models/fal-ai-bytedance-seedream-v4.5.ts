@@ -6,7 +6,7 @@ export const falAiBytedanceSeedreamV45Route: FalModelRoute = {
   buildImageRequest: (params: any) => {
     const images = params.uploadedImages || []
     const prompt = params.prompt || ''
-    const numImages = params.numImages || 1
+    const numImages = params.falSeedream40NumImages || 1
 
     // 处理imageSize参数，从字符串格式转换为对象格式
     let imageSize = { width: 2048, height: 2048 }

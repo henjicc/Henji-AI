@@ -105,7 +105,7 @@ export const falAiViduQ2Route: FalModelRoute = {
     }
 
     // 添加时长参数
-    const duration = params.videoDuration || 4
+    const duration = params.falViduQ2VideoDuration || 4
     requestData.duration = duration
 
     // 处理分辨率和宽高比

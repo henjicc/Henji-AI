@@ -21,8 +21,8 @@ export const falAiNanoBananaProRoute = {
     }
 
     // 添加可选参数
-    if (params.num_images !== undefined) {
-      requestData.num_images = params.num_images
+    if (params.falNanoBananaNumImages !== undefined) {
+      requestData.num_images = params.falNanoBananaNumImages
     }
 
     // aspect_ratio: 不发送 'auto' 或 'smart'
@@ -33,8 +33,9 @@ export const falAiNanoBananaProRoute = {
     }
 
     // 添加 resolution 参数（仅 nano-banana-pro）
-    if (params.resolution !== undefined) {
-      requestData.resolution = params.resolution
+    const resolution = params.falNanoBananaProResolution ?? params.resolution
+    if (resolution !== undefined) {
+      requestData.resolution = resolution
     }
 
     // 处理图生图：添加 image_urls

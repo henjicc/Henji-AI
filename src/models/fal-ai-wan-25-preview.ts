@@ -10,7 +10,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiWan25PreviewParams: ParamDef[] = [
   {
-    id: 'videoDuration',
+    id: 'falWan25VideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 5,  // Wan 2.5 默认 5 秒
@@ -20,7 +20,7 @@ export const falAiWan25PreviewParams: ParamDef[] = [
     ]
   },
   {
-    id: 'wanAspectRatio',
+    id: 'falWan25AspectRatio',
     type: 'dropdown',
     defaultValue: '16:9',
     // 分辨率配置：整合比例和分辨率到统一面板
@@ -49,7 +49,7 @@ export const falAiWan25PreviewParams: ParamDef[] = [
     className: 'min-w-[100px]'
   },
   {
-    id: 'wanResolution',
+    id: 'falWan25Resolution',
     type: 'dropdown',
     defaultValue: '1080p',
     // 图生视频时单独显示分辨率
@@ -67,7 +67,7 @@ export const falAiWan25PreviewParams: ParamDef[] = [
     hidden: (values) => !values.uploadedImages || values.uploadedImages.length === 0
   },
   {
-    id: 'wanPromptExpansion',
+    id: 'falWan25PromptExpansion',
     type: 'toggle',
     label: '提示词扩展',
     defaultValue: true

@@ -6,7 +6,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiKlingImageO1Params: ParamDef[] = [
   {
-    id: 'num_images',
+    id: 'falKlingImageO1Num_images',
     type: 'number',
     label: '数量',
     min: 1,
@@ -15,7 +15,7 @@ export const falAiKlingImageO1Params: ParamDef[] = [
     widthClassName: 'w-20'
   },
   {
-    id: 'aspectRatio',
+    id: 'falKlingImageO1AspectRatio',
     type: 'dropdown',
     defaultValue: '1:1',  // 无图时默认 1:1
     // 分辨率配置：启用智能匹配、可视化和质量选项

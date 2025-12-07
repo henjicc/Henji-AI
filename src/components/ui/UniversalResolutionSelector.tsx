@@ -6,7 +6,7 @@ import { calculateVisualizationSize } from '@/utils/aspectRatio'
 interface UniversalResolutionSelectorProps {
   label?: string
   value: any
-  options: Array<{ value: any; label: string }>
+  options: Array<{ value: any; label: string; disabled?: boolean }>
   config: ResolutionConfig
   customWidth?: string
   customHeight?: string
@@ -199,6 +199,16 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   // 获取显示文本
   const getDisplayText = () => {
     if (value === 'auto' || value === '智能') return '智能'
+
+    // 如果没有比例选项（图生视频模式），显示质量值
+    if (options.length === 0 && config.qualityOptions && qualityValue) {
+      const qualityOption = config.qualityOptions.find((opt: any) => opt.value === qualityValue)
+      if (qualityOption) {
+        return qualityOption.label
+      }
+    }
+
+    // 否则显示比例值
     const option = options.find(opt => opt.value === value)
     return option?.label || value
   }
@@ -284,8 +294,8 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           )}
 
           {/* 选择比例/尺寸/分辨率 */}
-          {/* 当 hideAspectRatio 为 true 且 options 为空时，隐藏此部分 */}
-          {!(config.hideAspectRatio && typeof config.hideAspectRatio === 'function' && values && config.hideAspectRatio(values) && options.length === 0) && (
+          {/* 当 options 为空时，隐藏此部分 */}
+          {options.length > 0 && (
             <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
               <label className="block text-xs text-zinc-400 mb-2">
                 {config.type === 'aspect_ratio' ? '选择比例' :
@@ -298,11 +308,17 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                 {options.map(option => (
                   <button
                     key={String(option.value)}
-                    onClick={() => onChange(option.value)}
+                    onClick={() => {
+                      if (option.disabled) return
+                      onChange(option.value)
+                    }}
+                    disabled={option.disabled}
                     className={`px-2 py-3 ${config.type === 'resolution' ? 'text-sm' : 'text-xs'} rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
-                      value === option.value
-                        ? 'bg-[#007eff] text-white'
-                        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                      option.disabled
+                        ? 'opacity-50 cursor-not-allowed bg-zinc-700/30'
+                        : value === option.value
+                          ? 'bg-[#007eff] text-white'
+                          : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                     }`}
                   >
                     {config.visualize && config.type !== 'resolution' && renderVisualization(option.value)}
@@ -316,18 +332,27 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           {/* 质量选项（如 2K/4K 或 1K/2K/4K） */}
           {config.qualityOptions && onQualityChange && (
             <div className={config.customInput ? 'mb-3' : ''}>
-              <label className="block text-xs text-zinc-400 mb-2">选择质量</label>
+              {/* 只有当同时有比例选项时才显示"选择质量"标签 */}
+              {options.length > 0 && (
+                <label className="block text-xs text-zinc-400 mb-2">选择质量</label>
+              )}
               <div className={`grid gap-2 ${
                 config.qualityOptions.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
               }`}>
                 {config.qualityOptions.map(quality => (
                   <button
                     key={String(quality.value)}
-                    onClick={() => onQualityChange(quality.value)}
+                    onClick={() => {
+                      if ((quality as any).disabled) return
+                      onQualityChange(quality.value)
+                    }}
+                    disabled={(quality as any).disabled}
                     className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
-                      qualityValue === quality.value
-                        ? 'bg-[#007eff] text-white'
-                        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                      (quality as any).disabled
+                        ? 'opacity-50 cursor-not-allowed bg-zinc-700/30'
+                        : qualityValue === quality.value
+                          ? 'bg-[#007eff] text-white'
+                          : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                     }`}
                   >
                     {quality.label}

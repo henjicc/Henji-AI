@@ -6,7 +6,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
   {
-    id: 'seedanceMode',
+    id: 'falSeedanceV1Mode',
     type: 'dropdown',
     label: '模式',
     defaultValue: 'text-to-video',
@@ -19,7 +19,7 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     autoSwitch: {
       condition: (values) => {
         const imageCount = values.uploadedImages?.length || 0
-        const currentMode = values.seedanceMode || 'text-to-video'
+        const currentMode = values.falSeedanceV1Mode || 'text-to-video'
 
         // 只有当前是文生视频模式，且上传了图片时，才切换到图生视频
         // 一旦切换到图生视频，就保持不变（不会自动恢复）
@@ -31,7 +31,7 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     className: 'min-w-[120px]'
   },
   {
-    id: 'seedanceVersion',
+    id: 'falSeedanceV1Version',
     type: 'dropdown',
     label: '版本',
     defaultValue: 'lite',
@@ -42,7 +42,7 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     className: 'min-w-[100px]'
   },
   {
-    id: 'seedanceAspectRatio',
+    id: 'ppioSeedanceV1AspectRatio',
     type: 'dropdown',
     defaultValue: '16:9',
     // 分辨率配置：整合比例和分辨率到统一面板
@@ -65,7 +65,7 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     // 在图生视频和参考生视频模式下自动切换到智能选项
     autoSwitch: {
       condition: (values) => {
-        const mode = values.seedanceMode || 'text-to-video'
+        const mode = values.falSeedanceV1Mode || 'text-to-video'
         // 图生视频或参考生视频模式下，自动切换到智能
         return mode === 'image-to-video' || mode === 'reference-to-video'
       },
@@ -73,8 +73,8 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     },
     // 根据模式和版本动态生成选项
     options: (values) => {
-      const mode = values.seedanceMode || 'text-to-video'
-      const version = values.seedanceVersion || 'lite'
+      const mode = values.falSeedanceV1Mode || 'text-to-video'
+      const version = values.falSeedanceV1Version || 'lite'
 
       // 文生视频模式
       if (mode === 'text-to-video') {
@@ -136,7 +136,7 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     className: 'min-w-[100px]'
   },
   {
-    id: 'videoDuration',
+    id: 'falSeedanceV1VideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 5,
@@ -155,19 +155,19 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
     ]
   },
   {
-    id: 'seedanceCameraFixed',
+    id: 'ppioSeedanceV1CameraFixed',
     type: 'toggle',
     label: '固定相机'
   },
   {
-    id: 'seedanceFastMode',
+    id: 'falSeedanceV1FastMode',
     type: 'toggle',
     label: '快速模式',
     defaultValue: true,
     // 仅在 Pro 版本的文生视频和图生视频模式下显示
     hidden: (values) => {
-      const version = values.seedanceVersion || 'lite'
-      const mode = values.seedanceMode || 'text-to-video'
+      const version = values.falSeedanceV1Version || 'lite'
+      const mode = values.falSeedanceV1Mode || 'text-to-video'
       return version !== 'pro' || mode === 'reference-to-video'
     }
   }

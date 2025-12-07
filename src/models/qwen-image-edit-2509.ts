@@ -4,7 +4,7 @@ import { ParamDef } from '../types/schema'
 // 支持上传最多3张图片进行编辑
 export const qwenImageEdit2509Params: ParamDef[] = [
   {
-    id: 'imageSize',
+    id: 'modelscopeImageSize',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: 'smart',  // 默认为智能模式

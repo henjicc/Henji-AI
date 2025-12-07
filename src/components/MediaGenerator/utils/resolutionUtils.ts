@@ -14,6 +14,58 @@ export const baseResolutions: Record<string, string> = {
   '21:9': '3024x1296'
 }
 
+// 标准宽高比列表（用于智能匹配）
+const standardAspectRatios = [
+  { ratio: '21:9', value: 21 / 9 },
+  { ratio: '16:9', value: 16 / 9 },
+  { ratio: '3:2', value: 3 / 2 },
+  { ratio: '4:3', value: 4 / 3 },
+  { ratio: '1:1', value: 1 / 1 },
+  { ratio: '3:4', value: 3 / 4 },
+  { ratio: '2:3', value: 2 / 3 },
+  { ratio: '9:16', value: 9 / 16 },
+  { ratio: '9:21', value: 9 / 21 }
+]
+
+/**
+ * 从图片计算最接近的标准宽高比
+ * @param imageDataUrl 图片的 data URL
+ * @returns Promise<string> 返回最接近的标准比例（如 "16:9"）
+ */
+export const calculateAspectRatioFromImage = (imageDataUrl: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const width = img.width
+      const height = img.height
+      const actualRatio = width / height
+
+      // 找到最接近的标准比例
+      let closestRatio = '16:9'
+      let minDifference = Infinity
+
+      for (const standard of standardAspectRatios) {
+        const difference = Math.abs(actualRatio - standard.value)
+        if (difference < minDifference) {
+          minDifference = difference
+          closestRatio = standard.ratio
+        }
+      }
+
+      console.log('[resolutionUtils] 智能比例匹配:', {
+        原图尺寸: `${width}x${height}`,
+        实际比例: actualRatio.toFixed(4),
+        匹配结果: closestRatio,
+        匹配比例值: standardAspectRatios.find(s => s.ratio === closestRatio)?.value.toFixed(4),
+        差异: minDifference.toFixed(4)
+      })
+
+      resolve(closestRatio)
+    }
+    img.src = imageDataUrl
+  })
+}
+
 // 根据质量获取实际分辨率
 export const getActualResolution = (ratio: string, quality: '2K' | '4K'): string => {
   const base = baseResolutions[ratio]

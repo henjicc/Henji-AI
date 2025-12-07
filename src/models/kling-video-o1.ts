@@ -7,7 +7,7 @@ import { ParamDef } from '../types/schema'
 export const klingVideoO1Params: ParamDef[] = [
   // 模式选择
   {
-    id: 'klingMode',
+    id: 'falKlingVideoO1Mode',
     type: 'dropdown',
     label: '模式',
     defaultValue: 'image-to-video',
@@ -22,7 +22,7 @@ export const klingVideoO1Params: ParamDef[] = [
 
   // 时长
   {
-    id: 'videoDuration',
+    id: 'falKlingVideoO1VideoDuration',
     type: 'dropdown',
     label: '时长',
     defaultValue: 5,
@@ -34,12 +34,12 @@ export const klingVideoO1Params: ParamDef[] = [
 
   // 宽高比（仅部分模式显示）
   {
-    id: 'klingAspectRatio',
+    id: 'falKlingVideoO1AspectRatio',
     type: 'dropdown',
     label: '比例',
     defaultValue: '16:9',
     options: (values) => {
-      const mode = values.klingMode
+      const mode = values.falKlingVideoO1Mode
       // reference-to-video 和 video-to-video-reference 模式支持宽高比
       if (mode === 'video-to-video-reference' || mode === 'reference-to-video') {
         return [
@@ -52,7 +52,7 @@ export const klingVideoO1Params: ParamDef[] = [
       return []
     },
     hidden: (values) => {
-      const mode = values.klingMode
+      const mode = values.falKlingVideoO1Mode
       // image-to-video 和 video-to-video-edit 模式不支持宽高比参数
       return mode === 'image-to-video' || mode === 'video-to-video-edit'
     }
@@ -60,12 +60,12 @@ export const klingVideoO1Params: ParamDef[] = [
 
   // 保留音频（仅视频模式显示）
   {
-    id: 'klingKeepAudio',
+    id: 'falKlingVideoO1KeepAudio',
     type: 'toggle',
     label: '保留音频',
     defaultValue: false,
     hidden: (values) => {
-      const mode = values.klingMode
+      const mode = values.falKlingVideoO1Mode
       // 只有视频编辑和视频参考模式支持保留音频
       return mode === 'image-to-video' || mode === 'reference-to-video'
     }

@@ -59,7 +59,7 @@ export const falAiBytedanceSeedreamV4Params: ParamDef[] = [
     className: 'min-w-[100px]'
   },
   {
-    id: 'numImages',
+    id: 'falSeedream40NumImages',
     type: 'number',
     label: '数量',
     min: 1,

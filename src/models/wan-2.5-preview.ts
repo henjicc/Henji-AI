@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
  */
 export const wan25PreviewParams: ParamDef[] = [
     {
-        id: 'videoDuration',
+        id: 'ppioWan25VideoDuration',
         type: 'dropdown',
         label: '时长',
         defaultValue: 5,  // Wan 2.5 默认 5 秒
@@ -15,7 +15,7 @@ export const wan25PreviewParams: ParamDef[] = [
         ]
     },
     {
-        id: 'wanSize',
+        id: 'ppioWan25Size',
         type: 'dropdown',
         defaultValue: '1280*720',
         // 分辨率配置：固定尺寸，显示矩形比例示例
@@ -46,7 +46,7 @@ export const wan25PreviewParams: ParamDef[] = [
         hidden: (values) => values.uploadedImages.length > 0
     },
     {
-        id: 'wanResolution',
+        id: 'falWan25Resolution',
         type: 'dropdown',
         defaultValue: '720P',
         // 分辨率配置：使用面板显示
@@ -63,13 +63,13 @@ export const wan25PreviewParams: ParamDef[] = [
         hidden: (values) => values.uploadedImages.length === 0
     },
     {
-        id: 'wanPromptExtend',
+        id: 'ppioWan25PromptExtend',
         type: 'toggle',
         label: '智能改写'
     },
     {
-        id: 'wanAudio',
+        id: 'ppioWan25Audio',
         type: 'toggle',
-        label: '音频'
+        label: '生成音频'
     }
 ]

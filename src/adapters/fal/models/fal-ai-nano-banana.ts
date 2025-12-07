@@ -21,8 +21,8 @@ export const falAiNanoBananaRoute = {
     }
 
     // 添加可选参数
-    if (params.num_images !== undefined) {
-      requestData.num_images = params.num_images
+    if (params.falNanoBananaNumImages !== undefined) {
+      requestData.num_images = params.falNanoBananaNumImages
     }
 
     // aspect_ratio: 不发送 'auto' 或 'smart'

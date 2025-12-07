@@ -6,24 +6,24 @@ export const falAiZImageTurboRoute: FalModelRoute = {
   buildImageRequest: (params: any) => {
     const images = params.uploadedImages || []
     const prompt = params.prompt || ''
-    const numImages = params.numImages || 1
-    const numInferenceSteps = params.numInferenceSteps || 8
-    const enablePromptExpansion = params.enablePromptExpansion || false
-    const acceleration = params.acceleration || 'none'
+    const numImages = params.falZImageTurboNumImages || 1
+    const numInferenceSteps = params.falZImageTurboNumInferenceSteps || 8
+    const enablePromptExpansion = params.falZImageTurboEnablePromptExpansion || false
+    const acceleration = params.falZImageTurboAcceleration || 'none'
 
     // 处理imageSize参数
-    // params.imageSize 格式为 "width*height" (如 "1760*1168")
+    // params.falZImageTurboImageSize 格式为 "width*height" (如 "1760*1168")
     // 需要转换为 fal.ai 支持的格式
     let imageSize: any = 'landscape_4_3' // 默认值
 
-    if (params.imageSize) {
+    if (params.falZImageTurboImageSize) {
       // 如果是 "width*height" 格式，转换为对象 { width, height }
-      if (params.imageSize.includes('*')) {
-        const [width, height] = params.imageSize.split('*').map(Number)
+      if (params.falZImageTurboImageSize.includes('*')) {
+        const [width, height] = params.falZImageTurboImageSize.split('*').map(Number)
         imageSize = { width, height }
       } else {
         // 否则直接使用（可能是预设值）
-        imageSize = params.imageSize
+        imageSize = params.falZImageTurboImageSize
       }
     }
 

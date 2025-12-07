@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
 
 export const falAiZImageTurboParams: ParamDef[] = [
   {
-    id: 'imageSize',
+    id: 'falZImageTurboImageSize',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: '1:1',
@@ -48,7 +48,7 @@ export const falAiZImageTurboParams: ParamDef[] = [
     ]
   },
   {
-    id: 'numInferenceSteps',
+    id: 'falZImageTurboNumInferenceSteps',
     type: 'number',
     label: '推理步数',
     min: 1,
@@ -60,7 +60,7 @@ export const falAiZImageTurboParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'numImages',
+    id: 'falZImageTurboNumImages',
     type: 'number',
     label: '数量',
     min: 1,
@@ -72,7 +72,7 @@ export const falAiZImageTurboParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'enablePromptExpansion',
+    id: 'falZImageTurboEnablePromptExpansion',
     type: 'toggle',
     label: '增强提示词',
     defaultValue: false,
@@ -80,7 +80,7 @@ export const falAiZImageTurboParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'acceleration',
+    id: 'falZImageTurboAcceleration',
     type: 'dropdown',
     label: '加速级别',
     defaultValue: 'none',

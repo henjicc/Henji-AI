@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiNanoBananaProParams: ParamDef[] = [
     {
-        id: 'num_images',
+        id: 'falNanoBananaProNum_images',
         type: 'number',
         label: '数量',
         min: 1,
@@ -14,7 +14,7 @@ export const falAiNanoBananaProParams: ParamDef[] = [
         widthClassName: 'w-20'
     },
     {
-        id: 'aspectRatio',
+        id: 'falNanoBananaProAspectRatio',
         type: 'dropdown',
         defaultValue: '1:1',  // 文生图默认 1:1
         // 分辨率配置：启用智能匹配、可视化和质量选项

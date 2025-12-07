@@ -32,125 +32,156 @@ interface BuildOptionsParams {
   videoNegativePrompt: string
   videoSeed?: number
 
-  // Vidu
-  viduMode: string
-  viduStyle: string
-  viduMovementAmplitude: string
-  viduBgm: boolean
-  viduAspectRatio: string
+  // Vidu Q1（派欧云）
+  ppioViduQ1VideoDuration?: number
+  ppioViduQ1Mode: string
+  ppioViduQ1Style: string
+  ppioViduQ1MovementAmplitude: string
+  ppioViduQ1Bgm: boolean
+  ppioViduQ1AspectRatio: string
 
-  // Kling
-  klingCfgScale: number
+  // Kling 2.5 Turbo（派欧云）
+  ppioKling25CfgScale: number
 
-  // Hailuo
-  hailuoFastMode: boolean
-  minimaxEnablePromptExpansion: boolean
+  // Hailuo（派欧云）
+  ppioHailuo23FastMode: boolean
+  ppioHailuo23EnablePromptExpansion: boolean
 
-  // PixVerse
-  pixFastMode: boolean
-  pixStyle?: string
+  // PixVerse v4.5（派欧云）
+  ppioPixverse45FastMode: boolean
+  ppioPixverse45Style?: string
 
-  // Wan（派欧云）
-  wanSize: string
-  wanPromptExtend: boolean
-  wanAudio: boolean
+  // Wan 2.5（派欧云）
+  ppioWan25Size: string
+  ppioWan25PromptExtend: boolean
+  ppioWan25Audio: boolean
 
-  // Wan（Fal）
-  wanAspectRatio?: string
-  wanResolution?: string
-  wanPromptExpansion?: boolean
+  // Wan 2.5（Fal）
+  falWan25AspectRatio?: string
+  falWan25Resolution?: string
+  falWan25PromptExpansion?: boolean
 
-  // Seedance（派欧云）
-  seedanceVariant: 'lite' | 'pro'
-  seedanceResolution: string
-  seedanceAspectRatio: string
-  seedanceCameraFixed: boolean
+  // Seedance v1（派欧云）
+  ppioSeedanceV1Variant: 'lite' | 'pro'
+  ppioSeedanceV1Resolution: string
+  ppioSeedanceV1AspectRatio: string
+  ppioSeedanceV1CameraFixed: boolean
 
   // Seedance v1（Fal）
-  seedanceMode?: 'text-to-video' | 'image-to-video' | 'reference-to-video'
-  seedanceVersion?: 'lite' | 'pro'
-  seedanceFastMode?: boolean
+  falSeedanceV1Mode?: 'text-to-video' | 'image-to-video' | 'reference-to-video'
+  falSeedanceV1Version?: 'lite' | 'pro'
+  falSeedanceV1FastMode?: boolean
 
-  // Veo 3.1
-  veoMode: string
-  veoAspectRatio: string
-  veoResolution: string
-  veoEnhancePrompt: boolean
-  veoGenerateAudio: boolean
-  veoAutoFix: boolean
-  veoFastMode: boolean
+  // Veo 3.1（Fal）
+  falVeo31Mode: string
+  falVeo31AspectRatio: string
+  falVeo31Resolution: string
+  falVeo31EnhancePrompt: boolean
+  falVeo31GenerateAudio: boolean
+  falVeo31AutoFix: boolean
+  falVeo31FastMode: boolean
 
-  // Kling Video O1
-  klingMode?: string
-  klingAspectRatio?: string
-  klingKeepAudio?: boolean
-  klingElements?: any[]
+  // Kling Video O1（Fal）
+  falKlingVideoO1Mode?: string
+  falKlingVideoO1AspectRatio?: string
+  falKlingVideoO1KeepAudio?: boolean
+  falKlingVideoO1Elements?: any[]
+  falKlingVideoO1VideoDuration?: number
   uploadedVideos?: string[]  // 视频缩略图（用于 UI）
   uploadedVideoFiles?: File[]  // 视频 File 对象（延迟读取）
 
-  // Kling v2.6 Pro
-  klingV26AspectRatio?: string
-  klingV26GenerateAudio?: boolean
-  klingV26CfgScale?: number
+  // Kling v2.6 Pro（Fal）
+  falKlingV26ProAspectRatio?: string
+  falKlingV26ProGenerateAudio?: boolean
+  falKlingV26ProCfgScale?: number
 
-  // Sora 2
-  soraMode?: string
-  soraAspectRatio?: string
-  soraResolution?: string
+  // Sora 2（Fal）
+  falSora2Mode?: string
+  falSora2AspectRatio?: string
+  falSora2Resolution?: string
 
-  // LTX-2
-  mode?: string  // LTX-2 模式
-  ltxResolution?: string
-  ltxFps?: number
-  ltxGenerateAudio?: boolean
-  ltxFastMode?: boolean
-  ltxRetakeDuration?: number
-  ltxRetakeStartTime?: number
-  ltxRetakeMode?: string
+  // LTX-2（Fal）
+  falLtx2Mode?: string
+  falLtx2Resolution?: string
+  falLtx2Fps?: number
+  falLtx2GenerateAudio?: boolean
+  falLtx2FastMode?: boolean
+  falLtx2RetakeDuration?: number
+  falLtx2RetakeStartTime?: number
+  falLtx2RetakeMode?: string
 
-  // Vidu Q2
-  viduQ2Mode?: string
-  viduQ2AspectRatio?: string
-  viduQ2Resolution?: string
-  viduQ2MovementAmplitude?: string
-  viduQ2Bgm?: boolean
-  viduQ2FastMode?: boolean
+  // Vidu Q2（Fal）
+  falViduQ2Mode?: string
+  falViduQ2AspectRatio?: string
+  falViduQ2Resolution?: string
+  falViduQ2MovementAmplitude?: string
+  falViduQ2Bgm?: boolean
+  falViduQ2FastMode?: boolean
 
-  // Pixverse V5.5
-  pixverseAspectRatio?: string
-  pixverseResolution?: string
-  pixverseStyle?: string
-  pixverseThinkingType?: string
-  pixverseGenerateAudio?: boolean
-  pixverseMultiClip?: boolean
+  // Pixverse V5.5（Fal）
+  falPixverse55AspectRatio?: string
+  falPixverse55Resolution?: string
+  falPixverse55Style?: string
+  falPixverse55ThinkingType?: string
+  falPixverse55GenerateAudio?: boolean
+  falPixverse55MultiClip?: boolean
 
   // 音频
-  audioSpeed: number
-  audioEmotion: string
-  voiceId: string
-  audioSpec: 'hd' | 'turbo'
-  audioVol: number
-  audioPitch: number
-  audioSampleRate: number
-  audioBitrate: number
-  audioFormat: string
-  audioChannel: number
-  latexRead: boolean
-  textNormalization: boolean
-  languageBoost: string
+  minimaxAudioSpeed: number
+  minimaxAudioEmotion: string
+  minimaxVoiceId: string
+  minimaxAudioSpec: 'hd' | 'turbo'
+  minimaxAudioVol: number
+  minimaxAudioPitch: number
+  minimaxAudioSampleRate: number
+  minimaxAudioBitrate: number
+  minimaxAudioFormat: string
+  minimaxAudioChannel: number
+  minimaxLatexRead: boolean
+  minimaxTextNormalization: boolean
+  minimaxLanguageBoost: string
 
   // Z-Image-Turbo
-  imageSize: string
-  numInferenceSteps: number
-  enablePromptExpansion: boolean
-  acceleration: string
+  modelscopeImageSize: string
+  falZImageTurboNumInferenceSteps: number
+  falZImageTurboEnablePromptExpansion: boolean
+  falZImageTurboAcceleration: string
 
   // 魔搭
-  steps: number
-  guidance: number
-  negativePrompt: string
+  modelscopeSteps: number
+  modelscopeGuidance: number
+  modelscopeNegativePrompt: string
   modelscopeCustomModel: string
   resolutionBaseSize: number
+
+  // 模型特定参数 - 派欧云
+  ppioKling25VideoDuration?: number
+  ppioKling25VideoAspectRatio?: string
+  ppioHailuo23VideoDuration?: number
+  ppioHailuo23VideoResolution?: string
+  ppioPixverse45VideoAspectRatio?: string
+  ppioPixverse45VideoResolution?: string
+  ppioWan25VideoDuration?: number
+  ppioSeedanceV1VideoDuration?: number
+
+  // 模型特定参数 - Fal
+  falNanoBananaAspectRatio?: string
+  falNanoBananaNumImages?: number
+  falNanoBananaProAspectRatio?: string
+  falNanoBananaProNumImages?: number
+  falKlingImageO1AspectRatio?: string
+  falKlingImageO1NumImages?: number
+  falZImageTurboImageSize?: string
+  falZImageTurboNumImages?: number
+  falSeedream40NumImages?: number
+  falSeedanceV1VideoDuration?: number
+  falVeo31VideoDuration?: number
+  falSora2VideoDuration?: number
+  falLtx2VideoDuration?: number
+  falViduQ2VideoDuration?: number
+  falPixverse55VideoDuration?: number
+  falKlingV26ProVideoDuration?: number
+  falWan25VideoDuration?: number
 
   // 工具函数
   calculateSmartResolution: (imageDataUrl: string) => Promise<string>
@@ -238,12 +269,12 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Vidu Q1 视频模型
   if (currentModel?.type === 'video' && selectedModel === 'vidu-q1') {
-    options.mode = params.viduMode
-    options.duration = 5
-    options.movementAmplitude = params.viduMovementAmplitude
-    options.bgm = params.viduBgm
+    options.mode = params.ppioViduQ1Mode
+    options.duration = params.ppioViduQ1VideoDuration ?? params.videoDuration
+    options.movementAmplitude = params.ppioViduQ1MovementAmplitude
+    options.bgm = params.ppioViduQ1Bgm
 
-    if (params.viduMode === 'text-image-to-video') {
+    if (params.ppioViduQ1Mode === 'text-image-to-video') {
       if (uploadedImages.length > 0) {
         options.images = [uploadedImages[0]]
         const p0 = uploadedFilePaths[0]
@@ -257,10 +288,10 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         }
       }
       if (uploadedImages.length === 0) {
-        options.aspectRatio = params.viduAspectRatio
-        options.style = params.viduStyle
+        options.aspectRatio = params.ppioViduQ1AspectRatio
+        options.style = params.ppioViduQ1Style
       }
-    } else if (params.viduMode === 'start-end-frame') {
+    } else if (params.ppioViduQ1Mode === 'start-end-frame') {
       if (uploadedImages.length < 2) {
         throw new Error('首尾帧模式需要至少2张图片')
       }
@@ -276,7 +307,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       }
       options.uploadedFilePaths = paths
       setUploadedFilePaths(paths)
-    } else if (params.viduMode === 'reference-to-video') {
+    } else if (params.ppioViduQ1Mode === 'reference-to-video') {
       if (uploadedImages.length < 1 || uploadedImages.length > 7) {
         throw new Error('参考生视频模式需要1-7张图片')
       }
@@ -292,17 +323,32 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       }
       options.uploadedFilePaths = paths
       setUploadedFilePaths(paths)
-      options.aspectRatio = params.viduAspectRatio
+
+      // 处理智能匹配
+      let finalAspectRatio = params.ppioViduQ1AspectRatio
+      if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+        const { getSmartMatchValues } = await import('@/models')
+        try {
+          const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+          const matchedValues = Object.values(matches)
+          finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+          console.log('[optionsBuilder] Vidu Q1 Smart matched aspect_ratio:', finalAspectRatio)
+        } catch (error) {
+          console.error('[optionsBuilder] Vidu Q1 Smart match failed:', error)
+          finalAspectRatio = '16:9'
+        }
+      }
+      options.aspectRatio = finalAspectRatio
     }
   }
 
   // Kling 2.5 Turbo
   else if (currentModel?.type === 'video' && selectedModel === 'kling-2.5-turbo') {
-    options.duration = params.videoDuration
-    options.cfgScale = params.klingCfgScale
-    options.negativePrompt = params.videoNegativePrompt
+    options.duration = params.ppioKling25VideoDuration ?? params.videoDuration
+    options.cfgScale = params.ppioKling25CfgScale
+    options.modelscopeNegativePrompt = params.videoNegativePrompt
     if (uploadedImages.length === 0) {
-      options.aspectRatio = params.videoAspectRatio
+      options.aspectRatio = params.ppioKling25VideoAspectRatio ?? params.videoAspectRatio
     } else {
       options.images = [uploadedImages[0]]
       const p0 = uploadedFilePaths[0]
@@ -319,9 +365,9 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Hailuo 2.3
   else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-2.3') {
-    options.duration = params.videoDuration || 6
-    options.resolution = params.videoResolution || '768P'
-    options.promptExtend = params.minimaxEnablePromptExpansion
+    options.duration = params.ppioHailuo23VideoDuration ?? (params.videoDuration || 6)
+    options.resolution = params.ppioHailuo23VideoResolution ?? (params.videoResolution || '768P')
+    options.promptExtend = params.ppioHailuo23EnablePromptExpansion
     if (uploadedImages.length > 0) {
       options.images = [uploadedImages[0]]
       const p0 = uploadedFilePaths[0]
@@ -333,15 +379,15 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         options.uploadedFilePaths = [saved.fullPath]
         setUploadedFilePaths([saved.fullPath])
       }
-      options.hailuoFast = params.hailuoFastMode
+      options.hailuoFast = params.ppioHailuo23FastMode
     }
   }
 
-  // Hailuo 02
+  // Hailuo 02（使用与 Hailuo 2.3 相同的参数）
   else if (currentModel?.type === 'video' && selectedModel === 'minimax-hailuo-02') {
-    options.duration = params.videoDuration || 6
-    options.resolution = params.videoResolution || '768P'
-    options.promptExtend = params.minimaxEnablePromptExpansion
+    options.duration = params.ppioHailuo23VideoDuration ?? (params.videoDuration || 6)
+    options.resolution = params.ppioHailuo23VideoResolution ?? (params.videoResolution || '768P')
+    options.promptExtend = params.ppioHailuo23EnablePromptExpansion
     if (uploadedImages.length > 0) {
       const take = Math.min(uploadedImages.length, 2)
       options.images = uploadedImages.slice(0, take)
@@ -361,12 +407,12 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // PixVerse v4.5
   else if (currentModel?.type === 'video' && selectedModel === 'pixverse-v4.5') {
-    options.resolution = params.videoResolution
-    options.negativePrompt = params.videoNegativePrompt
-    options.fastMode = params.pixFastMode
-    options.style = params.pixStyle
+    options.resolution = params.ppioPixverse45VideoResolution ?? params.videoResolution
+    options.modelscopeNegativePrompt = params.videoNegativePrompt
+    options.fastMode = params.ppioPixverse45FastMode
+    options.style = params.ppioPixverse45Style
     if (uploadedImages.length === 0) {
-      options.aspectRatio = params.videoAspectRatio
+      options.aspectRatio = params.ppioPixverse45VideoAspectRatio ?? params.videoAspectRatio
     } else {
       options.images = [uploadedImages[0]]
       const p0 = uploadedFilePaths[0]
@@ -384,9 +430,9 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Wan 2.5 Preview（派欧云）
   else if (currentModel?.type === 'video' && selectedModel === 'wan-2.5-preview') {
-    options.duration = params.videoDuration
-    options.promptExtend = params.wanPromptExtend
-    options.audio = params.wanAudio
+    options.duration = params.ppioWan25VideoDuration ?? params.videoDuration
+    options.promptExtend = params.ppioWan25PromptExtend
+    options.audio = params.ppioWan25Audio
     if (uploadedImages.length > 0) {
       options.images = [uploadedImages[0]]
       const p0 = uploadedFilePaths[0]
@@ -398,19 +444,35 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         options.uploadedFilePaths = [saved.fullPath]
         setUploadedFilePaths([saved.fullPath])
       }
-      options.resolution = params.wanResolution
+      options.resolution = params.falWan25Resolution
     } else {
-      options.size = params.wanSize
+      options.size = params.ppioWan25Size
     }
-    options.negativePrompt = params.videoNegativePrompt
+    options.modelscopeNegativePrompt = params.videoNegativePrompt
   }
 
   // Wan 2.5 Preview（Fal）
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-wan-25-preview' || selectedModel === 'wan-25-preview')) {
-    options.duration = params.videoDuration || 5
-    options.wanAspectRatio = params.wanAspectRatio
-    options.wanResolution = params.wanResolution
-    options.wanPromptExpansion = params.wanPromptExpansion
+    options.duration = params.falWan25VideoDuration ?? (params.videoDuration || 5)
+
+    // 处理智能匹配
+    let finalAspectRatio = params.falWan25AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Wan 2.5 Preview Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Wan 2.5 Preview Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.wanAspectRatio = finalAspectRatio
+
+    options.wanResolution = params.falWan25Resolution
+    options.wanPromptExpansion = params.falWan25PromptExpansion
 
     // 处理图片上传
     if (uploadedImages.length > 0) {
@@ -438,12 +500,29 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Seedance v1 系列（派欧云）
   else if (currentModel?.type === 'video' && (selectedModel === 'seedance-v1' || selectedModel === 'seedance-v1-lite' || selectedModel === 'seedance-v1-pro')) {
-    options.resolution = params.seedanceResolution
-    options.aspectRatio = params.seedanceAspectRatio
-    options.duration = params.videoDuration
-    options.cameraFixed = params.seedanceCameraFixed
+    options.resolution = params.ppioSeedanceV1Resolution
+
+    // 处理智能匹配
+    let finalAspectRatio = params.ppioSeedanceV1AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        // getSmartMatchValues返回的是 { paramId: value } 格式，提取第一个匹配的值
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Seedance V1 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Seedance V1 Smart match failed:', error)
+        finalAspectRatio = '16:9'  // 智能匹配失败时使用默认比例
+      }
+    }
+    options.aspectRatio = finalAspectRatio
+
+    options.duration = params.ppioSeedanceV1VideoDuration ?? params.videoDuration
+    options.cameraFixed = params.ppioSeedanceV1CameraFixed
     if (selectedModel === 'seedance-v1') {
-      options.seedanceVariant = params.seedanceVariant
+      options.seedanceVariant = params.ppioSeedanceV1Variant
     }
     if (uploadedImages.length > 0) {
       const first = uploadedImages[0]
@@ -476,13 +555,30 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Bytedance Seedance v1（Fal）
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1')) {
-    options.seedanceMode = params.seedanceMode
-    options.seedanceVersion = params.seedanceVersion
-    options.seedanceAspectRatio = params.seedanceAspectRatio
-    options.seedanceResolution = params.seedanceResolution
-    options.videoDuration = params.videoDuration
-    options.seedanceCameraFixed = params.seedanceCameraFixed
-    options.seedanceFastMode = params.seedanceFastMode
+    options.seedanceMode = params.falSeedanceV1Mode
+    options.seedanceVersion = params.falSeedanceV1Version
+
+    // 处理智能匹配
+    let finalAspectRatio = params.ppioSeedanceV1AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        // getSmartMatchValues返回的是 { paramId: value } 格式，提取第一个匹配的值
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Fal Seedance V1 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Fal Seedance V1 Smart match failed:', error)
+        finalAspectRatio = '16:9'  // 智能匹配失败时使用默认比例
+      }
+    }
+    options.seedanceAspectRatio = finalAspectRatio
+
+    options.seedanceResolution = params.ppioSeedanceV1Resolution
+    options.videoDuration = params.falSeedanceV1VideoDuration ?? params.videoDuration
+    options.seedanceCameraFixed = params.ppioSeedanceV1CameraFixed
+    options.seedanceFastMode = params.falSeedanceV1FastMode
 
     // 处理图片上传
     if (uploadedImages.length > 0) {
@@ -513,14 +609,30 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Veo 3.1
   else if (currentModel?.type === 'video' && (selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1')) {
-    options.mode = params.veoMode
-    options.duration = params.videoDuration
-    options.aspectRatio = params.veoAspectRatio
-    options.resolution = params.veoResolution
-    options.veoEnhancePrompt = params.veoEnhancePrompt
-    options.veoGenerateAudio = params.veoGenerateAudio
-    options.veoAutoFix = params.veoAutoFix
-    options.fastMode = params.veoFastMode
+    options.mode = params.falVeo31Mode
+    options.duration = params.falVeo31VideoDuration ?? params.videoDuration
+
+    // 处理智能匹配
+    let finalAspectRatio = params.falVeo31AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Veo 3.1 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Veo 3.1 Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.aspectRatio = finalAspectRatio
+
+    options.resolution = params.falVeo31Resolution
+    options.veoEnhancePrompt = params.falVeo31EnhancePrompt
+    options.veoGenerateAudio = params.falVeo31GenerateAudio
+    options.veoAutoFix = params.falVeo31AutoFix
+    options.fastMode = params.falVeo31FastMode
 
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
@@ -539,10 +651,26 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Sora 2
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-sora-2' || selectedModel === 'sora-2')) {
-    options.soraMode = params.soraMode
-    options.duration = params.videoDuration
-    options.soraAspectRatio = params.soraAspectRatio
-    options.soraResolution = params.soraResolution
+    options.soraMode = params.falSora2Mode
+    options.duration = params.falSora2VideoDuration ?? params.videoDuration
+
+    // 处理智能匹配
+    let finalAspectRatio = params.falSora2AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Sora 2 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Sora 2 Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.soraAspectRatio = finalAspectRatio
+
+    options.soraResolution = params.falSora2Resolution
 
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
@@ -561,17 +689,17 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // LTX-2
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2')) {
-    options.mode = params.mode || 'text-to-video'
-    options.ltxResolution = params.ltxResolution
-    options.ltxFps = params.ltxFps
-    options.ltxGenerateAudio = params.ltxGenerateAudio
-    options.ltxFastMode = params.ltxFastMode
+    options.mode = params.falLtx2Mode || 'text-to-video'
+    options.ltxResolution = params.falLtx2Resolution
+    options.ltxFps = params.falLtx2Fps
+    options.ltxGenerateAudio = params.falLtx2GenerateAudio
+    options.ltxFastMode = params.falLtx2FastMode
 
     // 视频编辑模式的特殊参数
     if (options.mode === 'retake-video') {
-      options.duration = params.ltxRetakeDuration || 5  // 视频编辑模式使用专用时长
-      options.ltxRetakeStartTime = params.ltxRetakeStartTime
-      options.ltxRetakeMode = params.ltxRetakeMode
+      options.duration = params.falLtx2RetakeDuration || 5  // 视频编辑模式使用专用时长
+      options.ltxRetakeStartTime = params.falLtx2RetakeStartTime
+      options.ltxRetakeMode = params.falLtx2RetakeMode
 
       // 处理视频上传：保存到 Uploads 目录并记录路径
       if (params.uploadedVideoFiles && params.uploadedVideoFiles.length > 0) {
@@ -599,7 +727,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     }
     // 文生视频和图生视频模式：使用通用时长
     else {
-      options.duration = params.videoDuration || 6
+      options.duration = params.falLtx2VideoDuration ?? (params.videoDuration || 6)
 
       // 图生视频模式：处理图片上传
       if (options.mode === 'image-to-video' && uploadedImages.length > 0) {
@@ -631,10 +759,26 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Kling Video O1
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1')) {
-    options.mode = params.klingMode || 'image-to-video'
-    options.duration = params.videoDuration
-    options.aspectRatio = params.klingAspectRatio
-    options.keepAudio = params.klingKeepAudio
+    options.mode = params.falKlingVideoO1Mode || 'image-to-video'
+    options.duration = params.falKlingVideoO1VideoDuration ?? (params.videoDuration || 5)
+
+    // 处理智能匹配
+    let finalAspectRatio = params.falKlingVideoO1AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Kling Video O1 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Kling Video O1 Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.aspectRatio = finalAspectRatio
+
+    options.keepAudio = params.falKlingVideoO1KeepAudio
 
     // 处理图片上传
     if (uploadedImages.length > 0) {
@@ -676,17 +820,33 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     }
 
     // 处理 Elements（如果有）
-    if (params.klingElements && params.klingElements.length > 0) {
-      options.elements = params.klingElements
+    if (params.falKlingVideoO1Elements && params.falKlingVideoO1Elements.length > 0) {
+      options.elements = params.falKlingVideoO1Elements
     }
   }
 
   // Kling Video v2.6 Pro
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro')) {
-    options.duration = params.videoDuration
-    options.aspectRatio = params.klingV26AspectRatio
-    options.klingV26GenerateAudio = params.klingV26GenerateAudio
-    options.klingV26CfgScale = params.klingV26CfgScale
+    options.duration = params.falKlingV26ProVideoDuration ?? params.videoDuration
+
+    // 处理智能匹配
+    let finalAspectRatio = params.falKlingV26ProAspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Kling v2.6 Pro Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Kling v2.6 Pro Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.aspectRatio = finalAspectRatio
+
+    options.klingV26GenerateAudio = params.falKlingV26ProGenerateAudio
+    options.klingV26CfgScale = params.falKlingV26ProCfgScale
 
     // 处理图片上传
     if (uploadedImages.length > 0) {
@@ -714,13 +874,29 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Vidu Q2
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2')) {
-    options.viduQ2Mode = params.viduQ2Mode || 'text-to-video'
-    options.viduQ2AspectRatio = params.viduQ2AspectRatio
-    options.viduQ2Resolution = params.viduQ2Resolution || '720p'
-    options.viduQ2MovementAmplitude = params.viduQ2MovementAmplitude
-    options.viduQ2Bgm = params.viduQ2Bgm
-    options.viduQ2FastMode = params.viduQ2FastMode
-    options.videoDuration = params.videoDuration || 4
+    options.viduQ2Mode = params.falViduQ2Mode || 'text-to-video'
+
+    // 处理智能匹配
+    let finalAspectRatio = params.falViduQ2AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Vidu Q2 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Vidu Q2 Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.viduQ2AspectRatio = finalAspectRatio
+
+    options.viduQ2Resolution = params.falViduQ2Resolution || '720p'
+    options.viduQ2MovementAmplitude = params.falViduQ2MovementAmplitude
+    options.viduQ2Bgm = params.falViduQ2Bgm
+    options.viduQ2FastMode = params.falViduQ2FastMode
+    options.videoDuration = params.falViduQ2VideoDuration ?? (params.videoDuration || 4)
 
     // 处理图片上传
     if (uploadedImages.length > 0) {
@@ -776,13 +952,28 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Pixverse V5.5
   else if (currentModel?.type === 'video' && (selectedModel === 'fal-ai-pixverse-v5.5' || selectedModel === 'pixverse-v5.5')) {
-    options.pixverseAspectRatio = params.pixverseAspectRatio
-    options.pixverseResolution = params.pixverseResolution
-    options.videoDuration = params.videoDuration || 5
-    options.pixverseStyle = params.pixverseStyle
-    options.pixverseThinkingType = params.pixverseThinkingType
-    options.pixverseGenerateAudio = params.pixverseGenerateAudio
-    options.pixverseMultiClip = params.pixverseMultiClip
+    // 处理智能匹配
+    let finalAspectRatio = params.falPixverse55AspectRatio
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
+      const { getSmartMatchValues } = await import('@/models')
+      try {
+        const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '16:9'
+        console.log('[optionsBuilder] Pixverse V5.5 Smart matched aspect_ratio:', finalAspectRatio)
+      } catch (error) {
+        console.error('[optionsBuilder] Pixverse V5.5 Smart match failed:', error)
+        finalAspectRatio = '16:9'
+      }
+    }
+    options.pixverseAspectRatio = finalAspectRatio
+
+    options.pixverseResolution = params.falPixverse55Resolution
+    options.videoDuration = params.falPixverse55VideoDuration ?? (params.videoDuration || 5)
+    options.pixverseStyle = params.falPixverse55Style
+    options.pixverseThinkingType = params.falPixverse55ThinkingType
+    options.pixverseGenerateAudio = params.falPixverse55GenerateAudio
+    options.pixverseMultiClip = params.falPixverse55MultiClip
 
     // 处理图片上传
     if (uploadedImages.length > 0) {
@@ -813,39 +1004,40 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // 音频模型
   else if (currentModel?.type === 'audio') {
-    options.speed = params.audioSpeed
-    options.emotion = params.audioEmotion
-    options.voiceId = params.voiceId
+    options.speed = params.minimaxAudioSpeed
+    options.emotion = params.minimaxAudioEmotion
+    options.minimaxVoiceId = params.minimaxVoiceId
     options.output_format = 'url'
-    options.spec = params.audioSpec
-    options.vol = params.audioVol
-    options.pitch = params.audioPitch
-    options.sample_rate = params.audioSampleRate
-    options.bitrate = params.audioBitrate
-    options.format = params.audioFormat
-    options.channel = params.audioChannel
-    options.latex_read = params.latexRead
-    options.text_normalization = params.textNormalization
-    options.language_boost = params.languageBoost
+    options.spec = params.minimaxAudioSpec
+    options.vol = params.minimaxAudioVol
+    options.pitch = params.minimaxAudioPitch
+    options.sample_rate = params.minimaxAudioSampleRate
+    options.bitrate = params.minimaxAudioBitrate
+    options.format = params.minimaxAudioFormat
+    options.channel = params.minimaxAudioChannel
+    options.latex_read = params.minimaxLatexRead
+    options.text_normalization = params.minimaxTextNormalization
+    options.language_boost = params.minimaxLanguageBoost
   }
 
   // Nano Banana
   else if (currentModel?.type === 'image' && (selectedModel === 'nano-banana' || selectedModel === 'fal-ai-nano-banana')) {
-    options.num_images = params.numImages
+    options.num_images = params.falNanoBananaNumImages ?? params.numImages
 
     // 保存原始的 aspect_ratio 参数（用于历史记录恢复）
-    let finalAspectRatio = params.aspectRatio
+    let finalAspectRatio = params.falNanoBananaAspectRatio ?? params.aspectRatio
 
     // 如果是 'smart'，执行智能匹配
-    if (params.aspectRatio === 'smart' && uploadedImages.length > 0) {
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
       const { getSmartMatchValues } = await import('@/models')
       try {
         const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
-        finalAspectRatio = matches.aspectRatio || params.aspectRatio
-        console.log('[optionsBuilder] Smart matched aspect_ratio:', finalAspectRatio)
+        const matchedValues = Object.values(matches)
+        finalAspectRatio = matchedValues.length > 0 ? matchedValues[0] as string : '1:1'
+        console.log('[optionsBuilder] Nano Banana Smart matched aspect_ratio:', finalAspectRatio)
       } catch (error) {
-        console.error('[optionsBuilder] Smart match failed:', error)
-        finalAspectRatio = params.aspectRatio
+        console.error('[optionsBuilder] Nano Banana Smart match failed:', error)
+        finalAspectRatio = '1:1'
       }
     }
 
@@ -870,24 +1062,27 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   // Nano Banana Pro
   else if (currentModel?.type === 'image' && (selectedModel === 'nano-banana-pro' || selectedModel === 'fal-ai-nano-banana-pro')) {
     options.model_id = 'nano-banana-pro'
-    options.num_images = params.numImages
+    options.num_images = params.falNanoBananaProNumImages ?? params.numImages
+
+    // 使用模型特定参数或通用参数
+    let finalAspectRatio = params.falNanoBananaProAspectRatio ?? params.aspectRatio
 
     // 如果是 'smart'，执行智能匹配
-    if (params.aspectRatio === 'smart' && uploadedImages.length > 0) {
+    if (finalAspectRatio === 'smart' && uploadedImages.length > 0) {
       const { getSmartMatchValues } = await import('@/models')
       try {
         const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
-        options.aspect_ratio = matches.aspectRatio || params.aspectRatio
+        options.aspect_ratio = matches.aspectRatio || finalAspectRatio
         console.log('[optionsBuilder] Smart matched aspect_ratio:', options.aspect_ratio)
       } catch (error) {
         console.error('[optionsBuilder] Smart match failed:', error)
-        options.aspect_ratio = params.aspectRatio
+        options.aspect_ratio = finalAspectRatio
       }
     } else {
-      options.aspect_ratio = params.aspectRatio
+      options.aspect_ratio = finalAspectRatio
     }
 
-    options.resolution = params.resolution
+    options.resolution = params.falNanoBananaProResolution ?? params.resolution
     if (uploadedImages.length > 0) {
       options.images = uploadedImages
       const paths: string[] = [...uploadedFilePaths]
@@ -911,7 +1106,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
   // - 2K模式：目标 2048×2048 = 4,194,304 像素，尽可能接近且不小于此值
   // - 4K模式：目标 4096×4096 = 16,777,216 像素，尽可能接近且不小于此值
   else if (currentModel?.type === 'image' && (selectedModel === 'bytedance-seedream-v4' || selectedModel === 'bytedance-seedream-v4.5' || selectedModel === 'fal-ai-bytedance-seedream-v4' || selectedModel === 'fal-ai-bytedance-seedream-v4.5')) {
-    options.numImages = params.numImages
+    options.numImages = params.falSeedream40NumImages ?? params.numImages
 
     // 分辨率处理
     let width = 2048
@@ -996,8 +1191,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     }
     // 智能模式但没有上传图片，使用默认尺寸（已在上面设置）
 
-    console.log('[optionsBuilder] bytedance-seedream-v4 最终分辨率:', { width, height, imageSize: `${width}*${height}` })
-    options.imageSize = `${width}*${height}`
+    console.log('[optionsBuilder] bytedance-seedream-v4 最终分辨率:', { width, height, modelscopeImageSize: `${width}*${height}` })
+    options.modelscopeImageSize = `${width}*${height}`
 
     // 处理上传的图片 - 使用 uploadedImages 参数名以匹配适配器
     if (uploadedImages.length > 0) {
@@ -1018,24 +1213,27 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
   // Kling Image O1
   else if (currentModel?.type === 'image' && (selectedModel === 'fal-ai-kling-image-o1' || selectedModel === 'kling-o1')) {
-    options.num_images = params.numImages
+    options.num_images = params.falKlingImageO1NumImages ?? params.numImages
+
+    // 使用模型特定参数或通用参数
+    let finalAspectRatio = params.falKlingImageO1AspectRatio ?? params.aspectRatio
 
     // 如果是 'auto'，执行智能匹配
-    if (params.aspectRatio === 'auto' && uploadedImages.length > 0) {
+    if (finalAspectRatio === 'auto' && uploadedImages.length > 0) {
       const { getSmartMatchValues } = await import('@/models')
       try {
         const matches = await getSmartMatchValues(selectedModel, uploadedImages[0], { uploadedImages })
-        options.aspect_ratio = matches.aspectRatio || params.aspectRatio
+        options.aspect_ratio = matches.aspectRatio || finalAspectRatio
         console.log('[optionsBuilder] Kling O1 Smart matched aspect_ratio:', options.aspect_ratio)
       } catch (error) {
         console.error('[optionsBuilder] Kling O1 Smart match failed:', error)
-        options.aspect_ratio = params.aspectRatio
+        options.aspect_ratio = finalAspectRatio
       }
     } else {
-      options.aspect_ratio = params.aspectRatio
+      options.aspect_ratio = finalAspectRatio
     }
 
-    options.resolution = params.resolution
+    options.resolution = params.falKlingImageO1Resolution ?? params.resolution
 
     // 处理上传的图片
     if (uploadedImages.length > 0) {
@@ -1081,14 +1279,14 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
       finalImageSize = '1440*1440'
     }
 
-    options.imageSize = finalImageSize
-    options.numInferenceSteps = params.numInferenceSteps
-    options.numImages = params.numImages
-    options.enablePromptExpansion = params.enablePromptExpansion
-    options.acceleration = params.acceleration
+    options.modelscopeImageSize = finalImageSize
+    options.falZImageTurboNumInferenceSteps = params.falZImageTurboNumInferenceSteps
+    options.numImages = params.falZImageTurboNumImages ?? params.numImages
+    options.falZImageTurboEnablePromptExpansion = params.falZImageTurboEnablePromptExpansion
+    options.falZImageTurboAcceleration = params.falZImageTurboAcceleration
 
     console.log('[optionsBuilder] Z-Image-Turbo 分辨率:', {
-      原始imageSize: params.imageSize,
+      原始imageSize: params.modelscopeImageSize,
       customWidth: params.customWidth,
       customHeight: params.customHeight,
       最终imageSize: finalImageSize
@@ -1144,7 +1342,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     // Qwen-Image-Edit-2509 使用专用计算器
     if (selectedModel === 'Qwen/Qwen-Image-Edit-2509') {
       // 智能模式：根据上传的第一张图片保持原图比例计算分辨率
-      if (params.imageSize === 'smart' && uploadedImages.length > 0) {
+      if (params.modelscopeImageSize === 'smart' && uploadedImages.length > 0) {
         const { smartMatchQwenResolution } = await import('@/utils/qwenResolutionCalculator')
         const img = new Image()
         await new Promise((resolve, reject) => {
@@ -1157,8 +1355,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         height = resolution.height
       }
       // 比例格式（如 "4:3"），使用 Qwen 专用计算器
-      else if (params.imageSize && params.imageSize.includes(':')) {
-        const [w, h] = params.imageSize.split(':').map(Number)
+      else if (params.modelscopeImageSize && params.modelscopeImageSize.includes(':')) {
+        const [w, h] = params.modelscopeImageSize.split(':').map(Number)
         if (!isNaN(w) && !isNaN(h)) {
           const { calculateQwenResolution } = await import('@/utils/qwenResolutionCalculator')
           const size = calculateQwenResolution(w, h)
@@ -1175,7 +1373,7 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     // 自定义模型支持图片编辑：使用带边界限制的计算器
     else if (isCustomModelWithImageEditing) {
       // 智能模式：根据上传的第一张图片保持原图比例计算分辨率
-      if (params.imageSize === 'smart' && uploadedImages.length > 0) {
+      if (params.modelscopeImageSize === 'smart' && uploadedImages.length > 0) {
         const { smartMatchQwenResolution } = await import('@/utils/qwenResolutionCalculator')
         const img = new Image()
         await new Promise((resolve, reject) => {
@@ -1188,8 +1386,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         height = resolution.height
       }
       // 比例格式（如 "4:3"），使用带边界限制的计算器
-      else if (params.imageSize && params.imageSize.includes(':')) {
-        const [w, h] = params.imageSize.split(':').map(Number)
+      else if (params.modelscopeImageSize && params.modelscopeImageSize.includes(':')) {
+        const [w, h] = params.modelscopeImageSize.split(':').map(Number)
         if (!isNaN(w) && !isNaN(h)) {
           const { calculateResolutionWithBounds } = await import('@/utils/resolutionCalculator')
           const baseSize = params.resolutionBaseSize || 1440
@@ -1212,8 +1410,8 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
         height = parseInt(params.customHeight)
       }
       // 如果没有自定义宽高，但 imageSize 是比例格式（如 "4:3"），使用基数动态计算（带边界限制）
-      else if (params.imageSize && params.imageSize.includes(':')) {
-        const [w, h] = params.imageSize.split(':').map(Number)
+      else if (params.modelscopeImageSize && params.modelscopeImageSize.includes(':')) {
+        const [w, h] = params.modelscopeImageSize.split(':').map(Number)
         if (!isNaN(w) && !isNaN(h)) {
           const { calculateResolutionWithBounds } = await import('@/utils/resolutionCalculator')
           const baseSize = params.resolutionBaseSize || 1440
@@ -1229,15 +1427,15 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
     options.height = height
 
     // 设置其他参数
-    options.steps = params.steps
+    options.modelscopeSteps = params.modelscopeSteps
 
     // Z-Image-Turbo 不使用 guidance 参数，其他模型才设置
-    if (selectedModel !== 'Tongyi-MAI/Z-Image-Turbo' && params.guidance !== undefined) {
-      options.guidance = params.guidance
+    if (selectedModel !== 'Tongyi-MAI/Z-Image-Turbo' && params.modelscopeGuidance !== undefined) {
+      options.modelscopeGuidance = params.modelscopeGuidance
     }
 
-    if (params.negativePrompt) {
-      options.negativePrompt = params.negativePrompt
+    if (params.modelscopeNegativePrompt) {
+      options.modelscopeNegativePrompt = params.modelscopeNegativePrompt
     }
 
     // 设置 model 参数
@@ -1275,13 +1473,13 @@ export const buildGenerateOptions = async (params: BuildOptionsParams): Promise<
 
     console.log('[optionsBuilder] 魔搭模型参数:', {
       selectedModel,
-      imageSize: params.imageSize,
+      modelscopeImageSize: params.modelscopeImageSize,
       customWidth: params.customWidth,
       customHeight: params.customHeight,
       resolutionBaseSize: params.resolutionBaseSize,
       最终分辨率: `${width}x${height}`,
-      steps: options.steps,
-      guidance: options.guidance,
+      modelscopeSteps: options.modelscopeSteps,
+      modelscopeGuidance: options.modelscopeGuidance,
       model: options.model,
       isCustomModelWithImageEditing,
       imageUrls: options.imageUrls?.length || 0

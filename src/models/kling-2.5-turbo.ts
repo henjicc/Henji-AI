@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
  */
 export const klingTurbo25Params: ParamDef[] = [
     {
-        id: 'videoDuration',
+        id: 'ppioKling25VideoDuration',
         type: 'dropdown',
         label: '时长',
         defaultValue: 5,  // Kling 默认 5 秒
@@ -15,7 +15,7 @@ export const klingTurbo25Params: ParamDef[] = [
         ]
     },
     {
-        id: 'videoAspectRatio',
+        id: 'ppioKling25VideoAspectRatio',
         type: 'dropdown',
         defaultValue: '16:9',
         // 分辨率配置：启用可视化
@@ -37,7 +37,7 @@ export const klingTurbo25Params: ParamDef[] = [
         hidden: (values) => values.uploadedImages && values.uploadedImages.length > 0
     },
     {
-        id: 'klingCfgScale',
+        id: 'ppioKling25CfgScale',
         type: 'number',
         label: 'CFG Scale',
         min: 0,

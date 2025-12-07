@@ -12,7 +12,7 @@ import { ParamDef } from '../types/schema'
 // 魔搭通用参数（所有模型共享）
 export const modelscopeCommonParams: ParamDef[] = [
   {
-    id: 'imageSize',
+    id: 'modelscopeImageSize',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: '1:1',
@@ -51,7 +51,7 @@ export const modelscopeCommonParams: ParamDef[] = [
     ]
   },
   {
-    id: 'steps',
+    id: 'modelscopeSteps',
     type: 'number',
     label: '采样步数',
     min: 1,
@@ -63,7 +63,7 @@ export const modelscopeCommonParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'guidance',
+    id: 'modelscopeGuidance',
     type: 'number',
     label: '提示词引导系数',
     min: 1.5,
@@ -76,7 +76,7 @@ export const modelscopeCommonParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'negativePrompt',
+    id: 'modelscopeNegativePrompt',
     type: 'text',
     label: '负面提示词',
     placeholder: '输入不希望出现的内容...',
@@ -121,7 +121,7 @@ const getCurrentCustomModel = (modelId: string) => {
 // 魔搭 Z-Image-Turbo 专用参数（移除 guidance，修改 steps 默认值）
 export const modelscopeZImageTurboParams: ParamDef[] = [
   {
-    id: 'imageSize',
+    id: 'modelscopeImageSize',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: '1:1',
@@ -159,7 +159,7 @@ export const modelscopeZImageTurboParams: ParamDef[] = [
     ]
   },
   {
-    id: 'steps',
+    id: 'modelscopeSteps',
     type: 'number',
     label: '采样步数',
     min: 1,
@@ -171,7 +171,7 @@ export const modelscopeZImageTurboParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'negativePrompt',
+    id: 'modelscopeNegativePrompt',
     type: 'text',
     label: '负面提示词',
     placeholder: '输入不希望出现的内容...',
@@ -199,7 +199,7 @@ export const modelscopeCustomParams: ParamDef[] = [
     placeholder: '选择模型'
   },
   {
-    id: 'imageSize',
+    id: 'modelscopeImageSize',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: '1:1',
@@ -265,7 +265,7 @@ export const modelscopeCustomParams: ParamDef[] = [
     }
   },
   {
-    id: 'steps',
+    id: 'modelscopeSteps',
     type: 'number',
     label: '采样步数',
     min: 1,
@@ -277,7 +277,7 @@ export const modelscopeCustomParams: ParamDef[] = [
     tooltipDelay: 500
   },
   {
-    id: 'guidance',
+    id: 'modelscopeGuidance',
     type: 'number',
     label: '提示词引导系数',
     min: 1.5,

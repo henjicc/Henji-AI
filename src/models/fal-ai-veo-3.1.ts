@@ -5,7 +5,7 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiVeo31Params: ParamDef[] = [
     {
-        id: 'veoMode',
+        id: 'falVeo31Mode',
         type: 'dropdown',
         label: '模式',
         options: [
@@ -16,7 +16,7 @@ export const falAiVeo31Params: ParamDef[] = [
         className: 'min-w-[120px]'
     },
     {
-        id: 'videoDuration',
+        id: 'falVeo31VideoDuration',
         type: 'dropdown',
         label: '时长',
         defaultValue: 8,  // Veo 3.1 默认 8 秒
@@ -27,7 +27,7 @@ export const falAiVeo31Params: ParamDef[] = [
         ]
     },
     {
-        id: 'veoAspectRatio',
+        id: 'falVeo31AspectRatio',
         type: 'dropdown',
         defaultValue: '16:9',
         // 分辨率配置：整合比例和分辨率到统一面板
@@ -53,7 +53,7 @@ export const falAiVeo31Params: ParamDef[] = [
         },
         // 根据模式动态生成选项
         options: (values) => {
-            const mode = values.veoMode || 'text-image-to-video'
+            const mode = values.falVeo31Mode || 'text-image-to-video'
 
             // reference-to-video 模式：不显示比例选项（会被 hidden 隐藏）
             if (mode === 'reference-to-video') {
@@ -79,28 +79,28 @@ export const falAiVeo31Params: ParamDef[] = [
             ]
         },
         // reference-to-video 模式隐藏比例选项
-        hidden: (values) => values.veoMode === 'reference-to-video',
+        hidden: (values) => values.falVeo31Mode === 'reference-to-video',
         className: 'min-w-[100px]'
     },
     {
-        id: 'veoGenerateAudio',
+        id: 'falVeo31GenerateAudio',
         type: 'toggle',
         label: '生成音频'
     },
     {
-        id: 'veoAutoFix',
+        id: 'falVeo31AutoFix',
         type: 'toggle',
         label: 'Auto Fix',
         tooltip: '自动修复可能违反内容政策或其他验证检查的提示词',
         tooltipDelay: 500
     },
     {
-        id: 'veoFastMode',
+        id: 'falVeo31FastMode',
         type: 'toggle',
         label: '快速模式'
     },
     {
-        id: 'veoEnhancePrompt',
+        id: 'falVeo31EnhancePrompt',
         type: 'toggle',
         label: '增强提示词'
     }
