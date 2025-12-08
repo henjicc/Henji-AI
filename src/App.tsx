@@ -19,6 +19,10 @@ import { loadPresets } from './utils/preset'
 import { canDeleteFile } from './utils/fileRefCount'
 import { getMediaDimensions, getMediaDurationFormatted } from './utils/mediaDimensions'
 import { migrateAllData } from './utils/parameterMigration'
+import TestModeIndicator from './components/TestModeIndicator'
+import TestModePanel from './components/TestModePanel'
+import TestModeParamsDisplay from './components/TestModeParamsDisplay'
+import { shouldSkipRequest, logRequestParams } from './utils/testMode'
 
 /**
  * 格式化模型显示名称
@@ -114,6 +118,9 @@ const App: React.FC = () => {
   const [isBuffering, setIsBuffering] = useState(false)
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false)
   const [isControlsVisible, setIsControlsVisible] = useState(true)
+
+  // 测试模式状态
+  const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
   const controlsHideTimer = React.useRef<number | null>(null)
   const [isVolumeMenuOpen, setIsVolumeMenuOpen] = useState(false)
   const progressBarRef = React.useRef<HTMLDivElement>(null)
@@ -162,6 +169,20 @@ const App: React.FC = () => {
       setIsReady(true)
     }, 100)
     return () => clearTimeout(timer)
+  }, [])
+
+  // 测试模式快捷键监听 (Ctrl+Alt+Shift+T)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Alt+Shift+T
+      if (e.ctrlKey && e.altKey && e.shiftKey && e.key === 'T') {
+        e.preventDefault()
+        setIsTestPanelOpen(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   // 初始化时监听首次鼠标交互
@@ -1366,6 +1387,23 @@ const App: React.FC = () => {
     if (!input.trim() && (!options || !options.images || options.images.length === 0)) {
       setError('请输入内容或上传图片')
       return
+    }
+
+    // 测试模式拦截
+    if (shouldSkipRequest()) {
+      logRequestParams({
+        input,
+        model,
+        type,
+        options,
+        timestamp: new Date().toISOString()
+      })
+
+      // 显示测试模式提示
+      setNotification({ message: '测试模式：已拦截请求，参数已输出到控制台', type: 'success' })
+      setNotificationVisible(true)
+
+      return // 不继续执行实际的生成逻辑
     }
 
     // 查找供应商信息
@@ -3101,6 +3139,18 @@ const App: React.FC = () => {
           <SettingsModal onClose={closeSettings} />
         )
       }
+
+      {/* 测试模式指示器 */}
+      <TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />
+
+      {/* 测试模式参数显示窗口 */}
+      <TestModeParamsDisplay />
+
+      {/* 测试模式面板 */}
+      <TestModePanel
+        isOpen={isTestPanelOpen}
+        onClose={() => setIsTestPanelOpen(false)}
+      />
     </div >
   )
 }

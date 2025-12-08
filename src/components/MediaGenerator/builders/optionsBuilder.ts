@@ -71,5 +71,62 @@ function convertParamsToContext(params: BuildOptionsParams): Record<string, any>
   return params as any
 }
 
+/**
+ * 反向映射：将 API 参数转换回 UI 状态参数
+ * 用于从历史记录恢复参数时使用
+ * @param modelId 模型 ID
+ * @param apiOptions API 参数对象
+ * @returns UI 状态参数对象
+ */
+export function reverseMapOptions(modelId: string, apiOptions: Record<string, any>): Record<string, any> {
+  ensureConfigsRegistered()
+
+  const config = optionsBuilder.getConfig(modelId)
+  if (!config || !config.paramMapping) {
+    // 如果没有配置，直接返回原始参数
+    return apiOptions
+  }
+
+  const uiParams: Record<string, any> = {}
+
+  // 遍历配置中的参数映射
+  for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
+    // 检查 API 参数中是否有这个 key
+    if (!(apiKey in apiOptions)) {
+      continue
+    }
+
+    const value = apiOptions[apiKey]
+
+    // 获取 UI 参数名
+    let uiKey: string | undefined
+
+    if (typeof mapping === 'string') {
+      // 简单映射：直接使用字符串作为 UI 参数名
+      uiKey = mapping
+    } else if (typeof mapping === 'object' && mapping !== null) {
+      // 复杂映射：从 source 中获取
+      if ('source' in mapping) {
+        const source = mapping.source
+        if (typeof source === 'string') {
+          uiKey = source
+        } else if (Array.isArray(source) && source.length > 0) {
+          // 使用 source 数组的第一个值（模型特定参数）
+          uiKey = source[0]
+        }
+      }
+    }
+
+    // 如果找到了 UI 参数名，添加到结果中
+    if (uiKey) {
+      uiParams[uiKey] = value
+    }
+  }
+
+  console.log(`[OptionsBuilder] Reverse mapped ${Object.keys(uiParams).length} parameters for ${modelId}`)
+
+  return uiParams
+}
+
 // 导出类型
 export type { BuildOptionsParams }

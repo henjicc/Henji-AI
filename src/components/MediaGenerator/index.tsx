@@ -436,7 +436,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 监听重新编辑事件
   const isRestoringRef = useRef(false)
   useEffect(() => {
-    const handleReedit = (event: CustomEvent) => {
+    const handleReedit = async (event: CustomEvent) => {
       const { prompt, images, uploadedFilePaths, videos, uploadedVideoFilePaths, model, provider, options } = event.detail as any
 
       // 标记正在恢复状态，防止 useEffect 重置参数
@@ -493,9 +493,36 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         state.setUploadedVideoFilePaths([])
       }
 
-      // 恢复参数 - 使用 setterMap 自动映射
+      // 恢复参数 - 同时处理 UI 参数和 API 参数
       if (options) {
+        const paramsToRestore: Record<string, any> = {}
+
+        // 1. 首先直接恢复已存在的 UI 参数（新的历史记录）
         for (const [key, value] of Object.entries(options)) {
+          if (key in setterMap) {
+            paramsToRestore[key] = value
+          }
+        }
+
+        // 2. 对于没有 UI 参数的情况，尝试反向映射 API 参数（旧的历史记录）
+        const { reverseMapOptions } = await import('./builders/optionsBuilder')
+        const reverseMappedParams = reverseMapOptions(model, options)
+
+        // 合并反向映射的参数（UI 参数优先）
+        for (const [key, value] of Object.entries(reverseMappedParams)) {
+          if (!(key in paramsToRestore)) {
+            paramsToRestore[key] = value
+          }
+        }
+
+        console.log('[MediaGenerator] Restoring parameters:', {
+          model,
+          originalOptions: options,
+          paramsToRestore
+        })
+
+        // 使用 setterMap 恢复所有参数
+        for (const [key, value] of Object.entries(paramsToRestore)) {
           const setter = setterMap[key]
           if (setter && value !== undefined && value !== null) {
             setter(value)
@@ -509,9 +536,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }, 100)
     }
 
-    window.addEventListener('reedit-content', handleReedit as EventListener)
+    window.addEventListener('reedit-content', handleReedit as unknown as EventListener)
     return () => {
-      window.removeEventListener('reedit-content', handleReedit as EventListener)
+      window.removeEventListener('reedit-content', handleReedit as unknown as EventListener)
     }
   }, [setterMap])
 
@@ -949,16 +976,51 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // 这些参数可能在 buildGenerateOptions 中被智能匹配转换，但我们需要保留原始值
       const originalUIParams: Record<string, any> = {}
 
+      // 自动提取模型特定的 UI 参数（基于配置驱动架构）
+      const { optionsBuilder } = await import('./builders/configs')
+      const config = optionsBuilder.getConfig(state.selectedModel)
+
+      if (config && config.paramMapping) {
+        // 遍历参数映射，提取所有 UI 参数
+        for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
+          let uiKey: string | undefined
+
+          if (typeof mapping === 'string') {
+            uiKey = mapping
+          } else if (typeof mapping === 'object' && mapping !== null && 'source' in mapping) {
+            const source = mapping.source
+            if (typeof source === 'string') {
+              uiKey = source
+            } else if (Array.isArray(source) && source.length > 0) {
+              // 使用 source 数组的第一个值（模型特定参数）
+              uiKey = source[0]
+            }
+          }
+
+          // 如果找到了 UI 参数名，从 state 中读取值并保存
+          if (uiKey && uiKey in state) {
+            originalUIParams[uiKey] = (state as any)[uiKey]
+          }
+        }
+      }
+
+      // 兼容旧的手动添加方式（向后兼容）
       // Nano Banana 和 Nano Banana Pro 的 aspectRatio
       if (state.selectedModel === 'nano-banana' || state.selectedModel === 'nano-banana-pro' ||
           state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
-        originalUIParams.aspectRatio = state.aspectRatio
+        if (!('aspectRatio' in originalUIParams)) {
+          originalUIParams.aspectRatio = state.aspectRatio
+        }
       }
 
       // ByteDance Seedream v4 的 selectedResolution
       if (state.selectedModel === 'bytedance-seedream-v4' || state.selectedModel === 'fal-ai-bytedance-seedream-v4') {
-        originalUIParams.selectedResolution = state.selectedResolution
+        if (!('selectedResolution' in originalUIParams)) {
+          originalUIParams.selectedResolution = state.selectedResolution
+        }
       }
+
+      console.log('[MediaGenerator] Saving UI params for restore:', originalUIParams)
 
       // 将原始 UI 参数合并到 options 中
       const finalOptions = { ...options, ...originalUIParams }
