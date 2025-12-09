@@ -16,7 +16,7 @@ import {
   pixverseV45Config,
   wan25PreviewConfig,
   seedream40Config
-} from './ppio-video'
+} from './ppio-models'
 
 // Fal 模型
 import {
@@ -43,7 +43,7 @@ import {
   qwenImageEdit2509Config,
   modelscopeCustomConfig,
   minimaxSpeech26Config
-} from './modelscope-audio'
+} from './modelscope-models'
 
 /**
  * 注册所有模型配置
