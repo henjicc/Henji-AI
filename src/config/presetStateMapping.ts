@@ -81,8 +81,8 @@ export interface PresetSetters {
     setFalVeo31FastMode: (v: boolean) => void
 
     // MiniMax Hailuo 2.3 (Fal)
-    setFalHailuo23Version: (v: 'standard' | 'pro') => void
-    setFalHailuo23Duration: (v: number) => void
+    setFalHailuo23Resolution: (v: string) => void
+    setFalHailuo23Duration: (v: string) => void
     setFalHailuo23FastMode: (v: boolean) => void
     setFalHailuo23PromptOptimizer: (v: boolean) => void
 
@@ -274,7 +274,8 @@ export function createPresetSetterMap(
         falVeo31FastMode: setters.setFalVeo31FastMode,
 
         // MiniMax Hailuo 2.3 (Fal)
-        falHailuo23Version: setters.setFalHailuo23Version,
+        falHailuo23Resolution: setters.setFalHailuo23Resolution,
+        hailuoResolution: setters.setFalHailuo23Resolution,  // 别名映射
         falHailuo23Duration: setters.setFalHailuo23Duration,
         falHailuo23FastMode: setters.setFalHailuo23FastMode,
         falHailuo23PromptOptimizer: setters.setFalHailuo23PromptOptimizer,

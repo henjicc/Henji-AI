@@ -86,8 +86,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setFalVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
     setFalVeo31AutoFix: state.setFalVeo31AutoFix,
     setFalVeo31FastMode: state.setFalVeo31FastMode,
-    setFalHailuo23Version: state.setFalHailuo23Version,
     setFalHailuo23Duration: state.setFalHailuo23Duration,
+    setFalHailuo23Resolution: state.setFalHailuo23Resolution,
     setFalHailuo23FastMode: state.setFalHailuo23FastMode,
     setFalHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
     setVideoDuration: state.setVideoDuration,
@@ -737,8 +737,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       falVeo31AutoFix: state.setFalVeo31AutoFix,
       falVeo31FastMode: state.setFalVeo31FastMode,
       // MiniMax Hailuo 2.3（Fal）
-      falHailuo23Version: state.setFalHailuo23Version,
       falHailuo23Duration: state.setFalHailuo23Duration,
+      falHailuo23Resolution: state.setFalHailuo23Resolution,
+      hailuoResolution: state.setFalHailuo23Resolution,  // 别名映射
       falHailuo23FastMode: state.setFalHailuo23FastMode,
       falHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
       // Sora 2
@@ -942,8 +943,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         falVeo31AutoFix: state.falVeo31AutoFix,
         falVeo31FastMode: state.falVeo31FastMode,
         // MiniMax Hailuo 2.3（Fal）参数
-        falHailuo23Version: state.falHailuo23Version,
         falHailuo23Duration: state.falHailuo23Duration,
+        falHailuo23Resolution: state.falHailuo23Resolution,
         falHailuo23FastMode: state.falHailuo23FastMode,
         falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
         falKlingVideoO1Mode: state.falKlingVideoO1Mode,
@@ -1318,14 +1319,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               falVeo31EnhancePrompt: state.falVeo31EnhancePrompt,
               falVeo31AutoFix: state.falVeo31AutoFix,
               // MiniMax Hailuo 2.3（Fal）参数
-              falHailuo23Version: state.falHailuo23Version,
               falHailuo23Duration: state.falHailuo23Duration,
+              falHailuo23Resolution: state.falHailuo23Resolution,
               falHailuo23FastMode: state.falHailuo23FastMode,
               falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
-              hailuoVersion: state.falHailuo23Version,  // 别名映射
-              hailuoFastMode: state.falHailuo23FastMode,  // 别名映射
-              duration: state.falHailuo23Duration,  // 通用映射
-              images: state.uploadedImages,  // 用于判断是否图生视频
+              // 用于价格计算的映射
+              hailuoVersion: state.falHailuo23Resolution === '1080P' ? 'pro' : 'standard',
+              hailuoFastMode: state.falHailuo23FastMode,
+              duration: state.falHailuo23Duration,
+              images: state.uploadedImages,
               falKlingVideoO1Mode: state.falKlingVideoO1Mode,
               falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
               falSora2Mode: state.falSora2Mode,

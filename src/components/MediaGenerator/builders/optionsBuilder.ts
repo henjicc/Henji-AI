@@ -4,8 +4,7 @@
  */
 
 import { optionsBuilder, registerAllConfigs } from './configs'
-import { BuildContext } from './core/types'
-import type { BuildOptionsParams } from './optionsBuilder.backup'
+import { BuildContext, BuildOptionsParams } from './core/types'
 
 // 确保配置已注册（只注册一次）
 let configsRegistered = false
@@ -138,6 +137,3 @@ export function reverseMapOptions(modelId: string, apiOptions: Record<string, an
 
   return uiParams
 }
-
-// 导出类型
-export type { BuildOptionsParams }

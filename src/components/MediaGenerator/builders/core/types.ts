@@ -137,3 +137,168 @@ export interface ModelConfig {
   /** 自定义处理器 */
   customHandlers?: CustomHandlers
 }
+
+/**
+ * buildGenerateOptions 函数的参数类型
+ */
+export interface BuildOptionsParams {
+  // 基础参数
+  currentModel?: any
+  selectedModel: string
+  uploadedImages: string[]
+  uploadedFilePaths?: string[]
+  setUploadedFilePaths?: (paths: string[]) => void
+  uploadedVideoFilePaths?: string[]
+  setUploadedVideoFilePaths?: (paths: string[]) => void
+
+  // 分辨率参数
+  selectedResolution?: string
+  resolutionQuality?: '2K' | '4K'
+  customWidth?: string
+  customHeight?: string
+  isManualInput?: boolean
+  resolutionBaseSize?: number
+
+  // 图片参数
+  maxImages?: number
+  numImages?: number
+  aspectRatio?: string
+  resolution?: string
+  modelscopeImageSize?: string
+
+  // 视频通用参数
+  videoDuration?: number
+  videoAspectRatio?: string
+  videoResolution?: string
+  videoNegativePrompt?: string
+  videoSeed?: number
+
+  // 派欧云模型参数
+  ppioKling25VideoDuration?: number
+  ppioKling25VideoAspectRatio?: string
+  ppioKling25CfgScale?: number
+  ppioHailuo23VideoDuration?: number
+  ppioHailuo23VideoResolution?: string
+  ppioHailuo23FastMode?: boolean
+  ppioHailuo23EnablePromptExpansion?: boolean
+  ppioPixverse45VideoAspectRatio?: string
+  ppioPixverse45VideoResolution?: string
+  ppioPixverse45FastMode?: boolean
+  ppioPixverse45Style?: string
+  ppioWan25VideoDuration?: number
+  ppioWan25Size?: string
+  ppioWan25PromptExtend?: boolean
+  ppioWan25Audio?: boolean
+  ppioSeedanceV1VideoDuration?: number
+  ppioSeedanceV1Variant?: 'lite' | 'pro'
+  ppioSeedanceV1Resolution?: string
+  ppioSeedanceV1AspectRatio?: string
+  ppioSeedanceV1CameraFixed?: boolean
+  ppioViduQ1Mode?: string
+  ppioViduQ1Style?: string
+  ppioViduQ1MovementAmplitude?: string
+  ppioViduQ1Bgm?: boolean
+  ppioViduQ1AspectRatio?: string
+
+  // Fal 图片模型参数
+  falNanoBananaAspectRatio?: string
+  falNanoBananaNumImages?: number
+  falNanoBananaProAspectRatio?: string
+  falNanoBananaProNumImages?: number
+  falKlingImageO1AspectRatio?: string
+  falKlingImageO1NumImages?: number
+  falZImageTurboImageSize?: string
+  falZImageTurboNumImages?: number
+  falZImageTurboNumInferenceSteps?: number
+  falZImageTurboEnablePromptExpansion?: boolean
+  falZImageTurboAcceleration?: string
+  falSeedream40NumImages?: number
+
+  // Fal 视频模型参数
+  falWan25VideoDuration?: number
+  falWan25AspectRatio?: string
+  falWan25Resolution?: string
+  falWan25PromptExpansion?: boolean
+  falSeedanceV1VideoDuration?: number
+  falSeedanceV1Mode?: string
+  falSeedanceV1Version?: 'lite' | 'pro'
+  falSeedanceV1FastMode?: boolean
+  falVeo31VideoDuration?: number
+  falVeo31Mode?: string
+  falVeo31AspectRatio?: string
+  falVeo31Resolution?: string
+  falVeo31EnhancePrompt?: boolean
+  falVeo31GenerateAudio?: boolean
+  falVeo31AutoFix?: boolean
+  falVeo31FastMode?: boolean
+  falHailuo23Duration?: string
+  falHailuo23Resolution?: string
+  falHailuo23FastMode?: boolean
+  falHailuo23PromptOptimizer?: boolean
+  falKlingVideoO1VideoDuration?: number
+  falKlingVideoO1Mode?: string
+  falKlingVideoO1AspectRatio?: string
+  falKlingVideoO1KeepAudio?: boolean
+  falKlingVideoO1Elements?: any[]
+  falKlingV26ProVideoDuration?: number
+  falKlingV26ProAspectRatio?: string
+  falKlingV26ProGenerateAudio?: boolean
+  falKlingV26ProCfgScale?: number
+  falSora2VideoDuration?: number
+  falSora2Mode?: string
+  falSora2AspectRatio?: string
+  falSora2Resolution?: string
+  falLtx2VideoDuration?: number
+  falLtx2Mode?: string
+  falLtx2Resolution?: string
+  falLtx2Fps?: number
+  falLtx2GenerateAudio?: boolean
+  falLtx2FastMode?: boolean
+  falLtx2RetakeDuration?: number
+  falLtx2RetakeStartTime?: number
+  falLtx2RetakeMode?: string
+  falViduQ2VideoDuration?: number
+  falViduQ2Mode?: string
+  falViduQ2AspectRatio?: string
+  falViduQ2Resolution?: string
+  falViduQ2MovementAmplitude?: string
+  falViduQ2Bgm?: boolean
+  falViduQ2FastMode?: boolean
+  falPixverse55VideoDuration?: number
+  falPixverse55AspectRatio?: string
+  falPixverse55Resolution?: string
+  falPixverse55Style?: string
+  falPixverse55ThinkingType?: string
+  falPixverse55GenerateAudio?: boolean
+  falPixverse55MultiClip?: boolean
+
+  // 视频上传
+  uploadedVideos?: string[]
+  uploadedVideoFiles?: File[]
+
+  // 音频参数
+  minimaxAudioSpeed?: number
+  minimaxAudioEmotion?: string
+  minimaxVoiceId?: string
+  minimaxAudioSpec?: 'hd' | 'turbo'
+  minimaxAudioVol?: number
+  minimaxAudioPitch?: number
+  minimaxAudioSampleRate?: number
+  minimaxAudioBitrate?: number
+  minimaxAudioFormat?: string
+  minimaxAudioChannel?: number
+  minimaxLatexRead?: boolean
+  minimaxTextNormalization?: boolean
+  minimaxLanguageBoost?: string
+
+  // 魔搭模型参数
+  modelscopeSteps?: number
+  modelscopeGuidance?: number
+  modelscopeNegativePrompt?: string
+  modelscopeCustomModel?: string
+
+  // 智能分辨率计算函数
+  calculateSmartResolution?: (img: string) => Promise<string>
+  calculateSeedreamSmartResolution?: (img: string) => Promise<string>
+  calculatePPIOSeedreamSmartResolution?: (img: string) => Promise<string>
+}

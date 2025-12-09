@@ -129,8 +129,8 @@ export const useMediaGeneratorState = () => {
   const [falVeo31FastMode, setFalVeo31FastMode] = useState(true)
 
   // MiniMax Hailuo 2.3 参数（Fal）
-  const [falHailuo23Version, setFalHailuo23Version] = useState<'standard' | 'pro'>('standard')
-  const [falHailuo23Duration, setFalHailuo23Duration] = useState(6)
+  const [falHailuo23Resolution, setFalHailuo23Resolution] = useState('768P')
+  const [falHailuo23Duration, setFalHailuo23Duration] = useState('6')
   const [falHailuo23FastMode, setFalHailuo23FastMode] = useState(true)
   const [falHailuo23PromptOptimizer, setFalHailuo23PromptOptimizer] = useState(true)
 
@@ -320,8 +320,8 @@ export const useMediaGeneratorState = () => {
     falVeo31FastMode, setFalVeo31FastMode,
 
     // MiniMax Hailuo 2.3（Fal）
-    falHailuo23Version, setFalHailuo23Version,
     falHailuo23Duration, setFalHailuo23Duration,
+    falHailuo23Resolution, setFalHailuo23Resolution,
     falHailuo23FastMode, setFalHailuo23FastMode,
     falHailuo23PromptOptimizer, setFalHailuo23PromptOptimizer,
 

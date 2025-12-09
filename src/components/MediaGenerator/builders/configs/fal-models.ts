@@ -1014,10 +1014,17 @@ export const falHailuo23Config: ModelConfig = {
       source: 'falHailuo23PromptOptimizer',
       defaultValue: true
     },
-    // 版本参数（用于路由选择）
+    // 分辨率参数（UI 显示，需要映射到 version）
+    hailuoResolution: {
+      source: 'falHailuo23Resolution',
+      defaultValue: '768P'
+    },
+    // 版本参数（从分辨率映射而来，用于路由选择）
+    // 768P -> standard, 1080P -> pro
     hailuoVersion: {
-      source: 'falHailuo23Version',
-      defaultValue: 'standard'
+      source: 'falHailuo23Resolution',
+      defaultValue: 'standard',
+      transform: (value: string) => value === '1080P' ? 'pro' : 'standard'
     },
     // 快速模式参数（用于路由选择）
     hailuoFastMode: {

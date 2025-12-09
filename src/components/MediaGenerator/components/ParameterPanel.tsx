@@ -341,8 +341,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           <SchemaForm
             schema={falAiMinimaxHailuo23Params}
             values={{
-              falHailuo23Version: values.falHailuo23Version,
               falHailuo23Duration: values.falHailuo23Duration,
+              falHailuo23Resolution: values.falHailuo23Resolution,
               falHailuo23FastMode: values.falHailuo23FastMode,
               falHailuo23PromptOptimizer: values.falHailuo23PromptOptimizer,
               uploadedImages

@@ -2,43 +2,41 @@ import { ParamDef } from '../types/schema'
 
 /**
  * Fal.ai MiniMax Hailuo 2.3 模型参数定义
- * 支持 Standard/Pro 版本，文生视频/图生视频，快速模式
+ * UI 显示分辨率（768P/1080P），实际映射到 standard/pro
  */
 export const falAiMinimaxHailuo23Params: ParamDef[] = [
-  {
-    id: 'falHailuo23Version',
-    type: 'dropdown',
-    label: '版本',
-    defaultValue: 'standard',
-    options: [
-      { value: 'standard', label: '标准 (768p)' },
-      { value: 'pro', label: '专业 (1080p)' }
-    ],
-    className: 'min-w-[140px]'
-  },
   {
     id: 'falHailuo23Duration',
     type: 'dropdown',
     label: '时长',
     defaultValue: '6',
-    // 根据版本动态生成选项
-    options: (values) => {
-      const version = values.falHailuo23Version || 'standard'
-
-      // Pro 版本：固定 6 秒（API 不支持 duration 参数）
-      if (version === 'pro') {
-        return [
-          { value: '6', label: '6s' }
-        ]
-      }
-
-      // Standard 版本：支持 6s 和 10s
-      return [
-        { value: '6', label: '6s' },
-        { value: '10', label: '10s' }
-      ]
+    options: [
+      { value: '6', label: '6s' },
+      { value: '10', label: '10s' }
+    ]
+  },
+  {
+    id: 'falHailuo23Resolution',
+    type: 'dropdown',
+    label: '分辨率',
+    defaultValue: '768P',
+    // 分辨率配置：使用面板显示
+    resolutionConfig: {
+      type: 'resolution',
+      smartMatch: false,
+      visualize: false
     },
-    className: 'min-w-[100px]'
+    // 自动切换规则：当时长为10秒且分辨率为1080P时，自动切换到768P
+    autoSwitch: {
+      condition: (values) => {
+        return values.falHailuo23Duration === '10' && values.falHailuo23Resolution === '1080P'
+      },
+      value: () => '768P'
+    },
+    options: (values) => [
+      { value: '768P', label: '768P' },
+      { value: '1080P', label: '1080P', disabled: values.falHailuo23Duration !== '6' }
+    ]
   },
   {
     id: 'falHailuo23FastMode',
@@ -46,16 +44,12 @@ export const falAiMinimaxHailuo23Params: ParamDef[] = [
     label: '快速模式',
     defaultValue: true,
     // 仅在上传图片时显示（图生视频才支持快速模式）
-    hidden: (values) => !values.uploadedImages || values.uploadedImages.length === 0,
-    tooltip: '快速模式可以更快生成视频，但质量可能略有下降',
-    tooltipDelay: 500
+    hidden: (values) => !values.uploadedImages || values.uploadedImages.length === 0
   },
   {
     id: 'falHailuo23PromptOptimizer',
     type: 'toggle',
     label: '提示词优化',
-    defaultValue: true,
-    tooltip: '使用模型的提示词优化器自动改进提示词',
-    tooltipDelay: 500
+    defaultValue: true
   }
 ]
