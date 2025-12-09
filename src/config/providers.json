@@ -346,6 +346,20 @@
             "type": "polling",
             "expectedPolls": 40
           }
+        },
+        {
+          "id": "fal-ai-minimax-hailuo-2.3",
+          "name": "海螺 Hailuo 2.3",
+          "type": "video",
+          "description": "MiniMax 海螺 2.3 视频生成模型，支持 Standard/Pro 版本，文生视频和图生视频，支持快速模式",
+          "functions": [
+            "文生视频",
+            "图生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
         }
       ]
     },

@@ -241,6 +241,25 @@ const PRICES = {
         '480p': 0.05,  // USD/s
         '720p': 0.10,  // USD/s
         '1080p': 0.15  // USD/s
+    },
+
+    // 视频 - MiniMax Hailuo 2.3 (Fal)
+    // 价格单位：美元
+    HAILUO_23_FAL: {
+        standard: {
+            textToVideo: { 6: 0.28, 10: 0.56 },
+            imageToVideo: { 6: 0.28, 10: 0.56 }
+        },
+        pro: {
+            textToVideo: 0.49,  // 固定价格
+            imageToVideo: 0.49  // 固定价格
+        },
+        fastStandard: {
+            imageToVideo: { 6: 0.19, 10: 0.32 }
+        },
+        fastPro: {
+            imageToVideo: 0.33  // 固定价格
+        }
     }
 } as const
 
@@ -874,6 +893,49 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 格式化为最多2位小数
             return formatPrice(totalPriceCNY)
+        }
+    },
+    {
+        providerId: 'fal',
+        modelId: 'fal-ai-minimax-hailuo-2.3',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const version = params.falHailuo23Version || params.hailuoVersion || 'standard'
+            const duration = parseInt(params.falHailuo23Duration || params.duration || '6')
+            const hasImages = params.uploadedImages?.length > 0 || params.images?.length > 0
+            const fastMode = params.falHailuo23FastMode !== undefined ? params.falHailuo23FastMode : (params.hailuoFastMode !== undefined ? params.hailuoFastMode : true)
+
+            let priceUSD: number
+
+            if (version === 'pro') {
+                // Pro 版本：固定价格 $0.49
+                if (hasImages && fastMode) {
+                    // Fast Pro Image-to-Video: $0.33
+                    priceUSD = PRICES.HAILUO_23_FAL.fastPro.imageToVideo
+                } else {
+                    // Pro (文生视频或图生视频): $0.49
+                    priceUSD = PRICES.HAILUO_23_FAL.pro.imageToVideo
+                }
+            } else {
+                // Standard 版本：根据时长和模式
+                if (hasImages && fastMode) {
+                    // Fast Standard Image-to-Video
+                    const pricing = PRICES.HAILUO_23_FAL.fastStandard.imageToVideo
+                    priceUSD = pricing[duration as 6 | 10] || pricing[6]
+                } else if (hasImages) {
+                    // Standard Image-to-Video
+                    const pricing = PRICES.HAILUO_23_FAL.standard.imageToVideo
+                    priceUSD = pricing[duration as 6 | 10] || pricing[6]
+                } else {
+                    // Standard Text-to-Video
+                    const pricing = PRICES.HAILUO_23_FAL.standard.textToVideo
+                    priceUSD = pricing[duration as 6 | 10] || pricing[6]
+                }
+            }
+
+            // 转换为人民币并格式化
+            return formatPrice(priceUSD * USD_TO_CNY)
         }
     }
 ]

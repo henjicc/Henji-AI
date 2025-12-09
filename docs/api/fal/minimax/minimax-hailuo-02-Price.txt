@@ -1,0 +1,12 @@
+Hailuo 02 Standard Text To Video:
+For each second of video generated, it will cost $0.045/sec. A single 6 second video will cost $0.27/video.
+
+Minimax Hailuo 02 Fast Image To Video:
+For each second of video generated at 512P, it will cost roughly $0.017/sec
+
+Hailuo 02 Standard Image To Video:
+For each second of video generated at 768P, it will cost $0.045/sec. For each second of video generated at 512P, it will cost roughly $0.017/sec. A single 6 second 768p video will cost $0.27/video.
+
+Hailuo 02 Pro Image To Video & Hailuo 02 Pro Text To Video:
+For each second of video generated, it will cost $0.08/sec. A single 6 second video will cost $0.48/video.
+

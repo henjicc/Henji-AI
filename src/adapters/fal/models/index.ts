@@ -13,6 +13,7 @@ import { falAiLtx2Route } from './fal-ai-ltx-2'
 import { falAiViduQ2Route } from './fal-ai-vidu-q2'
 import { falAiPixverseV55Route } from './fal-ai-pixverse-v5.5'
 import { falAiWan25PreviewRoute } from './fal-ai-wan-25-preview'
+import { falAiMinimaxHailuo23Route } from './fal-ai-minimax-hailuo-2.3'
 
 /**
  * 模型路由接口
@@ -38,6 +39,7 @@ export const falModelRoutes: FalModelRoute[] = [
   falAiLtx2Route,  // LTX-2
   falAiViduQ2Route,  // Vidu Q2
   falAiWan25PreviewRoute,  // Wan 2.5 Preview
+  falAiMinimaxHailuo23Route,  // MiniMax Hailuo 2.3
   falAiVeo31Route,
   falAiBytedanceSeedreamV4Route,
   falAiBytedanceSeedreamV45Route,

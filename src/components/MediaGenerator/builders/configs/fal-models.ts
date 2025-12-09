@@ -993,3 +993,48 @@ export const falWan25Config: ModelConfig = {
     }
   }
 }
+
+/**
+ * Fal MiniMax Hailuo 2.3 配置（视频模型）
+ * 支持 Standard/Pro 版本，文生视频、图生视频、快速模式
+ */
+export const falHailuo23Config: ModelConfig = {
+  id: 'minimax-hailuo-2.3-fal',
+  type: 'video',
+  provider: 'fal',
+
+  paramMapping: {
+    // 时长参数（Standard 支持 6s/10s，Pro 固定 6s）
+    duration: {
+      source: ['falHailuo23Duration', 'videoDuration'],
+      defaultValue: '6'
+    },
+    // 提示词优化参数
+    prompt_optimizer: {
+      source: 'falHailuo23PromptOptimizer',
+      defaultValue: true
+    },
+    // 版本参数（用于路由选择）
+    hailuoVersion: {
+      source: 'falHailuo23Version',
+      defaultValue: 'standard'
+    },
+    // 快速模式参数（用于路由选择）
+    hailuoFastMode: {
+      source: 'falHailuo23FastMode',
+      defaultValue: true
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      maxImages: 1,
+      mode: 'single',
+      paramKey: 'image_url',
+      convertToBlob: false
+    }
+  },
+
+  customHandlers: commonImageUploadHandler
+}

@@ -80,6 +80,12 @@ export interface PresetSetters {
     setFalVeo31AutoFix: (v: boolean) => void
     setFalVeo31FastMode: (v: boolean) => void
 
+    // MiniMax Hailuo 2.3 (Fal)
+    setFalHailuo23Version: (v: 'standard' | 'pro') => void
+    setFalHailuo23Duration: (v: number) => void
+    setFalHailuo23FastMode: (v: boolean) => void
+    setFalHailuo23PromptOptimizer: (v: boolean) => void
+
     // Wan25 (派欧云)
     setPpioWan25Size: (v: string) => void
     setPpioWan25PromptExtend: (v: boolean) => void
@@ -266,6 +272,12 @@ export function createPresetSetterMap(
         falVeo31GenerateAudio: setters.setFalVeo31GenerateAudio,
         falVeo31AutoFix: setters.setFalVeo31AutoFix,
         falVeo31FastMode: setters.setFalVeo31FastMode,
+
+        // MiniMax Hailuo 2.3 (Fal)
+        falHailuo23Version: setters.setFalHailuo23Version,
+        falHailuo23Duration: setters.setFalHailuo23Duration,
+        falHailuo23FastMode: setters.setFalHailuo23FastMode,
+        falHailuo23PromptOptimizer: setters.setFalHailuo23PromptOptimizer,
 
         // Wan25 (派欧云)
         ppioWan25Size: setters.setPpioWan25Size,

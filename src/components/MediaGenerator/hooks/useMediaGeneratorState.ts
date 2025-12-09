@@ -128,6 +128,12 @@ export const useMediaGeneratorState = () => {
   const [falVeo31AutoFix, setFalVeo31AutoFix] = useState(true)
   const [falVeo31FastMode, setFalVeo31FastMode] = useState(true)
 
+  // MiniMax Hailuo 2.3 参数（Fal）
+  const [falHailuo23Version, setFalHailuo23Version] = useState<'standard' | 'pro'>('standard')
+  const [falHailuo23Duration, setFalHailuo23Duration] = useState(6)
+  const [falHailuo23FastMode, setFalHailuo23FastMode] = useState(true)
+  const [falHailuo23PromptOptimizer, setFalHailuo23PromptOptimizer] = useState(true)
+
   // Nano Banana 参数（保留旧参数用于向后兼容，但新增模型特定参数）
   const [numImages, setNumImages] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('1:1')
@@ -312,6 +318,12 @@ export const useMediaGeneratorState = () => {
     falVeo31GenerateAudio, setFalVeo31GenerateAudio,
     falVeo31AutoFix, setFalVeo31AutoFix,
     falVeo31FastMode, setFalVeo31FastMode,
+
+    // MiniMax Hailuo 2.3（Fal）
+    falHailuo23Version, setFalHailuo23Version,
+    falHailuo23Duration, setFalHailuo23Duration,
+    falHailuo23FastMode, setFalHailuo23FastMode,
+    falHailuo23PromptOptimizer, setFalHailuo23PromptOptimizer,
 
     // Nano Banana（旧参数，保留向后兼容）
     numImages, setNumImages,

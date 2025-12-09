@@ -86,6 +86,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setFalVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
     setFalVeo31AutoFix: state.setFalVeo31AutoFix,
     setFalVeo31FastMode: state.setFalVeo31FastMode,
+    setFalHailuo23Version: state.setFalHailuo23Version,
+    setFalHailuo23Duration: state.setFalHailuo23Duration,
+    setFalHailuo23FastMode: state.setFalHailuo23FastMode,
+    setFalHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
     setVideoDuration: state.setVideoDuration,
     setVideoResolution: state.setVideoResolution,
     setVideoAspectRatio: state.setVideoAspectRatio,
@@ -732,6 +736,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       falVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
       falVeo31AutoFix: state.setFalVeo31AutoFix,
       falVeo31FastMode: state.setFalVeo31FastMode,
+      // MiniMax Hailuo 2.3（Fal）
+      falHailuo23Version: state.setFalHailuo23Version,
+      falHailuo23Duration: state.setFalHailuo23Duration,
+      falHailuo23FastMode: state.setFalHailuo23FastMode,
+      falHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
       // Sora 2
       falSora2Mode: state.setFalSora2Mode,
       falSora2AspectRatio: state.setFalSora2AspectRatio,
@@ -932,6 +941,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         falVeo31GenerateAudio: state.falVeo31GenerateAudio,
         falVeo31AutoFix: state.falVeo31AutoFix,
         falVeo31FastMode: state.falVeo31FastMode,
+        // MiniMax Hailuo 2.3（Fal）参数
+        falHailuo23Version: state.falHailuo23Version,
+        falHailuo23Duration: state.falHailuo23Duration,
+        falHailuo23FastMode: state.falHailuo23FastMode,
+        falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
         falKlingVideoO1Mode: state.falKlingVideoO1Mode,
         falKlingVideoO1AspectRatio: state.falKlingVideoO1AspectRatio,
         falKlingVideoO1KeepAudio: state.falKlingVideoO1KeepAudio,
@@ -1303,6 +1317,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               falVeo31Resolution: state.falVeo31Resolution,
               falVeo31EnhancePrompt: state.falVeo31EnhancePrompt,
               falVeo31AutoFix: state.falVeo31AutoFix,
+              // MiniMax Hailuo 2.3（Fal）参数
+              falHailuo23Version: state.falHailuo23Version,
+              falHailuo23Duration: state.falHailuo23Duration,
+              falHailuo23FastMode: state.falHailuo23FastMode,
+              falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
+              hailuoVersion: state.falHailuo23Version,  // 别名映射
+              hailuoFastMode: state.falHailuo23FastMode,  // 别名映射
+              duration: state.falHailuo23Duration,  // 通用映射
+              images: state.uploadedImages,  // 用于判断是否图生视频
               falKlingVideoO1Mode: state.falKlingVideoO1Mode,
               falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
               falSora2Mode: state.falSora2Mode,

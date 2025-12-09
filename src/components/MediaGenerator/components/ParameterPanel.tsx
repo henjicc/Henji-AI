@@ -32,7 +32,8 @@ import {
   falAiLtx2Params,
   falAiViduQ2Params,
   falAiPixverseV55Params,
-  falAiWan25PreviewParams
+  falAiWan25PreviewParams,
+  falAiMinimaxHailuo23Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -335,9 +336,26 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Fal MiniMax Hailuo 2.3 参数 */}
+        {(selectedModel === 'fal-ai-minimax-hailuo-2.3' || selectedModel === 'minimax-hailuo-2.3-fal') && (
+          <SchemaForm
+            schema={falAiMinimaxHailuo23Params}
+            values={{
+              falHailuo23Version: values.falHailuo23Version,
+              falHailuo23Duration: values.falHailuo23Duration,
+              falHailuo23FastMode: values.falHailuo23FastMode,
+              falHailuo23PromptOptimizer: values.falHailuo23PromptOptimizer,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
+         selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
+         selectedModel !== 'minimax-hailuo-2.3-fal' &&
          selectedModel !== 'wan-2.5-preview' &&
          selectedModel !== 'seedance-v1' &&
          selectedModel !== 'seedance-v1-lite' &&
@@ -373,6 +391,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         {selectedModel !== 'kling-2.5-turbo' &&
          selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
+         selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
+         selectedModel !== 'minimax-hailuo-2.3-fal' &&
          selectedModel !== 'pixverse-v4.5' &&
          selectedModel !== 'wan-2.5-preview' &&
          selectedModel !== 'seedance-v1' &&

@@ -81,6 +81,12 @@ export interface BuildOptionsParams {
   falVeo31AutoFix: boolean
   falVeo31FastMode: boolean
 
+  // MiniMax Hailuo 2.3（Fal）
+  falHailuo23Version?: string
+  falHailuo23Duration?: number
+  falHailuo23FastMode?: boolean
+  falHailuo23PromptOptimizer?: boolean
+
   // Kling Video O1（Fal）
   falKlingVideoO1Mode?: string
   falKlingVideoO1AspectRatio?: string
