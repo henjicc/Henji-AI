@@ -44,7 +44,7 @@ export const falAiVeo31Params: ParamDef[] = [
                 { value: '720p', label: '720P' },
                 { value: '1080p', label: '1080P' }
             ],
-            qualityKey: 'veoResolution'
+            qualityKey: 'falVeo31Resolution'
         },
         // 当上传图片时自动切换到智能选项
         autoSwitch: {

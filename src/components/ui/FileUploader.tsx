@@ -473,7 +473,24 @@ export default function FileUploader({
                                     className="w-full h-full object-cover rounded-lg border-2 border-white"
                                     draggable={false}
                                 />
+                            ) : (accept.startsWith('video') || accept.includes('video')) && file.startsWith('data:image') ? (
+                                // 视频缩略图（图片格式）
+                                <div className="relative w-full h-full">
+                                    <img
+                                        src={file}
+                                        alt={`Video thumbnail ${index + 1}`}
+                                        className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                        draggable={false}
+                                    />
+                                    {/* 播放图标覆盖层 */}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                    </div>
+                                </div>
                             ) : accept.startsWith('video') || accept.includes('video') ? (
+                                // 视频文件（实际视频）
                                 <div className="relative w-full h-full">
                                     <video
                                         src={file}

@@ -495,39 +495,54 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
       // 恢复参数 - 同时处理 UI 参数和 API 参数
       if (options) {
+        console.log('[MediaGenerator] Restore - Model:', model)
+        console.log('[MediaGenerator] Restore - Options keys:', Object.keys(options))
+        console.log('[MediaGenerator] Restore - Options:', options)
+
         const paramsToRestore: Record<string, any> = {}
 
         // 1. 首先直接恢复已存在的 UI 参数（新的历史记录）
         for (const [key, value] of Object.entries(options)) {
           if (key in setterMap) {
             paramsToRestore[key] = value
+            console.log(`[MediaGenerator] Restore - Direct UI param: ${key} = ${JSON.stringify(value)}`)
           }
         }
+
+        console.log('[MediaGenerator] Restore - Direct UI params count:', Object.keys(paramsToRestore).length)
 
         // 2. 对于没有 UI 参数的情况，尝试反向映射 API 参数（旧的历史记录）
         const { reverseMapOptions } = await import('./builders/optionsBuilder')
         const reverseMappedParams = reverseMapOptions(model, options)
 
+        console.log('[MediaGenerator] Restore - Reverse mapped params:', reverseMappedParams)
+
         // 合并反向映射的参数（UI 参数优先）
         for (const [key, value] of Object.entries(reverseMappedParams)) {
           if (!(key in paramsToRestore)) {
             paramsToRestore[key] = value
+            console.log(`[MediaGenerator] Restore - Reverse mapped: ${key} = ${JSON.stringify(value)}`)
+          } else {
+            console.log(`[MediaGenerator] Restore - Skipped (already exists): ${key}`)
           }
         }
 
-        console.log('[MediaGenerator] Restoring parameters:', {
-          model,
-          originalOptions: options,
-          paramsToRestore
-        })
+        console.log('[MediaGenerator] Restore - Final params to restore:', paramsToRestore)
 
         // 使用 setterMap 恢复所有参数
+        let restoredCount = 0
         for (const [key, value] of Object.entries(paramsToRestore)) {
           const setter = setterMap[key]
           if (setter && value !== undefined && value !== null) {
             setter(value)
+            restoredCount++
+            console.log(`[MediaGenerator] Restore - Applied: ${key} = ${JSON.stringify(value)}`)
+          } else if (!setter) {
+            console.log(`[MediaGenerator] Restore - No setter for: ${key}`)
           }
         }
+
+        console.log(`[MediaGenerator] Restore - Successfully restored ${restoredCount} parameters`)
       }
 
       // 恢复完成后重置标记
@@ -696,6 +711,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // Wan（Fal）
       falWan25AspectRatio: state.setFalWan25AspectRatio,
       falWan25Resolution: state.setFalWan25Resolution,
+      wanResolution: state.setFalWan25Resolution,  // qualityKey 映射
       falWan25PromptExpansion: state.setFalWan25PromptExpansion,
       // Seedance（派欧云）
       ppioSeedanceV1Variant: state.setPpioSeedanceV1Variant,
@@ -706,10 +722,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       falSeedanceV1Mode: state.setFalSeedanceV1Mode,
       falSeedanceV1Version: state.setFalSeedanceV1Version,
       falSeedanceV1FastMode: state.setFalSeedanceV1FastMode,
+      seedanceResolution: state.setPpioSeedanceV1Resolution,  // qualityKey 映射
       // Veo
       falVeo31Mode: state.setFalVeo31Mode,
       falVeo31AspectRatio: state.setFalVeo31AspectRatio,
       falVeo31Resolution: state.setFalVeo31Resolution,
+      veoResolution: state.setFalVeo31Resolution,  // qualityKey 映射
       falVeo31EnhancePrompt: state.setFalVeo31EnhancePrompt,
       falVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
       falVeo31AutoFix: state.setFalVeo31AutoFix,
@@ -718,6 +736,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       falSora2Mode: state.setFalSora2Mode,
       falSora2AspectRatio: state.setFalSora2AspectRatio,
       falSora2Resolution: state.setFalSora2Resolution,
+      soraResolution: state.setFalSora2Resolution,  // qualityKey 映射
       // LTX-2
       falLtx2Mode: state.setFalLtx2Mode,
       falLtx2Resolution: state.setFalLtx2Resolution,
@@ -731,12 +750,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       falViduQ2Mode: state.setFalViduQ2Mode,
       falViduQ2AspectRatio: state.setFalViduQ2AspectRatio,
       falViduQ2Resolution: state.setFalViduQ2Resolution,
+      viduQ2Resolution: state.setFalViduQ2Resolution,  // qualityKey 映射
       falViduQ2MovementAmplitude: state.setFalViduQ2MovementAmplitude,
       falViduQ2Bgm: state.setFalViduQ2Bgm,
       falViduQ2FastMode: state.setFalViduQ2FastMode,
       // Pixverse V5.5
       falPixverse55AspectRatio: state.setFalPixverse55AspectRatio,
       falPixverse55Resolution: state.setFalPixverse55Resolution,
+      pixverseResolution: state.setFalPixverse55Resolution,  // qualityKey 映射
       falPixverse55Style: state.setFalPixverse55Style,
       falPixverse55ThinkingType: state.setFalPixverse55ThinkingType,
       falPixverse55GenerateAudio: state.setFalPixverse55GenerateAudio,
@@ -781,7 +802,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 直接设置值，保持界面显示为 'smart'
     const setter = setterMap[id]
-    if (setter) setter(value)
+    if (setter) {
+      setter(value)
+    }
 
     // 特殊处理：当切换自定义模型时，检查是否需要清空图片
     if (id === 'modelscopeCustomModel' && value) {
@@ -980,7 +1003,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       const { optionsBuilder } = await import('./builders/configs')
       const config = optionsBuilder.getConfig(state.selectedModel)
 
+      console.log('[MediaGenerator] Save - Model:', state.selectedModel)
+      console.log('[MediaGenerator] Save - Config found:', !!config)
+      console.log('[MediaGenerator] Save - API options keys:', Object.keys(options))
+
       if (config && config.paramMapping) {
+        console.log('[MediaGenerator] Save - ParamMapping keys:', Object.keys(config.paramMapping))
+
         // 遍历参数映射，提取所有 UI 参数
         for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
           let uiKey: string | undefined
@@ -992,14 +1021,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             if (typeof source === 'string') {
               uiKey = source
             } else if (Array.isArray(source) && source.length > 0) {
-              // 使用 source 数组的第一个值（模型特定参数）
-              uiKey = source[0]
+              // 改进：尝试每个 key，使用第一个存在的值
+              for (const key of source) {
+                if (key in state && (state as any)[key] !== undefined) {
+                  uiKey = key
+                  break
+                }
+              }
+              // 如果都不存在，使用第一个作为默认值（向后兼容）
+              if (!uiKey) {
+                uiKey = source[0]
+              }
             }
           }
 
           // 如果找到了 UI 参数名，从 state 中读取值并保存
           if (uiKey && uiKey in state) {
-            originalUIParams[uiKey] = (state as any)[uiKey]
+            const value = (state as any)[uiKey]
+            originalUIParams[uiKey] = value
+            console.log(`[MediaGenerator] Save - Extracted: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
+          } else if (uiKey) {
+            console.log(`[MediaGenerator] Save - Skipped (not in state): ${apiKey} -> ${uiKey}`)
           }
         }
       }
@@ -1010,17 +1052,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
         if (!('aspectRatio' in originalUIParams)) {
           originalUIParams.aspectRatio = state.aspectRatio
+          console.log('[MediaGenerator] Save - Manual add: aspectRatio =', state.aspectRatio)
         }
       }
 
-      // ByteDance Seedream v4 的 selectedResolution
-      if (state.selectedModel === 'bytedance-seedream-v4' || state.selectedModel === 'fal-ai-bytedance-seedream-v4') {
+      // ByteDance Seedream v4 和 Seedream 4.0 的 selectedResolution
+      if (state.selectedModel === 'bytedance-seedream-v4' ||
+          state.selectedModel === 'fal-ai-bytedance-seedream-v4' ||
+          state.selectedModel === 'seedream-4.0') {
         if (!('selectedResolution' in originalUIParams)) {
           originalUIParams.selectedResolution = state.selectedResolution
+          console.log('[MediaGenerator] Save - Manual add: selectedResolution =', state.selectedResolution)
         }
       }
 
-      console.log('[MediaGenerator] Saving UI params for restore:', originalUIParams)
+      console.log('[MediaGenerator] Save - Final UI params:', originalUIParams)
+      console.log('[MediaGenerator] Save - Final options keys:', Object.keys({ ...options, ...originalUIParams }))
 
       // 将原始 UI 参数合并到 options 中
       const finalOptions = { ...options, ...originalUIParams }
@@ -1141,13 +1188,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onVideoRemove={videoUpload.handleVideoRemove}
         onVideoReplace={videoUpload.handleVideoReplace}
         onVideoClick={(videoUrl: string) => {
-          // 打开视频查看器，传递视频 URL 和文件路径（如果有）
+          // 打开视频查看器，使用 File 对象创建预览 URL
           const index = state.uploadedVideos.indexOf(videoUrl)
-          const filePath = index >= 0 ? state.uploadedVideoFilePaths[index] : undefined
-          // 触发自定义事件，让 App.tsx 打开视频查看器
-          window.dispatchEvent(new CustomEvent('open-video-viewer', {
-            detail: { url: videoUrl, filePath }
-          }))
+          const videoFile = index >= 0 ? state.uploadedVideoFiles[index] : undefined
+
+          if (videoFile) {
+            // 从 File 对象创建临时 Object URL 用于预览
+            const videoObjectUrl = URL.createObjectURL(videoFile)
+            // 触发自定义事件，让 App.tsx 打开视频查看器
+            window.dispatchEvent(new CustomEvent('open-video-viewer', {
+              detail: {
+                url: videoObjectUrl,
+                thumbnail: videoUrl, // 传递缩略图用于显示
+                isTemporary: true // 标记这是临时 URL，需要在关闭时清理
+              }
+            }))
+          }
         }}
         onGenerate={handleGenerate}
       />

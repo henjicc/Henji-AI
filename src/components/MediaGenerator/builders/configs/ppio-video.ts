@@ -109,6 +109,7 @@ export const seedanceV1ProConfig: ModelConfig = {
 /**
  * Vidu Q1 配置（派欧云）
  * 支持三种模式：text-image-to-video, start-end-frame, reference-to-video
+ * 注意：Vidu Q1 只支持5秒时长，不需要映射 duration 参数
  */
 export const viduQ1Config: ModelConfig = {
   id: 'vidu-q1',
@@ -117,9 +118,7 @@ export const viduQ1Config: ModelConfig = {
 
   paramMapping: {
     mode: 'ppioViduQ1Mode',
-    duration: {
-      source: ['ppioViduQ1VideoDuration', 'videoDuration']
-    },
+    // 移除 duration 映射，因为 Vidu Q1 只支持5秒，不需要用户选择
     movementAmplitude: 'ppioViduQ1MovementAmplitude',
     bgm: 'ppioViduQ1Bgm'
   },
@@ -196,6 +195,9 @@ export const viduQ1Config: ModelConfig = {
       }
     },
     afterBuild: async (options, context) => {
+      // Vidu Q1 固定时长为5秒
+      options.duration = 5
+
       // PPIO 特殊的图片处理逻辑
       if (context.uploadedImages.length > 0) {
         const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
@@ -337,6 +339,65 @@ export const minimaxHailuo23Config: ModelConfig = {
 }
 
 /**
+ * Hailuo 02 配置（派欧云）
+ * 使用与 Hailuo 2.3 相同的参数，但支持最多2张图片
+ */
+export const minimaxHailuo02Config: ModelConfig = {
+  id: 'minimax-hailuo-02',
+  type: 'video',
+  provider: 'ppio',
+
+  paramMapping: {
+    duration: {
+      source: ['ppioHailuo23VideoDuration', 'videoDuration'],
+      defaultValue: 6
+    },
+    resolution: {
+      source: ['ppioHailuo23VideoResolution', 'videoResolution'],
+      defaultValue: '768P'
+    },
+    promptExtend: 'ppioHailuo23EnablePromptExpansion'
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      maxImages: 2,
+      mode: 'multiple',
+      paramKey: 'images',
+      convertToBlob: false
+    }
+  },
+
+  customHandlers: {
+    afterBuild: async (options, context) => {
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+
+        const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+        const take = Math.min(context.uploadedImages.length, 2)
+        const images = context.uploadedImages.slice(0, take)
+        options.images = images
+
+        const paths: string[] = []
+        for (let i = 0; i < images.length; i++) {
+          if (uploadedFilePaths[i]) {
+            paths[i] = uploadedFilePaths[i]
+          } else {
+            const blob = await dataUrlToBlob(images[i])
+            const saved = await saveUploadImage(blob, 'persist')
+            paths[i] = saved.fullPath
+          }
+        }
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
+      }
+    }
+  }
+}
+
+/**
  * Pixverse V4.5 配置（派欧云）
  */
 export const pixverseV45Config: ModelConfig = {
@@ -345,12 +406,20 @@ export const pixverseV45Config: ModelConfig = {
   provider: 'ppio',
 
   paramMapping: {
-    duration: {
-      source: ['ppioPixverseV45VideoDuration', 'videoDuration']
+    resolution: {
+      source: ['ppioPixverse45VideoResolution', 'videoResolution']
     },
-    resolution: 'ppioPixverseV45Resolution',
-    negativePrompt: 'videoNegativePrompt',
-    seed: 'seed'
+    modelscopeNegativePrompt: 'videoNegativePrompt',
+    fastMode: 'ppioPixverse45FastMode',
+    style: 'ppioPixverse45Style',
+    aspectRatio: {
+      source: ['ppioPixverse45VideoAspectRatio', 'videoAspectRatio'],
+      condition: (ctx) => ctx.uploadedImages.length === 0  // 仅文生视频时使用
+    },
+    seed: {
+      source: 'videoSeed',
+      condition: (ctx) => (ctx.params as any).videoSeed !== undefined
+    }
   },
 
   features: {
@@ -443,7 +512,8 @@ export const seedream40Config: ModelConfig = {
   provider: 'ppio',
 
   paramMapping: {
-    aspectRatio: 'aspectRatio',
+    // 注意：不映射 aspectRatio，因为 API 不需要这个参数
+    // 分辨率通过 customHandlers 中的 size 参数设置
     resolutionQuality: 'resolutionQuality',
     customWidth: 'customWidth',
     customHeight: 'customHeight',
@@ -479,24 +549,37 @@ export const seedream40Config: ModelConfig = {
       }
 
       // 处理分辨率计算
-      if (params.aspectRatio && params.aspectRatio !== 'custom') {
-        const { getActualResolution, calculateSmartResolution } = await import('../../utils/resolutionUtils')
-        const quality = params.resolutionQuality === '2K' ? '2K' : '4K'
+      // 使用 selectedResolution 而不是 aspectRatio
+      const selectedResolution = params.selectedResolution
+      const quality = params.resolutionQuality === '2K' ? '2K' : '4K'
 
+      if (selectedResolution === 'smart') {
+        // 智能匹配模式
         if (context.uploadedImages.length > 0) {
+          const { calculateSmartResolution } = await import('../../utils/resolutionUtils')
           try {
             const smartSize = await calculateSmartResolution(context.uploadedImages[0], quality)
             options.size = smartSize
           } catch (error) {
-            const size = getActualResolution(params.aspectRatio, quality)
-            options.size = size
+            console.error('[Seedream 4.0] Smart resolution calculation failed:', error)
+            // 失败时使用默认比例
+            const { getActualResolution } = await import('../../utils/resolutionUtils')
+            options.size = getActualResolution('1:1', quality)
           }
         } else {
-          const size = getActualResolution(params.aspectRatio, quality)
-          options.size = size
+          // 没有图片时，智能模式默认使用 1:1
+          const { getActualResolution } = await import('../../utils/resolutionUtils')
+          options.size = getActualResolution('1:1', quality)
         }
-      } else if (params.customWidth && params.customHeight) {
-        options.size = `${params.customWidth}x${params.customHeight}`
+      } else if (selectedResolution === 'custom') {
+        // 自定义尺寸模式
+        if (params.customWidth && params.customHeight) {
+          options.size = `${params.customWidth}x${params.customHeight}`
+        }
+      } else if (selectedResolution) {
+        // 具体比例模式（如 '1:1', '16:9' 等）
+        const { getActualResolution } = await import('../../utils/resolutionUtils')
+        options.size = getActualResolution(selectedResolution, quality)
       }
 
       // Seedream 4.0 特殊参数

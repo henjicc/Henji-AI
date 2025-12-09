@@ -1,22 +1,32 @@
 # Fal 适配器专用指南
+
+---
+
+## ⚠️ 统一参数命名规范（必读）
+
+**所有 Fal 模型参数必须使用 `fal` 前缀**：
+
+```
+fal{ModelName}{ParameterName}
+```
+
+**示例**：
+- `falVeo31VideoDuration` - Fal Veo 3.1 时长
+- `falNanoBananaAspectRatio` - Fal Nano Banana 宽高比
+- `falNanoBananaNumImages` - Fal Nano Banana 图片数量
+
+**为什么需要前缀？**
+- 避免与其他供应商的相同模型参数冲突（如 PPIO 的 Veo 3.1）
+- 确保预设功能正确保存和恢复参数
+- 确保价格计算使用正确的参数值
+
 ---
 
 ## 核心特性与架构
 
-### Fal 适配器的特殊性与注意事项
+### Fal 适配器的特殊性
 
-Fal 适配器使用官方 `@fal-ai/client` SDK，与其他适配器（PPIO、ModelScope）有显著不同：
-可参考 src/adapters/fal 目录下的代码实现。
-一个模型相同版本的不同端点，合并为一个路由，既可以根据用户的输入动态选择不同的端点，在参数面板上设置“模式”选项，用户也可以手动切换端点
-禁止添加与传输负面提示、随机种子参数
-所有与 Fal 模型相关的文件名、变量名、模型 ID 都必须加上供应商前缀，以确保代码一致性和避免命名冲突，除此以外还需要携带模型版本号：
-
-- **文件名**: 使用 `fal-ai-` 前缀，例如：`fal-ai-kling-image-o1.ts`、`fal-ai-nano-banana.ts`
-- **变量名**: 使用 `falAi` 前缀，例如：`falAiKlingImageO1Route`、`falAiNanoBananaParams`
-- **模型 ID**: 在 `providers.json` 中使用 `fal-ai-` 前缀，例如：`fal-ai-kling-image-o1`、`fal-ai-nano-banana`
-- **配置引用**: 所有配置文件（如 `pricing.ts`、`models/index.ts`）中的模型 ID 引用也必须使用带前缀的格式
-
-**重要**: 前缀应用于所有 Fal 模型相关的代码元素，确保整个代码库中 Fal 模型的命名一致性。
+Fal 适配器使用官方 `@fal-ai/client` SDK，与其他适配器有显著不同：
 
 | 特性 | Fal | PPIO/ModelScope |
 |------|-----|-----------------|
@@ -31,45 +41,198 @@ Fal 适配器使用官方 `@fal-ai/client` SDK，与其他适配器（PPIO、Mod
 2. **不保存媒体**: Fal 图片解析器**不调用** `saveMediaLocally`，由 App.tsx 统一处理
 3. **轮询进度**: 必须配置 `"type": "polling"` 和 `expectedPolls`
 4. **智能匹配**: 永远不要传递 `'smart'` 或 `'auto'` 给 API
-5. **⚠️ 禁止修改原始 params**: FalAdapter 已经正确处理图片上传，模型路由**不要修改** `params` 对象，避免 base64 数据泄漏到 history.json
+5. **⚠️ 禁止修改原始 params**: FalAdapter 已经正确处理图片上传，模型路由**不要修改** `params` 对象
 
 ---
 
 ## 完整适配流程
 
-### 总览：7 个必须步骤
+### 总览：8 个必须步骤
 
 ```
-1. 创建模型路由 (adapters/fal/models/)
-2. 注册路由 (models/index.ts)
-3. 配置轮询次数 (config.ts)
-4. 定义参数 Schema (src/models/)
-5. 添加参数面板渲染 (ParameterPanel.tsx)
-6. 注册参数映射 (handleSchemaChange + presetStateMapping)
-7. 配置 providers.json
+1. 定义参数 Schema (使用 fal 前缀)
+2. 添加参数面板渲染
+3. 添加状态管理 (使用 fal 前缀)
+4. 注册参数映射
+5. 添加 OptionsBuilder 配置
+6. 创建模型路由 (adapters/fal/models/)
+7. 配置轮询次数 (config.ts)
+8. 配置 providers.json 和价格
 ```
 
 ---
 
-### 步骤 1: 创建模型路由 ⭐ 核心步骤
+## 步骤 1: 定义参数 Schema
 
-**位置**: `src/adapters/fal/models/[model-id].ts`
+**位置**: `src/models/fal-ai-[model-id].ts`
 
-**图片模型完整模板**:
+```typescript
+import { ParamDef } from '../types/schema'
+
+export const falYourModelParams: ParamDef[] = [
+  // ⚠️ 参数 ID 必须使用 fal 前缀
+  {
+    id: 'falYourModelNumImages',  // 使用 fal 前缀！
+    type: 'dropdown',
+    label: '数量',
+    defaultValue: 1,
+    options: [
+      { value: 1, label: '1张' },
+      { value: 2, label: '2张' },
+      { value: 4, label: '4张' }
+    ]
+  },
+
+  // 宽高比参数（带智能匹配）
+  {
+    id: 'falYourModelAspectRatio',  // 使用 fal 前缀！
+    type: 'dropdown',
+    defaultValue: '1:1',
+    resolutionConfig: {
+      type: 'aspect_ratio',
+      smartMatch: true,
+      visualize: true,
+      extractRatio: (value) => {
+        if (value === 'smart') return null
+        const [w, h] = value.split(':').map(Number)
+        return w / h
+      }
+    },
+    options: (values) => {
+      const baseOptions = [
+        { value: '1:1', label: '1:1' },
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' }
+      ]
+      // 图生图时添加智能选项
+      if (values.uploadedImages?.length > 0) {
+        return [{ value: 'smart', label: '智能' }, ...baseOptions]
+      }
+      return baseOptions
+    }
+  }
+]
+```
+
+**注册 Schema**: 在 `src/models/index.ts` 中：
+
+```typescript
+export { falYourModelParams } from './fal-ai-your-model'
+
+export const modelSchemaMap: Record<string, ParamDef[]> = {
+  'fal-ai-your-model': falYourModelParams,
+  'your-model': falYourModelParams  // 支持短名称
+}
+```
+
+---
+
+## 步骤 2-4: 参数面板、状态管理、参数映射
+
+参考 [ai-guide-new-model.md](./ai-guide-new-model.md) 的步骤 2-4，使用 `fal` 前缀的参数名。
+
+---
+
+## 步骤 5: 添加 OptionsBuilder 配置
+
+**位置**: `src/components/MediaGenerator/builders/configs/fal-models.ts`
+
+```typescript
+import { ModelConfig } from '../core/types'
+
+export const falYourModelConfig: ModelConfig = {
+  id: 'your-model',  // 短名称
+  type: 'image',
+  provider: 'fal',
+
+  // 参数映射（API 参数名 → UI 状态参数名）
+  paramMapping: {
+    num_images: {
+      source: ['falYourModelNumImages', 'numImages'],  // 优先使用 fal 前缀参数
+      defaultValue: 1
+    },
+    aspect_ratio: {
+      source: ['falYourModelAspectRatio', 'aspectRatio'],
+      defaultValue: '1:1'
+    },
+    seed: 'seed',
+    guidance_scale: 'guidanceScale'
+  },
+
+  // 特性配置
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'aspect_ratio',
+      defaultRatio: '1:1'
+    },
+    imageUpload: {
+      enabled: true,
+      maxImages: 1,
+      mode: 'single',
+      paramKey: 'image_url',
+      convertToBlob: false  // ⚠️ Fal 模型必须为 false
+    }
+  },
+
+  // 自定义处理器（如需要）
+  customHandlers: {
+    afterBuild: async (options, context) => {
+      // Fal 模型的特殊处理逻辑
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+
+        const paths: string[] = []
+        for (const image of context.uploadedImages) {
+          const blob = await dataUrlToBlob(image)
+          const saved = await saveUploadImage(blob, 'persist')
+          paths.push(saved.fullPath)
+        }
+
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
+      }
+    }
+  }
+}
+```
+
+**注册配置**: 在 `src/components/MediaGenerator/builders/configs/index.ts` 中：
+
+```typescript
+import { falYourModelConfig } from './fal-models'
+
+export function registerAllConfigs() {
+  // ... 现有注册
+  optionsBuilder.registerConfig(falYourModelConfig)
+
+  // 注册别名（支持完整名称）
+  optionsBuilder.registerConfig({ ...falYourModelConfig, id: 'fal-ai-your-model' })
+}
+```
+
+---
+
+## 步骤 6: 创建模型路由
+
+**位置**: `src/adapters/fal/models/fal-ai-[model-id].ts`
+
+### 图片模型模板
 
 ```typescript
 import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
 
-export const yourFalModelRoute: FalModelRoute = {
-  // 1. 模型匹配规则（支持多个别名）
+export const falYourModelRoute: FalModelRoute = {
+  // 模型匹配规则（支持多个别名）
   matches: (modelId: string) =>
     modelId === 'fal-ai/your-model' ||
     modelId === 'your-model',
 
-  // 2. 构建图片生成请求
+  // 构建图片生成请求
   buildImageRequest: (params: GenerateImageParams) => {
-    const images = params.images || []  //  已上传到 CDN，直接使用
+    const images = params.images || []  // ✅ 已上传到 CDN，直接使用
 
     // 智能路由：根据是否有图片选择端点
     const hasImages = images.length > 0
@@ -77,29 +240,29 @@ export const yourFalModelRoute: FalModelRoute = {
       ? 'fal-ai/your-model/edit'      // 图生图端点
       : 'fal-ai/your-model'            // 文生图端点
 
-    const modelId = 'fal-ai/your-model'  //  不含子路径（如 /edit）
+    const modelId = 'fal-ai/your-model'  // ⚠️ 不含子路径（如 /edit）
 
-    // 3. 构建请求数据
+    // 构建请求数据
     const requestData: any = {
       prompt: params.prompt
     }
 
-    // 4. 添加可选参数（根据 API 文档）
+    // 添加可选参数
     if (params.num_images !== undefined) {
       requestData.num_images = params.num_images
     }
 
-    //  关键：过滤掉 'smart' 和 'auto'，不传递给 API
+    // ⚠️ 关键：过滤掉 'smart' 和 'auto'，不传递给 API
     if (params.aspect_ratio !== undefined &&
         params.aspect_ratio !== 'smart' &&
         params.aspect_ratio !== 'auto') {
       requestData.aspect_ratio = params.aspect_ratio
     }
 
-    // 5. 图生图时添加图片 URL
+    // 图生图时添加图片 URL
     if (hasImages) {
-      requestData.image_urls = images  // 多图用 image_urls
-      // 或 requestData.image_url = images[0]  // 单图用 image_url
+      requestData.image_url = images[0]  // 单图用 image_url
+      // 或 requestData.image_urls = images  // 多图用 image_urls
     }
 
     return { submitPath, modelId, requestData }
@@ -107,13 +270,13 @@ export const yourFalModelRoute: FalModelRoute = {
 }
 ```
 
-**视频模型完整模板**:
+### 视频模型模板
 
 ```typescript
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
 
-export const yourVideoModelRoute: FalModelRoute = {
+export const falYourVideoModelRoute: FalModelRoute = {
   matches: (modelId: string) =>
     modelId === 'fal-ai/your-video-model' ||
     modelId === 'your-video-model',
@@ -122,17 +285,14 @@ export const yourVideoModelRoute: FalModelRoute = {
     const images = params.images || []
     const prompt = params.prompt || ''
 
-    // 构建请求数据
-    const requestData: any = {
-      prompt
-    }
+    const requestData: any = { prompt }
 
     // 添加视频参数
     if (params.duration !== undefined) {
       requestData.duration = params.duration
     }
 
-    //  智能匹配处理（如果支持）
+    // ⚠️ 智能匹配处理（如果支持）
     let aspectRatio = params.aspectRatio
     if ((aspectRatio === 'smart' || aspectRatio === 'auto') && images.length > 0) {
       try {
@@ -153,7 +313,7 @@ export const yourVideoModelRoute: FalModelRoute = {
 
     // 图生视频时添加图片
     if (images.length > 0) {
-      requestData.image_url = images[0]  // 单图
+      requestData.image_url = images[0]
     }
 
     return {
@@ -165,45 +325,20 @@ export const yourVideoModelRoute: FalModelRoute = {
 }
 ```
 
-**关键注意事项**:
-
-1. **submitPath vs modelId**:
-   - `submitPath` 用于提交请求（可以有子路径如 `/edit`）
-   - `modelId` 用于查询状态（**不含**子路径）
-
-2. **图片参数**:
-   - `params.images` 已经是 fal CDN URL，**直接使用**
-   - 不要手动转换或上传
-
-3. **智能匹配**:
-   - 永远不要传递 `'smart'` 或 `'auto'` 给 API
-   - 在路由中检测并转换为实际比例
-
-4. **参数过滤**:
-   - 使用 `!== undefined` 检查参数是否存在
-   - 不要传递 `undefined` 或 `null` 给 API
-
-5. **⚠️ 禁止修改原始 params 对象**（重要！）:
-   - **错误做法**: `params.images = uploadedUrls` - 会污染原始数据，导致 base64 泄漏到 history.json
-   - **正确做法**: 直接使用 `params.images`，FalAdapter 已经处理好上传
-   - 模型路由只负责构建 API 请求，不负责上传或修改数据
-
-### 步骤 2: 注册路由
-
-**位置**: `src/adapters/fal/models/index.ts`
+**注册路由**: 在 `src/adapters/fal/models/index.ts` 中：
 
 ```typescript
-import { yourFalModelRoute } from './your-fal-model'
+import { falYourModelRoute } from './fal-ai-your-model'
 
 export const falModelRoutes: FalModelRoute[] = [
   // ... 现有路由
-  yourFalModelRoute  // 添加到数组末尾
+  falYourModelRoute
 ]
 ```
 
 ---
 
-### 步骤 3: 配置预估轮询次数
+## 步骤 7: 配置预估轮询次数
 
 **位置**: `src/adapters/fal/config.ts`
 
@@ -212,8 +347,6 @@ export const FAL_CONFIG = {
   modelEstimatedPolls: {
     // ... 现有配置
     'your-model': 25,  // 使用短名称（不含 fal-ai/ 前缀）
-    'nano-banana': 10,
-    'nano-banana-pro': 15
   }
 }
 ```
@@ -231,171 +364,16 @@ export const FAL_CONFIG = {
 
 ---
 
-### 步骤 4: 定义参数 Schema
+## 步骤 8: 配置 providers.json 和价格
 
-**位置**: `src/models/your-fal-model.ts`
-
-```typescript
-import { ParamDef } from '../types/schema'
-
-export const yourFalModelParams: ParamDef[] = [
-  // 图片数量（图片模型）
-  {
-    id: 'numImages',
-    type: 'dropdown',
-    label: '数量',
-    defaultValue: 1,
-    options: [
-      { value: 1, label: '1张' },
-      { value: 2, label: '2张' },
-      { value: 4, label: '4张' }
-    ]
-  },
-
-  // 宽高比（带智能匹配）
-  {
-    id: 'aspectRatio',
-    type: 'dropdown',
-    defaultValue: '1:1',
-    resolutionConfig: {
-      type: 'aspect_ratio',
-      smartMatch: true,
-      visualize: true,
-      extractRatio: (value) => {
-        if (value === 'smart') return null
-        const [w, h] = value.split(':').map(Number)
-        return w / h
-      }
-    },
-    options: (values) => {
-      const baseOptions = [
-        { value: '1:1', label: '1:1' },
-        { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' }
-      ]
-
-      // 图生图时添加智能选项
-      if (values.uploadedImages?.length > 0) {
-        return [{ value: 'smart', label: '智能' }, ...baseOptions]
-      }
-
-      return baseOptions
-    }
-  }
-]
-```
-
-**然后在 `src/models/index.ts` 中导出**:
-
-```typescript
-export { yourFalModelParams } from './your-fal-model'
-
-export const modelSchemaMap: Record<string, ParamDef[]> = {
-  // ... 现有映射
-  'your-fal-model': yourFalModelParams
-}
-```
-
----
-
-### 步骤 5: 添加参数面板渲染
-
-**位置**: `src/components/MediaGenerator/components/ParameterPanel.tsx`
-
-在文件中添加渲染分支：
-
-```typescript
-// Your Fal Model 参数
-if (selectedModel === 'your-fal-model') {
-  return (
-    <SchemaForm
-      schema={yourFalModelParams}
-      values={{
-        numImages: values.numImages,
-        aspectRatio: values.aspectRatio,
-        uploadedImages  //  如果使用智能匹配，必须传递
-      }}
-      onChange={onChange}
-    />
-  )
-}
-```
-
-**记得在文件顶部导入 Schema**:
-
-```typescript
-import { yourFalModelParams } from '@/models'
-```
-
----
-
-### 步骤 6: 注册参数映射
-
-#### 6.1 在 handleSchemaChange 中注册
-
-**位置**: `src/components/MediaGenerator/index.tsx`
-
-```typescript
-const handleSchemaChange = (id: string, value: any) => {
-  const setterMap: Record<string, (v: any) => void> = {
-    // ... 现有映射
-    numImages: state.setNumImages,
-    aspectRatio: state.setAspectRatio
-  }
-
-  const setter = setterMap[id]
-  if (setter) {
-    setter(value)
-  }
-}
-```
-
-#### 6.2 在 presetStateMapping 中注册
-
-**位置**: `src/config/presetStateMapping.ts`
-
-```typescript
-// 1. 添加到接口
-export interface PresetSetters {
-  // ... 现有 setter
-  setNumImages: (v: number) => void
-  setAspectRatio: (v: string) => void
-}
-
-// 2. 添加到映射函数
-export function createPresetSetterMap(setters: PresetSetters) {
-  return {
-    // ... 现有映射
-    numImages: setters.setNumImages,
-    aspectRatio: setters.setAspectRatio
-  }
-}
-```
-
-#### 6.3 传入 setter
-
-**位置**: `src/components/MediaGenerator/index.tsx`
-
-```typescript
-const setterMap = useMemo(() => createPresetSetterMap({
-  // ... 现有 setter
-  setNumImages: state.setNumImages,
-  setAspectRatio: state.setAspectRatio
-}), [])
-```
-
----
-
-### 步骤 7: 配置 providers.json
+### providers.json
 
 **位置**: `src/config/providers.json`
 
-在 fal 供应商的 models 数组中添加：
-
 ```json
 {
-  "id": "your-fal-model",
-  "name": "Your Fal Model",
+  "id": "your-model",
+  "name": "Your Model Name",
   "type": "image",
   "description": "模型描述",
   "functions": ["图片生成", "图片编辑"],
@@ -406,16 +384,7 @@ const setterMap = useMemo(() => createPresetSetterMap({
 }
 ```
 
-**关键字段**:
-- `type`: `image` | `video` | `audio`
-- `functions`: 功能标签数组
-  - 图片: `图片生成`, `图片编辑`
-  - 视频: `文生视频`, `图生视频`
-- `progressConfig.type`:  **必须是** `"polling"`
-
----
-
-### 步骤 8: 配置价格
+### 价格配置
 
 **位置**: `src/config/pricing.ts`
 
@@ -427,7 +396,6 @@ const setterMap = useMemo(() => createPresetSetterMap({
 ```typescript
 // 1. 在 PRICES 常量中添加美元价格
 const PRICES = {
-  // fal 模型价格（美元）
   YOUR_FAL_MODEL: 0.0392,  // USD
   // ...
 }
@@ -435,103 +403,44 @@ const PRICES = {
 // 2. 在 pricingConfigs 数组中添加配置
 {
   providerId: 'fal',
-  modelId: 'your-fal-model',
+  modelId: 'your-model',
   currency: '¥',  // 最终显示人民币
   type: 'calculated',
   calculator: (params) => {
-    const numImages = params.num_images || 1
+    // ⚠️ 使用 fal 前缀的参数名，并提供回退
+    const numImages = params.falYourModelNumImages
+                   || params.numImages
+                   || 1
     // 美元价格 × 汇率 × 数量
     return PRICES.YOUR_FAL_MODEL * USD_TO_CNY * numImages
   }
 }
 ```
 
-**示例**（参考现有配置）:
-
-```typescript
-// nano-banana: $0.039/张
-{
-  providerId: 'fal',
-  modelId: 'nano-banana',
-  currency: '¥',
-  type: 'calculated',
-  calculator: (params) => {
-    const numImages = params.num_images || 1
-    return PRICES.NANO_BANANA * USD_TO_CNY * numImages
-  }
-}
-
-// nano-banana-pro: $0.15/张（4K时×2）
-{
-  providerId: 'fal',
-  modelId: 'nano-banana-pro',
-  currency: '¥',
-  type: 'calculated',
-  calculator: (params) => {
-    const numImages = params.num_images || 1
-    const basePrice = PRICES.NANO_BANANA_PRO * USD_TO_CNY * numImages
-    // 4K 分辨率时价格为 2 倍
-    const multiplier = params.resolution === '4K' ? 2 : 1
-    return basePrice * multiplier
-  }
-}
-
-// veo3.1: 按秒计费，支持音频和快速模式
-{
-  providerId: 'fal',
-  modelId: 'veo3.1',
-  currency: '¥',
-  type: 'calculated',
-  calculator: (params) => {
-    const duration = params.videoDuration || 8
-    const mode = params.mode || 'text-image-to-video'
-    const isFastMode = (params.veoFastMode || false) && mode !== 'reference-to-video'
-    const isAudioOn = params.veoGenerateAudio || false
-
-    // 获取价格（美元/秒）
-    const pricePerSecondUSD = isFastMode
-      ? (isAudioOn ? PRICES.VEO31.fast.audioOn : PRICES.VEO31.fast.audioOff)
-      : (isAudioOn ? PRICES.VEO31.normal.audioOn : PRICES.VEO31.normal.audioOff)
-
-    // 计算总价（转换为人民币）
-    const totalPriceCNY = pricePerSecondUSD * USD_TO_CNY * duration
-
-    // 保留两位小数
-    return parseFloat(totalPriceCNY.toFixed(2))
-  }
-}
-```
-
-**关键要点**:
-- ✅ 价格常量使用美元（与 fal 官方定价一致）
-- ✅ calculator 中乘以 `USD_TO_CNY` 转换为人民币
-- ✅ `currency: '¥'` 确保界面显示人民币符号
-- ✅ 汇率统一管理，修改 `USD_TO_CNY` 常量即可全局更新
-
 ---
 
 ## 关键概念详解
 
-### 1. submitPath vs modelId，重要
+### 1. submitPath vs modelId（重要）
 
 这是 Fal 适配器最容易出错的地方：
 
 ```typescript
-//  正确：有子路径的模型（如 /edit）
+// ✅ 正确：有子路径的模型（如 /edit）
 {
   submitPath: 'fal-ai/nano-banana/edit',  // 提交请求用（含子路径）
   modelId: 'fal-ai/nano-banana',          // 查询状态用（不含子路径）
   requestData: { ... }
 }
 
-//  正确：完整路径的模型
+// ✅ 正确：完整路径的模型
 {
   submitPath: 'fal-ai/bytedance/seedream/v4/text-to-image',
   modelId: 'fal-ai/bytedance/seedream/v4/text-to-image',  // 相同
   requestData: { ... }
 }
 
-// 错误：modelId 包含子路径
+// ❌ 错误：modelId 包含子路径
 {
   submitPath: 'fal-ai/nano-banana/edit',
   modelId: 'fal-ai/nano-banana/edit',  // 错误！会导致状态查询失败
@@ -543,12 +452,12 @@ const PRICES = {
 
 ---
 
-### 2. 图片参数处理，重要
+### 2. 图片参数处理（重要）
 
 Fal 适配器的图片已经自动上传到 CDN，**直接使用**：
 
 ```typescript
-//  正确：直接使用
+// ✅ 正确：直接使用
 const images = params.images || []
 if (images.length > 0) {
   requestData.image_urls = images  // FalAdapter 已上传到 CDN
@@ -565,43 +474,15 @@ const uploadedUrls = await uploadToFalCDN(images)  // 不需要！
 
 ---
 
-### 3. ⚠️ 禁止修改原始 params 对象（防止 base64 泄漏），极其重要
+### 3. ⚠️ 禁止修改原始 params 对象（极其重要）
 
-**问题背景**：如果在模型路由中修改 `params.images` 或 `params.videos`，当上传失败时会回退到 base64 数据，这些 base64 数据会被保存到 `history.json`，导致文件体积暴增（几 MB 到几十 MB）。
-
-**FalAdapter 的正确实现**（已修复）：
-
-```typescript
-// ✅ 正确：FalAdapter.generateImage() 中的实现
-async generateImage(params: GenerateImageParams): Promise<ImageResult> {
-  // 1. 创建新变量存储上传后的 URL，不修改原始 params
-  let uploadedImages: string[] = []
-  if (params.images && params.images.length > 0) {
-    uploadedImages = await this.uploadImagesToFalCDN(params.images)
-  }
-
-  // 2. 只在构建请求时使用上传后的 URL
-  const requestParams = uploadedImages.length > 0
-    ? { ...params, images: uploadedImages }  // 创建新对象
-    : params
-
-  const { submitPath, modelId, requestData } = await route.buildImageRequest(requestParams)
-  // ...
-}
-
-// ❌ 错误：直接修改原始 params（旧代码，已修复）
-async generateImage(params: GenerateImageParams): Promise<ImageResult> {
-  // 这会污染原始 params，导致 base64 泄漏到 history.json
-  params.images = await this.uploadImagesToFalCDN(params.images)
-  // ...
-}
-```
+**问题背景**：如果在模型路由中修改 `params.images` 或 `params.videos`，当上传失败时会回退到 base64 数据，这些 base64 数据会被保存到 `history.json`，导致文件体积暴增。
 
 **模型路由的正确实现**：
 
 ```typescript
 // ✅ 正确：模型路由只负责构建请求，不修改 params
-export const yourFalModelRoute: FalModelRoute = {
+export const falYourModelRoute: FalModelRoute = {
   buildImageRequest: (params: GenerateImageParams) => {
     // 直接使用 params.images，已经是 fal CDN URL
     const images = params.images || []
@@ -633,27 +514,19 @@ export const wrongFalModelRoute: FalModelRoute = {
 ```
 
 **关键原则**：
-
 1. **FalAdapter 负责上传**：`generateImage()` 和 `generateVideo()` 方法会自动上传图片/视频到 fal CDN
 2. **模型路由只读取**：路由收到的 `params.images` 已经是 URL，直接使用即可
-3. **不修改原始对象**：任何需要修改的地方，都应该创建新对象（使用展开运算符 `{ ...params }`）
-4. **保护历史记录**：原始 params 会被保存到 history.json，必须保持干净（只包含文件路径，不包含 base64）
-
-**检查清单**：
-
-- [ ] 模型路由中没有 `params.images = ...` 或 `params.videos = ...` 这样的赋值语句
-- [ ] 模型路由中没有调用任何上传函数（如 `uploadToFalCDN`、`fal.storage.upload`）
-- [ ] 模型路由中没有修改 `params` 对象的任何属性
-- [ ] 只使用 `const images = params.images || []` 读取图片，然后直接传递给 `requestData`
+3. **不修改原始对象**：任何需要修改的地方，都应该创建新对象
+4. **保护历史记录**：原始 params 会被保存到 history.json，必须保持干净
 
 ---
 
-### 4. 智能匹配处理，重要
+### 4. 智能匹配处理（重要）
 
 永远不要传递 `'smart'` 或 `'auto'` 给 API：
 
 ```typescript
-//  正确：在路由中检测并转换
+// ✅ 正确：在路由中检测并转换
 let aspectRatio = params.aspectRatio
 
 if ((aspectRatio === 'smart' || aspectRatio === 'auto') && images.length > 0) {
@@ -671,121 +544,103 @@ if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
   requestData.aspect_ratio = aspectRatio
 }
 
-// 错误：直接传递
+// ❌ 错误：直接传递
 requestData.aspect_ratio = params.aspectRatio  // 可能是 'smart'，会导致 422 错误
 ```
 
 ---
 
-### 4. 分辨率参数格式
-
-Fal 模型使用三种格式之一，根据 API 文档选择：
-
-```typescript
-// 格式 1: aspect_ratio (字符串) - 最常用
-requestData.aspect_ratio = params.aspectRatio  // "16:9", "1:1", "9:16"
-
-// 格式 2: image_size (对象) - 某些模型
-const [width, height] = params.imageSize.split('*').map(Number)
-requestData.image_size = { width, height }
-
-// 格式 3: resolution (字符串) - Nano Banana Pro
-requestData.resolution = params.resolution  // "1K", "2K", "4K"
-```
-
----
-
-### 5. 多图输入场景
-
-根据模型需求选择正确的参数名：
-
-```typescript
-// 单图（图生视频）
-if (images.length > 0) {
-  requestData.image_url = images[0]  // 单数
-}
-
-// 多图（图生图）
-if (images.length > 0) {
-  requestData.image_urls = images  // 复数
-}
-
-// 首尾帧（视频）
-if (images.length >= 2) {
-  requestData.start_image = images[0]
-  requestData.end_image = images[1]
-}
-```
-
 ## 检查清单
 
-###  Fal 特定步骤（必须完成）
-
-- [ ] **步骤 1**: 创建模型路由文件 (`adapters/fal/models/[model-id].ts`)
+### Fal 特定步骤（必须完成）
+- [ ] 在 `src/models/` 创建参数 Schema（使用 `fal` 前缀）
+- [ ] 在 `ParameterPanel.tsx` 添加渲染分支
+- [ ] 在 `useMediaGeneratorState.ts` 添加状态（使用 `fal` 前缀）
+- [ ] 在 `handleSchemaChange` 和 `presetStateMapping` 中注册参数映射
+- [ ] 在 `configs/fal-models.ts` 添加 OptionsBuilder 配置
+- [ ] 在 `configs/index.ts` 注册配置（包括别名）
+- [ ] 在 `adapters/fal/models/` 创建模型路由文件
   - [ ] 实现 `matches()` 方法（支持多个别名）
   - [ ] 实现 `buildImageRequest()` 或 `buildVideoRequest()`
   - [ ] 正确区分 `submitPath`（含子路径）和 `modelId`（不含子路径）
   - [ ] 直接使用 `params.images`（已上传到 CDN）
   - [ ] 过滤掉 `'smart'` 和 `'auto'`，不传递给 API
   - [ ] 添加智能匹配处理（如果支持）
-  - [ ] **⚠️ 关键**: 确认没有修改 `params` 对象（防止 base64 泄漏到 history.json）
-    - [ ] 没有 `params.images = ...` 赋值语句
-    - [ ] 没有 `params.videos = ...` 赋值语句
-    - [ ] 没有调用上传函数（`uploadToFalCDN`、`fal.storage.upload` 等）
-    - [ ] 只使用 `const images = params.images || []` 读取，不修改
+  - [ ] **⚠️ 关键**: 确认没有修改 `params` 对象
+- [ ] 在 `adapters/fal/models/index.ts` 注册路由
+- [ ] 在 `adapters/fal/config.ts` 配置预估轮询次数
+- [ ] 在 `providers.json` 添加模型配置
+  - [ ] **关键**: `progressConfig.type` 必须是 `"polling"`
+- [ ] 在 `pricing.ts` 添加价格配置
+  - [ ] 使用美元价格 × USD_TO_CNY 汇率
+  - [ ] 使用 `fal` 前缀的参数名，并提供回退
 
-- [ ] **步骤 2**: 注册路由 (`adapters/fal/models/index.ts`)
-  - [ ] 导入新路由
-  - [ ] 添加到 `falModelRoutes` 数组
+---
 
-- [ ] **步骤 3**: 配置预估轮询次数 (`adapters/fal/config.ts`)
-  - [ ] 在 `modelEstimatedPolls` 中添加配置
-  - [ ] 使用短名称（不含 `fal-ai/` 前缀）
-  - [ ] 根据模型速度选择合适的值（5-60）
+## 常见错误
 
-- [ ] **步骤 7**: 配置 providers.json
-  - [ ] 添加模型配置到 fal 供应商的 models 数组
-  - [ ] 设置正确的 `type` (image/video/audio)
-  - [ ] 设置 `functions` 数组
-  - [ ]  **关键**: `progressConfig.type` 必须是 `"polling"`
-  - [ ] 设置 `expectedPolls` 与步骤 3 一致
+### ⚠️ 参数命名错误
 
-###  通用步骤（必须完成）
+```typescript
+// ❌ 错误：使用通用参数名
+{
+  id: 'numImages',  // 会与其他供应商冲突
+  type: 'dropdown',
+  // ...
+}
 
-- [ ] **步骤 4**: 定义参数 Schema (`src/models/[model-id].ts`)
-  - [ ] 创建参数定义数组
-  - [ ] 使用 `resolutionConfig` 配置分辨率选择器（如需要）
-  - [ ] 添加动态选项（如智能匹配）
+// ✅ 正确：使用 fal 前缀
+{
+  id: 'falYourModelNumImages',
+  type: 'dropdown',
+  // ...
+}
+```
 
-- [ ] **步骤 4.1**: 导出 Schema (`src/models/index.ts`)
-  - [ ] 导出参数数组
-  - [ ] 添加到 `modelSchemaMap`
+### ⚠️ OptionsBuilder 配置错误
 
-- [ ] **步骤 5**: 添加参数面板渲染 (`ParameterPanel.tsx`)
-  - [ ] 添加 `if (selectedModel === 'your-model')` 分支
-  - [ ] 导入 Schema
-  - [ ] 传递所有必需的 values（包括 `uploadedImages`）
+```typescript
+// ❌ 错误：convertToBlob 设置为 true
+features: {
+  imageUpload: {
+    enabled: true,
+    convertToBlob: true  // 错误！Fal 模型必须为 false
+  }
+}
 
-- [ ] **步骤 6.1**: 注册参数映射 (`MediaGenerator/index.tsx`)
-  - [ ] 在 `handleSchemaChange` 的 `setterMap` 中添加所有参数
+// ✅ 正确：Fal 模型不转换为 Blob
+features: {
+  imageUpload: {
+    enabled: true,
+    convertToBlob: false
+  }
+}
+```
 
-- [ ] **步骤 6.2**: 预设映射 (`presetStateMapping.ts`)
-  - [ ] 在 `PresetSetters` 接口中添加 setter 类型
-  - [ ] 在 `createPresetSetterMap` 中添加映射
-  - [ ] 在 `MediaGenerator/index.tsx` 的 setterMap 中传入 setter
+### ⚠️ 价格计算错误
 
-###  其它步骤
+```typescript
+// ❌ 错误：直接使用美元价格
+calculator: (params) => {
+  return PRICES.YOUR_FAL_MODEL * numImages  // 显示美元价格
+}
 
-- [ ] 配置价格 (`pricing.ts`)
-- [ ] 添加状态管理（如果使用新参数）
-- [ ] 添加默认值重置逻辑（如果共享状态）
+// ✅ 正确：转换为人民币
+calculator: (params) => {
+  const numImages = params.falYourModelNumImages || params.numImages || 1
+  return PRICES.YOUR_FAL_MODEL * USD_TO_CNY * numImages
+}
+```
 
 ---
 
 ## 核心要点总结
 
-1. **图片已上传**: `params.images` 已经是 fal CDN URL，**直接使用**，不要手动上传
-2. **区分路径**: `submitPath` 可以有子路径，`modelId` **永远不含**子路径
-3. **轮询进度**: `providers.json` 必须配置 `"type": "polling"`
-4. **智能匹配**: 永远不要传递 `'smart'` 或 `'auto'` 给 API，在路由中转换
-5. **本地保存**: Fal 图片由 App.tsx 统一保存，解析器**不调用** `saveMediaLocally`
+1. **参数命名**: 所有参数使用 `fal` 前缀，避免冲突
+2. **图片已上传**: `params.images` 已经是 fal CDN URL，**直接使用**
+3. **区分路径**: `submitPath` 可以有子路径，`modelId` **永远不含**子路径
+4. **轮询进度**: `providers.json` 必须配置 `"type": "polling"`
+5. **智能匹配**: 永远不要传递 `'smart'` 或 `'auto'` 给 API，在路由中转换
+6. **本地保存**: Fal 图片由 App.tsx 统一保存，解析器**不调用** `saveMediaLocally`
+7. **价格转换**: 使用美元价格 × USD_TO_CNY 汇率，显示人民币
+8. **OptionsBuilder**: 使用配置驱动架构，`convertToBlob: false`

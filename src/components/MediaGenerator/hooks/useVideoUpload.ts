@@ -67,11 +67,16 @@ export const useVideoUpload = (
       const thumbnail = await generateVideoThumbnail(videoFile)
       console.log('[useVideoUpload] 缩略图生成成功')
 
-      // 3. 保存 File 对象引用和缩略图
-      // 注意：这里不读取视频内容，只保存 File 对象
-      setUploadedVideos([thumbnail]) // 缩略图用于 UI 预览
+      // 3. 创建视频 Object URL（用于预览播放）
+      const videoObjectUrl = URL.createObjectURL(videoFile)
+      console.log('[useVideoUpload] 创建视频预览 URL')
+
+      // 4. 保存 File 对象引用、缩略图和视频 URL
+      // 注意：这里不读取视频内容，只保存 File 对象和 URL
+      setUploadedVideos([thumbnail]) // 缩略图用于 UI 显示
       setUploadedVideoFiles([videoFile]) // File 对象引用，点击生成时才读取
 
+      // 清理元数据加载时创建的临时 URL
       URL.revokeObjectURL(videoElement.src)
       setIsProcessingVideo(false)
 

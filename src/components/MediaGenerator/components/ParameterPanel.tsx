@@ -65,7 +65,6 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <SchemaForm
         schema={viduParams}
         values={{
-          ppioViduQ1VideoDuration: values.ppioViduQ1VideoDuration,
           ppioViduQ1Mode: values.ppioViduQ1Mode,
           ppioViduQ1AspectRatio: values.ppioViduQ1AspectRatio,
           ppioViduQ1Style: values.ppioViduQ1Style,
@@ -185,6 +184,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               falSeedanceV1Version: values.falSeedanceV1Version,
               ppioSeedanceV1AspectRatio: values.ppioSeedanceV1AspectRatio,
               ppioSeedanceV1Resolution: values.ppioSeedanceV1Resolution,
+              seedanceResolution: values.ppioSeedanceV1Resolution,  // qualityKey 映射
               falSeedanceV1VideoDuration: values.falSeedanceV1VideoDuration,
               ppioSeedanceV1CameraFixed: values.ppioSeedanceV1CameraFixed,
               falSeedanceV1FastMode: values.falSeedanceV1FastMode,
@@ -203,6 +203,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               falVeo31VideoDuration: values.falVeo31VideoDuration,
               falVeo31AspectRatio: values.falVeo31AspectRatio,
               falVeo31Resolution: values.falVeo31Resolution,
+              veoResolution: values.falVeo31Resolution,  // qualityKey 映射
               falVeo31EnhancePrompt: values.falVeo31EnhancePrompt,
               falVeo31GenerateAudio: values.falVeo31GenerateAudio,
               falVeo31AutoFix: values.falVeo31AutoFix,
@@ -250,7 +251,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             values={{
               falSora2Mode: values.falSora2Mode,
               falSora2AspectRatio: values.falSora2AspectRatio,
-              falSora2Resolution: values.falSora2Resolution,
+              soraResolution: values.falSora2Resolution,  // 映射到实际的 state 变量
               falSora2VideoDuration: values.falSora2VideoDuration,
               uploadedImages
             }}
@@ -287,6 +288,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               falViduQ2Mode: values.falViduQ2Mode,
               falViduQ2AspectRatio: values.falViduQ2AspectRatio,
               falViduQ2Resolution: values.falViduQ2Resolution,
+              viduQ2Resolution: values.falViduQ2Resolution,  // qualityKey 映射
               falViduQ2VideoDuration: values.falViduQ2VideoDuration,
               falViduQ2MovementAmplitude: values.falViduQ2MovementAmplitude,
               falViduQ2Bgm: values.falViduQ2Bgm,
@@ -305,6 +307,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             values={{
               falPixverse55AspectRatio: values.falPixverse55AspectRatio,
               falPixverse55Resolution: values.falPixverse55Resolution,
+              pixverseResolution: values.falPixverse55Resolution,  // qualityKey 映射
               falPixverse55VideoDuration: values.falPixverse55VideoDuration,
               falPixverse55Style: values.falPixverse55Style,
               falPixverse55ThinkingType: values.falPixverse55ThinkingType,
@@ -324,6 +327,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               falWan25VideoDuration: values.falWan25VideoDuration,
               falWan25AspectRatio: values.falWan25AspectRatio,
               falWan25Resolution: values.falWan25Resolution,
+              wanResolution: values.falWan25Resolution,  // qualityKey 映射
               falWan25PromptExpansion: values.falWan25PromptExpansion,
               uploadedImages
             }}

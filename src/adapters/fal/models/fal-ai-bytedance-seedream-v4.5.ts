@@ -4,7 +4,7 @@ export const falAiBytedanceSeedreamV45Route: FalModelRoute = {
   matches: (modelId: string) => modelId === 'bytedance-seedream-v4.5' || modelId === 'fal-ai-bytedance-seedream-v4.5',
 
   buildImageRequest: (params: any) => {
-    const images = params.uploadedImages || []
+    const images = params.images || []
     const prompt = params.prompt || ''
     const numImages = params.falSeedream40NumImages || 1
 

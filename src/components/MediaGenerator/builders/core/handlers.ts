@@ -13,11 +13,35 @@ export async function handleSmartMatch(
   config: SmartMatchConfig,
   context: BuildContext
 ): Promise<void> {
-  if (!config.enabled || context.uploadedImages.length === 0) {
+  if (!config.enabled) {
     return
   }
 
+  // 检查参数值是否为 'smart'（表示用户选择了智能匹配）
+  const currentValue = options[config.paramKey]
+  const isSmartMode = currentValue === 'smart' || currentValue === '智能'
+
+  // 如果没有上传图片
+  if (context.uploadedImages.length === 0) {
+    // 如果用户选择了智能模式，使用默认比例
+    if (isSmartMode) {
+      console.log(`[Smart Match] No images uploaded, using default ratio: ${config.defaultRatio}`)
+      options[config.paramKey] = config.defaultRatio
+    }
+    // 如果是具体比例值，保持不变
+    return
+  }
+
+  // 如果用户没有选择智能模式，且已经有具体的比例值，不执行智能匹配
+  if (!isSmartMode && currentValue && currentValue !== config.defaultRatio) {
+    console.log(`[Smart Match] User selected specific ratio: ${currentValue}, skipping smart match`)
+    return
+  }
+
+  // 执行智能匹配
   try {
+    console.log(`[Smart Match] Calculating smart ratio for ${context.selectedModel}`)
+
     // 调用智能匹配函数
     const matches = await getSmartMatchValues(
       context.selectedModel,
@@ -29,9 +53,12 @@ export async function handleSmartMatch(
     const matchedValues = Object.values(matches)
     if (matchedValues.length > 0) {
       // 使用匹配的值
-      options[config.paramKey] = matchedValues[0]
+      const matchedRatio = matchedValues[0]
+      console.log(`[Smart Match] Matched ratio: ${matchedRatio}`)
+      options[config.paramKey] = matchedRatio
     } else {
       // 使用默认值
+      console.log(`[Smart Match] No match found, using default ratio: ${config.defaultRatio}`)
       options[config.paramKey] = config.defaultRatio
     }
   } catch (error) {

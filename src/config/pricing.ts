@@ -344,7 +344,7 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const numImages = params.numImages || 1
+            const numImages = params.falSeedream40NumImages || 1
             return formatPrice(0.0283 * USD_TO_CNY * numImages)
         }
     },
@@ -354,7 +354,7 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const numImages = params.numImages || 1
+            const numImages = params.falSeedream40NumImages || 1
             return formatPrice(0.04 * USD_TO_CNY * numImages)
         }
     },
@@ -577,8 +577,8 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const duration = params.videoDuration || 8
-            const mode = params.falVeo31Mode || 'text-image-to-video'  // 使用 veoMode
+            const duration = params.falVeo31VideoDuration || 8
+            const mode = params.falVeo31Mode || 'text-image-to-video'
             const isFastMode = (params.falVeo31FastMode || false) && mode !== 'reference-to-video' // 参考生视频模式不支持快速模式
             const isAudioOn = params.falVeo31GenerateAudio || false
 

@@ -81,11 +81,17 @@ function convertParamsToContext(params: BuildOptionsParams): Record<string, any>
 export function reverseMapOptions(modelId: string, apiOptions: Record<string, any>): Record<string, any> {
   ensureConfigsRegistered()
 
+  console.log('[OptionsBuilder] ReverseMap - Model:', modelId)
+  console.log('[OptionsBuilder] ReverseMap - API options keys:', Object.keys(apiOptions))
+
   const config = optionsBuilder.getConfig(modelId)
   if (!config || !config.paramMapping) {
+    console.log('[OptionsBuilder] ReverseMap - No config or paramMapping, returning original options')
     // 如果没有配置，直接返回原始参数
     return apiOptions
   }
+
+  console.log('[OptionsBuilder] ReverseMap - ParamMapping keys:', Object.keys(config.paramMapping))
 
   const uiParams: Record<string, any> = {}
 
@@ -93,6 +99,7 @@ export function reverseMapOptions(modelId: string, apiOptions: Record<string, an
   for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
     // 检查 API 参数中是否有这个 key
     if (!(apiKey in apiOptions)) {
+      console.log(`[OptionsBuilder] ReverseMap - Skipped (not in API options): ${apiKey}`)
       continue
     }
 
@@ -120,10 +127,14 @@ export function reverseMapOptions(modelId: string, apiOptions: Record<string, an
     // 如果找到了 UI 参数名，添加到结果中
     if (uiKey) {
       uiParams[uiKey] = value
+      console.log(`[OptionsBuilder] ReverseMap - Mapped: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
+    } else {
+      console.log(`[OptionsBuilder] ReverseMap - No UI key found for: ${apiKey}`)
     }
   }
 
-  console.log(`[OptionsBuilder] Reverse mapped ${Object.keys(uiParams).length} parameters for ${modelId}`)
+  console.log(`[OptionsBuilder] ReverseMap - Result: ${Object.keys(uiParams).length} parameters`)
+  console.log('[OptionsBuilder] ReverseMap - UI params:', uiParams)
 
   return uiParams
 }

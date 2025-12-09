@@ -12,6 +12,7 @@ import {
   viduQ1Config,
   kling25TurboConfig,
   minimaxHailuo23Config,
+  minimaxHailuo02Config,
   pixverseV45Config,
   wan25PreviewConfig,
   seedream40Config
@@ -55,6 +56,7 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(viduQ1Config)
   optionsBuilder.registerConfig(kling25TurboConfig)
   optionsBuilder.registerConfig(minimaxHailuo23Config)
+  optionsBuilder.registerConfig(minimaxHailuo02Config)
   optionsBuilder.registerConfig(pixverseV45Config)
   optionsBuilder.registerConfig(wan25PreviewConfig)
   optionsBuilder.registerConfig(seedream40Config)

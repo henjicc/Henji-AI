@@ -5,10 +5,48 @@
 import { ModelConfig, BuildContext } from '../core/types'
 
 /**
+ * 检查模型是否支持图片编辑
+ * @param selectedModel 当前选中的模型 ID
+ * @param modelscopeCustomModel 自定义模型 ID（如果有）
+ * @returns 是否支持图片编辑
+ */
+const checkModelSupportsImageEditing = (selectedModel: string, modelscopeCustomModel?: string): boolean => {
+  // 1. 对于自定义模型，检查 modelType.imageEditing
+  if (modelscopeCustomModel) {
+    try {
+      const stored = localStorage.getItem('modelscope_custom_models')
+      if (stored) {
+        const models = JSON.parse(stored)
+        const currentModel = models.find((m: any) => m.id === modelscopeCustomModel)
+
+        // 如果找到模型配置，检查是否支持图片编辑
+        if (currentModel && currentModel.modelType) {
+          return currentModel.modelType.imageEditing === true
+        }
+      }
+    } catch (e) {
+      console.error('[ModelScope] 检查自定义模型类型失败:', e)
+    }
+  }
+
+  // 2. 对于预设模型，根据模型 ID 判断
+  // 只有 Qwen-Image-Edit-2509 支持图片编辑
+  // 其他预设模型（Z-Image-Turbo, Qwen-Image, FLUX.1-Krea-dev 等）只支持图片生成
+  const imageEditingModels = [
+    'Qwen/Qwen-Image-Edit-2509'
+  ]
+
+  return imageEditingModels.includes(selectedModel)
+}
+
+/**
  * 通用的本地文件路径保存处理器
  * 用于保存上传图片的本地路径，以便历史记录恢复和重新编辑
  *
- * 注意：魔搭模型在 API 调用时使用 data URL，但仍需要保存本地文件路径用于历史记录
+ * 注意：魔搭模型需要将图片上传到 Fal CDN 获取 URL
+ * 1. 设置 options.images（data URL 格式）
+ * 2. ModelscopeAdapter 会检测并自动上传到 Fal CDN
+ * 3. 上传成功后，adapter 会将 imageUrls 传递给模型路由
  */
 const commonImageUploadHandler = {
   afterBuild: async (options: Record<string, any>, context: BuildContext) => {
@@ -16,9 +54,24 @@ const commonImageUploadHandler = {
       return
     }
 
+    const params = context.params
+    const selectedModel = (params as any).selectedModel
+    const modelscopeCustomModel = (params as any).modelscopeCustomModel
+
+    // 检查当前模型是否支持图片编辑
+    const supportsImageEditing = checkModelSupportsImageEditing(selectedModel, modelscopeCustomModel)
+
+    if (!supportsImageEditing) {
+      console.log('[ModelScope] 当前模型不支持图片编辑，跳过图片上传:', selectedModel)
+      return
+    }
+
     const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
-    const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
-    const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+    const setUploadedFilePaths = (params as any).setUploadedFilePaths
+    const uploadedFilePaths = (params as any).uploadedFilePaths || []
+
+    // 重要：设置 images 参数，让 ModelscopeAdapter 检测并上传到 Fal CDN
+    options.images = context.uploadedImages
 
     const paths: string[] = [...uploadedFilePaths]
 
@@ -33,6 +86,44 @@ const commonImageUploadHandler = {
 
     setUploadedFilePaths(paths)
     options.uploadedFilePaths = paths
+
+    // 处理智能分辨率计算（保持原图比例）
+    const modelscopeImageSize = (params as any).modelscopeImageSize
+
+    if (modelscopeImageSize === 'smart' && context.uploadedImages.length > 0) {
+      try {
+        // 使用 Qwen 专用智能分辨率计算器
+        const { smartMatchQwenResolution } = await import('@/utils/qwenResolutionCalculator')
+
+        // 从第一张图片获取尺寸
+        const img = new Image()
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = context.uploadedImages[0]
+        })
+
+        // 计算最佳分辨率（保持原图比例）
+        const resolution = smartMatchQwenResolution(img.width, img.height)
+
+        // 设置计算后的宽高
+        options.width = resolution.width
+        options.height = resolution.height
+
+        console.log('[ModelScope] 智能分辨率计算:', {
+          原图尺寸: `${img.width}x${img.height}`,
+          原图比例: (img.width / img.height).toFixed(4),
+          计算结果: `${resolution.width}x${resolution.height}`,
+          结果比例: (resolution.width / resolution.height).toFixed(4),
+          比例偏差: Math.abs((img.width / img.height) - (resolution.width / resolution.height)).toFixed(6)
+        })
+      } catch (error) {
+        console.error('[ModelScope] 智能分辨率计算失败:', error)
+        // 失败时使用默认分辨率 1024x1024
+        options.width = 1024
+        options.height = 1024
+      }
+    }
   }
 }
 
@@ -47,18 +138,18 @@ export const modelscopeCommonConfig: ModelConfig = {
   provider: 'modelscope',
 
   paramMapping: {
-    size: {
-      source: 'size',
-      defaultValue: '1024x1024'
-    },
-    num_images: {
-      source: ['numImages'],
-      defaultValue: 1
-    },
-    guidance_scale: 'guidanceScale',
-    num_inference_steps: 'numInferenceSteps',
-    seed: 'seed',
-    negative_prompt: 'negativePrompt'
+    // 宽度参数（路由期望 width）
+    width: 'customWidth',
+    // 高度参数（路由期望 height）
+    height: 'customHeight',
+    // 采样步数（路由期望 steps）
+    steps: 'modelscopeSteps',
+    // 提示词引导系数（路由期望 guidance）
+    guidance: 'modelscopeGuidance',
+    // 负面提示词（路由期望 negativePrompt）
+    negativePrompt: 'modelscopeNegativePrompt',
+    // 随机种子
+    seed: 'seed'
   },
 
   features: {
@@ -75,7 +166,7 @@ export const modelscopeCommonConfig: ModelConfig = {
 }
 
 /**
- * 魔搭 Z-Image Turbo 配置（无 guidance_scale）
+ * 魔搭 Z-Image Turbo 配置（无 guidance 参数）
  */
 export const modelscopeZImageTurboConfig: ModelConfig = {
   id: 'Tongyi-MAI/Z-Image-Turbo',
@@ -83,17 +174,17 @@ export const modelscopeZImageTurboConfig: ModelConfig = {
   provider: 'modelscope',
 
   paramMapping: {
-    size: {
-      source: 'size',
-      defaultValue: '1024x1024'
-    },
-    num_images: {
-      source: ['numImages'],
-      defaultValue: 1
-    },
-    num_inference_steps: 'numInferenceSteps',
-    seed: 'seed',
-    negative_prompt: 'negativePrompt'
+    // 宽度参数（路由期望 width）
+    width: 'customWidth',
+    // 高度参数（路由期望 height）
+    height: 'customHeight',
+    // 采样步数（路由期望 steps）
+    steps: 'modelscopeSteps',
+    // 负面提示词（路由期望 negativePrompt）
+    negativePrompt: 'modelscopeNegativePrompt',
+    // 随机种子
+    seed: 'seed'
+    // 注意：Z-Image Turbo 不使用 guidance 参数
   },
 
   features: {
@@ -111,6 +202,7 @@ export const modelscopeZImageTurboConfig: ModelConfig = {
 
 /**
  * Qwen Image Edit 2509 配置（支持最多3张图片）
+ * 注意：此模型不使用 negative_prompt 和 guidance 参数
  */
 export const qwenImageEdit2509Config: ModelConfig = {
   id: 'Qwen/Qwen-Image-Edit-2509',
@@ -118,18 +210,15 @@ export const qwenImageEdit2509Config: ModelConfig = {
   provider: 'modelscope',
 
   paramMapping: {
-    size: {
-      source: 'size',
-      defaultValue: '1024x1024'
-    },
-    num_images: {
-      source: ['numImages'],
-      defaultValue: 1
-    },
-    guidance_scale: 'guidanceScale',
-    num_inference_steps: 'numInferenceSteps',
-    seed: 'seed',
-    negative_prompt: 'negativePrompt'
+    // 宽度参数（路由期望 width）
+    width: 'customWidth',
+    // 高度参数（路由期望 height）
+    height: 'customHeight',
+    // 采样步数（路由期望 steps）
+    steps: 'modelscopeSteps',
+    // 随机种子
+    seed: 'seed'
+    // 注意：Qwen-Image-Edit-2509 不使用 negative_prompt 和 guidance 参数（route 会自动过滤）
   },
 
   features: {
@@ -154,19 +243,20 @@ export const modelscopeCustomConfig: ModelConfig = {
   provider: 'modelscope',
 
   paramMapping: {
+    // 模型 ID（路由期望 model）
     model: 'modelscopeCustomModel',
-    size: {
-      source: 'size',
-      defaultValue: '1024x1024'
-    },
-    num_images: {
-      source: ['numImages'],
-      defaultValue: 1
-    },
-    guidance_scale: 'guidanceScale',
-    num_inference_steps: 'numInferenceSteps',
-    seed: 'seed',
-    negative_prompt: 'negativePrompt'
+    // 宽度参数（路由期望 width）
+    width: 'customWidth',
+    // 高度参数（路由期望 height）
+    height: 'customHeight',
+    // 采样步数（路由期望 steps）
+    steps: 'modelscopeSteps',
+    // 提示词引导系数（路由期望 guidance）
+    guidance: 'modelscopeGuidance',
+    // 负面提示词（路由期望 negativePrompt）
+    negativePrompt: 'modelscopeNegativePrompt',
+    // 随机种子
+    seed: 'seed'
   },
 
   features: {

@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 type NumberInputProps = {
   label?: string
-  value: number
+  value: number | undefined
   onChange: (next: number) => void
   min?: number
   max?: number
@@ -16,9 +16,12 @@ type NumberInputProps = {
 
 export default function NumberInput(props: NumberInputProps) {
   const { label, value, onChange, min, max, step = 1, widthClassName = 'w-24', className, precision, disabled = false } = props
-  
+
+  // 处理 undefined 值，使用 min 或 0 作为默认值
+  const safeValue = value ?? (min ?? 0)
+
   // 使用内部状态存储输入值，允许用户输入过程中的中间状态
-  const [inputValue, setInputValue] = useState(value.toString())
+  const [inputValue, setInputValue] = useState(safeValue.toString())
   const [isFocused, setIsFocused] = useState(false)
   
   const clamp = (v: number) => {
@@ -44,12 +47,12 @@ export default function NumberInput(props: NumberInputProps) {
   // 获得焦点时更新输入值
   const handleFocus = () => {
     setIsFocused(true)
-    setInputValue(value.toString())
+    setInputValue(safeValue.toString())
   }
-  
+
   // 当外部 value 变化且未聚焦时，同步到 inputValue
-  if (!isFocused && value.toString() !== inputValue) {
-    setInputValue(value.toString())
+  if (!isFocused && safeValue.toString() !== inputValue) {
+    setInputValue(safeValue.toString())
   }
   
   return (
@@ -78,7 +81,7 @@ export default function NumberInput(props: NumberInputProps) {
           <button
             type="button"
             onClick={() => {
-              const next = clamp(value + step)
+              const next = clamp(safeValue + step)
               onChange(next)
               setInputValue(next.toString())
             }}
@@ -88,7 +91,7 @@ export default function NumberInput(props: NumberInputProps) {
           <button
             type="button"
             onClick={() => {
-              const next = clamp(value - step)
+              const next = clamp(safeValue - step)
               onChange(next)
               setInputValue(next.toString())
             }}

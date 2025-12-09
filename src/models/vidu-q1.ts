@@ -37,16 +37,6 @@ export const viduQ1Params: ParamDef[] = [
         className: 'min-w-[120px]'
     },
     {
-        id: 'ppioViduQ1VideoDuration',
-        type: 'dropdown',
-        label: '时长',
-        defaultValue: 4,
-        options: [
-            { value: 4, label: '4秒' },
-            { value: 8, label: '8秒' }
-        ]
-    },
-    {
         id: 'ppioViduQ1AspectRatio',
         type: 'dropdown',
         defaultValue: '16:9',

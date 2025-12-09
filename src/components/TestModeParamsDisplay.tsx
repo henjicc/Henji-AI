@@ -32,6 +32,35 @@ const TestModeParamsDisplay: React.FC = () => {
   }
 
   const { lastParams } = state
+  const { model, options, timestamp } = lastParams
+
+  // 过滤出真正会传递给 API 的参数
+  const getApiParams = () => {
+    // 需要排除的参数（UI 状态参数和内部参数）
+    const excludePatterns = [
+      /^ppio/,           // ppioPixverse45VideoResolution 等
+      /^fal[A-Z]/,       // falWan25VideoDuration 等
+      /^video[A-Z]/,     // videoNegativePrompt 等
+      /^uploaded/,       // uploadedFilePaths 等
+      /^aspect_ratio$/,  // 通用参数
+      /^num_images$/,    // 通用参数
+    ]
+
+    const apiParams: Record<string, any> = {}
+
+    for (const [key, value] of Object.entries(options)) {
+      // 检查是否应该排除
+      const shouldExclude = excludePatterns.some(pattern => pattern.test(key))
+
+      if (!shouldExclude) {
+        apiParams[key] = value
+      }
+    }
+
+    return apiParams
+  }
+
+  const apiParams = getApiParams()
 
   return (
     <div
@@ -45,7 +74,9 @@ const TestModeParamsDisplay: React.FC = () => {
       >
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-          <span className="text-xs font-medium text-yellow-500">最后请求参数</span>
+          <span className="text-xs font-medium text-yellow-500">
+            {model} - API 参数
+          </span>
         </div>
         <button className="text-yellow-500/60 hover:text-yellow-500 transition-colors">
           <svg
@@ -64,8 +95,13 @@ const TestModeParamsDisplay: React.FC = () => {
       {!isCollapsed && (
         <div className="p-3 text-xs">
           <pre className="text-gray-300 whitespace-pre-wrap break-all max-h-[500px] overflow-y-auto">
-            {JSON.stringify(lastParams, null, 2)}
+            {JSON.stringify(apiParams, null, 2)}
           </pre>
+          {timestamp && (
+            <div className="mt-2 pt-2 border-t border-zinc-700/50 text-gray-500 text-[10px]">
+              {new Date(timestamp).toLocaleTimeString('zh-CN')}
+            </div>
+          )}
         </div>
       )}
     </div>

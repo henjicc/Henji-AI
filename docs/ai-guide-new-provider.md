@@ -1,10 +1,34 @@
 # 适配指南：添加新供应商
 
+---
+
+## ⚠️ 统一参数命名规范（必读）
+
+**所有新供应商的模型参数必须使用供应商前缀**：
+
+```
+{providerId}{ModelName}{ParameterName}
+```
+
+**前缀规则**：
+- `ppio` = 派欧云 (PiaoYun)
+- `fal` = Fal.ai
+- `ms` = 魔搭 (ModelScope)
+- 新供应商使用简短的英文缩写（2-4 个字母）
+
+**示例**：
+- `newProviderModel1VideoDuration`
+- `newProviderModel1AspectRatio`
+
+---
+
 ## 核心流程
 
 ```
-创建适配器目录 → 实现适配器类 → 注册到工厂 → 配置 providers.json → 添加 API Key 输入
+创建适配器目录 → 实现适配器类 → 创建模型路由 → 添加 OptionsBuilder 配置 → 注册到工厂 → 配置 providers.json → 添加 API Key 输入
 ```
+
+---
 
 ## 1. 创建适配器目录结构
 
@@ -23,6 +47,8 @@ src/adapters/[provider-id]/
 └── statusHandler.ts       # 异步任务轮询（如需要）
 ```
 
+---
+
 ## 2. 实现配置文件
 
 **`config.ts`**:
@@ -35,6 +61,8 @@ export const YOUR_PROVIDER_CONFIG = {
 } as const
 ```
 
+---
+
 ## 3. 实现主适配器类
 
 **`[Provider]Adapter.ts`**:
@@ -44,24 +72,22 @@ import {
   BaseAdapter,
   GenerateImageParams,
   GenerateVideoParams,
-  GenerateAudioParams,
   ImageResult,
-  VideoResult,
-  AudioResult
+  VideoResult
 } from '../base/BaseAdapter'
 import { YOUR_PROVIDER_CONFIG } from './config'
 import { findRoute } from './models'
-import { parseImageResponse, parseVideoResponse, parseAudioResponse } from './parsers'
+import { parseImageResponse, parseVideoResponse } from './parsers'
 
 export class YourProviderAdapter extends BaseAdapter {
   private apiClient: AxiosInstance
 
   constructor(apiKey: string) {
-    super('YourProvider')  // 供应商名称
+    super('YourProvider')
     this.apiClient = axios.create({
       baseURL: YOUR_PROVIDER_CONFIG.baseURL,
       headers: {
-        'Authorization': `Bearer ${apiKey}`,  // 根据实际 API 调整
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       }
     })
@@ -69,19 +95,14 @@ export class YourProviderAdapter extends BaseAdapter {
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
-      // 1. 查找路由
       const route = findRoute(params.model)
       if (!route || !route.buildImageRequest) {
         throw new Error(`Unsupported image model: ${params.model}`)
       }
 
-      // 2. 构建请求
       const { endpoint, requestData } = route.buildImageRequest(params)
-
-      // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)
 
-      // 4. 解析响应
       return parseImageResponse(response.data)
     } catch (error) {
       throw this.handleError(error)
@@ -121,40 +142,12 @@ export class YourProviderAdapter extends BaseAdapter {
     }
   }
 
-  async generateAudio(params: GenerateAudioParams): Promise<AudioResult> {
-    try {
-      const route = findRoute(params.model)
-      if (!route || !route.buildAudioRequest) {
-        throw new Error(`Unsupported audio model: ${params.model}`)
-      }
-
-      const { endpoint, requestData } = route.buildAudioRequest(params)
-      const response = await this.apiClient.post(endpoint, requestData)
-
-      const audioResult = await parseAudioResponse(response.data)
-
-      // 保存到本地
-      try {
-        const savedResult = await this.saveMediaLocally(audioResult.url, 'audio')
-        return {
-          url: savedResult.url,
-          filePath: savedResult.filePath
-        }
-      } catch (e) {
-        this.log('音频本地保存失败，回退为远程URL', e)
-        return audioResult
-      }
-    } catch (error) {
-      throw this.handleError(error)
-    }
-  }
-
   async checkStatus(taskId: string): Promise<any> {
     const response = await this.apiClient.get(`${YOUR_PROVIDER_CONFIG.statusEndpoint}/${taskId}`)
     return response.data
   }
 
-  // 如果需要异步轮询，实现此方法
+  // 异步轮询实现
   async pollTaskStatus(taskId: string, modelId: string, onProgress?: any): Promise<VideoResult> {
     const { pollUntilComplete } = await import('@/utils/polling')
     const { getExpectedPolls } = await import('@/utils/modelConfig')
@@ -200,31 +193,30 @@ export class YourProviderAdapter extends BaseAdapter {
 }
 ```
 
+---
+
 ## 4. 实现模型路由
 
 ### 供应商前缀命名要求
 
-所有模型路由文件和变量必须使用供应商前缀，以确保代码库的一致性和避免命名冲突：
+所有模型路由文件和变量必须使用供应商前缀：
 
-- **路由文件名**: 使用 `[provider]-[model-id].ts` 格式，例如：`your-provider-model-1.ts`
-- **变量名**: 使用 `[provider][Model]Route` 格式，例如：`yourProviderModel1Route`
-- **模型 ID**: 使用 `[provider]-[model-id]` 格式，例如：`your-provider-model-1`
+- **路由文件名**: 使用 `[provider]-[model-id].ts` 格式
+- **变量名**: 使用 `[provider][Model]Route` 格式
+- **模型 ID**: 使用 `[provider]-[model-id]` 格式
 
 **`models/index.ts`**:
 ```typescript
-import { model1Route } from './model-1'
-import { model2Route } from './model-2'
+import { model1Route } from './your-provider-model-1'
 
 export interface ModelRoute {
   matches: (modelId: string) => boolean
   buildImageRequest?: (params: any) => { endpoint: string; requestData: any }
   buildVideoRequest?: (params: any) => { endpoint: string; requestData: any }
-  buildAudioRequest?: (params: any) => { endpoint: string; requestData: any }
 }
 
 export const yourProviderModelRoutes: ModelRoute[] = [
-  model1Route,
-  model2Route
+  model1Route
 ]
 
 export const findRoute = (modelId: string): ModelRoute | undefined => {
@@ -232,10 +224,10 @@ export const findRoute = (modelId: string): ModelRoute | undefined => {
 }
 ```
 
-**`models/[model-id].ts`**:
+**`models/your-provider-model-1.ts`**:
 ```typescript
 export const model1Route = {
-  matches: (modelId: string) => modelId === 'model-1',
+  matches: (modelId: string) => modelId === 'your-provider-model-1',
 
   buildVideoRequest: (params: any) => {
     const images = params.images || []
@@ -248,7 +240,7 @@ export const model1Route = {
       return {
         endpoint: '/v1/image-to-video',
         requestData: {
-          image: images[0],  // 根据 API 要求处理（URL/Base64）
+          image: images[0],
           prompt,
           duration
         }
@@ -268,6 +260,8 @@ export const model1Route = {
 }
 ```
 
+---
+
 ## 5. 实现响应解析器
 
 **`parsers/videoParser.ts`**:
@@ -279,12 +273,10 @@ export const parseVideoResponse = async (
   responseData: any,
   adapter: YourProviderAdapter
 ): Promise<VideoResult> => {
-  // 根据实际 API 响应格式解析
   if (responseData.video_url) {
     const videoUrl = responseData.video_url
 
     // ⚠️ 关键：保存到本地并设置 filePath
-    // 历史记录只保存 filePath，不保存 url，防止 base64 数据膨胀
     try {
       const savedResult = await adapter['saveMediaLocally'](videoUrl, 'video')
       return {
@@ -309,10 +301,6 @@ export const parseVideoResponse = async (
 ```typescript
 import { ImageResult } from '@/adapters/base/BaseAdapter'
 
-// ⚠️ 注意：图片解析器通常不直接保存到本地
-// 图片保存由 App.tsx 统一处理（检查 filePath 是否存在）
-// 但如果你的 Adapter 需要在解析器中保存，参考视频解析器的实现
-
 export const parseImageResponse = (responseData: any): ImageResult => {
   // 单图
   if (responseData.image_url) {
@@ -335,30 +323,112 @@ export const parseImageResponse = (responseData: any): ImageResult => {
 }
 ```
 
-**`parsers/audioParser.ts`**:
+---
+
+## 6. 添加参数 Schema 和 OptionsBuilder 配置
+
+### 6.1 定义参数 Schema
+
+**位置**: `src/models/your-provider-model-1.ts`
+
 ```typescript
-import { AudioResult } from '@/adapters/base/BaseAdapter'
+import { ParamDef } from '../types/schema'
 
-// ⚠️ 注意：音频解析器只返回 URL
-// 实际保存由 Adapter 的 generateAudio 方法处理
-
-export const parseAudioResponse = (responseData: any): AudioResult => {
-  if (responseData.audio_url) {
-    return { url: responseData.audio_url }
+export const yourProviderModel1Params: ParamDef[] = [
+  // ⚠️ 参数 ID 必须使用供应商前缀
+  {
+    id: 'yourProviderModel1VideoDuration',  // 使用前缀！
+    type: 'dropdown',
+    label: '时长',
+    defaultValue: 5,
+    options: [
+      { value: 5, label: '5s' },
+      { value: 10, label: '10s' }
+    ]
+  },
+  {
+    id: 'yourProviderModel1AspectRatio',  // 使用前缀！
+    type: 'dropdown',
+    defaultValue: '16:9',
+    resolutionConfig: {
+      type: 'aspect_ratio',
+      smartMatch: true,
+      visualize: true,
+      extractRatio: (value) => {
+        if (value === 'smart') return null
+        const [w, h] = value.split(':').map(Number)
+        return w / h
+      }
+    },
+    options: [
+      { value: '16:9', label: '16:9' },
+      { value: '9:16', label: '9:16' },
+      { value: '1:1', label: '1:1' }
+    ]
   }
+]
+```
 
-  throw new Error('No audio returned from API')
+### 6.2 添加 OptionsBuilder 配置
+
+**位置**: `src/components/MediaGenerator/builders/configs/your-provider-models.ts`
+
+```typescript
+import { ModelConfig } from '../core/types'
+
+export const yourProviderModel1Config: ModelConfig = {
+  id: 'your-provider-model-1',
+  type: 'video',
+  provider: 'custom',  // 或创建新的 provider 类型
+
+  // 参数映射（API 参数名 → UI 状态参数名）
+  paramMapping: {
+    duration: {
+      source: ['yourProviderModel1VideoDuration', 'videoDuration'],
+      defaultValue: 5
+    },
+    aspect_ratio: {
+      source: 'yourProviderModel1AspectRatio',
+      defaultValue: '16:9'
+    }
+  },
+
+  // 特性配置
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'aspect_ratio',
+      defaultRatio: '16:9'
+    },
+    imageUpload: {
+      enabled: true,
+      maxImages: 1,
+      mode: 'single',
+      paramKey: 'image_url',
+      convertToBlob: false  // 根据实际需求设置
+    }
+  }
 }
 ```
 
-**`parsers/index.ts`**:
+**注册配置**: 在 `src/components/MediaGenerator/builders/configs/index.ts` 中：
+
 ```typescript
-export { parseImageResponse } from './imageParser'
-export { parseVideoResponse } from './videoParser'
-export { parseAudioResponse } from './audioParser'
+import { yourProviderModel1Config } from './your-provider-models'
+
+export function registerAllConfigs() {
+  // ... 现有注册
+  optionsBuilder.registerConfig(yourProviderModel1Config)
+}
 ```
 
-## 6. 注册适配器到工厂
+### 6.3 添加状态管理和参数映射
+
+参考 [ai-guide-new-model.md](./ai-guide-new-model.md) 的步骤 2-4，使用供应商前缀的参数名。
+
+---
+
+## 7. 注册适配器到工厂
 
 **`src/adapters/index.ts`**:
 ```typescript
@@ -382,7 +452,9 @@ export class AdapterFactory {
 }
 ```
 
-## 7. 配置 providers.json
+---
+
+## 8. 配置 providers.json
 
 **`src/config/providers.json`**:
 ```json
@@ -394,7 +466,7 @@ export class AdapterFactory {
       "type": "multi",
       "models": [
         {
-          "id": "model-1",
+          "id": "your-provider-model-1",
           "name": "Model 1",
           "type": "video",
           "description": "模型描述",
@@ -410,56 +482,9 @@ export class AdapterFactory {
 }
 ```
 
-**关键字段**:
-- `type`: `image` | `video` | `audio`
-- `functions`: 功能标签数组
-  - 图片: `图片生成`, `图片编辑`
-  - 视频: `文生视频`, `图生视频`, `首尾帧`, `参考生视频`
-  - 音频: `语音合成`
+---
 
-### 进度条配置 (progressConfig)
-
-根据模型特性选择合适的进度类型：
-
-**异步轮询模型** (API 返回 taskId，需要轮询查询结果):
-```json
-"progressConfig": {
-  "type": "polling",
-  "expectedPolls": 40
-}
-```
-
-预期轮询次数参考值：
-- 超快（30秒内）: 10-15
-- 快速（1分钟）: 20-25
-- 中速（2-3分钟）: 35-50
-- 慢速（5分钟+）: 60-80
-
-计算公式: `expectedPolls ≈ 平均完成时间(秒) / 轮询间隔(3秒) × 80%`
-
-**同步时间模型** (API 同步返回，但耗时较长 >5秒):
-```json
-"progressConfig": {
-  "type": "time",
-  "expectedDuration": 20000
-}
-```
-
-预期耗时参考值（毫秒）：
-- 快速模型: 5000-10000
-- 中速模型: 15000-25000
-- 慢速模型: 30000+
-
-**无进度反馈** (API 返回极快 <2秒):
-```json
-"progressConfig": {
-  "type": "none"
-}
-```
-
-或直接省略 `progressConfig` 字段。
-
-## 8. 添加 API Key 输入
+## 9. 添加 API Key 输入
 
 **`src/components/SettingsModal.tsx`**:
 
@@ -482,7 +507,37 @@ export class AdapterFactory {
 localStorage.setItem('your-provider_api_key', yourProviderApiKey)
 ```
 
-## 9. Tauri 权限配置（桌面应用）
+---
+
+## 10. 配置价格
+
+**位置**: `src/config/pricing.ts`
+
+```typescript
+{
+  providerId: 'your-provider',
+  modelId: 'your-provider-model-1',
+  currency: '¥',
+  type: 'calculated',
+  calculator: (params) => {
+    // ⚠️ 使用供应商前缀的参数名，并提供回退
+    const duration = params.yourProviderModel1VideoDuration
+                  || params.videoDuration
+                  || 5
+    const hasImage = params.uploadedImages?.length > 0
+
+    if (hasImage) {
+      return duration === 10 ? 5 : 2.5
+    } else {
+      return duration === 10 ? 4 : 2
+    }
+  }
+}
+```
+
+---
+
+## 11. Tauri 权限配置（桌面应用）
 
 **`src-tauri/capabilities/default.json`**:
 
@@ -498,24 +553,185 @@ localStorage.setItem('your-provider_api_key', yourProviderApiKey)
 
 **重要**: 必须重启应用才能生效。
 
-## 关键注意事项
-
-1. **参数过滤**: API 文档可能有误，实际测试时过滤不支持的参数值
-2. **智能路由**: 在模型路由中根据 `params.images` 判断文生/图生
-3. **本地保存**: 所有媒体必须调用 `saveMediaLocally` 保存到本地
-4. **进度回调**: 异步任务支持 `onProgress` 回调，在 Adapter 内部轮询
-5. **错误处理**: 使用 `this.handleError(error)` 统一处理错误
-6. **日志记录**: 使用 `this.log()` 记录关键信息
+---
 
 ## 检查清单
 
+### 核心步骤（必须完成）
 - [ ] 创建适配器目录和所有必要文件
 - [ ] 实现主适配器类（继承 BaseAdapter）
 - [ ] 实现至少一个模型路由
 - [ ] 实现响应解析器（image/video/audio）
+- [ ] 定义参数 Schema（使用供应商前缀）
+- [ ] 添加 OptionsBuilder 配置
+- [ ] 在 `configs/index.ts` 注册配置
+- [ ] 添加状态管理和参数映射（使用供应商前缀）
 - [ ] 在 `adapters/index.ts` 注册适配器
 - [ ] 在 `providers.json` 添加供应商和模型配置
 - [ ] 在 `SettingsModal.tsx` 添加 API Key 输入
+- [ ] 在 `pricing.ts` 添加价格配置（使用供应商前缀参数）
 - [ ] 在 Tauri 配置中添加 CDN 域名
+
+### 测试步骤
 - [ ] 测试文生/图生功能
+- [ ] 测试参数修改和预设保存/加载
+- [ ] 测试价格估算
 - [ ] 测试错误处理（无效 API Key）
+- [ ] 测试历史记录重新编辑
+
+---
+
+## 关键注意事项
+
+### 1. 参数命名规范
+
+**所有参数必须使用供应商前缀**，避免与其他供应商冲突：
+
+```typescript
+// ❌ 错误：使用通用参数名
+{
+  id: 'videoDuration',  // 会与其他供应商冲突
+  type: 'dropdown',
+  // ...
+}
+
+// ✅ 正确：使用供应商前缀
+{
+  id: 'yourProviderModel1VideoDuration',
+  type: 'dropdown',
+  // ...
+}
+```
+
+### 2. OptionsBuilder 配置
+
+使用配置驱动架构，优先使用模型特定参数，提供回退：
+
+```typescript
+paramMapping: {
+  duration: {
+    source: ['yourProviderModel1VideoDuration', 'videoDuration'],
+    defaultValue: 5
+  }
+}
+```
+
+### 3. 本地保存
+
+所有媒体必须调用 `saveMediaLocally` 保存到本地，并设置 `filePath`：
+
+```typescript
+const savedResult = await adapter['saveMediaLocally'](videoUrl, 'video')
+return {
+  url: savedResult.url,
+  filePath: savedResult.filePath,  // ⚠️ 必须设置
+  status: 'COMPLETED'
+}
+```
+
+### 4. 智能路由
+
+在模型路由中根据 `params.images` 判断文生/图生：
+
+```typescript
+if (images.length > 0) {
+  // 图生视频
+  return {
+    endpoint: '/v1/image-to-video',
+    requestData: { image: images[0], prompt, duration }
+  }
+} else {
+  // 文生视频
+  return {
+    endpoint: '/v1/text-to-video',
+    requestData: { prompt, duration, aspect_ratio: params.aspectRatio }
+  }
+}
+```
+
+### 5. 进度回调
+
+异步任务支持 `onProgress` 回调，在 Adapter 内部轮询：
+
+```typescript
+if (params.onProgress) {
+  return await this.pollTaskStatus(taskId, params.model, params.onProgress)
+}
+```
+
+### 6. 错误处理
+
+使用 `this.handleError(error)` 统一处理错误：
+
+```typescript
+try {
+  // ...
+} catch (error) {
+  throw this.handleError(error)
+}
+```
+
+---
+
+## 常见错误
+
+### ⚠️ 参数命名冲突
+
+```typescript
+// ❌ 错误：不同供应商使用相同参数名
+// Provider A
+{ id: 'videoDuration', ... }
+
+// Provider B
+{ id: 'videoDuration', ... }  // 冲突！
+
+// ✅ 正确：使用供应商前缀
+// Provider A
+{ id: 'providerAModel1VideoDuration', ... }
+
+// Provider B
+{ id: 'providerBModel1VideoDuration', ... }
+```
+
+### ⚠️ 忘记设置 filePath
+
+```typescript
+// ❌ 错误：没有 filePath，历史记录无法恢复
+return {
+  url: videoUrl,
+  status: 'COMPLETED'
+}
+
+// ✅ 正确：设置 filePath
+const savedResult = await adapter['saveMediaLocally'](videoUrl, 'video')
+return {
+  url: savedResult.url,
+  filePath: savedResult.filePath,
+  status: 'COMPLETED'
+}
+```
+
+### ⚠️ OptionsBuilder 配置缺失
+
+```typescript
+// ❌ 错误：没有注册配置
+// 导致 buildGenerateOptions 报错找不到配置
+
+// ✅ 正确：在 configs/index.ts 中注册
+export function registerAllConfigs() {
+  optionsBuilder.registerConfig(yourProviderModel1Config)
+}
+```
+
+---
+
+## 核心要点总结
+
+1. **参数命名**: 所有参数使用供应商前缀，避免冲突
+2. **OptionsBuilder**: 使用配置驱动架构，优先使用模型特定参数
+3. **本地保存**: 所有媒体必须调用 `saveMediaLocally` 并设置 `filePath`
+4. **智能路由**: 在模型路由中根据输入类型选择端点
+5. **进度回调**: 异步任务支持 `onProgress` 回调
+6. **错误处理**: 使用 `this.handleError(error)` 统一处理
+7. **类型安全**: 完整的 TypeScript 类型定义
+8. **向后兼容**: 参数映射提供回退机制

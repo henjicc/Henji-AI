@@ -1419,6 +1419,7 @@ const App: React.FC = () => {
       model,  // 保存模型信息
       provider: providerId, // 保存供应商信息
       images: options?.images,
+      videos: options?.uploadedVideos,  // 保存视频缩略图（用于显示和重新编辑时的回退）
       // 不设置 size 字段，等生成完成后从实际文件中提取真实尺寸
       // size: options?.size,
       uploadedFilePaths: options?.uploadedFilePaths,
@@ -1751,6 +1752,8 @@ const App: React.FC = () => {
           delete sanitizedOptions.uploadedImages
           // 删除 videos 字段（包含 base64 视频数据）
           delete sanitizedOptions.videos
+          // 删除 uploadedVideos 字段（包含视频缩略图的 base64 数据）
+          delete sanitizedOptions.uploadedVideos
         }
 
         return {
@@ -1901,6 +1904,22 @@ const App: React.FC = () => {
         }
         videos = arr
       } catch { }
+    } else if (task.videos && task.videos.length) {
+      // 回退到 task.videos（视频缩略图）
+      if (task.videos.some(vid => typeof vid === 'string' && !vid.startsWith('data:')) && task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length) {
+        try {
+          const arr: string[] = []
+          for (const p of task.uploadedVideoFilePaths) {
+            const data = await fileToDataUrl(p)
+            arr.push(data)
+          }
+          videos = arr
+        } catch {
+          videos = task.videos
+        }
+      } else {
+        videos = task.videos
+      }
     }
 
     window.dispatchEvent(new CustomEvent('reedit-content', {
