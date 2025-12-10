@@ -1828,10 +1828,14 @@ const App: React.FC = () => {
         if (sanitizedOptions) {
           // 删除 images 字段（包含 base64 图片数据）
           delete sanitizedOptions.images
+          // 删除 image_url 字段（单图模式的 base64 数据，如 Hailuo 2.3）
+          delete sanitizedOptions.image_url
           // 删除 uploadedImages 字段（某些模型如 bytedance-seedream-v4/v4.5 使用此字段）
           delete sanitizedOptions.uploadedImages
           // 删除 videos 字段（包含 base64 视频数据）
           delete sanitizedOptions.videos
+          // 删除 video_url 字段（单视频模式的 base64 数据）
+          delete sanitizedOptions.video_url
           // 删除 uploadedVideos 字段（包含视频缩略图的 base64 数据）
           delete sanitizedOptions.uploadedVideos
 
