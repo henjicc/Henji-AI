@@ -808,6 +808,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       modelscopeGuidance: state.setModelscopeGuidance,
       modelscopeNegativePrompt: state.setModelscopeNegativePrompt,
       modelscopeCustomModel: state.setModelscopeCustomModel,
+      // KIE Nano Banana Pro
+      kieNanoBananaAspectRatio: state.setKieNanoBananaAspectRatio,
+      kieNanoBananaResolution: state.setKieNanoBananaResolution,
+      kieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,

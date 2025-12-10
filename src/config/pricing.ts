@@ -29,6 +29,13 @@ const PRICES = {
     NANO_BANANA_PRO: 0.15, // USD
     KLING_IMAGE_O1: 0.028, // USD
 
+    // KIE 模型价格（美元）
+    KIE_NANO_BANANA_PRO: {
+        '1K': 0.09,  // USD
+        '2K': 0.09,  // USD
+        '4K': 0.12   // USD
+    },
+
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
         IMAGE_VIDEO: 0.112,  // image-to-video & reference-to-video
@@ -374,6 +381,29 @@ export const pricingConfigs: PricingConfig[] = [
             // 4K 分辨率时价格为 2 倍
             const multiplier = params.resolution === '4K' ? 2 : 1
             return formatPrice(basePrice * multiplier)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-nano-banana-pro',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 使用 kie 前缀的参数名，并提供回退
+            const resolution = params.kieNanoBananaResolution || params.resolution || '1K'
+
+            // 根据分辨率获取基础价格（美元）
+            let basePriceUSD = PRICES.KIE_NANO_BANANA_PRO['1K']
+            if (resolution === '2K') {
+                basePriceUSD = PRICES.KIE_NANO_BANANA_PRO['2K']
+            } else if (resolution === '4K') {
+                basePriceUSD = PRICES.KIE_NANO_BANANA_PRO['4K']
+            }
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
         }
     },
     {

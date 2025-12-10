@@ -182,6 +182,10 @@ export const useMediaGeneratorState = () => {
   const [modelscopeNegativePrompt, setModelscopeNegativePrompt] = useState('')
   const [modelscopeCustomModel, setModelscopeCustomModel] = useState('')
 
+  // 模型特定参数 - KIE Nano Banana Pro
+  const [kieNanoBananaAspectRatio, setKieNanoBananaAspectRatio] = useState('1:1')
+  const [kieNanoBananaResolution, setKieNanoBananaResolution] = useState('2K')
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -383,6 +387,10 @@ export const useMediaGeneratorState = () => {
     modelscopeGuidance, setModelscopeGuidance,
     modelscopeNegativePrompt, setModelscopeNegativePrompt,
     modelscopeCustomModel, setModelscopeCustomModel,
+
+    // KIE Nano Banana Pro
+    kieNanoBananaAspectRatio, setKieNanoBananaAspectRatio,
+    kieNanoBananaResolution, setKieNanoBananaResolution,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

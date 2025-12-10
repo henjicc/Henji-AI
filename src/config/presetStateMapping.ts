@@ -192,6 +192,11 @@ export interface PresetSetters {
     setPpioPixverse45VideoResolution: (v: string) => void
     setPpioSeedanceV1VideoDuration: (v: number) => void
     setPpioWan25VideoDuration: (v: number) => void
+
+    // KIE Nano Banana Pro
+    setKieNanoBananaAspectRatio: (v: string) => void
+    setKieNanoBananaResolution: (v: string) => void
+    setKieNanoBananaOutputFormat: (v: string) => void
 }
 
 /**
@@ -393,5 +398,9 @@ export function createPresetSetterMap(
         ppioPixverse45VideoResolution: setters.setPpioPixverse45VideoResolution,
         ppioSeedanceV1VideoDuration: setters.setPpioSeedanceV1VideoDuration,
         ppioWan25VideoDuration: setters.setPpioWan25VideoDuration,
+
+        // KIE Nano Banana Pro
+        kieNanoBananaAspectRatio: setters.setKieNanoBananaAspectRatio,
+        kieNanoBananaResolution: setters.setKieNanoBananaResolution,
     }
 }

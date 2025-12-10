@@ -47,6 +47,12 @@ import {
   minimaxSpeech26Config
 } from './modelscope-models'
 
+// KIE 模型
+import {
+  kieNanoBananaProConfig,
+  kieNanoBananaProAliasConfig
+} from './kie-models'
+
 /**
  * 注册所有模型配置
  */
@@ -90,6 +96,10 @@ export function registerAllConfigs() {
 
   // 音频模型
   optionsBuilder.registerConfig(minimaxSpeech26Config)
+
+  // KIE 图片模型
+  optionsBuilder.registerConfig(kieNanoBananaProConfig)
+  optionsBuilder.registerConfig(kieNanoBananaProAliasConfig)
 
   // 为支持多个 ID 的模型注册别名
   registerAliases()

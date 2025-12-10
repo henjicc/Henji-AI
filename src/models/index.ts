@@ -39,6 +39,9 @@ export { falAiMinimaxHailuo02Params } from './fal-ai-minimax-hailuo-02'
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 export { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
+// KIE 模型
+export { kieNanoBananaProParams } from './kie-nano-banana-pro'
+
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
 export { klingTurbo25Params as klingParams } from './kling-2.5-turbo'
@@ -80,6 +83,7 @@ import { falAiMinimaxHailuo23Params } from './fal-ai-minimax-hailuo-2.3'
 import { falAiMinimaxHailuo02Params } from './fal-ai-minimax-hailuo-02'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
+import { kieNanoBananaProParams } from './kie-nano-banana-pro'
 
 /**
  * 模型 ID 到 Schema 的映射表
@@ -138,7 +142,10 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'MusePublic/14_ckpt_SD_XL': modelscopeCommonParams,
   'MusePublic/majicMIX_realistic': modelscopeCommonParams,
   // 自定义模型使用特殊参数（包含模型选择）
-  'modelscope-custom': modelscopeCustomParams
+  'modelscope-custom': modelscopeCustomParams,
+  // KIE 模型
+  'kie-nano-banana-pro': kieNanoBananaProParams,
+  'nano-banana-pro-kie': kieNanoBananaProParams
 }
 
 /**

@@ -1205,7 +1205,7 @@ const App: React.FC = () => {
       // 动态初始化适配器
       const providerObj = providers.find(p => p.models.some(m => m.id === model))
       if (providerObj) {
-        const providerType = providerObj.id as 'piaoyun' | 'fal' | 'modelscope'
+        const providerType = providerObj.id as 'piaoyun' | 'fal' | 'modelscope' | 'kie'
 
         // 获取对应的 API Key
         let apiKey = ''
@@ -1213,6 +1213,8 @@ const App: React.FC = () => {
           apiKey = localStorage.getItem('fal_api_key') || ''
         } else if (providerType === 'modelscope') {
           apiKey = localStorage.getItem('modelscope_api_key') || ''
+        } else if (providerType === 'kie') {
+          apiKey = localStorage.getItem('kie_api_key') || ''
         } else {
           apiKey = localStorage.getItem('piaoyun_api_key') || ''
         }
@@ -1826,18 +1828,70 @@ const App: React.FC = () => {
         // 清理 options 中的 base64 数据，防止 history.json 膨胀
         const sanitizedOptions = t.options ? { ...t.options } : undefined
         if (sanitizedOptions) {
-          // 删除 images 字段（包含 base64 图片数据）
+          // 1. 删除已知的包含 base64 数据的字段（黑名单，性能优化）
           delete sanitizedOptions.images
-          // 删除 image_url 字段（单图模式的 base64 数据，如 Hailuo 2.3）
           delete sanitizedOptions.image_url
-          // 删除 uploadedImages 字段（某些模型如 bytedance-seedream-v4/v4.5 使用此字段）
           delete sanitizedOptions.uploadedImages
-          // 删除 videos 字段（包含 base64 视频数据）
           delete sanitizedOptions.videos
-          // 删除 video_url 字段（单视频模式的 base64 数据）
           delete sanitizedOptions.video_url
-          // 删除 uploadedVideos 字段（包含视频缩略图的 base64 数据）
           delete sanitizedOptions.uploadedVideos
+          delete sanitizedOptions.image_input  // KIE 模型的图片 URL 数组
+
+          // 2. 自动检测并删除其他可能包含 base64 数据的字段（兜底保护）
+          // 这样添加新模型时不需要手动更新清理代码
+          const safeFields = new Set([
+            'uploadedFilePaths', 'uploadedVideoFilePaths', // 文件路径字段（需要保留）
+            'prompt', 'model', 'size', 'duration', 'aspectRatio', 'resolution', // 基础参数
+            'seed', 'guidanceScale', 'numInferenceSteps', 'negativePrompt', // 生成参数
+            'hailuoVersion', 'hailuoFastMode', 'hailuoResolution', 'hailuo02Version', 'hailuo02FastMode', 'hailuo02Resolution', // Hailuo 参数
+            'prompt_optimizer', 'falNanoBananaNumImages', 'falNanoBananaAspectRatio', // 其他模型参数
+            'mode', 'veoAspectRatio', 'veoResolution', 'veoEnhancePrompt', 'veoGenerateAudio', 'veoAutoFix', 'fastMode', // Veo 参数
+            'seedanceMode', 'seedanceVersion', 'seedanceAspectRatio', 'videoDuration', 'seedanceResolution', 'seedanceCameraFixed', 'seedanceFastMode', // Seedance 参数
+            'soraMode', 'soraAspectRatio', 'soraResolution', // Sora 参数
+            'ltxResolution', 'ltxFps', 'ltxGenerateAudio', 'ltxFastMode', 'ltxRetakeStartTime', 'ltxRetakeMode', // LTX 参数
+            'viduQ2Mode', 'falViduQ2VideoDuration', 'viduQ2AspectRatio', 'viduQ2Resolution', 'viduQ2MovementAmplitude', 'viduQ2Bgm', 'viduQ2FastMode', // Vidu 参数
+            'falPixverse55VideoDuration', 'pixverseAspectRatio', 'pixverseResolution', 'pixverseStyle', 'pixverseThinkingType', 'pixverseGenerateAudio', 'pixverseMultiClip', // Pixverse 参数
+            'wanAspectRatio', 'wanResolution', 'wanPromptExpansion', // Wan 参数
+            'klingV26CfgScale', 'klingV26GenerateAudio', 'aspectRatio', 'keepAudio', 'elements', // Kling 参数
+            'customWidth', 'customHeight', 'selectedResolution', 'resolutionQuality', 'imageSize', // 分辨率参数
+            'falZImageTurboNumInferenceSteps', 'falZImageTurboEnablePromptExpansion', 'falZImageTurboAcceleration', 'falZImageTurboImageSize', // Z-Image 参数
+            'num_images', 'aspect_ratio', 'enable_safety_checker', 'negative_prompt', 'video_negative_prompt', 'videoNegativePrompt', // 通用参数
+            'falSeedream40NumImages', 'falKlingImageO1NumImages', 'falKlingImageO1AspectRatio', // 其他图片模型参数
+            'falKlingVideoO1Mode', 'falKlingVideoO1VideoDuration', 'falKlingVideoO1AspectRatio', 'falKlingVideoO1KeepAudio', 'falKlingVideoO1Elements', // Kling Video O1 参数
+            'falKlingV26ProVideoDuration', 'falKlingV26ProAspectRatio', 'falKlingV26ProCfgScale', 'falKlingV26ProGenerateAudio', // Kling V2.6 Pro 参数
+            'falSora2Mode', 'falSora2VideoDuration', 'falSora2AspectRatio', 'falSora2Resolution', // Sora 2 参数
+            'falLtx2Mode', 'falLtx2RetakeDuration', 'falLtx2VideoDuration', 'falLtx2Resolution', 'falLtx2Fps', 'falLtx2GenerateAudio', 'falLtx2FastMode', 'falLtx2RetakeStartTime', 'falLtx2RetakeMode', // LTX 2 参数
+            'falViduQ2Mode', 'falViduQ2VideoDuration', 'falViduQ2AspectRatio', 'falViduQ2Resolution', 'falViduQ2MovementAmplitude', 'falViduQ2Bgm', 'falViduQ2FastMode', // Vidu Q2 参数
+            'falPixverse55VideoDuration', 'falPixverse55AspectRatio', 'falPixverse55Resolution', 'falPixverse55Style', 'falPixverse55ThinkingType', 'falPixverse55GenerateAudio', 'falPixverse55MultiClip', // Pixverse V5.5 参数
+            'falWan25VideoDuration', 'falWan25AspectRatio', 'falWan25Resolution', 'falWan25PromptExpansion', // Wan 2.5 参数
+            'falHailuo23Duration', 'falHailuo23PromptOptimizer', 'falHailuo23Resolution', 'falHailuo23FastMode', // Hailuo 2.3 参数
+            'falHailuo02Duration', 'falHailuo02PromptOptimizer', 'falHailuo02Resolution', 'falHailuo02FastMode', // Hailuo 02 参数
+            'falSeedanceV1Mode', 'falSeedanceV1Version', 'ppioSeedanceV1AspectRatio', 'falSeedanceV1VideoDuration', 'ppioSeedanceV1Resolution', 'ppioSeedanceV1CameraFixed', 'falSeedanceV1FastMode', // Seedance V1 参数
+            'falVeo31Mode', 'falVeo31VideoDuration', 'falVeo31AspectRatio', 'falVeo31Resolution', 'falVeo31EnhancePrompt', 'falVeo31GenerateAudio', 'falVeo31AutoFix', 'falVeo31FastMode', // Veo 3.1 参数
+            'numImages', 'num_inference_steps', 'guidance_scale' // 其他通用参数
+          ])
+
+          for (const key in sanitizedOptions) {
+            if (safeFields.has(key)) continue // 跳过安全字段
+
+            const value = sanitizedOptions[key]
+            // 检测是否为 base64 数据：
+            // 1. 字符串类型
+            // 2. 以 data: 开头（data URI）
+            // 3. 或者长度超过 1000 字符（可能是 base64 字符串）
+            if (typeof value === 'string' && (value.startsWith('data:') || value.length > 1000)) {
+              console.warn(`[History] 自动删除疑似 base64 数据字段: ${key} (长度: ${value.length})`)
+              delete sanitizedOptions[key]
+            }
+            // 检测数组中是否包含 base64 数据
+            else if (Array.isArray(value) && value.length > 0) {
+              const firstItem = value[0]
+              if (typeof firstItem === 'string' && (firstItem.startsWith('data:') || firstItem.length > 1000)) {
+                console.warn(`[History] 自动删除疑似 base64 数据数组字段: ${key} (数组长度: ${value.length})`)
+                delete sanitizedOptions[key]
+              }
+            }
+          }
 
           // 转换 options 中的路径为相对路径
           if (sanitizedOptions.uploadedFilePaths) {
@@ -2045,7 +2099,14 @@ const App: React.FC = () => {
       return
     }
 
-    console.log('[App] 继续查询 fal 队列:', { requestId: task.requestId, modelId: task.modelId })
+    // 根据任务模型确定供应商类型
+    const providerObj = providers.find(p => p.models.some(m => m.id === task.model))
+    if (!providerObj) {
+      throw new Error(`未找到模型 ${task.model} 对应的供应商`)
+    }
+    const providerType = providerObj.id as 'piaoyun' | 'fal' | 'modelscope' | 'kie'
+
+    console.log(`[App] 继续查询 ${providerType} 队列:`, { requestId: task.requestId, modelId: task.modelId })
 
     try {
       // 更新任务状态为生成中
@@ -2054,15 +2115,25 @@ const App: React.FC = () => {
       ))
       setIsLoading(true)
 
-      // 初始化 fal 适配器
-      const apiKey = localStorage.getItem('fal_api_key') || ''
+      // 获取对应的 API Key
+      let apiKey = ''
+      if (providerType === 'fal') {
+        apiKey = localStorage.getItem('fal_api_key') || ''
+      } else if (providerType === 'modelscope') {
+        apiKey = localStorage.getItem('modelscope_api_key') || ''
+      } else if (providerType === 'kie') {
+        apiKey = localStorage.getItem('kie_api_key') || ''
+      } else {
+        apiKey = localStorage.getItem('piaoyun_api_key') || ''
+      }
+
       if (!apiKey) {
-        throw new Error('请先在设置中配置 fal 的 API Key')
+        throw new Error(`请先在设置中配置 ${providerObj.name} 的 API Key`)
       }
 
       apiService.setApiKey(apiKey)
       apiService.initializeAdapter({
-        type: 'fal',
+        type: providerType,
         modelName: task.model
       })
 
@@ -2689,10 +2760,11 @@ const App: React.FC = () => {
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-zinc-400 mb-3">生成中...</p>
-                              {/* 进度条：视频任务、Fal图片任务、魔搭图片任务、有进度的派欧云图片任务 */}
+                              {/* 进度条：视频任务、Fal图片任务、魔搭图片任务、KIE图片任务、有进度的派欧云图片任务 */}
                               {(task.type === 'video' ||
                                 (task.type === 'image' && task.provider === 'fal') ||
                                 (task.type === 'image' && task.provider === 'modelscope') ||
+                                (task.type === 'image' && task.provider === 'kie') ||
                                 (task.type === 'image' && task.provider === 'piaoyun' && (task.model === 'seedream-4.0' || (taskProgress[task.id] || 0) > 0))
                               ) && (
                                   <ProgressBar

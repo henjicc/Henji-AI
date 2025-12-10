@@ -2,8 +2,9 @@ import { MediaGeneratorAdapter } from './base/BaseAdapter'
 import { PPIOAdapter } from './ppio/PPIOAdapter'
 import { FalAdapter } from './fal/FalAdapter'
 import { ModelscopeAdapter } from './modelscope/ModelscopeAdapter'
+import { KIEAdapter } from './kie/KIEAdapter'
 
-export type AdapterType = 'piaoyun' | 'fal' | 'modelscope' | 'openai' | 'stability' | 'midjourney'
+export type AdapterType = 'piaoyun' | 'fal' | 'modelscope' | 'kie' | 'openai' | 'stability' | 'midjourney'
 
 export interface AdapterConfig {
   type: AdapterType
@@ -21,6 +22,8 @@ export class AdapterFactory {
         return new FalAdapter(config.apiKey)
       case 'modelscope':
         return new ModelscopeAdapter(config.apiKey, config.falApiKey)
+      case 'kie':
+        return new KIEAdapter(config.apiKey)
       default:
         throw new Error(`Unsupported adapter type: ${config.type}`)
     }

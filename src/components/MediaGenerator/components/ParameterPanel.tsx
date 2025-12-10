@@ -34,7 +34,8 @@ import {
   falAiPixverseV55Params,
   falAiWan25PreviewParams,
   falAiMinimaxHailuo23Params,
-  falAiMinimaxHailuo02Params
+  falAiMinimaxHailuo02Params,
+  kieNanoBananaProParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -488,6 +489,24 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           falNanoBananaProNumImages: values.falNanoBananaProNumImages,
           falNanoBananaProAspectRatio: values.falNanoBananaProAspectRatio,
           resolution: values.resolution,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Nano Banana Pro 参数
+  if (selectedModel === 'kie-nano-banana-pro' || selectedModel === 'nano-banana-pro-kie') {
+    return (
+      <SchemaForm
+        schema={kieNanoBananaProParams}
+        values={{
+          kieNanoBananaAspectRatio: values.kieNanoBananaAspectRatio,
+          kieNanoBananaResolution: values.kieNanoBananaResolution,
+          kieNanoBananaOutputFormat: values.kieNanoBananaOutputFormat,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
           uploadedImages
         }}
         onChange={onChange}

@@ -450,6 +450,27 @@
           }
         }
       ]
+    },
+    {
+      "id": "kie",
+      "name": "KIE",
+      "type": "multi",
+      "models": [
+        {
+          "id": "kie-nano-banana-pro",
+          "name": "Nano Banana Pro",
+          "type": "image",
+          "description": "基于 Nano Banana Pro 模型的图像生成，支持图生图",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
+        }
+      ]
     }
   ]
 }
