@@ -53,6 +53,8 @@ export async function buildGenerateOptions(params: BuildOptionsParams): Promise<
     const options = await optionsBuilder.build(context)
 
     console.log(`[OptionsBuilder] ✓ Successfully built options for ${selectedModel}`)
+    console.log(`[OptionsBuilder] Built options keys:`, Object.keys(options))
+    console.log(`[OptionsBuilder] Built options:`, options)
     return options
 
   } catch (error) {

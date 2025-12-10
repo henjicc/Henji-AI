@@ -90,6 +90,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setFalHailuo23Resolution: state.setFalHailuo23Resolution,
     setFalHailuo23FastMode: state.setFalHailuo23FastMode,
     setFalHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
+    setFalHailuo02Duration: state.setFalHailuo02Duration,
+    setFalHailuo02Resolution: state.setFalHailuo02Resolution,
+    setFalHailuo02FastMode: state.setFalHailuo02FastMode,
+    setFalHailuo02PromptOptimizer: state.setFalHailuo02PromptOptimizer,
     setVideoDuration: state.setVideoDuration,
     setVideoResolution: state.setVideoResolution,
     setVideoAspectRatio: state.setVideoAspectRatio,
@@ -582,7 +586,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uploadedImagesLength: state.uploadedImages.length,
     uploadedVideosLength: state.uploadedVideos.length,
     modelscopeCustomModel: state.modelscopeCustomModel,
-    falSeedanceV1Mode: state.falSeedanceV1Mode
+    falSeedanceV1Mode: state.falSeedanceV1Mode,
+    falHailuo02FastMode: state.falHailuo02FastMode
   })
 
   // 自动应用模型 Schema 中定义的自动切换规则
@@ -595,7 +600,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       prev.uploadedImagesLength !== state.uploadedImages.length ||
       prev.uploadedVideosLength !== state.uploadedVideos.length ||
       prev.modelscopeCustomModel !== state.modelscopeCustomModel ||
-      prev.falSeedanceV1Mode !== state.falSeedanceV1Mode
+      prev.falSeedanceV1Mode !== state.falSeedanceV1Mode ||
+      prev.falHailuo02FastMode !== state.falHailuo02FastMode
 
     // 只有当关键状态真正改变时才执行自动切换
     if (!hasChanged) return
@@ -606,7 +612,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uploadedImagesLength: state.uploadedImages.length,
       uploadedVideosLength: state.uploadedVideos.length,
       modelscopeCustomModel: state.modelscopeCustomModel,
-      falSeedanceV1Mode: state.falSeedanceV1Mode
+      falSeedanceV1Mode: state.falSeedanceV1Mode,
+      falHailuo02FastMode: state.falHailuo02FastMode
     }
 
     const switches = getAutoSwitchValues(state.selectedModel, state)
@@ -619,7 +626,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.falSeedanceV1Mode])
+  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.falSeedanceV1Mode, state.falHailuo02FastMode])
 
   // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
   // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
@@ -638,6 +645,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
       (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
       (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.falViduQ2Mode :
+      (modelId === 'fal-ai-minimax-hailuo-02' || modelId === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
       undefined
     )
     if (state.uploadedImages.length > max) {
@@ -742,6 +750,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       hailuoResolution: state.setFalHailuo23Resolution,  // 别名映射
       falHailuo23FastMode: state.setFalHailuo23FastMode,
       falHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
+      // MiniMax Hailuo 02（Fal）
+      falHailuo02Duration: state.setFalHailuo02Duration,
+      falHailuo02Resolution: state.setFalHailuo02Resolution,
+      hailuo02Resolution: state.setFalHailuo02Resolution,  // 别名映射
+      falHailuo02FastMode: state.setFalHailuo02FastMode,
+      falHailuo02PromptOptimizer: state.setFalHailuo02PromptOptimizer,
       // Sora 2
       falSora2Mode: state.setFalSora2Mode,
       falSora2AspectRatio: state.setFalSora2AspectRatio,
@@ -947,6 +961,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         falHailuo23Resolution: state.falHailuo23Resolution,
         falHailuo23FastMode: state.falHailuo23FastMode,
         falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
+        // MiniMax Hailuo 02（Fal）参数
+        falHailuo02Duration: state.falHailuo02Duration,
+        falHailuo02Resolution: state.falHailuo02Resolution,
+        falHailuo02FastMode: state.falHailuo02FastMode,
+        falHailuo02PromptOptimizer: state.falHailuo02PromptOptimizer,
         falKlingVideoO1Mode: state.falKlingVideoO1Mode,
         falKlingVideoO1AspectRatio: state.falKlingVideoO1AspectRatio,
         falKlingVideoO1KeepAudio: state.falKlingVideoO1KeepAudio,
@@ -1159,6 +1178,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         mode={state.falLtx2Mode}
         seedanceMode={state.falSeedanceV1Mode}
         viduQ2Mode={state.falViduQ2Mode}
+        hailuo02FastMode={state.falHailuo02FastMode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
@@ -1167,6 +1187,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
             (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+            (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
             undefined
           )
           imageUpload.handleImageFileUpload(files, maxCount)
@@ -1182,6 +1203,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
             (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+            (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
             undefined
           )
           imageUpload.handlePaste(e, maxCount)
@@ -1193,6 +1215,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
             (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+            (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
             undefined
           )
           imageUpload.handleImageFileDrop(files, maxCount)
@@ -1328,6 +1351,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               hailuoFastMode: state.falHailuo23FastMode,
               duration: state.falHailuo23Duration,
               images: state.uploadedImages,
+              // MiniMax Hailuo 02（Fal）参数
+              falHailuo02Duration: state.falHailuo02Duration,
+              falHailuo02Resolution: state.falHailuo02Resolution,
+              falHailuo02FastMode: state.falHailuo02FastMode,
+              falHailuo02PromptOptimizer: state.falHailuo02PromptOptimizer,
               falKlingVideoO1Mode: state.falKlingVideoO1Mode,
               falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
               falSora2Mode: state.falSora2Mode,

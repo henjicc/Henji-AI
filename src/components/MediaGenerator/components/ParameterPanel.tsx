@@ -33,7 +33,8 @@ import {
   falAiViduQ2Params,
   falAiPixverseV55Params,
   falAiWan25PreviewParams,
-  falAiMinimaxHailuo23Params
+  falAiMinimaxHailuo23Params,
+  falAiMinimaxHailuo02Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -351,11 +352,28 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* Fal MiniMax Hailuo 02 参数 */}
+        {(selectedModel === 'fal-ai-minimax-hailuo-02' || selectedModel === 'minimax-hailuo-02-fal') && (
+          <SchemaForm
+            schema={falAiMinimaxHailuo02Params}
+            values={{
+              falHailuo02Duration: values.falHailuo02Duration,
+              falHailuo02Resolution: values.falHailuo02Resolution,
+              falHailuo02FastMode: values.falHailuo02FastMode,
+              falHailuo02PromptOptimizer: values.falHailuo02PromptOptimizer,
+              uploadedImages
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-02' &&
          selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
          selectedModel !== 'minimax-hailuo-2.3-fal' &&
+         selectedModel !== 'fal-ai-minimax-hailuo-02' &&
+         selectedModel !== 'minimax-hailuo-02-fal' &&
          selectedModel !== 'wan-2.5-preview' &&
          selectedModel !== 'seedance-v1' &&
          selectedModel !== 'seedance-v1-lite' &&

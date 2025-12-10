@@ -34,7 +34,8 @@ import {
   falViduQ2Config,
   falPixverseV55Config,
   falWan25Config,
-  falHailuo23Config
+  falHailuo23Config,
+  falHailuo02Config
 } from './fal-models'
 
 // 魔搭和音频模型
@@ -115,6 +116,8 @@ function registerAliases() {
   optionsBuilder.registerConfig({ ...falPixverseV55Config, id: 'fal-ai-pixverse-v5.5' })
   optionsBuilder.registerConfig({ ...falWan25Config, id: 'fal-ai-wan-25-preview' })
   optionsBuilder.registerConfig({ ...falHailuo23Config, id: 'fal-ai-minimax-hailuo-2.3' })
+  optionsBuilder.registerConfig(falHailuo02Config)
+  optionsBuilder.registerConfig({ ...falHailuo02Config, id: 'fal-ai-minimax-hailuo-02' })
 
   // 魔搭模型别名 - 为每个具体模型 ID 注册配置
   const modelscopeModels = [

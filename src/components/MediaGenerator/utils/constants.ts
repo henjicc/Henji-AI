@@ -41,7 +41,20 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
     return 1
   }
   if (modelId === 'minimax-hailuo-2.3') return 1
-  if (modelId === 'minimax-hailuo-02') return 2
+  if (modelId === 'minimax-hailuo-02') return 2  // 派欧云 Hailuo 02：最多 2 张图片
+
+  // Fal MiniMax Hailuo 2.3: 最多 1 张图片
+  if (modelId === 'fal-ai-minimax-hailuo-2.3' || modelId === 'minimax-hailuo-2.3-fal') return 1
+
+  // Fal MiniMax Hailuo 02: 根据快速模式动态限制图片数量
+  // - Fast 模式：最多 1 张图片
+  // - Standard/Pro 模式：最多 2 张图片（支持首尾帧）
+  if (modelId === 'fal-ai-minimax-hailuo-02' || modelId === 'minimax-hailuo-02-fal') {
+    // 如果传入了 mode 参数且为 'fast'，则限制为 1 张
+    // 否则允许 2 张（首尾帧模式）
+    return mode === 'fast' ? 1 : 2
+  }
+
   if (modelId === 'pixverse-v4.5') return 1  // 派欧云 PixVerse V4.5：最多 1 张图片
   if (modelId === 'wan-2.5-preview') return 1  // 派欧云 Wan 2.5 Preview
   if (modelId === 'fal-ai-wan-25-preview' || modelId === 'wan-25-preview') return 1  // Fal Wan 2.5 Preview：最多 1 张图片

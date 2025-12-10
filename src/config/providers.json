@@ -360,6 +360,21 @@
             "type": "polling",
             "expectedPolls": 30
           }
+        },
+        {
+          "id": "fal-ai-minimax-hailuo-02",
+          "name": "海螺 Hailuo-02",
+          "type": "video",
+          "description": "MiniMax 海螺 02 视频生成模型，支持 Standard/Pro 版本，文生视频、图生视频和首尾帧模式，支持快速模式",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "首尾帧"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
         }
       ]
     },

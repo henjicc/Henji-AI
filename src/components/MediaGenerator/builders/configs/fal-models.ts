@@ -1045,3 +1045,55 @@ export const falHailuo23Config: ModelConfig = {
 
   customHandlers: commonImageUploadHandler
 }
+
+/**
+ * MiniMax Hailuo 02 配置（Fal）
+ * 支持 5 个端点：Standard/Pro Text-to-Video, Standard/Pro Image-to-Video, Fast Image-to-Video
+ */
+export const falHailuo02Config: ModelConfig = {
+  id: 'minimax-hailuo-02-fal',
+  type: 'video',
+  provider: 'fal',
+
+  paramMapping: {
+    // 时长参数（Standard 支持 6s/10s，Pro 固定 6s）
+    duration: {
+      source: ['falHailuo02Duration', 'videoDuration'],
+      defaultValue: '6'
+    },
+    // 提示词优化参数
+    prompt_optimizer: {
+      source: 'falHailuo02PromptOptimizer',
+      defaultValue: true
+    },
+    // 分辨率参数（UI 显示，用于价格计算）
+    hailuo02Resolution: {
+      source: 'falHailuo02Resolution',
+      defaultValue: '768P'
+    },
+    // 版本参数（从分辨率映射而来，用于路由选择和价格计算）
+    // 512P/768P -> standard, 1080P -> pro
+    hailuo02Version: {
+      source: 'falHailuo02Resolution',
+      defaultValue: 'standard',
+      transform: (value: string) => value === '1080P' ? 'pro' : 'standard'
+    },
+    // 快速模式参数（用于路由选择和价格计算）
+    hailuo02FastMode: {
+      source: 'falHailuo02FastMode',
+      defaultValue: false
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      maxImages: 2,  // 支持最多 2 张图片（首尾帧模式）
+      mode: 'multiple',
+      paramKey: 'image_url',
+      convertToBlob: false
+    }
+  },
+
+  customHandlers: commonImageUploadHandler
+}

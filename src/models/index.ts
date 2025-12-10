@@ -33,6 +33,7 @@ export { falAiViduQ2Params } from './fal-ai-vidu-q2'
 export { falAiPixverseV55Params } from './fal-ai-pixverse-v5.5'
 export { falAiWan25PreviewParams } from './fal-ai-wan-25-preview'
 export { falAiMinimaxHailuo23Params } from './fal-ai-minimax-hailuo-2.3'
+export { falAiMinimaxHailuo02Params } from './fal-ai-minimax-hailuo-02'
 
 // 魔搭模型
 export { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
@@ -76,6 +77,7 @@ import { falAiViduQ2Params } from './fal-ai-vidu-q2'
 import { falAiPixverseV55Params } from './fal-ai-pixverse-v5.5'
 import { falAiWan25PreviewParams } from './fal-ai-wan-25-preview'
 import { falAiMinimaxHailuo23Params } from './fal-ai-minimax-hailuo-2.3'
+import { falAiMinimaxHailuo02Params } from './fal-ai-minimax-hailuo-02'
 import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboParams } from './modelscope-common'
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 
@@ -86,7 +88,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'seedream-4.0': seedream40Params,
   'kling-2.5-turbo': klingTurbo25Params,
   'minimax-hailuo-2.3': minimaxHailuo23Params,
-  'minimax-hailuo-02': minimaxHailuo23Params, // Hailuo 02 使用相同的 Schema
+  'minimax-hailuo-02': falAiMinimaxHailuo02Params, // Hailuo 02 使用独立的 Schema
   'vidu-q1': viduQ1Params,
   'pixverse-v4.5': pixverseV45Params,
   'wan-2.5-preview': wan25PreviewParams,
@@ -126,6 +128,8 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'wan-25-preview': falAiWan25PreviewParams,
   'fal-ai-minimax-hailuo-2.3': falAiMinimaxHailuo23Params,
   'minimax-hailuo-2.3-fal': falAiMinimaxHailuo23Params,
+  'fal-ai-minimax-hailuo-02': falAiMinimaxHailuo02Params,
+  'minimax-hailuo-02-fal': falAiMinimaxHailuo02Params,
   // 魔搭模型
   'Tongyi-MAI/Z-Image-Turbo': modelscopeZImageTurboParams,  // Z-Image-Turbo 使用专用参数（无 guidance）
   'Qwen/Qwen-Image': modelscopeCommonParams,

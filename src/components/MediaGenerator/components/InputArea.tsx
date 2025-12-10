@@ -18,6 +18,7 @@ interface InputAreaProps {
   mode?: string  // LTX-2 模式
   seedanceMode?: string  // Seedance v1 模式
   viduQ2Mode?: string  // Vidu Q2 模式
+  hailuo02FastMode?: boolean  // Hailuo 02 快速模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -61,6 +62,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   mode,
   seedanceMode,
   viduQ2Mode,
+  hailuo02FastMode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -84,6 +86,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     (selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1') ? veoMode :
     (selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1') ? seedanceMode :
     (selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') ? viduQ2Mode :
+    (selectedModel === 'fal-ai-minimax-hailuo-02' || selectedModel === 'minimax-hailuo-02-fal') && hailuo02FastMode ? 'fast' :
     undefined
   )
 

@@ -86,6 +86,12 @@ export interface PresetSetters {
     setFalHailuo23FastMode: (v: boolean) => void
     setFalHailuo23PromptOptimizer: (v: boolean) => void
 
+    // MiniMax Hailuo 02 (Fal)
+    setFalHailuo02Resolution: (v: string) => void
+    setFalHailuo02Duration: (v: string) => void
+    setFalHailuo02FastMode: (v: boolean) => void
+    setFalHailuo02PromptOptimizer: (v: boolean) => void
+
     // Wan25 (派欧云)
     setPpioWan25Size: (v: string) => void
     setPpioWan25PromptExtend: (v: boolean) => void
@@ -279,6 +285,13 @@ export function createPresetSetterMap(
         falHailuo23Duration: setters.setFalHailuo23Duration,
         falHailuo23FastMode: setters.setFalHailuo23FastMode,
         falHailuo23PromptOptimizer: setters.setFalHailuo23PromptOptimizer,
+
+        // MiniMax Hailuo 02 (Fal)
+        falHailuo02Resolution: setters.setFalHailuo02Resolution,
+        hailuo02Resolution: setters.setFalHailuo02Resolution,  // 别名映射
+        falHailuo02Duration: setters.setFalHailuo02Duration,
+        falHailuo02FastMode: setters.setFalHailuo02FastMode,
+        falHailuo02PromptOptimizer: setters.setFalHailuo02PromptOptimizer,
 
         // Wan25 (派欧云)
         ppioWan25Size: setters.setPpioWan25Size,

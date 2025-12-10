@@ -235,6 +235,10 @@ export interface BuildOptionsParams {
   falHailuo23Resolution?: string
   falHailuo23FastMode?: boolean
   falHailuo23PromptOptimizer?: boolean
+  falHailuo02Duration?: string
+  falHailuo02Resolution?: string
+  falHailuo02FastMode?: boolean
+  falHailuo02PromptOptimizer?: boolean
   falKlingVideoO1VideoDuration?: number
   falKlingVideoO1Mode?: string
   falKlingVideoO1AspectRatio?: string
