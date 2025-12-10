@@ -1,9 +1,10 @@
-import { BaseDirectory, writeFile, mkdir, readFile, remove } from '@tauri-apps/plugin-fs'
+import { writeFile, mkdir, readFile, remove } from '@tauri-apps/plugin-fs'
 import Pica from 'pica'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import * as path from '@tauri-apps/api/path'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { getMediaPath, getWaveformsPath, getUploadsPath, getDataRoot } from './dataPath'
 
 export const isDesktop = (): boolean => {
   const w: any = typeof window !== 'undefined' ? window : {}
@@ -23,13 +24,13 @@ export const isDesktopAsync = async (): Promise<boolean> => {
 }
 
 export async function saveBinary(data: Uint8Array, filename: string): Promise<{ fullPath: string; webSrc: string }> {
-  const rel = await path.join('Henji-AI', 'Media', filename)
-  await mkdir('Henji-AI/Media', { baseDir: BaseDirectory.AppLocalData, recursive: true })
-  await writeFile(rel, data, { baseDir: BaseDirectory.AppLocalData })
-  const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Media', filename)
-  const webSrc = convertFileSrc(full)
-  console.log('[save] wrote file', full)
-  return { fullPath: full, webSrc }
+  const mediaPath = await getMediaPath()
+  const fullPath = await path.join(mediaPath, filename)
+  await mkdir(mediaPath, { recursive: true })
+  await writeFile(fullPath, data)
+  const webSrc = convertFileSrc(fullPath)
+  console.log('[save] wrote file', fullPath)
+  return { fullPath, webSrc }
 }
 
 export async function saveImageFromUrl(url: string, filename?: string): Promise<{ fullPath: string; webSrc: string }> {
@@ -222,12 +223,12 @@ async function sha256HexString(input: string): Promise<string> {
   return hashArr.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function waveformCachePaths(audioFullPath: string): Promise<{ rel: string; full: string }> {
+async function waveformCachePaths(audioFullPath: string): Promise<{ full: string }> {
   const hash = await sha256HexString(audioFullPath)
   const name = `${hash}.json`
-  const rel = await path.join('Henji-AI', 'Waveforms', name)
-  const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Waveforms', name)
-  return { rel, full }
+  const waveformsPath = await getWaveformsPath()
+  const full = await path.join(waveformsPath, name)
+  return { full }
 }
 
 export async function readWaveformCacheForAudio(audioFullPath: string): Promise<number[] | null> {
@@ -245,10 +246,11 @@ export async function readWaveformCacheForAudio(audioFullPath: string): Promise<
 }
 
 export async function writeWaveformCacheForAudio(audioFullPath: string, samples: number[]): Promise<string> {
-  const { rel, full } = await waveformCachePaths(audioFullPath)
-  await mkdir('Henji-AI/Waveforms', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+  const { full } = await waveformCachePaths(audioFullPath)
+  const waveformsPath = await getWaveformsPath()
+  await mkdir(waveformsPath, { recursive: true })
   const payload = JSON.stringify(samples)
-  await writeFile(rel, new TextEncoder().encode(payload), { baseDir: BaseDirectory.AppLocalData })
+  await writeFile(full, new TextEncoder().encode(payload))
   return full
 }
 
@@ -324,14 +326,14 @@ export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 
     uploadCache.set(originalHash, cached)
   }
   const name = `upload-${cached.compressedHash}.${ext}`
-  const rel = await path.join('Henji-AI', 'Uploads', name)
-  const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Uploads', name)
+  const uploadsPath = await getUploadsPath()
+  const full = await path.join(uploadsPath, name)
   if (mode === 'persist') {
-    await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+    await mkdir(uploadsPath, { recursive: true })
     let exists = false
     try { await readFile(full); exists = true } catch { }
     if (!exists) {
-      await writeFile(rel, cached.bytes, { baseDir: BaseDirectory.AppLocalData })
+      await writeFile(full, cached.bytes)
     }
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
@@ -358,12 +360,12 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
 
   // 生成文件名和路径
   const name = `upload-video-${hash}.${ext}`
-  const rel = await path.join('Henji-AI', 'Uploads', name)
-  const full = await path.join(await path.appLocalDataDir(), 'Henji-AI', 'Uploads', name)
+  const uploadsPath = await getUploadsPath()
+  const full = await path.join(uploadsPath, name)
 
   if (mode === 'persist') {
     // 确保目录存在
-    await mkdir('Henji-AI/Uploads', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+    await mkdir(uploadsPath, { recursive: true })
 
     // 检查文件是否已存在
     let exists = false
@@ -374,7 +376,7 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
 
     // 如果文件不存在，写入文件
     if (!exists) {
-      await writeFile(rel, bytes, { baseDir: BaseDirectory.AppLocalData })
+      await writeFile(full, bytes)
     }
 
     // 生成显示用的 blob URL 和 data URL
@@ -491,15 +493,20 @@ async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?
 }
 
 export async function writeJsonToAppData(relPath: string, data: any): Promise<void> {
-  await mkdir('Henji-AI', { baseDir: BaseDirectory.AppLocalData, recursive: true })
+  const dataRoot = await getDataRoot()
+  const fullPath = await path.join(dataRoot, relPath.replace(/^Henji-AI[\/\\]?/, ''))
+  const dirPath = await path.dirname(fullPath)
+  await mkdir(dirPath, { recursive: true })
   const json = JSON.stringify(data)
   const bytes = new TextEncoder().encode(json)
-  await writeFile(relPath.startsWith('Henji-AI') ? relPath : `Henji-AI/${relPath}`, bytes, { baseDir: BaseDirectory.AppLocalData })
+  await writeFile(fullPath, bytes)
 }
 
 export async function readJsonFromAppData<T = any>(relPath: string): Promise<T | null> {
   try {
-    const bytes = await readFile(relPath.startsWith('Henji-AI') ? relPath : `Henji-AI/${relPath}`, { baseDir: BaseDirectory.AppLocalData } as any)
+    const dataRoot = await getDataRoot()
+    const fullPath = await path.join(dataRoot, relPath.replace(/^Henji-AI[\/\\]?/, ''))
+    const bytes = await readFile(fullPath)
     const json = new TextDecoder().decode(bytes as any)
     return JSON.parse(json) as T
   } catch {

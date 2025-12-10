@@ -14,7 +14,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPLOCALDATA/**"
+          "**"
         ]
       },
       "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src *; img-src 'self' asset: http://asset.localhost data: blob: *; media-src 'self' asset: http://asset.localhost data: blob: *; worker-src 'self' blob:;"

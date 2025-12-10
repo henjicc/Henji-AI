@@ -1,7 +1,7 @@
 import { Preset, PresetSaveMode } from '../types/preset'
 import { readJsonFromAppData, writeJsonToAppData } from './save'
 
-const PRESETS_FILE = 'Henji-AI/presets.json'
+const PRESETS_FILE = 'presets.json'
 
 // 生成 UUID
 function generateId(): string {

@@ -5,6 +5,7 @@ import SettingsModal from './components/SettingsModal'
 import ContextMenu from './components/ContextMenu'
 import { MediaResult } from './types'
 import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio } from './utils/save'
+import { initializeDataDirectory, getDataRoot, convertPathString, convertPathArray } from './utils/dataPath'
 import { convertBlobToPng } from './utils/imageConversion'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import WindowControls from './components/WindowControls'
@@ -162,6 +163,59 @@ const App: React.FC = () => {
   // 数据迁移 - 在应用启动时执行一次
   useEffect(() => {
     migrateAllData()
+  }, [])
+
+  // 初始化数据目录
+  useEffect(() => {
+    const init = async () => {
+      if (!isDesktop()) return
+      try {
+        const dataRoot = await getDataRoot()
+        await initializeDataDirectory(dataRoot)
+        console.log('[App] 数据目录已初始化:', dataRoot)
+      } catch (error) {
+        console.error('[App] 初始化数据目录失败:', error)
+      }
+    }
+    init()
+  }, [])
+
+  // 监听数据路径变更事件
+  useEffect(() => {
+    const handlePathChange = async () => {
+      if (!isDesktop()) return
+      console.log('[App] 检测到数据路径变更，重新加载历史记录')
+      try {
+        const fileHistory = await readJsonFromAppData<any[]>('history.json')
+        if (fileHistory) {
+          const loaded = fileHistory.map((task: any) => {
+            let result = task.result
+            if (result && result.filePath) {
+              try {
+                if (typeof result.filePath === 'string' && result.filePath.includes('|||')) {
+                  const paths = result.filePath.split('|||')
+                  const display = paths.map((p: string) => convertFileSrc(p)).join('|||')
+                  result = { ...result, url: display }
+                } else {
+                  result = { ...result, url: convertFileSrc(result.filePath) }
+                }
+              } catch { }
+            }
+            return {
+              ...task,
+              result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined
+            }
+          })
+          setTasks(loaded)
+          console.log('[App] 历史记录已重新加载')
+        }
+      } catch (error) {
+        console.error('[App] 重新加载历史记录失败:', error)
+      }
+    }
+
+    window.addEventListener('dataPathChanged', handlePathChange)
+    return () => window.removeEventListener('dataPathChanged', handlePathChange)
   }, [])
 
   useEffect(() => {
@@ -1664,34 +1718,56 @@ const App: React.FC = () => {
   // 加载历史（优先文件，其次本地存储）
   useEffect(() => {
     const load = async () => {
-      const fileHistory = isDesktop() ? await readJsonFromAppData<any[]>('Henji-AI/history.json') : null
+      const fileHistory = isDesktop() ? await readJsonFromAppData<any[]>('history.json') : null
       const store = fileHistory ?? (() => { try { return JSON.parse(localStorage.getItem('generationTasks') || '[]') } catch { return [] } })()
-      const loaded = (store || []).map((task: any) => {
+
+      const dataRoot = isDesktop() ? await getDataRoot() : ''
+
+      const loaded = await Promise.all((store || []).map(async (task: any) => {
         let result = task.result
         if (result && result.filePath && isDesktop()) {
           try {
-            if (typeof result.filePath === 'string' && result.filePath.includes('|||')) {
-              const paths = result.filePath.split('|||')
-              const display = paths.map((p: string) => convertFileSrc(p)).join('|||')
-              result = { ...result, url: display }
-            } else {
-              result = { ...result, url: convertFileSrc(result.filePath) }
+            // 将相对路径转换为绝对路径
+            const absoluteFilePath = await convertPathString(result.filePath, dataRoot, false)
+            if (absoluteFilePath) {
+              if (typeof absoluteFilePath === 'string' && absoluteFilePath.includes('|||')) {
+                const paths = absoluteFilePath.split('|||')
+                const display = paths.map((p: string) => convertFileSrc(p)).join('|||')
+                result = { ...result, filePath: absoluteFilePath, url: display }
+              } else {
+                result = { ...result, filePath: absoluteFilePath, url: convertFileSrc(absoluteFilePath) }
+              }
             }
           } catch { }
         }
+
         let images = task.images
         if ((!images || images.length === 0) && task.uploadedFilePaths && task.uploadedFilePaths.length && isDesktop()) {
           try {
-            images = task.uploadedFilePaths.map((p: string) => convertFileSrc(p))
+            // 将相对路径转换为绝对路径
+            const absolutePaths = await convertPathArray(task.uploadedFilePaths, dataRoot, false)
+            if (absolutePaths) {
+              images = absolutePaths.map((p: string) => convertFileSrc(p))
+              // 更新 task.uploadedFilePaths 为绝对路径
+              task.uploadedFilePaths = absolutePaths
+            }
           } catch { }
         }
+
         // 恢复视频缩略图（从 uploadedVideoFilePaths 生成）
         let videos: string[] | undefined = undefined
         if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length && isDesktop()) {
           try {
-            videos = task.uploadedVideoFilePaths.map((p: string) => convertFileSrc(p))
+            // 将相对路径转换为绝对路径
+            const absolutePaths = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, false)
+            if (absolutePaths) {
+              videos = absolutePaths.map((p: string) => convertFileSrc(p))
+              // 更新 task.uploadedVideoFilePaths 为绝对路径
+              task.uploadedVideoFilePaths = absolutePaths
+            }
           } catch { }
         }
+
         return {
           ...task,
           ...(images && { images }),  // 只有当 images 存在时才覆盖
@@ -1710,7 +1786,7 @@ const App: React.FC = () => {
           result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined,
           images
         }
-      })
+      }))
       setTasks(loaded)
       setIsTasksLoaded(true)
     }
@@ -1741,8 +1817,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isTasksLoaded) return
     if (!isDesktop()) return
-    const tasksToSave = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'timeout' || t.status === 'pending' || t.status === 'generating')
-      .map(t => {
+
+    const saveHistory = async () => {
+      const dataRoot = await getDataRoot()
+      const filteredTasks = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'timeout' || t.status === 'pending' || t.status === 'generating')
+
+      const tasksToSave = await Promise.all(filteredTasks.map(async t => {
         // 清理 options 中的 base64 数据，防止 history.json 膨胀
         const sanitizedOptions = t.options ? { ...t.options } : undefined
         if (sanitizedOptions) {
@@ -1754,7 +1834,20 @@ const App: React.FC = () => {
           delete sanitizedOptions.videos
           // 删除 uploadedVideos 字段（包含视频缩略图的 base64 数据）
           delete sanitizedOptions.uploadedVideos
+
+          // 转换 options 中的路径为相对路径
+          if (sanitizedOptions.uploadedFilePaths) {
+            sanitizedOptions.uploadedFilePaths = await convertPathArray(sanitizedOptions.uploadedFilePaths, dataRoot, true)
+          }
+          if (sanitizedOptions.uploadedVideoFilePaths) {
+            sanitizedOptions.uploadedVideoFilePaths = await convertPathArray(sanitizedOptions.uploadedVideoFilePaths, dataRoot, true)
+          }
         }
+
+        // 转换路径为相对路径
+        const relativeUploadedFilePaths = await convertPathArray(t.uploadedFilePaths, dataRoot, true)
+        const relativeUploadedVideoFilePaths = await convertPathArray(t.uploadedVideoFilePaths, dataRoot, true)
+        const relativeResultFilePath = t.result?.filePath ? await convertPathString(t.result.filePath, dataRoot, true) : undefined
 
         return {
           id: t.id,
@@ -1767,8 +1860,8 @@ const App: React.FC = () => {
           duration: t.duration, // 保存实际媒体时长
           status: t.status,
           error: t.error,
-          uploadedFilePaths: t.uploadedFilePaths,
-          uploadedVideoFilePaths: t.uploadedVideoFilePaths,  // 保存视频文件路径
+          uploadedFilePaths: relativeUploadedFilePaths,
+          uploadedVideoFilePaths: relativeUploadedVideoFilePaths,  // 保存视频文件路径（相对路径）
           options: sanitizedOptions, // 保存清理后的生成参数（不含 base64 数据）
           requestId: t.requestId, // 保存请求ID（用于超时恢复）
           modelId: t.modelId, // 保存模型ID（用于超时恢复）
@@ -1777,16 +1870,20 @@ const App: React.FC = () => {
           result: t.result ? {
             id: t.result.id,
             type: t.result.type,
-            filePath: t.result.filePath, // 只保存文件路径
+            filePath: relativeResultFilePath, // 保存相对路径
             // 明确不保存 url 字段，防止 base64 数据或远程 URL 被保存
             prompt: t.result.prompt,
             createdAt: t.result.createdAt
           } : undefined
         }
-      })
-    const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
-    const limitedTasks = tasksToSave.slice(-maxHistory)
-    writeJsonToAppData('Henji-AI/history.json', limitedTasks).catch(e => console.error('write history failed', e))
+      }))
+
+      const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
+      const limitedTasks = tasksToSave.slice(-maxHistory)
+      writeJsonToAppData('history.json', limitedTasks).catch(e => console.error('write history failed', e))
+    }
+
+    saveHistory()
   }, [tasks, isTasksLoaded])
 
   // 检查是否有保存的API密钥

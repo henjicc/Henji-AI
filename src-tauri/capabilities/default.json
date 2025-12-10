@@ -56,44 +56,19 @@
     "fs:default",
     "fs:allow-localdata-read-recursive",
     "fs:allow-localdata-write-recursive",
-    {
-      "identifier": "fs:allow-remove",
-      "allow": [
-        {
-          "path": "$APPLOCALDATA/Henji-AI/**/*"
-        }
-      ]
-    },
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-copy-file",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-exists",
     {
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "$APPLOCALDATA"
-        },
-        {
-          "path": "$APPLOCALDATA/**/*"
-        }
-      ]
-    },
-    {
-      "identifier": "fs:allow-write-file",
-      "allow": [
-        {
-          "path": "$APPLOCALDATA/Henji-AI/**/*"
-        },
-        {
-          "path": "**/*"
-        }
-      ]
-    },
-    {
-      "identifier": "fs:allow-write-text-file",
-      "allow": [
-        {
-          "path": "$APPLOCALDATA/Henji-AI/**/*"
-        },
-        {
-          "path": "$APPLOCALDATA/**/*"
+          "path": "**"
         }
       ]
     },

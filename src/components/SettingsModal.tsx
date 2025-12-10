@@ -4,6 +4,8 @@ import Toggle from './ui/Toggle'
 import { apiService } from '../services/api'
 import { open } from '@tauri-apps/plugin-shell'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { getDataRoot, getDefaultDataRoot, setCustomDataRoot, resetToDefaultDataRoot, validateDirectory, hasExistingData, migrateData } from '../utils/dataPath'
+import { path } from '@tauri-apps/api'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -29,6 +31,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [quickDownloadPath, setQuickDownloadPath] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
+
+  // 自定义数据目录相关状态
+  const [customDataPath, setCustomDataPath] = useState('')
+  const [isMigrating, setIsMigrating] = useState(false)
+  const [migrationProgress, setMigrationProgress] = useState({ current: 0, total: 0, file: '' })
+  const [showMigrationDialog, setShowMigrationDialog] = useState(false)
+  const [showConflictDialog, setShowConflictDialog] = useState(false)
+  const [conflictDialogPath, setConflictDialogPath] = useState('')
+
+  // 统一的提示弹窗状态
+  const [showAlertDialog, setShowAlertDialog] = useState(false)
+  const [alertMessage, setAlertMessage] = useState('')
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning'>('success')
+  const [showConfirmResetDialog, setShowConfirmResetDialog] = useState(false)
+  const [dialogOpacity, setDialogOpacity] = useState(0)
+
+  // 弹窗动画效果
+  useEffect(() => {
+    if (showAlertDialog || showConfirmResetDialog || showConflictDialog || showMigrationDialog) {
+      requestAnimationFrame(() => setDialogOpacity(1))
+    }
+  }, [showAlertDialog, showConfirmResetDialog, showConflictDialog, showMigrationDialog])
+
+  // 辅助函数：显示提示弹窗
+  const showAlert = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setAlertMessage(message)
+    setAlertType(type)
+    setShowAlertDialog(true)
+  }
+
+  // 辅助函数：关闭弹窗
+  const closeDialog = (setShowDialog: (show: boolean) => void) => {
+    setDialogOpacity(0)
+    setTimeout(() => setShowDialog(false), 180)
+  }
 
   useEffect(() => {
     // 从localStorage获取保存的设置
@@ -65,9 +102,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const savedQuickDownloadPath = localStorage.getItem('quick_download_path') || ''
     setQuickDownloadPath(savedQuickDownloadPath)
 
+    // 加载当前数据路径
+    const loadDataPath = async () => {
+      try {
+        const currentPath = await getDataRoot()
+        setCustomDataPath(currentPath)
+      } catch (error) {
+        console.error('加载数据路径失败:', error)
+      }
+    }
+    loadDataPath()
+
     // 点击模态框外部关闭
     const handleClickOutside = (event: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement
+
+      // 检查是否点击在弹窗内部（通过 data-dialog 属性识别）
+      const isClickInsideDialog = target.closest('[data-dialog="true"]')
+
+      if (isClickInsideDialog) {
+        return // 点击在弹窗内部，不关闭设置面板
+      }
+
+      if (modalRef.current && !modalRef.current.contains(target)) {
         handleClose()
       }
     }
@@ -195,6 +252,117 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }
   }
 
+  // 执行数据迁移
+  const performMigration = async (oldPath: string, newPath: string, mode: 'normal' | 'merge' | 'overwrite' = 'normal') => {
+    setIsMigrating(true)
+    setShowMigrationDialog(true)
+
+    try {
+      await migrateData(oldPath, newPath, (current, total, file) => {
+        setMigrationProgress({ current, total, file })
+      }, mode)
+
+      // 迁移成功，更新配置
+      await setCustomDataRoot(newPath)
+      setCustomDataPath(newPath)
+
+      // 触发路径变更事件
+      window.dispatchEvent(new Event('dataPathChanged'))
+
+      showAlert('数据迁移成功！页面即将刷新...', 'success')
+
+      // 延迟刷新页面以确保数据正确加载
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+    } catch (error) {
+      console.error('迁移失败:', error)
+      showAlert(`迁移失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    } finally {
+      setIsMigrating(false)
+      setShowMigrationDialog(false)
+    }
+  }
+
+  // 选择数据保存目录
+  const handleSelectDataDirectory = async () => {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: '选择数据保存目录'
+      })
+
+      if (!selected || typeof selected !== 'string') return
+
+      // 验证目录
+      const isValid = await validateDirectory(selected)
+      if (!isValid) {
+        showAlert('所选目录无法写入，请选择其他目录', 'error')
+        return
+      }
+
+      // 检查是否已有数据
+      const targetPath = await path.join(selected, 'Henji-AI')
+      const hasData = await hasExistingData(targetPath)
+
+      if (hasData) {
+        // 显示冲突处理对话框
+        setConflictDialogPath(targetPath)
+        setShowConflictDialog(true)
+        return
+      }
+
+      // 执行迁移
+      const currentPath = await getDataRoot()
+      await performMigration(currentPath, targetPath)
+    } catch (error) {
+      console.error('选择目录失败:', error)
+      showAlert(`操作失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
+  // 恢复默认数据目录
+  const handleResetToDefault = async () => {
+    setShowConfirmResetDialog(true)
+  }
+
+  // 确认恢复默认
+  const confirmResetToDefault = async () => {
+    closeDialog(setShowConfirmResetDialog)
+
+    try {
+      const currentPath = await getDataRoot()
+      const defaultPath = await getDefaultDataRoot()
+
+      await performMigration(currentPath, defaultPath)
+      await resetToDefaultDataRoot()
+      setCustomDataPath(defaultPath)
+    } catch (error) {
+      console.error('恢复默认失败:', error)
+      showAlert(`恢复默认失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
+  // 处理目录冲突
+  const handleConflictResolution = async (action: 'merge' | 'overwrite' | 'cancel') => {
+    closeDialog(setShowConflictDialog)
+
+    if (action === 'cancel') {
+      setConflictDialogPath('')
+      return
+    }
+
+    try {
+      const currentPath = await getDataRoot()
+      await performMigration(currentPath, conflictDialogPath, action)
+      setConflictDialogPath('')
+    } catch (error) {
+      console.error('冲突处理失败:', error)
+      showAlert(`操作失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
+    }
+  }
+
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     {
       id: 'general',
@@ -291,6 +459,37 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                       widthClassName="w-full"
                     />
                     <p className="mt-2 text-xs text-zinc-500">最多保存 1-500 条历史记录，超出后将自动删除最旧的记录</p>
+
+                    <div className="mt-4 pt-4 border-t border-zinc-700/30">
+                      <label className="block text-sm font-medium mb-2 text-zinc-300">
+                        数据保存目录
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customDataPath}
+                          readOnly
+                          className="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 text-white text-sm font-mono"
+                        />
+                        <button
+                          onClick={handleSelectDataDirectory}
+                          disabled={isMigrating}
+                          className="px-4 py-2.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transition-all duration-300"
+                        >
+                          选择
+                        </button>
+                        <button
+                          onClick={handleResetToDefault}
+                          disabled={isMigrating}
+                          className="px-4 py-2.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transition-all duration-300"
+                        >
+                          恢复默认
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-zinc-500">
+                        更改后将自动迁移现有数据到新目录
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -567,6 +766,143 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
         </div>
       </div>
+
+      {/* 通用提示弹窗 */}
+      {showAlertDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" data-dialog="true">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            style={{ opacity: dialogOpacity, transition: 'opacity 180ms ease' }}
+            onClick={() => closeDialog(setShowAlertDialog)}
+          />
+          <div
+            className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+            style={{ opacity: dialogOpacity, transform: `scale(${0.97 + 0.03 * dialogOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}
+          >
+            <div className="text-white text-base">{alertType === 'success' ? '操作成功' : alertType === 'error' ? '操作失败' : '提示'}</div>
+            <div className="text-zinc-300 text-sm mt-2">{alertMessage}</div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); closeDialog(setShowAlertDialog); }}
+                className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-colors ${
+                  alertType === 'success' ? 'bg-green-600/70 hover:bg-green-600' :
+                  alertType === 'error' ? 'bg-red-600/70 hover:bg-red-600' :
+                  'bg-yellow-600/70 hover:bg-yellow-600'
+                }`}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 确认恢复默认弹窗 */}
+      {showConfirmResetDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" data-dialog="true">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            style={{ opacity: dialogOpacity, transition: 'opacity 180ms ease' }}
+            onClick={() => closeDialog(setShowConfirmResetDialog)}
+          />
+          <div
+            className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+            style={{ opacity: dialogOpacity, transform: `scale(${0.97 + 0.03 * dialogOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}
+          >
+            <div className="text-white text-base">恢复默认数据目录</div>
+            <div className="text-zinc-300 text-sm mt-2">确定要恢复到默认数据目录吗？现有数据将被迁移回默认位置。</div>
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); closeDialog(setShowConfirmResetDialog); }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/50 hover:bg-zinc-600/50 text-white text-sm transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); confirmResetToDefault(); }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-[#007eff]/70 hover:bg-[#007eff] text-white text-sm transition-colors"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 冲突处理对话框 */}
+      {showConflictDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" data-dialog="true">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            style={{ opacity: dialogOpacity, transition: 'opacity 180ms ease' }}
+            onClick={() => closeDialog(setShowConflictDialog)}
+          />
+          <div
+            className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+            style={{ opacity: dialogOpacity, transform: `scale(${0.97 + 0.03 * dialogOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}
+          >
+            <div className="text-white text-base">目录冲突</div>
+            <div className="text-zinc-300 text-sm mt-2">所选目录中已存在 Henji-AI 数据，请选择处理方式：</div>
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleConflictResolution('merge'); }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-[#007eff]/70 hover:bg-[#007eff] text-white text-sm transition-colors"
+              >
+                合并数据
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleConflictResolution('overwrite'); }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-orange-600/70 hover:bg-orange-600 text-white text-sm transition-colors"
+              >
+                覆盖数据
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleConflictResolution('cancel'); }}
+                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/50 hover:bg-zinc-600/50 text-white text-sm transition-colors"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 迁移进度对话框 */}
+      {showMigrationDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" data-dialog="true">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            style={{ opacity: dialogOpacity, transition: 'opacity 180ms ease' }}
+          />
+          <div
+            className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+            style={{ opacity: dialogOpacity, transform: `scale(${0.97 + 0.03 * dialogOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}
+          >
+            <div className="text-white text-base">正在迁移数据...</div>
+            <div className="mt-4">
+              <div className="text-sm text-zinc-300 mb-2 truncate">
+                {migrationProgress.file}
+              </div>
+              <div className="text-xs text-zinc-400 mb-2">
+                {migrationProgress.current} / {migrationProgress.total}
+              </div>
+              <div className="w-full bg-zinc-800 rounded-full h-2">
+                <div
+                  className="bg-[#007eff] h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${migrationProgress.total > 0 ? (migrationProgress.current / migrationProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-xs text-zinc-400 mt-4">请勿关闭应用</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
