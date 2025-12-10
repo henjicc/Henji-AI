@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./src-tauri/icons/128x128@2x.png" width="100" height="100" alt="痕迹AI" style="margin-bottom: -50px;">
   <h1 style="color: #00a0ea;">痕迹AI</h1>
-  <h3>一个聚合多家AI供应商，一站式生成图片、视频和音频的客户端</h3>
+  <h3>一个软件用上各种AI - 聚合多家供应商，一站式生成图片、视频和音频</h3>
   
   [![Bilibili](https://img.shields.io/badge/bilibili-痕继痕迹-00AEEC?logo=bilibili)](https://space.bilibili.com/39337803)
   
@@ -54,8 +54,16 @@
 | 派欧云 | 万相 2.5 Preview | 文生视频、图生视频 |
 | 派欧云 | 即梦视频 3.0 | 文生视频、图生视频、首尾帧 |
 | fal | Veo 3.1 | 文生视频、图生视频、首尾帧、参考生视频 |
+| fal | Sora 2 | 文生视频、图生视频 |
 | fal | 可灵 V2.6 Pro | 文生视频、图生视频 |
 | fal | 可灵 O1 | 图生视频、参考生视频、视频编辑、视频参考 |
+| fal | LTX-2 | 文生视频、图生视频、视频编辑 |
+| fal | 即梦视频 3.0 | 文生视频、图生视频、首尾帧、参考生视频 |
+| fal | Vidu Q2 | 文生视频、图生视频、参考生视频、视频延长 |
+| fal | PixVerse V5.5 | 文生视频、图生视频、首尾帧 |
+| fal | 万相 2.5 Preview | 文生视频、图生视频 |
+| fal | 海螺 Hailuo 2.3 | 文生视频、图生视频 |
+| fal | 海螺 Hailuo-02 | 文生视频、图生视频、首尾帧 |
 
 ### 音频
 
