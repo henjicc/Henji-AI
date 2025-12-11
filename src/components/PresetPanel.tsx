@@ -6,6 +6,7 @@ import { canDeleteFile } from '../utils/fileRefCount'
 import { readJsonFromAppData } from '../utils/save'
 import { remove } from '@tauri-apps/plugin-fs'
 import PanelTrigger from './ui/PanelTrigger'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 interface PresetPanelProps {
     // 获取当前所有状态（用于保存）
@@ -85,7 +86,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
 
             // 不再弹窗提示，体验更流畅
         } catch (error) {
-            console.error('保存预设失败:', error)
+            logError('保存预设失败:', error)
             alert('保存预设失败')
         }
     }
@@ -138,17 +139,17 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                     if (canDelete) {
                         try {
                             await remove(filePath)
-                            console.log('[PresetPanel] 删除无引用文件:', filePath)
+                            logInfo('[PresetPanel] 删除无引用文件:', filePath)
                         } catch (error) {
-                            console.error('[PresetPanel] 删除文件失败:', filePath, error)
+                            logError('[PresetPanel] 删除文件失败:', filePath, error)
                         }
                     } else {
-                        console.log('[PresetPanel] 保留文件(仍有引用):', filePath)
+                        logInfo('[PresetPanel] 保留文件(仍有引用):', filePath)
                     }
                 }
             }
         } catch (error) {
-            console.error('删除预设失败:', error)
+            logError('删除预设失败:', error)
             alert('删除预设失败')
         } finally {
             setDeletingClosing(true)

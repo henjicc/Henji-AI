@@ -6,6 +6,7 @@
  * - 其他比例的分辨率根据基数计算，确保总像素数不超过 baseSize × baseSize
  */
 
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 export interface ResolutionSize {
   width: number
   height: number
@@ -70,7 +71,7 @@ export function calculateResolutions(
   for (const ratio of aspectRatios) {
     const [w, h] = ratio.split(':').map(Number)
     if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
-      console.warn(`Invalid aspect ratio: ${ratio}`)
+      logWarning('', `Invalid aspect ratio: ${ratio}`)
       continue
     }
     result[ratio] = calculateResolution(baseSize, w, h)

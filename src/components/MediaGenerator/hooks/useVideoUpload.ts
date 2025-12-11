@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { generateVideoThumbnail, validateVideo } from '@/utils/videoProcessing'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * 视频上传 Hook（优化版）
@@ -32,7 +33,7 @@ export const useVideoUpload = (
 
     try {
       const videoFile = files[0] // 只处理第一个视频文件
-      console.log('[useVideoUpload] 开始处理视频:', videoFile.name, '大小:', (videoFile.size / 1024 / 1024).toFixed(2), 'MB')
+      logInfo('[useVideoUpload] 开始处理视频:', videoFile.name, '大小:', (videoFile.size / 1024 / 1024).toFixed(2), 'MB')
 
       // 1. 验证视频
       const videoElement = document.createElement('video')
@@ -52,7 +53,7 @@ export const useVideoUpload = (
         fileSize: videoFile.size
       }
 
-      console.log('[useVideoUpload] 视频元数据:', metadata)
+      logInfo('[useVideoUpload] 视频元数据:', metadata)
 
       // 验证视频
       const validation = validateVideo(metadata)
@@ -64,9 +65,9 @@ export const useVideoUpload = (
       }
 
       // 2. 生成缩略图（用于预览）
-      console.log('[useVideoUpload] 生成缩略图...')
+      logInfo('', '[useVideoUpload] 生成缩略图...')
       const thumbnail = await generateVideoThumbnail(videoFile)
-      console.log('[useVideoUpload] 缩略图生成成功')
+      logInfo('', '[useVideoUpload] 缩略图生成成功')
 
       // 3. 保存 File 对象引用、缩略图和视频 URL
       // 注意：这里不读取视频内容，只保存 File 对象和 URL
@@ -77,9 +78,9 @@ export const useVideoUpload = (
       URL.revokeObjectURL(videoElement.src)
       setIsProcessingVideo(false)
 
-      console.log('[useVideoUpload] 视频上传完成（未读取内容，节省内存）')
+      logInfo('', '[useVideoUpload] 视频上传完成（未读取内容，节省内存）')
     } catch (error) {
-      console.error('[useVideoUpload] 视频处理失败:', error)
+      logError('[useVideoUpload] 视频处理失败:', error)
       alert('视频处理失败，请确保视频格式正确')
       setIsProcessingVideo(false)
     }

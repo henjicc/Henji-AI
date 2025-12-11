@@ -3,6 +3,7 @@
  */
 
 import { ModelConfig } from '../core/types'
+import { logError, logWarning, logInfo } from '../../../../utils/errorLogger'
 
 /**
  * Seedance V1 配置（派欧云）
@@ -561,7 +562,7 @@ export const seedream40Config: ModelConfig = {
             const smartSize = await calculateSmartResolution(context.uploadedImages[0], quality)
             options.size = smartSize
           } catch (error) {
-            console.error('[Seedream 4.0] Smart resolution calculation failed:', error)
+            logError('[Seedream 4.0] Smart resolution calculation failed:', error)
             // 失败时使用默认比例
             const { getActualResolution } = await import('../../utils/resolutionUtils')
             options.size = getActualResolution('1:1', quality)

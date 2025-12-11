@@ -1,6 +1,7 @@
 import React from 'react'
 import FileUploader from '@/components/ui/FileUploader'
 import { getMaxImageCount } from '../utils/constants'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 interface InputAreaProps {
   input: string
@@ -122,7 +123,7 @@ const InputArea: React.FC<InputAreaProps> = ({
         }
       }
     } catch (e) {
-      console.error('Failed to check custom model type:', e)
+      logError('Failed to check custom model type:', e)
     }
     return false
   })()

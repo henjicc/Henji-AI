@@ -24,7 +24,7 @@ import TestModeIndicator from './components/TestModeIndicator'
 import TestModePanel from './components/TestModePanel'
 import TestModeParamsDisplay from './components/TestModeParamsDisplay'
 import { shouldSkipRequest, logRequestParams } from './utils/testMode'
-import { logError } from './utils/errorLogger'
+import { logError, logWarning, logInfo } from './utils/errorLogger'
 
 /**
  * 格式化模型显示名称
@@ -173,9 +173,9 @@ const App: React.FC = () => {
       try {
         const dataRoot = await getDataRoot()
         await initializeDataDirectory(dataRoot)
-        console.log('[App] 数据目录已初始化:', dataRoot)
+        logInfo('[App] 数据目录已初始化:', dataRoot)
       } catch (error) {
-        console.error('[App] 初始化数据目录失败:', error)
+        logError('[App] 初始化数据目录失败:', error)
       }
     }
     init()
@@ -185,7 +185,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const handlePathChange = async () => {
       if (!isDesktop()) return
-      console.log('[App] 检测到数据路径变更，重新加载历史记录')
+      logInfo('', '[App] 检测到数据路径变更，重新加载历史记录')
       try {
         const fileHistory = await readJsonFromAppData<any[]>('history.json')
         if (fileHistory) {
@@ -208,10 +208,10 @@ const App: React.FC = () => {
             }
           })
           setTasks(loaded)
-          console.log('[App] 历史记录已重新加载')
+          logInfo('', '[App] 历史记录已重新加载')
         }
       } catch (error) {
-        console.error('[App] 重新加载历史记录失败:', error)
+        logError('[App] 重新加载历史记录失败:', error)
       }
     }
 
@@ -235,9 +235,23 @@ const App: React.FC = () => {
         setIsTestPanelOpen(prev => !prev)
       }
 
-      // F12 - 打开开发者工具（需要在测试模式中启用）
+      // F12 - 打开开发者工具
       if (e.key === 'F12') {
-        e.preventDefault() // 先阻止默认行为
+        // 开发环境：始终允许打开开发者工具
+        if (import.meta.env.DEV) {
+          e.preventDefault()
+          try {
+            const { invoke } = await import('@tauri-apps/api/core')
+            await invoke('toggle_devtools')
+            logInfo('', '[DevTools] 开发者工具已切换')
+          } catch (error) {
+            logError('[DevTools] 打开开发者工具失败:', error)
+          }
+          return
+        }
+
+        // 生产环境：需要测试模式授权
+        e.preventDefault() // 阻止默认行为
 
         const { getTestModeState } = await import('@/utils/testMode')
         const testMode = getTestModeState()
@@ -247,9 +261,9 @@ const App: React.FC = () => {
           try {
             const { invoke } = await import('@tauri-apps/api/core')
             await invoke('toggle_devtools')
-            console.log('[DevTools] 开发者工具已切换')
+            logInfo('', '[DevTools] 开发者工具已切换')
           } catch (error) {
-            console.error('[DevTools] 打开开发者工具失败:', error)
+            logError('[DevTools] 打开开发者工具失败:', error)
           }
         }
       }
@@ -901,7 +915,7 @@ const App: React.FC = () => {
         try {
           blob = await convertBlobToPng(blob)
         } catch (e) {
-          console.error('Image conversion failed:', e)
+          logError('Image conversion failed:', e)
           throw new Error('图片格式转换失败')
         }
       }
@@ -912,7 +926,7 @@ const App: React.FC = () => {
         })
       ])
     } catch (err) {
-      console.error('Copy failed:', err)
+      logError('Copy failed:', err)
       setError('复制图片失败: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
@@ -939,42 +953,42 @@ const App: React.FC = () => {
   // 处理媒体文件下载
   const handleDownloadMedia = async (filePath: string, fromButton: boolean = false) => {
     if (!filePath) {
-      console.error('[App] 下载失败: 文件路径为空')
+      logError('', '[App] 下载失败: 文件路径为空')
       showNotification('下载失败: 文件路径无效', 'error')
       return
     }
 
     try {
-      console.log('[App] 开始下载:', { filePath, fromButton })
+      logInfo('[App] 开始下载:', { filePath, fromButton })
 
       const enableQuick = localStorage.getItem('enable_quick_download') === 'true'
       const buttonOnly = localStorage.getItem('quick_download_button_only') === 'true'
       const quickPath = localStorage.getItem('quick_download_path') || ''
 
-      console.log('[App] 下载设置:', { enableQuick, buttonOnly, quickPath })
+      logInfo('[App] 下载设置:', { enableQuick, buttonOnly, quickPath })
 
       // 判断是否使用快速下载
       const useQuickDownload = enableQuick && (!buttonOnly || fromButton) && quickPath
 
-      console.log('[App] 使用快速下载:', useQuickDownload)
+      logInfo('[App] 使用快速下载:', useQuickDownload)
 
       if (useQuickDownload) {
-        console.log('[App] 执行快速下载...')
+        logInfo('', '[App] 执行快速下载...')
         const savedPath = await quickDownloadMediaFile(filePath, quickPath)
-        console.log('[App] 快速下载完成:', savedPath)
+        logInfo('[App] 快速下载完成:', savedPath)
         showNotification('下载成功', 'success')
       } else {
-        console.log('[App] 执行手动下载...')
+        logInfo('', '[App] 执行手动下载...')
         const savedPath = await downloadMediaFile(filePath)
-        console.log('[App] 手动下载完成:', savedPath)
+        logInfo('[App] 手动下载完成:', savedPath)
         showNotification('下载成功', 'success')
       }
     } catch (err) {
-      console.error('[App] 下载失败:', err)
+      logError('[App] 下载失败:', err)
 
       // 如果用户取消了下载，不显示错误
       if (err instanceof Error && err.message === 'cancelled') {
-        console.log('[App] 用户取消了下载')
+        logInfo('', '[App] 用户取消了下载')
         return
       }
 
@@ -1154,7 +1168,7 @@ const App: React.FC = () => {
       const nextTask = currentTasks.find(t => t.status === 'queued')
 
       if (nextTask) {
-        console.log('[App] 自动开始下一个排队任务:', nextTask.id)
+        logInfo('[App] 自动开始下一个排队任务:', nextTask.id)
         // 使用setTimeout确保状态更新后再执行
         setTimeout(() => executeTask(nextTask.id, nextTask), 0)
       }
@@ -1204,7 +1218,7 @@ const App: React.FC = () => {
       }
 
       if (!taskToExecute) {
-        console.error('[App] 找不到要执行的任务:', taskId)
+        logError('[App] 找不到要执行的任务:', taskId)
         setIsGenerating(false) // 确保重置状态
         return
       }
@@ -1250,7 +1264,7 @@ const App: React.FC = () => {
           modelName: model
         })
 
-        console.log('[App] 已切换适配器:', { provider: providerType, model })
+        logInfo('[App] 已切换适配器:', { provider: providerType, model })
       }
 
       // 更新任务状态为生成中
@@ -1326,7 +1340,7 @@ const App: React.FC = () => {
 
           // 检查是否为 fal 队列超时状态
           if (result?.status === 'timeout') {
-            console.log('[App] 检测到队列超时:', result)
+            logInfo('[App] 检测到队列超时:', result)
             updateTask(taskId, {
               status: 'timeout',
               provider: providerObj?.id,
@@ -1338,7 +1352,7 @@ const App: React.FC = () => {
           }
 
           // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
-          console.log('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
+          logInfo('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
           if (result?.url && isDesktop() && !(result as any).filePath) {
             try {
               if (result.url.includes('|||')) {
@@ -1359,12 +1373,12 @@ const App: React.FC = () => {
                 result.url = blobSrc
                   ; (result as any).filePath = fullPath
               }
-              console.log('[App] 本地保存成功并替换展示地址')
+              logInfo('', '[App] 本地保存成功并替换展示地址')
             } catch (e) {
-              console.error('[App] 本地保存失败，回退在线地址', e)
+              logError('[App] 本地保存失败，回退在线地址', e)
             }
           } else if ((result as any).filePath) {
-            console.log('[App] 适配器已处理本地保存，跳过重复保存')
+            logInfo('', '[App] 适配器已处理本地保存，跳过重复保存')
           }
           break
         case 'video':
@@ -1394,7 +1408,7 @@ const App: React.FC = () => {
           }
           break
         case 'audio':
-          console.log('[App] generateAudio 调用参数:', { input, model, options })
+          logInfo('[App] generateAudio 调用参数:', { input, model, options })
           result = await apiService.generateAudio(input, model, options)
           // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
           if (result && result.url && isDesktop() && !(result as any).filePath) {
@@ -1403,12 +1417,12 @@ const App: React.FC = () => {
               const blobSrc = await fileToBlobSrc(fullPath, 'audio/mpeg')
               result.url = blobSrc
                 ; (result as any).filePath = fullPath
-              console.log('[App] 本地保存成功并替换展示地址')
+              logInfo('', '[App] 本地保存成功并替换展示地址')
             } catch (e) {
-              console.error('[App] 本地保存失败，回退在线地址', e)
+              logError('[App] 本地保存失败，回退在线地址', e)
             }
           } else if ((result as any).filePath) {
-            console.log('[App] 适配器已处理本地保存，跳过重复保存')
+            logInfo('', '[App] 适配器已处理本地保存，跳过重复保存')
           }
           break
         default:
@@ -1424,9 +1438,9 @@ const App: React.FC = () => {
           const urlToCheck = (result as any).filePath || result.url
           dimensions = await getMediaDimensions(urlToCheck, type)
           duration = await getMediaDurationFormatted(urlToCheck, type)
-          console.log('[App] 获取媒体信息:', { dimensions, duration })
+          logInfo('[App] 获取媒体信息:', { dimensions, duration })
         } catch (error) {
-          console.error('[App] 获取媒体信息失败:', error)
+          logError('[App] 获取媒体信息失败:', error)
         }
 
         updateTask(taskId, {
@@ -1519,7 +1533,7 @@ const App: React.FC = () => {
   }
 
   const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, _model?: string): Promise<any> => {
-    console.log('[App] 开始轮询任务状态:', serverTaskId)
+    logInfo('[App] 开始轮询任务状态:', serverTaskId)
     return new Promise((resolve, reject) => {
       let pollCount = 0
       const maxPolls = 120
@@ -1527,33 +1541,33 @@ const App: React.FC = () => {
       const interval = setInterval(async () => {
         try {
           pollCount++
-          console.log(`[App] 第${pollCount}次轮询任务状态:`, serverTaskId)
+          logInfo(`[App] 第${pollCount}次轮询任务状态:`, serverTaskId)
 
           const status = await apiService.checkTaskStatus(serverTaskId)
 
           // 注意：API返回的是 TASK_STATUS_SUCCEED，不是 TASK_STATUS_SUCCEEDED
           if ((status.status === 'TASK_STATUS_SUCCEEDED' || status.status === 'TASK_STATUS_SUCCEED') && status.result) {
-            console.log('[App] 任务完成:', status.result)
+            logInfo('[App] 任务完成:', status.result)
             clearInterval(interval)
             updateTask(uiTaskId, { progress: 100, timedOut: false })
             resolve(status.result)
           } else if (status.status === 'TASK_STATUS_FAILED') {
-            console.error('[App] 任务失败')
+            logError('', '[App] 任务失败')
             clearInterval(interval)
             reject(new Error('任务执行失败'))
           } else if (pollCount >= maxPolls) {
             if (status.status === 'TASK_STATUS_PROCESSING' || status.status === 'TASK_STATUS_QUEUED') {
-              console.warn('[App] 轮询超时，仍在处理中，提供重试')
+              logWarning('', '[App] 轮询超时，仍在处理中，提供重试')
               clearInterval(interval)
               updateTask(uiTaskId, { timedOut: true })
               resolve(null)
             } else {
-              console.error('[App] 轮询超时')
+              logError('', '[App] 轮询超时')
               clearInterval(interval)
               reject(new Error('任务超时'))
             }
           } else {
-            console.log('[App] 任务进行中...', {
+            logInfo('[App] 任务进行中...', {
               status: status.status,
               progress: status.progress
             })
@@ -1578,7 +1592,7 @@ const App: React.FC = () => {
 
   const retryPolling = async (task: GenerationTask) => {
     if (!task.serverTaskId) {
-      console.error('[App] 无 serverTaskId，无法重试轮询')
+      logError('', '[App] 无 serverTaskId，无法重试轮询')
       return
     }
     updateTask(task.id, { timedOut: false, status: 'generating' })
@@ -1592,9 +1606,9 @@ const App: React.FC = () => {
           const urlToCheck = (result as any).filePath || result.url
           dimensions = await getMediaDimensions(urlToCheck, task.type)
           duration = await getMediaDurationFormatted(urlToCheck, task.type)
-          console.log('[App] 获取媒体信息:', { dimensions, duration })
+          logInfo('[App] 获取媒体信息:', { dimensions, duration })
         } catch (error) {
-          console.error('[App] 获取媒体信息失败:', error)
+          logError('[App] 获取媒体信息失败:', error)
         }
 
         updateTask(task.id, {
@@ -1727,7 +1741,7 @@ const App: React.FC = () => {
         window.URL.revokeObjectURL(url)
       }
     } catch (err) {
-      console.error('Video download failed', err)
+      logError('Video download failed', err)
     }
   }
 
@@ -1900,14 +1914,14 @@ const App: React.FC = () => {
             // 2. 以 data: 开头（data URI）
             // 3. 或者长度超过 1000 字符（可能是 base64 字符串）
             if (typeof value === 'string' && (value.startsWith('data:') || value.length > 1000)) {
-              console.warn(`[History] 自动删除疑似 base64 数据字段: ${key} (长度: ${value.length})`)
+              logWarning('', `[History] 自动删除疑似 base64 数据字段: ${key} (长度: ${value.length})`)
               delete sanitizedOptions[key]
             }
             // 检测数组中是否包含 base64 数据
             else if (Array.isArray(value) && value.length > 0) {
               const firstItem = value[0]
               if (typeof firstItem === 'string' && (firstItem.startsWith('data:') || firstItem.length > 1000)) {
-                console.warn(`[History] 自动删除疑似 base64 数据数组字段: ${key} (数组长度: ${value.length})`)
+                logWarning('', `[History] 自动删除疑似 base64 数据数组字段: ${key} (数组长度: ${value.length})`)
                 delete sanitizedOptions[key]
               }
             }
@@ -1958,7 +1972,7 @@ const App: React.FC = () => {
 
       const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
       const limitedTasks = tasksToSave.slice(-maxHistory)
-      writeJsonToAppData('history.json', limitedTasks).catch(e => console.error('write history failed', e))
+      writeJsonToAppData('history.json', limitedTasks).catch(e => logError('write history failed', e))
     }
 
     saveHistory()
@@ -2004,9 +2018,9 @@ const App: React.FC = () => {
             arr.push(data)
           }
           options.images = arr
-          console.log('[App] 重建 images 成功，数量:', arr.length)
+          logInfo('[App] 重建 images 成功，数量:', arr.length)
         } catch (e) {
-          console.error('[App] 重建 images 失败:', e)
+          logError('[App] 重建 images 失败:', e)
         }
       }
     }
@@ -2023,14 +2037,14 @@ const App: React.FC = () => {
             arr.push(data)
           }
           options.videos = arr
-          console.log('[App] 重建 videos 成功，数量:', arr.length)
+          logInfo('[App] 重建 videos 成功，数量:', arr.length)
         } catch (e) {
-          console.error('[App] 重建 videos 失败:', e)
+          logError('[App] 重建 videos 失败:', e)
         }
       }
     }
 
-    console.log('[App] 重新生成任务:', {
+    logInfo('[App] 重新生成任务:', {
       model: task.model,
       type: task.type,
       prompt: task.prompt,
@@ -2114,7 +2128,7 @@ const App: React.FC = () => {
   const handleContinuePolling = async (task: GenerationTask) => {
     // 处理 PPIO 任务 (Video)
     if (task.serverTaskId) {
-      console.log('[App] 继续查询 PPIO 任务:', task.serverTaskId)
+      logInfo('[App] 继续查询 PPIO 任务:', task.serverTaskId)
       await retryPolling(task)
       return
     }
@@ -2126,7 +2140,7 @@ const App: React.FC = () => {
     }
     const providerType = providerObj.id as 'ppio' | 'fal' | 'modelscope' | 'kie'
 
-    console.log(`[App] 继续查询 ${providerType} 队列:`, { requestId: task.requestId, modelId: task.modelId })
+    logInfo(`[App] 继续查询 ${providerType} 队列:`, { requestId: task.requestId, modelId: task.modelId })
 
     try {
       // 更新任务状态为生成中
@@ -2167,7 +2181,7 @@ const App: React.FC = () => {
         task.modelId,
         task.requestId,
         (status: any) => {
-          console.log('[App] 继续查询进度:', status.message)
+          logInfo('[App] 继续查询进度:', status.message)
           setTasks(prev => prev.map(t =>
             t.id === task.id ? {
               ...t,
@@ -2180,7 +2194,7 @@ const App: React.FC = () => {
 
       // 再次检查是否超时
       if (result?.status === 'timeout') {
-        console.log('[App] 再次超时')
+        logInfo('', '[App] 再次超时')
         setTasks(prev => prev.map(t =>
           t.id === task.id ? {
             ...t,
@@ -2213,9 +2227,9 @@ const App: React.FC = () => {
             result.url = blobSrc
               ; (result as any).filePath = fullPath
           }
-          console.log('[App] 本地保存成功')
+          logInfo('', '[App] 本地保存成功')
         } catch (e) {
-          console.error('[App] 本地保存失败', e)
+          logError('[App] 本地保存失败', e)
         }
       }
 
@@ -2226,9 +2240,9 @@ const App: React.FC = () => {
         const urlToCheck = (result as any).filePath || result.url
         dimensions = await getMediaDimensions(urlToCheck, task.type)
         duration = await getMediaDurationFormatted(urlToCheck, task.type)
-        console.log('[App] 获取媒体信息:', { dimensions, duration })
+        logInfo('[App] 获取媒体信息:', { dimensions, duration })
       } catch (error) {
-        console.error('[App] 获取媒体信息失败:', error)
+        logError('[App] 获取媒体信息失败:', error)
       }
 
       // 更新任务为成功状态
@@ -2297,12 +2311,12 @@ const App: React.FC = () => {
 
       // 删除结果文件
       for (const f of resultFiles) {
-        try { await remove(f) } catch (e) { console.error('[App] 删除文件失败', f, e) }
+        try { await remove(f) } catch (e) { logError('[App] 删除文件失败', f, e) }
       }
 
       // 删除音频波形缓存
       for (const ap of audioPaths) {
-        try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除波形缓存失败', ap, e) }
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { logError('[App] 删除波形缓存失败', ap, e) }
       }
 
       // 收集上传文件（图片）
@@ -2331,12 +2345,12 @@ const App: React.FC = () => {
         if (!usedByPreset) {
           try {
             await remove(filePath)
-            console.log('[App] 删除上传文件(预设未使用):', filePath)
+            logInfo('[App] 删除上传文件(预设未使用):', filePath)
           } catch (e) {
-            console.error('[App] 删除文件失败', filePath, e)
+            logError('[App] 删除文件失败', filePath, e)
           }
         } else {
-          console.log('[App] 保留上传文件(预设使用中):', filePath)
+          logInfo('[App] 保留上传文件(预设使用中):', filePath)
         }
       }
 
@@ -2344,9 +2358,9 @@ const App: React.FC = () => {
       for (const filePath of uploadedVideoFiles) {
         try {
           await remove(filePath)
-          console.log('[App] 删除上传视频文件:', filePath)
+          logInfo('[App] 删除上传视频文件:', filePath)
         } catch (e) {
-          console.error('[App] 删除视频文件失败', filePath, e)
+          logError('[App] 删除视频文件失败', filePath, e)
         }
       }
     } finally {
@@ -2383,12 +2397,12 @@ const App: React.FC = () => {
 
       // 删除结果文件
       for (const f of resultFiles) {
-        try { await remove(f) } catch (e) { console.error('[App] 删除失败记录文件失败', f, e) }
+        try { await remove(f) } catch (e) { logError('[App] 删除失败记录文件失败', f, e) }
       }
 
       // 删除音频波形缓存
       for (const ap of audioPaths) {
-        try { await deleteWaveformCacheForAudio(ap) } catch (e) { console.error('[App] 删除失败记录波形缓存失败', ap, e) }
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { logError('[App] 删除失败记录波形缓存失败', ap, e) }
       }
 
       // 收集上传文件（图片）
@@ -2418,12 +2432,12 @@ const App: React.FC = () => {
         if (canDelete) {
           try {
             await remove(filePath)
-            console.log('[App] 删除上传文件(无引用):', filePath)
+            logInfo('[App] 删除上传文件(无引用):', filePath)
           } catch (e) {
-            console.error('[App] 删除失败记录文件失败', filePath, e)
+            logError('[App] 删除失败记录文件失败', filePath, e)
           }
         } else {
-          console.log('[App] 保留上传文件(仍有引用):', filePath)
+          logInfo('[App] 保留上传文件(仍有引用):', filePath)
         }
       }
 
@@ -2437,12 +2451,12 @@ const App: React.FC = () => {
         if (!usedByRemaining) {
           try {
             await remove(filePath)
-            console.log('[App] 删除上传视频文件(无引用):', filePath)
+            logInfo('[App] 删除上传视频文件(无引用):', filePath)
           } catch (e) {
-            console.error('[App] 删除视频文件失败', filePath, e)
+            logError('[App] 删除视频文件失败', filePath, e)
           }
         } else {
-          console.log('[App] 保留上传视频文件(仍有引用):', filePath)
+          logInfo('[App] 保留上传视频文件(仍有引用):', filePath)
         }
       }
     } finally {
@@ -2459,11 +2473,11 @@ const App: React.FC = () => {
     if (target?.result?.filePath) {
       const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
       for (const p of paths) {
-        try { await remove(p) } catch (e) { console.error('[App] 删除单条文件失败', p, e) }
+        try { await remove(p) } catch (e) { logError('[App] 删除单条文件失败', p, e) }
       }
       if (target?.result?.type === 'audio') {
         for (const p of paths) {
-          try { await deleteWaveformCacheForAudio(p) } catch (e) { console.error('[App] 删除单条波形缓存失败', p, e) }
+          try { await deleteWaveformCacheForAudio(p) } catch (e) { logError('[App] 删除单条波形缓存失败', p, e) }
         }
       }
     }
@@ -2480,12 +2494,12 @@ const App: React.FC = () => {
         if (canDelete) {
           try {
             await remove(filePath)
-            console.log('[App] 删除上传文件(无引用):', filePath)
+            logInfo('[App] 删除上传文件(无引用):', filePath)
           } catch (e) {
-            console.error('[App] 删除单条上传文件失败', filePath, e)
+            logError('[App] 删除单条上传文件失败', filePath, e)
           }
         } else {
-          console.log('[App] 保留上传文件(仍有引用):', filePath)
+          logInfo('[App] 保留上传文件(仍有引用):', filePath)
         }
       }
     }
@@ -2502,12 +2516,12 @@ const App: React.FC = () => {
         if (!usedByOthers) {
           try {
             await remove(filePath)
-            console.log('[App] 删除上传视频文件(无引用):', filePath)
+            logInfo('[App] 删除上传视频文件(无引用):', filePath)
           } catch (e) {
-            console.error('[App] 删除单条上传视频文件失败', filePath, e)
+            logError('[App] 删除单条上传视频文件失败', filePath, e)
           }
         } else {
-          console.log('[App] 保留上传视频文件(仍有引用):', filePath)
+          logInfo('[App] 保留上传视频文件(仍有引用):', filePath)
         }
       }
     }

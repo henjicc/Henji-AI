@@ -3,6 +3,7 @@
  */
 
 import { ModelConfig, BuildContext } from '../core/types'
+import { logError, logWarning, logInfo } from '../../../../utils/errorLogger'
 
 /**
  * 检查模型是否支持图片编辑
@@ -25,7 +26,7 @@ const checkModelSupportsImageEditing = (selectedModel: string, modelscopeCustomM
         }
       }
     } catch (e) {
-      console.error('[ModelScope] 检查自定义模型类型失败:', e)
+      logError('[ModelScope] 检查自定义模型类型失败:', e)
     }
   }
 
@@ -62,7 +63,7 @@ const commonImageUploadHandler = {
     const supportsImageEditing = checkModelSupportsImageEditing(selectedModel, modelscopeCustomModel)
 
     if (!supportsImageEditing) {
-      console.log('[ModelScope] 当前模型不支持图片编辑，跳过图片上传:', selectedModel)
+      logInfo('[ModelScope] 当前模型不支持图片编辑，跳过图片上传:', selectedModel)
       return
     }
 
@@ -110,7 +111,7 @@ const commonImageUploadHandler = {
         options.width = resolution.width
         options.height = resolution.height
 
-        console.log('[ModelScope] 智能分辨率计算:', {
+        logInfo('[ModelScope] 智能分辨率计算:', {
           原图尺寸: `${img.width}x${img.height}`,
           原图比例: (img.width / img.height).toFixed(4),
           计算结果: `${resolution.width}x${resolution.height}`,
@@ -118,7 +119,7 @@ const commonImageUploadHandler = {
           比例偏差: Math.abs((img.width / img.height) - (resolution.width / resolution.height)).toFixed(6)
         })
       } catch (error) {
-        console.error('[ModelScope] 智能分辨率计算失败:', error)
+        logError('[ModelScope] 智能分辨率计算失败:', error)
         // 失败时使用默认分辨率 1024x1024
         options.width = 1024
         options.height = 1024

@@ -10,6 +10,7 @@ import {
 } from '../base/BaseAdapter'
 import { MODELSCOPE_CONFIG } from './config'
 import { findRoute } from './models'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 interface ModelscopeTaskResponse {
   task_id: string
@@ -75,8 +76,8 @@ export class ModelscopeAdapter extends BaseAdapter {
       // 4. 开始轮询任务状态
       return await this.pollTaskStatus(response.task_id, params.onProgress)
     } catch (error) {
-      console.error('[ModelscopeAdapter] generateImage 错误:', error)
-      console.error('[ModelscopeAdapter] 请求数据:', JSON.stringify(requestData, null, 2))
+      logError('[ModelscopeAdapter] generateImage 错误:', error)
+      logError('[ModelscopeAdapter] 请求数据:', JSON.stringify(requestData, null, 2))
       throw this.formatError(error)
     }
   }
@@ -98,7 +99,7 @@ export class ModelscopeAdapter extends BaseAdapter {
       })
       return response
     } catch (error) {
-      console.error('[ModelscopeAdapter] checkStatus 错误:', error)
+      logError('[ModelscopeAdapter] checkStatus 错误:', error)
       throw this.formatError(error)
     }
   }
@@ -150,7 +151,7 @@ export class ModelscopeAdapter extends BaseAdapter {
 
         // 如果任务失败，记录详细错误信息
         if (status.task_status === 'FAILED') {
-          console.error('[ModelscopeAdapter] 任务失败，完整响应:', JSON.stringify(status, null, 2))
+          logError('[ModelscopeAdapter] 任务失败，完整响应:', JSON.stringify(status, null, 2))
         }
 
         return {

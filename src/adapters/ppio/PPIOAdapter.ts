@@ -13,6 +13,7 @@ import { PPIO_CONFIG } from './config'
 import { findRoute } from './models'
 import { PPIOStatusHandler } from './statusHandler'
 import { parseImageResponse, parseAudioResponse } from './parsers'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 /**
  * 派欧云适配器
@@ -58,7 +59,7 @@ export class PPIOAdapter extends BaseAdapter {
   async generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
     try {
       // 输出日志方便调试
-      console.log('[PPIOAdapter] generateVideo 调用参数:', params)
+      logInfo('[PPIOAdapter] generateVideo 调用参数:', params)
 
       // 1. 查找路由
       const route = findRoute(params.model)
@@ -69,13 +70,13 @@ export class PPIOAdapter extends BaseAdapter {
       // 2. 构建请求
       const { endpoint, requestData } = route.buildVideoRequest(params)
 
-      console.log('[PPIOAdapter] API端点:', endpoint)
-      console.log('[PPIOAdapter] 请求数据:', requestData)
+      logInfo('[PPIOAdapter] API端点:', endpoint)
+      logInfo('[PPIOAdapter] 请求数据:', requestData)
 
       // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)
 
-      console.log('[PPIOAdapter] API响应:', response.data)
+      logInfo('[PPIOAdapter] API响应:', response.data)
 
       if (!response.data.task_id) {
         throw new Error('No task ID returned from API')
@@ -85,7 +86,7 @@ export class PPIOAdapter extends BaseAdapter {
 
       // 4. 如果提供了进度回调，在 Adapter 内部轮询
       if (params.onProgress) {
-        console.log('[PPIOAdapter] 开始内部轮询，taskId:', taskId)
+        logInfo('[PPIOAdapter] 开始内部轮询，taskId:', taskId)
         return await this.statusHandler.pollTaskStatus(taskId, params.model, params.onProgress)
       }
 
@@ -95,9 +96,9 @@ export class PPIOAdapter extends BaseAdapter {
         status: 'TASK_STATUS_QUEUED'
       }
     } catch (error) {
-      console.error('[PPIOAdapter] generateVideo 错误:', error)
+      logError('[PPIOAdapter] generateVideo 错误:', error)
       if (axios.isAxiosError(error) && error.response) {
-        console.error('[PPIOAdapter] 错误响应数据:', error.response.data)
+        logError('[PPIOAdapter] 错误响应数据:', error.response.data)
       }
       throw this.handleError(error)
     }
@@ -114,12 +115,12 @@ export class PPIOAdapter extends BaseAdapter {
       // 2. 构建请求
       const { endpoint, requestData } = route.buildAudioRequest(params)
 
-      console.log('[PPIOAdapter] generateAudio 请求', { endpoint, requestData })
+      logInfo('[PPIOAdapter] generateAudio 请求', { endpoint, requestData })
 
       // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)
 
-      console.log('[PPIOAdapter] generateAudio 响应', response.data)
+      logInfo('[PPIOAdapter] generateAudio 响应', response.data)
 
       // 4. 解析响应
       const audioResult = await parseAudioResponse(response.data)
@@ -136,9 +137,9 @@ export class PPIOAdapter extends BaseAdapter {
         return audioResult
       }
     } catch (error) {
-      console.error('[PPIOAdapter] generateAudio 错误:', error)
+      logError('[PPIOAdapter] generateAudio 错误:', error)
       if (axios.isAxiosError(error) && error.response) {
-        console.error('[PPIOAdapter] 错误响应数据:', error.response.data)
+        logError('[PPIOAdapter] 错误响应数据:', error.response.data)
       }
       throw this.handleError(error)
     }
@@ -148,7 +149,7 @@ export class PPIOAdapter extends BaseAdapter {
     try {
       return await this.statusHandler.checkStatus(taskId)
     } catch (error) {
-      console.error('[PPIOAdapter] checkStatus 错误:', error)
+      logError('[PPIOAdapter] checkStatus 错误:', error)
       throw this.handleError(error)
     }
   }

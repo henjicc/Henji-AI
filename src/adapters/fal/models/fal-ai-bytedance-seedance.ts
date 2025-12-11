@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * 获取图片的宽高比
@@ -136,9 +137,9 @@ export const falAiBytedanceSeedanceRoute: FalModelRoute = {
         const firstImageUrl = images[0]
         const ratio = await getImageAspectRatio(firstImageUrl)
         aspectRatio = matchAspectRatio(ratio)
-        console.log(`[Seedance] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
+        logInfo('', `[Seedance] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
       } catch (error) {
-        console.error('[Seedance] 计算图片宽高比失败:', error)
+        logError('[Seedance] 计算图片宽高比失败:', error)
         // 如果计算失败，使用默认宽高比
         aspectRatio = seedanceMode === 'text-to-video' ? '16:9' : 'auto'
       }

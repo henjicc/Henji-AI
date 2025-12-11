@@ -6,6 +6,7 @@
 /**
  * 从图片 URL 获取尺寸
  */
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 export const getImageDimensions = (url: string): Promise<{ width: number; height: number }> => {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -115,7 +116,7 @@ export const getMediaDimensions = async (
 
     return `${dimensions.width}x${dimensions.height}`
   } catch (error) {
-    console.error('[mediaDimensions] Failed to get dimensions:', error)
+    logError('[mediaDimensions] Failed to get dimensions:', error)
     return null
   }
 }
@@ -154,7 +155,7 @@ export const getMediaDurationFormatted = async (
 
     return formatDuration(duration)
   } catch (error) {
-    console.error('[mediaDimensions] Failed to get duration:', error)
+    logError('[mediaDimensions] Failed to get duration:', error)
     return null
   }
 }

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import PanelTrigger from './PanelTrigger'
 import { ResolutionConfig } from '@/types/schema'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 interface UniversalResolutionSelectorProps {
   label?: string
@@ -143,7 +144,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
         onWidthChange(String(width))
         onHeightChange(String(height))
 
-        console.log(`[UniversalResolutionSelector] ${constraints.name}即梦分辨率计算:`, {
+        logInfo(`[UniversalResolutionSelector] ${constraints.name}即梦分辨率计算:`, {
           提供商: provider,
           比例: `${w}:${h}`,
           质量模式: quality,
@@ -155,7 +156,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           最大像素限制: constraints.absoluteMaxPixels
         })
       } else {
-        console.warn(`[UniversalResolutionSelector] 宽高比 ${finalRatio.toFixed(4)} 超出 ${constraints.name} 允许范围 [${constraints.minRatio}, ${constraints.maxRatio}]`)
+        logWarning(`[UniversalResolutionSelector] 宽高比 ${finalRatio.toFixed(4)} 超出 ${constraints.name} 允许范围 [${constraints.minRatio}, ${constraints.maxRatio}]`)
       }
     }
     // 使用 Qwen 计算器（如果启用）

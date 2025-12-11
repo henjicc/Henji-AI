@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { inferMimeFromPath, isDesktop } from '../utils/save'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 type DragPosition = { x: number; y: number }
 type DragDropPayload = { paths: string[]; position: DragPosition }
@@ -52,7 +53,7 @@ export function useTauriDragDrop(
                             const file = new File([bytes], name, { type: mime })
                             files.push(file)
                         } catch (e) {
-                            console.error('Failed to read dropped file:', p, e)
+                            logError('Failed to read dropped file:', p, e)
                         }
                     }
                     if (files.length > 0) {

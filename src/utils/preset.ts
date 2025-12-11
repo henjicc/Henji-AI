@@ -1,5 +1,6 @@
 import { Preset, PresetSaveMode } from '../types/preset'
 import { readJsonFromAppData, writeJsonToAppData } from './save'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 const PRESETS_FILE = 'presets.json'
 
@@ -14,7 +15,7 @@ export async function loadPresets(): Promise<Preset[]> {
         const presets = await readJsonFromAppData<Preset[]>(PRESETS_FILE)
         return presets || []
     } catch (error) {
-        console.error('加载预设失败:', error)
+        logError('加载预设失败:', error)
         return []
     }
 }
@@ -24,7 +25,7 @@ async function savePresets(presets: Preset[]): Promise<void> {
     try {
         await writeJsonToAppData(PRESETS_FILE, presets)
     } catch (error) {
-        console.error('保存预设失败:', error)
+        logError('保存预设失败:', error)
         throw error
     }
 }

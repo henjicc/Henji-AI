@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * 获取图片的宽高比
@@ -117,9 +118,9 @@ export const falAiViduQ2Route: FalModelRoute = {
       try {
         const ratio = await getImageAspectRatio(images[0])
         viduQ2AspectRatio = matchAspectRatio(ratio)
-        console.log(`[Vidu Q2] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${viduQ2AspectRatio}`)
+        logInfo('', `[Vidu Q2] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${viduQ2AspectRatio}`)
       } catch (error) {
-        console.error('[Vidu Q2] 计算图片宽高比失败:', error)
+        logError('[Vidu Q2] 计算图片宽高比失败:', error)
         viduQ2AspectRatio = '16:9' // 回退默认值
       }
     }

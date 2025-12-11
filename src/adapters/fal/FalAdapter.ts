@@ -14,6 +14,7 @@ import { getEstimatedPolls } from './config'
 import { findRoute } from './models'
 import { parseImageResponse, parseVideoResponse } from './parsers'
 import { calculateProgress } from '@/utils/progress'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 /**
  * Fal 适配器
@@ -225,7 +226,7 @@ export class FalAdapter extends BaseAdapter {
         logRequestData.image_urls = `[${requestData.image_urls.length} images]`
       }
 
-      console.log('[FalAdapter] 提交请求:', {
+      logInfo('[FalAdapter] 提交请求:', {
         submitPath,
         modelId: routeModelId,
         syncMode: requestData.sync_mode,
@@ -235,7 +236,7 @@ export class FalAdapter extends BaseAdapter {
       // 3. 检查是否为同步模式
       if (requestData.sync_mode === true) {
         // 同步模式：使用 fal.run 直接获取结果
-        console.log('[FalAdapter] 使用同步模式')
+        logInfo('', '[FalAdapter] 使用同步模式')
 
         // 移除 sync_mode 参数，因为它不是 API 参数
         const { sync_mode, ...cleanRequestData } = requestData
@@ -243,7 +244,7 @@ export class FalAdapter extends BaseAdapter {
         const result = await fal.run(submitPath, {
           input: cleanRequestData
         })
-        console.log('[FalAdapter] 同步请求响应:', result)
+        logInfo('[FalAdapter] 同步请求响应:', result)
 
         // 直接解析响应数据
         const parsedResult = await parseImageResponse(result)
@@ -253,7 +254,7 @@ export class FalAdapter extends BaseAdapter {
         }
       } else {
         // 队列模式：使用 fal.subscribe 自动轮询
-        console.log('[FalAdapter] 使用队列模式')
+        logInfo('', '[FalAdapter] 使用队列模式')
         this.pollCount = 0
 
         const result = await fal.subscribe(submitPath, {
@@ -265,7 +266,7 @@ export class FalAdapter extends BaseAdapter {
               const progress = this.calculateProgress(update, routeModelId)
               const message = this.getStatusMessage(update)
 
-              console.log('[FalAdapter] 进度更新:', {
+              logInfo('[FalAdapter] 进度更新:', {
                 status: update.status,
                 queue_position: update.queue_position,
                 pollCount: this.pollCount,
@@ -283,7 +284,7 @@ export class FalAdapter extends BaseAdapter {
           }
         })
 
-        console.log('[FalAdapter] 队列请求完成:', result)
+        logInfo('[FalAdapter] 队列请求完成:', result)
 
         // 解析响应数据
         const parsedResult = await parseImageResponse(result)
@@ -293,7 +294,7 @@ export class FalAdapter extends BaseAdapter {
         }
       }
     } catch (error) {
-      console.error('[FalAdapter] generateImage 错误:', error)
+      logError('[FalAdapter] generateImage 错误:', error)
       throw this.handleError(error)
     }
   }
@@ -308,7 +309,7 @@ export class FalAdapter extends BaseAdapter {
     requestId: string,
     _onProgress?: (status: ProgressStatus) => void
   ): Promise<ImageResult> {
-    console.log('[FalAdapter] 继续查询:', { modelId, requestId })
+    logInfo('[FalAdapter] 继续查询:', { modelId, requestId })
 
     try {
       this.pollCount = 0
@@ -318,7 +319,7 @@ export class FalAdapter extends BaseAdapter {
         requestId: requestId
       })
 
-      console.log('[FalAdapter] 恢复查询完成:', result)
+      logInfo('[FalAdapter] 恢复查询完成:', result)
 
       const parsedResult = await parseImageResponse(result)
       return {
@@ -326,14 +327,14 @@ export class FalAdapter extends BaseAdapter {
         status: 'completed'
       }
     } catch (error) {
-      console.error('[FalAdapter] continuePolling 错误:', error)
+      logError('[FalAdapter] continuePolling 错误:', error)
       throw this.handleError(error)
     }
   }
 
   async generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
     try {
-      console.log('[FalAdapter] generateVideo 调用参数:', params)
+      logInfo('[FalAdapter] generateVideo 调用参数:', params)
 
       // 1. 如果有图片，先上传到 fal CDN（不修改原始 params）
       let uploadedImages: string[] = []
@@ -377,7 +378,7 @@ export class FalAdapter extends BaseAdapter {
         logRequestData.image_urls = `[${requestData.image_urls.length} images]`
       }
 
-      console.log('[FalAdapter] 提交视频生成请求:', {
+      logInfo('[FalAdapter] 提交视频生成请求:', {
         endpoint,
         modelId,
         requestData: logRequestData
@@ -395,7 +396,7 @@ export class FalAdapter extends BaseAdapter {
             const progress = this.calculateProgress(update, modelId)
             const message = this.getStatusMessage(update)
 
-            console.log('[FalAdapter] 视频生成进度更新:', {
+            logInfo('[FalAdapter] 视频生成进度更新:', {
               status: update.status,
               queue_position: update.queue_position,
               pollCount: this.pollCount,
@@ -412,7 +413,7 @@ export class FalAdapter extends BaseAdapter {
           }
         })
 
-        console.log('[FalAdapter] 视频生成完成:', result)
+        logInfo('[FalAdapter] 视频生成完成:', result)
 
         // 解析响应数据
         return await parseVideoResponse(result, this)
@@ -423,14 +424,14 @@ export class FalAdapter extends BaseAdapter {
         input: requestData
       })
 
-      console.log('[FalAdapter] 视频生成请求已提交:', { request_id, modelId })
+      logInfo('[FalAdapter] 视频生成请求已提交:', { request_id, modelId })
 
       return {
         taskId: `${modelId}:${request_id}`,
         status: 'QUEUED'
       }
     } catch (error) {
-      console.error('[FalAdapter] generateVideo 错误:', error)
+      logError('[FalAdapter] generateVideo 错误:', error)
       throw this.handleError(error)
     }
   }
@@ -447,7 +448,7 @@ export class FalAdapter extends BaseAdapter {
         throw new Error('Invalid taskId format. Expected "modelId:requestId"')
       }
 
-      console.log('[FalAdapter] 检查状态:', { modelId, requestId })
+      logInfo('[FalAdapter] 检查状态:', { modelId, requestId })
 
       // 使用官方 SDK 查询状态
       const statusResponse = await fal.queue.status(modelId, {
@@ -455,7 +456,7 @@ export class FalAdapter extends BaseAdapter {
         logs: true
       })
 
-      console.log('[FalAdapter] 状态响应:', statusResponse)
+      logInfo('[FalAdapter] 状态响应:', statusResponse)
 
       // 如果状态是 COMPLETED，获取结果
       if (statusResponse.status === 'COMPLETED') {
@@ -490,7 +491,7 @@ export class FalAdapter extends BaseAdapter {
         result: undefined
       }
     } catch (error) {
-      console.error('[FalAdapter] checkStatus 错误:', error)
+      logError('[FalAdapter] checkStatus 错误:', error)
       throw this.handleError(error)
     }
   }
@@ -539,7 +540,7 @@ export class FalAdapter extends BaseAdapter {
    * 错误处理
    */
   private handleError(error: any): Error {
-    console.error(`[${this.name}] 错误详情:`, error)
+    logError(`[${this.name}] 错误详情:`, error)
 
     // 处理官方 SDK 的错误格式
     if (error.body?.detail) {

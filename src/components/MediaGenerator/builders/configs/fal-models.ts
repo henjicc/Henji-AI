@@ -3,6 +3,7 @@
  */
 
 import { ModelConfig, BuildContext } from '../core/types'
+import { logError, logWarning, logInfo } from '../../../../utils/errorLogger'
 
 /**
  * 通用的图片上传处理器
@@ -65,7 +66,7 @@ const commonVideoUploadHandler = {
       options.uploadedVideos = uploadedVideos
     }
 
-    console.log('[commonVideoUploadHandler] 开始处理视频...', {
+    logInfo('[commonVideoUploadHandler] 开始处理视频...', {
       count: uploadedVideoFiles.length
     })
 
@@ -74,7 +75,7 @@ const commonVideoUploadHandler = {
 
     for (let i = 0; i < uploadedVideoFiles.length; i++) {
       const file = uploadedVideoFiles[i]
-      console.log(`[commonVideoUploadHandler] 处理第 ${i + 1}/${uploadedVideoFiles.length} 个视频...`, {
+      logInfo(`[commonVideoUploadHandler] 处理第 ${i + 1}/${uploadedVideoFiles.length} 个视频...`, {
         name: file.name,
         size: file.size,
         type: file.type
@@ -84,7 +85,7 @@ const commonVideoUploadHandler = {
       if (!paths[i]) {
         const saved = await saveUploadVideo(file, 'persist')
         paths[i] = saved.fullPath
-        console.log(`[commonVideoUploadHandler] 视频已保存到本地:`, saved.fullPath)
+        logInfo(`[commonVideoUploadHandler] 视频已保存到本地:`, saved.fullPath)
       }
     }
 
@@ -96,7 +97,7 @@ const commonVideoUploadHandler = {
     setUploadedVideoFilePaths(paths)
     options.uploadedVideoFilePaths = paths
 
-    console.log('[commonVideoUploadHandler] 视频文件路径已保存，File 对象已传递给适配器')
+    logInfo('', '[commonVideoUploadHandler] 视频文件路径已保存，File 对象已传递给适配器')
   }
 }
 
@@ -286,7 +287,7 @@ const falSeedreamImageUploadHandler = {
             // Fal 使用 "width*height" 格式（注意是 '*' 而不是 'x'）
             options.imageSize = smartSize.replace('x', '*')
           } catch (error) {
-            console.error('[Fal Seedream] Smart resolution calculation failed:', error)
+            logError('[Fal Seedream] Smart resolution calculation failed:', error)
             // 失败时使用默认比例
             const { getActualResolution } = await import('../../utils/resolutionUtils')
             const defaultSize = getActualResolution('1:1', quality)
@@ -316,7 +317,7 @@ const falSeedreamImageUploadHandler = {
         }
       }
     } catch (error) {
-      console.error('[Fal Seedream] Resolution calculation error:', error)
+      logError('[Fal Seedream] Resolution calculation error:', error)
       // 分辨率计算失败不应该影响图片上传和其他功能
     }
   }
@@ -515,7 +516,7 @@ export const falZImageTurboConfig: ModelConfig = {
       // 设置到 options 中，适配器会从这里读取
       options.falZImageTurboImageSize = finalImageSize
 
-      console.log('[falZImageTurboConfig] 分辨率处理:', {
+      logInfo('[falZImageTurboConfig] 分辨率处理:', {
         customWidth: params.customWidth,
         customHeight: params.customHeight,
         finalImageSize

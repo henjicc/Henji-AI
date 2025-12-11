@@ -1,4 +1,5 @@
 import { fal } from '@fal-ai/client'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 /**
  * 将 data URI 转换为 Blob
@@ -29,7 +30,7 @@ function dataURItoBlob(dataUri: string): Blob {
 export async function uploadToFalCDN(image: string, apiKey: string): Promise<string> {
   // 1. 如果已经是 HTTP/HTTPS URL，直接返回
   if (image.startsWith('http://') || image.startsWith('https://')) {
-    console.log('[falUpload] 图片已是 URL，跳过上传')
+    logInfo('', '[falUpload] 图片已是 URL，跳过上传')
     return image
   }
 
@@ -41,27 +42,27 @@ export async function uploadToFalCDN(image: string, apiKey: string): Promise<str
   // 2. 如果是 base64 data URI，转换为 Blob 后上传
   if (image.startsWith('data:')) {
     try {
-      console.log('[falUpload] 检测到 base64 图片，开始上传到 fal CDN...')
+      logInfo('', '[falUpload] 检测到 base64 图片，开始上传到 fal CDN...')
       const blob = dataURItoBlob(image)
       const url = await fal.storage.upload(blob)
-      console.log('[falUpload] 上传成功，获得 URL:', url)
+      logInfo('[falUpload] 上传成功，获得 URL:', url)
       return url
     } catch (error) {
-      console.error('[falUpload] 上传失败:', error)
+      logError('[falUpload] 上传失败:', error)
       throw error
     }
   }
 
   // 3. 如果是纯 base64 字符串（没有 data: 前缀），添加前缀后上传
   try {
-    console.log('[falUpload] 检测到纯 base64 字符串，添加前缀后上传...')
+    logInfo('', '[falUpload] 检测到纯 base64 字符串，添加前缀后上传...')
     const dataUri = `data:image/jpeg;base64,${image}`
     const blob = dataURItoBlob(dataUri)
     const url = await fal.storage.upload(blob)
-    console.log('[falUpload] 上传成功，获得 URL:', url)
+    logInfo('[falUpload] 上传成功，获得 URL:', url)
     return url
   } catch (error) {
-    console.error('[falUpload] 上传失败:', error)
+    logError('[falUpload] 上传失败:', error)
     throw error
   }
 }
@@ -80,16 +81,16 @@ export async function uploadMultipleToFalCDN(
     return []
   }
 
-  console.log(`[falUpload] 准备上传 ${images.length} 张图片到 fal CDN...`)
+  logInfo('', `[falUpload] 准备上传 ${images.length} 张图片到 fal CDN...`)
 
   // 并行上传所有图片
   const uploadedUrls = await Promise.all(
     images.map((img, index) => {
-      console.log(`[falUpload] 上传第 ${index + 1}/${images.length} 张图片...`)
+      logInfo('', `[falUpload] 上传第 ${index + 1}/${images.length} 张图片...`)
       return uploadToFalCDN(img, apiKey)
     })
   )
 
-  console.log(`[falUpload] 所有图片上传完成，共 ${uploadedUrls.length} 张`)
+  logInfo('', `[falUpload] 所有图片上传完成，共 ${uploadedUrls.length} 张`)
   return uploadedUrls
 }

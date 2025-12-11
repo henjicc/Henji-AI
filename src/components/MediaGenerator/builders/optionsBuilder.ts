@@ -5,6 +5,7 @@
 
 import { optionsBuilder, registerAllConfigs } from './configs'
 import { BuildContext, BuildOptionsParams } from './core/types'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 // 确保配置已注册（只注册一次）
 let configsRegistered = false
@@ -12,7 +13,7 @@ function ensureConfigsRegistered() {
   if (!configsRegistered) {
     registerAllConfigs()
     configsRegistered = true
-    console.log('[OptionsBuilder] Configuration-driven architecture initialized with 28 models')
+    logInfo('', '[OptionsBuilder] Configuration-driven architecture initialized with 28 models')
   }
 }
 
@@ -36,7 +37,7 @@ export async function buildGenerateOptions(params: BuildOptionsParams): Promise<
     )
   }
 
-  console.log(`[OptionsBuilder] Building options for ${selectedModel} using configuration-driven architecture`)
+  logInfo('', `[OptionsBuilder] Building options for ${selectedModel} using configuration-driven architecture`)
 
   try {
     // 将参数格式转换为 BuildContext 格式
@@ -52,13 +53,13 @@ export async function buildGenerateOptions(params: BuildOptionsParams): Promise<
     // 使用配置驱动的 OptionsBuilder 构建选项
     const options = await optionsBuilder.build(context)
 
-    console.log(`[OptionsBuilder] ✓ Successfully built options for ${selectedModel}`)
-    console.log(`[OptionsBuilder] Built options keys:`, Object.keys(options))
-    console.log(`[OptionsBuilder] Built options:`, options)
+    logInfo('', `[OptionsBuilder] ✓ Successfully built options for ${selectedModel}`)
+    logInfo(`[OptionsBuilder] Built options keys:`, Object.keys(options))
+    logInfo(`[OptionsBuilder] Built options:`, options)
     return options
 
   } catch (error) {
-    console.error(`[OptionsBuilder] ✗ Error building options for ${selectedModel}:`, error)
+    logError(`[OptionsBuilder] ✗ Error building options for ${selectedModel}:`, error)
     throw error
   }
 }
@@ -82,17 +83,17 @@ function convertParamsToContext(params: BuildOptionsParams): Record<string, any>
 export function reverseMapOptions(modelId: string, apiOptions: Record<string, any>): Record<string, any> {
   ensureConfigsRegistered()
 
-  console.log('[OptionsBuilder] ReverseMap - Model:', modelId)
-  console.log('[OptionsBuilder] ReverseMap - API options keys:', Object.keys(apiOptions))
+  logInfo('[OptionsBuilder] ReverseMap - Model:', modelId)
+  logInfo('[OptionsBuilder] ReverseMap - API options keys:', Object.keys(apiOptions))
 
   const config = optionsBuilder.getConfig(modelId)
   if (!config || !config.paramMapping) {
-    console.log('[OptionsBuilder] ReverseMap - No config or paramMapping, returning original options')
+    logInfo('[OptionsBuilder] ReverseMap - No config or paramMapping, returning original options')
     // 如果没有配置，直接返回原始参数
     return apiOptions
   }
 
-  console.log('[OptionsBuilder] ReverseMap - ParamMapping keys:', Object.keys(config.paramMapping))
+  logInfo('[OptionsBuilder] ReverseMap - ParamMapping keys:', Object.keys(config.paramMapping))
 
   const uiParams: Record<string, any> = {}
 
@@ -100,7 +101,7 @@ export function reverseMapOptions(modelId: string, apiOptions: Record<string, an
   for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
     // 检查 API 参数中是否有这个 key
     if (!(apiKey in apiOptions)) {
-      console.log(`[OptionsBuilder] ReverseMap - Skipped (not in API options): ${apiKey}`)
+      logInfo('', `[OptionsBuilder] ReverseMap - Skipped (not in API options): ${apiKey}`)
       continue
     }
 
@@ -128,14 +129,14 @@ export function reverseMapOptions(modelId: string, apiOptions: Record<string, an
     // 如果找到了 UI 参数名，添加到结果中
     if (uiKey) {
       uiParams[uiKey] = value
-      console.log(`[OptionsBuilder] ReverseMap - Mapped: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
+      logInfo('', `[OptionsBuilder] ReverseMap - Mapped: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
     } else {
-      console.log(`[OptionsBuilder] ReverseMap - No UI key found for: ${apiKey}`)
+      logInfo('', `[OptionsBuilder] ReverseMap - No UI key found for: ${apiKey}`)
     }
   }
 
-  console.log(`[OptionsBuilder] ReverseMap - Result: ${Object.keys(uiParams).length} parameters`)
-  console.log('[OptionsBuilder] ReverseMap - UI params:', uiParams)
+  logInfo('', `[OptionsBuilder] ReverseMap - Result: ${Object.keys(uiParams).length} parameters`)
+  logInfo('[OptionsBuilder] ReverseMap - UI params:', uiParams)
 
   return uiParams
 }

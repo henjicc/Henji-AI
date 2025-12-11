@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Fal.ai Sora 2 模型路由
@@ -76,9 +77,9 @@ export const falAiSora2Route: FalModelRoute = {
           }
 
           aspectRatio = closestRatio.value
-          console.log(`[Sora2] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
+          logInfo('', `[Sora2] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
         } catch (error) {
-          console.error('[Sora2] 计算图片宽高比失败:', error)
+          logError('[Sora2] 计算图片宽高比失败:', error)
           aspectRatio = 'auto' // 回退到 auto，让 API 自动处理
         }
       }

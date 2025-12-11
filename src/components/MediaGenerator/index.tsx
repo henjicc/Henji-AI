@@ -17,6 +17,7 @@ import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -282,7 +283,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
   // 监听 Z-Image-Turbo 的 imageSize 和 resolutionBaseSize 变化，自动更新 customWidth 和 customHeight
   useEffect(() => {
-    console.log('[Z-Image-Turbo] imageSize or baseSize changed:', {
+    logInfo('[Z-Image-Turbo] imageSize or baseSize changed:', {
       selectedModel: state.selectedModel,
       modelscopeImageSize: state.modelscopeImageSize,
       baseSize: state.resolutionBaseSize,
@@ -296,14 +297,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 如果是从 customSize 更新触发的，跳过
     if (isUpdatingFromCustomSizeRef.current) {
-      console.log('[Z-Image-Turbo] Skipping update (triggered by customSize change)')
+      logInfo('', '[Z-Image-Turbo] Skipping update (triggered by customSize change)')
       isUpdatingFromCustomSizeRef.current = false
       return
     }
 
     // 如果是 "自定义"，不做任何处理，保持当前的 customWidth 和 customHeight
     if (state.modelscopeImageSize === '自定义') {
-      console.log('[Z-Image-Turbo] imageSize is 自定义, skipping update')
+      logInfo('[Z-Image-Turbo] imageSize is 自定义, skipping update')
       return
     }
 
@@ -315,14 +316,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
           const baseSize = state.resolutionBaseSize || 1440 // 默认 1440
           const size = calculateResolution(baseSize, w, h)
-          console.log('[Z-Image-Turbo] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
+          logInfo('[Z-Image-Turbo] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
 
           const newWidth = String(size.width)
           const newHeight = String(size.height)
 
           // 只有当值真的不同时才更新
           if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
-            console.log('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
+            logInfo('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
             isUpdatingFromImageSizeRef.current = true
             state.setCustomWidth(newWidth)
             state.setCustomHeight(newHeight)
@@ -335,7 +336,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 监听 customWidth 和 customHeight 变化，反向匹配比例（Z-Image-Turbo）
   // 只有用户手动修改时才触发
   useEffect(() => {
-    console.log('[Z-Image-Turbo] customWidth/Height changed:', {
+    logInfo('[Z-Image-Turbo] customWidth/Height changed:', {
       selectedModel: state.selectedModel,
       customWidth: state.customWidth,
       customHeight: state.customHeight,
@@ -348,7 +349,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 如果是从 imageSize 更新触发的，跳过
     if (isUpdatingFromImageSizeRef.current) {
-      console.log('[Z-Image-Turbo] Skipping update (triggered by imageSize change)')
+      logInfo('', '[Z-Image-Turbo] Skipping update (triggered by imageSize change)')
       isUpdatingFromImageSizeRef.current = false
       return
     }
@@ -378,17 +379,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         }
       }
 
-      console.log('[Z-Image-Turbo] Matched ratio:', matchedRatio)
+      logInfo('[Z-Image-Turbo] Matched ratio:', matchedRatio)
 
       // 如果找到匹配的比例，自动选中
       if (matchedRatio && state.modelscopeImageSize !== matchedRatio) {
-        console.log('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
+        logInfo('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
         isUpdatingFromCustomSizeRef.current = true
         state.setModelscopeImageSize(matchedRatio)
       }
       // 如果没有匹配的比例，设置为 "自定义"
       else if (!matchedRatio && state.modelscopeImageSize !== '自定义') {
-        console.log('[Z-Image-Turbo] Setting imageSize to 自定义')
+        logInfo('', '[Z-Image-Turbo] Setting imageSize to 自定义')
         isUpdatingFromCustomSizeRef.current = true
         state.setModelscopeImageSize('自定义')
       }
@@ -407,7 +408,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     if (!isModelscopeModel) return
     if (!state.modelscopeImageSize) return
 
-    console.log('[ModelScope] imageSize or baseSize changed:', {
+    logInfo('[ModelScope] imageSize or baseSize changed:', {
       selectedModel: state.selectedModel,
       modelscopeImageSize: state.modelscopeImageSize,
       baseSize: state.resolutionBaseSize,
@@ -417,7 +418,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 如果是 "自定义"，不做任何处理
     if (state.modelscopeImageSize === '自定义') {
-      console.log('[ModelScope] imageSize is 自定义, skipping update')
+      logInfo('[ModelScope] imageSize is 自定义, skipping update')
       return
     }
 
@@ -429,14 +430,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
           const baseSize = state.resolutionBaseSize || 1024 // 默认 1024
           const size = calculateResolution(baseSize, w, h)
-          console.log('[ModelScope] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
+          logInfo('[ModelScope] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
 
           const newWidth = String(size.width)
           const newHeight = String(size.height)
 
           // 只有当值真的不同时才更新
           if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
-            console.log('[ModelScope] Updating customWidth and customHeight to:', size)
+            logInfo('[ModelScope] Updating customWidth and customHeight to:', size)
             state.setCustomWidth(newWidth)
             state.setCustomHeight(newHeight)
           }
@@ -491,7 +492,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             const file = new File([blob], `video-${index}.mp4`, { type: blob.type || 'video/mp4' })
             return file
           } catch (e) {
-            console.error('[MediaGenerator] Failed to convert video to File:', e)
+            logError('[MediaGenerator] Failed to convert video to File:', e)
             return null
           }
         })).then(files => {
@@ -507,9 +508,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
       // 恢复参数 - 同时处理 UI 参数和 API 参数
       if (options) {
-        console.log('[MediaGenerator] Restore - Model:', model)
-        console.log('[MediaGenerator] Restore - Options keys:', Object.keys(options))
-        console.log('[MediaGenerator] Restore - Options:', options)
+        logInfo('[MediaGenerator] Restore - Model:', model)
+        logInfo('[MediaGenerator] Restore - Options keys:', Object.keys(options))
+        logInfo('[MediaGenerator] Restore - Options:', options)
 
         const paramsToRestore: Record<string, any> = {}
 
@@ -517,29 +518,29 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         for (const [key, value] of Object.entries(options)) {
           if (key in setterMap) {
             paramsToRestore[key] = value
-            console.log(`[MediaGenerator] Restore - Direct UI param: ${key} = ${JSON.stringify(value)}`)
+            logInfo('', `[MediaGenerator] Restore - Direct UI param: ${key} = ${JSON.stringify(value)}`)
           }
         }
 
-        console.log('[MediaGenerator] Restore - Direct UI params count:', Object.keys(paramsToRestore).length)
+        logInfo('[MediaGenerator] Restore - Direct UI params count:', Object.keys(paramsToRestore).length)
 
         // 2. 对于没有 UI 参数的情况，尝试反向映射 API 参数（旧的历史记录）
         const { reverseMapOptions } = await import('./builders/optionsBuilder')
         const reverseMappedParams = reverseMapOptions(model, options)
 
-        console.log('[MediaGenerator] Restore - Reverse mapped params:', reverseMappedParams)
+        logInfo('[MediaGenerator] Restore - Reverse mapped params:', reverseMappedParams)
 
         // 合并反向映射的参数（UI 参数优先）
         for (const [key, value] of Object.entries(reverseMappedParams)) {
           if (!(key in paramsToRestore)) {
             paramsToRestore[key] = value
-            console.log(`[MediaGenerator] Restore - Reverse mapped: ${key} = ${JSON.stringify(value)}`)
+            logInfo('', `[MediaGenerator] Restore - Reverse mapped: ${key} = ${JSON.stringify(value)}`)
           } else {
-            console.log(`[MediaGenerator] Restore - Skipped (already exists): ${key}`)
+            logInfo('', `[MediaGenerator] Restore - Skipped (already exists): ${key}`)
           }
         }
 
-        console.log('[MediaGenerator] Restore - Final params to restore:', paramsToRestore)
+        logInfo('[MediaGenerator] Restore - Final params to restore:', paramsToRestore)
 
         // 使用 setterMap 恢复所有参数
         let restoredCount = 0
@@ -548,13 +549,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           if (setter && value !== undefined && value !== null) {
             setter(value)
             restoredCount++
-            console.log(`[MediaGenerator] Restore - Applied: ${key} = ${JSON.stringify(value)}`)
+            logInfo('', `[MediaGenerator] Restore - Applied: ${key} = ${JSON.stringify(value)}`)
           } else if (!setter) {
-            console.log(`[MediaGenerator] Restore - No setter for: ${key}`)
+            logInfo('', `[MediaGenerator] Restore - No setter for: ${key}`)
           }
         }
 
-        console.log(`[MediaGenerator] Restore - Successfully restored ${restoredCount} parameters`)
+        logInfo('', `[MediaGenerator] Restore - Successfully restored ${restoredCount} parameters`)
       }
 
       // 恢复完成后重置标记
@@ -855,7 +856,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           }
         }
       } catch (e) {
-        console.error('Failed to check model type:', e)
+        logError('Failed to check model type:', e)
       }
     }
   }
@@ -1045,12 +1046,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       const { optionsBuilder } = await import('./builders/configs')
       const config = optionsBuilder.getConfig(state.selectedModel)
 
-      console.log('[MediaGenerator] Save - Model:', state.selectedModel)
-      console.log('[MediaGenerator] Save - Config found:', !!config)
-      console.log('[MediaGenerator] Save - API options keys:', Object.keys(options))
+      logInfo('[MediaGenerator] Save - Model:', state.selectedModel)
+      logInfo('[MediaGenerator] Save - Config found:', !!config)
+      logInfo('[MediaGenerator] Save - API options keys:', Object.keys(options))
 
       if (config && config.paramMapping) {
-        console.log('[MediaGenerator] Save - ParamMapping keys:', Object.keys(config.paramMapping))
+        logInfo('[MediaGenerator] Save - ParamMapping keys:', Object.keys(config.paramMapping))
 
         // 遍历参数映射，提取所有 UI 参数
         for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
@@ -1081,9 +1082,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           if (uiKey && uiKey in state) {
             const value = (state as any)[uiKey]
             originalUIParams[uiKey] = value
-            console.log(`[MediaGenerator] Save - Extracted: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
+            logInfo('', `[MediaGenerator] Save - Extracted: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
           } else if (uiKey) {
-            console.log(`[MediaGenerator] Save - Skipped (not in state): ${apiKey} -> ${uiKey}`)
+            logInfo('', `[MediaGenerator] Save - Skipped (not in state): ${apiKey} -> ${uiKey}`)
           }
         }
       }
@@ -1094,7 +1095,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
         if (!('aspectRatio' in originalUIParams)) {
           originalUIParams.aspectRatio = state.aspectRatio
-          console.log('[MediaGenerator] Save - Manual add: aspectRatio =', state.aspectRatio)
+          logInfo('[MediaGenerator] Save - Manual add: aspectRatio =', state.aspectRatio)
         }
       }
 
@@ -1104,12 +1105,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           state.selectedModel === 'seedream-4.0') {
         if (!('selectedResolution' in originalUIParams)) {
           originalUIParams.selectedResolution = state.selectedResolution
-          console.log('[MediaGenerator] Save - Manual add: selectedResolution =', state.selectedResolution)
+          logInfo('[MediaGenerator] Save - Manual add: selectedResolution =', state.selectedResolution)
         }
       }
 
-      console.log('[MediaGenerator] Save - Final UI params:', originalUIParams)
-      console.log('[MediaGenerator] Save - Final options keys:', Object.keys({ ...options, ...originalUIParams }))
+      logInfo('[MediaGenerator] Save - Final UI params:', originalUIParams)
+      logInfo('[MediaGenerator] Save - Final options keys:', Object.keys({ ...options, ...originalUIParams }))
 
       // 将原始 UI 参数合并到 options 中
       const finalOptions = { ...options, ...originalUIParams }

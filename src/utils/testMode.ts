@@ -3,6 +3,7 @@
  * 用于开发和调试，不影响生产功能
  */
 
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 export interface TestModeOptions {
   skipRequest: boolean // 不发送实际请求
   logParams: boolean   // 在控制台输出参数
@@ -36,7 +37,7 @@ export function getTestModeState(): TestModeState {
       return JSON.parse(stored)
     }
   } catch (e) {
-    console.error('[TestMode] Failed to load state:', e)
+    logError('[TestMode] Failed to load state:', e)
   }
 
   return {
@@ -53,7 +54,7 @@ export function saveTestModeState(state: TestModeState): void {
     // 触发自定义事件，通知其他组件状态已更新
     window.dispatchEvent(new CustomEvent('test-mode-changed', { detail: state }))
   } catch (e) {
-    console.error('[TestMode] Failed to save state:', e)
+    logError('[TestMode] Failed to save state:', e)
   }
 }
 
@@ -63,7 +64,7 @@ export function toggleTestMode(): boolean {
   state.enabled = !state.enabled
   saveTestModeState(state)
 
-  console.log(`[TestMode] ${state.enabled ? '已开启' : '已关闭'}`)
+  logInfo('', `[TestMode] ${state.enabled ? '已开启' : '已关闭'}`)
 
   return state.enabled
 }
@@ -219,10 +220,10 @@ export function logRequestParams(params: any): void {
 
     // 基本信息
     console.group('📋 基本信息')
-    console.log('模型:', model)
-    console.log('类型:', type === 'image' ? '图片' : type === 'video' ? '视频' : type === 'audio' ? '音频' : type)
-    console.log('提示词:', input || '(无)')
-    console.log('时间:', new Date(params.timestamp).toLocaleString('zh-CN'))
+    logInfo('模型:', model)
+    logInfo('类型:', type === 'image' ? '图片' : type === 'video' ? '视频' : type === 'audio' ? '音频' : type)
+    logInfo('提示词:', input || '(无)')
+    logInfo('时间:', new Date(params.timestamp).toLocaleString('zh-CN'))
     console.groupEnd()
 
     // 关键参数
@@ -230,7 +231,7 @@ export function logRequestParams(params: any): void {
     if (Object.keys(keyParams).length > 0) {
       console.group('⚙️ 关键参数')
       for (const [key, value] of Object.entries(keyParams)) {
-        console.log(`${key}:`, value)
+        logInfo(`${key}:`, value)
       }
       console.groupEnd()
     }
@@ -240,7 +241,7 @@ export function logRequestParams(params: any): void {
     if (Object.keys(files).length > 0) {
       console.group('📁 上传文件')
       for (const [key, value] of Object.entries(files)) {
-        console.log(`${key}:`, value)
+        logInfo(`${key}:`, value)
       }
       console.groupEnd()
     }
@@ -248,12 +249,12 @@ export function logRequestParams(params: any): void {
     // 完整参数（格式化 Base64）
     console.group('📦 完整参数 (Base64已简化)')
     const formattedOptions = formatBase64(options)
-    console.log(formattedOptions)
+    logInfo('', formattedOptions)
     console.groupEnd()
 
     // 原始参数（折叠，仅在需要时展开）
     console.groupCollapsed('🔍 原始参数 (包含Base64)')
-    console.log('完整options对象:', options)
+    logInfo('完整options对象:', options)
     console.groupEnd()
 
     console.groupEnd()

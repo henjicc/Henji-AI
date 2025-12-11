@@ -1,6 +1,7 @@
 import React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isDesktop, isDesktopAsync } from '../utils/save'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 // CSS properties that are not in the default type definitions
 type WebkitAppRegion = 'drag' | 'no-drag'
@@ -34,10 +35,10 @@ const WindowControls: React.FC = () => {
   const win = getCurrentWindow()
 
   const handleMinimize = async () => {
-    try { await win.minimize() } catch (e) { console.error('[WindowControls] minimize failed', e) }
+    try { await win.minimize() } catch (e) { logError('[WindowControls] minimize failed', e) }
   }
   const handleToggleMaximize = async () => {
-    try { await win.toggleMaximize() } catch (e) { console.error('[WindowControls] toggleMaximize failed', e) }
+    try { await win.toggleMaximize() } catch (e) { logError('[WindowControls] toggleMaximize failed', e) }
   }
   const handleClose = async () => {
     try { await win.close() } catch (e) { console.error('[WindowControls] close failed', e) }

@@ -1,4 +1,5 @@
 import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Kling Image O1 模型路由
@@ -36,9 +37,9 @@ export const falAiKlingImageO1Route = {
         const { getImageAspectRatio, formatAspectRatio } = await import('@/utils/aspectRatio')
         const ratio = await getImageAspectRatio(images[0])
         aspectRatio = formatAspectRatio(ratio)
-        console.log(`[Kling O1] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
+        logInfo('', `[Kling O1] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
       } catch (error) {
-        console.error('[Kling O1] 计算图片宽高比失败:', error)
+        logError('[Kling O1] 计算图片宽高比失败:', error)
         aspectRatio = '1:1'  // 回退默认值
       }
     } else if (aspectRatio === 'auto') {

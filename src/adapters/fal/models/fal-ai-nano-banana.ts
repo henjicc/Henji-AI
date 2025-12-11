@@ -1,4 +1,5 @@
 import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Fal.ai Nano Banana 模型路由
@@ -26,14 +27,14 @@ export const falAiNanoBananaRoute = {
     }
 
     // aspect_ratio: 不发送 'auto' 或 'smart'
-    console.log('[fal-ai-nano-banana] params.aspect_ratio:', params.aspect_ratio)
+    logInfo('[fal-ai-nano-banana] params.aspect_ratio:', params.aspect_ratio)
     if (params.aspect_ratio !== undefined &&
         params.aspect_ratio !== 'auto' &&
         params.aspect_ratio !== 'smart') {
-      console.log('[fal-ai-nano-banana] Adding aspect_ratio to request:', params.aspect_ratio)
+      logInfo('[fal-ai-nano-banana] Adding aspect_ratio to request:', params.aspect_ratio)
       requestData.aspect_ratio = params.aspect_ratio
     } else {
-      console.log('[fal-ai-nano-banana] Skipping aspect_ratio (undefined, auto, or smart)')
+      logInfo('[fal-ai-nano-banana] Skipping aspect_ratio (undefined, auto, or smart)')
     }
 
     // 处理图生图：添加 image_urls

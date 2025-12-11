@@ -21,7 +21,7 @@ export class ApiService {
     if (config.type === 'modelscope') {
       falApiKey = localStorage.getItem('fal_api_key') || undefined
       if (falApiKey) {
-        console.log('[ApiService] 魔搭适配器将使用 fal API key 进行文件上传')
+        logInfo('', '[ApiService] 魔搭适配器将使用 fal API key 进行文件上传')
       }
     }
 
@@ -64,7 +64,7 @@ export class ApiService {
       throw new Error('Adapter is not initialized')
     }
 
-    console.log('[ApiService] generateAudio 调用', { text, model, options })
+    logInfo('[ApiService] generateAudio 调用', { text, model, options })
     return this.adapter.generateAudio({
       text,
       model,

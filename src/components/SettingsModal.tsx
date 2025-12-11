@@ -6,6 +6,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { getDataRoot, getDefaultDataRoot, setCustomDataRoot, resetToDefaultDataRoot, validateDirectory, hasExistingData, migrateData } from '../utils/dataPath'
 import { path } from '@tauri-apps/api'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -113,7 +114,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         const currentPath = await getDataRoot()
         setCustomDataPath(currentPath)
       } catch (error) {
-        console.error('加载数据路径失败:', error)
+        logError('加载数据路径失败:', error)
       }
     }
     loadDataPath()
@@ -250,7 +251,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         handleQuickDownloadPathChange(selected)
       }
     } catch (error) {
-      console.error('选择目录失败:', error)
+      logError('选择目录失败:', error)
     }
   }
 
@@ -259,7 +260,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     try {
       await open(url)
     } catch (error) {
-      console.error('Failed to open link:', error)
+      logError('Failed to open link:', error)
     }
   }
 
@@ -287,7 +288,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         window.location.reload()
       }, 1500)
     } catch (error) {
-      console.error('迁移失败:', error)
+      logError('迁移失败:', error)
       showAlert(`迁移失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     } finally {
       setIsMigrating(false)
@@ -328,7 +329,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       const currentPath = await getDataRoot()
       await performMigration(currentPath, targetPath)
     } catch (error) {
-      console.error('选择目录失败:', error)
+      logError('选择目录失败:', error)
       showAlert(`操作失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }
@@ -350,7 +351,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       await resetToDefaultDataRoot()
       setCustomDataPath(defaultPath)
     } catch (error) {
-      console.error('恢复默认失败:', error)
+      logError('恢复默认失败:', error)
       showAlert(`恢复默认失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }
@@ -369,7 +370,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       await performMigration(currentPath, conflictDialogPath, action)
       setConflictDialogPath('')
     } catch (error) {
-      console.error('冲突处理失败:', error)
+      logError('冲突处理失败:', error)
       showAlert(`操作失败：${error instanceof Error ? error.message : '未知错误'}`, 'error')
     }
   }

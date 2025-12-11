@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import { open } from '@tauri-apps/plugin-shell'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 interface CustomModel {
   id: string
@@ -43,7 +44,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
         setModels(migratedModels)
       }
     } catch (e) {
-      console.error('Failed to load custom models:', e)
+      logError('Failed to load custom models:', e)
     }
   }
 
@@ -53,7 +54,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       setModels(newModels)
       onModelsChange?.()
     } catch (e) {
-      console.error('Failed to save custom models:', e)
+      logError('Failed to save custom models:', e)
     }
   }
 
@@ -91,7 +92,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     try {
       await open('https://modelscope.cn/models?filter=inference_type&page=1&tabKey=task&tasks=hotTask:text-to-image-synthesis&type=tasks')
     } catch (error) {
-      console.error('Failed to open model library:', error)
+      logError('Failed to open model library:', error)
     }
   }
 

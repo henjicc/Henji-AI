@@ -1,4 +1,5 @@
 // 抽象基类，提供通用实现
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 export abstract class BaseAdapter {
   name: string
   
@@ -77,7 +78,7 @@ export abstract class BaseAdapter {
   
   // 通用方法：格式化错误消息
   protected formatError(error: any): Error {
-    console.error(`[${this.name}] 错误:`, error)
+    logError(`[${this.name}] 错误:`, error)
     if (error instanceof Error) {
       return error
     }
@@ -86,7 +87,7 @@ export abstract class BaseAdapter {
   
   // 通用方法：记录日志
   protected log(message: string, data?: any): void {
-    console.log(`[${this.name}] ${message}`, data)
+    logInfo(`[${this.name}] ${message}`, data)
   }
 }
 

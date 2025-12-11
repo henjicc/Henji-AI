@@ -4,6 +4,7 @@ import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 export interface FileUploaderProps {
     files: string[]
@@ -106,7 +107,7 @@ export default function FileUploader({
         e.stopPropagation()
         dragCounter.current += 1
         setIsHTML5Dragging(true)
-        console.log('[FileUploader] wrapper dragenter', { types: Array.from(e.dataTransfer.types || []) })
+        logInfo('[FileUploader] wrapper dragenter', { types: Array.from(e.dataTransfer.types || []) })
         const hasReorderType = Array.from(e.dataTransfer.types || []).includes('text/henji-reorder-index')
         if (hasReorderType) {
             e.dataTransfer.dropEffect = 'move'
@@ -126,7 +127,7 @@ export default function FileUploader({
         e.preventDefault()
         e.stopPropagation()
         const hasReorderType = Array.from(e.dataTransfer.types || []).includes('text/henji-reorder-index')
-        console.log('[FileUploader] wrapper dragover', { types: Array.from(e.dataTransfer.types || []), hasReorderType })
+        logInfo('[FileUploader] wrapper dragover', { types: Array.from(e.dataTransfer.types || []), hasReorderType })
         e.dataTransfer.dropEffect = hasReorderType ? 'move' : 'copy'
     }
 
@@ -139,13 +140,13 @@ export default function FileUploader({
         if (disabled) return
 
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            console.log('[FileUploader] wrapper drop files', { fileCount: e.dataTransfer.files.length })
+            logInfo('[FileUploader] wrapper drop files', { fileCount: e.dataTransfer.files.length })
             handleFiles(Array.from(e.dataTransfer.files))
             return
         }
 
         const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
-        console.log('[FileUploader] wrapper drop reorder', { fromIndexData })
+        logInfo('[FileUploader] wrapper drop reorder', { fromIndexData })
         if (fromIndexData) {
 
         }
@@ -176,7 +177,7 @@ export default function FileUploader({
 
                     handleFiles([file])
                 } catch (error) {
-                    console.error('Failed to convert dragged image:', error)
+                    logError('Failed to convert dragged image:', error)
                 }
             }
             endDrag()
@@ -196,7 +197,6 @@ export default function FileUploader({
 
         if (disabled || isCustomDragging || e.button !== 0) return
         e.preventDefault()
-        console.log('[Drag] Start', { index, x: e.clientX, y: e.clientY })
         setDragState({
             isDragging: false, // 初始状态不拖拽，等待鼠标移动确认
             isDropping: false,
@@ -384,7 +384,6 @@ export default function FileUploader({
             onMouseUp={handleCustomDrop}
         >
             {/* Previews */}
-            {dragState.isDragging && console.log('[Render]', { fromIndex: dragState.fromIndex, toIndex: dragState.toIndex }) as any}
             {files.map((file, index) => {
                 const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
                 const isDroppingThis = dragState.isDropping && dragState.fromIndex === index
@@ -437,7 +436,7 @@ export default function FileUploader({
                                 }
                                 onReplace(targetIndex, file)
                             } catch (error) {
-                                console.error('Failed to convert dragged image:', error)
+                                logError('Failed to convert dragged image:', error)
                             }
                         }
                         endDrag()

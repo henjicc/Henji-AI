@@ -4,6 +4,7 @@ import { TaskStatus, VideoResult, ProgressStatus } from '../base/BaseAdapter'
 import { parseImageResponse, parseVideoResponse, parseAudioResponse } from './parsers'
 import { pollUntilComplete } from '@/utils/polling'
 import { getExpectedPolls } from '@/utils/modelConfig'
+import { logError, logWarning, logInfo } from '../../utils/errorLogger'
 
 /**
  * 派欧云状态管理器
@@ -19,13 +20,13 @@ export class PPIOStatusHandler {
    * 检查任务状态
    */
   async checkStatus(taskId: string): Promise<TaskStatus> {
-    console.log('[PPIOStatusHandler] 查询任务状态:', taskId)
+    logInfo('[PPIOStatusHandler] 查询任务状态:', taskId)
 
     const response = await this.apiClient.get(PPIO_CONFIG.statusEndpoint, {
       params: { task_id: taskId }
     })
 
-    console.log('[PPIOStatusHandler] 任务状态响应:', response.data)
+    logInfo('[PPIOStatusHandler] 任务状态响应:', response.data)
 
     const taskData = response.data.task
     const result: TaskStatus = {
@@ -38,18 +39,18 @@ export class PPIOStatusHandler {
     if (taskData.status === 'TASK_STATUS_SUCCEEDED' || taskData.status === 'TASK_STATUS_SUCCEED') {
       if (response.data.images && response.data.images.length > 0) {
         result.result = await parseImageResponse(response.data)
-        console.log('[PPIOStatusHandler] 图片生成成功:', result.result.url)
+        logInfo('[PPIOStatusHandler] 图片生成成功:', result.result.url)
       } else if (response.data.videos && response.data.videos.length > 0) {
         result.result = await parseVideoResponse(response.data, this.adapter)
         this.adapter.log('视频生成成功:', result.result.url)
       } else if (response.data.audios && response.data.audios.length > 0) {
         result.result = await parseAudioResponse(response.data)
-        console.log('[PPIOStatusHandler] 音频生成成功:', result.result.url)
+        logInfo('[PPIOStatusHandler] 音频生成成功:', result.result.url)
       }
     } else if (taskData.status === 'TASK_STATUS_FAILED') {
-      console.error('[PPIOStatusHandler] 任务失败:', taskData.reason)
+      logError('[PPIOStatusHandler] 任务失败:', taskData.reason)
     } else if (taskData.status === 'TASK_STATUS_PROCESSING' || taskData.status === 'TASK_STATUS_QUEUED') {
-      console.log('[PPIOStatusHandler] 任务进度:', {
+      logInfo('[PPIOStatusHandler] 任务进度:', {
         status: taskData.status,
         progress: taskData.progress_percent,
         eta: taskData.eta
@@ -74,7 +75,7 @@ export class PPIOStatusHandler {
   ): Promise<VideoResult> {
     const estimatedPolls = getExpectedPolls(modelId)
 
-    console.log('[PPIOStatusHandler] 开始轮询:', { taskId, modelId, estimatedPolls })
+    logInfo('[PPIOStatusHandler] 开始轮询:', { taskId, modelId, estimatedPolls })
 
     const result = await pollUntilComplete<VideoResult>({
       checkFn: async () => {

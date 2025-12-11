@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * LTX-2 模型路由
@@ -79,7 +80,7 @@ export const falAiLtx2Route: FalModelRoute = {
       }
     }
 
-    console.log('[LTX-2] 构建请求:', {
+    logInfo('[LTX-2] 构建请求:', {
       mode,
       endpoint,
       fastMode: ltxFastMode,

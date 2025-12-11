@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Fal.ai Pixverse V5.5 模型路由
@@ -65,9 +66,9 @@ export const falAiPixverseV55Route: FalModelRoute = {
         }
 
         aspectRatio = closestRatio.value
-        console.log(`[Pixverse V5.5] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
+        logInfo('', `[Pixverse V5.5] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
       } catch (error) {
-        console.error('[Pixverse V5.5] 计算图片宽高比失败:', error)
+        logError('[Pixverse V5.5] 计算图片宽高比失败:', error)
         aspectRatio = '16:9'  // 回退默认值
       }
     }

@@ -1,4 +1,5 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * 获取图片的宽高比
@@ -117,9 +118,9 @@ export const falAiVeo31Route = {
 
         // 匹配最适合的预设宽高比
         veoAspectRatio = matchAspectRatio(aspectRatio)
-        console.log(`[veoRoute] 智能计算宽高比: ${aspectRatio.toFixed(2)}，匹配预设: ${veoAspectRatio}`)
+        logInfo('', `[veoRoute] 智能计算宽高比: ${aspectRatio.toFixed(2)}，匹配预设: ${veoAspectRatio}`)
       } catch (error) {
-        console.error('[veoRoute] 计算图片宽高比失败:', error)
+        logError('[veoRoute] 计算图片宽高比失败:', error)
         // 如果计算失败，使用默认宽高比
         veoAspectRatio = '16:9'
       }

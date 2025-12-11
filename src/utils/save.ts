@@ -5,6 +5,7 @@ import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import * as path from '@tauri-apps/api/path'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { getMediaPath, getWaveformsPath, getUploadsPath, getDataRoot } from './dataPath'
+import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 export const isDesktop = (): boolean => {
   const w: any = typeof window !== 'undefined' ? window : {}
@@ -29,7 +30,7 @@ export async function saveBinary(data: Uint8Array, filename: string): Promise<{ 
   await mkdir(mediaPath, { recursive: true })
   await writeFile(fullPath, data)
   const webSrc = convertFileSrc(fullPath)
-  console.log('[save] wrote file', fullPath)
+  logInfo('[save] wrote file', fullPath)
   return { fullPath, webSrc }
 }
 
@@ -42,7 +43,7 @@ export async function saveImageFromUrl(url: string, filename?: string): Promise<
   const ext = lower.includes('.png') ? 'png' : lower.includes('.jpg') || lower.includes('.jpeg') ? 'jpg' : 'png'
   const name = filename ?? `image-${Date.now()}.${ext}`
   const saved = await saveBinary(array, name)
-  console.log('[save] image saved', saved.fullPath)
+  logInfo('[save] image saved', saved.fullPath)
   return saved
 }
 
@@ -54,7 +55,7 @@ export async function saveVideoFromUrl(url: string, filename?: string): Promise<
   const ext = lower.includes('.mp4') ? 'mp4' : lower.includes('.webm') ? 'webm' : 'mp4'
   const name = filename ?? `video-${Date.now()}.${ext}`
   const saved = await saveBinary(array, name)
-  console.log('[save] video saved', saved.fullPath)
+  logInfo('[save] video saved', saved.fullPath)
   return saved
 }
 
@@ -66,7 +67,7 @@ export async function saveAudioFromUrl(url: string, filename?: string): Promise<
   const ext = lower.includes('.mp3') ? 'mp3' : lower.includes('.wav') ? 'wav' : lower.includes('.flac') ? 'flac' : lower.includes('.pcm') ? 'pcm' : 'mp3'
   const name = filename ?? `audio-${Date.now()}.${ext}`
   const saved = await saveBinary(array, name)
-  console.log('[save] audio saved', saved.fullPath)
+  logInfo('[save] audio saved', saved.fullPath)
   return saved
 }
 
@@ -117,7 +118,7 @@ export async function downloadAudioFile(sourcePath: string, suggestedName?: stri
   const bytes = await readFile(sourcePath)
   await writeFile(finalTarget, bytes as any)
 
-  console.log('[save] 音频文件已保存:', finalTarget)
+  logInfo('[save] 音频文件已保存:', finalTarget)
   return finalTarget
 }
 
@@ -166,13 +167,13 @@ export async function downloadMediaFile(sourcePath: string, suggestedName?: stri
   const bytes = await readFile(sourcePath)
   await writeFile(finalTarget, bytes as any)
 
-  console.log('[save] 媒体文件已保存:', finalTarget)
+  logInfo('[save] 媒体文件已保存:', finalTarget)
   return finalTarget
 }
 
 export async function quickDownloadMediaFile(sourcePath: string, targetDir: string, suggestedName?: string): Promise<string> {
   try {
-    console.log('[save] 快速下载开始:', { sourcePath, targetDir, suggestedName })
+    logInfo('[save] 快速下载开始:', { sourcePath, targetDir, suggestedName })
 
     // 验证源文件路径
     if (!sourcePath) {
@@ -186,32 +187,32 @@ export async function quickDownloadMediaFile(sourcePath: string, targetDir: stri
 
     // 生成目标文件名
     const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
-    console.log('[save] 目标文件名:', name)
+    logInfo('[save] 目标文件名:', name)
 
     // 构建完整的目标路径
     const target = await path.join(targetDir, name)
-    console.log('[save] 完整目标路径:', target)
+    logInfo('[save] 完整目标路径:', target)
 
     // 确保目标目录存在（尝试创建，如果已存在会被忽略）
     try {
       // 注意：这里不能直接创建 targetDir，因为它可能是系统路径
       // 我们只是尝试读取源文件并写入目标位置
       const bytes = await readFile(sourcePath)
-      console.log('[save] 源文件读取成功，大小:', bytes.length, 'bytes')
+      logInfo('[save] 源文件读取成功，大小:', bytes.length, 'bytes')
 
       await writeFile(target, bytes as any)
-      console.log('[save] 快速下载成功保存到:', target)
+      logInfo('[save] 快速下载成功保存到:', target)
 
       return target
     } catch (error) {
-      console.error('[save] 文件操作失败:', error)
+      logError('[save] 文件操作失败:', error)
       if (error instanceof Error) {
         throw new Error(`文件保存失败: ${error.message}`)
       }
       throw new Error('文件保存失败')
     }
   } catch (error) {
-    console.error('[save] 快速下载失败:', error)
+    logError('[save] 快速下载失败:', error)
     throw error // 重新抛出异常，让调用者处理
   }
 }
@@ -259,7 +260,7 @@ export async function deleteWaveformCacheForAudio(audioFullPath: string): Promis
     const { full } = await waveformCachePaths(audioFullPath)
     await remove(full)
   } catch (e) {
-    console.warn('[save] delete waveform cache failed', e)
+    logWarning('[save] delete waveform cache failed', e)
   }
 }
 
@@ -267,7 +268,7 @@ export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promis
   const bytes = await readFile(fullPath)
   const blob = new Blob([bytes], { type: mimeHint || inferMimeFromPath(fullPath) })
   const url = URL.createObjectURL(blob)
-  console.log('[save] display blob created', fullPath)
+  logInfo('[save] display blob created', fullPath)
   return url
 }
 
@@ -337,7 +338,7 @@ export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 
     }
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
-    console.log('[save] upload image persisted', full)
+    logInfo('[save] upload image persisted', full)
     return { fullPath: full, displaySrc, dataUrl }
   } else {
     return { fullPath: full, displaySrc: cached.displaySrc, dataUrl: cached.dataUrl }
@@ -383,7 +384,7 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
 
-    console.log('[save] upload video persisted', full)
+    logInfo('[save] upload video persisted', full)
     return { fullPath: full, displaySrc, dataUrl }
   } else {
     // memory 模式：只生成临时 URL
@@ -395,7 +396,7 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
 
 export async function deleteUploads(paths: string[]): Promise<void> {
   for (const p of paths) {
-    try { await remove(p) } catch (e) { console.error('[save] delete upload failed', p, e) }
+    try { await remove(p) } catch (e) { logError('[save] delete upload failed', p, e) }
   }
 }
 

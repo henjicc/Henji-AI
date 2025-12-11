@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Fal.ai MiniMax Hailuo 2.3 模型路由
@@ -31,7 +32,7 @@ export const falAiMinimaxHailuo23Route: FalModelRoute = {
     const promptOptimizer = params.prompt_optimizer !== undefined ? params.prompt_optimizer : true
     const fastMode = params.hailuoFastMode !== undefined ? params.hailuoFastMode : true
 
-    console.log('[Hailuo 2.3] 接收到的参数:', {
+    logInfo('[Hailuo 2.3] 接收到的参数:', {
       version,
       duration,
       durationType: typeof duration,
@@ -93,7 +94,7 @@ export const falAiMinimaxHailuo23Route: FalModelRoute = {
       requestData.image_url = images[0]
     }
 
-    console.log('[Hailuo 2.3] 端点选择:', {
+    logInfo('[Hailuo 2.3] 端点选择:', {
       version,
       hasImages,
       fastMode,

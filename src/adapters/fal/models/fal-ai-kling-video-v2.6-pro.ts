@@ -1,5 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Kling Video v2.6 Pro 模型路由
@@ -58,7 +59,7 @@ export const falAiKlingVideoV26ProRoute: FalModelRoute = {
       }
     }
 
-    console.log('[Kling v2.6 Pro] 构建请求:', {
+    logInfo('[Kling v2.6 Pro] 构建请求:', {
       mode: hasImages ? 'image-to-video' : 'text-to-video',
       endpoint,
       hasImages,

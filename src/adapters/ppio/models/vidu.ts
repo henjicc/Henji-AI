@@ -1,4 +1,5 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
+import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Vidu Q1 模型路由
@@ -12,8 +13,8 @@ export const viduQ1Route = {
     const mode = params.mode || 'text-image-to-video'
     const images = params.images || []
 
-    console.log('[viduRoute] 选择的模式:', mode)
-    console.log('[viduRoute] 图片数量:', images.length)
+    logInfo('[viduRoute] 选择的模式:', mode)
+    logInfo('[viduRoute] 图片数量:', images.length)
 
     let endpoint: string
     let requestData: any = {
@@ -32,12 +33,12 @@ export const viduQ1Route = {
           endpoint = '/async/vidu-q1-img2video'
           requestData.images = [images[0]] // 只取第一张图片
           // 图生视频不支持 aspect_ratio 和 style
-          console.log('[viduRoute] 使用图生视频接口')
+          logInfo('', '[viduRoute] 使用图生视频接口')
         } else {
           endpoint = '/async/vidu-q1-text2video'
           requestData.aspect_ratio = params.aspectRatio || '16:9'
           requestData.style = params.style || 'general'
-          console.log('[viduRoute] 使用文生视频接口')
+          logInfo('', '[viduRoute] 使用文生视频接口')
         }
         break
 
@@ -49,7 +50,7 @@ export const viduQ1Route = {
         endpoint = '/async/vidu-q1-startend2video'
         requestData.images = [images[0], images[1]] // 取前两张作为首尾帧
         // 首尾帧不支持 aspect_ratio 和 style
-        console.log('[viduRoute] 使用首尾帧接口')
+        logInfo('', '[viduRoute] 使用首尾帧接口')
         break
 
       case 'reference-to-video':
@@ -64,7 +65,7 @@ export const viduQ1Route = {
         requestData.images = images.slice(0, 7) // 最多取7张
         requestData.aspect_ratio = params.aspectRatio || '16:9'
         // 参考生视频不支持 style
-        console.log('[viduRoute] 使用参考生视频接口')
+        logInfo('', '[viduRoute] 使用参考生视频接口')
         break
 
       default:
