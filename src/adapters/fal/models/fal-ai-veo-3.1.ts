@@ -1,5 +1,5 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError, logInfo } from '../../../utils/errorLogger'
 
 /**
  * 获取图片的宽高比

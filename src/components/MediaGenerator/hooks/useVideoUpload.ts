@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { generateVideoThumbnail, validateVideo } from '@/utils/videoProcessing'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError, logInfo } from '../../../utils/errorLogger'
 
 /**
  * 视频上传 Hook（优化版）
@@ -33,7 +33,7 @@ export const useVideoUpload = (
 
     try {
       const videoFile = files[0] // 只处理第一个视频文件
-      logInfo('[useVideoUpload] 开始处理视频:', videoFile.name, '大小:', (videoFile.size / 1024 / 1024).toFixed(2), 'MB')
+      logInfo('[useVideoUpload] 开始处理视频:', { data: [videoFile.name, '大小:', (videoFile.size / 1024 / 1024).toFixed(2), 'MB'] })
 
       // 1. 验证视频
       const videoElement = document.createElement('video')

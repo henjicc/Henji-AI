@@ -1,5 +1,5 @@
 import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Kling Image O1 模型路由

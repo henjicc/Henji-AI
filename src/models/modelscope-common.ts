@@ -1,5 +1,5 @@
 import { ParamDef } from '../types/schema'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError } from '../utils/errorLogger'
 
 // 魔搭API支持的分辨率范围
 // SD系列: [64x64, 2048x2048]

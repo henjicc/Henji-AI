@@ -7,7 +7,7 @@
  * - 优先使用较大的分辨率以获得更好的图像质量
  */
 
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logWarning } from '../utils/errorLogger'
 export interface ResolutionSize {
   width: number
   height: number

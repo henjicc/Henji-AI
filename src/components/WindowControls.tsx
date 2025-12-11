@@ -1,7 +1,7 @@
 import React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isDesktop, isDesktopAsync } from '../utils/save'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError } from '../utils/errorLogger'
 
 // CSS properties that are not in the default type definitions
 type WebkitAppRegion = 'drag' | 'no-drag'

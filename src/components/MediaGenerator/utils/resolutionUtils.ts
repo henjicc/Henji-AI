@@ -3,7 +3,7 @@
  */
 
 // 预设分辨率选项 - 2K基础分辨率
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logInfo } from '../../../utils/errorLogger'
 export const baseResolutions: Record<string, string> = {
   '1:1': '2048x2048',
   '4:3': '2304x1728',

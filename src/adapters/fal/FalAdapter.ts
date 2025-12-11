@@ -14,7 +14,7 @@ import { getEstimatedPolls } from './config'
 import { findRoute } from './models'
 import { parseImageResponse, parseVideoResponse } from './parsers'
 import { calculateProgress } from '@/utils/progress'
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError, logInfo } from '../../utils/errorLogger'
 
 /**
  * Fal 适配器

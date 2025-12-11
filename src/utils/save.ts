@@ -198,7 +198,7 @@ export async function quickDownloadMediaFile(sourcePath: string, targetDir: stri
       // 注意：这里不能直接创建 targetDir，因为它可能是系统路径
       // 我们只是尝试读取源文件并写入目标位置
       const bytes = await readFile(sourcePath)
-      logInfo('[save] 源文件读取成功，大小:', bytes.length, 'bytes')
+      logInfo('[save] 源文件读取成功，大小:', { data: [bytes.length, 'bytes'] })
 
       await writeFile(target, bytes as any)
       logInfo('[save] 快速下载成功保存到:', target)
@@ -396,7 +396,7 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
 
 export async function deleteUploads(paths: string[]): Promise<void> {
   for (const p of paths) {
-    try { await remove(p) } catch (e) { logError('[save] delete upload failed', p, e) }
+    try { await remove(p) } catch (e) { logError('[save] delete upload failed', { data: [p, e] }) }
   }
 }
 

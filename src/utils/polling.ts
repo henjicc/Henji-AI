@@ -1,5 +1,4 @@
 import { calculateProgress } from './progress'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
 
 /**
  * 通用轮询配置
@@ -30,7 +29,7 @@ export interface PollingOptions<T> {
  *   checkFn: () => this.checkStatus(taskId),
  *   isComplete: (s) => s === 'COMPLETED',
  *   isFailed: (s) => s === 'FAILED',
- *   onProgress: (p) => logInfo(`Progress: ${p}%`),
+ *   onProgress: (p) => logInfo(`Progress: ${p}%`, {}),
  *   interval: 3000,
  *   estimatedAttempts: 40
  * })

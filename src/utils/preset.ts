@@ -1,6 +1,6 @@
 import { Preset, PresetSaveMode } from '../types/preset'
 import { readJsonFromAppData, writeJsonToAppData } from './save'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError } from '../utils/errorLogger'
 
 const PRESETS_FILE = 'presets.json'
 

@@ -5,7 +5,7 @@
 
 import { optionsBuilder, registerAllConfigs } from './configs'
 import { BuildContext, BuildOptionsParams } from './core/types'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError, logInfo } from '../../../utils/errorLogger'
 
 // 确保配置已注册（只注册一次）
 let configsRegistered = false
@@ -88,7 +88,7 @@ export function reverseMapOptions(modelId: string, apiOptions: Record<string, an
 
   const config = optionsBuilder.getConfig(modelId)
   if (!config || !config.paramMapping) {
-    logInfo('[OptionsBuilder] ReverseMap - No config or paramMapping, returning original options')
+    logInfo('[OptionsBuilder] ReverseMap - No config or paramMapping, returning original options', {})
     // 如果没有配置，直接返回原始参数
     return apiOptions
   }

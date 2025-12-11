@@ -6,7 +6,7 @@ import { canDeleteFile } from '../utils/fileRefCount'
 import { readJsonFromAppData } from '../utils/save'
 import { remove } from '@tauri-apps/plugin-fs'
 import PanelTrigger from './ui/PanelTrigger'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError, logInfo } from '../utils/errorLogger'
 
 interface PresetPanelProps {
     // 获取当前所有状态（用于保存）
@@ -141,7 +141,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                             await remove(filePath)
                             logInfo('[PresetPanel] 删除无引用文件:', filePath)
                         } catch (error) {
-                            logError('[PresetPanel] 删除文件失败:', filePath, error)
+                            logError('[PresetPanel] 删除文件失败:', { data: [filePath, error] })
                         }
                     } else {
                         logInfo('[PresetPanel] 保留文件(仍有引用):', filePath)

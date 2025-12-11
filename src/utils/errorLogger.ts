@@ -18,8 +18,12 @@ function shouldLog(): boolean {
 
   // 生产环境：检查测试模式是否启用
   try {
-    const testModeEnabled = localStorage.getItem('test_mode_enabled')
-    return testModeEnabled === 'true'
+    const stored = localStorage.getItem('henji_test_mode')
+    if (stored) {
+      const state = JSON.parse(stored)
+      return state.enabled === true
+    }
+    return false
   } catch {
     // 如果无法访问 localStorage（例如在某些受限环境中），默认不输出
     return false

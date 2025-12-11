@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { saveUploadImage } from '@/utils/save'
 import { extractImagesFromClipboard } from '@/utils/imageConversion'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError } from '../../../utils/errorLogger'
 
 /**
  * 图片上传处理逻辑

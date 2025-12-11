@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import { open } from '@tauri-apps/plugin-shell'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError } from '../../../utils/errorLogger'
 
 interface CustomModel {
   id: string

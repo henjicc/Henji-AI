@@ -6,7 +6,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { getDataRoot, getDefaultDataRoot, setCustomDataRoot, resetToDefaultDataRoot, validateDirectory, hasExistingData, migrateData } from '../utils/dataPath'
 import { path } from '@tauri-apps/api'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError } from '../utils/errorLogger'
 
 interface SettingsModalProps {
   onClose: () => void

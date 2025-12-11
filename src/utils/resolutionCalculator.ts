@@ -6,7 +6,7 @@
  * - 其他比例的分辨率根据基数计算，确保总像素数不超过 baseSize × baseSize
  */
 
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logWarning } from '../utils/errorLogger'
 export interface ResolutionSize {
   width: number
   height: number

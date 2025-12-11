@@ -1,6 +1,6 @@
 import { path } from '@tauri-apps/api'
 import { mkdir, readDir, copyFile, remove, exists, writeFile, readFile } from '@tauri-apps/plugin-fs'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError, logInfo } from '../utils/errorLogger'
 
 // ==================== 核心路径管理 ====================
 

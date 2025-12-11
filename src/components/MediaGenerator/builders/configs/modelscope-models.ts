@@ -3,7 +3,7 @@
  */
 
 import { ModelConfig, BuildContext } from '../core/types'
-import { logError, logWarning, logInfo } from '../../../../utils/errorLogger'
+import { logError, logInfo } from '../../../../utils/errorLogger'
 
 /**
  * 检查模型是否支持图片编辑

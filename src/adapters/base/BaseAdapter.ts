@@ -1,5 +1,5 @@
 // 抽象基类，提供通用实现
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError, logInfo } from '../../utils/errorLogger'
 export abstract class BaseAdapter {
   name: string
   

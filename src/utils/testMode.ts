@@ -3,7 +3,7 @@
  * 用于开发和调试，不影响生产功能
  */
 
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError, logInfo } from '../utils/errorLogger'
 export interface TestModeOptions {
   skipRequest: boolean // 不发送实际请求
   logParams: boolean   // 在控制台输出参数

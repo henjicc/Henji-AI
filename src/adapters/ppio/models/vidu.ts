@@ -1,5 +1,5 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logInfo } from '../../../utils/errorLogger'
 
 /**
  * Vidu Q1 模型路由

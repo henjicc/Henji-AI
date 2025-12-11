@@ -4,7 +4,7 @@ import { TaskStatus, VideoResult, ProgressStatus } from '../base/BaseAdapter'
 import { parseImageResponse, parseVideoResponse, parseAudioResponse } from './parsers'
 import { pollUntilComplete } from '@/utils/polling'
 import { getExpectedPolls } from '@/utils/modelConfig'
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError, logInfo } from '../../utils/errorLogger'
 
 /**
  * 派欧云状态管理器

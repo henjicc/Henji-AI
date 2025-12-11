@@ -4,7 +4,7 @@
 
 import { getSmartMatchValues } from '../../../../models'
 import { BuildContext, SmartMatchConfig, ImageUploadConfig, VideoUploadConfig } from './types'
-import { logError, logWarning, logInfo } from '../../../../utils/errorLogger'
+import { logError, logInfo } from '../../../../utils/errorLogger'
 
 /**
  * 处理智能匹配
@@ -26,7 +26,7 @@ export async function handleSmartMatch(
   if (context.uploadedImages.length === 0) {
     // 如果用户选择了智能模式，使用默认比例
     if (isSmartMode) {
-      logInfo(`[Smart Match] No images uploaded, using default ratio: ${config.defaultRatio}`)
+      logInfo(`[Smart Match] No images uploaded, using default ratio: ${config.defaultRatio}`, {})
       options[config.paramKey] = config.defaultRatio
     }
     // 如果是具体比例值，保持不变
@@ -35,7 +35,7 @@ export async function handleSmartMatch(
 
   // 如果用户没有选择智能模式，且已经有具体的比例值，不执行智能匹配
   if (!isSmartMode && currentValue && currentValue !== config.defaultRatio) {
-    logInfo(`[Smart Match] User selected specific ratio: ${currentValue}, skipping smart match`)
+    logInfo(`[Smart Match] User selected specific ratio: ${currentValue}, skipping smart match`, {})
     return
   }
 
@@ -59,7 +59,7 @@ export async function handleSmartMatch(
       options[config.paramKey] = matchedRatio
     } else {
       // 使用默认值
-      logInfo(`[Smart Match] No match found, using default ratio: ${config.defaultRatio}`)
+      logInfo(`[Smart Match] No match found, using default ratio: ${config.defaultRatio}`, {})
       options[config.paramKey] = config.defaultRatio
     }
   } catch (error) {

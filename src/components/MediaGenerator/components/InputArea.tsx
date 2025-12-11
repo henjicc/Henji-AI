@@ -1,7 +1,7 @@
 import React from 'react'
 import FileUploader from '@/components/ui/FileUploader'
 import { getMaxImageCount } from '../utils/constants'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError } from '../../../utils/errorLogger'
 
 interface InputAreaProps {
   input: string

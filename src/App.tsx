@@ -2311,12 +2311,12 @@ const App: React.FC = () => {
 
       // 删除结果文件
       for (const f of resultFiles) {
-        try { await remove(f) } catch (e) { logError('[App] 删除文件失败', f, e) }
+        try { await remove(f) } catch (e) { logError('[App] 删除文件失败', { data: [f, e] }) }
       }
 
       // 删除音频波形缓存
       for (const ap of audioPaths) {
-        try { await deleteWaveformCacheForAudio(ap) } catch (e) { logError('[App] 删除波形缓存失败', ap, e) }
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { logError('[App] 删除波形缓存失败', { data: [ap, e] }) }
       }
 
       // 收集上传文件（图片）
@@ -2347,7 +2347,7 @@ const App: React.FC = () => {
             await remove(filePath)
             logInfo('[App] 删除上传文件(预设未使用):', filePath)
           } catch (e) {
-            logError('[App] 删除文件失败', filePath, e)
+            logError('[App] 删除文件失败', { data: [filePath, e] })
           }
         } else {
           logInfo('[App] 保留上传文件(预设使用中):', filePath)
@@ -2360,7 +2360,7 @@ const App: React.FC = () => {
           await remove(filePath)
           logInfo('[App] 删除上传视频文件:', filePath)
         } catch (e) {
-          logError('[App] 删除视频文件失败', filePath, e)
+          logError('[App] 删除视频文件失败', { data: [filePath, e] })
         }
       }
     } finally {
@@ -2397,12 +2397,12 @@ const App: React.FC = () => {
 
       // 删除结果文件
       for (const f of resultFiles) {
-        try { await remove(f) } catch (e) { logError('[App] 删除失败记录文件失败', f, e) }
+        try { await remove(f) } catch (e) { logError('[App] 删除失败记录文件失败', { data: [f, e] }) }
       }
 
       // 删除音频波形缓存
       for (const ap of audioPaths) {
-        try { await deleteWaveformCacheForAudio(ap) } catch (e) { logError('[App] 删除失败记录波形缓存失败', ap, e) }
+        try { await deleteWaveformCacheForAudio(ap) } catch (e) { logError('[App] 删除失败记录波形缓存失败', { data: [ap, e] }) }
       }
 
       // 收集上传文件（图片）
@@ -2434,7 +2434,7 @@ const App: React.FC = () => {
             await remove(filePath)
             logInfo('[App] 删除上传文件(无引用):', filePath)
           } catch (e) {
-            logError('[App] 删除失败记录文件失败', filePath, e)
+            logError('[App] 删除失败记录文件失败', { data: [filePath, e] })
           }
         } else {
           logInfo('[App] 保留上传文件(仍有引用):', filePath)
@@ -2453,7 +2453,7 @@ const App: React.FC = () => {
             await remove(filePath)
             logInfo('[App] 删除上传视频文件(无引用):', filePath)
           } catch (e) {
-            logError('[App] 删除视频文件失败', filePath, e)
+            logError('[App] 删除视频文件失败', { data: [filePath, e] })
           }
         } else {
           logInfo('[App] 保留上传视频文件(仍有引用):', filePath)
@@ -2473,11 +2473,11 @@ const App: React.FC = () => {
     if (target?.result?.filePath) {
       const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
       for (const p of paths) {
-        try { await remove(p) } catch (e) { logError('[App] 删除单条文件失败', p, e) }
+        try { await remove(p) } catch (e) { logError('[App] 删除单条文件失败', { data: [p, e] }) }
       }
       if (target?.result?.type === 'audio') {
         for (const p of paths) {
-          try { await deleteWaveformCacheForAudio(p) } catch (e) { logError('[App] 删除单条波形缓存失败', p, e) }
+          try { await deleteWaveformCacheForAudio(p) } catch (e) { logError('[App] 删除单条波形缓存失败', { data: [p, e] }) }
         }
       }
     }
@@ -2496,7 +2496,7 @@ const App: React.FC = () => {
             await remove(filePath)
             logInfo('[App] 删除上传文件(无引用):', filePath)
           } catch (e) {
-            logError('[App] 删除单条上传文件失败', filePath, e)
+            logError('[App] 删除单条上传文件失败', { data: [filePath, e] })
           }
         } else {
           logInfo('[App] 保留上传文件(仍有引用):', filePath)
@@ -2518,7 +2518,7 @@ const App: React.FC = () => {
             await remove(filePath)
             logInfo('[App] 删除上传视频文件(无引用):', filePath)
           } catch (e) {
-            logError('[App] 删除单条上传视频文件失败', filePath, e)
+            logError('[App] 删除单条上传视频文件失败', { data: [filePath, e] })
           }
         } else {
           logInfo('[App] 保留上传视频文件(仍有引用):', filePath)

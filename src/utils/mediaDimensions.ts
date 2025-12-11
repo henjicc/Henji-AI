@@ -6,7 +6,7 @@
 /**
  * 从图片 URL 获取尺寸
  */
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError } from '../utils/errorLogger'
 export const getImageDimensions = (url: string): Promise<{ width: number; height: number }> => {
   return new Promise((resolve, reject) => {
     const img = new Image()

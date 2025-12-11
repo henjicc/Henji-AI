@@ -1,6 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logError, logInfo } from '../../../utils/errorLogger'
 
 /**
  * Fal.ai Pixverse V5.5 模型路由

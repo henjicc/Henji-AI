@@ -10,7 +10,7 @@ import {
 } from '../base/BaseAdapter'
 import { MODELSCOPE_CONFIG } from './config'
 import { findRoute } from './models'
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError } from '../../utils/errorLogger'
 
 interface ModelscopeTaskResponse {
   task_id: string

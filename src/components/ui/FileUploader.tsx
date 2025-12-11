@@ -4,7 +4,7 @@ import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError, logInfo } from '../../utils/errorLogger'
 
 export interface FileUploaderProps {
     files: string[]

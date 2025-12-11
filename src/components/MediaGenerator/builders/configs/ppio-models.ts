@@ -3,7 +3,7 @@
  */
 
 import { ModelConfig } from '../core/types'
-import { logError, logWarning, logInfo } from '../../../../utils/errorLogger'
+import { logError } from '../../../../utils/errorLogger'
 
 /**
  * Seedance V1 配置（派欧云）

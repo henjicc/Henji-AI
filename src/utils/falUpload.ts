@@ -1,5 +1,5 @@
 import { fal } from '@fal-ai/client'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError, logInfo } from '../utils/errorLogger'
 
 /**
  * 将 data URI 转换为 Blob

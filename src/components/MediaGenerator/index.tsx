@@ -17,7 +17,7 @@ import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError, logInfo } from '../../utils/errorLogger'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -304,7 +304,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 如果是 "自定义"，不做任何处理，保持当前的 customWidth 和 customHeight
     if (state.modelscopeImageSize === '自定义') {
-      logInfo('[Z-Image-Turbo] imageSize is 自定义, skipping update')
+      logInfo('[Z-Image-Turbo] imageSize is 自定义, skipping update', {})
       return
     }
 
@@ -418,7 +418,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 如果是 "自定义"，不做任何处理
     if (state.modelscopeImageSize === '自定义') {
-      logInfo('[ModelScope] imageSize is 自定义, skipping update')
+      logInfo('[ModelScope] imageSize is 自定义, skipping update', {})
       return
     }
 

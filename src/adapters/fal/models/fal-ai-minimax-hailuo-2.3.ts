@@ -1,6 +1,6 @@
 import { GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 import { FalModelRoute } from './index'
-import { logError, logWarning, logInfo } from '../../../utils/errorLogger'
+import { logInfo } from '../../../utils/errorLogger'
 
 /**
  * Fal.ai MiniMax Hailuo 2.3 模型路由

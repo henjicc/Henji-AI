@@ -13,7 +13,7 @@ import { PPIO_CONFIG } from './config'
 import { findRoute } from './models'
 import { PPIOStatusHandler } from './statusHandler'
 import { parseImageResponse, parseAudioResponse } from './parsers'
-import { logError, logWarning, logInfo } from '../../utils/errorLogger'
+import { logError, logInfo } from '../../utils/errorLogger'
 
 /**
  * 派欧云适配器
