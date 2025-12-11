@@ -103,6 +103,7 @@ const App: React.FC = () => {
   const contentRef = React.useRef<HTMLDivElement>(null)
   const imageViewerRef = React.useRef<HTMLImageElement>(null)
   const imageViewerContainerRef = React.useRef<HTMLDivElement>(null)
+  const cssScaleRef = React.useRef<number>(1) // 存储CSS缩放比例（相对于原始尺寸）
   const imageScaleRef = React.useRef(1)
   const imagePositionRef = React.useRef({ x: 0, y: 0 })
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
@@ -676,7 +677,9 @@ const App: React.FC = () => {
     const pos = imagePositionRef.current
     imageViewerRef.current.style.transform = `scale(${scale}) translate(${pos.x / scale}px, ${pos.y / scale}px)`
     if (scaleDisplayRef.current) {
-      scaleDisplayRef.current.innerText = `${Math.round(scale * 100)}%`
+      // 总缩放比例 = CSS缩放比例 × Transform缩放比例
+      const totalScale = cssScaleRef.current * scale
+      scaleDisplayRef.current.innerText = `${Math.round(totalScale * 100)}%`
     }
   }
 
@@ -686,6 +689,12 @@ const App: React.FC = () => {
     if (!container || !isImageViewerOpen) return
 
     const handleWheel = (e: WheelEvent) => {
+      // 检查鼠标是否在实际图片内容上
+      if (!isPositionOnImageContent(e.clientX, e.clientY)) {
+        // 不在图片内容上，不执行缩放
+        return
+      }
+
       e.preventDefault()
 
       // 如果没有正在进行的动画，初始化目标状态为当前状态
@@ -1092,10 +1101,60 @@ const App: React.FC = () => {
   }, [])
 
 
+  // 判断位置是否在实际图片内容上（简化版本，直接使用transform后的坐标）
+  const isPositionOnImageContent = (clientX: number, clientY: number): boolean => {
+    const img = imageViewerRef.current
+    if (!img || !img.naturalWidth || !img.naturalHeight) return false
+
+    const rect = img.getBoundingClientRect()
+
+    // 计算objectFit: contain下实际图片内容的显示区域（使用transform后的尺寸）
+    const imgRatio = img.naturalWidth / img.naturalHeight
+    const containerRatio = rect.width / rect.height
+
+    let contentWidth: number, contentHeight: number, offsetX: number, offsetY: number
+    if (imgRatio > containerRatio) {
+      // 图片受宽度限制
+      contentWidth = rect.width
+      contentHeight = rect.width / imgRatio
+      offsetX = 0
+      offsetY = (rect.height - contentHeight) / 2
+    } else {
+      // 图片受高度限制
+      contentHeight = rect.height
+      contentWidth = rect.height * imgRatio
+      offsetY = 0
+      offsetX = (rect.width - contentWidth) / 2
+    }
+
+    // 获取点击位置相对于图片元素的坐标
+    const clickX = clientX - rect.left
+    const clickY = clientY - rect.top
+
+    // 判断点击位置是否在实际图片内容区域内
+    return (
+      clickX >= offsetX &&
+      clickX <= offsetX + contentWidth &&
+      clickY >= offsetY &&
+      clickY <= offsetY + contentHeight
+    )
+  }
+
+  // 判断点击位置是否在实际图片内容上（React事件版本）
+  const isClickOnImageContent = (e: React.MouseEvent<HTMLImageElement>): boolean => {
+    return isPositionOnImageContent(e.clientX, e.clientY)
+  }
+
   // 图片拖动开始
-  const handleImageMouseDown = (e: React.MouseEvent) => {
+  const handleImageMouseDown = (e: React.MouseEvent<HTMLImageElement>) => {
     // 只响应左键点击
     if (e.button === 0) {
+      // 检查是否点击在实际图片内容上
+      if (!isClickOnImageContent(e)) {
+        // 点击的是透明区域，不启动拖拽
+        return
+      }
+
       e.preventDefault()
       setIsDragging(true)
       dragStartRef.current = {
@@ -1661,11 +1720,13 @@ const App: React.FC = () => {
       setCurrentFilePathList([])
     }
     setCurrentImage(imageUrl)
-    // 打开时重置缩放和位置
+
+    // 重置缩放和位置
     imageScaleRef.current = 1
     imagePositionRef.current = { x: 0, y: 0 }
     targetScaleRef.current = 1
     targetPositionRef.current = { x: 0, y: 0 }
+
     setIsImageViewerOpen(true)
     setViewerOpacity(0)
     // 禁止后面页面滚动
@@ -1718,18 +1779,46 @@ const App: React.FC = () => {
       newIndex = currentImageIndex < currentImageList.length - 1 ? currentImageIndex + 1 : 0
     }
 
-    // 直接硬切换图片,不重置缩放和位置
+    // 切换图片并重置缩放和位置
     setCurrentImageIndex(newIndex)
     setCurrentImage(currentImageList[newIndex])
-  }
 
-  // 重置图片视图到适应窗口大小
-  const resetImageView = () => {
+    // 重置缩放和位置，实际的缩放会在图片的onLoad事件中计算
     imageScaleRef.current = 1
     imagePositionRef.current = { x: 0, y: 0 }
     targetScaleRef.current = 1
     targetPositionRef.current = { x: 0, y: 0 }
-    updateImageTransform()
+  }
+
+  // 重置图片视图到适应窗口大小
+  const resetImageView = () => {
+    const img = imageViewerRef.current
+    if (!img) return
+
+    // 重新计算CSS缩放比例并重置transform缩放为1
+    if (img.naturalWidth && img.naturalHeight && img.offsetWidth && img.offsetHeight) {
+      // 计算objectFit: contain下的实际显示尺寸
+      const naturalRatio = img.naturalWidth / img.naturalHeight
+      const layoutRatio = img.offsetWidth / img.offsetHeight
+
+      let actualDisplayWidth
+      if (naturalRatio > layoutRatio) {
+        // 图片受宽度限制
+        actualDisplayWidth = img.offsetWidth
+      } else {
+        // 图片受高度限制
+        actualDisplayWidth = img.offsetHeight * naturalRatio
+      }
+
+      const cssScale = actualDisplayWidth / img.naturalWidth
+      cssScaleRef.current = cssScale
+      // 重置transform缩放为1（相对于布局尺寸）
+      imageScaleRef.current = 1
+      targetScaleRef.current = 1
+      imagePositionRef.current = { x: 0, y: 0 }
+      targetPositionRef.current = { x: 0, y: 0 }
+      updateImageTransform()
+    }
   }
 
   const downloadVideo = async (videoUrl: string) => {
@@ -3139,39 +3228,67 @@ const App: React.FC = () => {
               }
             }}
           >
-            <div className={"relative max-w-6xl max-h-full flex items-center justify-center"}>
-              {/* 图片容器 */}
-              <div
-                className="relative"
-                style={{
-                  cursor: isDragging ? 'grabbing' : 'grab'
-                }}
-              >
-                {/* 关闭按钮 */}
-                <button
-                  onClick={closeImageViewer}
-                  className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200 z-10"
-                  title="关闭"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+            {/* 图片容器 */}
+            <div className="relative">
                 <img
                   ref={imageViewerRef}
                   src={currentImage}
                   alt="Full size"
-                  className={`object-contain select-none image-transition`}
+                  className={`select-none image-transition`}
                   style={{
                     transform: viewerOpacity < 1
                       ? `scale(${imageScaleRef.current * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`
-                      : undefined,
-                    transition: viewerOpacity < 1 ? 'transform 200ms ease, opacity 200ms ease' : 'opacity 200ms ease',
+                      : `scale(${imageScaleRef.current}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`,
+                    transition: viewerOpacity < 1 ? 'transform 200ms ease, opacity 200ms ease' : 'none',
                     opacity: viewerOpacity,
-                    maxHeight: '90vh',
-                    maxWidth: '90vw'
+                    transformOrigin: 'center',
+                    width: '95vw',
+                    height: '95vh',
+                    objectFit: 'contain'
+                  }}
+                  onLoad={(e) => {
+                    // 图片加载完成后，计算CSS缩放比例（相对于原始尺寸）
+                    const img = e.currentTarget
+                    if (img.naturalWidth && img.naturalHeight && img.offsetWidth && img.offsetHeight) {
+                      // 计算objectFit: contain下的实际显示尺寸
+                      const naturalRatio = img.naturalWidth / img.naturalHeight
+                      const layoutRatio = img.offsetWidth / img.offsetHeight
+
+                      let actualDisplayWidth
+                      if (naturalRatio > layoutRatio) {
+                        // 图片受宽度限制
+                        actualDisplayWidth = img.offsetWidth
+                      } else {
+                        // 图片受高度限制
+                        actualDisplayWidth = img.offsetHeight * naturalRatio
+                      }
+
+                      const cssScale = actualDisplayWidth / img.naturalWidth
+                      cssScaleRef.current = cssScale
+                      // imageScaleRef存储相对于布局尺寸的缩放，初始为1
+                      imageScaleRef.current = 1
+                      targetScaleRef.current = 1
+                      imagePositionRef.current = { x: 0, y: 0 }
+                      targetPositionRef.current = { x: 0, y: 0 }
+                      updateImageTransform()
+                    }
                   }}
                   onMouseDown={handleImageMouseDown}
+                  onMouseMove={(e) => {
+                    // 动态设置cursor样式：只有在实际图片内容上才显示手抓形状
+                    const isOnContent = isClickOnImageContent(e)
+                    e.currentTarget.style.cursor = isOnContent ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                  }}
+                  onClick={(e) => {
+                    // 判断是否点击在实际图片内容上
+                    if (isClickOnImageContent(e)) {
+                      // 点击图片内容，阻止冒泡，不关闭查看器
+                      e.stopPropagation()
+                    } else {
+                      // 点击透明区域，直接关闭查看器
+                      closeImageViewer()
+                    }
+                  }}
                   onContextMenu={(e) => {
                     const filePath = currentFilePathList[currentImageIndex]
                     showMenu(e, getImageMenuItems(currentImage, filePath))
@@ -3180,8 +3297,8 @@ const App: React.FC = () => {
                 />
               </div>
 
-              {/* 底部信息栏和切换按钮 */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+            {/* 底部信息栏和切换按钮 - 移到查看器容器的直接子元素 */}
+            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
                 {/* 切换按钮组 */}
                 {currentImageList.length > 1 && (
                   <div className="flex items-center gap-3">
@@ -3218,16 +3335,23 @@ const App: React.FC = () => {
                     100%
                   </div>
 
-                  {/* 重置按钮 - 始终显示 */}
+                  {/* 重置按钮 */}
                   <button
                     onClick={resetImageView}
                     className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
                   >
                     重置视图
                   </button>
+
+                  {/* 关闭按钮 */}
+                  <button
+                    onClick={closeImageViewer}
+                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                  >
+                    关闭
+                  </button>
                 </div>
               </div>
-            </div>
           </div>
         )
       }
