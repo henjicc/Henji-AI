@@ -74,6 +74,8 @@ export interface VideoUploadConfig {
   paramKey?: string
   /** 是否转换为 Blob */
   convertToBlob?: boolean
+  /** 最大视频数量 */
+  maxVideos?: number
 }
 
 /**
@@ -121,7 +123,7 @@ export interface ModelConfig {
   /** 模型类型 */
   type: 'image' | 'video' | 'audio'
   /** 提供商 */
-  provider: 'ppio' | 'fal' | 'modelscope' | 'custom'
+  provider: 'ppio' | 'fal' | 'modelscope' | 'custom' | 'kie'
 
   /** 参数映射规则 */
   paramMapping: Record<string, ParamMappingRule>

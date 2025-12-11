@@ -185,6 +185,7 @@ export const useMediaGeneratorState = () => {
   // 模型特定参数 - KIE Nano Banana Pro
   const [kieNanoBananaAspectRatio, setKieNanoBananaAspectRatio] = useState('1:1')
   const [kieNanoBananaResolution, setKieNanoBananaResolution] = useState('2K')
+  const [kieNanoBananaOutputFormat, setKieNanoBananaOutputFormat] = useState('png')
 
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
@@ -391,6 +392,7 @@ export const useMediaGeneratorState = () => {
     // KIE Nano Banana Pro
     kieNanoBananaAspectRatio, setKieNanoBananaAspectRatio,
     kieNanoBananaResolution, setKieNanoBananaResolution,
+    kieNanoBananaOutputFormat, setKieNanoBananaOutputFormat,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

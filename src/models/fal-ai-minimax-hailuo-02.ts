@@ -48,7 +48,7 @@ export const falAiMinimaxHailuo02Params: ParamDef[] = [
         }
         return false
       },
-      value: (values) => {
+      value: (values: any) => {
         if (values.falHailuo02FastMode) return '512P'
         if (values.falHailuo02Duration === '10') return '768P'
         return '768P'

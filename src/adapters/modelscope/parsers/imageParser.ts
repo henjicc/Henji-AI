@@ -5,7 +5,7 @@ export const parseImageResponse = (responseData: any): ImageResult => {
   if (responseData.task_id) {
     return {
       taskId: responseData.task_id,
-      status: 'QUEUED'
+      url: ''
     }
   }
 
@@ -15,7 +15,7 @@ export const parseImageResponse = (responseData: any): ImageResult => {
     const urls = responseData.images.map((img: any) => img.url)
     return {
       url: urls.length > 1 ? urls.join('|||') : urls[0],
-      status: 'COMPLETED'
+      status: 'completed'
     }
   }
 
@@ -24,7 +24,7 @@ export const parseImageResponse = (responseData: any): ImageResult => {
     const urls = responseData.output_images
     return {
       url: urls.length > 1 ? urls.join('|||') : urls[0],
-      status: 'COMPLETED'
+      status: 'completed'
     }
   }
 

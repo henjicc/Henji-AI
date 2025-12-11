@@ -2,7 +2,11 @@ import axios, { AxiosInstance } from 'axios'
 import {
   BaseAdapter,
   GenerateImageParams,
-  ImageResult
+  GenerateVideoParams,
+  GenerateAudioParams,
+  ImageResult,
+  VideoResult,
+  AudioResult
 } from '../base/BaseAdapter'
 import { KIE_CONFIG } from './config'
 import { findRoute } from './models'
@@ -31,16 +35,30 @@ export class KIEAdapter extends BaseAdapter {
   }
 
   /**
+   * 将 data URL 转换为 Blob（不使用 fetch，兼容 Tauri 生产环境）
+   */
+  private dataURLtoBlob(dataURL: string): Blob {
+    const parts = dataURL.split(',')
+    const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg'
+    const bstr = atob(parts[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n)
+    }
+    return new Blob([u8arr], { type: mime })
+  }
+
+  /**
    * 上传图片到 KIE CDN
    */
   private async uploadImageToKIE(imageDataUrl: string): Promise<string> {
     try {
       this.log('开始上传图片到 KIE CDN...')
 
-      // 将 data URL 转换为 Blob
-      const response = await fetch(imageDataUrl)
-      const blob = await response.blob()
-      this.log('图片转换为 Blob 成功，大小:', blob.size, 'bytes')
+      // 将 data URL 转换为 Blob（不使用 fetch，避免 Tauri 生产环境限制）
+      const blob = this.dataURLtoBlob(imageDataUrl)
+      this.log(`图片转换为 Blob 成功，大小: ${blob.size} bytes`)
 
       // 创建 FormData
       const formData = new FormData()
@@ -133,12 +151,20 @@ export class KIEAdapter extends BaseAdapter {
       // 否则返回 taskId
       return {
         taskId: taskId,
-        status: 'QUEUED'
+        url: ''
       }
     } catch (error: any) {
       this.log('生成图片失败:', error.message || error)
       throw error
     }
+  }
+
+  async generateVideo(_params: GenerateVideoParams): Promise<VideoResult> {
+    throw new Error('KIE adapter does not support video generation yet')
+  }
+
+  async generateAudio(_params: GenerateAudioParams): Promise<AudioResult> {
+    throw new Error('KIE adapter does not support audio generation yet')
   }
 
   async checkStatus(taskId: string): Promise<any> {

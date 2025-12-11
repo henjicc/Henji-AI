@@ -6,12 +6,13 @@ export type ParamType = 'dropdown' | 'toggle' | 'number' | 'text'
  */
 export interface ResolutionConfig {
     type: 'aspect_ratio' | 'size' | 'resolution'  // 参数类型
-    smartMatch: boolean                            // 是否启用智能匹配
-    visualize: boolean                             // 是否使用可视化选择器
+    smartMatch?: boolean                           // 是否启用智能匹配
+    visualize?: boolean                            // 是否使用可视化选择器
     extractRatio?: (value: any) => number | null   // 从参数值提取宽高比的函数
     customInput?: boolean                          // 是否支持自定义输入
-    qualityOptions?: Array<{ value: any; label: string }>  // 质量选项（如 2K/4K）
+    qualityOptions?: Array<{ value: any; label: string }> | ((values: any) => Array<{ value: any; label: string }>)  // 质量选项（如 2K/4K）
     qualityKey?: string                            // 质量参数的 key（默认为 'resolutionQuality'）
+    defaultQuality?: string                        // 默认质量选项
 
     // 基数配置
     baseSize?: number                              // 基数（正方形时的边长，默认 1440）
@@ -20,6 +21,8 @@ export interface ResolutionConfig {
     baseSizeMax?: number                           // 基数最大值（默认 2048）
     baseSizeStep?: number                          // 基数步进值（默认 8，必须是8的倍数）
     baseSizeKey?: string                           // 基数参数的 key（默认为 'resolutionBaseSize'）
+    minSize?: number                               // 最小边长
+    maxSize?: number                               // 最大边长
 
     // 专用计算器标记（互斥，只能启用一个）
     useSeedreamCalculator?: boolean                // 使用即梦专用计算器（fal.ai 或派欧云即梦模型）
@@ -34,7 +37,8 @@ export interface BaseParam {
     defaultValue?: any  // 参数的默认值（当切换到该模型时自动设置）
     autoSwitch?: {      // 自动切换规则（当条件满足时自动切换参数值）
         condition: (values: any) => boolean  // 触发条件
-        value: any  // 切换到的值
+        value: any | ((values: any) => any)  // 切换到的值（可以是静态值或函数）
+        noRestore?: boolean  // 是否在条件不满足时恢复默认值
     }
     resolutionConfig?: ResolutionConfig  // 分辨率参数配置
     hidden?: (values: any) => boolean
@@ -42,6 +46,7 @@ export interface BaseParam {
     className?: string
     tooltip?: string
     tooltipDelay?: number
+    description?: string  // 参数描述
 }
 
 export interface DropdownOption {
@@ -56,6 +61,7 @@ export interface DropdownParam extends BaseParam {
     display?: (value: any) => string
     panelClassName?: string
     buttonClassName?: string
+    placeholder?: string
 }
 
 export interface ToggleParam extends BaseParam {

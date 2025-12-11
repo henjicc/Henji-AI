@@ -34,7 +34,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   customHeight,
   qualityValue,
   baseSizeValue,
-  values,
+  values: _values,
   onChange,
   onWidthChange,
   onHeightChange,
@@ -202,7 +202,10 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
 
     // 如果没有比例选项（图生视频模式），显示质量值
     if (options.length === 0 && config.qualityOptions && qualityValue) {
-      const qualityOption = config.qualityOptions.find((opt: any) => opt.value === qualityValue)
+      const qualityOpts = typeof config.qualityOptions === 'function'
+        ? config.qualityOptions(_values)
+        : config.qualityOptions
+      const qualityOption = qualityOpts.find((opt: any) => opt.value === qualityValue)
       if (qualityOption) {
         return qualityOption.label
       }
@@ -330,16 +333,20 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           )}
 
           {/* 质量选项（如 2K/4K 或 1K/2K/4K） */}
-          {config.qualityOptions && onQualityChange && (
-            <div className={config.customInput ? 'mb-3' : ''}>
-              {/* 只有当同时有比例选项时才显示"选择质量"标签 */}
-              {options.length > 0 && (
-                <label className="block text-xs text-zinc-400 mb-2">选择质量</label>
-              )}
-              <div className={`grid gap-2 ${
-                config.qualityOptions.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
-              }`}>
-                {config.qualityOptions.map(quality => (
+          {config.qualityOptions && onQualityChange && (() => {
+            const qualityOpts = typeof config.qualityOptions === 'function'
+              ? config.qualityOptions(_values)
+              : config.qualityOptions
+            return (
+              <div className={config.customInput ? 'mb-3' : ''}>
+                {/* 只有当同时有比例选项时才显示"选择质量"标签 */}
+                {options.length > 0 && (
+                  <label className="block text-xs text-zinc-400 mb-2">选择质量</label>
+                )}
+                <div className={`grid gap-2 ${
+                  qualityOpts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
+                }`}>
+                  {qualityOpts.map((quality: any) => (
                   <button
                     key={String(quality.value)}
                     onClick={() => {
@@ -360,7 +367,8 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                 ))}
               </div>
             </div>
-          )}
+          )
+          })()}
 
           {/* 自定义尺寸输入 */}
           {config.customInput && onWidthChange && onHeightChange && (

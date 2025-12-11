@@ -2,7 +2,11 @@ import { invoke } from '@tauri-apps/api/core'
 import {
   BaseAdapter,
   GenerateImageParams,
-  ImageResult
+  GenerateVideoParams,
+  GenerateAudioParams,
+  ImageResult,
+  VideoResult,
+  AudioResult
 } from '../base/BaseAdapter'
 import { MODELSCOPE_CONFIG } from './config'
 import { findRoute } from './models'
@@ -77,6 +81,14 @@ export class ModelscopeAdapter extends BaseAdapter {
     }
   }
 
+  async generateVideo(_params: GenerateVideoParams): Promise<VideoResult> {
+    throw new Error('ModelScope adapter does not support video generation yet')
+  }
+
+  async generateAudio(_params: GenerateAudioParams): Promise<AudioResult> {
+    throw new Error('ModelScope adapter does not support audio generation yet')
+  }
+
   async checkStatus(taskId: string): Promise<any> {
     try {
       // 通过 Tauri 后端查询任务状态
@@ -121,7 +133,7 @@ export class ModelscopeAdapter extends BaseAdapter {
               result: {
                 url: savedResult.url,
                 filePath: savedResult.filePath,
-                status: 'COMPLETED'
+                status: 'completed'
               }
             }
           } catch (error) {
@@ -130,7 +142,7 @@ export class ModelscopeAdapter extends BaseAdapter {
               status: 'SUCCEED',
               result: {
                 url: combinedUrl,
-                status: 'COMPLETED'
+                status: 'completed'
               }
             }
           }

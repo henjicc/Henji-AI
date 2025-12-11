@@ -40,7 +40,7 @@ export const falAiPixverseV55Route: FalModelRoute = {
     let aspectRatio = params.pixverseAspectRatio || params.aspectRatio
     if ((aspectRatio === 'smart' || aspectRatio === 'auto') && images.length > 0) {
       try {
-        const { getImageAspectRatio, matchAspectRatio } = await import('@/utils/aspectRatio')
+        const { getImageAspectRatio } = await import('@/utils/aspectRatio')
         const ratio = await getImageAspectRatio(images[0])
 
         // Pixverse 支持的比例：16:9, 4:3, 1:1, 3:4, 9:16

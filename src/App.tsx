@@ -1498,7 +1498,7 @@ const App: React.FC = () => {
     // 否则任务会保持queued状态，等待前一个任务完成
   }
 
-  const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, model?: string): Promise<any> => {
+  const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, _model?: string): Promise<any> => {
     console.log('[App] 开始轮询任务状态:', serverTaskId)
     return new Promise((resolve, reject) => {
       let pollCount = 0

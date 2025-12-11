@@ -178,7 +178,7 @@ export function validateReferences(
  */
 export function resolveReferences(
   prompt: string,
-  context: ResolveContext
+  _context: ResolveContext
 ): string {
   // 根据 Kling O1 API 文档，prompt 中的 @ 引用应该保持原样
   // API 会自动根据 image_urls, video_url, elements 数组来解析引用

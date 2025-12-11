@@ -20,7 +20,7 @@ export type PriceResult = number | { min: number; max: number } | null
 const USD_TO_CNY = 7.071 // 1 美元 ≈ 7.071 人民币
 
 // ===== 价格常量（便于批量调整）=====
-const PRICES = {
+const PRICES: Record<string, any> = {
     // 图片
     SEEDREAM: 0.2,
 
@@ -306,45 +306,6 @@ function getSeedanceAspectGroup(aspect: string): 'wide' | 'standard' | 'classic'
     if (['1:1'].includes(ratio)) return 'square'
 
     return 'standard' // 默认
-}
-
-// ===== 辅助函数：解析分辨率为宽高 =====
-function parseResolution(resolution: string, aspectRatio: string): { width: number; height: number } {
-    // 标准分辨率映射（基于 16:9）
-    const standardResolutions: Record<string, { width: number; height: number }> = {
-        '480p': { width: 854, height: 480 },
-        '720p': { width: 1280, height: 720 },
-        '1080p': { width: 1920, height: 1080 }
-    }
-
-    // 获取基础分辨率
-    const baseRes = standardResolutions[resolution] || standardResolutions['720p']
-
-    // 如果是标准 16:9 比例，直接返回
-    if (aspectRatio === '16:9') {
-        return baseRes
-    }
-
-    // 根据宽高比调整分辨率
-    const [w, h] = aspectRatio.split(':').map(Number)
-    const targetRatio = w / h
-
-    // 保持高度不变，调整宽度
-    if (targetRatio > 16 / 9) {
-        // 更宽的比例（如 21:9）
-        return {
-            width: Math.round(baseRes.height * targetRatio),
-            height: baseRes.height
-        }
-    } else if (targetRatio < 16 / 9) {
-        // 更窄的比例（如 9:16, 4:3, 1:1）
-        return {
-            width: Math.round(baseRes.height * targetRatio),
-            height: baseRes.height
-        }
-    }
-
-    return baseRes
 }
 
 // ===== 模型价格配置 =====

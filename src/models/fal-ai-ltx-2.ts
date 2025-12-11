@@ -22,7 +22,7 @@ export const falAiLtx2Params: ParamDef[] = [
         }
         return false
       },
-      value: (values) => {
+      value: (values: any) => {
         if (values.uploadedVideos && values.uploadedVideos.length > 0) {
           return 'retake-video'
         }

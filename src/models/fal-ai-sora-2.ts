@@ -30,7 +30,7 @@ export const falAiSora2Params: ParamDef[] = [
         return w / h
       },
       // 动态质量选项：根据模式显示不同的分辨率选项
-      qualityOptions: (values) => {
+      qualityOptions: (values: any) => {
         const mode = values.falSora2Mode || 'standard'
         if (mode === 'standard') {
           // 标准模式：只有 720p

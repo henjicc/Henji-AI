@@ -189,7 +189,7 @@ export const modelscopeCustomParams: ParamDef[] = [
     type: 'dropdown',
     label: '模型',
     defaultValue: '',
-    options: (values) => {
+    options: (_values: any) => {
       const customModels = loadCustomModels()
       if (customModels.length === 0) {
         return [{ value: '', label: '请先添加自定义模型' }]

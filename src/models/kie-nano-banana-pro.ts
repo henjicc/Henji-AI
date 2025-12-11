@@ -22,6 +22,11 @@ export const kieNanoBananaProParams: ParamDef[] = [
       ],
       qualityKey: 'kieNanoBananaResolution'
     },
+    // 当上传图片时自动切换到智能选项
+    autoSwitch: {
+      condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
+      value: 'smart'
+    },
     options: [
       { value: 'smart', label: '智能' },
       { value: '1:1', label: '1:1' },

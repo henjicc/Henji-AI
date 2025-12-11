@@ -1,7 +1,15 @@
 export async function dataUrlToFile(dataUrl: string, filename: string = 'image.jpg'): Promise<File> {
-    const response = await fetch(dataUrl)
-    const blob = await response.blob()
-    return new File([blob], filename, { type: blob.type || 'image/jpeg' })
+    // 直接转换 data URL 为 Blob（不使用 fetch，兼容 Tauri 生产环境）
+    const parts = dataUrl.split(',')
+    const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg'
+    const bstr = atob(parts[1])
+    let n = bstr.length
+    const u8arr = new Uint8Array(n)
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n)
+    }
+    const blob = new Blob([u8arr], { type: mime })
+    return new File([blob], filename, { type: mime })
 }
 
 export async function urlToFile(url: string, filename: string = 'image.jpg'): Promise<File> {

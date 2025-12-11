@@ -21,7 +21,7 @@ export const parseImageResponse = async (
     // 保存所有图片到本地
     try {
       const savedResults = await Promise.all(
-        urls.map(url => adapter['saveMediaLocally'](url, 'image'))
+        urls.map((url: string) => adapter['saveMediaLocally'](url, 'image'))
       )
 
       // 如果是单图，返回单个结果
@@ -29,7 +29,7 @@ export const parseImageResponse = async (
         return {
           url: savedResults[0].url,
           filePath: savedResults[0].filePath,
-          status: 'COMPLETED'
+          status: 'completed'
         }
       }
 
@@ -40,7 +40,7 @@ export const parseImageResponse = async (
       return {
         url: combinedUrls,
         filePath: combinedPaths,
-        status: 'COMPLETED'
+        status: 'completed'
       }
     } catch (e) {
       adapter['log']('图片本地保存失败，回退为远程 URL', e)
@@ -49,13 +49,13 @@ export const parseImageResponse = async (
       if (urls.length === 1) {
         return {
           url: urls[0],
-          status: 'COMPLETED'
+          status: 'completed'
         }
       }
 
       return {
         url: urls.join('|||'),
-        status: 'COMPLETED'
+        status: 'completed'
       }
     }
   }

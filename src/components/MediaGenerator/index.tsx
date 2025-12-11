@@ -206,7 +206,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setModelscopeSteps: state.setModelscopeSteps,
     setModelscopeGuidance: state.setModelscopeGuidance,
     setModelscopeNegativePrompt: state.setModelscopeNegativePrompt,
-    setModelscopeCustomModel: state.setModelscopeCustomModel
+    setModelscopeCustomModel: state.setModelscopeCustomModel,
+    // KIE 模型参数
+    setKieNanoBananaAspectRatio: state.setKieNanoBananaAspectRatio,
+    setKieNanoBananaResolution: state.setKieNanoBananaResolution,
+    setKieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat
   }), [])
 
   // 收藏模型管理

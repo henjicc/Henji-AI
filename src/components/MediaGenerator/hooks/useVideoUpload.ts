@@ -14,9 +14,9 @@ import { generateVideoThumbnail, validateVideo } from '@/utils/videoProcessing'
  * - 与图片处理策略一致
  */
 export const useVideoUpload = (
-  uploadedVideos: string[],
+  _uploadedVideos: string[],
   setUploadedVideos: (videos: string[]) => void,
-  uploadedVideoFiles: File[],
+  _uploadedVideoFiles: File[],
   setUploadedVideoFiles: (files: File[]) => void
 ) => {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
@@ -48,7 +48,8 @@ export const useVideoUpload = (
         duration: videoElement.duration,
         width: videoElement.videoWidth,
         height: videoElement.videoHeight,
-        size: videoFile.size
+        aspectRatio: videoElement.videoWidth / videoElement.videoHeight,
+        fileSize: videoFile.size
       }
 
       console.log('[useVideoUpload] 视频元数据:', metadata)
@@ -67,11 +68,7 @@ export const useVideoUpload = (
       const thumbnail = await generateVideoThumbnail(videoFile)
       console.log('[useVideoUpload] 缩略图生成成功')
 
-      // 3. 创建视频 Object URL（用于预览播放）
-      const videoObjectUrl = URL.createObjectURL(videoFile)
-      console.log('[useVideoUpload] 创建视频预览 URL')
-
-      // 4. 保存 File 对象引用、缩略图和视频 URL
+      // 3. 保存 File 对象引用、缩略图和视频 URL
       // 注意：这里不读取视频内容，只保存 File 对象和 URL
       setUploadedVideos([thumbnail]) // 缩略图用于 UI 显示
       setUploadedVideoFiles([videoFile]) // File 对象引用，点击生成时才读取
@@ -91,7 +88,7 @@ export const useVideoUpload = (
   /**
    * 移除视频
    */
-  const handleVideoRemove = useCallback((index: number) => {
+  const handleVideoRemove = useCallback((_index: number) => {
     setUploadedVideos([])
     setUploadedVideoFiles([])
   }, [setUploadedVideos, setUploadedVideoFiles])

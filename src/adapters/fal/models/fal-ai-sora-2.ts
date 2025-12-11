@@ -54,9 +54,28 @@ export const falAiSora2Route: FalModelRoute = {
       // 智能匹配：如果宽高比为 smart，根据上传的第一张图片计算宽高比
       if (aspectRatio === 'smart') {
         try {
-          const { getImageAspectRatio, matchAspectRatio } = await import('@/utils/aspectRatio')
+          const { getImageAspectRatio } = await import('@/utils/aspectRatio')
           const ratio = await getImageAspectRatio(images[0])
-          aspectRatio = matchAspectRatio(ratio)
+
+          // Sora 2 支持的比例：16:9, 9:16
+          const presetRatios = [
+            { value: '16:9', ratio: 16 / 9 },
+            { value: '9:16', ratio: 9 / 16 }
+          ]
+
+          // 找到最接近的预设宽高比
+          let closestRatio = presetRatios[0]
+          let minDiff = Math.abs(ratio - closestRatio.ratio)
+
+          for (const preset of presetRatios) {
+            const diff = Math.abs(ratio - preset.ratio)
+            if (diff < minDiff) {
+              minDiff = diff
+              closestRatio = preset
+            }
+          }
+
+          aspectRatio = closestRatio.value
           console.log(`[Sora2] 智能计算宽高比: ${ratio.toFixed(2)}，匹配预设: ${aspectRatio}`)
         } catch (error) {
           console.error('[Sora2] 计算图片宽高比失败:', error)

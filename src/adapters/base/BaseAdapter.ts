@@ -127,8 +127,11 @@ export interface GenerateVideoParams {
   prompt: string
   model: string
   duration?: number
-  mode?: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video'
+  mode?: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video' | 'image-to-video' | 'text-to-video' | 'video-to-video-edit' | 'video-to-video-reference' | 'retake-video'
   images?: string[]
+  videos?: string[]
+  elements?: any[]
+  keepAudio?: boolean
   aspectRatio?: string
   resolution?: string
   style?: string
@@ -166,6 +169,8 @@ export interface ImageResult {
   requestId?: string  // fal 队列请求ID（用于继续查询）
   modelId?: string    // fal 模型ID（用于继续查询）
   message?: string    // 状态消息
+  taskId?: string     // 任务ID（用于异步任务）
+  filePath?: string   // 本地文件路径
 }
 
 export interface VideoResult {

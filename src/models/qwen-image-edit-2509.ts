@@ -25,7 +25,7 @@ export const qwenImageEdit2509Params: ParamDef[] = [
         return null
       }
     },
-    options: (values) => {
+    options: (_values: any) => {
       const baseOptions = [
         { value: '21:9', label: '21:9' },
         { value: '16:9', label: '16:9' },
