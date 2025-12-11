@@ -2604,7 +2604,7 @@ const App: React.FC = () => {
                               {task.images.slice(0, 3).map((image, index) => (
                                 <div
                                   key={index}
-                                  className="w-16 h-16 rounded cursor-pointer transition-all overflow-hidden border border-zinc-700/50 hover:brightness-75"
+                                  className="w-16 h-16 rounded cursor-grab active:cursor-grabbing transition-all overflow-hidden border border-zinc-700/50 hover:brightness-75"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     openImageViewer(image, task.images)
@@ -2613,7 +2613,12 @@ const App: React.FC = () => {
                                   <img
                                     src={image}
                                     alt={`Input ${index + 1}`}
-                                    className="w-full h-full object-cover rounded"
+                                    className="w-full h-full object-cover rounded select-none"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation()
+                                      handleHistoryImageDragStart(e, image, task.uploadedFilePaths?.[index])
+                                    }}
+                                    draggable={false}
                                   />
                                 </div>
                               ))}
