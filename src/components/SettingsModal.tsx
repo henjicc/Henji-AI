@@ -103,7 +103,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     setEnableQuickDownload(savedEnableQuickDownload === 'true')
 
     const savedQuickDownloadButtonOnly = localStorage.getItem('quick_download_button_only')
-    setQuickDownloadButtonOnly(savedQuickDownloadButtonOnly === 'true')
+    setQuickDownloadButtonOnly(savedQuickDownloadButtonOnly !== 'false') // 默认开启
 
     const savedQuickDownloadPath = localStorage.getItem('quick_download_path') || ''
     setQuickDownloadPath(savedQuickDownloadPath)
