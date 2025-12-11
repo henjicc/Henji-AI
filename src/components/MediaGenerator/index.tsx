@@ -259,7 +259,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   useEffect(() => {
     const event = new CustomEvent('generatorStateChanged', {
       detail: {
-        modelName: currentModel?.name || state.selectedModel,
+        modelName: currentModel?.id || state.selectedModel,
         prompt: state.input
       }
     })

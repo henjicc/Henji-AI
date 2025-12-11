@@ -150,6 +150,7 @@ const App: React.FC = () => {
   const [isCollapsing, setIsCollapsing] = useState(false) // 动画进行中
   const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
   const [collapseDelay, setCollapseDelay] = useState(500)
+  const [collapseOnScrollOnly, setCollapseOnScrollOnly] = useState(true)
   const [currentModelName, setCurrentModelName] = useState('')
   const [currentPrompt, setCurrentPrompt] = useState('')
   const collapseTimerRef = React.useRef<number | null>(null)
@@ -348,6 +349,8 @@ const App: React.FC = () => {
     setEnableAutoCollapse(savedAutoCollapse !== 'false')
     const savedCollapseDelay = parseInt(localStorage.getItem('collapse_delay') || '500', 10)
     setCollapseDelay(savedCollapseDelay)
+    const savedCollapseOnScrollOnly = localStorage.getItem('collapse_on_scroll_only')
+    setCollapseOnScrollOnly(savedCollapseOnScrollOnly !== 'false')
 
     // 监听设置变化
     const handleSettingChange = () => {
@@ -355,6 +358,8 @@ const App: React.FC = () => {
       setEnableAutoCollapse(newAutoCollapse !== 'false')
       const newDelay = parseInt(localStorage.getItem('collapse_delay') || '500', 10)
       setCollapseDelay(newDelay)
+      const newCollapseOnScrollOnly = localStorage.getItem('collapse_on_scroll_only')
+      setCollapseOnScrollOnly(newCollapseOnScrollOnly !== 'false')
     }
     window.addEventListener('collapseSettingChanged', handleSettingChange)
     return () => window.removeEventListener('collapseSettingChanged', handleSettingChange)
@@ -601,6 +606,9 @@ const App: React.FC = () => {
     isPanelHoveredRef.current = false
 
     if (!enableAutoCollapse) return
+
+    // 如果开启了"仅滚动时折叠"，则鼠标移开时不折叠
+    if (collapseOnScrollOnly) return
 
     // 鼠标离开后，立即检查当前状态
     const el = listContainerRef.current
@@ -3011,10 +3019,10 @@ const App: React.FC = () => {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded whitespace-nowrap">
-                    {currentModelName || 'seedream-4.0'}
+                    {formatModelDisplayName(currentModelName || 'seedream-4.0')}
                   </span>
                   <span className="text-sm text-zinc-300 truncate flex-1">
-                    {currentPrompt || '点击展开输入面板...'}
+                    {currentPrompt || '鼠标移动到此处来展开面板......'}
                   </span>
                 </div>
                 <svg
