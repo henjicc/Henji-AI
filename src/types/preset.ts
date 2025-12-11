@@ -22,7 +22,7 @@ export interface Preset {
 
     // 模型和参数 (仅 full 模式)
     model?: {
-        provider: string           // 'piaoyun' | 'fal'
+        provider: string           // 'ppio' | 'fal'
         modelId: string           // 'seedream-4.0'
         type: 'image' | 'video' | 'audio'
     }

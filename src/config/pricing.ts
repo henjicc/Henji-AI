@@ -312,7 +312,7 @@ function getSeedanceAspectGroup(aspect: string): 'wide' | 'standard' | 'classic'
 export const pricingConfigs: PricingConfig[] = [
     //===== 图片模型 =====
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'seedream-4.0',
         currency: '¥',
         type: 'calculated',
@@ -472,7 +472,7 @@ export const pricingConfigs: PricingConfig[] = [
 
     // ===== 音频模型 =====
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'minimax-speech-2.6',
         currency: '¥',
         type: 'calculated',
@@ -488,14 +488,14 @@ export const pricingConfigs: PricingConfig[] = [
 
     // ===== 视频模型 =====
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'vidu-q1',
         currency: '¥',
         type: 'fixed',
         fixedPrice: PRICES.VIDU
     },
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'kling-2.5-turbo',
         currency: '¥',
         type: 'calculated',
@@ -505,7 +505,7 @@ export const pricingConfigs: PricingConfig[] = [
         }
     },
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'minimax-hailuo-2.3',
         currency: '¥',
         type: 'calculated',
@@ -528,7 +528,7 @@ export const pricingConfigs: PricingConfig[] = [
         }
     },
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'minimax-hailuo-02',
         currency: '¥',
         type: 'calculated',
@@ -539,7 +539,7 @@ export const pricingConfigs: PricingConfig[] = [
         }
     },
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'pixverse-v4.5',
         currency: '¥',
         type: 'calculated',
@@ -551,7 +551,7 @@ export const pricingConfigs: PricingConfig[] = [
         }
     },
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'wan-2.5-preview',
         currency: '¥',
         type: 'calculated',
@@ -583,7 +583,7 @@ export const pricingConfigs: PricingConfig[] = [
         }
     },
     {
-        providerId: 'piaoyun',
+        providerId: 'ppio',
         modelId: 'seedance-v1',
         currency: '¥',
         type: 'calculated',

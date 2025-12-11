@@ -39,7 +39,7 @@
 - Fal Veo 3.1 模式：`falVeo31Mode`
 
 **命名规则**：
-- `ppio` = 派欧云 (PiaoYun)
+- `ppio` = 派欧云 (PPIO)
 - `fal` = Fal.ai
 - 模型名使用驼峰命名法
 - 参数名保持语义清晰
@@ -143,7 +143,7 @@ export async function buildGenerateOptions(params: BuildOptionsParams): Promise<
 
 ```typescript
 {
-    providerId: 'piaoyun',
+    providerId: 'ppio',
     modelId: 'vidu-q1',
     currency: '¥',
     type: 'calculated',

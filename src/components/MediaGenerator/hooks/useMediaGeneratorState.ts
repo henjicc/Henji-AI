@@ -7,7 +7,7 @@ import { useState } from 'react'
 export const useMediaGeneratorState = () => {
   // 基础状态
   const [input, setInput] = useState('')
-  const [selectedProvider, setSelectedProvider] = useState('piaoyun')
+  const [selectedProvider, setSelectedProvider] = useState('ppio')
   const [selectedModel, setSelectedModel] = useState('seedream-4.0')
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([])

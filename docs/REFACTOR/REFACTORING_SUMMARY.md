@@ -43,7 +43,7 @@
 - `ppioHailuo23VideoResolution` - 派欧云 Hailuo 2.3 分辨率
 
 **前缀规则**:
-- `ppio` = 派欧云 (PiaoYun)
+- `ppio` = 派欧云 (PPIO)
 - `fal` = Fal.ai
 - `ms` = 魔搭 (ModelScope)
 

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import { AdapterFactory, AdapterConfig } from '../adapters'
 import { MediaGeneratorAdapter } from '../adapters/base/BaseAdapter'
+import { logInfo } from '../utils/errorLogger'
 
 export class ApiService {
   private adapter: MediaGeneratorAdapter | null = null
@@ -31,7 +32,7 @@ export class ApiService {
     }
 
     this.adapter = AdapterFactory.createAdapter(fullConfig)
-    console.log('[ApiService] 适配器已初始化', fullConfig)
+    logInfo('[ApiService] 适配器已初始化', fullConfig)
   }
 
   async generateImage(prompt: string, model: string, options?: any) {

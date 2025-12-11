@@ -386,7 +386,7 @@ export const kieNanoBananaProConfig: ModelConfig = {
 ```typescript
 import { KIEAdapter } from './kie/KIEAdapter'
 
-export type AdapterType = 'piaoyun' | 'fal' | 'modelscope' | 'kie' | ...
+export type AdapterType = 'ppio' | 'fal' | 'modelscope' | 'kie' | ...
 
 export class AdapterFactory {
   static createAdapter(config: AdapterConfig): MediaGeneratorAdapter {

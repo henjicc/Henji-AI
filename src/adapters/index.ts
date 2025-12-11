@@ -4,7 +4,7 @@ import { FalAdapter } from './fal/FalAdapter'
 import { ModelscopeAdapter } from './modelscope/ModelscopeAdapter'
 import { KIEAdapter } from './kie/KIEAdapter'
 
-export type AdapterType = 'piaoyun' | 'fal' | 'modelscope' | 'kie' | 'openai' | 'stability' | 'midjourney'
+export type AdapterType = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'openai' | 'stability' | 'midjourney'
 
 export interface AdapterConfig {
   type: AdapterType
@@ -16,7 +16,7 @@ export interface AdapterConfig {
 export class AdapterFactory {
   static createAdapter(config: AdapterConfig): MediaGeneratorAdapter {
     switch (config.type) {
-      case 'piaoyun':
+      case 'ppio':
         return new PPIOAdapter(config.apiKey)
       case 'fal':
         return new FalAdapter(config.apiKey)

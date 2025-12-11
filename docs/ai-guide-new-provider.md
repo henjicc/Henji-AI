@@ -11,7 +11,7 @@
 ```
 
 **前缀规则**：
-- `ppio` = 派欧云 (PiaoYun)
+- `ppio` = 派欧云 (PPIO)
 - `fal` = Fal.ai
 - `ms` = 魔搭 (ModelScope)
 - 新供应商使用简短的英文缩写（2-4 个字母）
@@ -434,12 +434,12 @@ export function registerAllConfigs() {
 ```typescript
 import { YourProviderAdapter } from './your-provider/YourProviderAdapter'
 
-export type AdapterType = 'piaoyun' | 'fal' | 'your-provider'  // 添加新类型
+export type AdapterType = 'ppio' | 'fal' | 'your-provider'  // 添加新类型
 
 export class AdapterFactory {
   static createAdapter(config: AdapterConfig): MediaGeneratorAdapter {
     switch (config.type) {
-      case 'piaoyun':
+      case 'ppio':
         return new PPIOAdapter(config.apiKey)
       case 'fal':
         return new FalAdapter(config.apiKey)

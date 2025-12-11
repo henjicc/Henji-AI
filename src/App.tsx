@@ -24,6 +24,7 @@ import TestModeIndicator from './components/TestModeIndicator'
 import TestModePanel from './components/TestModePanel'
 import TestModeParamsDisplay from './components/TestModeParamsDisplay'
 import { shouldSkipRequest, logRequestParams } from './utils/testMode'
+import { logError } from './utils/errorLogger'
 
 /**
  * 格式化模型显示名称
@@ -225,13 +226,32 @@ const App: React.FC = () => {
     return () => clearTimeout(timer)
   }, [])
 
-  // 测试模式快捷键监听 (Ctrl+Alt+Shift+T)
+  // 测试模式快捷键监听 (Ctrl+Alt+Shift+T 和 F12)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Alt+Shift+T
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      // Ctrl+Alt+Shift+T - 打开测试模式面板
       if (e.ctrlKey && e.altKey && e.shiftKey && e.key === 'T') {
         e.preventDefault()
         setIsTestPanelOpen(prev => !prev)
+      }
+
+      // F12 - 打开开发者工具（需要在测试模式中启用）
+      if (e.key === 'F12') {
+        e.preventDefault() // 先阻止默认行为
+
+        const { getTestModeState } = await import('@/utils/testMode')
+        const testMode = getTestModeState()
+
+        if (testMode.enabled && testMode.options.enableDevTools) {
+          // 调用 Tauri 命令打开开发者工具
+          try {
+            const { invoke } = await import('@tauri-apps/api/core')
+            await invoke('toggle_devtools')
+            console.log('[DevTools] 开发者工具已切换')
+          } catch (error) {
+            console.error('[DevTools] 打开开发者工具失败:', error)
+          }
+        }
       }
     }
 
@@ -1205,7 +1225,7 @@ const App: React.FC = () => {
       // 动态初始化适配器
       const providerObj = providers.find(p => p.models.some(m => m.id === model))
       if (providerObj) {
-        const providerType = providerObj.id as 'piaoyun' | 'fal' | 'modelscope' | 'kie'
+        const providerType = providerObj.id as 'ppio' | 'fal' | 'modelscope' | 'kie'
 
         // 获取对应的 API Key
         let apiKey = ''
@@ -1216,7 +1236,7 @@ const App: React.FC = () => {
         } else if (providerType === 'kie') {
           apiKey = localStorage.getItem('kie_api_key') || ''
         } else {
-          apiKey = localStorage.getItem('piaoyun_api_key') || ''
+          apiKey = localStorage.getItem('ppio_api_key') || ''
         }
 
         if (!apiKey) {
@@ -1425,7 +1445,7 @@ const App: React.FC = () => {
         })
       }
     } catch (err) {
-      console.error('[App] 生成失败:', err)
+      logError('[App] 生成失败:', err)
       // 更新任务状态为错误
       updateTask(taskId, {
         status: 'error',
@@ -1548,7 +1568,7 @@ const App: React.FC = () => {
             updateProgress(uiTaskId, next)
           }
         } catch (err) {
-          console.error('[App] 轮询错误:', err)
+          logError('[App] 轮询错误:', err)
           clearInterval(interval)
           reject(err)
         }
@@ -1593,7 +1613,7 @@ const App: React.FC = () => {
         })
       }
     } catch (e) {
-      console.error('[App] 重试轮询失败', e)
+      logError('[App] 重试轮询失败', e)
     }
   }
 
@@ -1946,17 +1966,17 @@ const App: React.FC = () => {
 
   // 检查是否有保存的API密钥
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('piaoyun_api_key')
+    const savedApiKey = localStorage.getItem('ppio_api_key')
     if (savedApiKey) {
       apiService.setApiKey(savedApiKey)
       // 默认初始化派欧云适配器
       try {
         apiService.initializeAdapter({
-          type: 'piaoyun',
+          type: 'ppio',
           modelName: 'seedream-4.0'
         })
       } catch (err) {
-        console.error('Failed to initialize adapter:', err)
+        logError('Failed to initialize adapter:', err)
       }
     }
   }, [])
@@ -2104,7 +2124,7 @@ const App: React.FC = () => {
     if (!providerObj) {
       throw new Error(`未找到模型 ${task.model} 对应的供应商`)
     }
-    const providerType = providerObj.id as 'piaoyun' | 'fal' | 'modelscope' | 'kie'
+    const providerType = providerObj.id as 'ppio' | 'fal' | 'modelscope' | 'kie'
 
     console.log(`[App] 继续查询 ${providerType} 队列:`, { requestId: task.requestId, modelId: task.modelId })
 
@@ -2124,7 +2144,7 @@ const App: React.FC = () => {
       } else if (providerType === 'kie') {
         apiKey = localStorage.getItem('kie_api_key') || ''
       } else {
-        apiKey = localStorage.getItem('piaoyun_api_key') || ''
+        apiKey = localStorage.getItem('ppio_api_key') || ''
       }
 
       if (!apiKey) {
@@ -2232,7 +2252,7 @@ const App: React.FC = () => {
         } : t
       ))
     } catch (err) {
-      console.error('[App] 继续查询失败:', err)
+      logError('[App] 继续查询失败:', err)
       setTasks(prev => prev.map(t =>
         t.id === task.id ? {
           ...t,
@@ -2765,7 +2785,7 @@ const App: React.FC = () => {
                                 (task.type === 'image' && task.provider === 'fal') ||
                                 (task.type === 'image' && task.provider === 'modelscope') ||
                                 (task.type === 'image' && task.provider === 'kie') ||
-                                (task.type === 'image' && task.provider === 'piaoyun' && (task.model === 'seedream-4.0' || (taskProgress[task.id] || 0) > 0))
+                                (task.type === 'image' && task.provider === 'ppio' && (task.model === 'seedream-4.0' || (taskProgress[task.id] || 0) > 0))
                               ) && (
                                   <ProgressBar
                                     progress={taskProgress[task.id] || task.progress || 0}

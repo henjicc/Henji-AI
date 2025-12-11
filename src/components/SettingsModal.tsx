@@ -71,7 +71,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   useEffect(() => {
     // 从localStorage获取保存的设置
-    const savedApiKey = localStorage.getItem('piaoyun_api_key') || ''
+    const savedApiKey = localStorage.getItem('ppio_api_key') || ''
     setApiKey(savedApiKey)
 
     const savedFalApiKey = localStorage.getItem('fal_api_key') || ''
@@ -147,15 +147,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }, 300)
   }
 
-  // 实时保存 Piaoyun API Key
+  // 实时保存 PPIO API Key
   const handleApiKeyChange = (value: string) => {
     setApiKey(value)
-    localStorage.setItem('piaoyun_api_key', value)
+    localStorage.setItem('ppio_api_key', value)
     apiService.setApiKey(value)
     // 尝试初始化适配器（如果key不为空）
     if (value.trim()) {
       apiService.initializeAdapter({
-        type: 'piaoyun',
+        type: 'ppio',
         modelName: 'seedream-4.0'
       })
     }

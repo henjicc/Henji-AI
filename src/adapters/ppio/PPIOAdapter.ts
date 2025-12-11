@@ -23,7 +23,7 @@ export class PPIOAdapter extends BaseAdapter {
   private statusHandler: PPIOStatusHandler
 
   constructor(apiKey: string) {
-    super('PiaoYun')
+    super('PPIO')
     this.apiClient = axios.create({
       baseURL: PPIO_CONFIG.baseURL,
       headers: {

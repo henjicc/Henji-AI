@@ -6,6 +6,7 @@
 export interface TestModeOptions {
   skipRequest: boolean // 不发送实际请求
   logParams: boolean   // 在控制台输出参数
+  enableDevTools: boolean // 允许在构建版中使用F12打开控制台
   // 未来可以添加更多选项
   // mockResponse: boolean
   // slowMode: boolean
@@ -23,7 +24,8 @@ const STORAGE_KEY = 'henji_test_mode'
 // 默认配置
 const DEFAULT_OPTIONS: TestModeOptions = {
   skipRequest: true,
-  logParams: true
+  logParams: true,
+  enableDevTools: false
 }
 
 // 获取测试模式状态

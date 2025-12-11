@@ -172,6 +172,22 @@ const TestModePanel: React.FC<TestModePanelProps> = ({ isOpen, onClose }) => {
                   className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
                 />
               </label>
+
+              {/* 开发者工具 */}
+              <label className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors">
+                <div>
+                  <div className="text-white text-sm">允许F12打开控制台</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    在构建版中按F12可以打开开发者工具（如果无效请尝试重启应用）
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={state.options.enableDevTools}
+                  onChange={() => handleToggleOption('enableDevTools')}
+                  className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+                />
+              </label>
             </div>
           </div>
         )}

@@ -144,7 +144,7 @@ Henji AI 的模型适配分为前端和后端两个部分：
 添加新模型时，必须在 `src/config/providers.json` 中正确配置以下三个维度的分类：
 
 1. **供应商 (Provider)**: 模型所属的 API 服务商
-   - 例如：`piaoyun`, `fal`
+   - 例如：`ppio`, `fal`
    - 如果是新供应商，需要先按照「添加新供应商」流程进行配置
 
 2. **类型 (Type)**: 模型的媒体类型
@@ -1001,7 +1001,7 @@ Henji AI 集成了实时价格估算功能，显示在生成面板的右下角�
 
 ```typescript
 interface PricingConfig {
-  providerId: string    // 供应商 ID（如 'piaoyun', 'fal'）
+  providerId: string    // 供应商 ID（如 'ppio', 'fal'）
   modelId: string       // 模型 ID（如 'seedream-4.0'）
   currency: '¥' | '$'   // 货币符号（统一使用人民币 ¥）
   type: 'fixed' | 'calculated'  // 价格类型
@@ -1024,7 +1024,7 @@ interface PricingConfig {
 **配置示例**:
 ```typescript
 {
-  providerId: 'piaoyun',
+  providerId: 'ppio',
   modelId: 'seedream-4.0',
   currency: '¥',
   type: 'fixed',
@@ -1057,7 +1057,7 @@ interface PricingConfig {
 
 ```typescript
 {
-  providerId: 'piaoyun',
+  providerId: 'ppio',
   modelId: 'kling-2.5-turbo',
   currency: '¥',
   type: 'calculated',
@@ -1072,7 +1072,7 @@ interface PricingConfig {
 
 ```typescript
 {
-  providerId: 'piaoyun',
+  providerId: 'ppio',
   modelId: 'minimax-hailuo-2.3',
   currency: '¥',
   type: 'calculated',
@@ -1101,7 +1101,7 @@ interface PricingConfig {
 
 ```typescript
 {
-  providerId: 'piaoyun',
+  providerId: 'ppio',
   modelId: 'minimax-speech-2.6',
   currency: '¥',
   type: 'calculated',
@@ -1506,7 +1506,7 @@ case 'image':
     {/* 进度条：视频任务 或 有进度值的图片任务 */}
     {(task.type === 'video' ||
       (task.type === 'image' && task.provider === 'fal') ||
-      (task.type === 'image' && task.provider === 'piaoyun' && 
+      (task.type === 'image' && task.provider === 'ppio' && 
        (task.model === 'seedream-4.0' || (task.progress || 0) > 0))
     ) && (
       <ProgressBar
