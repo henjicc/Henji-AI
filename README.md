@@ -20,7 +20,7 @@
 
 ## 功能特性
 
-- 多家供应商可选，目前已适配：[派欧云](https://ppio.com/user/register?invited_by=MLBDS6)、[fal](https://fal.ai/)、[魔搭](https://modelscope.cn/)
+- 多家供应商可选，目前已适配：[派欧云](https://ppio.com/user/register?invited_by=MLBDS6)、[fal](https://fal.ai/)、[魔搭](https://modelscope.cn/)、[KIE](https://kie.ai/zh-CN/)
 - 还算是比较简洁美观的界面，基础功能也比较完善
 
 ## 适配列表
@@ -41,6 +41,7 @@
 | 魔搭 | Qwen-Image | 图片生成 |
 | 魔搭 | Qwen-Image-Edit-2509 | 图片编辑 |
 | 魔搭 | 魔搭API自定义 | 图片生成、图片编辑 |
+| KIE | Nano Banana Pro | 图片生成、图片编辑 |
 
 ### 视频
 
