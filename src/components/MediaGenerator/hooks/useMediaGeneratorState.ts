@@ -221,6 +221,14 @@ export const useMediaGeneratorState = () => {
   const [kieHailuo02Resolution, setKieHailuo02Resolution] = useState('768P')
   const [kieHailuo02PromptOptimizer, setKieHailuo02PromptOptimizer] = useState(true)
 
+  // 模型特定参数 - KIE Seedance V3
+  const [kieSeedanceV3Version, setKieSeedanceV3Version] = useState('lite')
+  const [kieSeedanceV3AspectRatio, setKieSeedanceV3AspectRatio] = useState('16:9')
+  const [kieSeedanceV3Resolution, setKieSeedanceV3Resolution] = useState('720p')
+  const [kieSeedanceV3Duration, setKieSeedanceV3Duration] = useState('5')
+  const [kieSeedanceV3CameraFixed, setKieSeedanceV3CameraFixed] = useState(false)
+  const [kieSeedanceV3FastMode, setKieSeedanceV3FastMode] = useState(true)
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -461,6 +469,14 @@ export const useMediaGeneratorState = () => {
     kieHailuo02Duration, setKieHailuo02Duration,
     kieHailuo02Resolution, setKieHailuo02Resolution,
     kieHailuo02PromptOptimizer, setKieHailuo02PromptOptimizer,
+
+    // KIE Seedance V3
+    kieSeedanceV3Version, setKieSeedanceV3Version,
+    kieSeedanceV3AspectRatio, setKieSeedanceV3AspectRatio,
+    kieSeedanceV3Resolution, setKieSeedanceV3Resolution,
+    kieSeedanceV3Duration, setKieSeedanceV3Duration,
+    kieSeedanceV3CameraFixed, setKieSeedanceV3CameraFixed,
+    kieSeedanceV3FastMode, setKieSeedanceV3FastMode,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

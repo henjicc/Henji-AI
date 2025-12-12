@@ -43,7 +43,8 @@ import {
   kieZImageParams,
   kieKlingV26Params,
   kieHailuo23Params,
-  kieHailuo02Params
+  kieHailuo02Params,
+  kieSeedanceV3Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -89,7 +90,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -406,7 +407,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-wan-25-preview' &&
          selectedModel !== 'wan-25-preview' &&
          selectedModel !== 'kie-hailuo-02' &&
-         selectedModel !== 'hailuo-02-kie' && (
+         selectedModel !== 'hailuo-02-kie' &&
+         selectedModel !== 'kie-seedance-v3' &&
+         selectedModel !== 'seedance-v3-kie' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -444,7 +447,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-wan-25-preview' &&
          selectedModel !== 'wan-25-preview' &&
          selectedModel !== 'kie-hailuo-02' &&
-         selectedModel !== 'hailuo-02-kie' && (
+         selectedModel !== 'hailuo-02-kie' &&
+         selectedModel !== 'kie-seedance-v3' &&
+         selectedModel !== 'seedance-v3-kie' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
@@ -647,6 +652,25 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           kieHailuo02Duration: values.kieHailuo02Duration,
           kieHailuo02Resolution: values.kieHailuo02Resolution,
           kieHailuo02PromptOptimizer: values.kieHailuo02PromptOptimizer,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Seedance V3 参数
+  if (selectedModel === 'kie-seedance-v3' || selectedModel === 'seedance-v3-kie') {
+    return (
+      <SchemaForm
+        schema={kieSeedanceV3Params}
+        values={{
+          kieSeedanceV3Version: values.kieSeedanceV3Version,
+          kieSeedanceV3AspectRatio: values.kieSeedanceV3AspectRatio,
+          kieSeedanceV3Resolution: values.kieSeedanceV3Resolution,
+          kieSeedanceV3Duration: values.kieSeedanceV3Duration,
+          kieSeedanceV3CameraFixed: values.kieSeedanceV3CameraFixed,
+          kieSeedanceV3FastMode: values.kieSeedanceV3FastMode,
           uploadedImages
         }}
         onChange={onChange}

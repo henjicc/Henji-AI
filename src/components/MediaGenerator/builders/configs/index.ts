@@ -66,7 +66,9 @@ import {
   kieHailuo23Config,
   kieHailuo23AliasConfig,
   kieHailuo02Config,
-  kieHailuo02AliasConfig
+  kieHailuo02AliasConfig,
+  kieSeedanceV3Config,
+  kieSeedanceV3AliasConfig
 } from './kie-models'
 
 /**
@@ -134,6 +136,8 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(kieHailuo23AliasConfig)
   optionsBuilder.registerConfig(kieHailuo02Config)
   optionsBuilder.registerConfig(kieHailuo02AliasConfig)
+  optionsBuilder.registerConfig(kieSeedanceV3Config)
+  optionsBuilder.registerConfig(kieSeedanceV3AliasConfig)
 
   // 为支持多个 ID 的模型注册别名
   registerAliases()

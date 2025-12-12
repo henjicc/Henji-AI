@@ -231,6 +231,14 @@ export interface PresetSetters {
     setKieHailuo02Duration: (v: number) => void
     setKieHailuo02Resolution: (v: string) => void
     setKieHailuo02PromptOptimizer: (v: boolean) => void
+
+    // KIE Seedance V3
+    setKieSeedanceV3Version: (v: string) => void
+    setKieSeedanceV3AspectRatio: (v: string) => void
+    setKieSeedanceV3Resolution: (v: string) => void
+    setKieSeedanceV3Duration: (v: string) => void
+    setKieSeedanceV3CameraFixed: (v: boolean) => void
+    setKieSeedanceV3FastMode: (v: boolean) => void
 }
 
 /**
@@ -470,5 +478,13 @@ export function createPresetSetterMap(
         kieHailuo02Duration: setters.setKieHailuo02Duration,
         kieHailuo02Resolution: setters.setKieHailuo02Resolution,
         kieHailuo02PromptOptimizer: setters.setKieHailuo02PromptOptimizer,
+
+        // KIE Seedance V3
+        kieSeedanceV3Version: setters.setKieSeedanceV3Version,
+        kieSeedanceV3AspectRatio: setters.setKieSeedanceV3AspectRatio,
+        kieSeedanceV3Resolution: setters.setKieSeedanceV3Resolution,
+        kieSeedanceV3Duration: setters.setKieSeedanceV3Duration,
+        kieSeedanceV3CameraFixed: setters.setKieSeedanceV3CameraFixed,
+        kieSeedanceV3FastMode: setters.setKieSeedanceV3FastMode,
     }
 }

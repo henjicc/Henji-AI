@@ -422,3 +422,75 @@ export const kieHailuo02AliasConfig: ModelConfig = {
   ...kieHailuo02Config,
   id: 'hailuo-02-kie'
 }
+
+/**
+ * KIE Seedance V3 (即梦视频 3.0) 配置
+ *
+ * 功能：
+ * - 文生视频（0张图片）
+ * - 图生视频（1张图片）
+ * - 首尾帧（2张图片）
+ *
+ * 版本：
+ * - Lite: bytedance/v1-lite-text-to-video, bytedance/v1-lite-image-to-video
+ * - Pro: bytedance/v1-pro-text-to-video, bytedance/v1-pro-image-to-video
+ * - Pro Fast: bytedance/v1-pro-fast-image-to-video (仅图生视频)
+ */
+export const kieSeedanceV3Config: ModelConfig = {
+  id: 'kie-seedance-v3',
+  type: 'video',
+  provider: 'kie',
+
+  paramMapping: {
+    aspect_ratio: {
+      source: ['kieSeedanceV3AspectRatio', 'aspectRatio'],
+      defaultValue: '16:9'
+    },
+    resolution: {
+      source: ['kieSeedanceV3Resolution', 'resolution'],
+      defaultValue: '720p'
+    },
+    duration: {
+      source: ['kieSeedanceV3Duration', 'duration'],
+      defaultValue: '5'
+    },
+    camera_fixed: {
+      source: ['kieSeedanceV3CameraFixed', 'cameraFixed'],
+      defaultValue: false
+    },
+    // Note: version and fast_mode are not API parameters
+    // They are used for endpoint selection in the adapter
+    version: {
+      source: ['kieSeedanceV3Version', 'version'],
+      defaultValue: 'lite'
+    },
+    fast_mode: {
+      source: ['kieSeedanceV3FastMode', 'fastMode'],
+      defaultValue: true
+    }
+  },
+
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'aspect_ratio',
+      defaultRatio: '16:9'
+    },
+    imageUpload: {
+      enabled: true,
+      required: false,  // 支持文生视频和图生视频
+      maxImages: 2,  // 最多支持 2 张图片（首尾帧模式）
+      mode: 'multiple',
+      paramKey: 'image_url',  // 第一张图片使用 image_url，第二张使用 end_image_url
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieSeedanceV3AliasConfig: ModelConfig = {
+  ...kieSeedanceV3Config,
+  id: 'seedance-v3-kie'
+}

@@ -72,6 +72,24 @@ const PRICES: Record<string, any> = {
             '6s_1080P': 0.285   // USD for pro 6s 1080P ($0.0475/s * 6s)
         }
     },
+    KIE_SEEDANCE_V3: {
+        lite: {
+            '480p': 0.010,   // USD per second at 480p
+            '720p': 0.0225,  // USD per second at 720p
+            '1080p': 0.050   // USD per second at 1080p
+        },
+        pro: {
+            '480p': 0.014,   // USD per second at 480p
+            '720p': 0.030,   // USD per second at 720p
+            '1080p': 0.070   // USD per second at 1080p
+        },
+        pro_fast: {
+            '5s_720p': 0.080,   // USD for 5s at 720p (fixed price)
+            '10s_720p': 0.180,  // USD for 10s at 720p (fixed price)
+            '5s_1080p': 0.180,  // USD for 5s at 1080p (fixed price)
+            '10s_1080p': 0.360  // USD for 10s at 1080p (fixed price)
+        }
+    },
 
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
@@ -565,6 +583,62 @@ export const pricingConfigs: PricingConfig[] = [
             // 获取基础价格（美元）
             const mode = usePro ? 'pro' : 'standard'
             const basePriceUSD = PRICES.KIE_HAILUO_02[mode]?.[priceKey] || PRICES.KIE_HAILUO_02.standard['6s_768P']
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-seedance-v3',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 使用 kie 前缀的参数名，并提供回退
+            const version = params.kieSeedanceV3Version || params.version || 'lite'
+
+            // 处理 fastMode：支持布尔值和字符串，默认为 true
+            let fastMode = true
+            if (params.kieSeedanceV3FastMode !== undefined) {
+                fastMode = params.kieSeedanceV3FastMode !== false && params.kieSeedanceV3FastMode !== 'false'
+            } else if (params.fastMode !== undefined) {
+                fastMode = params.fastMode !== false && params.fastMode !== 'false'
+            }
+
+            const resolution = (params.kieSeedanceV3Resolution || params.resolution || '720p').toLowerCase()
+            const duration = parseInt(params.kieSeedanceV3Duration || params.duration || '5')
+
+            // 检查是否有上传图片（同时检查 uploadedImages 和 images）
+            const hasImages = (params.uploadedImages && params.uploadedImages.length > 0) ||
+                            (params.images && params.images.length > 0)
+
+            let basePriceUSD: number
+
+            // 判断是否使用 Pro Fast 模式（仅图生视频支持，且只支持 720p 和 1080p）
+            if (version === 'pro' && fastMode && hasImages && (resolution === '720p' || resolution === '1080p')) {
+                // Pro Fast 模式：使用固定价格（只支持 720p 和 1080p）
+                const priceKey = `${duration}s_${resolution}`
+                basePriceUSD = PRICES.KIE_SEEDANCE_V3.pro_fast[priceKey]
+
+                // 如果找不到对应的价格键（例如不支持的时长），回退到默认价格
+                if (!basePriceUSD) {
+                    basePriceUSD = PRICES.KIE_SEEDANCE_V3.pro_fast['5s_720p']
+                }
+            } else {
+                // Lite 或 Pro 常规模式：使用按秒计费
+                // 注意：如果是 Pro + Fast Mode + 480p，会走这个分支（因为 Fast 不支持 480p）
+                const pricePerSecond = PRICES.KIE_SEEDANCE_V3[version]?.[resolution]
+
+                // 如果找不到对应的价格，回退到默认价格
+                if (pricePerSecond) {
+                    basePriceUSD = pricePerSecond * duration
+                } else {
+                    // 回退到 Lite 720p 的价格
+                    basePriceUSD = PRICES.KIE_SEEDANCE_V3.lite['720p'] * duration
+                }
+            }
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY

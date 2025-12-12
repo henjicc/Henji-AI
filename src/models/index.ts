@@ -49,6 +49,7 @@ export { kieZImageParams } from './kie-z-image'
 export { kieKlingV26Params } from './kie-kling-v2-6'
 export { kieHailuo23Params } from './kie-hailuo-2-3'
 export { kieHailuo02Params } from './kie-hailuo-02'
+export { kieSeedanceV3Params } from './kie-seedance-v3'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -100,6 +101,7 @@ import { kieZImageParams } from './kie-z-image'
 import { kieKlingV26Params } from './kie-kling-v2-6'
 import { kieHailuo23Params } from './kie-hailuo-2-3'
 import { kieHailuo02Params } from './kie-hailuo-02'
+import { kieSeedanceV3Params } from './kie-seedance-v3'
 import { logError } from '../utils/errorLogger'
 
 /**
@@ -178,7 +180,9 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'kie-hailuo-2-3': kieHailuo23Params,
   'hailuo-2-3-kie': kieHailuo23Params,
   'kie-hailuo-02': kieHailuo02Params,
-  'hailuo-02-kie': kieHailuo02Params
+  'hailuo-02-kie': kieHailuo02Params,
+  'kie-seedance-v3': kieSeedanceV3Params,
+  'seedance-v3-kie': kieSeedanceV3Params
 }
 
 /**

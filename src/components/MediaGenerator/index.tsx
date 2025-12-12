@@ -852,6 +852,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieHailuo02Duration: state.setKieHailuo02Duration,
       kieHailuo02Resolution: state.setKieHailuo02Resolution,
       kieHailuo02PromptOptimizer: state.setKieHailuo02PromptOptimizer,
+      // KIE Seedance V3
+      kieSeedanceV3Version: state.setKieSeedanceV3Version,
+      kieSeedanceV3AspectRatio: state.setKieSeedanceV3AspectRatio,
+      kieSeedanceV3Resolution: state.setKieSeedanceV3Resolution,
+      kieSeedanceV3Duration: state.setKieSeedanceV3Duration,
+      kieSeedanceV3CameraFixed: state.setKieSeedanceV3CameraFixed,
+      kieSeedanceV3FastMode: state.setKieSeedanceV3FastMode,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,
@@ -1480,7 +1487,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               // KIE Hailuo 02 参数
               kieHailuo02Duration: state.kieHailuo02Duration,
               kieHailuo02Resolution: state.kieHailuo02Resolution,
-              kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer
+              kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer,
+              // KIE Seedance V3 参数
+              kieSeedanceV3Version: state.kieSeedanceV3Version,
+              kieSeedanceV3Resolution: state.kieSeedanceV3Resolution,
+              kieSeedanceV3Duration: state.kieSeedanceV3Duration,
+              kieSeedanceV3FastMode: state.kieSeedanceV3FastMode
             }}
           />
         </div>
