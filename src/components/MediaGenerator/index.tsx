@@ -214,6 +214,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
     setKieSeedreamAspectRatio: state.setKieSeedreamAspectRatio,
     setKieSeedreamQuality: state.setKieSeedreamQuality,
+    setKieSeedream40AspectRatio: state.setKieSeedream40AspectRatio,
+    setKieSeedream40Resolution: state.setKieSeedream40Resolution,
+    setKieSeedream40MaxImages: state.setKieSeedream40MaxImages,
     setKieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
     setKieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
     setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode
@@ -825,6 +828,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // KIE Seedream 4.5
       kieSeedreamAspectRatio: state.setKieSeedreamAspectRatio,
       kieSeedreamQuality: state.setKieSeedreamQuality,
+      // KIE Seedream 4.0
+      kieSeedream40AspectRatio: state.setKieSeedream40AspectRatio,
+      kieSeedream40Resolution: state.setKieSeedream40Resolution,
+      kieSeedream40MaxImages: state.setKieSeedream40MaxImages,
       // KIE Grok Imagine
       kieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
       // KIE Grok Imagine Video
@@ -1052,6 +1059,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieNanoBananaOutputFormat: state.kieNanoBananaOutputFormat,
         kieSeedreamAspectRatio: state.kieSeedreamAspectRatio,
         kieSeedreamQuality: state.kieSeedreamQuality,
+        kieSeedream40AspectRatio: state.kieSeedream40AspectRatio,
+        kieSeedream40Resolution: state.kieSeedream40Resolution,
+        kieSeedream40MaxImages: state.kieSeedream40MaxImages,
         kieGrokImagineAspectRatio: state.kieGrokImagineAspectRatio,
         kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
@@ -1138,8 +1148,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       const finalOptions = { ...options, ...originalUIParams }
 
       let finalInput = state.input
+      // PPIO Seedream 4.0: 使用 maxImages
       if (state.selectedModel === 'seedream-4.0' && state.maxImages > 1) {
         finalInput = `生成${state.maxImages}张图片。${state.input}`
+      }
+      // KIE Seedream 4.0: 使用 kieSeedream40MaxImages
+      if (state.selectedModel === 'kie-seedream-4.0' && state.kieSeedream40MaxImages > 1) {
+        finalInput = `生成${state.kieSeedream40MaxImages}张图片。${state.input}`
       }
 
       onGenerate(finalInput, state.selectedModel, currentModel?.type || 'image', finalOptions)
@@ -1411,7 +1426,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               falPixverse55GenerateAudio: state.falPixverse55GenerateAudio,
               falPixverse55MultiClip: state.falPixverse55MultiClip,
               input: state.input,
-              minimaxAudioSpec: state.minimaxAudioSpec
+              minimaxAudioSpec: state.minimaxAudioSpec,
+              // KIE 模型参数
+              kieNanoBananaResolution: state.kieNanoBananaResolution,
+              kieSeedreamQuality: state.kieSeedreamQuality,
+              kieSeedream40MaxImages: state.kieSeedream40MaxImages,
+              kieSeedream40Resolution: state.kieSeedream40Resolution
             }}
           />
         </div>

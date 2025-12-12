@@ -39,6 +39,7 @@ const PRICES: Record<string, any> = {
         '2K': 0.032,  // USD per image (basic quality)
         '4K': 0.064   // USD per image (high quality)
     },
+    KIE_SEEDREAM_40: 0.025,  // USD per image (固定价格，与分辨率无关)
     KIE_GROK_IMAGINE: 0.02,  // USD per generation (6 images)
     KIE_GROK_IMAGINE_VIDEO: 0.10,  // USD per 6-second video
 
@@ -392,6 +393,27 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-seedream-4.0',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 获取生成图片数量
+            const maxImages = params.kieSeedream40MaxImages || params.maxImages || 1
+
+            // 固定价格：$0.025/张，与分辨率无关
+            const basePriceUSD = PRICES.KIE_SEEDREAM_40
+
+            // 乘以生成图片数量
+            const totalPriceUSD = basePriceUSD * maxImages
+
+            // 转换为人民币
+            const priceCNY = totalPriceUSD * USD_TO_CNY
 
             return formatPrice(priceCNY)
         }

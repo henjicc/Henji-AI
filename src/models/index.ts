@@ -44,6 +44,7 @@ export { kieNanoBananaProParams } from './kie-nano-banana-pro'
 export { kieGrokImagineParams } from './kie-grok-imagine'
 export { kieGrokImagineVideoParams } from './kie-grok-imagine-video'
 export { kieSeedream45Params } from './kie-seedream-4.5'
+export { kieSeedream40Params } from './kie-seedream-4.0'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -90,6 +91,7 @@ import { kieNanoBananaProParams } from './kie-nano-banana-pro'
 import { kieGrokImagineParams } from './kie-grok-imagine'
 import { kieGrokImagineVideoParams } from './kie-grok-imagine-video'
 import { kieSeedream45Params } from './kie-seedream-4.5'
+import { kieSeedream40Params } from './kie-seedream-4.0'
 import { logError } from '../utils/errorLogger'
 
 /**
@@ -158,7 +160,9 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'kie-grok-imagine-video': kieGrokImagineVideoParams,
   'grok-imagine-video-kie': kieGrokImagineVideoParams,
   'kie-seedream-4.5': kieSeedream45Params,
-  'seedream-4.5-kie': kieSeedream45Params
+  'seedream-4.5-kie': kieSeedream45Params,
+  'kie-seedream-4.0': kieSeedream40Params,
+  'seedream-4.0-kie': kieSeedream40Params
 }
 
 /**

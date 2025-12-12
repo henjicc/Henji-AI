@@ -197,3 +197,73 @@ export const kieSeedream45AliasConfig: ModelConfig = {
   ...kieSeedream45Config,
   id: 'seedream-4.5-kie'
 }
+
+/**
+ * KIE Seedream 4.0 配置
+ */
+export const kieSeedream40Config: ModelConfig = {
+  id: 'kie-seedream-4.0',
+  type: 'image',
+  provider: 'kie',
+
+  paramMapping: {
+    image_size: {
+      source: ['kieSeedream40AspectRatio', 'aspectRatio'],
+      defaultValue: '1:1',
+      // 转换比例格式到 API 参数格式
+      // 例如：'16:9' → 'landscape_16_9', '9:16' → 'portrait_16_9', '1:1' → 'square_hd'
+      transform: (value: string) => {
+        // 1:1 使用 square_hd
+        if (value === '1:1') return 'square_hd'
+
+        // 解析比例
+        const [w, h] = value.split(':').map(Number)
+        const ratio = w / h
+
+        // 判断方向：横向 (landscape) 或竖向 (portrait)
+        const prefix = ratio > 1 ? 'landscape' : 'portrait'
+
+        // 映射比例到 API 格式
+        if (value === '4:3' || value === '3:4') return `${prefix}_4_3`
+        if (value === '3:2' || value === '2:3') return `${prefix}_3_2`
+        if (value === '16:9' || value === '9:16') return `${prefix}_16_9`
+        if (value === '21:9') return 'landscape_21_9'
+
+        // 默认返回 square_hd
+        return 'square_hd'
+      }
+    },
+    image_resolution: {
+      source: ['kieSeedream40Resolution', 'resolution'],
+      defaultValue: '2K'
+      // 注意：不需要 transform，直接传递 2K/4K
+    },
+    max_images: {
+      source: ['kieSeedream40MaxImages', 'maxImages'],
+      defaultValue: 1
+    }
+  },
+
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'image_size',
+      defaultRatio: '1:1'
+    },
+    imageUpload: {
+      enabled: true,
+      maxImages: 10,  // KIE Seedream 4.0 支持最多 10 张输入图片
+      mode: 'multiple',
+      paramKey: 'image_urls',
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieSeedream40AliasConfig: ModelConfig = {
+  ...kieSeedream40Config,
+  id: 'seedream-4.0-kie'
+}

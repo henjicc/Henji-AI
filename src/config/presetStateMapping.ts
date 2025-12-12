@@ -407,6 +407,11 @@ export function createPresetSetterMap(
         kieSeedreamAspectRatio: setters.setKieSeedreamAspectRatio,
         kieSeedreamQuality: setters.setKieSeedreamQuality,
 
+        // KIE Seedream 4.0
+        kieSeedream40AspectRatio: setters.setKieSeedream40AspectRatio,
+        kieSeedream40Resolution: setters.setKieSeedream40Resolution,
+        kieSeedream40MaxImages: setters.setKieSeedream40MaxImages,
+
         // KIE Grok Imagine
         kieGrokImagineAspectRatio: setters.setKieGrokImagineAspectRatio,
 

@@ -471,6 +471,20 @@
           }
         },
         {
+          "id": "kie-seedream-4.0",
+          "name": "即梦图片 4.0",
+          "type": "image",
+          "description": "基于 Seedream 4.0 模型的高质量写实风格图像生成，支持图生图（最多10张图），可生成1-6张图片",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
+        },
+        {
           "id": "kie-seedream-4.5",
           "name": "即梦图片 4.5",
           "type": "image",

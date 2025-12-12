@@ -191,6 +191,11 @@ export const useMediaGeneratorState = () => {
   const [kieSeedreamAspectRatio, setKieSeedreamAspectRatio] = useState('1:1')
   const [kieSeedreamQuality, setKieSeedreamQuality] = useState('2K')
 
+  // 模型特定参数 - KIE Seedream 4.0
+  const [kieSeedream40AspectRatio, setKieSeedream40AspectRatio] = useState('1:1')
+  const [kieSeedream40Resolution, setKieSeedream40Resolution] = useState('2K')
+  const [kieSeedream40MaxImages, setKieSeedream40MaxImages] = useState(1)
+
   // 模型特定参数 - KIE Grok Imagine
   const [kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio] = useState('1:1')
 
@@ -408,6 +413,11 @@ export const useMediaGeneratorState = () => {
     // KIE Seedream 4.5
     kieSeedreamAspectRatio, setKieSeedreamAspectRatio,
     kieSeedreamQuality, setKieSeedreamQuality,
+
+    // KIE Seedream 4.0
+    kieSeedream40AspectRatio, setKieSeedream40AspectRatio,
+    kieSeedream40Resolution, setKieSeedream40Resolution,
+    kieSeedream40MaxImages, setKieSeedream40MaxImages,
 
     // KIE Grok Imagine
     kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio,

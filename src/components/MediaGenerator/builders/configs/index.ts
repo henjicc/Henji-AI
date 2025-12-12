@@ -56,7 +56,9 @@ import {
   kieGrokImagineVideoConfig,
   kieGrokImagineVideoAliasConfig,
   kieSeedream45Config,
-  kieSeedream45AliasConfig
+  kieSeedream45AliasConfig,
+  kieSeedream40Config,
+  kieSeedream40AliasConfig
 } from './kie-models'
 
 /**
@@ -108,6 +110,8 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(kieNanoBananaProAliasConfig)
   optionsBuilder.registerConfig(kieSeedream45Config)
   optionsBuilder.registerConfig(kieSeedream45AliasConfig)
+  optionsBuilder.registerConfig(kieSeedream40Config)
+  optionsBuilder.registerConfig(kieSeedream40AliasConfig)
   optionsBuilder.registerConfig(kieGrokImagineConfig)
   optionsBuilder.registerConfig(kieGrokImagineAliasConfig)
 
