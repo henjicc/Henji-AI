@@ -61,6 +61,17 @@ const PRICES: Record<string, any> = {
             '6s_1080P': 0.35    // USD for pro 6s 1080P
         }
     },
+    KIE_HAILUO_02: {
+        standard: {
+            '6s_512P': 0.06,    // USD for standard 6s 512P ($0.010/s * 6s)
+            '10s_512P': 0.10,   // USD for standard 10s 512P ($0.010/s * 10s)
+            '6s_768P': 0.15,    // USD for standard 6s 768P ($0.025/s * 6s)
+            '10s_768P': 0.25    // USD for standard 10s 768P ($0.025/s * 10s)
+        },
+        pro: {
+            '6s_1080P': 0.285   // USD for pro 6s 1080P ($0.0475/s * 6s)
+        }
+    },
 
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
@@ -528,6 +539,32 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 获取基础价格（美元）
             const basePriceUSD = PRICES.KIE_HAILUO_23[mode]?.[priceKey] || PRICES.KIE_HAILUO_23.standard['6s_768P']
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-hailuo-02',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 使用 kie 前缀的参数名，并提供回退
+            const duration = params.kieHailuo02Duration || params.duration || 6
+            const resolution = params.kieHailuo02Resolution || params.resolution || '768P'
+
+            // 判断是否使用 Pro 端点：6秒 + 1080P
+            const usePro = duration === 6 && resolution === '1080P'
+
+            // 构建价格键
+            const priceKey = `${duration}s_${resolution}`
+
+            // 获取基础价格（美元）
+            const mode = usePro ? 'pro' : 'standard'
+            const basePriceUSD = PRICES.KIE_HAILUO_02[mode]?.[priceKey] || PRICES.KIE_HAILUO_02.standard['6s_768P']
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY

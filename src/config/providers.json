@@ -530,7 +530,8 @@
           "type": "video",
           "description": "由 Grok AI 驱动的高质量视频生成，支持文生视频和图生视频（最多1张图）",
           "functions": [
-            "视频生成"
+            "文生视频",
+            "图生视频"
           ],
           "progressConfig": {
             "type": "polling",
@@ -543,7 +544,8 @@
           "type": "video",
           "description": "基于 Kling V2.6 模型的高质量视频生成，支持文生视频和图生视频（最多1张图），支持音频生成",
           "functions": [
-            "视频生成"
+            "文生视频",
+            "图生视频"
           ],
           "progressConfig": {
             "type": "polling",
@@ -556,7 +558,23 @@
           "type": "video",
           "description": "海螺 2.3 图生视频模型，支持标准和专业两种模式（必须上传图片）",
           "functions": [
-            "视频生成"
+            "文生视频",
+            "图生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
+        },
+        {
+          "id": "kie-hailuo-02",
+          "name": "海螺 Hailuo-02",
+          "type": "video",
+          "description": "海螺 02 视频模型，支持文生视频和图生视频，支持标准和专业两种模式",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "首尾帧"
           ],
           "progressConfig": {
             "type": "polling",

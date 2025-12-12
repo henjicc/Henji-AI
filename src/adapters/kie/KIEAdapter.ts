@@ -12,6 +12,7 @@ import { KIE_CONFIG } from './config'
 import { findRoute } from './models'
 import { parseImageResponse, parseVideoResponse } from './parsers'
 import { logInfo } from '../../utils/errorLogger'
+import { getMaxImageCount } from '../../components/MediaGenerator/utils/constants'
 
 export class KIEAdapter extends BaseAdapter {
   private apiClient: AxiosInstance
@@ -186,8 +187,10 @@ export class KIEAdapter extends BaseAdapter {
       let uploadedImageUrls: string[] = []
       if (params.images && params.images.length > 0) {
         this.log('开始上传图片到 KIE CDN...')
-        // Grok Imagine 视频最多支持 1 张图片
-        const imagesToUpload = params.images.slice(0, 1)
+        // 根据模型动态确定最大图片数量
+        const maxImages = getMaxImageCount(params.model)
+        const imagesToUpload = params.images.slice(0, maxImages)
+        this.log(`模型 ${params.model} 最多支持 ${maxImages} 张图片，实际上传 ${imagesToUpload.length} 张`)
         uploadedImageUrls = await Promise.all(
           imagesToUpload.map(img => this.uploadImageToKIE(img))
         )

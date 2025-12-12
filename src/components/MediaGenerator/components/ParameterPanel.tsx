@@ -42,7 +42,8 @@ import {
   kieSeedream40Params,
   kieZImageParams,
   kieKlingV26Params,
-  kieHailuo23Params
+  kieHailuo23Params,
+  kieHailuo02Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -88,7 +89,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -403,7 +404,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-pixverse-v5.5' &&
          selectedModel !== 'pixverse-v5.5' &&
          selectedModel !== 'fal-ai-wan-25-preview' &&
-         selectedModel !== 'wan-25-preview' && (
+         selectedModel !== 'wan-25-preview' &&
+         selectedModel !== 'kie-hailuo-02' &&
+         selectedModel !== 'hailuo-02-kie' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -439,7 +442,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-pixverse-v5.5' &&
          selectedModel !== 'pixverse-v5.5' &&
          selectedModel !== 'fal-ai-wan-25-preview' &&
-         selectedModel !== 'wan-25-preview' && (
+         selectedModel !== 'wan-25-preview' &&
+         selectedModel !== 'kie-hailuo-02' &&
+         selectedModel !== 'hailuo-02-kie' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
@@ -626,6 +631,22 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           kieHailuo23Mode: values.kieHailuo23Mode,
           kieHailuo23Duration: values.kieHailuo23Duration,
           kieHailuo23Resolution: values.kieHailuo23Resolution,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Hailuo 02 参数
+  if (selectedModel === 'kie-hailuo-02' || selectedModel === 'hailuo-02-kie') {
+    return (
+      <SchemaForm
+        schema={kieHailuo02Params}
+        values={{
+          kieHailuo02Duration: values.kieHailuo02Duration,
+          kieHailuo02Resolution: values.kieHailuo02Resolution,
+          kieHailuo02PromptOptimizer: values.kieHailuo02PromptOptimizer,
           uploadedImages
         }}
         onChange={onChange}

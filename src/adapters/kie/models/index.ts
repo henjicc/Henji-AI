@@ -6,6 +6,7 @@ import { kieSeedream40Route } from './seedream-4.0'
 import { kieZImageRoute } from './z-image'
 import { kieKlingV26Route } from './kling-v2-6'
 import { kieHailuo23Route } from './hailuo-2-3'
+import { kieHailuo02Route } from './hailuo-02'
 
 export type { KIEModelRoute }
 
@@ -17,7 +18,8 @@ export const kieModelRoutes: KIEModelRoute[] = [
   kieZImageRoute,
   kieGrokImagineVideoRoute,
   kieKlingV26Route,
-  kieHailuo23Route
+  kieHailuo23Route,
+  kieHailuo02Route
 ]
 
 export const findRoute = (modelId: string): KIEModelRoute | undefined => {

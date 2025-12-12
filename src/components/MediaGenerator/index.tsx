@@ -848,6 +848,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieHailuo23Mode: state.setKieHailuo23Mode,
       kieHailuo23Duration: state.setKieHailuo23Duration,
       kieHailuo23Resolution: state.setKieHailuo23Resolution,
+      // KIE Hailuo 02
+      kieHailuo02Duration: state.setKieHailuo02Duration,
+      kieHailuo02Resolution: state.setKieHailuo02Resolution,
+      kieHailuo02PromptOptimizer: state.setKieHailuo02PromptOptimizer,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,
@@ -1095,6 +1099,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieHailuo23Mode: state.kieHailuo23Mode,
         kieHailuo23Duration: state.kieHailuo23Duration,
         kieHailuo23Resolution: state.kieHailuo23Resolution,
+        kieHailuo02Duration: state.kieHailuo02Duration,
+        kieHailuo02Resolution: state.kieHailuo02Resolution,
+        kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
@@ -1469,7 +1476,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               // KIE Hailuo 2.3 参数
               kieHailuo23Mode: state.kieHailuo23Mode,
               kieHailuo23Duration: state.kieHailuo23Duration,
-              kieHailuo23Resolution: state.kieHailuo23Resolution
+              kieHailuo23Resolution: state.kieHailuo23Resolution,
+              // KIE Hailuo 02 参数
+              kieHailuo02Duration: state.kieHailuo02Duration,
+              kieHailuo02Resolution: state.kieHailuo02Resolution,
+              kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer
             }}
           />
         </div>

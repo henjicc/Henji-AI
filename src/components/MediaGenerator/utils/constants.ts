@@ -55,6 +55,11 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
     return mode === 'fast' ? 1 : 2
   }
 
+  // KIE Hailuo 02: 最多 2 张图片（首尾帧）
+  if (modelId === 'kie-hailuo-02' || modelId === 'hailuo-02-kie') {
+    return 2
+  }
+
   if (modelId === 'pixverse-v4.5') return 1  // 派欧云 PixVerse V4.5：最多 1 张图片
   if (modelId === 'wan-2.5-preview') return 1  // 派欧云 Wan 2.5 Preview
   if (modelId === 'fal-ai-wan-25-preview' || modelId === 'wan-25-preview') return 1  // Fal Wan 2.5 Preview：最多 1 张图片

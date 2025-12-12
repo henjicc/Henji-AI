@@ -379,3 +379,46 @@ export const kieHailuo23AliasConfig: ModelConfig = {
   ...kieHailuo23Config,
   id: 'hailuo-2-3-kie'
 }
+
+/**
+ * KIE Hailuo 02 配置
+ */
+export const kieHailuo02Config: ModelConfig = {
+  id: 'kie-hailuo-02',
+  type: 'video',
+  provider: 'kie',
+
+  paramMapping: {
+    duration: {
+      source: ['kieHailuo02Duration', 'duration'],
+      defaultValue: 6
+    },
+    resolution: {
+      source: ['kieHailuo02Resolution', 'resolution'],
+      defaultValue: '768P'
+    },
+    prompt_optimizer: {
+      source: ['kieHailuo02PromptOptimizer', 'prompt_optimizer'],
+      defaultValue: true
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      required: false,  // 支持文生视频和图生视频
+      maxImages: 2,  // Hailuo 02 最多支持 2 张图片
+      mode: 'multiple',
+      paramKey: 'image_url',  // 第一张图片使用 image_url，第二张使用 end_image_url
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieHailuo02AliasConfig: ModelConfig = {
+  ...kieHailuo02Config,
+  id: 'hailuo-02-kie'
+}

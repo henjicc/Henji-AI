@@ -197,6 +197,40 @@ export interface PresetSetters {
     setKieNanoBananaAspectRatio: (v: string) => void
     setKieNanoBananaResolution: (v: string) => void
     setKieNanoBananaOutputFormat: (v: string) => void
+
+    // KIE Seedream 4.5
+    setKieSeedreamAspectRatio: (v: string) => void
+    setKieSeedreamQuality: (v: string) => void
+
+    // KIE Seedream 4.0
+    setKieSeedream40AspectRatio: (v: string) => void
+    setKieSeedream40Resolution: (v: string) => void
+    setKieSeedream40MaxImages: (v: number) => void
+
+    // KIE Grok Imagine
+    setKieGrokImagineAspectRatio: (v: string) => void
+
+    // KIE Z-Image
+    setKieZImageAspectRatio: (v: string) => void
+
+    // KIE Grok Imagine Video
+    setKieGrokImagineVideoAspectRatio: (v: string) => void
+    setKieGrokImagineVideoMode: (v: string) => void
+
+    // KIE Kling V2.6
+    setKieKlingV26AspectRatio: (v: string) => void
+    setKieKlingV26Duration: (v: string) => void
+    setKieKlingV26EnableAudio: (v: boolean) => void
+
+    // KIE Hailuo 2.3
+    setKieHailuo23Mode: (v: string) => void
+    setKieHailuo23Duration: (v: number) => void
+    setKieHailuo23Resolution: (v: string) => void
+
+    // KIE Hailuo 02
+    setKieHailuo02Duration: (v: number) => void
+    setKieHailuo02Resolution: (v: string) => void
+    setKieHailuo02PromptOptimizer: (v: boolean) => void
 }
 
 /**
@@ -431,5 +465,10 @@ export function createPresetSetterMap(
         kieHailuo23Mode: setters.setKieHailuo23Mode,
         kieHailuo23Duration: setters.setKieHailuo23Duration,
         kieHailuo23Resolution: setters.setKieHailuo23Resolution,
+
+        // KIE Hailuo 02
+        kieHailuo02Duration: setters.setKieHailuo02Duration,
+        kieHailuo02Resolution: setters.setKieHailuo02Resolution,
+        kieHailuo02PromptOptimizer: setters.setKieHailuo02PromptOptimizer,
     }
 }

@@ -216,6 +216,11 @@ export const useMediaGeneratorState = () => {
   const [kieHailuo23Duration, setKieHailuo23Duration] = useState(6)
   const [kieHailuo23Resolution, setKieHailuo23Resolution] = useState('768P')
 
+  // 模型特定参数 - KIE Hailuo 02
+  const [kieHailuo02Duration, setKieHailuo02Duration] = useState(6)
+  const [kieHailuo02Resolution, setKieHailuo02Resolution] = useState('768P')
+  const [kieHailuo02PromptOptimizer, setKieHailuo02PromptOptimizer] = useState(true)
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -451,6 +456,11 @@ export const useMediaGeneratorState = () => {
     kieHailuo23Mode, setKieHailuo23Mode,
     kieHailuo23Duration, setKieHailuo23Duration,
     kieHailuo23Resolution, setKieHailuo23Resolution,
+
+    // KIE Hailuo 02
+    kieHailuo02Duration, setKieHailuo02Duration,
+    kieHailuo02Resolution, setKieHailuo02Resolution,
+    kieHailuo02PromptOptimizer, setKieHailuo02PromptOptimizer,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,
