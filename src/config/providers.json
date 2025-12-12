@@ -482,6 +482,19 @@
             "type": "polling",
             "expectedPolls": 30
           }
+        },
+        {
+          "id": "kie-grok-imagine-video",
+          "name": "Grok Imagine 视频",
+          "type": "video",
+          "description": "由 Grok AI 驱动的高质量视频生成，支持文生视频和图生视频（最多1张图）",
+          "functions": [
+            "视频生成"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
         }
       ]
     }

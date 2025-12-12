@@ -42,6 +42,7 @@ export { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 // KIE 模型
 export { kieNanoBananaProParams } from './kie-nano-banana-pro'
 export { kieGrokImagineParams } from './kie-grok-imagine'
+export { kieGrokImagineVideoParams } from './kie-grok-imagine-video'
 
 // 为了向后兼容，保留旧的导出名称
 export { seedream40Params as seedreamParams } from './seedream-4.0'
@@ -86,6 +87,7 @@ import { modelscopeCommonParams, modelscopeCustomParams, modelscopeZImageTurboPa
 import { qwenImageEdit2509Params } from './qwen-image-edit-2509'
 import { kieNanoBananaProParams } from './kie-nano-banana-pro'
 import { kieGrokImagineParams } from './kie-grok-imagine'
+import { kieGrokImagineVideoParams } from './kie-grok-imagine-video'
 import { logError } from '../utils/errorLogger'
 
 /**
@@ -150,7 +152,9 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'kie-nano-banana-pro': kieNanoBananaProParams,
   'nano-banana-pro-kie': kieNanoBananaProParams,
   'kie-grok-imagine': kieGrokImagineParams,
-  'grok-imagine-kie': kieGrokImagineParams
+  'grok-imagine-kie': kieGrokImagineParams,
+  'kie-grok-imagine-video': kieGrokImagineVideoParams,
+  'grok-imagine-video-kie': kieGrokImagineVideoParams
 }
 
 /**

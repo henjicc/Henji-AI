@@ -52,7 +52,9 @@ import {
   kieNanoBananaProConfig,
   kieNanoBananaProAliasConfig,
   kieGrokImagineConfig,
-  kieGrokImagineAliasConfig
+  kieGrokImagineAliasConfig,
+  kieGrokImagineVideoConfig,
+  kieGrokImagineVideoAliasConfig
 } from './kie-models'
 
 /**
@@ -104,6 +106,10 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(kieNanoBananaProAliasConfig)
   optionsBuilder.registerConfig(kieGrokImagineConfig)
   optionsBuilder.registerConfig(kieGrokImagineAliasConfig)
+
+  // KIE 视频模型
+  optionsBuilder.registerConfig(kieGrokImagineVideoConfig)
+  optionsBuilder.registerConfig(kieGrokImagineVideoAliasConfig)
 
   // 为支持多个 ID 的模型注册别名
   registerAliases()

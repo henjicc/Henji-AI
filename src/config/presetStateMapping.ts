@@ -405,5 +405,9 @@ export function createPresetSetterMap(
 
         // KIE Grok Imagine
         kieGrokImagineAspectRatio: setters.setKieGrokImagineAspectRatio,
+
+        // KIE Grok Imagine Video
+        kieGrokImagineVideoAspectRatio: setters.setKieGrokImagineVideoAspectRatio,
+        kieGrokImagineVideoMode: setters.setKieGrokImagineVideoMode,
     }
 }

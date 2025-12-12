@@ -36,7 +36,8 @@ import {
   falAiMinimaxHailuo23Params,
   falAiMinimaxHailuo02Params,
   kieNanoBananaProParams,
-  kieGrokImagineParams
+  kieGrokImagineParams,
+  kieGrokImagineVideoParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -82,7 +83,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -524,6 +525,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           kieGrokImagineAspectRatio: values.kieGrokImagineAspectRatio,
           customWidth: values.customWidth,
           customHeight: values.customHeight
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Grok Imagine Video 参数
+  if (selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie') {
+    return (
+      <SchemaForm
+        schema={kieGrokImagineVideoParams}
+        values={{
+          kieGrokImagineVideoAspectRatio: values.kieGrokImagineVideoAspectRatio,
+          kieGrokImagineVideoMode: values.kieGrokImagineVideoMode,
+          uploadedImages
         }}
         onChange={onChange}
       />

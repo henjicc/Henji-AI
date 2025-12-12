@@ -295,7 +295,13 @@ const InputArea: React.FC<InputAreaProps> = ({
               }
             }
           }}
-          placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的内容'}
+          placeholder={
+            currentModel?.type === 'audio'
+              ? '输入要合成的文本'
+              : (selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie' || selectedModel === 'black-forest-labs/FLUX.1-Krea-dev')
+                ? '描述想要生成的内容（仅支持英文提示词）'
+                : '描述想要生成的内容'
+          }
           className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${
             // 音频模型或没有图片上传组件的模型：使用较大高度
             currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || selectedModel === 'kie-grok-imagine' || selectedModel === 'grok-imagine-kie' || isModelscopeModel || (selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing)

@@ -110,3 +110,41 @@ export const kieGrokImagineAliasConfig: ModelConfig = {
   ...kieGrokImagineConfig,
   id: 'grok-imagine-kie'
 }
+
+/**
+ * KIE Grok Imagine 视频配置
+ */
+export const kieGrokImagineVideoConfig: ModelConfig = {
+  id: 'kie-grok-imagine-video',
+  type: 'video',
+  provider: 'kie',
+
+  paramMapping: {
+    aspect_ratio: {
+      source: ['kieGrokImagineVideoAspectRatio', 'aspectRatio'],
+      defaultValue: '2:3'
+    },
+    mode: {
+      source: ['kieGrokImagineVideoMode', 'mode'],
+      defaultValue: 'normal'
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      maxImages: 1,  // Grok Imagine 视频最多支持 1 张图片
+      mode: 'single',
+      paramKey: 'image_urls',
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieGrokImagineVideoAliasConfig: ModelConfig = {
+  ...kieGrokImagineVideoConfig,
+  id: 'grok-imagine-video-kie'
+}

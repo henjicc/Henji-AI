@@ -190,6 +190,10 @@ export const useMediaGeneratorState = () => {
   // 模型特定参数 - KIE Grok Imagine
   const [kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio] = useState('1:1')
 
+  // 模型特定参数 - KIE Grok Imagine Video
+  const [kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio] = useState('2:3')
+  const [kieGrokImagineVideoMode, setKieGrokImagineVideoMode] = useState('normal')
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -399,6 +403,10 @@ export const useMediaGeneratorState = () => {
 
     // KIE Grok Imagine
     kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio,
+
+    // KIE Grok Imagine Video
+    kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio,
+    kieGrokImagineVideoMode, setKieGrokImagineVideoMode,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

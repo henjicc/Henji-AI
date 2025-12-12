@@ -819,6 +819,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
       // KIE Grok Imagine
       kieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
+      // KIE Grok Imagine Video
+      kieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
+      kieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,
@@ -1040,6 +1043,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieNanoBananaResolution: state.kieNanoBananaResolution,
         kieNanoBananaOutputFormat: state.kieNanoBananaOutputFormat,
         kieGrokImagineAspectRatio: state.kieGrokImagineAspectRatio,
+        kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
+        kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)

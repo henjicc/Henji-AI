@@ -10,7 +10,7 @@ import {
 } from '../base/BaseAdapter'
 import { KIE_CONFIG } from './config'
 import { findRoute } from './models'
-import { parseImageResponse } from './parsers'
+import { parseImageResponse, parseVideoResponse } from './parsers'
 import { logInfo } from '../../utils/errorLogger'
 
 export class KIEAdapter extends BaseAdapter {
@@ -175,8 +175,77 @@ export class KIEAdapter extends BaseAdapter {
     }
   }
 
-  async generateVideo(_params: GenerateVideoParams): Promise<VideoResult> {
-    throw new Error('KIE adapter does not support video generation yet')
+  async generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
+    try {
+      const route = findRoute(params.model)
+      if (!route || !route.buildVideoRequest) {
+        throw new Error(`不支持的视频模型: ${params.model}`)
+      }
+
+      // 如果有图片，先上传到 KIE CDN
+      let uploadedImageUrls: string[] = []
+      if (params.images && params.images.length > 0) {
+        this.log('开始上传图片到 KIE CDN...')
+        // Grok Imagine 视频最多支持 1 张图片
+        const imagesToUpload = params.images.slice(0, 1)
+        uploadedImageUrls = await Promise.all(
+          imagesToUpload.map(img => this.uploadImageToKIE(img))
+        )
+        this.log('所有图片上传完成:', uploadedImageUrls)
+      }
+
+      // 构建请求（传入上传后的 URL）
+      const { requestData } = route.buildVideoRequest({
+        ...params,
+        images: uploadedImageUrls
+      })
+
+      // 构建日志对象，对图片 URL 做简化处理
+      const logRequestData: any = { ...requestData }
+      if (requestData.input?.image_urls && Array.isArray(requestData.input.image_urls)) {
+        logRequestData.input = {
+          ...requestData.input,
+          image_urls: `[${requestData.input.image_urls.length} images]`
+        }
+      }
+
+      logInfo('[KIEAdapter] 提交视频请求:', {
+        endpoint: KIE_CONFIG.createTaskEndpoint,
+        model: requestData.model,
+        requestData: logRequestData
+      })
+
+      // 创建任务
+      const response = await this.apiClient.post(
+        KIE_CONFIG.createTaskEndpoint,
+        requestData
+      )
+
+      if (response.data.code !== 200) {
+        throw new Error(response.data.msg || '创建任务失败')
+      }
+
+      const taskId = response.data.data?.taskId
+      if (!taskId) {
+        throw new Error('响应中未找到任务 ID')
+      }
+
+      this.log('视频任务创建成功:', taskId)
+
+      // 如果提供了进度回调，内部轮询
+      if (params.onProgress) {
+        return await this.pollVideoTaskStatus(taskId, params.model, params.onProgress)
+      }
+
+      // 否则返回 taskId
+      return {
+        taskId: taskId,
+        url: ''
+      }
+    } catch (error: any) {
+      this.log('生成视频失败:', error.message || error)
+      throw error
+    }
   }
 
   async generateAudio(_params: GenerateAudioParams): Promise<AudioResult> {
@@ -238,6 +307,72 @@ export class KIEAdapter extends BaseAdapter {
         if (status === 'FAILED') {
           this.log('任务失败:', statusData.failMsg)
           throw new Error(statusData.failMsg || '任务失败')
+        }
+
+        return { status, result: undefined }
+      },
+      isComplete: (status) => status === 'COMPLETED',
+      isFailed: (status) => status === 'FAILED',
+      onProgress: (progress, status) => {
+        if (onProgress) {
+          onProgress({
+            status: status as any,
+            progress,
+            message: this.getStatusMessage(status)
+          })
+        }
+      },
+      interval: KIE_CONFIG.pollInterval,
+      maxAttempts: KIE_CONFIG.maxPollAttempts,
+      estimatedAttempts: estimatedPolls
+    })
+
+    return result
+  }
+
+  /**
+   * 轮询视频任务状态直到完成
+   */
+  async pollVideoTaskStatus(
+    taskId: string,
+    modelId: string,
+    onProgress?: any
+  ): Promise<VideoResult> {
+    const { pollUntilComplete } = await import('@/utils/polling')
+    const { getExpectedPolls } = await import('@/utils/modelConfig')
+
+    const estimatedPolls = getExpectedPolls(modelId)
+
+    let pollCount = 0
+
+    const result = await pollUntilComplete<VideoResult>({
+      checkFn: async () => {
+        pollCount++
+        const statusData = await this.checkStatus(taskId)
+
+        // 映射 KIE 状态到标准状态
+        const status = this.mapKIEStatus(statusData.state)
+
+        this.log(`[视频轮询 ${pollCount}/${estimatedPolls}] 任务状态:`, {
+          taskId,
+          kieState: statusData.state,
+          status,
+          createTime: statusData.createTime,
+          updateTime: statusData.updateTime
+        })
+
+        // 如果成功，解析结果
+        if (status === 'COMPLETED' && statusData.resultJson) {
+          this.log('视频任务完成，解析结果...')
+          const resultData = JSON.parse(statusData.resultJson)
+          const videoResult = await parseVideoResponse(resultData, this)
+          return { status, result: videoResult }
+        }
+
+        // 如果失败，返回错误信息
+        if (status === 'FAILED') {
+          this.log('视频任务失败:', statusData.failMsg)
+          throw new Error(statusData.failMsg || '视频任务失败')
         }
 
         return { status, result: undefined }
