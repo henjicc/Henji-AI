@@ -1503,8 +1503,10 @@ const App: React.FC = () => {
         let duration: string | null = null
         try {
           const urlToCheck = (result as any).filePath || result.url
-          dimensions = await getMediaDimensions(urlToCheck, type)
-          duration = await getMediaDurationFormatted(urlToCheck, type)
+          // 如果包含多个 URL（用 ||| 分隔），只取第一个
+          const firstUrl = urlToCheck.includes('|||') ? urlToCheck.split('|||')[0] : urlToCheck
+          dimensions = await getMediaDimensions(firstUrl, type)
+          duration = await getMediaDurationFormatted(firstUrl, type)
           logInfo('[App] 获取媒体信息:', { dimensions, duration })
         } catch (error) {
           logError('[App] 获取媒体信息失败:', error)
@@ -1671,8 +1673,10 @@ const App: React.FC = () => {
         let duration: string | null = null
         try {
           const urlToCheck = (result as any).filePath || result.url
-          dimensions = await getMediaDimensions(urlToCheck, task.type)
-          duration = await getMediaDurationFormatted(urlToCheck, task.type)
+          // 如果包含多个 URL（用 ||| 分隔），只取第一个
+          const firstUrl = urlToCheck.includes('|||') ? urlToCheck.split('|||')[0] : urlToCheck
+          dimensions = await getMediaDimensions(firstUrl, task.type)
+          duration = await getMediaDurationFormatted(firstUrl, task.type)
           logInfo('[App] 获取媒体信息:', { dimensions, duration })
         } catch (error) {
           logError('[App] 获取媒体信息失败:', error)
@@ -2335,8 +2339,10 @@ const App: React.FC = () => {
       let duration: string | null = null
       try {
         const urlToCheck = (result as any).filePath || result.url
-        dimensions = await getMediaDimensions(urlToCheck, task.type)
-        duration = await getMediaDurationFormatted(urlToCheck, task.type)
+        // 如果包含多个 URL（用 ||| 分隔），只取第一个
+        const firstUrl = urlToCheck.includes('|||') ? urlToCheck.split('|||')[0] : urlToCheck
+        dimensions = await getMediaDimensions(firstUrl, task.type)
+        duration = await getMediaDurationFormatted(firstUrl, task.type)
         logInfo('[App] 获取媒体信息:', { dimensions, duration })
       } catch (error) {
         logError('[App] 获取媒体信息失败:', error)
@@ -2948,16 +2954,65 @@ const App: React.FC = () => {
                         {task.status === 'success' && task.result && (
                           <div className="flex justify-start">
                             <div
+                              ref={(el) => {
+                                if (el) {
+                                  // 移除旧的监听器（如果存在）
+                                  const oldHandler = (el as any)._wheelHandler
+                                  if (oldHandler) {
+                                    el.removeEventListener('wheel', oldHandler)
+                                  }
+
+                                  // 目标滚动位置
+                                  let targetScrollLeft = el.scrollLeft
+                                  let animationFrameId: number | null = null
+
+                                  // 平滑滚动动画函数
+                                  const smoothScroll = () => {
+                                    const currentScrollLeft = el.scrollLeft
+                                    const distance = targetScrollLeft - currentScrollLeft
+
+                                    // 如果距离很小，直接设置到目标位置
+                                    if (Math.abs(distance) < 0.5) {
+                                      el.scrollLeft = targetScrollLeft
+                                      animationFrameId = null
+                                      return
+                                    }
+
+                                    // 使用缓动函数（easing）实现平滑滚动
+                                    // 每次移动剩余距离的 20%，实现减速效果
+                                    el.scrollLeft += distance * 0.2
+                                    animationFrameId = requestAnimationFrame(smoothScroll)
+                                  }
+
+                                  // 创建新的滚轮处理器
+                                  const wheelHandler = (e: WheelEvent) => {
+                                    if (e.deltaY !== 0) {
+                                      e.preventDefault()
+
+                                      // 更新目标滚动位置
+                                      targetScrollLeft += e.deltaY
+
+                                      // 限制滚动范围
+                                      targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, el.scrollWidth - el.clientWidth))
+
+                                      // 如果没有正在进行的动画，启动新动画
+                                      if (animationFrameId === null) {
+                                        animationFrameId = requestAnimationFrame(smoothScroll)
+                                      }
+                                    }
+                                  }
+
+                                  // 保存处理器引用以便后续清理
+                                  ;(el as any)._wheelHandler = wheelHandler
+
+                                  // 添加事件监听器，设置 passive: false 以允许 preventDefault
+                                  el.addEventListener('wheel', wheelHandler, { passive: false })
+                                }
+                              }}
                               className="flex gap-2 overflow-x-auto max-w-full pb-2 image-strip"
                               style={{
                                 scrollbarWidth: 'thin',
                                 scrollbarColor: '#4B5563 #1F2937'
-                              }}
-                              onWheel={(e) => {
-                                // 鼠标停留在图片区域时，滚轮变为横向滚动
-                                if (e.deltaY !== 0) {
-                                  e.currentTarget.scrollLeft += e.deltaY
-                                }
                               }}
                             >
                               {/* 支持多张图片显示 */}

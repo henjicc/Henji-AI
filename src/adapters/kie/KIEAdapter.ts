@@ -11,6 +11,7 @@ import {
 import { KIE_CONFIG } from './config'
 import { findRoute } from './models'
 import { parseImageResponse } from './parsers'
+import { logInfo } from '../../utils/errorLogger'
 
 export class KIEAdapter extends BaseAdapter {
   private apiClient: AxiosInstance
@@ -124,6 +125,21 @@ export class KIEAdapter extends BaseAdapter {
       const { requestData } = route.buildImageRequest({
         ...params,
         images: uploadedImageUrls
+      })
+
+      // 构建日志对象，对图片 URL 做简化处理
+      const logRequestData: any = { ...requestData }
+      if (requestData.input?.image_input && Array.isArray(requestData.input.image_input)) {
+        logRequestData.input = {
+          ...requestData.input,
+          image_input: `[${requestData.input.image_input.length} images]`
+        }
+      }
+
+      logInfo('[KIEAdapter] 提交请求:', {
+        endpoint: KIE_CONFIG.createTaskEndpoint,
+        model: requestData.model,
+        requestData: logRequestData
       })
 
       // 创建任务

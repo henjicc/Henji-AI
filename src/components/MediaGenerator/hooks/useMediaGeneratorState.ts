@@ -187,6 +187,9 @@ export const useMediaGeneratorState = () => {
   const [kieNanoBananaResolution, setKieNanoBananaResolution] = useState('2K')
   const [kieNanoBananaOutputFormat, setKieNanoBananaOutputFormat] = useState('png')
 
+  // 模型特定参数 - KIE Grok Imagine
+  const [kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio] = useState('1:1')
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -393,6 +396,9 @@ export const useMediaGeneratorState = () => {
     kieNanoBananaAspectRatio, setKieNanoBananaAspectRatio,
     kieNanoBananaResolution, setKieNanoBananaResolution,
     kieNanoBananaOutputFormat, setKieNanoBananaOutputFormat,
+
+    // KIE Grok Imagine
+    kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

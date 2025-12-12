@@ -83,3 +83,30 @@ export const kieNanoBananaProAliasConfig: ModelConfig = {
   ...kieNanoBananaProConfig,
   id: 'nano-banana-pro-kie'
 }
+
+/**
+ * KIE Grok Imagine 配置
+ */
+export const kieGrokImagineConfig: ModelConfig = {
+  id: 'kie-grok-imagine',
+  type: 'image',
+  provider: 'kie',
+
+  paramMapping: {
+    aspect_ratio: {
+      source: ['kieGrokImagineAspectRatio', 'aspectRatio'],
+      defaultValue: '1:1'
+    }
+  },
+
+  features: {
+    // Grok Imagine 不支持图片上传，仅支持文本生成图片
+    // 因此不需要 smartMatch 和 imageUpload 功能
+  }
+}
+
+// 导出别名配置（支持短名称）
+export const kieGrokImagineAliasConfig: ModelConfig = {
+  ...kieGrokImagineConfig,
+  id: 'grok-imagine-kie'
+}

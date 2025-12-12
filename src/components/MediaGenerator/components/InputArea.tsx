@@ -237,6 +237,8 @@ const InputArea: React.FC<InputAreaProps> = ({
       {/* 统一的文件上传区域（支持视频+图片混合上传） */}
       {currentModel?.type !== 'audio' &&
        selectedModel !== 'fal-ai-z-image-turbo' &&
+       selectedModel !== 'kie-grok-imagine' &&
+       selectedModel !== 'grok-imagine-kie' &&
        !isModelscopeModel &&
        // 自定义模型：只有支持图片编辑的才显示图片上传
        !(selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing) && (
@@ -296,7 +298,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           placeholder={currentModel?.type === 'audio' ? '输入要合成的文本' : '描述想要生成的内容'}
           className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${
             // 音频模型或没有图片上传组件的模型：使用较大高度
-            currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || isModelscopeModel || (selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing)
+            currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || selectedModel === 'kie-grok-imagine' || selectedModel === 'grok-imagine-kie' || isModelscopeModel || (selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing)
               ? 'min-h-[176px]'
               : 'min-h-[100px]'
           } resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}

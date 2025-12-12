@@ -469,6 +469,19 @@
             "type": "polling",
             "expectedPolls": 30
           }
+        },
+        {
+          "id": "kie-grok-imagine",
+          "name": "Grok Imagine 图片",
+          "type": "image",
+          "description": "由 Grok AI 驱动的高质量照片级图像生成，仅支持文本生成图片",
+          "functions": [
+            "图片生成"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
         }
       ]
     }

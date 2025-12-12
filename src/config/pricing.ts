@@ -35,6 +35,7 @@ const PRICES: Record<string, any> = {
         '2K': 0.09,  // USD
         '4K': 0.12   // USD
     },
+    KIE_GROK_IMAGINE: 0.02,  // USD per generation (6 images)
 
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
@@ -360,6 +361,21 @@ export const pricingConfigs: PricingConfig[] = [
             } else if (resolution === '4K') {
                 basePriceUSD = PRICES.KIE_NANO_BANANA_PRO['4K']
             }
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-grok-imagine',
+        currency: '¥',
+        type: 'calculated',
+        calculator: () => {
+            // Grok Imagine 固定价格：$0.02 per generation (6 images)
+            const basePriceUSD = PRICES.KIE_GROK_IMAGINE
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY

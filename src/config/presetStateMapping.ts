@@ -402,5 +402,8 @@ export function createPresetSetterMap(
         // KIE Nano Banana Pro
         kieNanoBananaAspectRatio: setters.setKieNanoBananaAspectRatio,
         kieNanoBananaResolution: setters.setKieNanoBananaResolution,
+
+        // KIE Grok Imagine
+        kieGrokImagineAspectRatio: setters.setKieGrokImagineAspectRatio,
     }
 }

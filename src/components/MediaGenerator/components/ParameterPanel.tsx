@@ -35,7 +35,8 @@ import {
   falAiWan25PreviewParams,
   falAiMinimaxHailuo23Params,
   falAiMinimaxHailuo02Params,
-  kieNanoBananaProParams
+  kieNanoBananaProParams,
+  kieGrokImagineParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -508,6 +509,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           customWidth: values.customWidth,
           customHeight: values.customHeight,
           uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Grok Imagine 参数
+  if (selectedModel === 'kie-grok-imagine' || selectedModel === 'grok-imagine-kie') {
+    return (
+      <SchemaForm
+        schema={kieGrokImagineParams}
+        values={{
+          kieGrokImagineAspectRatio: values.kieGrokImagineAspectRatio,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight
         }}
         onChange={onChange}
       />
