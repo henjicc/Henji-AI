@@ -148,3 +148,52 @@ export const kieGrokImagineVideoAliasConfig: ModelConfig = {
   ...kieGrokImagineVideoConfig,
   id: 'grok-imagine-video-kie'
 }
+
+/**
+ * KIE Seedream 4.5 配置
+ */
+export const kieSeedream45Config: ModelConfig = {
+  id: 'kie-seedream-4.5',
+  type: 'image',
+  provider: 'kie',
+
+  paramMapping: {
+    aspect_ratio: {
+      source: ['kieSeedreamAspectRatio', 'aspectRatio'],
+      defaultValue: '1:1'
+    },
+    quality: {
+      source: ['kieSeedreamQuality', 'quality'],
+      defaultValue: '2K',
+      // 质量映射：UI 显示 2K/4K，API 需要 basic/high
+      transform: (value: string) => {
+        if (value === '2K') return 'basic'
+        if (value === '4K') return 'high'
+        return 'basic'  // 默认值
+      }
+    }
+  },
+
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'aspect_ratio',
+      defaultRatio: '1:1'
+    },
+    imageUpload: {
+      enabled: true,
+      maxImages: 14,  // KIE Seedream 4.5 支持最多 14 张图片
+      mode: 'multiple',
+      paramKey: 'image_urls',
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieSeedream45AliasConfig: ModelConfig = {
+  ...kieSeedream45Config,
+  id: 'seedream-4.5-kie'
+}

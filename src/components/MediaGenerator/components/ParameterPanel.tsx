@@ -37,7 +37,8 @@ import {
   falAiMinimaxHailuo02Params,
   kieNanoBananaProParams,
   kieGrokImagineParams,
-  kieGrokImagineVideoParams
+  kieGrokImagineVideoParams,
+  kieSeedream45Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -507,6 +508,23 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           kieNanoBananaAspectRatio: values.kieNanoBananaAspectRatio,
           kieNanoBananaResolution: values.kieNanoBananaResolution,
           kieNanoBananaOutputFormat: values.kieNanoBananaOutputFormat,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Seedream 4.5 参数
+  if (selectedModel === 'kie-seedream-4.5' || selectedModel === 'seedream-4.5-kie') {
+    return (
+      <SchemaForm
+        schema={kieSeedream45Params}
+        values={{
+          kieSeedreamAspectRatio: values.kieSeedreamAspectRatio,
+          kieSeedreamQuality: values.kieSeedreamQuality,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
           uploadedImages

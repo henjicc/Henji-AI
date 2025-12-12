@@ -471,6 +471,20 @@
           }
         },
         {
+          "id": "kie-seedream-4.5",
+          "name": "即梦图片 4.5",
+          "type": "image",
+          "description": "基于 Seedream 4.5 模型的高质量写实风格图像生成，支持图生图（最多14张图）",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
+        },
+        {
           "id": "kie-grok-imagine",
           "name": "Grok Imagine 图片",
           "type": "image",

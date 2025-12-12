@@ -35,6 +35,10 @@ const PRICES: Record<string, any> = {
         '2K': 0.09,  // USD
         '4K': 0.12   // USD
     },
+    KIE_SEEDREAM_45: {
+        '2K': 0.032,  // USD per image (basic quality)
+        '4K': 0.064   // USD per image (high quality)
+    },
     KIE_GROK_IMAGINE: 0.02,  // USD per generation (6 images)
     KIE_GROK_IMAGINE_VIDEO: 0.10,  // USD per 6-second video
 
@@ -361,6 +365,29 @@ export const pricingConfigs: PricingConfig[] = [
                 basePriceUSD = PRICES.KIE_NANO_BANANA_PRO['2K']
             } else if (resolution === '4K') {
                 basePriceUSD = PRICES.KIE_NANO_BANANA_PRO['4K']
+            }
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-seedream-4.5',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 使用 kie 前缀的参数名，并提供回退
+            // 注意：quality 已经在 OptionsBuilder 中通过 transform 转换为 'basic'/'high'
+            // 但在 params 中仍然是 UI 的值 '2K'/'4K'
+            const quality = params.kieSeedreamQuality || params.quality || '2K'
+
+            // 根据质量获取基础价格（美元）
+            let basePriceUSD = PRICES.KIE_SEEDREAM_45['2K']
+            if (quality === '4K' || quality === 'high') {
+                basePriceUSD = PRICES.KIE_SEEDREAM_45['4K']
             }
 
             // 转换为人民币

@@ -187,6 +187,10 @@ export const useMediaGeneratorState = () => {
   const [kieNanoBananaResolution, setKieNanoBananaResolution] = useState('2K')
   const [kieNanoBananaOutputFormat, setKieNanoBananaOutputFormat] = useState('png')
 
+  // 模型特定参数 - KIE Seedream 4.5
+  const [kieSeedreamAspectRatio, setKieSeedreamAspectRatio] = useState('1:1')
+  const [kieSeedreamQuality, setKieSeedreamQuality] = useState('2K')
+
   // 模型特定参数 - KIE Grok Imagine
   const [kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio] = useState('1:1')
 
@@ -400,6 +404,10 @@ export const useMediaGeneratorState = () => {
     kieNanoBananaAspectRatio, setKieNanoBananaAspectRatio,
     kieNanoBananaResolution, setKieNanoBananaResolution,
     kieNanoBananaOutputFormat, setKieNanoBananaOutputFormat,
+
+    // KIE Seedream 4.5
+    kieSeedreamAspectRatio, setKieSeedreamAspectRatio,
+    kieSeedreamQuality, setKieSeedreamQuality,
 
     // KIE Grok Imagine
     kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio,

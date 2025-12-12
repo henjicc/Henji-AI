@@ -211,7 +211,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // KIE 模型参数
     setKieNanoBananaAspectRatio: state.setKieNanoBananaAspectRatio,
     setKieNanoBananaResolution: state.setKieNanoBananaResolution,
-    setKieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat
+    setKieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
+    setKieSeedreamAspectRatio: state.setKieSeedreamAspectRatio,
+    setKieSeedreamQuality: state.setKieSeedreamQuality,
+    setKieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
+    setKieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
+    setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode
   }), [])
 
   // 收藏模型管理
@@ -817,6 +822,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieNanoBananaAspectRatio: state.setKieNanoBananaAspectRatio,
       kieNanoBananaResolution: state.setKieNanoBananaResolution,
       kieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
+      // KIE Seedream 4.5
+      kieSeedreamAspectRatio: state.setKieSeedreamAspectRatio,
+      kieSeedreamQuality: state.setKieSeedreamQuality,
       // KIE Grok Imagine
       kieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
       // KIE Grok Imagine Video
@@ -1042,6 +1050,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieNanoBananaAspectRatio: state.kieNanoBananaAspectRatio,
         kieNanoBananaResolution: state.kieNanoBananaResolution,
         kieNanoBananaOutputFormat: state.kieNanoBananaOutputFormat,
+        kieSeedreamAspectRatio: state.kieSeedreamAspectRatio,
+        kieSeedreamQuality: state.kieSeedreamQuality,
         kieGrokImagineAspectRatio: state.kieGrokImagineAspectRatio,
         kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
