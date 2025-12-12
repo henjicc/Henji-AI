@@ -536,6 +536,19 @@
             "type": "polling",
             "expectedPolls": 60
           }
+        },
+        {
+          "id": "kie-kling-v2-6",
+          "name": "可灵 2.6",
+          "type": "video",
+          "description": "基于 Kling V2.6 模型的高质量视频生成，支持文生视频和图生视频（最多1张图），支持音频生成",
+          "functions": [
+            "视频生成"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
         }
       ]
     }

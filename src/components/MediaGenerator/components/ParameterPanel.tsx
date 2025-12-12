@@ -40,7 +40,8 @@ import {
   kieGrokImagineVideoParams,
   kieSeedream45Params,
   kieSeedream40Params,
-  kieZImageParams
+  kieZImageParams,
+  kieKlingV26Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -86,7 +87,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -592,6 +593,22 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         values={{
           kieGrokImagineVideoAspectRatio: values.kieGrokImagineVideoAspectRatio,
           kieGrokImagineVideoMode: values.kieGrokImagineVideoMode,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Kling V2.6 参数
+  if (selectedModel === 'kie-kling-v2-6' || selectedModel === 'kling-v2-6-kie') {
+    return (
+      <SchemaForm
+        schema={kieKlingV26Params}
+        values={{
+          kieKlingV26AspectRatio: values.kieKlingV26AspectRatio,
+          kieKlingV26Duration: values.kieKlingV26Duration,
+          kieKlingV26EnableAudio: values.kieKlingV26EnableAudio,
           uploadedImages
         }}
         onChange={onChange}

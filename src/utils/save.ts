@@ -48,15 +48,50 @@ export async function saveImageFromUrl(url: string, filename?: string): Promise<
 }
 
 export async function saveVideoFromUrl(url: string, filename?: string): Promise<{ fullPath: string; webSrc: string }> {
-  const res = await httpFetch(url, { method: 'GET' })
-  const buf = await res.arrayBuffer()
-  const array = new Uint8Array(buf)
-  const lower = url.toLowerCase()
-  const ext = lower.includes('.mp4') ? 'mp4' : lower.includes('.webm') ? 'webm' : 'mp4'
-  const name = filename ?? `video-${Date.now()}.${ext}`
-  const saved = await saveBinary(array, name)
-  logInfo('[save] video saved', saved.fullPath)
-  return saved
+  const maxRetries = 5
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      logInfo(`[save] 尝试保存视频 (第 ${attempt}/${maxRetries} 次)`, url)
+
+      const res = await httpFetch(url, { method: 'GET' })
+      const buf = await res.arrayBuffer()
+      const array = new Uint8Array(buf)
+      const lower = url.toLowerCase()
+      const ext = lower.includes('.mp4') ? 'mp4' : lower.includes('.webm') ? 'webm' : 'mp4'
+      const name = filename ?? `video-${Date.now()}.${ext}`
+      const saved = await saveBinary(array, name)
+      logInfo('[save] video saved', saved.fullPath)
+      return saved
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e))
+      logWarning(`[save] 视频保存失败 (第 ${attempt}/${maxRetries} 次)`, {
+        error: lastError.message,
+        url
+      })
+
+      // 如果不是最后一次尝试，等待一段时间后重试
+      if (attempt < maxRetries) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // 指数退避，最多5秒
+        logInfo(`[save] 等待 ${delayMs}ms 后重试...`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+
+  // 所有重试都失败了
+  const errorMessage = `视频保存失败，已尝试 ${maxRetries} 次。最后的错误: ${lastError?.message || '未知错误'}`
+  logError('[save] 视频保存最终失败', {
+    url,
+    attempts: maxRetries,
+    error: lastError?.message,
+    stack: lastError?.stack
+  })
+  console.error(`[save] ${errorMessage}`)
+  console.error('[save] 错误详情:', lastError)
+
+  throw new Error(errorMessage)
 }
 
 export async function saveAudioFromUrl(url: string, filename?: string): Promise<{ fullPath: string; webSrc: string }> {

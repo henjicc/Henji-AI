@@ -421,5 +421,10 @@ export function createPresetSetterMap(
         // KIE Grok Imagine Video
         kieGrokImagineVideoAspectRatio: setters.setKieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: setters.setKieGrokImagineVideoMode,
+
+        // KIE Kling V2.6
+        kieKlingV26AspectRatio: setters.setKieKlingV26AspectRatio,
+        kieKlingV26Duration: setters.setKieKlingV26Duration,
+        kieKlingV26EnableAudio: setters.setKieKlingV26EnableAudio,
     }
 }

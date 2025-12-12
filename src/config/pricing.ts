@@ -43,6 +43,12 @@ const PRICES: Record<string, any> = {
     KIE_GROK_IMAGINE: 0.02,  // USD per generation (6 images)
     KIE_GROK_IMAGINE_VIDEO: 0.10,  // USD per 6-second video
     KIE_Z_IMAGE: 0.004,  // USD per image (固定价格)
+    KIE_KLING_V26: {
+        '5s_no_audio': 0.28,   // USD for 5s video without audio
+        '10s_no_audio': 0.55,  // USD for 10s video without audio
+        '5s_audio': 0.55,      // USD for 5s video with audio
+        '10s_audio': 1.10      // USD for 10s video with audio
+    },
 
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
@@ -457,6 +463,36 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: () => {
             // Z-Image 固定价格：$0.004 per image
             const basePriceUSD = PRICES.KIE_Z_IMAGE
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-kling-v2-6',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 使用 kie 前缀的参数名，并提供回退
+            const duration = params.kieKlingV26Duration || params.duration || '5'
+            const enableAudio = params.kieKlingV26EnableAudio || params.enableAudio || false
+
+            // 根据时长和音频选项确定价格键
+            let priceKey: string
+            if (duration === '5') {
+                priceKey = enableAudio ? '5s_audio' : '5s_no_audio'
+            } else if (duration === '10') {
+                priceKey = enableAudio ? '10s_audio' : '10s_no_audio'
+            } else {
+                // 默认使用 5s 无音频价格
+                priceKey = '5s_no_audio'
+            }
+
+            // 获取基础价格（美元）
+            const basePriceUSD = PRICES.KIE_KLING_V26[priceKey]
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY

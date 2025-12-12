@@ -55,6 +55,8 @@ import {
   kieGrokImagineAliasConfig,
   kieGrokImagineVideoConfig,
   kieGrokImagineVideoAliasConfig,
+  kieKlingV26Config,
+  kieKlingV26AliasConfig,
   kieSeedream45Config,
   kieSeedream45AliasConfig,
   kieSeedream40Config,
@@ -122,6 +124,8 @@ export function registerAllConfigs() {
   // KIE 视频模型
   optionsBuilder.registerConfig(kieGrokImagineVideoConfig)
   optionsBuilder.registerConfig(kieGrokImagineVideoAliasConfig)
+  optionsBuilder.registerConfig(kieKlingV26Config)
+  optionsBuilder.registerConfig(kieKlingV26AliasConfig)
 
   // 为支持多个 ID 的模型注册别名
   registerAliases()

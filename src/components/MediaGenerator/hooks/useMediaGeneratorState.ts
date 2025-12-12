@@ -206,6 +206,11 @@ export const useMediaGeneratorState = () => {
   const [kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio] = useState('2:3')
   const [kieGrokImagineVideoMode, setKieGrokImagineVideoMode] = useState('normal')
 
+  // 模型特定参数 - KIE Kling V2.6
+  const [kieKlingV26AspectRatio, setKieKlingV26AspectRatio] = useState('16:9')
+  const [kieKlingV26Duration, setKieKlingV26Duration] = useState('5')
+  const [kieKlingV26EnableAudio, setKieKlingV26EnableAudio] = useState(false)
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -431,6 +436,11 @@ export const useMediaGeneratorState = () => {
     // KIE Grok Imagine Video
     kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio,
     kieGrokImagineVideoMode, setKieGrokImagineVideoMode,
+
+    // KIE Kling V2.6
+    kieKlingV26AspectRatio, setKieKlingV26AspectRatio,
+    kieKlingV26Duration, setKieKlingV26Duration,
+    kieKlingV26EnableAudio, setKieKlingV26EnableAudio,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

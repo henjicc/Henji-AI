@@ -840,6 +840,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // KIE Grok Imagine Video
       kieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
       kieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
+      // KIE Kling V2.6
+      kieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
+      kieKlingV26Duration: state.setKieKlingV26Duration,
+      kieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,
@@ -1069,6 +1073,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieZImageAspectRatio: state.kieZImageAspectRatio,
         kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
+        kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
+        kieKlingV26Duration: state.kieKlingV26Duration,
+        kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
@@ -1435,7 +1442,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               kieNanoBananaResolution: state.kieNanoBananaResolution,
               kieSeedreamQuality: state.kieSeedreamQuality,
               kieSeedream40MaxImages: state.kieSeedream40MaxImages,
-              kieSeedream40Resolution: state.kieSeedream40Resolution
+              kieSeedream40Resolution: state.kieSeedream40Resolution,
+              // KIE Kling V2.6 参数
+              kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
+              kieKlingV26Duration: state.kieKlingV26Duration,
+              kieKlingV26EnableAudio: state.kieKlingV26EnableAudio
             }}
           />
         </div>

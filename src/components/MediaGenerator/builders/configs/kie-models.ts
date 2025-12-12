@@ -177,6 +177,48 @@ export const kieGrokImagineVideoAliasConfig: ModelConfig = {
 }
 
 /**
+ * KIE Kling V2.6 视频配置
+ */
+export const kieKlingV26Config: ModelConfig = {
+  id: 'kie-kling-v2-6',
+  type: 'video',
+  provider: 'kie',
+
+  paramMapping: {
+    aspect_ratio: {
+      source: ['kieKlingV26AspectRatio', 'aspectRatio'],
+      defaultValue: '16:9'
+    },
+    duration: {
+      source: ['kieKlingV26Duration', 'duration'],
+      defaultValue: '5'
+    },
+    enable_audio: {
+      source: ['kieKlingV26EnableAudio', 'enableAudio'],
+      defaultValue: false
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      maxImages: 1,  // Kling V2.6 最多支持 1 张图片
+      mode: 'single',
+      paramKey: 'image_urls',  // 注意：API 使用 image_urls（复数，数组格式）
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieKlingV26AliasConfig: ModelConfig = {
+  ...kieKlingV26Config,
+  id: 'kling-v2-6-kie'
+}
+
+/**
  * KIE Seedream 4.5 配置
  */
 export const kieSeedream45Config: ModelConfig = {
