@@ -239,7 +239,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKieSeedanceV3Resolution: state.setKieSeedanceV3Resolution,
     setKieSeedanceV3Duration: state.setKieSeedanceV3Duration,
     setKieSeedanceV3CameraFixed: state.setKieSeedanceV3CameraFixed,
-    setKieSeedanceV3FastMode: state.setKieSeedanceV3FastMode
+    setKieSeedanceV3FastMode: state.setKieSeedanceV3FastMode,
+    // KIE Sora 2 参数
+    setKieSora2Mode: state.setKieSora2Mode,
+    setKieSora2AspectRatio: state.setKieSora2AspectRatio,
+    setKieSora2Duration: state.setKieSora2Duration,
+    setKieSora2Quality: state.setKieSora2Quality
   }), [])
 
   // 收藏模型管理
@@ -885,6 +890,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieSeedanceV3Duration: state.setKieSeedanceV3Duration,
       kieSeedanceV3CameraFixed: state.setKieSeedanceV3CameraFixed,
       kieSeedanceV3FastMode: state.setKieSeedanceV3FastMode,
+      // KIE Sora 2
+      kieSora2Mode: state.setKieSora2Mode,
+      kieSora2AspectRatio: state.setKieSora2AspectRatio,
+      kieSora2Duration: state.setKieSora2Duration,
+      kieSora2Quality: state.setKieSora2Quality,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,
@@ -1142,6 +1152,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieSeedanceV3Duration: state.kieSeedanceV3Duration,
         kieSeedanceV3CameraFixed: state.kieSeedanceV3CameraFixed,
         kieSeedanceV3FastMode: state.kieSeedanceV3FastMode,
+        // KIE Sora 2 参数
+        kieSora2Mode: state.kieSora2Mode,
+        kieSora2AspectRatio: state.kieSora2AspectRatio,
+        kieSora2Duration: state.kieSora2Duration,
+        kieSora2Quality: state.kieSora2Quality,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
@@ -1529,7 +1544,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               kieSeedanceV3Version: state.kieSeedanceV3Version,
               kieSeedanceV3Resolution: state.kieSeedanceV3Resolution,
               kieSeedanceV3Duration: state.kieSeedanceV3Duration,
-              kieSeedanceV3FastMode: state.kieSeedanceV3FastMode
+              kieSeedanceV3FastMode: state.kieSeedanceV3FastMode,
+              // KIE Sora 2 参数
+              kieSora2Mode: state.kieSora2Mode,
+              kieSora2Duration: state.kieSora2Duration,
+              kieSora2Quality: state.kieSora2Quality
             }}
           />
         </div>

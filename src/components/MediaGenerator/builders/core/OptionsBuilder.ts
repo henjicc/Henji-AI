@@ -74,6 +74,17 @@ export class OptionsBuilder {
     // 5. 处理智能匹配
     if (effectiveConfig.features?.smartMatch) {
       await handleSmartMatch(options, effectiveConfig.features.smartMatch, context)
+
+      // 重新应用 transform 到 smartMatch 参数
+      // smartMatch 可能会将 'smart' 转换为实际比例（如 '16:9'），需要再次转换为 API 格式（如 'landscape'）
+      const paramKey = effectiveConfig.features.smartMatch.paramKey
+      const mapping = effectiveConfig.paramMapping[paramKey]
+      if (mapping && typeof mapping === 'object' && mapping.transform) {
+        const currentValue = options[paramKey]
+        if (currentValue !== undefined && currentValue !== 'smart') {
+          options[paramKey] = mapping.transform(currentValue, context)
+        }
+      }
     }
 
     // 6. 处理图片上传

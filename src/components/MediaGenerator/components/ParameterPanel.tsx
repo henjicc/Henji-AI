@@ -44,7 +44,8 @@ import {
   kieKlingV26Params,
   kieHailuo23Params,
   kieHailuo02Params,
-  kieSeedanceV3Params
+  kieSeedanceV3Params,
+  kieSora2Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -90,7 +91,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -409,7 +410,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'kie-hailuo-02' &&
          selectedModel !== 'hailuo-02-kie' &&
          selectedModel !== 'kie-seedance-v3' &&
-         selectedModel !== 'seedance-v3-kie' && (
+         selectedModel !== 'seedance-v3-kie' &&
+         selectedModel !== 'kie-sora-2' &&
+         selectedModel !== 'sora-2-kie' && (
           <TextInput
             label="负面提示"
             value={values.videoNegativePrompt}
@@ -449,7 +452,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'kie-hailuo-02' &&
          selectedModel !== 'hailuo-02-kie' &&
          selectedModel !== 'kie-seedance-v3' &&
-         selectedModel !== 'seedance-v3-kie' && (
+         selectedModel !== 'seedance-v3-kie' &&
+         selectedModel !== 'kie-sora-2' &&
+         selectedModel !== 'sora-2-kie' && (
           <NumberInput
             label="随机种子"
             value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
@@ -671,6 +676,23 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           kieSeedanceV3Duration: values.kieSeedanceV3Duration,
           kieSeedanceV3CameraFixed: values.kieSeedanceV3CameraFixed,
           kieSeedanceV3FastMode: values.kieSeedanceV3FastMode,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Sora 2 参数
+  if (selectedModel === 'kie-sora-2' || selectedModel === 'sora-2-kie') {
+    return (
+      <SchemaForm
+        schema={kieSora2Params}
+        values={{
+          kieSora2Mode: values.kieSora2Mode,
+          kieSora2AspectRatio: values.kieSora2AspectRatio,
+          kieSora2Duration: values.kieSora2Duration,
+          kieSora2Quality: values.kieSora2Quality,
           uploadedImages
         }}
         onChange={onChange}

@@ -90,6 +90,20 @@ const PRICES: Record<string, any> = {
             '10s_1080p': 0.360  // USD for 10s at 1080p (fixed price)
         }
     },
+    KIE_SORA_2: {
+        standard: {
+            '10s': 0.03,   // USD for standard 10s
+            '15s': 0.054   // USD for standard 15s
+        },
+        pro_standard: {
+            '10s': 0.375,  // USD for pro standard 10s
+            '15s': 0.675   // USD for pro standard 15s
+        },
+        pro_high: {
+            '10s': 0.825,  // USD for pro high 10s
+            '15s': 1.575   // USD for pro high 15s
+        }
+    },
 
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
@@ -642,6 +656,42 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-sora-2',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            // 使用 kie 前缀的参数名，并提供回退
+            const mode = params.kieSora2Mode || params.mode || 'standard'
+            const duration = params.kieSora2Duration || params.duration || '10'
+            const quality = params.kieSora2Quality || params.quality || 'standard'
+
+            let priceUSD: number
+
+            if (mode === 'standard') {
+                // 标准模式价格
+                const durationKey = `${duration}s`
+                priceUSD = PRICES.KIE_SORA_2.standard[durationKey] || PRICES.KIE_SORA_2.standard['10s']
+            } else {
+                // 专业模式价格
+                if (quality === 'high') {
+                    // Pro High
+                    const durationKey = `${duration}s`
+                    priceUSD = PRICES.KIE_SORA_2.pro_high[durationKey] || PRICES.KIE_SORA_2.pro_high['10s']
+                } else {
+                    // Pro Standard
+                    const durationKey = `${duration}s`
+                    priceUSD = PRICES.KIE_SORA_2.pro_standard[durationKey] || PRICES.KIE_SORA_2.pro_standard['10s']
+                }
+            }
+
+            // 转换为人民币
+            const priceCNY = priceUSD * USD_TO_CNY
 
             return formatPrice(priceCNY)
         }

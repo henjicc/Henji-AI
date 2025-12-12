@@ -16,6 +16,44 @@ interface SchemaFormProps {
 }
 
 export default function SchemaForm({ schema, values, onChange, className }: SchemaFormProps) {
+    // 使用 ref 追踪上一次的 values，用于检测 watchKeys 的变化
+    const prevValuesRef = React.useRef<Record<string, any>>({})
+
+    // Handle autoSwitch logic
+    React.useEffect(() => {
+        schema.forEach(param => {
+            if (param.autoSwitch) {
+                const { condition, value, watchKeys } = param.autoSwitch
+
+                // 如果指定了 watchKeys，检查这些 key 是否发生了变化
+                if (watchKeys && watchKeys.length > 0) {
+                    const hasWatchedKeyChanged = watchKeys.some(
+                        key => prevValuesRef.current[key] !== values[key]
+                    )
+
+                    // 如果 watchKeys 中的值没有变化，跳过此参数的 autoSwitch
+                    if (!hasWatchedKeyChanged) {
+                        return
+                    }
+                }
+
+                // Check if condition is met
+                if (condition(values)) {
+                    // Calculate target value
+                    const targetValue = typeof value === 'function' ? value(values) : value
+
+                    // Update if current value is different from target value
+                    if (values[param.id] !== targetValue) {
+                        onChange(param.id, targetValue)
+                    }
+                }
+            }
+        })
+
+        // 更新 prevValuesRef
+        prevValuesRef.current = values
+    }, [values, schema, onChange])
+
     // Filter out hidden parameters
     const visibleParams = schema.filter(param => {
         if (param.hidden) {

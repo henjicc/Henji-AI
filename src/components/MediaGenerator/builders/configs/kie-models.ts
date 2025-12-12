@@ -494,3 +494,67 @@ export const kieSeedanceV3AliasConfig: ModelConfig = {
   ...kieSeedanceV3Config,
   id: 'seedance-v3-kie'
 }
+
+/**
+ * KIE Sora 2 配置
+ */
+export const kieSora2Config: ModelConfig = {
+  id: 'kie-sora-2',
+  type: 'video',
+  provider: 'kie',
+
+  paramMapping: {
+    mode: {
+      source: ['kieSora2Mode', 'mode'],
+      defaultValue: 'standard'
+    },
+    aspect_ratio: {
+      source: ['kieSora2AspectRatio', 'aspectRatio'],
+      defaultValue: '16:9',
+      // 转换比例格式到 API 格式
+      // UI: '16:9', '9:16', 'smart' → API: 'landscape', 'portrait'
+      transform: (value: string) => {
+        // 重要：不要转换 'smart'，让 handleSmartMatch 处理它
+        if (value === 'smart') return value
+        if (value === '16:9') return 'landscape'
+        if (value === '9:16') return 'portrait'
+        // 如果已经是 API 格式,直接返回
+        if (value === 'landscape' || value === 'portrait') return value
+        // 默认返回 landscape
+        return 'landscape'
+      }
+    },
+    duration: {
+      source: ['kieSora2Duration', 'duration'],
+      defaultValue: '10'
+    },
+    quality: {
+      source: ['kieSora2Quality', 'quality'],
+      defaultValue: 'standard'
+    }
+  },
+
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'aspect_ratio',
+      defaultRatio: '16:9'
+    },
+    imageUpload: {
+      enabled: true,
+      required: false,  // 支持文生视频和图生视频
+      maxImages: 1,  // Sora 2 最多支持 1 张图片
+      mode: 'single',
+      paramKey: 'image_urls',
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieSora2AliasConfig: ModelConfig = {
+  ...kieSora2Config,
+  id: 'sora-2-kie'
+}

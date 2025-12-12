@@ -229,6 +229,12 @@ export const useMediaGeneratorState = () => {
   const [kieSeedanceV3CameraFixed, setKieSeedanceV3CameraFixed] = useState(false)
   const [kieSeedanceV3FastMode, setKieSeedanceV3FastMode] = useState(true)
 
+  // 模型特定参数 - KIE Sora 2
+  const [kieSora2Mode, setKieSora2Mode] = useState('standard')
+  const [kieSora2AspectRatio, setKieSora2AspectRatio] = useState('16:9')
+  const [kieSora2Duration, setKieSora2Duration] = useState('10')
+  const [kieSora2Quality, setKieSora2Quality] = useState('standard')
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -477,6 +483,12 @@ export const useMediaGeneratorState = () => {
     kieSeedanceV3Duration, setKieSeedanceV3Duration,
     kieSeedanceV3CameraFixed, setKieSeedanceV3CameraFixed,
     kieSeedanceV3FastMode, setKieSeedanceV3FastMode,
+
+    // KIE Sora 2
+    kieSora2Mode, setKieSora2Mode,
+    kieSora2AspectRatio, setKieSora2AspectRatio,
+    kieSora2Duration, setKieSora2Duration,
+    kieSora2Quality, setKieSora2Quality,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

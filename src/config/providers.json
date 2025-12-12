@@ -594,6 +594,20 @@
             "type": "polling",
             "expectedPolls": 60
           }
+        },
+        {
+          "id": "kie-sora-2",
+          "name": "Sora 2",
+          "type": "video",
+          "description": "基于 OpenAI Sora 2 模型的高质量视频生成，支持文生视频和图生视频（最多1张图），提供标准和专业两种模式",
+          "functions": [
+            "文生视频",
+            "图生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
         }
       ]
     }

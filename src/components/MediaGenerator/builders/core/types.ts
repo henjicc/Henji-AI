@@ -333,6 +333,10 @@ export interface BuildOptionsParams {
   kieSeedanceV3Duration?: string
   kieSeedanceV3CameraFixed?: boolean
   kieSeedanceV3FastMode?: boolean
+  kieSora2Mode?: string
+  kieSora2AspectRatio?: string
+  kieSora2Duration?: string
+  kieSora2Quality?: string
 
   // 智能分辨率计算函数
   calculateSmartResolution?: (img: string) => Promise<string>

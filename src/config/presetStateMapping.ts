@@ -239,6 +239,12 @@ export interface PresetSetters {
     setKieSeedanceV3Duration: (v: string) => void
     setKieSeedanceV3CameraFixed: (v: boolean) => void
     setKieSeedanceV3FastMode: (v: boolean) => void
+
+    // KIE Sora 2
+    setKieSora2Mode: (v: string) => void
+    setKieSora2AspectRatio: (v: string) => void
+    setKieSora2Duration: (v: string) => void
+    setKieSora2Quality: (v: string) => void
 }
 
 /**
@@ -486,5 +492,11 @@ export function createPresetSetterMap(
         kieSeedanceV3Duration: setters.setKieSeedanceV3Duration,
         kieSeedanceV3CameraFixed: setters.setKieSeedanceV3CameraFixed,
         kieSeedanceV3FastMode: setters.setKieSeedanceV3FastMode,
+
+        // KIE Sora 2
+        kieSora2Mode: setters.setKieSora2Mode,
+        kieSora2AspectRatio: setters.setKieSora2AspectRatio,
+        kieSora2Duration: setters.setKieSora2Duration,
+        kieSora2Quality: setters.setKieSora2Quality,
     }
 }

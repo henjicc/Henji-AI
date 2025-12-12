@@ -40,6 +40,7 @@ export interface BaseParam {
         condition: (values: any) => boolean  // 触发条件
         value: any | ((values: any) => any)  // 切换到的值（可以是静态值或函数）
         noRestore?: boolean  // 是否在条件不满足时恢复默认值
+        watchKeys?: string[]  // 监听的 key 列表，只有这些 key 变化时才触发检查（默认监听所有 values）
     }
     resolutionConfig?: ResolutionConfig  // 分辨率参数配置
     hidden?: (values: any) => boolean
