@@ -588,8 +588,7 @@
           "description": "基于字节跳动 Seedance V3 模型的高质量视频生成，支持文生视频、图生视频和首尾帧模式，提供 Lite 和 Pro 两种版本",
           "functions": [
             "文生视频",
-            "图生视频",
-            "首尾帧"
+            "图生视频"
           ],
           "progressConfig": {
             "type": "polling",

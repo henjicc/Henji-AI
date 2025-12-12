@@ -13,6 +13,7 @@ export interface ResolutionConfig {
     qualityOptions?: Array<{ value: any; label: string }> | ((values: any) => Array<{ value: any; label: string }>)  // 质量选项（如 2K/4K）
     qualityKey?: string                            // 质量参数的 key（默认为 'resolutionQuality'）
     defaultQuality?: string                        // 默认质量选项
+    hideAspectRatio?: (values: any) => boolean     // 是否隐藏宽高比选择器（仅保留质量选择器）
 
     // 基数配置
     baseSize?: number                              // 基数（正方形时的边长，默认 1440）

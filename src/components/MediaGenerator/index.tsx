@@ -220,7 +220,26 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
     setKieZImageAspectRatio: state.setKieZImageAspectRatio,
     setKieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
-    setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode
+    setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
+    // KIE Kling V2.6 参数
+    setKieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
+    setKieKlingV26Duration: state.setKieKlingV26Duration,
+    setKieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
+    // KIE Hailuo 2.3 参数
+    setKieHailuo23Mode: state.setKieHailuo23Mode,
+    setKieHailuo23Duration: state.setKieHailuo23Duration,
+    setKieHailuo23Resolution: state.setKieHailuo23Resolution,
+    // KIE Hailuo 02 参数
+    setKieHailuo02Duration: state.setKieHailuo02Duration,
+    setKieHailuo02Resolution: state.setKieHailuo02Resolution,
+    setKieHailuo02PromptOptimizer: state.setKieHailuo02PromptOptimizer,
+    // KIE Seedance V3 参数
+    setKieSeedanceV3Version: state.setKieSeedanceV3Version,
+    setKieSeedanceV3AspectRatio: state.setKieSeedanceV3AspectRatio,
+    setKieSeedanceV3Resolution: state.setKieSeedanceV3Resolution,
+    setKieSeedanceV3Duration: state.setKieSeedanceV3Duration,
+    setKieSeedanceV3CameraFixed: state.setKieSeedanceV3CameraFixed,
+    setKieSeedanceV3FastMode: state.setKieSeedanceV3FastMode
   }), [])
 
   // 收藏模型管理
@@ -601,7 +620,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uploadedVideosLength: state.uploadedVideos.length,
     modelscopeCustomModel: state.modelscopeCustomModel,
     falSeedanceV1Mode: state.falSeedanceV1Mode,
-    falHailuo02FastMode: state.falHailuo02FastMode
+    falHailuo02FastMode: state.falHailuo02FastMode,
+    kieSeedanceV3Version: state.kieSeedanceV3Version,
+    kieSeedanceV3FastMode: state.kieSeedanceV3FastMode
   })
 
   // 自动应用模型 Schema 中定义的自动切换规则
@@ -615,7 +636,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       prev.uploadedVideosLength !== state.uploadedVideos.length ||
       prev.modelscopeCustomModel !== state.modelscopeCustomModel ||
       prev.falSeedanceV1Mode !== state.falSeedanceV1Mode ||
-      prev.falHailuo02FastMode !== state.falHailuo02FastMode
+      prev.falHailuo02FastMode !== state.falHailuo02FastMode ||
+      prev.kieSeedanceV3Version !== state.kieSeedanceV3Version ||
+      prev.kieSeedanceV3FastMode !== state.kieSeedanceV3FastMode
 
     // 只有当关键状态真正改变时才执行自动切换
     if (!hasChanged) return
@@ -627,7 +650,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uploadedVideosLength: state.uploadedVideos.length,
       modelscopeCustomModel: state.modelscopeCustomModel,
       falSeedanceV1Mode: state.falSeedanceV1Mode,
-      falHailuo02FastMode: state.falHailuo02FastMode
+      falHailuo02FastMode: state.falHailuo02FastMode,
+      kieSeedanceV3Version: state.kieSeedanceV3Version,
+      kieSeedanceV3FastMode: state.kieSeedanceV3FastMode
     }
 
     const switches = getAutoSwitchValues(state.selectedModel, state)
@@ -640,7 +665,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.falSeedanceV1Mode, state.falHailuo02FastMode])
+  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.falSeedanceV1Mode, state.falHailuo02FastMode, state.kieSeedanceV3Version, state.kieSeedanceV3FastMode])
 
   // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
   // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
@@ -660,6 +685,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
       (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.falViduQ2Mode :
       (modelId === 'fal-ai-minimax-hailuo-02' || modelId === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+      (modelId === 'kie-seedance-v3' || modelId === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
       undefined
     )
     if (state.uploadedImages.length > max) {
@@ -1109,6 +1135,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieHailuo02Duration: state.kieHailuo02Duration,
         kieHailuo02Resolution: state.kieHailuo02Resolution,
         kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer,
+        // KIE Seedance V3 参数
+        kieSeedanceV3Version: state.kieSeedanceV3Version,
+        kieSeedanceV3AspectRatio: state.kieSeedanceV3AspectRatio,
+        kieSeedanceV3Resolution: state.kieSeedanceV3Resolution,
+        kieSeedanceV3Duration: state.kieSeedanceV3Duration,
+        kieSeedanceV3CameraFixed: state.kieSeedanceV3CameraFixed,
+        kieSeedanceV3FastMode: state.kieSeedanceV3FastMode,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
@@ -1269,6 +1302,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         seedanceMode={state.falSeedanceV1Mode}
         viduQ2Mode={state.falViduQ2Mode}
         hailuo02FastMode={state.falHailuo02FastMode}
+        kieSeedanceV3Version={state.kieSeedanceV3Version}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
@@ -1278,6 +1312,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
             (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
             (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+            (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
             undefined
           )
           imageUpload.handleImageFileUpload(files, maxCount)
@@ -1294,6 +1329,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
             (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
             (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+            (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
             undefined
           )
           imageUpload.handlePaste(e, maxCount)
@@ -1306,6 +1342,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
             (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
             (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+            (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
             undefined
           )
           imageUpload.handleImageFileDrop(files, maxCount)

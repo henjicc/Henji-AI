@@ -201,8 +201,8 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   const getDisplayText = () => {
     if (value === 'auto' || value === '智能') return '智能'
 
-    // 如果没有比例选项（图生视频模式），显示质量值
-    if (options.length === 0 && config.qualityOptions && qualityValue) {
+    // 如果隐藏了宽高比选择器（图生视频模式），显示质量值
+    if (config.hideAspectRatio && config.qualityOptions && qualityValue) {
       const qualityOpts = typeof config.qualityOptions === 'function'
         ? config.qualityOptions(_values)
         : config.qualityOptions
@@ -298,8 +298,8 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           )}
 
           {/* 选择比例/尺寸/分辨率 */}
-          {/* 当 options 为空时，隐藏此部分 */}
-          {options.length > 0 && (
+          {/* 当 hideAspectRatio 为 true 或 options 为空时，隐藏此部分 */}
+          {!config.hideAspectRatio && options.length > 0 && (
             <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
               <label className="block text-xs text-zinc-400 mb-2">
                 {config.type === 'aspect_ratio' ? '选择比例' :
@@ -340,8 +340,8 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
               : config.qualityOptions
             return (
               <div className={config.customInput ? 'mb-3' : ''}>
-                {/* 只有当同时有比例选项时才显示"选择质量"标签 */}
-                {options.length > 0 && (
+                {/* 只有当同时有比例选项且比例选项可见时才显示"选择质量"标签 */}
+                {!config.hideAspectRatio && options.length > 0 && (
                   <label className="block text-xs text-zinc-400 mb-2">选择质量</label>
                 )}
                 <div className={`grid gap-2 ${

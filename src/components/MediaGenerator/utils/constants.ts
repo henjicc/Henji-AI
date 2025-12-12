@@ -60,6 +60,11 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
     return 2
   }
 
+  // KIE Seedance V3: 最多 1 张图片（不支持首尾帧）
+  if (modelId === 'kie-seedance-v3' || modelId === 'seedance-v3-kie') {
+    return 1
+  }
+
   if (modelId === 'pixverse-v4.5') return 1  // 派欧云 PixVerse V4.5：最多 1 张图片
   if (modelId === 'wan-2.5-preview') return 1  // 派欧云 Wan 2.5 Preview
   if (modelId === 'fal-ai-wan-25-preview' || modelId === 'wan-25-preview') return 1  // Fal Wan 2.5 Preview：最多 1 张图片

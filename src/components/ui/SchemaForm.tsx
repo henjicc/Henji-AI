@@ -66,10 +66,16 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
                                 ? p.resolutionConfig.qualityOptions(values)
                                 : p.resolutionConfig.qualityOptions
 
-                            // 创建一个新的 config 对象，包含解析后的 qualityOptions
+                            // 解析 hideAspectRatio（如果是函数，则调用它）
+                            const shouldHideAspectRatio = p.resolutionConfig.hideAspectRatio
+                                ? p.resolutionConfig.hideAspectRatio(values)
+                                : false
+
+                            // 创建一个新的 config 对象，包含解析后的 qualityOptions 和 hideAspectRatio
                             const resolvedConfig = {
                                 ...p.resolutionConfig,
-                                qualityOptions: resolvedQualityOptions
+                                qualityOptions: resolvedQualityOptions,
+                                hideAspectRatio: shouldHideAspectRatio
                             }
 
                             const component = (

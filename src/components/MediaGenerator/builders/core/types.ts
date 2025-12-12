@@ -303,6 +303,37 @@ export interface BuildOptionsParams {
   modelscopeNegativePrompt?: string
   modelscopeCustomModel?: string
 
+  // KIE 图片模型参数
+  kieNanoBananaAspectRatio?: string
+  kieNanoBananaResolution?: string
+  kieNanoBananaOutputFormat?: string
+  kieSeedreamAspectRatio?: string
+  kieSeedreamQuality?: string
+  kieSeedream40AspectRatio?: string
+  kieSeedream40Resolution?: string
+  kieSeedream40MaxImages?: number
+  kieGrokImagineAspectRatio?: string
+  kieZImageAspectRatio?: string
+
+  // KIE 视频模型参数
+  kieGrokImagineVideoAspectRatio?: string
+  kieGrokImagineVideoMode?: string
+  kieKlingV26AspectRatio?: string
+  kieKlingV26Duration?: string
+  kieKlingV26EnableAudio?: boolean
+  kieHailuo23Mode?: string
+  kieHailuo23Duration?: number
+  kieHailuo23Resolution?: string
+  kieHailuo02Duration?: number
+  kieHailuo02Resolution?: string
+  kieHailuo02PromptOptimizer?: boolean
+  kieSeedanceV3Version?: string
+  kieSeedanceV3AspectRatio?: string
+  kieSeedanceV3Resolution?: string
+  kieSeedanceV3Duration?: string
+  kieSeedanceV3CameraFixed?: boolean
+  kieSeedanceV3FastMode?: boolean
+
   // 智能分辨率计算函数
   calculateSmartResolution?: (img: string) => Promise<string>
   calculateSeedreamSmartResolution?: (img: string) => Promise<string>
