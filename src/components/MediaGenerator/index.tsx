@@ -844,6 +844,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
       kieKlingV26Duration: state.setKieKlingV26Duration,
       kieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
+      // KIE Hailuo 2.3
+      kieHailuo23Mode: state.setKieHailuo23Mode,
+      kieHailuo23Duration: state.setKieHailuo23Duration,
+      kieHailuo23Resolution: state.setKieHailuo23Resolution,
       // 音频
       minimaxVoiceId: state.setMinimaxVoiceId,
       minimaxAudioSpec: state.setMinimaxAudioSpec,
@@ -906,6 +910,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       setIsWarningDialogOpen(true)
       setTimeout(() => setWarningOpacity(1), 10)
       return
+    }
+
+    // 检查 KIE Hailuo 2.3 的必需条件
+    if (state.selectedModel === 'kie-hailuo-2-3' || state.selectedModel === 'hailuo-2-3-kie') {
+      if (state.uploadedImages.length === 0) {
+        alert('KIE 海螺 2.3 是图生视频模型，必须上传图片才能生成')
+        return
+      }
+      if (!state.input.trim()) {
+        alert('请输入提示词描述期望的视频效果')
+        return
+      }
     }
 
     try {
@@ -1076,6 +1092,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
         kieKlingV26Duration: state.kieKlingV26Duration,
         kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
+        kieHailuo23Mode: state.kieHailuo23Mode,
+        kieHailuo23Duration: state.kieHailuo23Duration,
+        kieHailuo23Resolution: state.kieHailuo23Resolution,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
         calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
         calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
@@ -1446,7 +1465,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               // KIE Kling V2.6 参数
               kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
               kieKlingV26Duration: state.kieKlingV26Duration,
-              kieKlingV26EnableAudio: state.kieKlingV26EnableAudio
+              kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
+              // KIE Hailuo 2.3 参数
+              kieHailuo23Mode: state.kieHailuo23Mode,
+              kieHailuo23Duration: state.kieHailuo23Duration,
+              kieHailuo23Resolution: state.kieHailuo23Resolution
             }}
           />
         </div>

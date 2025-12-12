@@ -426,5 +426,10 @@ export function createPresetSetterMap(
         kieKlingV26AspectRatio: setters.setKieKlingV26AspectRatio,
         kieKlingV26Duration: setters.setKieKlingV26Duration,
         kieKlingV26EnableAudio: setters.setKieKlingV26EnableAudio,
+
+        // KIE Hailuo 2.3
+        kieHailuo23Mode: setters.setKieHailuo23Mode,
+        kieHailuo23Duration: setters.setKieHailuo23Duration,
+        kieHailuo23Resolution: setters.setKieHailuo23Resolution,
     }
 }

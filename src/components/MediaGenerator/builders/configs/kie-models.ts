@@ -336,3 +336,46 @@ export const kieSeedream40AliasConfig: ModelConfig = {
   ...kieSeedream40Config,
   id: 'seedream-4.0-kie'
 }
+
+/**
+ * KIE Hailuo 2.3 图生视频配置
+ */
+export const kieHailuo23Config: ModelConfig = {
+  id: 'kie-hailuo-2-3',
+  type: 'video',
+  provider: 'kie',
+
+  paramMapping: {
+    mode: {
+      source: ['kieHailuo23Mode', 'mode'],
+      defaultValue: 'standard'
+    },
+    duration: {
+      source: ['kieHailuo23Duration', 'duration'],
+      defaultValue: 6
+    },
+    resolution: {
+      source: ['kieHailuo23Resolution', 'resolution'],
+      defaultValue: '768P'
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      required: true,  // 图生视频必须上传图片
+      maxImages: 1,  // Hailuo 2.3 最多支持 1 张图片
+      mode: 'single',
+      paramKey: 'image_url',  // 注意：API 使用 image_url（单数）
+      convertToBlob: false  // KIE 适配器会处理上传
+    }
+  },
+
+  customHandlers: kieImageUploadHandler
+}
+
+// 导出别名配置（支持短名称）
+export const kieHailuo23AliasConfig: ModelConfig = {
+  ...kieHailuo23Config,
+  id: 'hailuo-2-3-kie'
+}

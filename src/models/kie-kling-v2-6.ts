@@ -38,7 +38,7 @@ export const kieKlingV26Params: ParamDef[] = [
       { value: '5', label: '5秒' },
       { value: '10', label: '10秒' }
     ],
-    className: 'min-w-[100px]'
+    className: 'min-w-[50px]'
   },
   // 音频生成开关
   {

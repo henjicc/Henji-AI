@@ -549,6 +549,19 @@
             "type": "polling",
             "expectedPolls": 60
           }
+        },
+        {
+          "id": "kie-hailuo-2-3",
+          "name": "海螺 2.3",
+          "type": "video",
+          "description": "海螺 2.3 图生视频模型，支持标准和专业两种模式（必须上传图片）",
+          "functions": [
+            "视频生成"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 60
+          }
         }
       ]
     }

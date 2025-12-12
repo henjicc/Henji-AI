@@ -41,7 +41,8 @@ import {
   kieSeedream45Params,
   kieSeedream40Params,
   kieZImageParams,
-  kieKlingV26Params
+  kieKlingV26Params,
+  kieHailuo23Params
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -87,7 +88,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -609,6 +610,22 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           kieKlingV26AspectRatio: values.kieKlingV26AspectRatio,
           kieKlingV26Duration: values.kieKlingV26Duration,
           kieKlingV26EnableAudio: values.kieKlingV26EnableAudio,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Hailuo 2.3 参数
+  if (selectedModel === 'kie-hailuo-2-3' || selectedModel === 'hailuo-2-3-kie') {
+    return (
+      <SchemaForm
+        schema={kieHailuo23Params}
+        values={{
+          kieHailuo23Mode: values.kieHailuo23Mode,
+          kieHailuo23Duration: values.kieHailuo23Duration,
+          kieHailuo23Resolution: values.kieHailuo23Resolution,
           uploadedImages
         }}
         onChange={onChange}

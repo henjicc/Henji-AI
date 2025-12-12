@@ -211,6 +211,11 @@ export const useMediaGeneratorState = () => {
   const [kieKlingV26Duration, setKieKlingV26Duration] = useState('5')
   const [kieKlingV26EnableAudio, setKieKlingV26EnableAudio] = useState(false)
 
+  // 模型特定参数 - KIE Hailuo 2.3
+  const [kieHailuo23Mode, setKieHailuo23Mode] = useState('standard')
+  const [kieHailuo23Duration, setKieHailuo23Duration] = useState(6)
+  const [kieHailuo23Resolution, setKieHailuo23Resolution] = useState('768P')
+
   // 音频参数
   const [minimaxAudioSpeed, setMinimaxAudioSpeed] = useState<number>(1.0)
   const [minimaxAudioEmotion, setMinimaxAudioEmotion] = useState<string>('neutral')
@@ -441,6 +446,11 @@ export const useMediaGeneratorState = () => {
     kieKlingV26AspectRatio, setKieKlingV26AspectRatio,
     kieKlingV26Duration, setKieKlingV26Duration,
     kieKlingV26EnableAudio, setKieKlingV26EnableAudio,
+
+    // KIE Hailuo 2.3
+    kieHailuo23Mode, setKieHailuo23Mode,
+    kieHailuo23Duration, setKieHailuo23Duration,
+    kieHailuo23Resolution, setKieHailuo23Resolution,
 
     // 音频
     minimaxAudioSpeed, setMinimaxAudioSpeed,

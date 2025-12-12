@@ -140,6 +140,11 @@ const InputArea: React.FC<InputAreaProps> = ({
       return !input.trim() || uploadedImages.length === 0
     }
 
+    // KIE Hailuo 2.3 必须同时有提示词和图片
+    if (selectedModel === 'kie-hailuo-2-3' || selectedModel === 'hailuo-2-3-kie') {
+      return !input.trim() || uploadedImages.length === 0
+    }
+
     // 其他模型的逻辑保持不变
     return !input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0)
   }
