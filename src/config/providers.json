@@ -512,6 +512,19 @@
           }
         },
         {
+          "id": "kie-z-image",
+          "name": "Z-Image-Turbo",
+          "type": "image",
+          "description": "超快速的6B参数文本到图像模型，支持多种分辨率",
+          "functions": [
+            "图片生成"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 30
+          }
+        },
+        {
           "id": "kie-grok-imagine-video",
           "name": "Grok Imagine 视频",
           "type": "video",

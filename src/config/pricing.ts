@@ -42,6 +42,7 @@ const PRICES: Record<string, any> = {
     KIE_SEEDREAM_40: 0.025,  // USD per image (固定价格，与分辨率无关)
     KIE_GROK_IMAGINE: 0.02,  // USD per generation (6 images)
     KIE_GROK_IMAGINE_VIDEO: 0.10,  // USD per 6-second video
+    KIE_Z_IMAGE: 0.004,  // USD per image (固定价格)
 
     // Kling Video O1 价格（美元/秒）
     KLING_VIDEO_O1: {
@@ -441,6 +442,21 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: () => {
             // Grok Imagine Video 固定价格：$0.10 per 6-second video
             const basePriceUSD = PRICES.KIE_GROK_IMAGINE_VIDEO
+
+            // 转换为人民币
+            const priceCNY = basePriceUSD * USD_TO_CNY
+
+            return formatPrice(priceCNY)
+        }
+    },
+    {
+        providerId: 'kie',
+        modelId: 'kie-z-image',
+        currency: '¥',
+        type: 'calculated',
+        calculator: () => {
+            // Z-Image 固定价格：$0.004 per image
+            const basePriceUSD = PRICES.KIE_Z_IMAGE
 
             // 转换为人民币
             const priceCNY = basePriceUSD * USD_TO_CNY

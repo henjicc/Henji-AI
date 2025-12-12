@@ -415,6 +415,9 @@ export function createPresetSetterMap(
         // KIE Grok Imagine
         kieGrokImagineAspectRatio: setters.setKieGrokImagineAspectRatio,
 
+        // KIE Z-Image
+        kieZImageAspectRatio: setters.setKieZImageAspectRatio,
+
         // KIE Grok Imagine Video
         kieGrokImagineVideoAspectRatio: setters.setKieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: setters.setKieGrokImagineVideoMode,

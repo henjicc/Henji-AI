@@ -3,6 +3,7 @@ import { kieGrokImagineRoute } from './grok-imagine'
 import { kieGrokImagineVideoRoute } from './grok-imagine-video'
 import { kieSeedream45Route } from './seedream-4.5'
 import { kieSeedream40Route } from './seedream-4.0'
+import { kieZImageRoute } from './z-image'
 
 export type { KIEModelRoute }
 
@@ -11,6 +12,7 @@ export const kieModelRoutes: KIEModelRoute[] = [
   kieSeedream45Route,
   kieSeedream40Route,
   kieGrokImagineRoute,
+  kieZImageRoute,
   kieGrokImagineVideoRoute
 ]
 

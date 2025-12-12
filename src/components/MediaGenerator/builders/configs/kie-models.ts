@@ -112,6 +112,33 @@ export const kieGrokImagineAliasConfig: ModelConfig = {
 }
 
 /**
+ * KIE Z-Image 配置
+ */
+export const kieZImageConfig: ModelConfig = {
+  id: 'kie-z-image',
+  type: 'image',
+  provider: 'kie',
+
+  paramMapping: {
+    aspect_ratio: {
+      source: ['kieZImageAspectRatio', 'aspectRatio'],
+      defaultValue: '1:1'
+    }
+  },
+
+  features: {
+    // Z-Image 不支持图片上传，仅支持文本生成图片
+    // 因此不需要 smartMatch 和 imageUpload 功能
+  }
+}
+
+// 导出别名配置（支持短名称）
+export const kieZImageAliasConfig: ModelConfig = {
+  ...kieZImageConfig,
+  id: 'z-image-kie'
+}
+
+/**
  * KIE Grok Imagine 视频配置
  */
 export const kieGrokImagineVideoConfig: ModelConfig = {

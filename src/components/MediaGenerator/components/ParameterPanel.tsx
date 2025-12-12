@@ -39,7 +39,8 @@ import {
   kieGrokImagineParams,
   kieGrokImagineVideoParams,
   kieSeedream45Params,
-  kieSeedream40Params
+  kieSeedream40Params,
+  kieZImageParams
 } from '@/models'
 import { voicePresets } from '../utils/constants'
 
@@ -560,6 +561,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         schema={kieGrokImagineParams}
         values={{
           kieGrokImagineAspectRatio: values.kieGrokImagineAspectRatio,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Z-Image 参数
+  if (selectedModel === 'kie-z-image' || selectedModel === 'z-image-kie') {
+    return (
+      <SchemaForm
+        schema={kieZImageParams}
+        values={{
+          kieZImageAspectRatio: values.kieZImageAspectRatio,
           customWidth: values.customWidth,
           customHeight: values.customHeight
         }}

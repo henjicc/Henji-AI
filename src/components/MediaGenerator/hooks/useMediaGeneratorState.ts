@@ -199,6 +199,9 @@ export const useMediaGeneratorState = () => {
   // 模型特定参数 - KIE Grok Imagine
   const [kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio] = useState('1:1')
 
+  // 模型特定参数 - KIE Z-Image
+  const [kieZImageAspectRatio, setKieZImageAspectRatio] = useState('1:1')
+
   // 模型特定参数 - KIE Grok Imagine Video
   const [kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio] = useState('2:3')
   const [kieGrokImagineVideoMode, setKieGrokImagineVideoMode] = useState('normal')
@@ -421,6 +424,9 @@ export const useMediaGeneratorState = () => {
 
     // KIE Grok Imagine
     kieGrokImagineAspectRatio, setKieGrokImagineAspectRatio,
+
+    // KIE Z-Image
+    kieZImageAspectRatio, setKieZImageAspectRatio,
 
     // KIE Grok Imagine Video
     kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio,

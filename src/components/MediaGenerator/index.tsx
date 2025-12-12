@@ -218,6 +218,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKieSeedream40Resolution: state.setKieSeedream40Resolution,
     setKieSeedream40MaxImages: state.setKieSeedream40MaxImages,
     setKieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
+    setKieZImageAspectRatio: state.setKieZImageAspectRatio,
     setKieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
     setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode
   }), [])
@@ -834,6 +835,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       kieSeedream40MaxImages: state.setKieSeedream40MaxImages,
       // KIE Grok Imagine
       kieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
+      // KIE Z-Image
+      kieZImageAspectRatio: state.setKieZImageAspectRatio,
       // KIE Grok Imagine Video
       kieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
       kieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
@@ -1063,6 +1066,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieSeedream40Resolution: state.kieSeedream40Resolution,
         kieSeedream40MaxImages: state.kieSeedream40MaxImages,
         kieGrokImagineAspectRatio: state.kieGrokImagineAspectRatio,
+        kieZImageAspectRatio: state.kieZImageAspectRatio,
         kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
         calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
