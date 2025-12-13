@@ -193,7 +193,7 @@ export const modelscopeCustomParams: ParamDef[] = [
     options: (_values: any) => {
       const customModels = loadCustomModels()
       if (customModels.length === 0) {
-        return [{ value: '', label: '请先添加自定义模型' }]
+        return [{ value: '', label: '请先添加模型' }]
       }
       return customModels.map(m => ({ value: m.id, label: m.name }))
     },

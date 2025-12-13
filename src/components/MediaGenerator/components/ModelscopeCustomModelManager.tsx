@@ -20,10 +20,10 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const [models, setModels] = useState<CustomModel[]>([])
   const [newModelId, setNewModelId] = useState('')
   const [newModelName, setNewModelName] = useState('')
-  const [newModelType, setNewModelType] = useState({ imageGeneration: true, imageEditing: false })
+  const [newModelType, setNewModelType] = useState<'imageGeneration' | 'imageEditing'>('imageGeneration')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
-  const [editModelType, setEditModelType] = useState({ imageGeneration: true, imageEditing: false })
+  const [editModelType, setEditModelType] = useState<'imageGeneration' | 'imageEditing'>('imageGeneration')
   const [isAddingNew, setIsAddingNew] = useState(false)
 
   // 加载模型列表
@@ -36,11 +36,25 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       const stored = localStorage.getItem('modelscope_custom_models')
       if (stored) {
         const loadedModels = JSON.parse(stored)
-        // 兼容旧数据：如果没有 modelType 字段，默认为图片生成
-        const migratedModels = loadedModels.map((m: any) => ({
-          ...m,
-          modelType: m.modelType || { imageGeneration: true, imageEditing: false }
-        }))
+        // 兼容旧数据：如果是旧的对象格式，转换为新格式
+        const migratedModels = loadedModels.map((m: any) => {
+          if (m.modelType && typeof m.modelType === 'object') {
+            // 旧格式：{ imageGeneration: boolean, imageEditing: boolean }
+            // 转换为新格式：优先选择 imageGeneration
+            return {
+              ...m,
+              modelType: {
+                imageGeneration: m.modelType.imageGeneration ? true : false,
+                imageEditing: m.modelType.imageEditing && !m.modelType.imageGeneration ? true : false
+              }
+            }
+          }
+          // 如果没有 modelType 字段，默认为图片生成
+          return {
+            ...m,
+            modelType: m.modelType || { imageGeneration: true, imageEditing: false }
+          }
+        })
         setModels(migratedModels)
       }
     } catch (e) {
@@ -64,12 +78,6 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       return
     }
 
-    // 检查至少选择一个类型
-    if (!newModelType.imageGeneration && !newModelType.imageEditing) {
-      alert('请至少选择一个模型类型')
-      return
-    }
-
     // 检查是否已存在
     if (models.some(m => m.id === newModelId.trim())) {
       alert('该模型ID已存在')
@@ -79,12 +87,15 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     const newModels = [...models, {
       id: newModelId.trim(),
       name: newModelName.trim(),
-      modelType: { ...newModelType }
+      modelType: {
+        imageGeneration: newModelType === 'imageGeneration',
+        imageEditing: newModelType === 'imageEditing'
+      }
     }]
     saveModels(newModels)
     setNewModelId('')
     setNewModelName('')
-    setNewModelType({ imageGeneration: true, imageEditing: false })
+    setNewModelType('imageGeneration')
     setIsAddingNew(false)
   }
 
@@ -106,7 +117,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const handleStartEdit = (model: CustomModel) => {
     setEditingId(model.id)
     setEditName(model.name)
-    setEditModelType({ ...model.modelType })
+    setEditModelType(model.modelType.imageGeneration ? 'imageGeneration' : 'imageEditing')
   }
 
   const handleSaveEdit = (id: string) => {
@@ -115,25 +126,26 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       return
     }
 
-    // 检查至少选择一个类型
-    if (!editModelType.imageGeneration && !editModelType.imageEditing) {
-      alert('请至少选择一个模型类型')
-      return
-    }
-
     const newModels = models.map(m =>
-      m.id === id ? { ...m, name: editName.trim(), modelType: { ...editModelType } } : m
+      m.id === id ? {
+        ...m,
+        name: editName.trim(),
+        modelType: {
+          imageGeneration: editModelType === 'imageGeneration',
+          imageEditing: editModelType === 'imageEditing'
+        }
+      } : m
     )
     saveModels(newModels)
     setEditingId(null)
     setEditName('')
-    setEditModelType({ imageGeneration: true, imageEditing: false })
+    setEditModelType('imageGeneration')
   }
 
   const handleCancelEdit = () => {
     setEditingId(null)
     setEditName('')
-    setEditModelType({ imageGeneration: true, imageEditing: false })
+    setEditModelType('imageGeneration')
   }
 
   return (
@@ -198,33 +210,31 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               inputClassName="w-full text-sm"
             />
             <div className="flex flex-col gap-2">
-              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型（至少选一个）</div>
+              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型</div>
               <div className="flex gap-2">
                 <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                   <div className="relative flex items-center justify-center">
                     <input
-                      type="checkbox"
-                      checked={newModelType.imageGeneration}
-                      onChange={(e) => setNewModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
-                      className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                      type="radio"
+                      name="newModelType"
+                      checked={newModelType === 'imageGeneration'}
+                      onChange={() => setNewModelType('imageGeneration')}
+                      className="peer appearance-none w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
                     />
-                    <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
+                    <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                   </div>
                   <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片生成</span>
                 </label>
                 <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                   <div className="relative flex items-center justify-center">
                     <input
-                      type="checkbox"
-                      checked={newModelType.imageEditing}
-                      onChange={(e) => setNewModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
-                      className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                      type="radio"
+                      name="newModelType"
+                      checked={newModelType === 'imageEditing'}
+                      onChange={() => setNewModelType('imageEditing')}
+                      className="peer appearance-none w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
                     />
-                    <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
+                    <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                   </div>
                   <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片编辑</span>
                 </label>
@@ -242,7 +252,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                   setIsAddingNew(false)
                   setNewModelId('')
                   setNewModelName('')
-                  setNewModelType({ imageGeneration: true, imageEditing: false })
+                  setNewModelType('imageGeneration')
                 }}
                 className="px-4 py-2 bg-zinc-300 dark:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-sm rounded hover:bg-zinc-400 dark:hover:bg-zinc-500 transition-colors"
               >
@@ -280,33 +290,31 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       inputClassName="w-full text-sm"
                     />
                     <div className="flex flex-col gap-2">
-                      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型（至少选一个）</div>
+                      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型</div>
                       <div className="flex gap-2">
                         <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                           <div className="relative flex items-center justify-center">
                             <input
-                              type="checkbox"
-                              checked={editModelType.imageGeneration}
-                              onChange={(e) => setEditModelType(prev => ({ ...prev, imageGeneration: e.target.checked }))}
-                              className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                              type="radio"
+                              name={`editModelType-${model.id}`}
+                              checked={editModelType === 'imageGeneration'}
+                              onChange={() => setEditModelType('imageGeneration')}
+                              className="peer appearance-none w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
                             />
-                            <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
+                            <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                           </div>
                           <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片生成</span>
                         </label>
-                        <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/10">
+                        <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                           <div className="relative flex items-center justify-center">
                             <input
-                              type="checkbox"
-                              checked={editModelType.imageEditing}
-                              onChange={(e) => setEditModelType(prev => ({ ...prev, imageEditing: e.target.checked }))}
-                              className="peer appearance-none w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
+                              type="radio"
+                              name={`editModelType-${model.id}`}
+                              checked={editModelType === 'imageEditing'}
+                              onChange={() => setEditModelType('imageEditing')}
+                              className="peer appearance-none w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 bg-transparent cursor-pointer transition-all checked:bg-[#007eff] checked:border-[#007eff] hover:border-[#007eff]/50 outline-none focus:outline-none focus-visible:outline-none active:outline-none [-webkit-tap-highlight-color:transparent]"
                             />
-                            <svg className="absolute w-3.5 h-3.5 pointer-events-none hidden peer-checked:block text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
+                            <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                           </div>
                           <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片编辑</span>
                         </label>
