@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 mod modelscope;
+mod clipboard_files;
 
 use tauri::Manager;
 
@@ -25,7 +26,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       modelscope::modelscope_submit_task,
       modelscope::modelscope_check_status,
-      toggle_devtools
+      toggle_devtools,
+      clipboard_files::read_clipboard_files
     ])
     .setup(|app| {
       let app_local = app.path().app_local_data_dir().expect("get app local data dir");

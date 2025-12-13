@@ -115,6 +115,91 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.setUploadedFilePaths
   )
 
+  // 监听全局右键菜单的图片粘贴事件
+  useEffect(() => {
+    // 辅助函数：将 base64 数据 URL 转换为 File
+    const dataUrlToFile = (dataUrl: string, fileName: string): File | null => {
+      try {
+        const arr = dataUrl.split(',')
+        const mimeMatch = arr[0].match(/:(.*?);/)
+        if (!mimeMatch) return null
+        const mime = mimeMatch[1]
+        const bstr = atob(arr[1])
+        let n = bstr.length
+        const u8arr = new Uint8Array(n)
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n)
+        }
+        return new File([u8arr], fileName, { type: mime })
+      } catch {
+        return null
+      }
+    }
+
+    // 辅助函数：获取最大图片数
+    const getMaxCount = () => getMaxImageCount(
+      state.selectedModel,
+      state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
+      (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+      (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+      (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+      (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
+      undefined
+    )
+
+    const handleGlobalPasteImage = async (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        files?: File[],
+        clipboardFiles?: Array<{ data: string; mimeType: string; name: string }>,
+        imageBlob?: Blob,
+        imageType?: string
+      }>
+      const detail = customEvent.detail
+
+      // 处理从文件管理器复制的文件（通过 Rust 命令读取）
+      if (detail?.clipboardFiles && detail.clipboardFiles.length > 0) {
+        const files: File[] = []
+        for (const cf of detail.clipboardFiles) {
+          const file = dataUrlToFile(cf.data, cf.name)
+          if (file) {
+            files.push(file)
+          }
+        }
+        if (files.length > 0) {
+          imageUpload.handleImageFileUpload(files, getMaxCount())
+        }
+        return
+      }
+
+      // 处理剪贴板中的图片 Blob（截图等）
+      if (detail?.imageBlob) {
+        const extension = detail.imageType?.split('/')[1] || 'png'
+        const file = new File([detail.imageBlob], `clipboard-${Date.now()}.${extension}`, {
+          type: detail.imageType || 'image/png'
+        })
+        imageUpload.handleImageFileUpload([file], getMaxCount())
+        return
+      }
+
+      // 直接传入的文件
+      if (detail?.files && detail.files.length > 0) {
+        imageUpload.handleImageFileUpload(detail.files, getMaxCount())
+      }
+    }
+
+    // 导入事件名称
+    import('@/contexts/GlobalContextMenuProvider').then(({ PASTE_IMAGE_EVENT }) => {
+      document.addEventListener(PASTE_IMAGE_EVENT, handleGlobalPasteImage)
+    })
+
+    return () => {
+      import('@/contexts/GlobalContextMenuProvider').then(({ PASTE_IMAGE_EVENT }) => {
+        document.removeEventListener(PASTE_IMAGE_EVENT, handleGlobalPasteImage)
+      })
+    }
+  }, [state.selectedModel, state.ppioViduQ1Mode, state.falVeo31Mode, state.falSeedanceV1Mode, state.falViduQ2Mode, state.falHailuo02FastMode, state.kieSeedanceV3Version, imageUpload])
+
   // 使用视频上传 hook
   const videoUpload = useVideoUpload(
     state.uploadedVideos,
