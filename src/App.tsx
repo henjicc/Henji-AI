@@ -1029,7 +1029,7 @@ const App: React.FC = () => {
       logInfo('[App] 开始下载:', { filePath, fromButton })
 
       const enableQuick = localStorage.getItem('enable_quick_download') === 'true'
-      const buttonOnly = localStorage.getItem('quick_download_button_only') === 'true'
+      const buttonOnly = localStorage.getItem('quick_download_button_only') !== 'false' // 默认开启
       const quickPath = localStorage.getItem('quick_download_path') || ''
 
       logInfo('[App] 下载设置:', { enableQuick, buttonOnly, quickPath })
@@ -1089,6 +1089,7 @@ const App: React.FC = () => {
       ),
       onClick: async () => {
         if (filePath) {
+          // 右键菜单下载不是来自按钮，传递 false
           await handleDownloadMedia(filePath, false)
         }
       },
@@ -1109,6 +1110,7 @@ const App: React.FC = () => {
       ),
       onClick: async () => {
         if (filePath) {
+          // 右键菜单下载不是来自按钮，传递 false
           await handleDownloadMedia(filePath, false)
         }
       },
@@ -1129,6 +1131,7 @@ const App: React.FC = () => {
       ),
       onClick: async () => {
         if (filePath) {
+          // 右键菜单下载不是来自按钮，传递 false
           await handleDownloadMedia(filePath, false)
         }
       },
