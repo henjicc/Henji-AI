@@ -1264,7 +1264,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           label="模型"
           display={`${currentProvider?.name}_${currentModel?.name || '选择'}`}
           className="w-auto min-w-[180px] flex-shrink-0"
-          panelWidth={960}
+          panelWidth={1100}
           alignment="aboveCenter"
           stableHeight={true}
           closeOnPanelClick={(t) => {
