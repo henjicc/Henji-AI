@@ -59,12 +59,13 @@ const commonImageUploadHandler = {
     const selectedModel = (params as any).selectedModel
     const modelscopeCustomModel = (params as any).modelscopeCustomModel
 
-    // 检查当前模型是否支持图片编辑
-    const supportsImageEditing = checkModelSupportsImageEditing(selectedModel, modelscopeCustomModel)
+    // 检查当前模型是否支持图片功能（图片编辑或图生图）
+    const supportsImageFeature = checkModelSupportsImageEditing(selectedModel, modelscopeCustomModel)
 
-    if (!supportsImageEditing) {
-      logInfo('[ModelScope] 当前模型不支持图片编辑，跳过图片上传:', selectedModel)
-      return
+    // 注意：即使模型不支持图片编辑，也可能支持图生图功能
+    // 因此我们总是尝试上传图片，让 adapter 和 API 决定如何处理
+    if (!supportsImageFeature) {
+      logInfo('[ModelScope] 当前模型可能不支持图片编辑，但仍尝试上传图片（支持图生图）:', selectedModel)
     }
 
     const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
