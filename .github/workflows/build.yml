@@ -48,6 +48,16 @@ jobs:
       - name: Build application
         run: npm run tauri:build:ci
 
+      - name: Rename Windows installer
+        shell: pwsh
+        run: |
+          $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
+          $MSI_PATH = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          $NEW_NAME = "Henji-AI_${VERSION}_x64_zh-CN.msi"
+          $NEW_PATH = Join-Path (Split-Path $MSI_PATH) $NEW_NAME
+          Move-Item -Path $MSI_PATH -Destination $NEW_PATH -Force
+          Write-Host "Renamed to: $NEW_NAME"
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
@@ -97,6 +107,15 @@ jobs:
           CC: ""
           CXX: ""
         run: npm run tauri:build:mac -- --target universal-apple-darwin
+
+      - name: Rename macOS DMG
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          DMG_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -n 1)
+          NEW_NAME="Henji-AI_${VERSION}_universal.dmg"
+          NEW_PATH="$(dirname "$DMG_PATH")/$NEW_NAME"
+          mv "$DMG_PATH" "$NEW_PATH"
+          echo "Renamed to: $NEW_NAME"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
