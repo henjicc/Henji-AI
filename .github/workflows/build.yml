@@ -37,7 +37,10 @@ jobs:
         shell: pwsh
         run: |
           $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
-          npm version $VERSION --no-git-tag-version
+          $CURRENT = (Get-Content package.json | ConvertFrom-Json).version
+          if ($CURRENT -ne $VERSION) {
+            npm version $VERSION --no-git-tag-version
+          }
 
       - name: Install dependencies
         run: npm ci
@@ -78,7 +81,13 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          npm version $VERSION --no-git-tag-version
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" != "$VERSION" ]; then
+            echo "Updating package.json version from $CURRENT to $VERSION"
+            npm version "$VERSION" --no-git-tag-version
+          else
+            echo "package.json already at version $VERSION — skipping npm version"
+          fi
 
       - name: Install dependencies
         run: npm ci
