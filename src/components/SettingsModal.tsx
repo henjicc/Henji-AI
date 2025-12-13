@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import NumberInput from './ui/NumberInput'
 import Toggle from './ui/Toggle'
+import ModelSettingsPanel from './ModelSettingsPanel'
 import { apiService } from '../services/api'
 import { open } from '@tauri-apps/plugin-shell'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
@@ -12,7 +13,7 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
-type SettingsTab = 'general' | 'api' | 'interface'
+type SettingsTab = 'general' | 'api' | 'interface' | 'models'
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
@@ -401,6 +402,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+      )
+    },
+    {
+      id: 'models',
+      label: '模型管理',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         </svg>
       )
     }
@@ -813,6 +823,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   </div>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'models' && (
+              <ModelSettingsPanel />
             )}
           </div>
 

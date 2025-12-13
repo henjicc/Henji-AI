@@ -1,5 +1,5 @@
-import React from 'react'
-import { providers } from '@/config/providers'
+import React, { useState, useEffect, useMemo } from 'react'
+import { providers, getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 
 interface ModelSelectorPanelProps {
   selectedProvider: string
@@ -32,6 +32,35 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   onFilterFunctionChange,
   onToggleFavorite
 }) => {
+  // 直接从 localStorage 读取，每次渲染时都获取最新数据
+  const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
+  const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
+
+  useEffect(() => {
+    // 每次组件挂载时重新加载数据（因为可能是下拉面板重新打开）
+    setHiddenProviders(getHiddenProviders())
+    setHiddenTypes(getHiddenTypes())
+    setHiddenModels(getHiddenModels())
+
+    // 监听模型可见性变化事件
+    const handleVisibilityChange = () => {
+      setHiddenProviders(getHiddenProviders())
+      setHiddenTypes(getHiddenTypes())
+      setHiddenModels(getHiddenModels())
+    }
+
+    window.addEventListener('modelVisibilityChanged', handleVisibilityChange)
+    return () => {
+      window.removeEventListener('modelVisibilityChanged', handleVisibilityChange)
+    }
+  }, [])
+
+  // 获取过滤后的可见模型列表
+  const visibleProviders = useMemo(() => {
+    return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels)
+  }, [hiddenProviders, hiddenTypes, hiddenModels])
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* 筛选区域 - 固定在顶部 */}
@@ -51,9 +80,24 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               { label: '图片', value: 'image' },
               { label: '视频', value: 'video' },
               { label: '音频', value: 'audio' }
-            ].map(t => (
-              <button key={t.value} onClick={() => onFilterTypeChange(t.value as any)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t.label}</button>
-            ))}
+            ].map(t => {
+              const isTypeHidden = t.value !== 'all' && t.value !== 'favorite' && hiddenTypes.has(t.value)
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => onFilterTypeChange(t.value as any)}
+                  className={`px-3 py-2 text-xs rounded transition-all duration-300 ${
+                    modelFilterType === t.value
+                      ? 'bg-[#007eff] text-white'
+                      : isTypeHidden
+                        ? 'opacity-40 bg-zinc-700/50 text-zinc-400 hover:bg-zinc-600/50'
+                        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -82,7 +126,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       {/* 模型列表 - 可滚动区域 */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-          {providers
+          {visibleProviders
             .flatMap(p => p.models.map(m => ({ p, m })))
             .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
             .filter(item => {
