@@ -17,6 +17,7 @@
 
 ### 网盘下载
 **夸克网盘**：[https://pan.quark.cn/s/66bcb08a7713](https://pan.quark.cn/s/66bcb08a7713)
+
 **蓝奏云**：[https://henji.lanzout.com/b01vdihsza](https://henji.lanzout.com/b01vdihsza) 提取码：g90x
 
 </div>
@@ -30,8 +31,11 @@
 
 ### 供应商
 [派欧云](https://ppio.com/user/register?invited_by=MLBDS6)：访问与充值都比较方便，但 API 更新比较慢，且仅支持国内 AI
+
 [fal](https://fal.ai/)：API 更新快，覆盖面广，但充值可能需要信用卡
+
 [魔搭](https://modelscope.cn/)：免费，但仅支持开源模型
+
 [KIE](https://kie.ai/zh-CN)：充值方便，部分模型有优惠，但某些 API 功能有所缺失
 
 ### 图片
