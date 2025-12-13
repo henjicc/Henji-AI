@@ -44,8 +44,7 @@ export const kieHailuo02Params: ParamDef[] = [
       condition: (values) => {
         return values.kieHailuo02Resolution === '1080P' && values.kieHailuo02Duration !== 6
       },
-      value: () => 6,
-      targetParam: 'kieHailuo02Duration'
+      value: () => 6
     },
     // 动态选项：当时长为10秒时，禁用1080P选项
     options: (values) => [

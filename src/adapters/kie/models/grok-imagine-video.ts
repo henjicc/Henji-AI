@@ -56,7 +56,7 @@ export const kieGrokImagineVideoRoute: KIEModelRoute = {
     // 添加 mode 参数（可选）
     if (params.mode !== undefined) {
       // 图生视频时，如果是 spicy 模式，改为 normal（因为不支持）
-      if (hasImages && params.mode === 'spicy') {
+      if (hasImages && (params as any).mode === 'spicy') {
         requestData.input.mode = 'normal'
       } else {
         requestData.input.mode = params.mode

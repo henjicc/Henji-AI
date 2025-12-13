@@ -363,7 +363,6 @@ export const kieHailuo23Config: ModelConfig = {
   features: {
     imageUpload: {
       enabled: true,
-      required: true,  // 图生视频必须上传图片
       maxImages: 1,  // Hailuo 2.3 最多支持 1 张图片
       mode: 'single',
       paramKey: 'image_url',  // 注意：API 使用 image_url（单数）
@@ -406,7 +405,6 @@ export const kieHailuo02Config: ModelConfig = {
   features: {
     imageUpload: {
       enabled: true,
-      required: false,  // 支持文生视频和图生视频
       maxImages: 2,  // Hailuo 02 最多支持 2 张图片
       mode: 'multiple',
       paramKey: 'image_url',  // 第一张图片使用 image_url，第二张使用 end_image_url
@@ -478,7 +476,6 @@ export const kieSeedanceV3Config: ModelConfig = {
     },
     imageUpload: {
       enabled: true,
-      required: false,  // 支持文生视频和图生视频
       maxImages: 1,  // 最多支持 1 张图片（不支持首尾帧）
       mode: 'single',
       paramKey: 'image_url',
@@ -542,7 +539,6 @@ export const kieSora2Config: ModelConfig = {
     },
     imageUpload: {
       enabled: true,
-      required: false,  // 支持文生视频和图生视频
       maxImages: 1,  // Sora 2 最多支持 1 张图片
       mode: 'single',
       paramKey: 'image_urls',

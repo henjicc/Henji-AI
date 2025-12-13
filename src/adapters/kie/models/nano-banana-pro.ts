@@ -1,8 +1,11 @@
-import { GenerateImageParams } from '@/adapters/base/BaseAdapter'
+import { GenerateImageParams, GenerateVideoParams } from '@/adapters/base/BaseAdapter'
 
 export interface KIEModelRoute {
   matches: (modelId: string) => boolean
   buildImageRequest?: (params: GenerateImageParams) => {
+    requestData: any
+  }
+  buildVideoRequest?: (params: GenerateVideoParams) => {
     requestData: any
   }
 }

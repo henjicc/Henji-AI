@@ -74,11 +74,10 @@ export const kieSora2Params: ParamDef[] = [
 
         return false
       },
-      value: (values) => {
+      value: (values: any) => {
         const hasImages = values.uploadedImages && values.uploadedImages.length > 0
         return hasImages ? 'smart' : '16:9'
       },
-      targetParam: 'kieSora2AspectRatio',
       watchKeys: ['uploadedImages']  // 只监听图片数量变化，不监听比例参数变化
     },
     className: 'min-w-[100px]'

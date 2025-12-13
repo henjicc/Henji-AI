@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { providers, getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
 
 const ModelSettingsPanel: React.FC = () => {
@@ -45,6 +45,36 @@ const ModelSettingsPanel: React.FC = () => {
 
     setHiddenProviders(newHiddenProviders)
     saveHiddenProviders(newHiddenProviders)
+    window.dispatchEvent(new Event('modelVisibilityChanged'))
+  }
+
+  const showAllModelsForProvider = (providerId: string) => {
+    const provider = providers.find(p => p.id === providerId)
+    if (!provider) return
+
+    const newHiddenModels = new Set(hiddenModels)
+    provider.models.forEach(model => {
+      const key = `${providerId}-${model.id}`
+      newHiddenModels.delete(key)
+    })
+
+    setHiddenModels(newHiddenModels)
+    saveHiddenModels(newHiddenModels)
+    window.dispatchEvent(new Event('modelVisibilityChanged'))
+  }
+
+  const hideAllModelsForProvider = (providerId: string) => {
+    const provider = providers.find(p => p.id === providerId)
+    if (!provider) return
+
+    const newHiddenModels = new Set(hiddenModels)
+    provider.models.forEach(model => {
+      const key = `${providerId}-${model.id}`
+      newHiddenModels.add(key)
+    })
+
+    setHiddenModels(newHiddenModels)
+    saveHiddenModels(newHiddenModels)
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
@@ -220,14 +250,14 @@ const ModelSettingsPanel: React.FC = () => {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => toggleProviderVisibility(provider.id, true)}
+                      onClick={() => showAllModelsForProvider(provider.id)}
                       className="text-xs text-[#007eff] hover:text-[#006add] transition-colors"
                     >
                       全部显示
                     </button>
                     <span className="text-zinc-600">|</span>
                     <button
-                      onClick={() => toggleProviderVisibility(provider.id, false)}
+                      onClick={() => hideAllModelsForProvider(provider.id)}
                       className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
                     >
                       全部隐藏

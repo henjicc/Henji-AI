@@ -74,7 +74,7 @@ export async function saveVideoFromUrl(url: string, filename?: string): Promise<
       // 如果不是最后一次尝试，等待一段时间后重试
       if (attempt < maxRetries) {
         const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // 指数退避，最多5秒
-        logInfo(`[save] 等待 ${delayMs}ms 后重试...`)
+        logInfo(`[save] 等待 ${delayMs}ms 后重试...`, { delayMs })
         await new Promise(resolve => setTimeout(resolve, delayMs))
       }
     }
