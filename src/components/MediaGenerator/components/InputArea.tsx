@@ -240,6 +240,11 @@ const InputArea: React.FC<InputAreaProps> = ({
     ? (needsVideoOnly ? 1 : 1 + maxImageCount)
     : maxImageCount
 
+  // 检查是否是 KIE Grok Imagine 视频模型且已上传1张图片（需要隐藏上传按钮）
+  const shouldHideUploadButton =
+    (selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie') &&
+    uploadedImages.length >= 1
+
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 统一的文件上传区域（支持视频+图片混合上传） */}
@@ -268,6 +273,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
             multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
             maxCount={mixedMaxCount}
+            hideUploadButton={shouldHideUploadButton}
             {...{ onDragStateChange } as any}
           />
         </div>

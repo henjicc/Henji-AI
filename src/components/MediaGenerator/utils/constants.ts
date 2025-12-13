@@ -101,5 +101,10 @@ export const getMaxImageCount = (modelId: string, mode?: string): number => {
     return 2
   }
 
+  // KIE Grok Imagine 视频: 最多 1 张图片
+  if (modelId === 'kie-grok-imagine-video' || modelId === 'grok-imagine-video-kie') {
+    return 1
+  }
+
   return 6 // 默认图片模型最多6张
 }

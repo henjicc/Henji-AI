@@ -19,6 +19,7 @@ export interface FileUploaderProps {
     maxCount?: number
     disabled?: boolean
     className?: string
+    hideUploadButton?: boolean
 }
 
 export default function FileUploader({
@@ -33,7 +34,8 @@ export default function FileUploader({
     multiple = false,
     maxCount = 1,
     disabled = false,
-    className = ''
+    className = '',
+    hideUploadButton = false
 }: FileUploaderProps) {
     const inputRef = useRef<HTMLInputElement>(null)
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
@@ -533,7 +535,7 @@ export default function FileUploader({
 
 
             {/* Upload Button */}
-            {canUploadMore && (
+            {canUploadMore && !hideUploadButton && (
                 <div
                     className={`w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed ${isDragging ? 'border-[#007eff] bg-zinc-700/90' : 'border-zinc-700/50 hover:border-zinc-700/50'} flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
