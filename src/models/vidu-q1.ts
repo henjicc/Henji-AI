@@ -11,20 +11,28 @@ export const viduQ1Params: ParamDef[] = [
         defaultValue: 'text-image-to-video',
         // 根据上传的图片数量自动切换模式
         autoSwitch: {
+            // 只监听 uploadedImages 的变化，不监听模式本身的变化
+            watchKeys: ['uploadedImages'],
             condition: (values) => {
-                const { uploadedImages } = values
+                const { uploadedImages, ppioViduQ1Mode } = values
                 const count = uploadedImages?.length || 0
-                // 根据图片数量判断应该切换到哪个模式
-                if (count === 0) return values.ppioViduQ1Mode !== 'text-image-to-video'
-                if (count === 1) return values.ppioViduQ1Mode !== 'text-image-to-video'
-                if (count === 2) return values.ppioViduQ1Mode !== 'start-end-frame'
-                if (count >= 3) return values.ppioViduQ1Mode !== 'reference-to-video'
-                return false
+
+                // 计算目标模式
+                let targetMode: string
+                if (count === 0 || count === 1) {
+                    targetMode = 'text-image-to-video'
+                } else if (count === 2) {
+                    targetMode = 'start-end-frame'
+                } else {
+                    targetMode = 'reference-to-video'
+                }
+
+                // 只有当目标模式与当前模式不同时才切换
+                return ppioViduQ1Mode !== targetMode
             },
             value: (values: any) => {
                 const count = values.uploadedImages?.length || 0
-                if (count === 0) return 'text-image-to-video'
-                if (count === 1) return 'text-image-to-video'
+                if (count === 0 || count === 1) return 'text-image-to-video'
                 if (count === 2) return 'start-end-frame'
                 return 'reference-to-video'
             }

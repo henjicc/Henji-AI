@@ -1293,9 +1293,17 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
       logInfo('[MediaGenerator] Save - Final UI params:', originalUIParams)
       logInfo('[MediaGenerator] Save - Final options keys:', Object.keys({ ...options, ...originalUIParams }))
+      logInfo('[MediaGenerator] Save - options.images length:', options.images?.length)
+      logInfo('[MediaGenerator] Save - options.images:', options.images)
 
       // 将原始 UI 参数合并到 options 中
-      const finalOptions = { ...options, ...originalUIParams }
+      // 重要：保护 images、uploadedFilePaths、uploadedVideos、uploadedVideoFilePaths 字段不被覆盖
+      // 这些字段在 buildGenerateOptions 中已经被正确处理（包括首尾帧模式的2张图片）
+      const { images: _images, uploadedFilePaths: _paths, uploadedVideos: _videos, uploadedVideoFilePaths: _videoPaths, ...safeUIParams } = originalUIParams
+      const finalOptions = { ...options, ...safeUIParams }
+
+      logInfo('[MediaGenerator] Save - finalOptions.images length:', finalOptions.images?.length)
+      logInfo('[MediaGenerator] Save - finalOptions.images:', finalOptions.images)
 
       let finalInput = state.input
       // PPIO Seedream 4.0: 使用 maxImages

@@ -10,10 +10,11 @@ export const falAiViduQ2Params: ParamDef[] = [
         label: '模式',
         defaultValue: 'text-to-video',
         // 智能切换模式：根据上传的图片/视频数量自动切换
-        // 注意：不要将 viduQ2Mode 本身作为切换条件，避免无限循环
         autoSwitch: {
+            // 只监听 uploadedImages 和 uploadedVideos 的变化，不监听模式本身的变化
+            watchKeys: ['uploadedImages', 'uploadedVideos'],
             condition: (values) => {
-                const { uploadedImages, uploadedVideos, viduQ2Mode } = values
+                const { uploadedImages, uploadedVideos, falViduQ2Mode } = values
                 const imageCount = uploadedImages?.length || 0
                 const videoCount = uploadedVideos?.length || 0
 
@@ -30,7 +31,7 @@ export const falAiViduQ2Params: ParamDef[] = [
                 }
 
                 // 只有当目标模式与当前模式不同时才切换
-                return viduQ2Mode !== targetMode
+                return falViduQ2Mode !== targetMode
             },
             value: (values: any) => {
                 const imageCount = values.uploadedImages?.length || 0

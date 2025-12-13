@@ -2098,6 +2098,8 @@ const App: React.FC = () => {
           prompt: t.prompt,
           model: t.model,
           provider: t.provider, // 保存供应商信息
+          images: t.images, // 保存上传的图片缩略图（用于历史记录显示）
+          videos: t.videos, // 保存上传的视频缩略图（用于历史记录显示）
           size: t.size,
           dimensions: t.dimensions, // 保存实际媒体尺寸
           duration: t.duration, // 保存实际媒体时长

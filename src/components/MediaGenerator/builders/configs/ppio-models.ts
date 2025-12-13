@@ -202,6 +202,7 @@ export const viduQ1Config: ModelConfig = {
       // PPIO 特殊的图片处理逻辑
       if (context.uploadedImages.length > 0) {
         const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const { logInfo } = await import('@/utils/errorLogger')
         const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
 
         const mode = context.params.ppioViduQ1Mode
@@ -212,8 +213,14 @@ export const viduQ1Config: ModelConfig = {
         if (mode === 'start-end-frame') maxImages = 2
         if (mode === 'reference-to-video') maxImages = 7
 
+        logInfo('[Vidu Q1 afterBuild] mode:', mode)
+        logInfo('[Vidu Q1 afterBuild] maxImages:', maxImages)
+        logInfo('[Vidu Q1 afterBuild] context.uploadedImages.length:', context.uploadedImages.length)
+
         const images = context.uploadedImages.slice(0, maxImages)
         options.images = images
+
+        logInfo('[Vidu Q1 afterBuild] options.images.length after set:', options.images.length)
 
         for (let i = 0; i < images.length; i++) {
           if (uploadedFilePaths[i]) {
