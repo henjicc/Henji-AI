@@ -34,7 +34,8 @@ export const kieSeedream45Params: ParamDef[] = [
     // 自动切换：上传图片时切换到智能，删除图片时恢复为 1:1
     autoSwitch: {
       condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
-      value: 'smart'
+      value: 'smart',
+      watchKeys: ['uploadedImages']  // 只监听图片数量变化，避免用户手动选择比例时被强制切换
     },
     options: [
       { value: 'smart', label: '智能' },

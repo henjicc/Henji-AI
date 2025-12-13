@@ -30,7 +30,8 @@ export const falAiLtx2Params: ParamDef[] = [
           return 'image-to-video'
         }
         return 'text-to-video'
-      }
+      },
+      watchKeys: ['uploadedImages', 'uploadedVideos']  // 只监听媒体变化，避免用户手动选择模式时被强制切换
     },
     options: [
       { value: 'text-to-video', label: '文生视频' },

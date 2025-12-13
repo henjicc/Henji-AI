@@ -38,7 +38,8 @@ export const falAiKlingImageO1Params: ParamDef[] = [
     // 当上传图片时自动切换到 auto
     autoSwitch: {
       condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
-      value: 'auto'
+      value: 'auto',
+      watchKeys: ['uploadedImages']  // 只监听图片数量变化，避免用户手动选择比例时被强制切换
     },
     options: [
       { value: 'auto', label: '智能' },

@@ -262,7 +262,8 @@ export const modelscopeCustomParams: ParamDef[] = [
         // 只要是图片编辑模型就切换到智能模式
         return supportsImageEditing
       },
-      value: 'smart'
+      value: 'smart',
+      watchKeys: ['modelscopeCustomModel']  // 只监听模型变化，避免用户手动选择比例时被强制切换
     }
   },
   {

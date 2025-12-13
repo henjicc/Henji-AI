@@ -87,7 +87,8 @@ export const falAiViduQ2Params: ParamDef[] = [
                 // 图生视频模式不需要切换，因为它不显示比例选择器
                 return mode === 'reference-to-video' && imageCount > 0
             },
-            value: 'smart'
+            value: 'smart',
+            watchKeys: ['falViduQ2Mode', 'uploadedImages']  // 只监听模式和图片变化，避免用户手动选择比例时被强制切换
         },
         // 根据模式动态生成选项
         options: (values) => {

@@ -49,7 +49,8 @@ export const falAiVeo31Params: ParamDef[] = [
         // 当上传图片时自动切换到智能选项
         autoSwitch: {
             condition: (values) => values.uploadedImages && values.uploadedImages.length > 0,
-            value: 'smart'
+            value: 'smart',
+            watchKeys: ['uploadedImages']  // 只监听图片数量变化，避免用户手动选择比例时被强制切换
         },
         // 根据模式动态生成选项
         options: (values) => {

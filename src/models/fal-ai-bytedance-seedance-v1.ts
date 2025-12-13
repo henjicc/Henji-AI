@@ -69,7 +69,8 @@ export const falAiBytedanceSeedanceV1Params: ParamDef[] = [
         // 图生视频或参考生视频模式下，自动切换到智能
         return mode === 'image-to-video' || mode === 'reference-to-video'
       },
-      value: 'smart'
+      value: 'smart',
+      watchKeys: ['falSeedanceV1Mode']  // 只监听模式变化，避免用户手动选择比例时被强制切换
     },
     // 根据模式和版本动态生成选项
     options: (values) => {
