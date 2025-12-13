@@ -49,7 +49,8 @@
     "shortDescription": "聚合多家AI供应商，一站式生成图片、视频和音频的客户端",
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.13"
+      "minimumSystemVersion": "10.13",
+      "infoPlist": "./Info.plist"
     },
     "windows": {
       "wix": {
