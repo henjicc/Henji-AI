@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { providers } from '@/config/providers'
 import ParamRow from '@/components/ui/ParamRow'
 import PanelTrigger from '@/components/ui/PanelTrigger'
@@ -44,6 +44,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 }) => {
   // 使用统一的状态管理 hook
   const state = useMediaGeneratorState()
+
+  // 追踪模型可见性变化，用于强制重新渲染模型选择面板
+  const [modelVisibilityVersion, setModelVisibilityVersion] = useState(0)
+
+  // 监听模型可见性变化事件
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setModelVisibilityVersion(v => v + 1)
+    }
+    window.addEventListener('modelVisibilityChanged', handleVisibilityChange)
+    return () => {
+      window.removeEventListener('modelVisibilityChanged', handleVisibilityChange)
+    }
+  }, [])
 
   // 使用图片上传 hook
   const imageUpload = useImageUpload(
@@ -1261,6 +1275,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       <ParamRow className="mb-4">
         {/* 模型选择器 */}
         <PanelTrigger
+          key={`model-selector-${modelVisibilityVersion}`}
           label="模型"
           display={`${currentProvider?.name}_${currentModel?.name || '选择'}`}
           className="w-auto min-w-[180px] flex-shrink-0"
