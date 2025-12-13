@@ -25,6 +25,9 @@ import TestModePanel from './components/TestModePanel'
 import TestModeParamsDisplay from './components/TestModeParamsDisplay'
 import { shouldSkipRequest, logRequestParams } from './utils/testMode'
 import { logError, logWarning, logInfo } from './utils/errorLogger'
+import { shouldCheckForUpdates, updateLastCheckTime, isVersionIgnored } from './utils/updateConfig'
+import { checkForUpdates, getCurrentVersion } from './services/updateChecker'
+import UpdateDialog from './components/UpdateDialog'
 
 /**
  * 格式化模型显示名称
@@ -163,6 +166,10 @@ const App: React.FC = () => {
   // 图片拖动状态 - 用于动态调整底部面板 z-index
   const [isImageDragging, setIsImageDragging] = useState(false)
 
+  // 更新检测相关状态
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false)
+  const [updateReleaseInfo, setUpdateReleaseInfo] = useState<any>(null)
+
   // 数据迁移 - 在应用启动时执行一次
   useEffect(() => {
     migrateAllData()
@@ -181,6 +188,49 @@ const App: React.FC = () => {
       }
     }
     init()
+  }, [])
+
+  // 应用启动时检查更新
+  useEffect(() => {
+    const checkUpdate = async () => {
+      // 检查是否应该进行更新检测
+      if (!shouldCheckForUpdates()) {
+        return
+      }
+
+      try {
+        logInfo('[App]', '开始检查更新...')
+        const result = await checkForUpdates()
+
+        // 更新最后检查时间
+        updateLastCheckTime()
+
+        if (result.hasUpdate && result.releaseInfo) {
+          const latestVersion = result.latestVersion || ''
+
+          // 检查该版本是否被用户忽略
+          if (isVersionIgnored(latestVersion)) {
+            logInfo('[App]', `版本 ${latestVersion} 已被用户忽略`)
+            return
+          }
+
+          logInfo('[App]', `发现新版本: ${latestVersion}`)
+          setUpdateReleaseInfo(result.releaseInfo)
+          setShowUpdateDialog(true)
+        } else {
+          logInfo('[App]', '当前已是最新版本')
+        }
+      } catch (error) {
+        logError('[App] 检查更新失败:', error)
+      }
+    }
+
+    // 延迟 2 秒后检查更新，避免影响应用启动速度
+    const timer = setTimeout(() => {
+      checkUpdate()
+    }, 2000)
+
+    return () => clearTimeout(timer)
   }, [])
 
   // 监听数据路径变更事件
@@ -3569,6 +3619,15 @@ const App: React.FC = () => {
         isOpen={isTestPanelOpen}
         onClose={() => setIsTestPanelOpen(false)}
       />
+
+      {/* 更新提示对话框 */}
+      {showUpdateDialog && updateReleaseInfo && (
+        <UpdateDialog
+          releaseInfo={updateReleaseInfo}
+          currentVersion={getCurrentVersion()}
+          onClose={() => setShowUpdateDialog(false)}
+        />
+      )}
     </div >
   )
 }

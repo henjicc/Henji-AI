@@ -8,6 +8,9 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { getDataRoot, getDefaultDataRoot, setCustomDataRoot, resetToDefaultDataRoot, validateDirectory, hasExistingData, migrateData } from '../utils/dataPath'
 import { path } from '@tauri-apps/api'
 import { logError } from '../utils/errorLogger'
+import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency, clearIgnoredVersions, getFrequencyLabel } from '../utils/updateConfig'
+import type { UpdateConfig } from '../utils/updateConfig'
+import { checkForUpdates, getCurrentVersion } from '../services/updateChecker'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -35,6 +38,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [quickDownloadPath, setQuickDownloadPath] = useState('')
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
+
+  // 更新检测相关状态
+  const [updateEnabled, setUpdateEnabledState] = useState(true)
+  const [updateFrequency, setUpdateFrequencyState] = useState<UpdateConfig['frequency']>('startup')
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
 
   // 自定义数据目录相关状态
   const [customDataPath, setCustomDataPath] = useState('')
@@ -108,6 +116,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedQuickDownloadPath = localStorage.getItem('quick_download_path') || ''
     setQuickDownloadPath(savedQuickDownloadPath)
+
+    // 加载更新检测配置
+    const updateConfig = getUpdateConfig()
+    setUpdateEnabledState(updateConfig.enabled)
+    setUpdateFrequencyState(updateConfig.frequency)
 
     // 加载当前数据路径
     const loadDataPath = async () => {
@@ -237,6 +250,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const handleQuickDownloadPathChange = (value: string) => {
     setQuickDownloadPath(value)
     localStorage.setItem('quick_download_path', value)
+  }
+
+  // 实时保存更新检测启用设置
+  const handleUpdateEnabledChange = (value: boolean) => {
+    setUpdateEnabledState(value)
+    setUpdateEnabled(value)
+  }
+
+  // 实时保存更新检测频率
+  const handleUpdateFrequencyChange = (value: UpdateConfig['frequency']) => {
+    setUpdateFrequencyState(value)
+    setUpdateFrequency(value)
+  }
+
+  // 手动检查更新
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true)
+    try {
+      const result = await checkForUpdates()
+      if (result.hasUpdate && result.releaseInfo) {
+        showAlert(`发现新版本 ${result.latestVersion}！请前往 GitHub 下载。`, 'success')
+        // 打开 GitHub Release 页面
+        await open(result.releaseInfo.htmlUrl)
+      } else {
+        showAlert('当前已是最新版本', 'success')
+      }
+    } catch (error) {
+      showAlert('检查更新失败，请稍后重试', 'error')
+      logError('检查更新失败:', error)
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }
+
+  // 清除忽略的版本
+  const handleClearIgnoredVersions = () => {
+    clearIgnoredVersions()
+    showAlert('已清除所有忽略的版本', 'success')
   }
 
   // 选择快速下载路径
@@ -572,6 +623,75 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         </button>
                       </div>
                       <p className="mt-2 text-xs text-zinc-500">所有快速下载的文件将保存到此目录</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">更新检测</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30 space-y-5">
+                    <div>
+                      <Toggle
+                        label="启用更新检测"
+                        checked={updateEnabled}
+                        onChange={handleUpdateEnabledChange}
+                        className="w-full"
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">自动检查应用是否有新版本可用</p>
+                    </div>
+
+                    <div className={`transition-opacity duration-300 ${!updateEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <label className="block text-sm font-medium mb-2 text-zinc-300">检测频率</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(['startup', 'daily', 'weekly', 'never'] as const).map((freq) => (
+                          <button
+                            key={freq}
+                            onClick={() => handleUpdateFrequencyChange(freq)}
+                            disabled={!updateEnabled}
+                            className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
+                              updateFrequency === freq
+                                ? 'bg-[#007eff] text-white'
+                                : 'bg-zinc-700/30 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {getFrequencyLabel(freq)}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs text-zinc-500">选择自动检查更新的频率</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-zinc-700/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-zinc-300 font-medium">当前版本</p>
+                          <p className="text-xs text-zinc-500 mt-1 font-mono">{getCurrentVersion()}</p>
+                        </div>
+                        <button
+                          onClick={handleCheckUpdate}
+                          disabled={isCheckingUpdate}
+                          className="px-4 py-2 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {isCheckingUpdate ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              检查中...
+                            </>
+                          ) : (
+                            '检查更新'
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleClearIgnoredVersions}
+                        className="w-full px-4 py-2 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-300 rounded-lg transition-all duration-300 text-sm"
+                      >
+                        清除忽略的版本
+                      </button>
+                      <p className="text-xs text-zinc-500">清除后将重新提示所有被忽略的版本更新</p>
                     </div>
                   </div>
                 </div>
