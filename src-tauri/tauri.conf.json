@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "痕迹AI",
+  "productName": "Henji-AI",
   "version": "0.1.0",
   "identifier": "com.henji.ai",
   "build": {
