@@ -45,19 +45,67 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 使用统一的状态管理 hook
   const state = useMediaGeneratorState()
 
+  // 获取当前选择的供应商和模型（需要在 useEffect 之前定义）
+  const currentProvider = providers.find(p => p.id === state.selectedProvider)
+  const currentModel = currentProvider?.models.find(m => m.id === state.selectedModel)
+
   // 追踪模型可见性变化，用于强制重新渲染模型选择面板
   const [modelVisibilityVersion, setModelVisibilityVersion] = useState(0)
 
   // 监听模型可见性变化事件
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
+      // 更新版本号，强制重新渲染模型选择面板
       setModelVisibilityVersion(v => v + 1)
+
+      // 立即检查当前选中的模型是否还可见
+      const { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } = await import('@/config/providers')
+
+      const hiddenProviders = getHiddenProviders()
+      const hiddenTypes = getHiddenTypes()
+      const hiddenModels = getHiddenModels()
+
+      // 检查当前选中的模型是否被隐藏
+      const currentModelKey = `${state.selectedProvider}-${state.selectedModel}`
+      const isProviderHidden = hiddenProviders.has(state.selectedProvider)
+
+      // 获取当前模型的类型
+      const currentProvider = providers.find(p => p.id === state.selectedProvider)
+      const currentModel = currentProvider?.models.find(m => m.id === state.selectedModel)
+      const isTypeHidden = currentModel && hiddenTypes.has(currentModel.type)
+      const isModelHidden = hiddenModels.has(currentModelKey)
+
+      if (isProviderHidden || isTypeHidden || isModelHidden) {
+        // 当前模型被隐藏，切换到第一个可见的模型
+        const visibleProviders = getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels)
+
+        if (visibleProviders.length > 0 && visibleProviders[0].models.length > 0) {
+          const firstProvider = visibleProviders[0]
+          const firstModel = firstProvider.models[0]
+
+          // 切换到第一个可见的模型
+          state.setSelectedProvider(firstProvider.id)
+          state.setSelectedModel(firstModel.id)
+
+          // 加载新模型的默认参数
+          const defaultValues = getModelDefaultValues(firstModel.id)
+          if (defaultValues) {
+            Object.entries(defaultValues).forEach(([key, value]) => {
+              const setter = (state as any)[`set${key.charAt(0).toUpperCase()}${key.slice(1)}`]
+              if (setter && typeof setter === 'function') {
+                setter(value)
+              }
+            })
+          }
+        }
+      }
     }
+
     window.addEventListener('modelVisibilityChanged', handleVisibilityChange)
     return () => {
       window.removeEventListener('modelVisibilityChanged', handleVisibilityChange)
     }
-  }, [])
+  }, [state.selectedProvider, state.selectedModel, state])
 
   // 使用图片上传 hook
   const imageUpload = useImageUpload(
@@ -74,10 +122,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.uploadedVideoFiles,
     state.setUploadedVideoFiles
   )
-
-  // 获取当前选择的供应商和模型
-  const currentProvider = providers.find(p => p.id === state.selectedProvider)
-  const currentModel = currentProvider?.models.find(m => m.id === state.selectedModel)
 
   // 预设参数映射（用于预设功能和重新编辑功能）
   const setterMap = useMemo(() => createPresetSetterMap({
