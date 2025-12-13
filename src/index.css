@@ -615,7 +615,8 @@ input[type="number"] {
 /* Context Menu Styles */
 .context-menu {
   position: fixed;
-  background: rgba(19, 19, 19, 0.9);
+  background: rgba(19, 19, 19, 0.75);
+  -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
   border: 1px solid rgba(113, 113, 122, 0.5);
   border-radius: 0.75rem;

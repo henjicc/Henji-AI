@@ -35,26 +35,27 @@ export const useContextMenu = (): UseContextMenuReturn => {
         setMenuItems(items)
 
         // 计算菜单高度（估算）
-        const itemHeight = 36 // 每个菜单项的大概高度
-        const padding = 16 // 菜单的上下 padding
+        const itemHeight = 40 // 每个菜单项的大概高度
+        const padding = 8 // 菜单的上下 padding
         const estimatedHeight = items.length * itemHeight + padding
+        const menuWidth = menuRef.current.width
 
         // 获取视口尺寸
         const viewportWidth = window.innerWidth
         const viewportHeight = window.innerHeight
 
-        // 计算菜单位置，确保不会超出视口
+        // 使用 clientX/clientY（相对于视口的坐标）
         let x = e.clientX
         let y = e.clientY
 
-        // 检查右边界
-        if (x + menuRef.current.width > viewportWidth) {
-            x = viewportWidth - menuRef.current.width - 10
+        // 如果菜单会超出右边界，向左偏移
+        if (x + menuWidth > viewportWidth - 10) {
+            x = viewportWidth - menuWidth - 10
         }
 
-        // 检查底部边界
-        if (y + estimatedHeight > viewportHeight) {
-            y = viewportHeight - estimatedHeight - 10
+        // 如果菜单会超出底部边界，向上显示
+        if (y + estimatedHeight > viewportHeight - 10) {
+            y = y - estimatedHeight
         }
 
         // 确保不会超出左边界和顶部
@@ -73,24 +74,31 @@ export const useContextMenu = (): UseContextMenuReturn => {
     useEffect(() => {
         if (!menuVisible) return
 
-        const handleClick = () => {
-            hideMenu()
+        const handleClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement
+            // 如果点击的不是菜单内部，关闭菜单
+            if (!target.closest('[data-context-menu]')) {
+                hideMenu()
+            }
         }
 
-        const handleContextMenu = () => {
+        const handleContextMenu = (e: MouseEvent) => {
+            const target = e.target as HTMLElement
             // 如果右键点击的不是菜单本身，关闭菜单
-            hideMenu()
+            if (!target.closest('[data-context-menu]')) {
+                hideMenu()
+            }
         }
 
         // 延迟添加事件监听器，避免立即触发
         const timer = setTimeout(() => {
-            document.addEventListener('click', handleClick)
+            document.addEventListener('mousedown', handleClick)
             document.addEventListener('contextmenu', handleContextMenu)
-        }, 0)
+        }, 10)
 
         return () => {
             clearTimeout(timer)
-            document.removeEventListener('click', handleClick)
+            document.removeEventListener('mousedown', handleClick)
             document.removeEventListener('contextmenu', handleContextMenu)
         }
     }, [menuVisible, hideMenu])

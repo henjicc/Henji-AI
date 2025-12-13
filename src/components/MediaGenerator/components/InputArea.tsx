@@ -354,6 +354,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           )}
         </button>
       </div>
+
     </div>
   )
 }
