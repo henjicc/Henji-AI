@@ -52,7 +52,7 @@ function compareVersions(v1: string, v2: string): boolean {
  */
 export function getCurrentVersion(): string {
   // 从 package.json 获取版本号
-  return '0.1.0'
+  return '0.1.1'
 }
 
 /**

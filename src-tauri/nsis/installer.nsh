@@ -4,7 +4,7 @@
 
 # 自定义变量设置
 !define PRODUCT_NAME "痕迹AI"
-!define PRODUCT_VERSION "0.1.0"
+!define PRODUCT_VERSION "0.1.1"
 !define PRODUCT_PUBLISHER "痕迹AI开发团队"
 !define PRODUCT_URL "https://henji.ai"
 !define PRODUCT_DESCRIPTION "使用AI技术生成图片、视频和音频的桌面应用"

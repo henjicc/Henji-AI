@@ -1,6 +1,6 @@
 [package]
 name = "henji-ai"
-version = "0.1.0"
+version = "0.1.1"
 description = "一个聚合多家AI供应商，一站式生成图片、视频和音频的客户端"
 authors = ["henjicc"]
 license = "Apache-2.0"
