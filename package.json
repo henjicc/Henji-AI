@@ -15,7 +15,8 @@
     "tauri:build": "call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri build",
     "tauri:build:ci": "tauri build",
     "tauri:dev:mac": "tauri dev",
-    "tauri:build:mac": "tauri build"
+    "tauri:build:mac": "tauri build",
+    "release": "node scripts/release.cjs"
   },
   "dependencies": {
     "@fal-ai/client": "^1.7.2",
