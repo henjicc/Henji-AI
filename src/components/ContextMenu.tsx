@@ -36,6 +36,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
     return (
         <div
             ref={menuRef}
+            data-context-menu
             className="context-menu animate-scale-in"
             style={{
                 left: `${position.x}px`,
@@ -46,10 +47,14 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
                 <React.Fragment key={item.id}>
                     <div
                         className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
-                        onClick={() => {
+                        onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
                             if (!item.disabled) {
-                                item.onClick()
                                 onClose()
+                                // 等待一小段时间确保菜单关闭动画完成，然后执行操作
+                                await new Promise(resolve => setTimeout(resolve, 50))
+                                await item.onClick()
                             }
                         }}
                     >
