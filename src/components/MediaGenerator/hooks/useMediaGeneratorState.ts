@@ -87,6 +87,13 @@ export const useMediaGeneratorState = () => {
   // 模型特定参数 - Fal Kling Video O1
   const [falKlingVideoO1VideoDuration, setFalKlingVideoO1VideoDuration] = useState(5)
 
+  // 模型特定参数 - PPIO Kling O1
+  const [ppioKlingO1Mode, setPpioKlingO1Mode] = useState<'text-image-to-video' | 'start-end-frame' | 'reference-to-video' | 'video-edit'>('text-image-to-video')
+  const [ppioKlingO1VideoDuration, setPpioKlingO1VideoDuration] = useState(5)
+  const [ppioKlingO1AspectRatio, setPpioKlingO1AspectRatio] = useState('16:9')
+  const [ppioKlingO1KeepAudio, setPpioKlingO1KeepAudio] = useState(true)
+  const [ppioKlingO1FastMode, setPpioKlingO1FastMode] = useState(false)
+
   // Kling 2.5 Turbo 参数（派欧云）
   const [ppioKling25CfgScale, setPpioKling25CfgScale] = useState(0.5)
 
@@ -425,6 +432,13 @@ export const useMediaGeneratorState = () => {
     falPixverse55VideoDuration, setFalPixverse55VideoDuration,
     falKlingV26ProVideoDuration, setFalKlingV26ProVideoDuration,
     falKlingVideoO1VideoDuration, setFalKlingVideoO1VideoDuration,
+
+    // PPIO Kling O1
+    ppioKlingO1Mode, setPpioKlingO1Mode,
+    ppioKlingO1VideoDuration, setPpioKlingO1VideoDuration,
+    ppioKlingO1AspectRatio, setPpioKlingO1AspectRatio,
+    ppioKlingO1KeepAudio, setPpioKlingO1KeepAudio,
+    ppioKlingO1FastMode, setPpioKlingO1FastMode,
 
     // Z-Image-Turbo
     falZImageTurboNumInferenceSteps, setFalZImageTurboNumInferenceSteps,

@@ -1,5 +1,6 @@
 import { seedream40Route } from './seedream'
 import { klingTurbo25Route } from './kling-2.5-turbo'
+import { klingO1Route } from './kling-o1'
 import { minimaxHailuo23Route } from './minimax-hailuo-2.3'
 import { minimaxHailuo02Route } from './minimax-hailuo-02'
 import { viduQ1Route } from './vidu'
@@ -13,9 +14,9 @@ import { minimaxSpeech26Route } from './minimax-speech-2.6'
  */
 export interface ModelRoute {
   matches: (modelId: string) => boolean
-  buildImageRequest?: (params: any) => { endpoint: string; requestData: any }
-  buildVideoRequest?: (params: any) => { endpoint: string; requestData: any }
-  buildAudioRequest?: (params: any) => { endpoint: string; requestData: any }
+  buildImageRequest?: (params: any) => { endpoint: string; requestData: any } | Promise<{ endpoint: string; requestData: any }>
+  buildVideoRequest?: (params: any) => { endpoint: string; requestData: any } | Promise<{ endpoint: string; requestData: any }>
+  buildAudioRequest?: (params: any) => { endpoint: string; requestData: any } | Promise<{ endpoint: string; requestData: any }>
 }
 
 /**
@@ -24,6 +25,7 @@ export interface ModelRoute {
 export const ppioModelRoutes: ModelRoute[] = [
   seedream40Route,
   klingTurbo25Route,
+  klingO1Route,
   minimaxHailuo23Route,
   minimaxHailuo02Route,
   viduQ1Route,

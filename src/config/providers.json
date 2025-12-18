@@ -50,6 +50,22 @@
           }
         },
         {
+          "id": "kling-o1",
+          "name": "可灵 O1",
+          "type": "video",
+          "description": "支持文生视频、图生视频、参考生视频、视频编辑四种模式",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "参考生视频",
+            "视频编辑"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 40
+          }
+        },
+        {
           "id": "minimax-hailuo-2.3",
           "name": "海螺 Hailuo 2.3",
           "type": "video",

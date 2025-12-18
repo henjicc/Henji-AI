@@ -118,18 +118,18 @@ export async function handleVideoUpload(
   config: VideoUploadConfig,
   context: BuildContext
 ): Promise<void> {
-  if (!config.enabled || !context.uploadedVideos || context.uploadedVideos.length === 0) {
+  // 检查是否有视频文件
+  const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
+
+  if (!config.enabled || uploadedVideoFiles.length === 0) {
     return
   }
 
   const paramKey = config.paramKey || 'video_url'
-  const video = context.uploadedVideos[0]
+  const videoFile = uploadedVideoFiles[0]
 
-  if (config.convertToBlob) {
-    options[paramKey] = await dataURLtoBlob(video)
-  } else {
-    options[paramKey] = video
-  }
+  // 直接传递 File 对象
+  options[paramKey] = videoFile
 }
 
 /**

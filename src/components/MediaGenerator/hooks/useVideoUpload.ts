@@ -18,7 +18,8 @@ export const useVideoUpload = (
   _uploadedVideos: string[],
   setUploadedVideos: (videos: string[]) => void,
   _uploadedVideoFiles: File[],
-  setUploadedVideoFiles: (files: File[]) => void
+  setUploadedVideoFiles: (files: File[]) => void,
+  onError?: (title: string, message: string) => void
 ) => {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
 
@@ -58,7 +59,9 @@ export const useVideoUpload = (
       // 验证视频
       const validation = validateVideo(metadata)
       if (!validation.valid) {
-        alert(`视频验证失败：${validation.errors.join(', ')}`)
+        if (onError) {
+          onError('视频验证失败', validation.errors.join(', '))
+        }
         URL.revokeObjectURL(videoElement.src)
         setIsProcessingVideo(false)
         return
@@ -81,7 +84,9 @@ export const useVideoUpload = (
       logInfo('', '[useVideoUpload] 视频上传完成（未读取内容，节省内存）')
     } catch (error) {
       logError('[useVideoUpload] 视频处理失败:', error)
-      alert('视频处理失败，请确保视频格式正确')
+      if (onError) {
+        onError('视频处理失败', '请确保视频格式正确')
+      }
       setIsProcessingVideo(false)
     }
   }, [setUploadedVideos, setUploadedVideoFiles])

@@ -25,7 +25,7 @@ function ensureConfigsRegistered() {
 export async function buildGenerateOptions(params: BuildOptionsParams): Promise<any> {
   ensureConfigsRegistered()
 
-  const { selectedModel, uploadedImages, uploadedVideos } = params
+  const { selectedModel, uploadedImages, uploadedVideos, fileOrder } = params
 
   // 检查是否有配置
   const config = optionsBuilder.getConfig(selectedModel)
@@ -39,13 +39,26 @@ export async function buildGenerateOptions(params: BuildOptionsParams): Promise<
 
   logInfo('', `[OptionsBuilder] Building options for ${selectedModel} using configuration-driven architecture`)
 
+  // 如果有 fileOrder，根据顺序重新排列图片和视频
+  let orderedImages = uploadedImages || []
+  let orderedVideos = uploadedVideos || []
+
+  if (fileOrder && fileOrder.length > 0) {
+    // 提取视频和图片，保持 fileOrder 中的相对顺序
+    const videoItems = fileOrder.filter(f => f.type === 'video')
+    const imageItems = fileOrder.filter(f => f.type === 'image')
+
+    orderedVideos = videoItems.map(item => uploadedVideos![item.index]).filter(Boolean)
+    orderedImages = imageItems.map(item => uploadedImages![item.index]).filter(Boolean)
+  }
+
   try {
     // 将参数格式转换为 BuildContext 格式
     const context: BuildContext = {
       selectedModel,
       params: convertParamsToContext(params),
-      uploadedImages: uploadedImages || [],
-      uploadedVideos: uploadedVideos || [],
+      uploadedImages: orderedImages,
+      uploadedVideos: orderedVideos,
       prompt: (params as any).prompt,
       negativePrompt: (params as any).negativePrompt
     }

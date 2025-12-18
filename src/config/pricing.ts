@@ -130,6 +130,14 @@ const PRICES: Record<string, any> = {
         10: 5
     },
 
+    // 视频 - Kling O1
+    KLING_O1: {
+        reference: 1.218,      // 参考生视频 ¥1.218/秒
+        standard: 0.812,       // 文生视频、图生视频 ¥0.812/秒
+        editFast: 0.6525,      // 视频编辑快速模式 ¥0.6525/秒
+        edit: 1.218            // 视频编辑标准模式 ¥1.218/秒
+    },
+
     // 视频 - Minimax Hailuo 2.3
     HAILUO_23: {
         text: {
@@ -831,6 +839,32 @@ export const pricingConfigs: PricingConfig[] = [
         calculator: (params) => {
             const duration = (params.ppioKling25VideoDuration || params.videoDuration || 5) as 5 | 10
             return PRICES.KLING[duration] || PRICES.KLING[5]
+        }
+    },
+    {
+        providerId: 'ppio',
+        modelId: 'kling-o1',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const mode = params.ppioKlingO1Mode || 'text-image-to-video'
+            const duration = params.ppioKlingO1VideoDuration || params.videoDuration || 5
+            const fastMode = params.ppioKlingO1FastMode || false
+
+            let pricePerSecond: number
+
+            if (mode === 'reference-to-video') {
+                // 参考生视频
+                pricePerSecond = PRICES.KLING_O1.reference
+            } else if (mode === 'video-edit') {
+                // 视频编辑
+                pricePerSecond = fastMode ? PRICES.KLING_O1.editFast : PRICES.KLING_O1.edit
+            } else {
+                // text-image-to-video, start-end-frame
+                pricePerSecond = PRICES.KLING_O1.standard
+            }
+
+            return pricePerSecond * duration
         }
     },
     {

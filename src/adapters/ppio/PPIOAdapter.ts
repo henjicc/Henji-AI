@@ -44,7 +44,7 @@ export class PPIOAdapter extends BaseAdapter {
       }
 
       // 2. 构建请求
-      const { endpoint, requestData } = route.buildImageRequest(params)
+      const { endpoint, requestData } = await route.buildImageRequest(params)
 
       // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)
@@ -68,7 +68,7 @@ export class PPIOAdapter extends BaseAdapter {
       }
 
       // 2. 构建请求
-      const { endpoint, requestData } = route.buildVideoRequest(params)
+      const { endpoint, requestData } = await route.buildVideoRequest(params)
 
       logInfo('[PPIOAdapter] API端点:', endpoint)
       logInfo('[PPIOAdapter] 请求数据:', requestData)
@@ -113,7 +113,7 @@ export class PPIOAdapter extends BaseAdapter {
       }
 
       // 2. 构建请求
-      const { endpoint, requestData } = route.buildAudioRequest(params)
+      const { endpoint, requestData } = await route.buildAudioRequest(params)
 
       logInfo('[PPIOAdapter] generateAudio 请求', { endpoint, requestData })
 

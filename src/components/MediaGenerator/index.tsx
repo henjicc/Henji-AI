@@ -16,7 +16,8 @@ import { calculateSmartResolution, calculateSeedreamSmartResolution, calculatePP
 import { getMaxImageCount } from './utils/constants'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
-import InputArea from './components/InputArea'
+import InputArea, { FileOrderItem } from './components/InputArea'
+import AlertDialog from '../ui/AlertDialog'
 import { logError, logInfo } from '../../utils/errorLogger'
 
 interface MediaGeneratorProps {
@@ -51,6 +52,27 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
   // 追踪模型可见性变化，用于强制重新渲染模型选择面板
   const [modelVisibilityVersion, setModelVisibilityVersion] = useState(0)
+
+  // 混合文件顺序状态（用于支持视频+图片混合排序）
+  const [fileOrder, setFileOrder] = useState<FileOrderItem[]>([])
+
+  // 全局 AlertDialog 状态
+  const [alertDialog, setAlertDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    type: 'info' | 'warning' | 'error'
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'warning'
+  })
+
+  // 显示提示弹窗的函数
+  const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
+    setAlertDialog({ isOpen: true, title, message, type })
+  }
 
   // 监听模型可见性变化事件
   useEffect(() => {
@@ -205,7 +227,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.uploadedVideos,
     state.setUploadedVideos,
     state.uploadedVideoFiles,
-    state.setUploadedVideoFiles
+    state.setUploadedVideoFiles,
+    showAlert
   )
 
   // 预设参数映射（用于预设功能和重新编辑功能）
@@ -246,6 +269,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // 模型特定参数 - 派欧云
     setPpioKling25VideoDuration: state.setPpioKling25VideoDuration,
     setPpioKling25VideoAspectRatio: state.setPpioKling25VideoAspectRatio,
+    setPpioKlingO1Mode: state.setPpioKlingO1Mode,
+    setPpioKlingO1VideoDuration: state.setPpioKlingO1VideoDuration,
+    setPpioKlingO1AspectRatio: state.setPpioKlingO1AspectRatio,
+    setPpioKlingO1KeepAudio: state.setPpioKlingO1KeepAudio,
+    setPpioKlingO1FastMode: state.setPpioKlingO1FastMode,
     setPpioHailuo23VideoDuration: state.setPpioHailuo23VideoDuration,
     setPpioHailuo23VideoResolution: state.setPpioHailuo23VideoResolution,
     setPpioPixverse45VideoAspectRatio: state.setPpioPixverse45VideoAspectRatio,
@@ -890,6 +918,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       ppioViduQ1Bgm: state.setPpioViduQ1Bgm,
       // Kling
       ppioKling25CfgScale: state.setPpioKling25CfgScale,
+      // PPIO Kling O1
+      ppioKlingO1Mode: state.setPpioKlingO1Mode,
+      ppioKlingO1VideoDuration: state.setPpioKlingO1VideoDuration,
+      ppioKlingO1AspectRatio: state.setPpioKlingO1AspectRatio,
+      ppioKlingO1KeepAudio: state.setPpioKlingO1KeepAudio,
+      ppioKlingO1FastMode: state.setPpioKlingO1FastMode,
       // Kling Video O1
       falKlingVideoO1Mode: state.setFalKlingVideoO1Mode,
       falKlingVideoO1AspectRatio: state.setFalKlingVideoO1AspectRatio,
@@ -1105,11 +1139,34 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // 检查 KIE Hailuo 2.3 的必需条件
     if (state.selectedModel === 'kie-hailuo-2-3' || state.selectedModel === 'hailuo-2-3-kie') {
       if (state.uploadedImages.length === 0) {
-        alert('KIE 海螺 2.3 是图生视频模型，必须上传图片才能生成')
+        showAlert('图片必需', 'KIE 海螺 2.3 是图生视频模型，必须上传图片才能生成', 'warning')
         return
       }
       if (!state.input.trim()) {
-        alert('请输入提示词描述期望的视频效果')
+        showAlert('提示词必需', '请输入提示词描述期望的视频效果', 'warning')
+        return
+      }
+    }
+
+    // 检查 PPIO Kling O1 的必需条件
+    if (state.selectedModel === 'kling-o1') {
+      const mode = state.ppioKlingO1Mode || 'text-image-to-video'
+
+      // 首尾帧模式：必须上传2张图片
+      if (mode === 'start-end-frame' && state.uploadedImages.length !== 2) {
+        showAlert('图片必需', '首尾帧模式需要上传2张图片', 'warning')
+        return
+      }
+
+      // 参考生视频模式：必须上传1个视频
+      if (mode === 'reference-to-video' && state.uploadedVideoFiles.length === 0) {
+        showAlert('视频必需', '参考生视频模式需要上传视频才能生成', 'warning')
+        return
+      }
+
+      // 视频编辑模式：必须上传1个视频
+      if (mode === 'video-edit' && state.uploadedVideoFiles.length === 0) {
+        showAlert('视频必需', '视频编辑模式需要上传视频才能生成', 'warning')
         return
       }
     }
@@ -1123,6 +1180,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         setUploadedFilePaths: state.setUploadedFilePaths,
         uploadedVideoFilePaths: state.uploadedVideoFilePaths,
         setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
+        fileOrder, // 传递文件顺序
         selectedResolution: state.selectedResolution,
         resolutionQuality: state.resolutionQuality,
         customWidth: state.customWidth,
@@ -1171,6 +1229,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         ppioViduQ1Bgm: state.ppioViduQ1Bgm,
         ppioViduQ1AspectRatio: state.ppioViduQ1AspectRatio,
         ppioKling25CfgScale: state.ppioKling25CfgScale,
+        // PPIO Kling O1 参数
+        ppioKlingO1Mode: state.ppioKlingO1Mode,
+        ppioKlingO1VideoDuration: state.ppioKlingO1VideoDuration,
+        ppioKlingO1AspectRatio: state.ppioKlingO1AspectRatio,
+        ppioKlingO1KeepAudio: state.ppioKlingO1KeepAudio,
+        ppioKlingO1FastMode: state.ppioKlingO1FastMode,
         ppioHailuo23FastMode: state.ppioHailuo23FastMode,
         ppioHailuo23EnablePromptExpansion: state.ppioHailuo23EnablePromptExpansion,
         ppioPixverse45FastMode: state.ppioPixverse45FastMode,
@@ -1402,7 +1466,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
       onGenerate(finalInput, state.selectedModel, currentModel?.type || 'image', finalOptions)
     } catch (error: any) {
-      alert(error.message)
+      showAlert('生成失败', error.message, 'error')
     }
   }
 
@@ -1470,6 +1534,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         viduQ2Mode={state.falViduQ2Mode}
         hailuo02FastMode={state.falHailuo02FastMode}
         kieSeedanceV3Version={state.kieSeedanceV3Version}
+        ppioKlingO1Mode={state.ppioKlingO1Mode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
@@ -1537,6 +1602,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             }))
           }
         }}
+        fileOrder={fileOrder}
+        onFileOrderChange={setFileOrder}
         onGenerate={handleGenerate}
       />
 
@@ -1774,6 +1841,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           </div>
         </div>
       )}
+
+      {/* 全局 Alert Dialog */}
+      <AlertDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type={alertDialog.type}
+        onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
+      />
     </div>
   )
 }

@@ -52,6 +52,13 @@ export interface PresetSetters {
     // Kling
     setPpioKling25CfgScale: (v: number) => void
 
+    // Kling O1
+    setPpioKlingO1Mode: (v: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video' | 'video-edit') => void
+    setPpioKlingO1VideoDuration: (v: number) => void
+    setPpioKlingO1AspectRatio: (v: string) => void
+    setPpioKlingO1KeepAudio: (v: boolean) => void
+    setPpioKlingO1FastMode: (v: boolean) => void
+
     // Hailuo
     setPpioHailuo23FastMode: (v: boolean) => void
     setPpioHailuo23EnablePromptExpansion: (v: boolean) => void
@@ -303,6 +310,13 @@ export function createPresetSetterMap(
 
         // Kling
         ppioKling25CfgScale: setters.setPpioKling25CfgScale,
+
+        // Kling O1
+        ppioKlingO1Mode: setters.setPpioKlingO1Mode,
+        ppioKlingO1VideoDuration: setters.setPpioKlingO1VideoDuration,
+        ppioKlingO1AspectRatio: setters.setPpioKlingO1AspectRatio,
+        ppioKlingO1KeepAudio: setters.setPpioKlingO1KeepAudio,
+        ppioKlingO1FastMode: setters.setPpioKlingO1FastMode,
 
         // Hailuo
         ppioHailuo23FastMode: setters.setPpioHailuo23FastMode,

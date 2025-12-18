@@ -1,7 +1,16 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import FileUploader from '@/components/ui/FileUploader'
+import AlertDialog from '@/components/ui/AlertDialog'
 import { getMaxImageCount } from '../utils/constants'
 import { logError } from '../../../utils/errorLogger'
+
+/**
+ * 文件顺序项：记录每个位置是视频还是图片，以及在原数组中的索引
+ */
+export interface FileOrderItem {
+  type: 'video' | 'image'
+  index: number
+}
 
 interface InputAreaProps {
   input: string
@@ -21,6 +30,7 @@ interface InputAreaProps {
   viduQ2Mode?: string  // Vidu Q2 模式
   hailuo02FastMode?: boolean  // Hailuo 02 快速模式
   kieSeedanceV3Version?: string  // KIE Seedance V3 版本
+  ppioKlingO1Mode?: string  // PPIO Kling O1 模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -41,6 +51,10 @@ interface InputAreaProps {
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
   onVideoClick?: (videoUrl: string) => void
+
+  // 混合文件顺序（用于支持视频+图片混合排序）
+  fileOrder?: FileOrderItem[]
+  onFileOrderChange?: (order: FileOrderItem[]) => void
 
   // 生成回调
   onGenerate: () => void
@@ -66,6 +80,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   viduQ2Mode,
   hailuo02FastMode,
   kieSeedanceV3Version,
+  ppioKlingO1Mode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -80,8 +95,87 @@ const InputArea: React.FC<InputAreaProps> = ({
   onVideoRemove,
   onVideoReplace,
   onVideoClick,
+  fileOrder,
+  onFileOrderChange,
   onGenerate
 }) => {
+  // 本地文件顺序状态（如果父组件没有提供）
+  const [localFileOrder, setLocalFileOrder] = useState<FileOrderItem[]>([])
+
+  // 使用父组件提供的 fileOrder 或本地状态
+  const currentFileOrder = fileOrder || localFileOrder
+  const setCurrentFileOrder = onFileOrderChange || setLocalFileOrder
+
+  // 提示弹窗状态
+  const [alertDialog, setAlertDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    type: 'info' | 'warning' | 'error'
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'warning'
+  })
+
+  // 显示提示弹窗
+  const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
+    setAlertDialog({ isOpen: true, title, message, type })
+  }
+
+  // 当 uploadedVideos 或 uploadedImages 变化时，重建文件顺序
+  useEffect(() => {
+    // 只在混合上传模式下才需要维护顺序
+    const needsVideoUpload =
+      ((selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
+       (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')) ||
+      (selectedModel === 'kling-o1' &&
+       (ppioKlingO1Mode === 'reference-to-video' || ppioKlingO1Mode === 'video-edit')) ||
+      ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
+       mode === 'retake-video') ||
+      ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
+       viduQ2Mode === 'video-extension')
+
+    if (!needsVideoUpload) {
+      // 非混合模式，清空顺序
+      setCurrentFileOrder([])
+      return
+    }
+
+    // 构建新的文件顺序
+    const newOrder: FileOrderItem[] = []
+
+    // 检查现有顺序中的文件是否还存在
+    const existingVideoIndices = new Set<number>()
+    const existingImageIndices = new Set<number>()
+
+    currentFileOrder.forEach(item => {
+      if (item.type === 'video' && item.index < uploadedVideos.length) {
+        newOrder.push(item)
+        existingVideoIndices.add(item.index)
+      } else if (item.type === 'image' && item.index < uploadedImages.length) {
+        newOrder.push(item)
+        existingImageIndices.add(item.index)
+      }
+    })
+
+    // 添加新上传的视频（不在现有顺序中的）
+    for (let i = 0; i < uploadedVideos.length; i++) {
+      if (!existingVideoIndices.has(i)) {
+        newOrder.push({ type: 'video', index: i })
+      }
+    }
+
+    // 添加新上传的图片（不在现有顺序中的）
+    for (let i = 0; i < uploadedImages.length; i++) {
+      if (!existingImageIndices.has(i)) {
+        newOrder.push({ type: 'image', index: i })
+      }
+    }
+
+    setCurrentFileOrder(newOrder)
+  }, [uploadedVideos.length, uploadedImages.length, selectedModel, klingMode, ppioKlingO1Mode, mode, viduQ2Mode])
   // 计算最大图片数
   const maxImageCount = getMaxImageCount(
     selectedModel,
@@ -154,11 +248,14 @@ const InputArea: React.FC<InputAreaProps> = ({
 
   // 检查是否需要显示视频上传
   // 1. Kling Video O1 的视频编辑和视频参考模式（支持视频+图片）
-  // 2. LTX-2 的视频编辑模式（仅支持视频）
-  // 3. Vidu Q2 的视频延长模式（仅支持视频）
+  // 2. PPIO Kling O1 的参考生视频和视频编辑模式（支持视频+图片）
+  // 3. LTX-2 的视频编辑模式（仅支持视频）
+  // 4. Vidu Q2 的视频延长模式（仅支持视频）
   const needsVideoUpload =
     ((selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
      (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')) ||
+    (selectedModel === 'kling-o1' &&
+     (ppioKlingO1Mode === 'reference-to-video' || ppioKlingO1Mode === 'video-edit')) ||
     ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
      mode === 'retake-video') ||
     ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
@@ -174,76 +271,158 @@ const InputArea: React.FC<InputAreaProps> = ({
     const videoFiles = files.filter(f => f.type.startsWith('video/'))
     const imageFiles = files.filter(f => f.type.startsWith('image/'))
 
-    // 先处理视频（只取第一个）
-    if (videoFiles.length > 0 && onVideoUpload) {
+    // 检查当前已上传的文件数量
+    const currentVideoCount = uploadedVideos.length
+    const currentImageCount = uploadedImages.length
+
+    // 处理视频：只有在没有视频时才能上传
+    if (videoFiles.length > 0 && onVideoUpload && currentVideoCount === 0) {
       onVideoUpload([videoFiles[0]])
+    } else if (videoFiles.length > 0 && currentVideoCount > 0) {
+      // 已有视频，提示用户
+      showAlert('视频数量限制', '最多只能上传1个视频，请先删除现有视频', 'warning')
     }
 
-    // 再处理图片（如果不是只需要视频的模式）
+    // 处理图片：检查是否还有空位
     if (imageFiles.length > 0 && !needsVideoOnly) {
-      onImageUpload(imageFiles)
+      const availableImageSlots = maxImageCount - currentImageCount
+      if (availableImageSlots > 0) {
+        onImageUpload(imageFiles)
+      } else {
+        showAlert('图片数量限制', `最多只能上传${maxImageCount}张图片`, 'warning')
+      }
     }
   }
 
   // 处理混合文件移除
   const handleMixedFileRemove = (index: number) => {
-    // 视频在前，图片在后
-    if (index < uploadedVideos.length) {
-      // 移除视频
-      if (onVideoRemove) {
-        onVideoRemove(index)
-      }
-    } else {
-      // 移除图片
-      const imageIndex = index - uploadedVideos.length
-      onImageRemove(imageIndex)
+    if (!needsVideoUpload || currentFileOrder.length === 0) {
+      // 非混合模式，直接移除图片
+      onImageRemove(index)
+      return
     }
+
+    // 混合模式：根据 fileOrder 确定要移除的文件
+    const item = currentFileOrder[index]
+    if (!item) return
+
+    if (item.type === 'video' && onVideoRemove) {
+      onVideoRemove(item.index)
+    } else if (item.type === 'image') {
+      onImageRemove(item.index)
+    }
+
+    // 移除后，fileOrder 会在 useEffect 中自动更新
   }
 
   // 处理混合文件替换
   const handleMixedFileReplace = (index: number, file: File) => {
-    if (index < uploadedVideos.length) {
-      // 替换视频
-      if (onVideoReplace) {
-        onVideoReplace(index, file)
-      }
-    } else {
-      // 替换图片
-      const imageIndex = index - uploadedVideos.length
-      onImageReplace(imageIndex, file)
+    if (!needsVideoUpload || currentFileOrder.length === 0) {
+      // 非混合模式，直接替换图片
+      onImageReplace(index, file)
+      return
     }
+
+    // 混合模式：根据 fileOrder 确定要替换的文件
+    const item = currentFileOrder[index]
+    if (!item) return
+
+    if (item.type === 'video' && onVideoReplace) {
+      onVideoReplace(item.index, file)
+    } else if (item.type === 'image') {
+      onImageReplace(item.index, file)
+    }
+  }
+
+  // 处理混合文件排序
+  const handleMixedFileReorder = (from: number, to: number) => {
+    if (!needsVideoUpload || currentFileOrder.length === 0) {
+      // 非混合模式，使用原有的图片排序
+      onImageReorder(from, to)
+      return
+    }
+
+    // 混合模式：更新 fileOrder
+    if (from === to) return
+    const newOrder = [...currentFileOrder]
+    const [item] = newOrder.splice(from, 1)
+    newOrder.splice(to, 0, item)
+    setCurrentFileOrder(newOrder)
   }
 
   // 处理混合文件点击（视频+图片）
   const handleMixedFileClick = (fileUrl: string, fileList: string[]) => {
     const index = fileList.indexOf(fileUrl)
-    if (index < uploadedVideos.length) {
-      // 点击视频
-      if (onVideoClick) {
-        onVideoClick(fileUrl)
-      }
-    } else {
-      // 点击图片
+    if (index === -1) return
+
+    if (!needsVideoUpload || currentFileOrder.length === 0) {
+      // 非混合模式，直接点击图片
       if (onImageClick) {
-        onImageClick(fileUrl, fileList.slice(uploadedVideos.length))
+        onImageClick(fileUrl, fileList)
       }
+      return
+    }
+
+    // 混合模式：根据 fileOrder 确定点击的文件类型
+    const item = currentFileOrder[index]
+    if (!item) return
+
+    if (item.type === 'video' && onVideoClick) {
+      onVideoClick(fileUrl)
+    } else if (item.type === 'image' && onImageClick) {
+      // 提取所有图片用于查看器
+      const allImages = currentFileOrder
+        .filter(f => f.type === 'image')
+        .map(f => uploadedImages[f.index])
+      onImageClick(fileUrl, allImages)
     }
   }
 
-  // 合并视频和图片文件列表
-  const mixedFiles = needsVideoUpload
-    ? (needsVideoOnly ? uploadedVideos : [...uploadedVideos, ...uploadedImages])
-    : uploadedImages
+  // 合并视频和图片文件列表（根据 fileOrder 排序）
+  const mixedFiles = needsVideoUpload && currentFileOrder.length > 0
+    ? currentFileOrder.map(item =>
+        item.type === 'video' ? uploadedVideos[item.index] : uploadedImages[item.index]
+      )
+    : needsVideoUpload
+      ? (needsVideoOnly ? uploadedVideos : [...uploadedVideos, ...uploadedImages])
+      : uploadedImages
 
   // 计算混合上传的最大文件数
   const mixedMaxCount = needsVideoUpload
     ? (needsVideoOnly ? 1 : 1 + maxImageCount)
     : maxImageCount
 
-  // 检查是否是 KIE Grok Imagine 视频模型且已上传1张图片（需要隐藏上传按钮）
-  const shouldHideUploadButton =
-    (selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie') &&
-    uploadedImages.length >= 1
+  // 检查是否应该隐藏上传按钮
+  const shouldHideUploadButton = (() => {
+    // KIE Grok Imagine 视频模型：已上传1张图片时隐藏
+    if ((selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie') &&
+        uploadedImages.length >= 1) {
+      return true
+    }
+
+    // 混合上传模式：检查是否达到上限
+    if (needsVideoUpload && !needsVideoOnly) {
+      const currentVideoCount = uploadedVideos.length
+      const currentImageCount = uploadedImages.length
+
+      // 视频和图片都达到上限时隐藏
+      if (currentVideoCount >= 1 && currentImageCount >= maxImageCount) {
+        return true
+      }
+    }
+
+    // 纯视频模式：已有1个视频时隐藏
+    if (needsVideoOnly && uploadedVideos.length >= 1) {
+      return true
+    }
+
+    // 纯图片模式：图片达到上限时隐藏
+    if (!needsVideoUpload && uploadedImages.length >= maxImageCount) {
+      return true
+    }
+
+    return false
+  })()
 
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
@@ -268,12 +447,15 @@ const InputArea: React.FC<InputAreaProps> = ({
             onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
             onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
             onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
-            onReorder={needsVideoUpload ? () => {} : onImageReorder}
+            onReorder={needsVideoUpload ? handleMixedFileReorder : onImageReorder}
             onImageClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
             accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
             multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
             maxCount={mixedMaxCount}
             hideUploadButton={shouldHideUploadButton}
+            fileTypes={needsVideoUpload && currentFileOrder.length > 0
+              ? currentFileOrder.map(item => item.type)
+              : undefined}
             {...{ onDragStateChange } as any}
           />
         </div>
@@ -355,6 +537,14 @@ const InputArea: React.FC<InputAreaProps> = ({
         </button>
       </div>
 
+      {/* Alert Dialog */}
+      <AlertDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type={alertDialog.type}
+        onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
+      />
     </div>
   )
 }

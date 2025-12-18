@@ -282,6 +282,9 @@ export interface BuildOptionsParams {
   uploadedVideos?: string[]
   uploadedVideoFiles?: File[]
 
+  // 混合文件顺序（用于支持视频+图片混合排序）
+  fileOrder?: Array<{ type: 'video' | 'image', index: number }>
+
   // 音频参数
   minimaxAudioSpeed?: number
   minimaxAudioEmotion?: string
@@ -337,6 +340,13 @@ export interface BuildOptionsParams {
   kieSora2AspectRatio?: string
   kieSora2Duration?: string
   kieSora2Quality?: string
+
+  // PPIO Kling O1 参数
+  ppioKlingO1Mode?: string
+  ppioKlingO1VideoDuration?: number
+  ppioKlingO1AspectRatio?: string
+  ppioKlingO1KeepAudio?: boolean
+  ppioKlingO1FastMode?: boolean
 
   // 智能分辨率计算函数
   calculateSmartResolution?: (img: string) => Promise<string>

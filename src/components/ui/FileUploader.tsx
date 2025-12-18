@@ -20,6 +20,8 @@ export interface FileUploaderProps {
     disabled?: boolean
     className?: string
     hideUploadButton?: boolean
+    videoCount?: number  // 混合模式下，前 N 个文件是视频（已废弃，使用 fileTypes）
+    fileTypes?: Array<'video' | 'image'>  // 每个文件的类型（用于混合模式）
 }
 
 export default function FileUploader({
@@ -35,7 +37,9 @@ export default function FileUploader({
     maxCount = 1,
     disabled = false,
     className = '',
-    hideUploadButton = false
+    hideUploadButton = false,
+    videoCount = 0,
+    fileTypes
 }: FileUploaderProps) {
     const inputRef = useRef<HTMLInputElement>(null)
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
@@ -467,53 +471,43 @@ export default function FileUploader({
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
                         <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isDraggingThis ? 'ring-2 ring-[#007eff] shadow-2xl' : ''} ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''}`}>
-                            {accept.startsWith('image') ? (
-                                <img
-                                    src={file}
-                                    alt={`Uploaded ${index + 1}`}
-                                    className="w-full h-full object-cover rounded-lg border-2 border-white"
-                                    draggable={false}
-                                />
-                            ) : (accept.startsWith('video') || accept.includes('video')) && file.startsWith('data:image') ? (
-                                // 视频缩略图（图片格式）
-                                <div className="relative w-full h-full">
-                                    <img
-                                        src={file}
-                                        alt={`Video thumbnail ${index + 1}`}
-                                        className="w-full h-full object-cover rounded-lg border-2 border-white"
-                                        draggable={false}
-                                    />
-                                    {/* 播放图标覆盖层 */}
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                    </div>
-                                </div>
-                            ) : accept.startsWith('video') || accept.includes('video') ? (
-                                // 视频文件（实际视频）
-                                <div className="relative w-full h-full">
-                                    <video
-                                        src={file}
-                                        className="w-full h-full object-cover rounded-lg border-2 border-white"
-                                        muted
-                                        playsInline
-                                        preload="metadata"
-                                    />
-                                    {/* 播放图标覆盖层 */}
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="w-full h-full bg-zinc-800 rounded-lg border-2 border-zinc-600 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                </div>
-                            )}
+                            {(() => {
+                                // 判断当前文件是视频还是图片
+                                // 优先使用 fileTypes 数组（精确），回退到 videoCount（位置判断）
+                                const isVideo = fileTypes
+                                    ? fileTypes[index] === 'video'
+                                    : (videoCount > 0 && index < videoCount)
+
+                                if (isVideo) {
+                                    // 视频：显示缩略图 + 播放按钮
+                                    return (
+                                        <div className="relative w-full h-full">
+                                            <img
+                                                src={file}
+                                                alt={`Video thumbnail ${index + 1}`}
+                                                className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                                draggable={false}
+                                            />
+                                            {/* 播放图标覆盖层 */}
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M8 5v14l11-7z" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    )
+                                } else {
+                                    // 图片：直接显示
+                                    return (
+                                        <img
+                                            src={file}
+                                            alt={`Uploaded ${index + 1}`}
+                                            className="w-full h-full object-cover rounded-lg border-2 border-white"
+                                            draggable={false}
+                                        />
+                                    )
+                                }
+                            })()}
 
                             <button
                                 onClick={(e) => {

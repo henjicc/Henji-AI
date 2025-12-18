@@ -8,6 +8,7 @@ import ModelscopeCustomModelManager from './ModelscopeCustomModelManager'
 import {
   viduParams,
   klingParams,
+  ppioKlingO1Params,
   hailuoParams,
   pixverseParams,
   wan25Params,
@@ -242,6 +243,23 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           />
         )}
 
+        {/* PPIO Kling O1 参数 */}
+        {selectedModel === 'kling-o1' && (
+          <SchemaForm
+            schema={ppioKlingO1Params}
+            values={{
+              ppioKlingO1Mode: values.ppioKlingO1Mode,
+              ppioKlingO1VideoDuration: values.ppioKlingO1VideoDuration,
+              ppioKlingO1AspectRatio: values.ppioKlingO1AspectRatio,
+              ppioKlingO1KeepAudio: values.ppioKlingO1KeepAudio,
+              ppioKlingO1FastMode: values.ppioKlingO1FastMode,
+              uploadedImages,
+              uploadedVideos: values.uploadedVideos
+            }}
+            onChange={onChange}
+          />
+        )}
+
         {/* Kling Video v2.6 Pro 参数 */}
         {(selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && (
           <SchemaForm
@@ -395,6 +413,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-veo-3.1' &&
          selectedModel !== 'fal-ai-kling-video-o1' &&
          selectedModel !== 'kling-video-o1' &&
+         selectedModel !== 'kling-o1' &&
          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
          selectedModel !== 'kling-video-v2.6-pro' &&
          selectedModel !== 'fal-ai-sora-2' &&
@@ -439,6 +458,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
          selectedModel !== 'fal-ai-veo-3.1' &&
          selectedModel !== 'fal-ai-kling-video-o1' &&
          selectedModel !== 'kling-video-o1' &&
+         selectedModel !== 'kling-o1' &&
          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
          selectedModel !== 'kling-video-v2.6-pro' &&
          selectedModel !== 'fal-ai-sora-2' &&

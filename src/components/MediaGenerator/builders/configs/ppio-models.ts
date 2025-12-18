@@ -601,3 +601,219 @@ export const seedream40Config: ModelConfig = {
     }
   }
 }
+
+/**
+ * PPIO Kling O1 配置
+ * 支持 4 种模式：文/图生视频、首尾帧、参考生视频、视频编辑
+ */
+export const ppioKlingO1Config: ModelConfig = {
+  id: 'kling-o1',
+  type: 'video',
+  provider: 'ppio',
+
+  paramMapping: {
+    mode: {
+      source: 'ppioKlingO1Mode',
+      defaultValue: 'text-image-to-video'
+    },
+    duration: {
+      source: ['ppioKlingO1VideoDuration', 'videoDuration'],
+      defaultValue: 5
+    },
+    aspectRatio: {
+      source: 'ppioKlingO1AspectRatio',
+      defaultValue: '16:9'
+    },
+    keepAudio: {
+      source: 'ppioKlingO1KeepAudio',
+      defaultValue: true
+    },
+    fastMode: {
+      source: 'ppioKlingO1FastMode',
+      defaultValue: false
+    }
+  },
+
+  features: {
+    modeSwitch: {
+      modeParamKey: 'ppioKlingO1Mode',
+      configs: {
+        'text-image-to-video': {
+          // 文/图生视频：支持0-2张图片
+          features: {
+            imageUpload: {
+              enabled: true,
+              maxImages: 2,
+              mode: 'multiple',
+              paramKey: 'images',
+              convertToBlob: false
+            }
+          }
+        },
+        'start-end-frame': {
+          // 首尾帧：强制要求2张图片
+          features: {
+            imageUpload: {
+              enabled: true,
+              maxImages: 2,
+              mode: 'multiple',
+              paramKey: 'images',
+              convertToBlob: false
+            }
+          }
+        },
+        'reference-to-video': {
+          // 参考生视频：需要1个视频，可选最多7张参考图片
+          paramMapping: {
+            // 参考生视频模式支持 duration 和 aspectRatio
+            duration: {
+              source: ['ppioKlingO1VideoDuration', 'videoDuration'],
+              defaultValue: 5
+            },
+            aspectRatio: {
+              source: 'ppioKlingO1AspectRatio',
+              defaultValue: '16:9'
+            },
+            keepAudio: {
+              source: 'ppioKlingO1KeepAudio',
+              defaultValue: true
+            }
+          },
+          features: {
+            imageUpload: {
+              enabled: true,
+              maxImages: 7,
+              mode: 'multiple',
+              paramKey: 'images',
+              convertToBlob: false
+            },
+            videoUpload: {
+              enabled: true,
+              maxVideos: 1,
+              paramKey: 'video',
+              convertToBlob: false
+            }
+          }
+        },
+        'video-edit': {
+          // 视频编辑：需要1个视频，可选最多4张参考图片
+          paramMapping: {
+            // 视频编辑模式不支持 duration，但支持 aspectRatio、keepAudio、fastMode
+            aspectRatio: {
+              source: 'ppioKlingO1AspectRatio',
+              defaultValue: '16:9'
+            },
+            keepAudio: {
+              source: 'ppioKlingO1KeepAudio',
+              defaultValue: true
+            },
+            fastMode: {
+              source: 'ppioKlingO1FastMode',
+              defaultValue: false
+            }
+          },
+          features: {
+            imageUpload: {
+              enabled: true,
+              maxImages: 4,
+              mode: 'multiple',
+              paramKey: 'images',
+              convertToBlob: false
+            },
+            videoUpload: {
+              enabled: true,
+              maxVideos: 1,
+              paramKey: 'video',
+              convertToBlob: false
+            }
+          }
+        }
+      }
+    }
+  },
+
+  customHandlers: {
+    validateParams: (params) => {
+      const mode = params.ppioKlingO1Mode || 'text-image-to-video'
+      const imageCount = (params as any).uploadedImages?.length || 0
+      const videoCount = (params as any).uploadedVideoFiles?.length || 0
+
+      // 首尾帧模式：必须上传2张图片
+      if (mode === 'start-end-frame' && imageCount !== 2) {
+        throw new Error('首尾帧模式需要上传2张图片')
+      }
+
+      // 参考生视频模式：必须上传1个视频
+      if (mode === 'reference-to-video' && videoCount === 0) {
+        throw new Error('参考生视频模式需要上传视频')
+      }
+
+      // 视频编辑模式：必须上传1个视频
+      if (mode === 'video-edit' && videoCount === 0) {
+        throw new Error('视频编辑模式需要上传视频')
+      }
+
+      // 文/图生视频模式：最多2张图片
+      if (mode === 'text-image-to-video' && imageCount > 2) {
+        throw new Error('文/图生视频模式最多支持2张图片')
+      }
+    },
+
+    afterBuild: async (options, context) => {
+      const mode = options.mode
+
+      // 处理图片上传
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+        const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+
+        const images = context.uploadedImages
+        options.images = images
+
+        const paths: string[] = []
+        for (let i = 0; i < images.length; i++) {
+          if (uploadedFilePaths[i]) {
+            paths.push(uploadedFilePaths[i])
+          } else {
+            const blob = await dataUrlToBlob(images[i])
+            const saved = await saveUploadImage(blob, 'persist')
+            paths.push(saved.fullPath)
+          }
+        }
+
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
+      }
+
+      // 处理视频上传（需要上传到 Fal CDN）
+      if (mode === 'reference-to-video' || mode === 'video-edit') {
+        const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
+
+        if (uploadedVideoFiles.length > 0) {
+          const { saveUploadVideo } = await import('@/utils/save')
+          const setUploadedVideoFilePaths = (context.params as any).setUploadedVideoFilePaths
+          const uploadedVideoFilePaths = (context.params as any).uploadedVideoFilePaths || []
+          const uploadedVideos = (context.params as any).uploadedVideos || []
+
+          // 保存视频缩略图用于历史记录显示
+          if (uploadedVideos.length > 0) {
+            options.uploadedVideos = uploadedVideos
+          }
+
+          // 保存视频文件路径
+          const paths: string[] = [...uploadedVideoFilePaths]
+          if (!paths[0]) {
+            const saved = await saveUploadVideo(uploadedVideoFiles[0], 'persist')
+            paths[0] = saved.fullPath
+          }
+
+          // 传递 File 对象给适配器（适配器会上传到 Fal CDN）
+          options.video = uploadedVideoFiles[0]
+          setUploadedVideoFilePaths(paths)
+          options.uploadedVideoFilePaths = paths
+        }
+      }
+    }
+  }
+}

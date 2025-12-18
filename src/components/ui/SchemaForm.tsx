@@ -23,30 +23,38 @@ export default function SchemaForm({ schema, values, onChange, className }: Sche
     React.useEffect(() => {
         schema.forEach(param => {
             if (param.autoSwitch) {
-                const { condition, value, watchKeys } = param.autoSwitch
+                // 支持单个对象或数组形式的 autoSwitch
+                const autoSwitchConfigs = Array.isArray(param.autoSwitch)
+                    ? param.autoSwitch
+                    : [param.autoSwitch]
 
-                // 如果指定了 watchKeys，检查这些 key 是否发生了变化
-                if (watchKeys && watchKeys.length > 0) {
-                    const hasWatchedKeyChanged = watchKeys.some(
-                        key => prevValuesRef.current[key] !== values[key]
-                    )
+                // 遍历所有 autoSwitch 配置
+                autoSwitchConfigs.forEach(autoSwitchConfig => {
+                    const { condition, value, watchKeys } = autoSwitchConfig
 
-                    // 如果 watchKeys 中的值没有变化，跳过此参数的 autoSwitch
-                    if (!hasWatchedKeyChanged) {
-                        return
+                    // 如果指定了 watchKeys，检查这些 key 是否发生了变化
+                    if (watchKeys && watchKeys.length > 0) {
+                        const hasWatchedKeyChanged = watchKeys.some(
+                            key => prevValuesRef.current[key] !== values[key]
+                        )
+
+                        // 如果 watchKeys 中的值没有变化，跳过此 autoSwitch 配置
+                        if (!hasWatchedKeyChanged) {
+                            return
+                        }
                     }
-                }
 
-                // Check if condition is met
-                if (condition(values)) {
-                    // Calculate target value
-                    const targetValue = typeof value === 'function' ? value(values) : value
+                    // Check if condition is met
+                    if (condition(values)) {
+                        // Calculate target value
+                        const targetValue = typeof value === 'function' ? value(values) : value
 
-                    // Update if current value is different from target value
-                    if (values[param.id] !== targetValue) {
-                        onChange(param.id, targetValue)
+                        // Update if current value is different from target value
+                        if (values[param.id] !== targetValue) {
+                            onChange(param.id, targetValue)
+                        }
                     }
-                }
+                })
             }
         })
 

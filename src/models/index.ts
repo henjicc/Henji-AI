@@ -10,6 +10,7 @@ import { ParamDef } from '../types/schema'
 // 派欧云模型
 export { seedream40Params } from './seedream-4.0'
 export { klingTurbo25Params } from './kling-2.5-turbo'
+export { ppioKlingO1Params } from './ppio/kling-o1'
 export { minimaxHailuo23Params } from './minimax-hailuo-2.3'
 export { viduQ1Params } from './vidu-q1'
 export { pixverseV45Params } from './pixverse-v4.5'
@@ -69,6 +70,7 @@ export { falAiVeo31Params as veoParams } from './fal-ai-veo-3.1'
 // 导入所有模型参数
 import { seedream40Params } from './seedream-4.0'
 import { klingTurbo25Params } from './kling-2.5-turbo'
+import { ppioKlingO1Params } from './ppio/kling-o1'
 import { minimaxHailuo23Params } from './minimax-hailuo-2.3'
 import { viduQ1Params } from './vidu-q1'
 import { pixverseV45Params } from './pixverse-v4.5'
@@ -112,6 +114,7 @@ import { logError } from '../utils/errorLogger'
 export const modelSchemaMap: Record<string, ParamDef[]> = {
   'seedream-4.0': seedream40Params,
   'kling-2.5-turbo': klingTurbo25Params,
+  'kling-o1': ppioKlingO1Params,
   'minimax-hailuo-2.3': minimaxHailuo23Params,
   'minimax-hailuo-02': falAiMinimaxHailuo02Params, // Hailuo 02 使用独立的 Schema
   'vidu-q1': viduQ1Params,
@@ -136,7 +139,6 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'fal-ai-bytedance-seedance-v1': falAiBytedanceSeedanceV1Params,
   'fal-ai-z-image-turbo': falAiZImageTurboParams,
   'fal-ai-kling-image-o1': falAiKlingImageO1Params,
-  'kling-o1': falAiKlingImageO1Params,
   'fal-ai-kling-video-o1': klingVideoO1Params,
   'kling-video-o1': klingVideoO1Params,
   'fal-ai-kling-video-v2.6-pro': falAiKlingVideoV26ProParams,
@@ -226,27 +228,45 @@ export function getAutoSwitchValues(modelId: string, currentValues: any): Record
   const switches: Record<string, any> = {}
   for (const param of schema) {
     if (param.autoSwitch) {
-      const shouldSwitch = param.autoSwitch.condition(currentValues)
-      if (shouldSwitch) {
-        // 获取目标值（支持函数类型）
-        const targetValue = typeof param.autoSwitch.value === 'function'
-          ? param.autoSwitch.value(currentValues)
-          : param.autoSwitch.value
+      // 支持单个规则或规则数组
+      const rules = Array.isArray(param.autoSwitch) ? param.autoSwitch : [param.autoSwitch]
 
-        // 只有当前值与目标值不同时才切换
-        if (currentValues[param.id] !== targetValue) {
-          switches[param.id] = targetValue
+      // 遍历所有规则，找到第一个满足条件的
+      let matched = false
+      for (const rule of rules) {
+        const shouldSwitch = rule.condition(currentValues)
+        if (shouldSwitch) {
+          // 获取目标值（支持函数类型）
+          const targetValue = typeof rule.value === 'function'
+            ? rule.value(currentValues)
+            : rule.value
+
+          // 只有当前值与目标值不同时才切换
+          if (currentValues[param.id] !== targetValue) {
+            switches[param.id] = targetValue
+          }
+          matched = true
+          break // 找到第一个匹配的规则后停止
         }
-      } else {
-        // 条件不满足时，如果当前值是 autoSwitch 的值，则恢复为默认值
-        // 但如果设置了 noRestore，则不恢复
-        if (param.autoSwitch.noRestore) {
+      }
+
+      // 如果没有规则匹配，检查是否需要恢复默认值
+      if (!matched) {
+        // 对于数组规则，不自动恢复默认值（因为可能有多个条件）
+        if (Array.isArray(param.autoSwitch)) {
           continue
         }
 
-        const targetValue = typeof param.autoSwitch.value === 'function'
-          ? param.autoSwitch.value(currentValues)
-          : param.autoSwitch.value
+        const rule = param.autoSwitch
+        // 条件不满足时，如果当前值是 autoSwitch 的值，则恢复为默认值
+        // 但如果设置了 noRestore，则不恢复
+        if (rule.noRestore) {
+          continue
+        }
+
+        const targetValue = typeof rule.value === 'function'
+          ? rule.value(currentValues)
+          : rule.value
 
         if (currentValues[param.id] === targetValue && param.defaultValue !== undefined) {
           switches[param.id] = param.defaultValue

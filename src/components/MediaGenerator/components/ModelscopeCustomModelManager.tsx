@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
+import AlertDialog from '@/components/ui/AlertDialog'
 import { open } from '@tauri-apps/plugin-shell'
 import { logError } from '../../../utils/errorLogger'
 
@@ -25,6 +26,23 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const [editName, setEditName] = useState('')
   const [editModelType, setEditModelType] = useState<'imageGeneration' | 'imageEditing'>('imageGeneration')
   const [isAddingNew, setIsAddingNew] = useState(false)
+
+  // AlertDialog 状态
+  const [alertDialog, setAlertDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    type: 'info' | 'warning' | 'error'
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'warning'
+  })
+
+  const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
+    setAlertDialog({ isOpen: true, title, message, type })
+  }
 
   // 加载模型列表
   useEffect(() => {
@@ -74,13 +92,13 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
 
   const handleAdd = () => {
     if (!newModelId.trim() || !newModelName.trim()) {
-      alert('请输入模型ID和名称')
+      showAlert('输入不完整', '请输入模型ID和名称', 'warning')
       return
     }
 
     // 检查是否已存在
     if (models.some(m => m.id === newModelId.trim())) {
-      alert('该模型ID已存在')
+      showAlert('模型已存在', '该模型ID已存在', 'warning')
       return
     }
 
@@ -122,7 +140,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
 
   const handleSaveEdit = (id: string) => {
     if (!editName.trim()) {
-      alert('名称不能为空')
+      showAlert('输入不完整', '名称不能为空', 'warning')
       return
     }
 
@@ -381,6 +399,15 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           </div>
         )}
       </div>
+
+      {/* Alert Dialog */}
+      <AlertDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        type={alertDialog.type}
+        onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
+      />
     </div>
   )
 }

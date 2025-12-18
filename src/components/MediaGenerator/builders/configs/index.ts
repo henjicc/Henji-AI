@@ -11,6 +11,7 @@ import {
   seedanceV1ProConfig,
   viduQ1Config,
   kling25TurboConfig,
+  ppioKlingO1Config,
   minimaxHailuo23Config,
   minimaxHailuo02Config,
   pixverseV45Config,
@@ -83,6 +84,7 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(seedanceV1ProConfig)
   optionsBuilder.registerConfig(viduQ1Config)
   optionsBuilder.registerConfig(kling25TurboConfig)
+  optionsBuilder.registerConfig(ppioKlingO1Config)
   optionsBuilder.registerConfig(minimaxHailuo23Config)
   optionsBuilder.registerConfig(minimaxHailuo02Config)
   optionsBuilder.registerConfig(pixverseV45Config)
@@ -159,7 +161,8 @@ function registerAliases() {
   optionsBuilder.registerConfig({ ...falSeedreamV4Config, id: 'bytedance-seedream-v4.5' })
   optionsBuilder.registerConfig({ ...falSeedreamV4Config, id: 'fal-ai-bytedance-seedream-v4.5' })
   optionsBuilder.registerConfig({ ...falSeedanceV1Config, id: 'fal-ai-bytedance-seedance-v1' })
-  optionsBuilder.registerConfig({ ...falKlingImageO1Config, id: 'kling-o1' })
+  // 注意：'kling-o1' 是 PPIO 的视频模型，不要用 Fal 的图片模型配置覆盖它！
+  // optionsBuilder.registerConfig({ ...falKlingImageO1Config, id: 'kling-o1' })  // 已删除，避免覆盖 PPIO 配置
   optionsBuilder.registerConfig({ ...falKlingVideoO1Config, id: 'fal-ai-kling-video-o1' })
   optionsBuilder.registerConfig({ ...falKlingV26ProConfig, id: 'fal-ai-kling-video-v2.6-pro' })
   optionsBuilder.registerConfig({ ...falSora2Config, id: 'fal-ai-sora-2' })
