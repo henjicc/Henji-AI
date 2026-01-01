@@ -1624,6 +1624,14 @@ const App: React.FC = () => {
 
     // 创建新的生成任务
     const taskId = Date.now().toString()
+
+    // 【关键修复】视频缩略图应该使用视频文件 URL，而不是 base64 缩略图
+    // <video> 标签需要视频文件 URL 才能正确渲染第一帧作为缩略图
+    let videoUrls: string[] | undefined = undefined
+    if (options?.uploadedVideoFilePaths && options.uploadedVideoFilePaths.length > 0) {
+      videoUrls = options.uploadedVideoFilePaths.map((p: string) => convertFileSrc(p))
+    }
+
     const newTask: GenerationTask = {
       id: taskId,
       type,
@@ -1631,7 +1639,7 @@ const App: React.FC = () => {
       model,  // 保存模型信息
       provider: providerId, // 保存供应商信息
       images: options?.images,
-      videos: options?.uploadedVideos,  // 保存视频缩略图（用于显示和重新编辑时的回退）
+      videos: videoUrls,  // 使用视频文件 URL（可播放），而不是 base64 缩略图
       // 不设置 size 字段，等生成完成后从实际文件中提取真实尺寸
       // size: options?.size,
       uploadedFilePaths: options?.uploadedFilePaths,
@@ -3057,8 +3065,8 @@ const App: React.FC = () => {
                                     }
                                   }
 
-                                  // 保存处理器引用以便后续清理
-                                  ;(el as any)._wheelHandler = wheelHandler
+                                    // 保存处理器引用以便后续清理
+                                    ; (el as any)._wheelHandler = wheelHandler
 
                                   // 添加事件监听器，设置 passive: false 以允许 preventDefault
                                   el.addEventListener('wheel', wheelHandler, { passive: false })
@@ -3340,128 +3348,128 @@ const App: React.FC = () => {
           >
             {/* 图片容器 */}
             <div className="relative">
-                <img
-                  ref={imageViewerRef}
-                  src={currentImage}
-                  alt="Full size"
-                  className={`select-none image-transition`}
-                  style={{
-                    transform: viewerOpacity < 1
-                      ? `scale(${imageScaleRef.current * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`
-                      : `scale(${imageScaleRef.current}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`,
-                    transition: viewerOpacity < 1 ? 'transform 200ms ease, opacity 200ms ease' : 'none',
-                    opacity: viewerOpacity,
-                    transformOrigin: 'center',
-                    width: '95vw',
-                    height: '95vh',
-                    objectFit: 'contain'
-                  }}
-                  onLoad={(e) => {
-                    // 图片加载完成后，计算CSS缩放比例（相对于原始尺寸）
-                    const img = e.currentTarget
-                    if (img.naturalWidth && img.naturalHeight && img.offsetWidth && img.offsetHeight) {
-                      // 计算objectFit: contain下的实际显示尺寸
-                      const naturalRatio = img.naturalWidth / img.naturalHeight
-                      const layoutRatio = img.offsetWidth / img.offsetHeight
+              <img
+                ref={imageViewerRef}
+                src={currentImage}
+                alt="Full size"
+                className={`select-none image-transition`}
+                style={{
+                  transform: viewerOpacity < 1
+                    ? `scale(${imageScaleRef.current * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`
+                    : `scale(${imageScaleRef.current}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`,
+                  transition: viewerOpacity < 1 ? 'transform 200ms ease, opacity 200ms ease' : 'none',
+                  opacity: viewerOpacity,
+                  transformOrigin: 'center',
+                  width: '95vw',
+                  height: '95vh',
+                  objectFit: 'contain'
+                }}
+                onLoad={(e) => {
+                  // 图片加载完成后，计算CSS缩放比例（相对于原始尺寸）
+                  const img = e.currentTarget
+                  if (img.naturalWidth && img.naturalHeight && img.offsetWidth && img.offsetHeight) {
+                    // 计算objectFit: contain下的实际显示尺寸
+                    const naturalRatio = img.naturalWidth / img.naturalHeight
+                    const layoutRatio = img.offsetWidth / img.offsetHeight
 
-                      let actualDisplayWidth
-                      if (naturalRatio > layoutRatio) {
-                        // 图片受宽度限制
-                        actualDisplayWidth = img.offsetWidth
-                      } else {
-                        // 图片受高度限制
-                        actualDisplayWidth = img.offsetHeight * naturalRatio
-                      }
-
-                      const cssScale = actualDisplayWidth / img.naturalWidth
-                      cssScaleRef.current = cssScale
-                      // imageScaleRef存储相对于布局尺寸的缩放，初始为1
-                      imageScaleRef.current = 1
-                      targetScaleRef.current = 1
-                      imagePositionRef.current = { x: 0, y: 0 }
-                      targetPositionRef.current = { x: 0, y: 0 }
-                      updateImageTransform()
-                    }
-                  }}
-                  onMouseDown={handleImageMouseDown}
-                  onMouseMove={(e) => {
-                    // 动态设置cursor样式：只有在实际图片内容上才显示手抓形状
-                    const isOnContent = isClickOnImageContent(e)
-                    e.currentTarget.style.cursor = isOnContent ? (isDragging ? 'grabbing' : 'grab') : 'default'
-                  }}
-                  onClick={(e) => {
-                    // 判断是否点击在实际图片内容上
-                    if (isClickOnImageContent(e)) {
-                      // 点击图片内容，阻止冒泡，不关闭查看器
-                      e.stopPropagation()
+                    let actualDisplayWidth
+                    if (naturalRatio > layoutRatio) {
+                      // 图片受宽度限制
+                      actualDisplayWidth = img.offsetWidth
                     } else {
-                      // 点击透明区域，直接关闭查看器
-                      closeImageViewer()
+                      // 图片受高度限制
+                      actualDisplayWidth = img.offsetHeight * naturalRatio
                     }
-                  }}
-                  onContextMenu={(e) => {
-                    const filePath = currentFilePathList[currentImageIndex]
-                    showMenu(e, getImageMenuItems(currentImage, filePath))
-                  }}
-                  draggable={false}
-                />
-              </div>
+
+                    const cssScale = actualDisplayWidth / img.naturalWidth
+                    cssScaleRef.current = cssScale
+                    // imageScaleRef存储相对于布局尺寸的缩放，初始为1
+                    imageScaleRef.current = 1
+                    targetScaleRef.current = 1
+                    imagePositionRef.current = { x: 0, y: 0 }
+                    targetPositionRef.current = { x: 0, y: 0 }
+                    updateImageTransform()
+                  }
+                }}
+                onMouseDown={handleImageMouseDown}
+                onMouseMove={(e) => {
+                  // 动态设置cursor样式：只有在实际图片内容上才显示手抓形状
+                  const isOnContent = isClickOnImageContent(e)
+                  e.currentTarget.style.cursor = isOnContent ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                }}
+                onClick={(e) => {
+                  // 判断是否点击在实际图片内容上
+                  if (isClickOnImageContent(e)) {
+                    // 点击图片内容，阻止冒泡，不关闭查看器
+                    e.stopPropagation()
+                  } else {
+                    // 点击透明区域，直接关闭查看器
+                    closeImageViewer()
+                  }
+                }}
+                onContextMenu={(e) => {
+                  const filePath = currentFilePathList[currentImageIndex]
+                  showMenu(e, getImageMenuItems(currentImage, filePath))
+                }}
+                draggable={false}
+              />
+            </div>
 
             {/* 底部信息栏和切换按钮 - 移到查看器容器的直接子元素 */}
             <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-                {/* 切换按钮组 */}
+              {/* 切换按钮组 */}
+              {currentImageList.length > 1 && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => navigateImage('prev')}
+                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => navigateImage('next')}
+                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+
+              {/* 信息按钮组 */}
+              <div className="flex items-center gap-4">
+                {/* 导航指示器和计数器 */}
                 {currentImageList.length > 1 && (
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => navigateImage('prev')}
-                      className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => navigateImage('next')}
-                      className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
+                  <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                    {currentImageIndex + 1} / {currentImageList.length}
                   </div>
                 )}
 
-                {/* 信息按钮组 */}
-                <div className="flex items-center gap-4">
-                  {/* 导航指示器和计数器 */}
-                  {currentImageList.length > 1 && (
-                    <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                      {currentImageIndex + 1} / {currentImageList.length}
-                    </div>
-                  )}
-
-                  {/* 缩放比例显示 */}
-                  <div ref={scaleDisplayRef} className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                    100%
-                  </div>
-
-                  {/* 重置按钮 */}
-                  <button
-                    onClick={resetImageView}
-                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
-                  >
-                    重置视图
-                  </button>
-
-                  {/* 关闭按钮 */}
-                  <button
-                    onClick={closeImageViewer}
-                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
-                  >
-                    关闭
-                  </button>
+                {/* 缩放比例显示 */}
+                <div ref={scaleDisplayRef} className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                  100%
                 </div>
+
+                {/* 重置按钮 */}
+                <button
+                  onClick={resetImageView}
+                  className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                >
+                  重置视图
+                </button>
+
+                {/* 关闭按钮 */}
+                <button
+                  onClick={closeImageViewer}
+                  className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                >
+                  关闭
+                </button>
               </div>
+            </div>
           </div>
         )
       }

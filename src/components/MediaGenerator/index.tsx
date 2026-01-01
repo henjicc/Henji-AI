@@ -162,12 +162,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     const getMaxCount = () => getMaxImageCount(
       state.selectedModel,
       state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-      (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-      (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-      (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-      (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-      undefined
+        (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+          (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+              (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+                (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
+                  undefined
     )
 
     const handleGlobalPasteImage = async (e: Event) => {
@@ -228,6 +228,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.setUploadedVideos,
     state.uploadedVideoFiles,
     state.setUploadedVideoFiles,
+    state.setUploadedVideoFilePaths, // 【关键修复】传递路径设置函数，用于删除/上传视频时清空旧路径
     showAlert
   )
 
@@ -686,26 +687,45 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
 
       // 恢复视频
-      if (videos && Array.isArray(videos)) {
-        state.setUploadedVideos(videos)
-        // 将 base64 视频转换为 File 对象（用于后续上传）
-        Promise.all(videos.map(async (videoDataUrl: string, index: number) => {
+      // 【关键修复】使用 uploadedVideoFilePaths 从本地读取视频，生成缩略图
+      // videos 现在是视频文件 URL，不是缩略图，需要从本地文件重新生成
+      // 【优化】延迟设置所有状态，直到缩略图生成完成，避免 UI 闪烁
+      if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths) && uploadedVideoFilePaths.length > 0) {
+        // 异步处理：读取本地视频文件，生成缩略图和 File 对象
+        // 注意：不立即设置 uploadedVideoFilePaths，等缩略图准备好后一起设置
+        Promise.all(uploadedVideoFilePaths.map(async (filePath: string, index: number) => {
           try {
-            const response = await fetch(videoDataUrl)
-            const blob = await response.blob()
-            const file = new File([blob], `video-${index}.mp4`, { type: blob.type || 'video/mp4' })
-            return file
+            // 使用 Tauri API 读取本地视频文件
+            const { readFile } = await import('@tauri-apps/plugin-fs')
+            const { generateVideoThumbnail } = await import('@/utils/videoProcessing')
+
+            // 读取文件内容
+            const bytes = await readFile(filePath)
+            const blob = new Blob([bytes], { type: 'video/mp4' })
+            const file = new File([blob], `video-${index}.mp4`, { type: 'video/mp4' })
+
+            // 生成缩略图
+            const thumbnail = await generateVideoThumbnail(file)
+
+            logInfo('[MediaGenerator] 视频恢复成功:', { path: filePath, thumbnailLength: thumbnail.length })
+            return { file, thumbnail, path: filePath }
           } catch (e) {
-            logError('[MediaGenerator] Failed to convert video to File:', e)
+            logError('[MediaGenerator] 视频恢复失败:', { path: filePath, error: e })
             return null
           }
-        })).then(files => {
-          const validFiles = files.filter(f => f !== null) as File[]
-          state.setUploadedVideoFiles(validFiles)
+        })).then(results => {
+          const validResults = results.filter(r => r !== null) as { file: File, thumbnail: string, path: string }[]
+          if (validResults.length > 0) {
+            // 【关键】一次性设置所有状态，避免 UI 闪烁
+            state.setUploadedVideos(validResults.map(r => r.thumbnail))  // 先设置缩略图
+            state.setUploadedVideoFiles(validResults.map(r => r.file))
+            state.setUploadedVideoFilePaths(validResults.map(r => r.path))  // 最后设置路径
+          }
         })
-      }
-      if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths)) {
-        state.setUploadedVideoFilePaths(uploadedVideoFilePaths)
+      } else if (videos && Array.isArray(videos)) {
+        // 旧逻辑回退：如果没有 uploadedVideoFilePaths，尝试使用 videos
+        state.setUploadedVideos(videos)
+        state.setUploadedVideoFilePaths([])
       } else {
         state.setUploadedVideoFilePaths([])
       }
@@ -857,12 +877,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     const max = getMaxImageCount(
       modelId,
       modelId === 'vidu-q1' ? state.ppioViduQ1Mode :
-      (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-      (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-      (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.falViduQ2Mode :
-      (modelId === 'fal-ai-minimax-hailuo-02' || modelId === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-      (modelId === 'kie-seedance-v3' || modelId === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-      undefined
+        (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+          (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+            (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.falViduQ2Mode :
+              (modelId === 'fal-ai-minimax-hailuo-02' || modelId === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+                (modelId === 'kie-seedance-v3' || modelId === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
+                  undefined
     )
     if (state.uploadedImages.length > max) {
       state.setUploadedImages(prev => prev.slice(0, max))
@@ -1126,10 +1146,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     // 检查 Seedance v1 Fast 模式的限制
     if ((state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') &&
-        state.falSeedanceV1Version === 'pro' &&
-        state.falSeedanceV1FastMode &&
-        state.falSeedanceV1Mode === 'image-to-video' &&
-        state.uploadedImages.length >= 2) {
+      state.falSeedanceV1Version === 'pro' &&
+      state.falSeedanceV1FastMode &&
+      state.falSeedanceV1Mode === 'image-to-video' &&
+      state.uploadedImages.length >= 2) {
       // 显示警告弹窗
       setIsWarningDialogOpen(true)
       setTimeout(() => setWarningOpacity(1), 10)
@@ -1423,7 +1443,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // 兼容旧的手动添加方式（向后兼容）
       // Nano Banana 和 Nano Banana Pro 的 aspectRatio
       if (state.selectedModel === 'nano-banana' || state.selectedModel === 'nano-banana-pro' ||
-          state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
+        state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
         if (!('aspectRatio' in originalUIParams)) {
           originalUIParams.aspectRatio = state.aspectRatio
           logInfo('[MediaGenerator] Save - Manual add: aspectRatio =', state.aspectRatio)
@@ -1432,8 +1452,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
       // ByteDance Seedream v4 和 Seedream 4.0 的 selectedResolution
       if (state.selectedModel === 'bytedance-seedream-v4' ||
-          state.selectedModel === 'fal-ai-bytedance-seedream-v4' ||
-          state.selectedModel === 'seedream-4.0') {
+        state.selectedModel === 'fal-ai-bytedance-seedream-v4' ||
+        state.selectedModel === 'seedream-4.0') {
         if (!('selectedResolution' in originalUIParams)) {
           originalUIParams.selectedResolution = state.selectedResolution
           logInfo('[MediaGenerator] Save - Manual add: selectedResolution =', state.selectedResolution)
@@ -1540,12 +1560,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           const maxCount = getMaxImageCount(
             state.selectedModel,
             state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-            (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-            (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-            undefined
+              (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+                (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+                  (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+                    (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+                      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
+                        undefined
           )
           imageUpload.handleImageFileUpload(files, maxCount)
         }}
@@ -1557,12 +1577,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           const maxCount = getMaxImageCount(
             state.selectedModel,
             state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-            (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-            (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-            undefined
+              (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+                (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+                  (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+                    (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+                      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
+                        undefined
           )
           imageUpload.handlePaste(e, maxCount)
         }}
@@ -1570,12 +1590,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           const maxCount = getMaxImageCount(
             state.selectedModel,
             state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-            (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-            (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-            (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-            (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-            undefined
+              (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
+                (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
+                  (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
+                    (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
+                      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
+                        undefined
           )
           imageUpload.handleImageFileDrop(files, maxCount)
         }}

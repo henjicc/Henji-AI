@@ -389,8 +389,8 @@ export default function FileUploader({
             onDrop={handleDrop}
             onMouseUp={handleCustomDrop}
         >
-            {/* Previews */}
-            {files.map((file, index) => {
+            {/* Previews - 过滤掉 undefined 的文件项，避免状态更新时的闪烁 */}
+            {files.filter(file => file !== undefined && file !== null).map((file, index) => {
                 const isDraggingThis = dragState.isDragging && dragState.fromIndex === index
                 const isDroppingThis = dragState.isDropping && dragState.fromIndex === index
                 const shouldShift = (dragState.isDragging || dragState.isDropping) && dragState.fromIndex !== null && dragState.toIndex !== null

@@ -19,6 +19,7 @@ export const useVideoUpload = (
   setUploadedVideos: (videos: string[]) => void,
   _uploadedVideoFiles: File[],
   setUploadedVideoFiles: (files: File[]) => void,
+  setUploadedVideoFilePaths: (paths: string[]) => void,  // 新增：用于清空路径
   onError?: (title: string, message: string) => void
 ) => {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
@@ -76,6 +77,7 @@ export const useVideoUpload = (
       // 注意：这里不读取视频内容，只保存 File 对象和 URL
       setUploadedVideos([thumbnail]) // 缩略图用于 UI 显示
       setUploadedVideoFiles([videoFile]) // File 对象引用，点击生成时才读取
+      setUploadedVideoFilePaths([]) // 【关键修复】清空旧路径，确保下次保存时生成新路径
 
       // 清理元数据加载时创建的临时 URL
       URL.revokeObjectURL(videoElement.src)
@@ -97,7 +99,8 @@ export const useVideoUpload = (
   const handleVideoRemove = useCallback((_index: number) => {
     setUploadedVideos([])
     setUploadedVideoFiles([])
-  }, [setUploadedVideos, setUploadedVideoFiles])
+    setUploadedVideoFilePaths([]) // 【关键修复】同时清空路径
+  }, [setUploadedVideos, setUploadedVideoFiles, setUploadedVideoFilePaths])
 
   /**
    * 替换视频

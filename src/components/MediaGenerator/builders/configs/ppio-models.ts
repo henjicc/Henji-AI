@@ -760,7 +760,6 @@ export const ppioKlingO1Config: ModelConfig = {
     },
 
     afterBuild: async (options, context) => {
-      const mode = options.mode
 
       // 处理图片上传
       if (context.uploadedImages.length > 0) {
@@ -787,32 +786,32 @@ export const ppioKlingO1Config: ModelConfig = {
       }
 
       // 处理视频上传（需要上传到 Fal CDN）
-      if (mode === 'reference-to-video' || mode === 'video-edit') {
-        const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
+      // 【关键修复】直接检查是否有视频文件，而不是依赖 mode 值
+      // 这样即使 mode 被意外切换，视频也会被正确保存
+      const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
+      const uploadedVideos = (context.params as any).uploadedVideos || []
 
-        if (uploadedVideoFiles.length > 0) {
-          const { saveUploadVideo } = await import('@/utils/save')
-          const setUploadedVideoFilePaths = (context.params as any).setUploadedVideoFilePaths
-          const uploadedVideoFilePaths = (context.params as any).uploadedVideoFilePaths || []
-          const uploadedVideos = (context.params as any).uploadedVideos || []
+      // 设置 uploadedVideos（用于重新编辑时的回退）
+      if (uploadedVideos.length > 0) {
+        options.uploadedVideos = uploadedVideos
+      }
 
-          // 保存视频缩略图用于历史记录显示
-          if (uploadedVideos.length > 0) {
-            options.uploadedVideos = uploadedVideos
-          }
+      if (uploadedVideoFiles.length > 0) {
+        const { saveUploadVideo } = await import('@/utils/save')
+        const setUploadedVideoFilePaths = (context.params as any).setUploadedVideoFilePaths
+        const uploadedVideoFilePaths = (context.params as any).uploadedVideoFilePaths || []
 
-          // 保存视频文件路径
-          const paths: string[] = [...uploadedVideoFilePaths]
-          if (!paths[0]) {
-            const saved = await saveUploadVideo(uploadedVideoFiles[0], 'persist')
-            paths[0] = saved.fullPath
-          }
-
-          // 传递 File 对象给适配器（适配器会上传到 Fal CDN）
-          options.video = uploadedVideoFiles[0]
-          setUploadedVideoFilePaths(paths)
-          options.uploadedVideoFilePaths = paths
+        // 保存视频文件路径（用于历史记录恢复）
+        const paths: string[] = [...uploadedVideoFilePaths]
+        if (!paths[0]) {
+          const saved = await saveUploadVideo(uploadedVideoFiles[0], 'persist')
+          paths[0] = saved.fullPath
         }
+
+        // 传递 File 对象给适配器（适配器会上传到 Fal CDN）
+        options.video = uploadedVideoFiles[0]
+        setUploadedVideoFilePaths(paths)
+        options.uploadedVideoFilePaths = paths
       }
     }
   }

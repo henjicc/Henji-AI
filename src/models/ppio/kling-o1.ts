@@ -4,6 +4,7 @@ interface ParamValues {
   ppioKlingO1Mode?: string
   ppioKlingO1AspectRatio?: string
   uploadedImages?: string[]
+  uploadedVideos?: string[]  // 新增：监听视频变化
 }
 
 /**
@@ -17,36 +18,31 @@ export const ppioKlingO1Params: ParamDef[] = [
     type: 'dropdown',
     label: '模式',
     defaultValue: 'text-image-to-video',
-    // 根据上传的图片数量自动切换模式
-    autoSwitch: {
-      // 只监听 uploadedImages 的变化，不监听模式本身的变化
-      watchKeys: ['uploadedImages'],
-      condition: (values: ParamValues) => {
-        const { uploadedImages, ppioKlingO1Mode } = values
-        const count = uploadedImages?.length || 0
-
-        // 【关键修复】只在文/图生视频模式下，且图片数量从1变为2时，才自动切换到首尾帧
-        // 如果用户手动选择了其他模式（参考生视频、视频编辑），不要自动切换
-        if (ppioKlingO1Mode === 'text-image-to-video' && count === 2) {
-          return true
-        }
-
-        return false
+    // 根据上传的媒体自动切换模式
+    autoSwitch: [
+      {
+        // 条件1：在文/图生视频模式下，上传2张图片时切换到首尾帧
+        watchKeys: ['uploadedImages'],
+        condition: (values: ParamValues) => {
+          const { uploadedImages, ppioKlingO1Mode } = values
+          const count = uploadedImages?.length || 0
+          return ppioKlingO1Mode === 'text-image-to-video' && count === 2
+        },
+        value: 'start-end-frame'
       },
-      value: (values: ParamValues) => {
-        const { uploadedImages, ppioKlingO1Mode } = values
-        const count = uploadedImages?.length || 0
-
-        // 【关键修复】只有在文/图生视频模式下，且有2张图片时，才切换到首尾帧
-        // 其他情况保持用户选择的模式不变
-        if (ppioKlingO1Mode === 'text-image-to-video' && count === 2) {
-          return 'start-end-frame'
-        }
-
-        // 保持当前模式不变
-        return ppioKlingO1Mode
+      {
+        // 条件2：【关键修复】当有视频上传且在视频相关模式时，保持当前模式不变
+        // 这防止了视频编辑/参考生视频模式被意外切换到其他模式
+        watchKeys: ['uploadedVideos', 'uploadedImages'],
+        condition: (values: ParamValues) => {
+          const { uploadedVideos, ppioKlingO1Mode } = values
+          const videoCount = uploadedVideos?.length || 0
+          // 如果有视频且当前是视频相关模式，触发此规则保持模式不变
+          return videoCount > 0 && (ppioKlingO1Mode === 'reference-to-video' || ppioKlingO1Mode === 'video-edit')
+        },
+        value: (values: ParamValues) => values.ppioKlingO1Mode  // 保持当前模式
       }
-    },
+    ],
     options: [
       { value: 'text-image-to-video', label: '文/图生视频' },
       { value: 'start-end-frame', label: '首尾帧' },
@@ -118,11 +114,11 @@ export const ppioKlingO1Params: ParamDef[] = [
           const currentRatio = values.ppioKlingO1AspectRatio
           // 文/图生视频或首尾帧模式下，有图片且当前不是智能时，切换到智能
           return (mode === 'text-image-to-video' || mode === 'start-end-frame') &&
-                 imageCount > 0 &&
-                 currentRatio !== 'smart'
+            imageCount > 0 &&
+            currentRatio !== 'smart'
         },
         value: 'smart',
-        watchKeys: ['ppioKlingO1Mode', 'uploadedImages']
+        watchKeys: ['ppioKlingO1Mode', 'uploadedImages', 'uploadedVideos']
       },
       {
         // 条件2：切换到不支持智能选项的模式时，将智能重置为具体比例
@@ -131,10 +127,10 @@ export const ppioKlingO1Params: ParamDef[] = [
           const currentRatio = values.ppioKlingO1AspectRatio
           // 当前是智能，但切换到了参考生视频或视频编辑模式（不支持智能）
           return currentRatio === 'smart' &&
-                 (mode === 'reference-to-video' || mode === 'video-edit')
+            (mode === 'reference-to-video' || mode === 'video-edit')
         },
         value: '16:9',
-        watchKeys: ['ppioKlingO1Mode']
+        watchKeys: ['ppioKlingO1Mode', 'uploadedVideos']
       },
       {
         // 条件3：在文/图生视频或首尾帧模式下删除所有图片后，将智能重置为具体比例
@@ -144,11 +140,11 @@ export const ppioKlingO1Params: ParamDef[] = [
           const currentRatio = values.ppioKlingO1AspectRatio
           // 文/图生视频或首尾帧模式下，当前是智能但没有图片时，重置为具体比例
           return (mode === 'text-image-to-video' || mode === 'start-end-frame') &&
-                 imageCount === 0 &&
-                 currentRatio === 'smart'
+            imageCount === 0 &&
+            currentRatio === 'smart'
         },
         value: '16:9',
-        watchKeys: ['uploadedImages']
+        watchKeys: ['uploadedImages', 'uploadedVideos']
       }
     ],
     // 根据模式和图片动态生成选项
