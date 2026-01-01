@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
-import { AdapterFactory, AdapterConfig } from '../adapters'
-import { MediaGeneratorAdapter } from '../adapters/base/BaseAdapter'
+import { AdapterFactory, AdapterConfig, AdapterType } from '../adapters'
+import { MediaGeneratorAdapter, ImageResult, VideoResult, AudioResult } from '../adapters/base/BaseAdapter'
 import { logInfo } from '../utils/errorLogger'
 
 export class ApiService {
@@ -82,6 +82,73 @@ export class ApiService {
 
   getAdapter(): MediaGeneratorAdapter | null {
     return this.adapter
+  }
+
+  /**
+   * 创建独立适配器（供节点式界面、工具箱等使用）
+   * 不影响全局适配器状态
+   */
+  createAdapter(config: Omit<AdapterConfig, 'apiKey'> & { apiKey?: string }): MediaGeneratorAdapter {
+    const apiKey = config.apiKey || localStorage.getItem(`${config.type}_api_key`) || ''
+    if (!apiKey) {
+      throw new Error(`API key for ${config.type} is not set`)
+    }
+
+    // 如果是魔搭适配器，尝试获取 fal API key 用于文件上传
+    let falApiKey: string | undefined
+    if (config.type === 'modelscope') {
+      falApiKey = localStorage.getItem('fal_api_key') || undefined
+    }
+
+    return AdapterFactory.createAdapter({
+      ...config,
+      apiKey,
+      falApiKey
+    })
+  }
+
+  /**
+   * 一次性调用（自动选择适配器）
+   * 适用于节点式工作流等场景
+   */
+  async generateWithModel(
+    type: 'image' | 'video' | 'audio',
+    params: {
+      provider: AdapterType
+      model: string
+      prompt?: string
+      text?: string
+      onProgress?: (status: any) => void
+      [key: string]: any
+    }
+  ): Promise<ImageResult | VideoResult | AudioResult> {
+    const adapter = this.createAdapter({
+      type: params.provider,
+      modelName: params.model
+    })
+
+    const { provider, model, prompt, text, ...restParams } = params
+
+    switch (type) {
+      case 'image':
+        return adapter.generateImage({
+          ...restParams,
+          prompt: prompt || '',
+          model
+        })
+      case 'video':
+        return adapter.generateVideo({
+          ...restParams,
+          prompt: prompt || '',
+          model
+        })
+      case 'audio':
+        return adapter.generateAudio({
+          ...restParams,
+          text: text || '',
+          model
+        })
+    }
   }
 }
 
