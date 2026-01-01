@@ -293,6 +293,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setFalZImageTurboImageSize: state.setFalZImageTurboImageSize,
     setFalZImageTurboNumImages: state.setFalZImageTurboNumImages,
     setFalSeedream40NumImages: state.setFalSeedream40NumImages,
+    // PPIO Seedream 4.5
+    setPpioSeedream45MaxImages: state.setPpioSeedream45MaxImages,
+    setPpioSeedream45OptimizePrompt: state.setPpioSeedream45OptimizePrompt,
     setFalWan25VideoDuration: state.setFalWan25VideoDuration,
     setFalSeedanceV1VideoDuration: state.setFalSeedanceV1VideoDuration,
     setFalVeo31VideoDuration: state.setFalVeo31VideoDuration,
@@ -920,6 +923,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       falZImageTurboImageSize: state.setFalZImageTurboImageSize,
       falZImageTurboNumImages: state.setFalZImageTurboNumImages,
       falSeedream40NumImages: state.setFalSeedream40NumImages,
+      // PPIO Seedream 4.5
+      ppioSeedream45MaxImages: state.setPpioSeedream45MaxImages,
+      ppioSeedream45OptimizePrompt: state.setPpioSeedream45OptimizePrompt,
       falWan25VideoDuration: state.setFalWan25VideoDuration,
       falSeedanceV1VideoDuration: state.setFalSeedanceV1VideoDuration,
       falVeo31VideoDuration: state.setFalVeo31VideoDuration,
@@ -1234,6 +1240,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         falZImageTurboImageSize: state.falZImageTurboImageSize,
         falZImageTurboNumImages: state.falZImageTurboNumImages,
         falSeedream40NumImages: state.falSeedream40NumImages,
+        // PPIO Seedream 4.5 参数
+        ppioSeedream45MaxImages: state.ppioSeedream45MaxImages,
+        ppioSeedream45OptimizePrompt: state.ppioSeedream45OptimizePrompt,
         falWan25VideoDuration: state.falWan25VideoDuration,
         falSeedanceV1VideoDuration: state.falSeedanceV1VideoDuration,
         falVeo31VideoDuration: state.falVeo31VideoDuration,

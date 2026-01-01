@@ -178,6 +178,10 @@ export const useMediaGeneratorState = () => {
   // 模型特定参数 - Fal Seedream 4.0
   const [falSeedream40NumImages, setFalSeedream40NumImages] = useState(1)
 
+  // 模型特定参数 - PPIO Seedream 4.5
+  const [ppioSeedream45MaxImages, setPpioSeedream45MaxImages] = useState(1)
+  const [ppioSeedream45OptimizePrompt, setPpioSeedream45OptimizePrompt] = useState(false)
+
   // Z-Image-Turbo 参数
   const [falZImageTurboNumInferenceSteps, setFalZImageTurboNumInferenceSteps] = useState(8)
   const [falZImageTurboEnablePromptExpansion, setFalZImageTurboEnablePromptExpansion] = useState(false)
@@ -415,6 +419,11 @@ export const useMediaGeneratorState = () => {
     falZImageTurboImageSize, setFalZImageTurboImageSize,
     falZImageTurboNumImages, setFalZImageTurboNumImages,
     falSeedream40NumImages, setFalSeedream40NumImages,
+
+    // PPIO Seedream 4.5
+    ppioSeedream45MaxImages, setPpioSeedream45MaxImages,
+    ppioSeedream45OptimizePrompt, setPpioSeedream45OptimizePrompt,
+
     ppioKling25VideoDuration, setPpioKling25VideoDuration,
     ppioKling25VideoAspectRatio, setPpioKling25VideoAspectRatio,
     ppioHailuo23VideoDuration, setPpioHailuo23VideoDuration,

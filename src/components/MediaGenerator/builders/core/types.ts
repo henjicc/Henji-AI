@@ -26,15 +26,15 @@ export interface BuildContext {
 export type ParamMappingRule =
   | string  // 简单映射：直接指定参数 key
   | {
-      /** 参数来源（支持多个回退选项） */
-      source: string | string[]
-      /** 默认值 */
-      defaultValue?: any
-      /** 转换函数 */
-      transform?: (value: any, context: BuildContext) => any
-      /** 条件函数（返回 false 时不包含此参数） */
-      condition?: (context: BuildContext) => boolean
-    }
+    /** 参数来源（支持多个回退选项） */
+    source: string | string[]
+    /** 默认值 */
+    defaultValue?: any
+    /** 转换函数 */
+    transform?: (value: any, context: BuildContext) => any
+    /** 条件函数（返回 false 时不包含此参数） */
+    condition?: (context: BuildContext) => boolean
+  }
 
 /**
  * 智能匹配配置
@@ -347,6 +347,10 @@ export interface BuildOptionsParams {
   ppioKlingO1AspectRatio?: string
   ppioKlingO1KeepAudio?: boolean
   ppioKlingO1FastMode?: boolean
+
+  // PPIO Seedream 4.5 参数
+  ppioSeedream45MaxImages?: number
+  ppioSeedream45OptimizePrompt?: boolean
 
   // 智能分辨率计算函数
   calculateSmartResolution?: (img: string) => Promise<string>

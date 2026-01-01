@@ -399,6 +399,16 @@ export const pricingConfigs: PricingConfig[] = [
         }
     },
     {
+        providerId: 'ppio',
+        modelId: 'seedream-4.5',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const maxImages = params.ppioSeedream45MaxImages || 1
+            return formatPrice(PRICES.SEEDREAM * maxImages)
+        }
+    },
+    {
         providerId: 'fal',
         modelId: 'fal-ai-nano-banana',
         currency: '¥',
@@ -634,7 +644,7 @@ export const pricingConfigs: PricingConfig[] = [
 
             // 检查是否有上传图片（同时检查 uploadedImages 和 images）
             const hasImages = (params.uploadedImages && params.uploadedImages.length > 0) ||
-                            (params.images && params.images.length > 0)
+                (params.images && params.images.length > 0)
 
             let basePriceUSD: number
 

@@ -3,7 +3,7 @@
  */
 
 import { ModelConfig } from '../core/types'
-import { logError } from '../../../../utils/errorLogger'
+import { logError, logInfo } from '../../../../utils/errorLogger'
 
 /**
  * Seedance V1 配置（派欧云）
@@ -597,6 +597,113 @@ export const seedream40Config: ModelConfig = {
       } else {
         options.sequential_image_generation = 'disabled'
       }
+      options.watermark = false
+    }
+  }
+}
+
+/**
+ * Seedream 4.5 配置（派欧云）
+ * 与 4.0 类似但有以下差异：
+ * - 新增 optimize_prompt_options 提示词优化
+ * - watermark 不显示在界面，固定传 false
+ * - 图片参数名为 image 而不是 images
+ * - max_images 嵌套在 sequential_image_generation_options 中
+ */
+export const seedream45Config: ModelConfig = {
+  id: 'seedream-4.5',
+  type: 'image',
+  provider: 'ppio',
+
+  paramMapping: {
+    resolutionQuality: 'resolutionQuality',
+    customWidth: 'customWidth',
+    customHeight: 'customHeight',
+    isManualInput: 'isManualInput',
+    maxImages: 'ppioSeedream45MaxImages',
+    optimizePrompt: 'ppioSeedream45OptimizePrompt',
+    seed: 'seed',
+    guidanceScale: 'guidanceScale'
+  },
+
+  customHandlers: {
+    afterBuild: async (options, context) => {
+      const params = context.params
+
+      // 处理图片上传
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = params.setUploadedFilePaths
+        const uploadedFilePaths = params.uploadedFilePaths || []
+
+        options.images = context.uploadedImages
+        const paths: string[] = [...uploadedFilePaths]
+        logInfo('[Seedream 4.5] afterBuild - uploadedImages:', context.uploadedImages.length)
+        logInfo('[Seedream 4.5] afterBuild - initial paths:', paths)
+
+        for (let i = 0; i < context.uploadedImages.length; i++) {
+          if (!paths[i]) {
+            try {
+              const blob = await dataUrlToBlob(context.uploadedImages[i])
+              const saved = await saveUploadImage(blob, 'persist')
+              paths[i] = saved.fullPath
+              logInfo('[Seedream 4.5] afterBuild - Saved image to:', saved.fullPath)
+            } catch (e) {
+              logError('[Seedream 4.5] Save failed for image ' + i, e)
+            }
+          } else {
+            logInfo('[Seedream 4.5] afterBuild - Image ' + i + ' already has path:', paths[i])
+          }
+        }
+
+        logInfo('[Seedream 4.5] afterBuild - Final uploadedFilePaths:', paths)
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
+      }
+
+      // 处理分辨率计算
+      const selectedResolution = params.selectedResolution
+      const quality = params.resolutionQuality === '2K' ? '2K' : '4K'
+
+      if (selectedResolution === 'smart') {
+        if (context.uploadedImages.length > 0) {
+          const { calculateSmartResolution } = await import('../../utils/resolutionUtils')
+          try {
+            const smartSize = await calculateSmartResolution(context.uploadedImages[0], quality)
+            options.size = smartSize
+          } catch (error) {
+            logError('[Seedream 4.5] Smart resolution calculation failed:', error)
+            const { getActualResolution } = await import('../../utils/resolutionUtils')
+            options.size = getActualResolution('1:1', quality)
+          }
+        } else {
+          const { getActualResolution } = await import('../../utils/resolutionUtils')
+          options.size = getActualResolution('1:1', quality)
+        }
+      } else if (selectedResolution === 'custom') {
+        if (params.customWidth && params.customHeight) {
+          options.size = `${params.customWidth}x${params.customHeight}`
+        }
+      } else if (selectedResolution) {
+        const { getActualResolution } = await import('../../utils/resolutionUtils')
+        options.size = getActualResolution(selectedResolution, quality)
+      }
+
+      // Seedream 4.5 特殊参数
+      const maxImages = params.ppioSeedream45MaxImages || 1
+      if (maxImages > 1) {
+        options.sequential_image_generation = 'auto'
+        options.max_images = maxImages
+      } else {
+        options.sequential_image_generation = 'disabled'
+      }
+
+      // 提示词优化
+      if (params.ppioSeedream45OptimizePrompt === true) {
+        options.optimize_prompt = true
+      }
+
+      // watermark 固定为 false（不在界面显示）
       options.watermark = false
     }
   }

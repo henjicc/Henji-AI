@@ -173,6 +173,11 @@ export interface PresetSetters {
     // 重构后的参数 setters
     setFalSeedanceV1VideoDuration: (v: number) => void
     setFalSeedream40NumImages: (v: number) => void
+
+    // PPIO Seedream 4.5
+    setPpioSeedream45MaxImages: (v: number) => void
+    setPpioSeedream45OptimizePrompt: (v: boolean) => void
+
     setFalKlingImageO1AspectRatio: (v: string) => void
     setFalKlingImageO1NumImages: (v: number) => void
     setFalKlingImageO1Resolution: (v: string) => void
@@ -434,6 +439,11 @@ export function createPresetSetterMap(
         // 重构后的参数映射
         falSeedanceV1VideoDuration: setters.setFalSeedanceV1VideoDuration,
         falSeedream40NumImages: setters.setFalSeedream40NumImages,
+
+        // PPIO Seedream 4.5
+        ppioSeedream45MaxImages: setters.setPpioSeedream45MaxImages,
+        ppioSeedream45OptimizePrompt: setters.setPpioSeedream45OptimizePrompt,
+
         falKlingImageO1NumImages: setters.setFalKlingImageO1NumImages,
         falKlingImageO1AspectRatio: setters.setFalKlingImageO1AspectRatio,
         falKlingImageO1Resolution: setters.setFalKlingImageO1Resolution,

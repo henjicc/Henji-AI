@@ -15,6 +15,7 @@ import {
   seedanceParams,
   veoParams,
   seedreamParams,
+  seedream45Params,
   nanoBananaParams,
   nanoBananaProParams,
   falAiBytedanceSeedreamV4Params,
@@ -398,93 +399,93 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
         {/* 通用负面提示和随机种子 */}
         {selectedModel !== 'minimax-hailuo-2.3' &&
-         selectedModel !== 'minimax-hailuo-02' &&
-         selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
-         selectedModel !== 'minimax-hailuo-2.3-fal' &&
-         selectedModel !== 'fal-ai-minimax-hailuo-02' &&
-         selectedModel !== 'minimax-hailuo-02-fal' &&
-         selectedModel !== 'wan-2.5-preview' &&
-         selectedModel !== 'seedance-v1' &&
-         selectedModel !== 'seedance-v1-lite' &&
-         selectedModel !== 'seedance-v1-pro' &&
-         selectedModel !== 'fal-ai-bytedance-seedance-v1' &&
-         selectedModel !== 'bytedance-seedance-v1' &&
-         selectedModel !== 'veo3.1' &&
-         selectedModel !== 'fal-ai-veo-3.1' &&
-         selectedModel !== 'fal-ai-kling-video-o1' &&
-         selectedModel !== 'kling-video-o1' &&
-         selectedModel !== 'kling-o1' &&
-         selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
-         selectedModel !== 'kling-video-v2.6-pro' &&
-         selectedModel !== 'fal-ai-sora-2' &&
-         selectedModel !== 'sora-2' &&
-         selectedModel !== 'fal-ai-ltx-2' &&
-         selectedModel !== 'ltx-2' &&
-         selectedModel !== 'fal-ai-vidu-q2' &&
-         selectedModel !== 'vidu-q2' &&
-         selectedModel !== 'fal-ai-pixverse-v5.5' &&
-         selectedModel !== 'pixverse-v5.5' &&
-         selectedModel !== 'fal-ai-wan-25-preview' &&
-         selectedModel !== 'wan-25-preview' &&
-         selectedModel !== 'kie-hailuo-02' &&
-         selectedModel !== 'hailuo-02-kie' &&
-         selectedModel !== 'kie-seedance-v3' &&
-         selectedModel !== 'seedance-v3-kie' &&
-         selectedModel !== 'kie-sora-2' &&
-         selectedModel !== 'sora-2-kie' && (
-          <TextInput
-            label="负面提示"
-            value={values.videoNegativePrompt}
-            onChange={(v) => onChange('videoNegativePrompt', v)}
-            placeholder="不希望出现的内容"
-            className="w-auto flex-1 min-w-[200px]"
-            inputClassName="w-full"
-          />
-        )}
+          selectedModel !== 'minimax-hailuo-02' &&
+          selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
+          selectedModel !== 'minimax-hailuo-2.3-fal' &&
+          selectedModel !== 'fal-ai-minimax-hailuo-02' &&
+          selectedModel !== 'minimax-hailuo-02-fal' &&
+          selectedModel !== 'wan-2.5-preview' &&
+          selectedModel !== 'seedance-v1' &&
+          selectedModel !== 'seedance-v1-lite' &&
+          selectedModel !== 'seedance-v1-pro' &&
+          selectedModel !== 'fal-ai-bytedance-seedance-v1' &&
+          selectedModel !== 'bytedance-seedance-v1' &&
+          selectedModel !== 'veo3.1' &&
+          selectedModel !== 'fal-ai-veo-3.1' &&
+          selectedModel !== 'fal-ai-kling-video-o1' &&
+          selectedModel !== 'kling-video-o1' &&
+          selectedModel !== 'kling-o1' &&
+          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
+          selectedModel !== 'kling-video-v2.6-pro' &&
+          selectedModel !== 'fal-ai-sora-2' &&
+          selectedModel !== 'sora-2' &&
+          selectedModel !== 'fal-ai-ltx-2' &&
+          selectedModel !== 'ltx-2' &&
+          selectedModel !== 'fal-ai-vidu-q2' &&
+          selectedModel !== 'vidu-q2' &&
+          selectedModel !== 'fal-ai-pixverse-v5.5' &&
+          selectedModel !== 'pixverse-v5.5' &&
+          selectedModel !== 'fal-ai-wan-25-preview' &&
+          selectedModel !== 'wan-25-preview' &&
+          selectedModel !== 'kie-hailuo-02' &&
+          selectedModel !== 'hailuo-02-kie' &&
+          selectedModel !== 'kie-seedance-v3' &&
+          selectedModel !== 'seedance-v3-kie' &&
+          selectedModel !== 'kie-sora-2' &&
+          selectedModel !== 'sora-2-kie' && (
+            <TextInput
+              label="负面提示"
+              value={values.videoNegativePrompt}
+              onChange={(v) => onChange('videoNegativePrompt', v)}
+              placeholder="不希望出现的内容"
+              className="w-auto flex-1 min-w-[200px]"
+              inputClassName="w-full"
+            />
+          )}
 
         {selectedModel !== 'kling-2.5-turbo' &&
-         selectedModel !== 'minimax-hailuo-2.3' &&
-         selectedModel !== 'minimax-hailuo-02' &&
-         selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
-         selectedModel !== 'minimax-hailuo-2.3-fal' &&
-         selectedModel !== 'pixverse-v4.5' &&
-         selectedModel !== 'wan-2.5-preview' &&
-         selectedModel !== 'seedance-v1' &&
-         selectedModel !== 'seedance-v1-lite' &&
-         selectedModel !== 'seedance-v1-pro' &&
-         selectedModel !== 'fal-ai-bytedance-seedance-v1' &&
-         selectedModel !== 'bytedance-seedance-v1' &&
-         selectedModel !== 'veo3.1' &&
-         selectedModel !== 'fal-ai-veo-3.1' &&
-         selectedModel !== 'fal-ai-kling-video-o1' &&
-         selectedModel !== 'kling-video-o1' &&
-         selectedModel !== 'kling-o1' &&
-         selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
-         selectedModel !== 'kling-video-v2.6-pro' &&
-         selectedModel !== 'fal-ai-sora-2' &&
-         selectedModel !== 'sora-2' &&
-         selectedModel !== 'fal-ai-ltx-2' &&
-         selectedModel !== 'ltx-2' &&
-         selectedModel !== 'fal-ai-pixverse-v5.5' &&
-         selectedModel !== 'pixverse-v5.5' &&
-         selectedModel !== 'fal-ai-wan-25-preview' &&
-         selectedModel !== 'wan-25-preview' &&
-         selectedModel !== 'kie-hailuo-02' &&
-         selectedModel !== 'hailuo-02-kie' &&
-         selectedModel !== 'kie-seedance-v3' &&
-         selectedModel !== 'seedance-v3-kie' &&
-         selectedModel !== 'kie-sora-2' &&
-         selectedModel !== 'sora-2-kie' && (
-          <NumberInput
-            label="随机种子"
-            value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
-            onChange={(v) => onChange('videoSeed', Math.max(0, Math.round(v)))}
-            min={0}
-            step={1}
-            widthClassName="w-20"
-            className="w-auto min-w-[120px]"
-          />
-        )}
+          selectedModel !== 'minimax-hailuo-2.3' &&
+          selectedModel !== 'minimax-hailuo-02' &&
+          selectedModel !== 'fal-ai-minimax-hailuo-2.3' &&
+          selectedModel !== 'minimax-hailuo-2.3-fal' &&
+          selectedModel !== 'pixverse-v4.5' &&
+          selectedModel !== 'wan-2.5-preview' &&
+          selectedModel !== 'seedance-v1' &&
+          selectedModel !== 'seedance-v1-lite' &&
+          selectedModel !== 'seedance-v1-pro' &&
+          selectedModel !== 'fal-ai-bytedance-seedance-v1' &&
+          selectedModel !== 'bytedance-seedance-v1' &&
+          selectedModel !== 'veo3.1' &&
+          selectedModel !== 'fal-ai-veo-3.1' &&
+          selectedModel !== 'fal-ai-kling-video-o1' &&
+          selectedModel !== 'kling-video-o1' &&
+          selectedModel !== 'kling-o1' &&
+          selectedModel !== 'fal-ai-kling-video-v2.6-pro' &&
+          selectedModel !== 'kling-video-v2.6-pro' &&
+          selectedModel !== 'fal-ai-sora-2' &&
+          selectedModel !== 'sora-2' &&
+          selectedModel !== 'fal-ai-ltx-2' &&
+          selectedModel !== 'ltx-2' &&
+          selectedModel !== 'fal-ai-pixverse-v5.5' &&
+          selectedModel !== 'pixverse-v5.5' &&
+          selectedModel !== 'fal-ai-wan-25-preview' &&
+          selectedModel !== 'wan-25-preview' &&
+          selectedModel !== 'kie-hailuo-02' &&
+          selectedModel !== 'hailuo-02-kie' &&
+          selectedModel !== 'kie-seedance-v3' &&
+          selectedModel !== 'seedance-v3-kie' &&
+          selectedModel !== 'kie-sora-2' &&
+          selectedModel !== 'sora-2-kie' && (
+            <NumberInput
+              label="随机种子"
+              value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
+              onChange={(v) => onChange('videoSeed', Math.max(0, Math.round(v)))}
+              min={0}
+              step={1}
+              widthClassName="w-20"
+              className="w-auto min-w-[120px]"
+            />
+          )}
       </>
     )
   }
@@ -496,6 +497,25 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
         schema={seedreamParams}
         values={{
           maxImages: values.maxImages,
+          selectedResolution: values.selectedResolution,
+          customWidth: values.customWidth,
+          customHeight: values.customHeight,
+          resolutionQuality: values.resolutionQuality,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // Seedream 4.5 参数（派欧云）
+  if (selectedModel === 'seedream-4.5') {
+    return (
+      <SchemaForm
+        schema={seedream45Params}
+        values={{
+          ppioSeedream45MaxImages: values.ppioSeedream45MaxImages,
+          ppioSeedream45OptimizePrompt: values.ppioSeedream45OptimizePrompt,
           selectedResolution: values.selectedResolution,
           customWidth: values.customWidth,
           customHeight: values.customHeight,
@@ -824,9 +844,9 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
   // 魔搭其他预设模型参数（包含 guidance）
   if (selectedModel === 'Qwen/Qwen-Image' ||
-      selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
-      selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
-      selectedModel === 'MusePublic/majicMIX_realistic') {
+    selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
+    selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
+    selectedModel === 'MusePublic/majicMIX_realistic') {
     return (
       <>
         {/* 分辨率、采样步数、引导系数 */}
@@ -944,11 +964,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
                       key={g.value}
                       type="button"
                       onClick={() => onChange('voiceFilterGender', g.value)}
-                      className={`px-3 py-2 text-xs rounded transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 ${
-                        values.voiceFilterGender === g.value
-                          ? 'bg-[#007eff] text-white'
-                          : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
-                      }`}
+                      className={`px-3 py-2 text-xs rounded transition-all duration-300 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 ${values.voiceFilterGender === g.value
+                        ? 'bg-[#007eff] text-white'
+                        : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
+                        }`}
                     >
                       {g.label}
                     </button>
@@ -964,11 +983,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
                         key={v.id}
                         data-close-on-select
                         onClick={() => onChange('minimaxVoiceId', v.id)}
-                        className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${
-                          values.minimaxVoiceId === v.id
-                            ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30'
-                            : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'
-                        }`}
+                        className={`px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${values.minimaxVoiceId === v.id
+                          ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30'
+                          : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-sm">{v.name}</span>

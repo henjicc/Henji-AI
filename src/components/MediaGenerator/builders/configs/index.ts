@@ -16,7 +16,8 @@ import {
   minimaxHailuo02Config,
   pixverseV45Config,
   wan25PreviewConfig,
-  seedream40Config
+  seedream40Config,
+  seedream45Config
 } from './ppio-models'
 
 // Fal 模型
@@ -90,6 +91,7 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(pixverseV45Config)
   optionsBuilder.registerConfig(wan25PreviewConfig)
   optionsBuilder.registerConfig(seedream40Config)
+  optionsBuilder.registerConfig(seedream45Config)
 
   // Fal 图片模型
   optionsBuilder.registerConfig(nanoBananaConfig)

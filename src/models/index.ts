@@ -9,6 +9,7 @@ import { ParamDef } from '../types/schema'
 
 // 派欧云模型
 export { seedream40Params } from './seedream-4.0'
+export { seedream45Params } from './ppio/seedream-4.5'
 export { klingTurbo25Params } from './kling-2.5-turbo'
 export { ppioKlingO1Params } from './ppio/kling-o1'
 export { minimaxHailuo23Params } from './minimax-hailuo-2.3'
@@ -69,6 +70,7 @@ export { falAiVeo31Params as veoParams } from './fal-ai-veo-3.1'
 
 // 导入所有模型参数
 import { seedream40Params } from './seedream-4.0'
+import { seedream45Params } from './ppio/seedream-4.5'
 import { klingTurbo25Params } from './kling-2.5-turbo'
 import { ppioKlingO1Params } from './ppio/kling-o1'
 import { minimaxHailuo23Params } from './minimax-hailuo-2.3'
@@ -113,6 +115,7 @@ import { logError } from '../utils/errorLogger'
  */
 export const modelSchemaMap: Record<string, ParamDef[]> = {
   'seedream-4.0': seedream40Params,
+  'seedream-4.5': seedream45Params,
   'kling-2.5-turbo': klingTurbo25Params,
   'kling-o1': ppioKlingO1Params,
   'minimax-hailuo-2.3': minimaxHailuo23Params,

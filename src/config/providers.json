@@ -20,6 +20,20 @@
           }
         },
         {
+          "id": "seedream-4.5",
+          "name": "即梦图片 4.5",
+          "type": "image",
+          "description": "先进的图像生成模型，支持2K-4K分辨率和组图生成",
+          "functions": [
+            "图片生成",
+            "图片编辑"
+          ],
+          "progressConfig": {
+            "type": "time",
+            "expectedDuration": 20000
+          }
+        },
+        {
           "id": "vidu-q1",
           "name": "Vidu Q1",
           "type": "video",

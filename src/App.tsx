@@ -1650,6 +1650,11 @@ const App: React.FC = () => {
     }
 
     // 立即添加到任务列表（最新的在最后）
+    if (options?.uploadedFilePaths) {
+      logInfo('[App] handleGenerate - uploadedFilePaths:', options.uploadedFilePaths)
+    } else {
+      logInfo('[App] handleGenerate - No uploadedFilePaths in options', '')
+    }
     setTasks(prev => [...prev, newTask])
     setError(null)
 
@@ -2033,6 +2038,11 @@ const App: React.FC = () => {
           delete sanitizedOptions.uploadedVideos
           delete sanitizedOptions.image_input  // KIE 模型的图片 URL 数组
 
+          // Seedream 4.5 specific cleanup
+          if (sanitizedOptions.sequential_image_generation_options) {
+            // Deep clean nested options if necessary, but sequential_image_generation_options typically contains numbers
+          }
+
           // 2. 自动检测并删除其他可能包含 base64 数据的字段（兜底保护）
           // 这样添加新模型时不需要手动更新清理代码
           const safeFields = new Set([
@@ -2109,7 +2119,7 @@ const App: React.FC = () => {
           prompt: t.prompt,
           model: t.model,
           provider: t.provider, // 保存供应商信息
-          images: t.images, // 保存上传的图片缩略图（用于历史记录显示）
+          // images: t.images, // 移除：不再直接保存 base64 图片数据，依赖 uploadedFilePaths 恢复
           videos: t.videos, // 保存上传的视频缩略图（用于历史记录显示）
           size: t.size,
           dimensions: t.dimensions, // 保存实际媒体尺寸
@@ -2220,6 +2230,8 @@ const App: React.FC = () => {
 
   const handleReedit = async (task: GenerationTask) => {
     let images: string[] | undefined = undefined
+
+    // 尝试从文件路径恢复图片
     if (task.uploadedFilePaths && task.uploadedFilePaths.length) {
       try {
         const arr: string[] = []
@@ -2228,51 +2240,52 @@ const App: React.FC = () => {
           arr.push(data)
         }
         images = arr
-      } catch { }
-    } else if (task.images && task.images.length) {
-      if (task.images.some(img => typeof img === 'string' && !img.startsWith('data:')) && task.uploadedFilePaths && task.uploadedFilePaths.length) {
-        try {
-          const arr: string[] = []
-          for (const p of task.uploadedFilePaths) {
-            const data = await fileToDataUrl(p)
-            arr.push(data)
-          }
-          images = arr
-        } catch {
+      } catch (e) {
+        logError('[App] 重新编辑无法读取图片文件，尝试使用缓存:', e)
+        // 只有当读取失败时，才尝试使用 task.images 回退
+        if (task.images && task.images.length) {
           images = task.images
         }
-      } else {
-        images = task.images
       }
+    } else if (task.images && task.images.length) {
+      // 没有文件路径，直接使用 images
+      images = task.images
     }
 
-    // 恢复视频（与图片逻辑相同）
+    // 恢复视频（逻辑优化）
     let videos: string[] | undefined = undefined
+
     if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length) {
       try {
+        // 读取视频文件（用于生成缩略图等）
+        // 注意：这里我们只检查能否读取，实际上不需要全部转为 base64，
+        // 因为 uploadedVideoFilePaths 会被传递给 MediaGenerator 处理
+        // 但为了保持一致性，我们尝试读取一下
         const arr: string[] = []
         for (const p of task.uploadedVideoFilePaths) {
-          const data = await fileToDataUrl(p)
-          arr.push(data)
-        }
-        videos = arr
-      } catch { }
-    } else if (task.videos && task.videos.length) {
-      // 回退到 task.videos（视频缩略图）
-      if (task.videos.some(vid => typeof vid === 'string' && !vid.startsWith('data:')) && task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length) {
-        try {
-          const arr: string[] = []
-          for (const p of task.uploadedVideoFilePaths) {
-            const data = await fileToDataUrl(p)
-            arr.push(data)
+          try {
+            // 简单验证文件是否存在
+            await fileToDataUrl(p)
+            // 视频这里我们不需要 base64 数据用于显示（因为太大了），
+            // 这个 videos 数组主要是为了兼顾旧逻辑
+            // 实际使用的是 uploadedVideoFilePaths
+            arr.push(p)
+          } catch (e) {
+            throw e // 抛出错误以触发回退
           }
-          videos = arr
-        } catch {
+        }
+        // 如果成功，videos 这里的赋值其实不太重要，因为 uploadedVideoFilePaths 更重要
+        // 但为了旧逻辑兼容性，我们可以暂不设置 videos，或者设置为空
+        // 关键是确保 uploadedVideoFilePaths 有效
+      } catch (e) {
+        logError('[App] 重新编辑无法读取视频文件，尝试使用缓存:', e)
+        // 读取失败，尝试回退到 task.videos (缩略图)
+        if (task.videos && task.videos.length) {
           videos = task.videos
         }
-      } else {
-        videos = task.videos
       }
+    } else if (task.videos && task.videos.length) {
+      videos = task.videos
     }
 
     window.dispatchEvent(new CustomEvent('reedit-content', {
