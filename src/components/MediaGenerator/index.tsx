@@ -412,10 +412,21 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setKieZImageAspectRatio: state.setKieZImageAspectRatio,
     setKieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
     setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
+    // PPIO Kling 2.6 Pro 参数
+    setPpioKling26Mode: state.setPpioKling26Mode,
+    setPpioKling26VideoDuration: state.setPpioKling26VideoDuration,
+    setPpioKling26AspectRatio: state.setPpioKling26AspectRatio,
+    setPpioKling26CfgScale: state.setPpioKling26CfgScale,
+    setPpioKling26Sound: state.setPpioKling26Sound,
+    setPpioKling26CharacterOrientation: state.setPpioKling26CharacterOrientation,
+    setPpioKling26KeepOriginalSound: state.setPpioKling26KeepOriginalSound,
     // KIE Kling V2.6 参数
+    setKieKlingV26Mode: state.setKieKlingV26Mode,
     setKieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
+    setKieKlingV26Resolution: state.setKieKlingV26Resolution,
     setKieKlingV26Duration: state.setKieKlingV26Duration,
     setKieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
+    setKieKlingV26CharacterOrientation: state.setKieKlingV26CharacterOrientation,
     // KIE Hailuo 2.3 参数
     setKieHailuo23Mode: state.setKieHailuo23Mode,
     setKieHailuo23Duration: state.setKieHailuo23Duration,
@@ -1851,7 +1862,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               kieSeedream40MaxImages: state.kieSeedream40MaxImages,
               kieSeedream40Resolution: state.kieSeedream40Resolution,
               // KIE Kling V2.6 参数
+              kieKlingV26Mode: state.kieKlingV26Mode,
               kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
+              kieKlingV26Resolution: state.kieKlingV26Resolution,
               kieKlingV26Duration: state.kieKlingV26Duration,
               kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
               // KIE Hailuo 2.3 参数

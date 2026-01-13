@@ -44,10 +44,14 @@ const PRICES: Record<string, any> = {
     KIE_GROK_IMAGINE_VIDEO: 0.10,  // USD per 6-second video
     KIE_Z_IMAGE: 0.004,  // USD per image (固定价格)
     KIE_KLING_V26: {
+        // 文/图生视频
         '5s_no_audio': 0.28,   // USD for 5s video without audio
         '10s_no_audio': 0.55,  // USD for 10s video without audio
         '5s_audio': 0.55,      // USD for 5s video with audio
-        '10s_audio': 1.10      // USD for 10s video with audio
+        '10s_audio': 1.10,     // USD for 10s video with audio
+        // 动作控制（按秒计费）
+        'motion_control_720p': 0.03,   // USD per second at 720p
+        'motion_control_1080p': 0.045  // USD per second at 1080p
     },
     KIE_HAILUO_23: {
         standard: {
@@ -561,10 +565,24 @@ export const pricingConfigs: PricingConfig[] = [
         type: 'calculated',
         calculator: (params) => {
             // 使用 kie 前缀的参数名，并提供回退
+            const mode = params.kieKlingV26Mode || params.mode || 'text-image-to-video'
             const duration = params.kieKlingV26Duration || params.duration || '5'
             const enableAudio = params.kieKlingV26EnableAudio || params.enableAudio || false
+            const resolution = params.kieKlingV26Resolution || params.resolution || '720p'
 
-            // 根据时长和音频选项确定价格键
+            // 动作控制模式：按秒计费
+            if (mode === 'motion-control') {
+                // 从上传的视频中获取时长，如果没有则使用默认值（5秒）
+                const videoDuration = params.videoDuration || params.uploadedVideoDuration || 5
+                const pricePerSecond = resolution === '1080p'
+                    ? PRICES.KIE_KLING_V26['motion_control_1080p']
+                    : PRICES.KIE_KLING_V26['motion_control_720p']
+                const basePriceUSD = pricePerSecond * videoDuration
+                const priceCNY = basePriceUSD * USD_TO_CNY
+                return formatPrice(priceCNY)
+            }
+
+            // 文/图生视频模式：根据时长和音频选项确定价格键
             let priceKey: string
             if (duration === '5') {
                 priceKey = enableAudio ? '5s_audio' : '5s_no_audio'

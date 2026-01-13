@@ -463,6 +463,13 @@ const InputArea: React.FC<InputAreaProps> = ({
       return true
     }
 
+    // KIE 可灵2.6 文/图生视频模式：API 只支持1张图片
+    if ((selectedModel === 'kie-kling-v2-6' || selectedModel === 'kling-v2-6-kie') &&
+      kieKlingV26Mode !== 'motion-control' &&
+      uploadedImages.length >= 1) {
+      return true
+    }
+
     // 混合上传模式：检查是否达到上限
     if (needsVideoUpload && !needsVideoOnly) {
       const currentVideoCount = uploadedVideos.length

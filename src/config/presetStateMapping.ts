@@ -229,10 +229,22 @@ export interface PresetSetters {
     setKieGrokImagineVideoAspectRatio: (v: string) => void
     setKieGrokImagineVideoMode: (v: string) => void
 
+    // PPIO Kling 2.6 Pro
+    setPpioKling26Mode: (v: string) => void
+    setPpioKling26VideoDuration: (v: number) => void
+    setPpioKling26AspectRatio: (v: string) => void
+    setPpioKling26CfgScale: (v: number) => void
+    setPpioKling26Sound: (v: boolean) => void
+    setPpioKling26CharacterOrientation: (v: 'video' | 'image') => void
+    setPpioKling26KeepOriginalSound: (v: boolean) => void
+
     // KIE Kling V2.6
+    setKieKlingV26Mode: (v: string) => void
     setKieKlingV26AspectRatio: (v: string) => void
+    setKieKlingV26Resolution: (v: string) => void
     setKieKlingV26Duration: (v: string) => void
     setKieKlingV26EnableAudio: (v: boolean) => void
+    setKieKlingV26CharacterOrientation: (v: 'video' | 'image') => void
 
     // KIE Hailuo 2.3
     setKieHailuo23Mode: (v: string) => void
@@ -494,10 +506,22 @@ export function createPresetSetterMap(
         kieGrokImagineVideoAspectRatio: setters.setKieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: setters.setKieGrokImagineVideoMode,
 
+        // PPIO Kling 2.6 Pro
+        ppioKling26Mode: setters.setPpioKling26Mode,
+        ppioKling26VideoDuration: setters.setPpioKling26VideoDuration,
+        ppioKling26AspectRatio: setters.setPpioKling26AspectRatio,
+        ppioKling26CfgScale: setters.setPpioKling26CfgScale,
+        ppioKling26Sound: setters.setPpioKling26Sound,
+        ppioKling26CharacterOrientation: setters.setPpioKling26CharacterOrientation,
+        ppioKling26KeepOriginalSound: setters.setPpioKling26KeepOriginalSound,
+
         // KIE Kling V2.6
+        kieKlingV26Mode: setters.setKieKlingV26Mode,
         kieKlingV26AspectRatio: setters.setKieKlingV26AspectRatio,
+        kieKlingV26Resolution: setters.setKieKlingV26Resolution,
         kieKlingV26Duration: setters.setKieKlingV26Duration,
         kieKlingV26EnableAudio: setters.setKieKlingV26EnableAudio,
+        kieKlingV26CharacterOrientation: setters.setKieKlingV26CharacterOrientation,
 
         // KIE Hailuo 2.3
         kieHailuo23Mode: setters.setKieHailuo23Mode,

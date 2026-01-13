@@ -227,7 +227,62 @@ export const kieKlingV26Config: ModelConfig = {
     }
   },
 
-  customHandlers: kieImageUploadHandler
+  customHandlers: {
+    afterBuild: async (options: Record<string, any>, context: BuildContext) => {
+      const mode = context.params.kieKlingV26Mode || 'text-image-to-video'
+
+      // 处理图片上传
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+        const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+
+        // 设置图片数据到 options 中
+        options.images = context.uploadedImages
+
+        const paths: string[] = [...uploadedFilePaths]
+        for (let i = 0; i < context.uploadedImages.length; i++) {
+          if (!paths[i]) {
+            const blob = await dataUrlToBlob(context.uploadedImages[i])
+            const saved = await saveUploadImage(blob, 'persist')
+            paths[i] = saved.fullPath
+          }
+        }
+
+        setUploadedFilePaths(paths)
+        options.uploadedFilePaths = paths
+      }
+
+      // 动作控制模式：处理视频上传
+      if (mode === 'motion-control') {
+        const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
+        const uploadedVideos = (context.params as any).uploadedVideos || []
+
+        // 设置 uploadedVideos（用于历史记录显示）
+        if (uploadedVideos.length > 0) {
+          options.uploadedVideos = uploadedVideos
+        }
+
+        if (uploadedVideoFiles.length > 0) {
+          const { saveUploadVideo } = await import('@/utils/save')
+          const setUploadedVideoFilePaths = (context.params as any).setUploadedVideoFilePaths
+          const uploadedVideoFilePaths = (context.params as any).uploadedVideoFilePaths || []
+
+          // 保存视频文件路径
+          const paths: string[] = [...uploadedVideoFilePaths]
+          if (!paths[0]) {
+            const saved = await saveUploadVideo(uploadedVideoFiles[0], 'persist')
+            paths[0] = saved.fullPath
+          }
+
+          // 传递 File 对象给适配器（适配器会上传到 KIE CDN）
+          options.video = uploadedVideoFiles[0]
+          setUploadedVideoFilePaths(paths)
+          options.uploadedVideoFilePaths = paths
+        }
+      }
+    }
+  }
 }
 
 // 导出别名配置（支持短名称）
