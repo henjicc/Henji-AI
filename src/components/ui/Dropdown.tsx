@@ -109,7 +109,11 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           `bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between whitespace-nowrap ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           } ${buttonClassName || 'w-full'}`
         }
-        style={minWidthPx ? { minWidth: `${minWidthPx}px` } : undefined}
+        style={{
+          outline: 'none',
+          boxShadow: 'none',
+          ...(minWidthPx ? { minWidth: `${minWidthPx}px` } : {})
+        }}
       >
         <span className="text-sm truncate">{display ?? String(value ?? '')}</span>
         <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -119,6 +123,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           createPortal(
             <div className={`bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg text-white ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
               style={{ position: 'fixed', top: fixedPos.top, left: fixedPos.left, width: fixedPos.width, zIndex }}
+              data-dropdown-portal="true"
             >
               {renderPanel ? (
                 <div className="max-h-60 overflow-y-auto">{renderPanel()}</div>
@@ -149,7 +154,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             document.body
           )
         ) : (
-          <div className={`absolute left-0 z-50 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg text-white ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}>
+          <div
+            className={`absolute left-0 z-50 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg text-white ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            data-dropdown-portal="true"
+          >
             {renderPanel ? (
               <div className="max-h-60 overflow-y-auto">{renderPanel()}</div>
             ) : (

@@ -37,14 +37,34 @@ export class PPIOAdapter extends BaseAdapter {
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
+      // 0. 处理文件上传 (使用通用上传服务)
+      let finalParams = { ...params }
+      if (params.images && params.images.some(img => img.startsWith('data:'))) {
+        try {
+          const { UploadService } = await import('../../services/upload/UploadService')
+          const uploadService = UploadService.getInstance()
+          this.log('开始处理图片上传 (provider: ' + uploadService.getCurrentProvider() + ')...')
+
+          const uploadedUrls = await uploadService.uploadFiles(params.images)
+          finalParams.images = uploadedUrls
+          // 同时更新 imageUrls 兼容旧代码
+          finalParams.imageUrls = uploadedUrls
+
+          this.log('图片上传完成:', uploadedUrls)
+        } catch (error) {
+          this.log('图片上传失败:', error)
+          throw new Error(`图片上传失败: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+
       // 1. 查找路由
-      const route = findRoute(params.model)
+      const route = findRoute(finalParams.model)
       if (!route || !route.buildImageRequest) {
-        throw new Error(`Unsupported image model: ${params.model}`)
+        throw new Error(`Unsupported image model: ${finalParams.model}`)
       }
 
       // 2. 构建请求
-      const { endpoint, requestData } = await route.buildImageRequest(params)
+      const { endpoint, requestData } = await route.buildImageRequest(finalParams)
 
       // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)
@@ -61,14 +81,45 @@ export class PPIOAdapter extends BaseAdapter {
       // 输出日志方便调试
       logInfo('[PPIOAdapter] generateVideo 调用参数:', params)
 
+      // 0. 处理文件上传 (使用通用上传服务)
+      let finalParams = { ...params }
+      if ((params.images && params.images.some(img => img.startsWith('data:'))) ||
+        (params.video && typeof params.video !== 'string') ||
+        (typeof params.video === 'string' && params.video.startsWith('data:'))) {
+
+        try {
+          const { UploadService } = await import('../../services/upload/UploadService')
+          const uploadService = UploadService.getInstance()
+          this.log('开始处理文件上传 (provider: ' + uploadService.getCurrentProvider() + ')...')
+
+          // 上传图片
+          if (params.images && params.images.length > 0) {
+            const uploadedUrls = await uploadService.uploadFiles(params.images)
+            finalParams.images = uploadedUrls
+            this.log('图片上传完成:', uploadedUrls)
+          }
+
+          // 上传视频
+          if (params.video) {
+            const videoUrl = await uploadService.uploadFile(params.video)
+            finalParams.video = videoUrl
+            this.log('视频上传完成:', videoUrl)
+          }
+
+        } catch (error) {
+          this.log('文件上传失败:', error)
+          throw new Error(`文件上传失败: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+
       // 1. 查找路由
-      const route = findRoute(params.model)
+      const route = findRoute(finalParams.model)
       if (!route || !route.buildVideoRequest) {
-        throw new Error(`Unsupported video model: ${params.model}`)
+        throw new Error(`Unsupported video model: ${finalParams.model}`)
       }
 
       // 2. 构建请求
-      const { endpoint, requestData } = await route.buildVideoRequest(params)
+      const { endpoint, requestData } = await route.buildVideoRequest(finalParams)
 
       logInfo('[PPIOAdapter] API端点:', endpoint)
       logInfo('[PPIOAdapter] 请求数据:', requestData)
@@ -85,9 +136,9 @@ export class PPIOAdapter extends BaseAdapter {
       const taskId = response.data.task_id
 
       // 4. 如果提供了进度回调，在 Adapter 内部轮询
-      if (params.onProgress) {
+      if (finalParams.onProgress) {
         logInfo('[PPIOAdapter] 开始内部轮询，taskId:', taskId)
-        return await this.statusHandler.pollTaskStatus(taskId, params.model, params.onProgress)
+        return await this.statusHandler.pollTaskStatus(taskId, finalParams.model, finalParams.onProgress)
       }
 
       // 5. 否则返回 taskId，让 App 层控制轮询

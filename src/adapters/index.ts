@@ -21,7 +21,7 @@ export class AdapterFactory {
       case 'fal':
         return new FalAdapter(config.apiKey)
       case 'modelscope':
-        return new ModelscopeAdapter(config.apiKey, config.falApiKey)
+        return new ModelscopeAdapter(config.apiKey)
       case 'kie':
         return new KIEAdapter(config.apiKey)
       default:

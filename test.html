@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BizyAir 文件上传测试工具</title>
+    <script src="https://gosspublic.alicdn.com/aliyun-oss-sdk-6.18.0.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f5f5f7;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h2 { margin-top: 0; color: #333; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007aff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        .success { background-color: #e6fffa; color: #047857; border: 1px solid #b2f5ea; }
+        .error { background-color: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+        .info { background-color: #ebf8ff; color: #2b6cb0; border: 1px solid #bee3f8; }
+
+        .result-link {
+            word-break: break-all;
+            font-weight: bold;
+            color: #007aff;
+        }
+        img.preview {
+            max-width: 100%;
+            margin-top: 15px;
+            border-radius: 6px;
+            border: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>BizyAir 上传测试</h2>
+    
+    <div class="form-group">
+        <label for="apiKey">API Key (不带 Bearer 前缀)</label>
+        <input type="text" id="apiKey" placeholder="输入你的 BizyAir API Key">
+    </div>
+
+    <div class="form-group">
+        <label for="fileInput">选择文件</label>
+        <input type="file" id="fileInput">
+    </div>
+
+    <button id="uploadBtn" onclick="startUpload()">开始上传</button>
+
+    <div id="status"></div>
+</div>
+
+<script>
+    // 日志辅助函数
+    const statusDiv = document.getElementById('status');
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    function log(message, type = 'info') {
+        statusDiv.style.display = 'block';
+        statusDiv.className = type;
+        // 如果是 success 类型，可能包含 HTML，所以用 innerHTML
+        if (type === 'success') {
+            statusDiv.innerHTML = message;
+        } else {
+            statusDiv.textContent = message;
+        }
+    }
+
+    async function startUpload() {
+        // 1. 基础校验
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+
+        if (!apiKey) {
+            log('错误：请输入 API Key', 'error');
+            return;
+        }
+        if (!file) {
+            log('错误：请选择一个文件', 'error');
+            return;
+        }
+
+        // 构造 Authorization Header
+        const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+
+        try {
+            uploadBtn.disabled = true;
+            log('步骤 1/3: 正在获取上传凭证...', 'info');
+
+            // ---------------------------------------------------------
+            // 步骤一：获取上传凭证 (API: /x/v1/upload/token)
+            // ---------------------------------------------------------
+            const tokenUrl = new URL('https://api.bizyair.cn/x/v1/upload/token');
+            tokenUrl.searchParams.append('file_name', file.name);
+            tokenUrl.searchParams.append('file_type', 'inputs');
+
+            const tokenRes = await fetch(tokenUrl, {
+                method: 'GET',
+                headers: { 'Authorization': authHeader }
+            });
+
+            if (!tokenRes.ok) throw new Error(`获取凭证失败: ${tokenRes.status}`);
+            const tokenData = await tokenRes.json();
+
+            if (!tokenData.status) throw new Error(`API 错误: ${tokenData.message}`);
+
+            const { file: fileInfo, storage } = tokenData.data;
+            
+            log('步骤 2/3: 正在上传文件到 OSS...', 'info');
+
+            // ---------------------------------------------------------
+            // 步骤二：使用 Ali-OSS SDK 上传文件
+            // ---------------------------------------------------------
+            
+            // 【修改点】：直接使用接口返回的 endpoint，不要自己去截取字符串
+            // 接口返回的 storage.endpoint 通常是 "oss-cn-shanghai.aliyuncs.com"
+            
+            const client = new OSS({
+                // 必须指定 region，虽然有 endpoint，但 SDK 内部有时仍需 region 参数
+                region: storage.region.startsWith('oss-') ? storage.region : `oss-${storage.region}`,
+                
+                // 关键修正：显式指定 endpoint，确保域名拼接正确
+                endpoint: storage.endpoint, 
+                
+                accessKeyId: fileInfo.access_key_id,
+                accessKeySecret: fileInfo.access_key_secret,
+                stsToken: fileInfo.security_token,
+                bucket: storage.bucket,
+                secure: true
+            });
+
+            // 执行上传
+            await client.put(fileInfo.object_key, file);
+
+            log('步骤 3/3: 正在提交资源...', 'info');
+
+            // ---------------------------------------------------------
+            // 步骤三：提交输入资源 (API: /x/v1/input_resource/commit)
+            // ---------------------------------------------------------
+            const commitRes = await fetch('https://api.bizyair.cn/x/v1/input_resource/commit', {
+                method: 'POST',
+                headers: {
+                    'Authorization': authHeader,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: file.name,
+                    object_key: fileInfo.object_key
+                })
+            });
+
+            const commitData = await commitRes.json();
+            if (!commitData.status) throw new Error(`提交资源失败: ${commitData.message}`);
+
+            // ---------------------------------------------------------
+            // 成功：显示结果
+            // ---------------------------------------------------------
+            const finalUrl = commitData.data.url;
+            const resultHtml = `
+                <strong>✅ 上传成功!</strong><br><br>
+                <strong>文件 URL:</strong><br>
+                <a href="${finalUrl}" target="_blank" class="result-link">${finalUrl}</a>
+                <br>
+                ${file.type.startsWith('image/') ? `<img src="${finalUrl}" class="preview">` : ''}
+            `;
+            log(resultHtml, 'success');
+
+        } catch (error) {
+            console.error(error);
+            log(`❌ 操作失败: ${error.message}\n(请按 F12 查看控制台详细报错)`, 'error');
+        } finally {
+            uploadBtn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>

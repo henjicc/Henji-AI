@@ -2,199 +2,196 @@
 trigger: always_on
 ---
 
-## Project Overview
+## 项目概述
 
-Henji-AI (痕迹AI) is a Tauri-based desktop application that aggregates multiple AI providers (PPIO, Fal, ModelScope, KIE) for generating images, videos, and audio through a unified interface. The application uses an adapter pattern to abstract provider-specific APIs.
+Henji-AI（痕迹AI）是一款基于Tauri框架的桌面应用程序，它整合了多个AI提供商（PPIO、Fal、ModelScope、KIE），通过统一的接口生成图片、视频和音频。该应用程序采用适配器模式来抽象出各提供商特定的API。
 
-## Development Commands
+## 开发命令
 
-### Frontend Development
+### 前端开发
 ```bash
-npm install              # Install dependencies
-npm run dev              # Vite dev server only
-npm run build            # TypeScript compilation + Vite build
-npm run preview          # Preview production build
-npm run lint             # Run ESLint
-npm run lint:fix         # Auto-fix ESLint issues
+npm install              # 安装依赖项
+npm run dev              # 仅启动Vite开发服务器
+npm run build            # 编译TypeScript代码并构建应用程序
+npm run preview          # 预览生产版本
+npm run lint             # 运行ESLint代码检查
+npm run lint:fix         # 自动修复ESLint发现的错误
 ```
 
-### Tauri Development
+### Tauri开发
 ```bash
-# Windows (requires Visual Studio Build Tools)
-npm run tauri:dev        # Development mode with hot reload
-npm run tauri:build      # Production build (generates MSI)
-npm run tauri:build:ci   # CI build without VS environment setup
+# Windows系统（需要安装Visual Studio Build Tools）
+npm run tauri:dev        # 开发模式（支持热重载）
+npm run tauri:build      # 构建生产版本（生成MSI文件）
+npm run tauri:build:ci   # 无需安装Visual Studio环境的持续集成构建
 
-# macOS (requires Xcode Command Line Tools)
-npm run tauri:dev:mac    # Development mode
-npm run tauri:build:mac  # Production build (generates DMG)
+# macOS系统（需要安装Xcode Command Line Tools）
+npm run tauri:dev:mac    # 开发模式
+npm run tauri:build:mac  # 构建生产版本（生成DMG文件）
 ```
 
-Build artifacts are located in `src-tauri/target/release/bundle/`
+构建生成的文件存放在`src-tauri/target/release/bundle/`目录下。
 
-## Architecture
+## 架构
 
-### Adapter Pattern Implementation
+### 适配器模式实现
 
-The core architecture uses a **Factory + Strategy pattern** to integrate multiple AI providers:
-
-```
+核心架构采用了**工厂模式 + 策略模式**来集成多个AI提供商：
+```plaintext
 MediaGenerator (UI)
     ↓
-ApiService (Singleton)
+ApiService (单例)
     ↓
 AdapterFactory.createAdapter(config)
     ↓
-BaseAdapter (Abstract)
+BaseAdapter (抽象类)
     ↓
 ├── PPIOAdapter
 ├── FalAdapter
 ├── KIEAdapter
-└── ModelscopeAdapter
+└── ModelScopeAdapter
 ```
 
-**Key Files:**
-- `src/adapters/base/BaseAdapter.ts` - Abstract base class defining the adapter interface
-- `src/adapters/index.ts` - `AdapterFactory` with `createAdapter()` method
-- `src/services/api.ts` - `ApiService` singleton managing adapter lifecycle
+**关键文件：**
+- `src/adapters/base/BaseAdapter.ts` - 定义适配器接口的抽象基类
+- `src/adapters/index.ts` - 包含`createAdapter()`方法的`AdapterFactory`
+- `src/services/api.ts` - 管理适配器生命周期的`ApiService`单例
 
-### Model Routing System
+### 模型路由系统
 
-Each adapter implements a **route-based model system** that maps model IDs to request builders:
-
+每个适配器都实现了一个**基于路由的模型系统**，将模型ID映射到相应的请求构建函数：
 ```typescript
 interface ModelRoute {
   matches: (modelId: string) => boolean
-  buildImageRequest?: (params) => { endpoint, requestData }
+  buildImageRequest?: (params) => { endpoint,requestData }
   buildVideoRequest?: (params) => { endpoint, requestData }
-  buildAudioRequest?: (params) => { endpoint, requestData }
+  buildAudioRequest?: (params) => { endpoint,requestedData }
 }
 ```
 
-**Route Registration:**
-- `src/adapters/ppio/models/index.ts` - PPIO model routes
-- `src/adapters/fal/models/index.ts` - Fal model routes
-- `src/adapters/kie/models/index.ts` - KIE model routes
-- `src/adapters/modelscope/models/index.ts` - ModelScope model routes
+**路由注册：**
+- `src/adapters/ppio/models/index.ts` - PPIO模型路由
+- `src/adapters/fal/models/index.ts` - Fal模型路由
+- `src/adapters/kie/models/index.ts` - KIE模型路由
+- `src/adapters/modelscope/models/index.ts` - ModelScope模型路由
 
-**Flow:** `adapter.generateImage()` → `findRoute(modelId)` → `route.buildImageRequest()` → API call
+**流程：** `adapter.generateImage()` → `findRoute(modelId)` → `route.buildImageRequest()` → 调用API
 
-### Provider-Specific Implementations
+### 提供商特定实现
 
-**PPIO Adapter** (`src/adapters/ppio/PPIOAdapter.ts`)
-- Uses Axios for HTTP requests
-- Polling via `PPIOStatusHandler` class
-- Config: `src/adapters/ppio/config.ts` (base URL, poll interval: 3000ms, max attempts: 120)
+**PPIO适配器** (`src/adapters/ppio/PPIOAdapter.ts`)
+- 使用Axios进行HTTP请求
+- 通过`PPIOStatusHandler`类进行轮询
+- 配置信息：`src/adapters/ppio/config.ts`（基础URL、轮询间隔：3000毫秒、最大尝试次数：120次）
 
-**Fal Adapter** (`src/adapters/fal/FalAdapter.ts`)
-- Uses official `@fal-ai/client` SDK
-- Automatic polling via `fal.subscribe()`
-- Handles image/video uploads to Fal CDN
-- Config: `src/adapters/fal/config.ts` (model-specific poll counts)
+**Fal适配器** (`src/adapters/fal/FalAdapter.ts)`
+- 使用官方的`@fal-ai/client` SDK
+- 通过`fal.subscribe()`自动轮询
+- 将图片/视频上传到Fal CDN
+- 配置信息：`src/adapters/fal/config.ts`（针对特定模型的轮询次数）
 
-**KIE Adapter** (`src/adapters/kie/KIEAdapter.ts`)
-- Uses Axios with separate upload client
-- Uploads images to KIE CDN before processing
-- Status mapping: waiting → QUEUED, generating → PROCESSING, success → COMPLETED
-- Config: `src/adapters/kie/config.ts` (poll interval: 3000ms, max attempts: 200)
+**KIE适配器** (`src/adapters/kie/KIEAdapter.ts)`
+- 使用Axios以及独立的上传客户端
+- 在处理之前将图片上传到KIE CDN
+- 状态映射：等待 → 排队中 → 处理中 → 完成
+- 配置信息：`src/adapters/kie/config.ts`（轮询间隔：3000毫秒、最大尝试次数：200次）
 
-**ModelScope Adapter** (`src/adapters/modelscope/ModelscopeAdapter.ts`)
-- Uses Tauri backend via `invoke()` for API calls
-- Optional Fal CDN integration for image uploads
-- Currently supports image generation only
+**ModelScope适配器** (`src/adapters/modelscope/ModelscopeAdapter.ts)`
+- 通过`invoke()`调用Tauri后端API
+- 可选集成Fal CDN进行图片上传
+- 目前仅支持图片生成
 
-### Configuration System
+### 配置系统
 
-**Provider Registry** (`src/config/providers.ts`)
-- Loads from `providers.json`
-- Defines provider metadata and available models
-- Structure: `Provider { id, name, type, models[] }`
+**提供商注册表** (`src/config/providers.ts`)
+- 从`providers.json`文件加载数据
+- 定义提供商元数据和可用模型
+- 结构：`Provider { id, name, type, models[] }`
 
-**Model Parameter System** (`src/models/index.ts`)
-- Centralized `modelSchemaMap` mapping model IDs to parameter schemas
-- Key functions:
-  - `getModelSchema(modelId)` - Get parameter schema
-  - `getModelDefaultValues(modelId)` - Extract default values
-  - `getAutoSwitchValues(modelId, currentValues)` - Conditional parameter switching
-  - `getSmartMatchValues(modelId, imageDataUrl, currentValues)` - Intelligent aspect ratio matching
+**模型参数系统** (`src/models/index.ts`)
+- 中心化的`modelSchemaMap`将模型ID映射到参数模式
+- 主要函数：
+  - `getModelSchema(modelId)` - 获取参数模式
+  - `modelsDefaultValues(modelId)` - 提取默认值
+  - `getAutoSwitchValues(modelId, currentValues)` - 条件性参数切换
+  - `getSmartMatchValues(modelId, imageDataUrl, currentValues)` - 智能比例匹配
 
-**Model Parameter Files:**
-- `src/models/ppio/` - PPIO model parameters
-- `src/models/fal/` - Fal model parameters
-- `src/models/modelscope/` - ModelScope model parameters
-- `src/models/kie/` - KIE model parameters
+**模型参数文件：**
+- `src/models/ppio/` - PPIO模型参数
+- `src/models/fal/` - Fal模型参数
+- `src/models/modelscope/` - ModelScope模型参数
+- `src/models/kie/` - KIE模型参数
 
-### Response Parsing
+### 响应解析
 
-Each adapter has provider-specific parsers:
-- `src/adapters/ppio/parsers/index.ts` - PPIO response parsing
-- `src/adapters/fal/parsers/imageParser.ts` - Fal response parsing
-- `src/adapters/kie/parsers/` - KIE response parsing
+每个适配器都有针对其提供商的解析器：
+- `src/adapters/ppio/parsers/index.ts` - PPIO响应解析
+- `src/adapters/fal/parsers/imageParser.ts` - Fal响应解析
+- `src/adapters/kie/parsers/` - KIE响应解析
 
-### Data Storage
+### 数据存储
 
-- **API Keys:** localStorage
-- **History:** AppLocalData (`Henji-AI/history.json`)
-- **Media Files:** AppLocalData (`Henji-AI/Media/`)
-- **Cache:** AppLocalData (`Henji-AI/Uploads/`, `Henji-AI/Waveforms/`)
+- **API密钥：** 保存在localStorage中
+- **历史记录：** 存储在`AppLocalData (`Henji-AI/history.json`)中
+- **媒体文件：** 存储在`AppLocalData (`Henji-AI/Media/`)中
+- **缓存：** 存储在`AppLocalData (`Henji-AI/Uploads/`, `Henji-AI/Waveforms/`)中
 
-## Adding New AI Models or Providers
+## 添加新的AI模型或提供商
 
-See **[docs/model-adaptation-guide.md](docs/model-adaptation-guide.md)** for detailed instructions on:
-1. Defining model parameter schemas
-2. Implementing adapter routes
-3. Registering models in the system
+有关详细说明，请参阅**[docs/model-adaptation-guide.md](docs/model-adaptation-guide.md)**：
+1. 定义模型参数模式
+2. 实现适配器路由
+3. 在系统中注册模型
 
-### Quick Steps:
+### 快速操作指南：
 
-**Adding a new model to an existing provider:**
-1. Create parameter schema in `src/models/{provider}/{model-name}.ts`
-2. Register in `src/models/index.ts` modelSchemaMap
-3. Add route in `src/adapters/{provider}/models/index.ts`
-4. Update `providers.json` with model metadata
+**向现有提供商添加新模型：**
+1. 在`src/models/{provider}/{model-name}.ts`中创建参数模式
+2. 在`src/adapters/{provider}/models/index.ts`中注册模型
+3. 在`src/adapters/{provider}/models/index.ts`中添加路由
+4. 更新`providers.json`文件中的提供商元数据
 
-**Adding a new provider:**
-1. Create adapter class extending `BaseAdapter` in `src/adapters/{provider}/`
-2. Implement `generateImage()`, `generateVideo()`, `generateAudio()` methods
-3. Create model routes in `src/adapters/{provider}/models/`
-4. Add provider case in `AdapterFactory.createAdapter()`
-5. Create parameter schemas in `src/models/{provider}/`
-6. Update `providers.json` with provider metadata
+**添加新提供商：**
+1. 在`src/adapters/{provider}/`目录下创建继承自`BaseAdapter`的适配器类
+2. 实现`generateImage()`, `generateVideo()`, `generateAudio()`方法
+3. 在`src/adapters/{provider}/models/`目录下创建模型路由
+4. 在`onDeleteFactory.createAdapter()`方法中添加新的提供商配置
+5. 在`src/models/{provider}/`目录下创建参数模式
+6. 更新`providers.json`文件中的提供商元数据
 
-## Troubleshooting & FAQ Resources
+## 故障排除与常见问题解答
 
-When encountering difficult problems, check the **`docs/FAQ/`** directory for detailed troubleshooting guides:
+遇到问题时，请查看**`docs/FAQ/`目录中的详细故障排除指南：
+- **`fal-model-integration-issues.md`** - 集成Fal模型时常见的问题：
+  - 价格计算不更新
+  - 图片上传按钮显示问题
+  - 参数自动切换失败
+  - 自动恢复行为问题
+  - 参数传递不完整
 
-- **`fal-model-integration-issues.md`** - Common issues when integrating Fal models:
-  - Price calculation not updating
-  - Image upload button display issues
-  - Parameter auto-switching failures
-  - Auto-restore behavior problems
-  - Incomplete parameter passing
+- **`history-json-base64-bloat.md`** - 解决history.json文件大小问题的方法：
+  - Base64数据导致文件过大
+  - 正确清理历史记录中的图片/视频数据
+  - 新模型集成的最佳实践
 
-- **`history-json-base64-bloat.md`** - Solutions for history.json file bloat:
-  - Base64 data causing file size issues
-  - Proper cleanup of image/video data in history
-  - Best practices for new model integration
+- **`configuration-driven-architecture-常见问题.md`** - 与配置相关的问题：
+  - 参数未出现在API请求中
+  - 自动切换功能失效或过于敏感
+  - 价格估算不更新
+  - 图片上传按钮可见性问题
 
-- **`配置驱动架构-常见问题.md`** - Configuration-driven architecture issues:
-  - Parameters not appearing in API requests
-  - autoSwitch not working or being too aggressive
-  - Price estimation not updating
-  - Image upload button visibility issues
+- **`new-model-parameter- synchronization-guide.md`** - 添加新模型参数的检查清单：
+  - 需要在多个文件中进行的更新
+  - TypeScript类型定义
+  - 常见错误及遗漏的位置
+  - 快速验证方法
 
-- **`新模型参数-同步更新清单.md`** - Checklist for adding new model parameters:
-  - Required updates across multiple files
-  - TypeScript type definitions
-  - Common mistakes and missing locations
-  - Quick verification methods
+这些FAQ包含了针对模型适配过程中常见问题的详细根本原因分析、逐步解决方案和调试技巧。
 
-These FAQs contain detailed root cause analysis, step-by-step solutions, and debugging techniques for common problems encountered during model adaptation.
-
-## Key Interfaces
+## 关键接口
 
 ```typescript
-// Core parameter types (src/adapters/base/BaseAdapter.ts)
+// 核心参数类型（src/adapters/base/BaseAdapter.ts）
 interface GenerateImageParams {
   prompt: string
   model: string
@@ -216,7 +213,7 @@ interface GenerateVideoParams {
   [key: string]: any
 }
 
-// Result types
+// 结果类型
 interface ImageResult {
   url: string
   taskId?: string
@@ -231,7 +228,7 @@ interface VideoResult {
   status?: string
 }
 
-// Progress callback
+// 进度回调
 interface ProgressStatus {
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED'
   queue_position?: number
@@ -240,34 +237,34 @@ interface ProgressStatus {
 }
 ```
 
-## Platform-Specific Notes
+## 平台特定说明
 
 ### Windows
-- Requires Visual Studio Build Tools (MSVC)
-- Uses custom build script that sets up VS environment
-- Window controls use Windows-specific styling
+- 需要安装Visual Studio Build Tools（MSVC）
+- 使用自定义构建脚本来设置VS环境
+- 窗口控件使用Windows特定的样式
 
 ### macOS
-- Requires Xcode Command Line Tools
-- Uses separate build scripts (`tauri:dev:mac`, `tauri:build:mac`)
-- Window controls use macOS-specific styling
+- 需要安装Xcode Command Line Tools
+- 使用不同的构建脚本（`tauri:dev:mac`, `tauri:build:mac`)
+- 窗口控件使用macOS特定的样式
 
-### Cross-Platform Compatibility
-- File paths use Tauri API (`@tauri-apps/plugin-fs`)
-- HTTP requests use Tauri plugin (`@tauri-apps/plugin-http`)
-- Avoid platform-specific path separators
+### 跨平台兼容性
+- 文件路径使用Tauri API（`@tauri-apps/plugin-fs`）
+- HTTP请求使用Tauri插件（`@tauri-apps/plugin-http`）
+- 避免使用平台特定的路径分隔符
 
-## Common Patterns
+## 常见模式
 
-### Polling Pattern
-All adapters implement polling for async operations:
-- PPIO: `PPIOStatusHandler.pollTaskStatus()`
-- Fal: `fal.subscribe()` with automatic polling
-- KIE: Direct polling with status mapping
-- ModelScope: Backend-managed polling via Tauri
+### 轮询模式
+所有适配器都实现了异步操作的轮询：
+- PPIO：`PPIOStatusHandler.pollTaskStatus()`
+- Fal：通过`fal.subscribe()`自动轮询
+- KIE：直接轮询并映射状态
+- ModelScope：通过Tauri后台管理轮询
 
-### Progress Callbacks
-Use `onProgress` callback for real-time status updates:
+### 进度回调
+使用`onProgress`回调进行实时状态更新：
 ```typescript
 await adapter.generateImage({
   prompt: "...",
@@ -277,12 +274,12 @@ await adapter.generateImage({
 })
 ```
 
-### Error Handling
-All adapters use `BaseAdapter.formatError()` for consistent error formatting.
+### 错误处理
+所有适配器都使用`BaseAdapter.formatError()`来统一错误格式。
 
-## Testing
+## 测试
 
-No test suite is currently configured. When adding tests:
-- Use the existing ESLint configuration
-- Follow TypeScript strict mode conventions
-- Test adapter implementations independently
+目前尚未配置测试套件。添加测试时，请遵循以下步骤：
+- 使用现有的ESLint配置
+- 遵循TypeScript的严格模式约定
+- 独立测试每个适配器的实现

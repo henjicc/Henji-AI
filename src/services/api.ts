@@ -17,18 +17,12 @@ export class ApiService {
     }
 
     // 如果是魔搭适配器，尝试获取 fal API key 用于文件上传
-    let falApiKey: string | undefined
-    if (config.type === 'modelscope') {
-      falApiKey = localStorage.getItem('fal_api_key') || undefined
-      if (falApiKey) {
-        logInfo('', '[ApiService] 魔搭适配器将使用 fal API key 进行文件上传')
-      }
-    }
+    // 注意：现在 ModelscopeAdapter 使用通用的 UploadService，不再需要显式传递 falApiKey
+    // 但为了保持接口兼容性，这里不做彻底删除，只是不再传递给 fullConfig
 
     const fullConfig: AdapterConfig = {
       ...config,
-      apiKey: this.apiKey,
-      falApiKey
+      apiKey: this.apiKey
     }
 
     this.adapter = AdapterFactory.createAdapter(fullConfig)
@@ -94,16 +88,11 @@ export class ApiService {
       throw new Error(`API key for ${config.type} is not set`)
     }
 
-    // 如果是魔搭适配器，尝试获取 fal API key 用于文件上传
-    let falApiKey: string | undefined
-    if (config.type === 'modelscope') {
-      falApiKey = localStorage.getItem('fal_api_key') || undefined
-    }
+    // 注意：现在 ModelscopeAdapter 使用通用的 UploadService，不再需要显式传递 falApiKey
 
     return AdapterFactory.createAdapter({
       ...config,
-      apiKey,
-      falApiKey
+      apiKey
     })
   }
 

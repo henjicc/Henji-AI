@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import NumberInput from './ui/NumberInput'
 import Toggle from './ui/Toggle'
+import Dropdown from './ui/Dropdown'
 import ModelSettingsPanel from './ModelSettingsPanel'
 import { apiService } from '../services/api'
 import { open } from '@tauri-apps/plugin-shell'
@@ -24,12 +25,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [falApiKey, setFalApiKey] = useState('')
   const [modelscopeApiKey, setModelscopeApiKey] = useState('')
   const [kieApiKey, setKieApiKey] = useState('')
+  const [bizyAirApiKey, setBizyAirApiKey] = useState('')
   const [maxHistoryCount, setMaxHistoryCount] = useState(50)
   const [showPriceEstimate, setShowPriceEstimate] = useState(true)
   const [showApiKey, setShowApiKey] = useState(false)
   const [showFalApiKey, setShowFalApiKey] = useState(false)
   const [showModelscopeApiKey, setShowModelscopeApiKey] = useState(false)
   const [showKieApiKey, setShowKieApiKey] = useState(false)
+  const [showBizyAirApiKey, setShowBizyAirApiKey] = useState(false)
   const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
   const [collapseDelay, setCollapseDelay] = useState(500)
   const [collapseOnScrollOnly, setCollapseOnScrollOnly] = useState(true)
@@ -94,6 +97,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const savedKieApiKey = localStorage.getItem('kie_api_key') || ''
     setKieApiKey(savedKieApiKey)
 
+    const savedBizyAirApiKey = localStorage.getItem('bizyair_api_key') || ''
+    setBizyAirApiKey(savedBizyAirApiKey)
+
     const savedMaxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
     setMaxHistoryCount(savedMaxHistory)
 
@@ -142,7 +148,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       const target = event.target as HTMLElement
 
       // 检查是否点击在弹窗内部（通过 data-dialog 属性识别）
-      const isClickInsideDialog = target.closest('[data-dialog="true"]')
+      const isClickInsideDialog = target.closest('[data-dialog="true"]') || target.closest('[data-dropdown-portal="true"]')
 
       if (isClickInsideDialog) {
         return // 点击在弹窗内部，不关闭设置面板
@@ -196,6 +202,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const handleKieApiKeyChange = (value: string) => {
     setKieApiKey(value)
     localStorage.setItem('kie_api_key', value)
+  }
+
+  // 实时保存 BizyAir API Key
+  const handleBizyAirApiKeyChange = (value: string) => {
+    setBizyAirApiKey(value)
+    localStorage.setItem('bizyair_api_key', value)
   }
 
   // 实时保存历史记录数量
@@ -669,8 +681,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             onClick={() => handleUpdateFrequencyChange(freq)}
                             disabled={!updateEnabled}
                             className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${updateFrequency === freq
-                                ? 'bg-[#007eff] text-white'
-                                : 'bg-zinc-700/30 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
+                              ? 'bg-[#007eff] text-white'
+                              : 'bg-zinc-700/30 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
                               } disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {getFrequencyLabel(freq)}
@@ -798,19 +810,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <p className="mt-2 text-xs text-zinc-500">
                       打开
                       <button
-                        onClick={() => handleOpenLink('https://fal.ai/')}
-                        className="text-[#007eff] hover:underline mx-1"
-                      >
-                        fal 官网
-                      </button>
-                      注册并登录，然后在
-                      <button
                         onClick={() => handleOpenLink('https://fal.ai/dashboard/keys')}
                         className="text-[#007eff] hover:underline mx-1"
                       >
-                        密钥管理页面
+                        fal.ai 控制台
                       </button>
-                      获取密钥
+                      注册并登录，获取 Key ID:Key Secret 格式的密钥
                     </p>
                   </div>
                 </div>
@@ -917,6 +922,114 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </p>
                   </div>
                 </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 tracking-wider">BizyAir</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <label className="block text-sm font-medium mb-2 text-zinc-300">API 密钥</label>
+                    <div className="relative">
+                      <input
+                        type={showBizyAirApiKey ? "text" : "password"}
+                        value={bizyAirApiKey}
+                        onChange={(e) => handleBizyAirApiKeyChange(e.target.value)}
+                        placeholder="请输入您的 BizyAir API 密钥"
+                        className="w-full bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 pr-10 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowBizyAirApiKey(!showBizyAirApiKey)}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      >
+                        {showBizyAirApiKey ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      打开
+                      <button
+                        onClick={() => handleOpenLink('https://bizyair.cn/')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        BizyAir 官网
+                      </button>
+                      注册并登录，然后在
+                      <button
+                        onClick={() => handleOpenLink('https://bizyair.cn/user/api-key')}
+                        className="text-[#007eff] hover:underline mx-1"
+                      >
+                        密钥管理页面
+                      </button>
+                      获取密钥
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 tracking-wider">通用文件上传服务</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30 text-zinc-300">
+                    <p className="text-xs text-zinc-500 mb-4">
+                      为 ModelScope、PPIO 等不具备原生文件上传功能的模型提供文件托管服务。
+                    </p>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">默认上传提供商</label>
+                        <Dropdown
+                          value={localStorage.getItem('general_upload_provider') || 'kie'}
+                          display={
+                            (() => {
+                              const p = localStorage.getItem('general_upload_provider') || 'kie';
+                              if (p === 'kie') return 'KIE';
+                              if (p === 'bizyair') return 'BizyAir';
+                              return 'Fal.ai';
+                            })()
+                          }
+                          options={[
+                            { label: 'KIE', value: 'kie' },
+                            { label: 'BizyAir', value: 'bizyair' },
+                            { label: 'Fal.ai', value: 'fal' }
+                          ]}
+                          onSelect={(val) => {
+                            import('../services/upload/UploadService').then(({ UploadService }) => {
+                              UploadService.getInstance().setProvider(val as any)
+                              // 强制重新渲染
+                              setApiKey(apiKey + ' ')
+                              setTimeout(() => setApiKey(apiKey), 0)
+                            })
+                          }}
+                          className="w-40"
+                          buttonClassName="w-full bg-zinc-900/50 border-zinc-700/50 h-[34px]"
+                        />
+                      </div>
+
+                      <div className="border-t border-zinc-700/30 pt-4">
+                        <Toggle
+                          label="启用自动回退"
+                          checked={localStorage.getItem('general_upload_fallback') !== 'false'}
+                          onChange={(checked) => {
+                            import('../services/upload/UploadService').then(({ UploadService }) => {
+                              UploadService.getInstance().setFallbackEnabled(checked)
+                              // 强制重新渲染 (使用一个不太优雅但在FC内部简单的hacks)
+                              setApiKey(apiKey + ' ')
+                              setTimeout(() => setApiKey(apiKey), 0)
+                            })
+                          }}
+                          className="w-full"
+                        />
+                        <p className="mt-2 text-xs text-zinc-500">
+                          当首选提供商不可用（例如未配置密钥）或上传失败时，尝试使用其他已配置的提供商。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -999,8 +1112,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 type="button"
                 onClick={(e) => { e.stopPropagation(); closeDialog(setShowAlertDialog); }}
                 className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-colors ${alertType === 'success' ? 'bg-green-600/70 hover:bg-green-600' :
-                    alertType === 'error' ? 'bg-red-600/70 hover:bg-red-600' :
-                      'bg-yellow-600/70 hover:bg-yellow-600'
+                  alertType === 'error' ? 'bg-red-600/70 hover:bg-red-600' :
+                    'bg-yellow-600/70 hover:bg-yellow-600'
                   }`}
               >
                 确定
