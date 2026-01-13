@@ -52,19 +52,16 @@ export class KIEAdapter extends BaseAdapter {
   }
 
   /**
-   * 上传图片到 KIE CDN
+   * 通用文件上传到 KIE CDN
    */
-  private async uploadImageToKIE(imageDataUrl: string): Promise<string> {
+  private async uploadFileToKIE(file: Blob | File, filename: string = 'file'): Promise<string> {
     try {
-      this.log('开始上传图片到 KIE CDN...')
-
-      // 将 data URL 转换为 Blob（不使用 fetch，避免 Tauri 生产环境限制）
-      const blob = this.dataURLtoBlob(imageDataUrl)
-      this.log(`图片转换为 Blob 成功，大小: ${blob.size} bytes`)
+      this.log(`开始上传文件到 KIE CDN (${filename})...`)
+      this.log(`文件大小: ${file.size} bytes`)
 
       // 创建 FormData
       const formData = new FormData()
-      formData.append('file', blob, 'image.jpg')
+      formData.append('file', file, filename)
       formData.append('uploadPath', 'henji-uploads')
 
       this.log('开始发送上传请求到:', KIE_CONFIG.uploadBaseURL + KIE_CONFIG.fileUploadEndpoint)
@@ -87,7 +84,7 @@ export class KIEAdapter extends BaseAdapter {
       if (uploadResponse.data && uploadResponse.data.data) {
         const fileUrl = uploadResponse.data.data.fileUrl || uploadResponse.data.data.downloadUrl
         if (fileUrl) {
-          this.log('图片上传成功:', fileUrl)
+          this.log('文件上传成功:', fileUrl)
           return fileUrl
         }
       }
@@ -96,13 +93,32 @@ export class KIEAdapter extends BaseAdapter {
       this.log('上传响应格式不符合预期，完整响应:', uploadResponse.data)
       throw new Error('上传响应中未找到文件 URL')
     } catch (error: any) {
-      this.log('图片上传失败:', error.message || error)
+      this.log('文件上传失败:', error.message || error)
       if (error.response) {
         this.log('错误响应状态:', error.response.status)
         this.log('错误响应数据:', error.response.data)
       }
-      throw new Error(`图片上传到 KIE CDN 失败: ${error.message || error}`)
+      throw new Error(`文件上传到 KIE CDN 失败: ${error.message || error}`)
     }
+  }
+
+  /**
+   * 上传图片到 KIE CDN
+   */
+  private async uploadImageToKIE(imageDataUrl: string): Promise<string> {
+    // 将 data URL 转换为 Blob（不使用 fetch，避免 Tauri 生产环境限制）
+    const blob = this.dataURLtoBlob(imageDataUrl)
+    return this.uploadFileToKIE(blob, 'image.jpg')
+  }
+
+  /**
+   * 上传视频到 KIE CDN
+   */
+  private async uploadVideoToKIE(video: File | string): Promise<string> {
+    if (typeof video === 'string') {
+      return video
+    }
+    return this.uploadFileToKIE(video, video.name || 'video.mp4')
   }
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
@@ -197,10 +213,19 @@ export class KIEAdapter extends BaseAdapter {
         this.log('所有图片上传完成:', uploadedImageUrls)
       }
 
+      // 如果有视频，上传到 KIE CDN
+      let uploadedVideoUrl: string | undefined
+      if (params.video) {
+        this.log('开始上传视频到 KIE CDN...')
+        uploadedVideoUrl = await this.uploadVideoToKIE(params.video)
+        this.log('视频上传完成:', uploadedVideoUrl)
+      }
+
       // 构建请求（传入上传后的 URL）
       const { requestData } = route.buildVideoRequest({
         ...params,
-        images: uploadedImageUrls
+        images: uploadedImageUrls,
+        video: uploadedVideoUrl // 使用上传后的视频 URL (如果有)
       })
 
       // 构建日志对象，对图片 URL 做简化处理
@@ -397,6 +422,19 @@ export class KIEAdapter extends BaseAdapter {
     })
 
     return result
+  }
+
+  /**
+   * 继续轮询任务（用于超时恢复）
+   */
+  async continuePolling(
+    modelId: string,
+    taskId: string,
+    onProgress?: any
+  ): Promise<VideoResult> {
+    this.log('继续轮询任务:', { taskId, modelId })
+    // 复用 pollVideoTaskStatus 方法
+    return this.pollVideoTaskStatus(taskId, modelId, onProgress)
   }
 
   /**

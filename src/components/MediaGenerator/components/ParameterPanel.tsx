@@ -9,6 +9,7 @@ import {
   viduParams,
   klingParams,
   ppioKlingO1Params,
+  ppioKling26ProParams,
   hailuoParams,
   pixverseParams,
   wan25Params,
@@ -93,7 +94,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie' && selectedModel !== 'kling-2.6-pro') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -198,7 +199,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               falSeedanceV1Mode: values.falSeedanceV1Mode,
               falSeedanceV1Version: values.falSeedanceV1Version,
               ppioSeedanceV1AspectRatio: values.ppioSeedanceV1AspectRatio,
-              ppioSeedanceV1Resolution: values.ppioSeedanceV1Resolution,
+              ppioSeedanceV1Resolution: values.ppioSeedanceV1Resolution,  // qualityKey 映射
               seedanceResolution: values.ppioSeedanceV1Resolution,  // qualityKey 映射
               falSeedanceV1VideoDuration: values.falSeedanceV1VideoDuration,
               ppioSeedanceV1CameraFixed: values.ppioSeedanceV1CameraFixed,
@@ -487,6 +488,47 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             />
           )}
       </>
+    )
+  }
+
+  // PPIO Kling 2.6 Pro 参数
+  if (selectedModel === 'kling-2.6-pro') {
+    return (
+      <SchemaForm
+        schema={ppioKling26ProParams}
+        values={{
+          ppioKling26Mode: values.ppioKling26Mode,
+          ppioKling26VideoDuration: values.ppioKling26VideoDuration,
+          ppioKling26AspectRatio: values.ppioKling26AspectRatio,
+          ppioKling26CfgScale: values.ppioKling26CfgScale,
+          ppioKling26Sound: values.ppioKling26Sound,
+          ppioKling26CharacterOrientation: values.ppioKling26CharacterOrientation,
+          ppioKling26KeepOriginalSound: values.ppioKling26KeepOriginalSound,
+          uploadedImages,
+          uploadedVideos: values.uploadedVideos
+        }}
+        onChange={onChange}
+      />
+    )
+  }
+
+  // KIE Kling V2.6 参数
+  if (selectedModel === 'kie-kling-v2-6') {
+    return (
+      <SchemaForm
+        schema={kieKlingV26Params}
+        values={{
+          kieKlingV26Mode: values.kieKlingV26Mode,
+          kieKlingV26AspectRatio: values.kieKlingV26AspectRatio,
+          kieKlingV26Resolution: values.kieKlingV26Resolution,
+          kieKlingV26Duration: values.kieKlingV26Duration,
+          kieKlingV26EnableAudio: values.kieKlingV26EnableAudio,
+          kieKlingV26CharacterOrientation: values.kieKlingV26CharacterOrientation,
+          uploadedImages,
+          uploadedVideos: values.uploadedVideos
+        }}
+        onChange={onChange}
+      />
     )
   }
 

@@ -222,6 +222,21 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     }
   }, [state.selectedModel, state.ppioViduQ1Mode, state.falVeo31Mode, state.falSeedanceV1Mode, state.falViduQ2Mode, state.falHailuo02FastMode, state.kieSeedanceV3Version, imageUpload])
 
+  // 视频验证选项
+  const videoValidationOptions = useMemo(() => {
+    // Kling Motion Control (PPIO 2.6 Pro & KIE 2.6)
+    if ((state.selectedModel === 'kling-2.6-pro' && state.ppioKling26Mode === 'motion-control') ||
+      (state.selectedModel === 'kie-kling-v2-6' && state.kieKlingV26Mode === 'motion-control')) {
+      return {
+        minDuration: 3,
+        maxDuration: 30, // 3-30s (动作控制模式支持最长30秒)
+        maxSizeMB: 100
+      }
+    }
+    // 默认使用 validateVideo 内部定义的默认值 (3-10s, 200MB)
+    return undefined
+  }, [state.selectedModel, state.ppioKling26Mode, state.kieKlingV26Mode])
+
   // 使用视频上传 hook
   const videoUpload = useVideoUpload(
     state.uploadedVideos,
@@ -229,7 +244,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.uploadedVideoFiles,
     state.setUploadedVideoFiles,
     state.setUploadedVideoFilePaths, // 【关键修复】传递路径设置函数，用于删除/上传视频时清空旧路径
-    showAlert
+    showAlert,
+    videoValidationOptions
   )
 
   // 预设参数映射（用于预设功能和重新编辑功能）
@@ -950,6 +966,22 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       ppioKlingO1AspectRatio: state.setPpioKlingO1AspectRatio,
       ppioKlingO1KeepAudio: state.setPpioKlingO1KeepAudio,
       ppioKlingO1FastMode: state.setPpioKlingO1FastMode,
+      // PPIO Kling 2.6 Pro
+      ppioKling26Mode: state.setPpioKling26Mode,
+      ppioKling26VideoDuration: state.setPpioKling26VideoDuration,
+      ppioKling26AspectRatio: state.setPpioKling26AspectRatio,
+      ppioKling26CfgScale: state.setPpioKling26CfgScale,
+      ppioKling26Sound: state.setPpioKling26Sound,
+      ppioKling26CharacterOrientation: state.setPpioKling26CharacterOrientation,
+      ppioKling26KeepOriginalSound: state.setPpioKling26KeepOriginalSound,
+
+      // KIE Kling V2.6
+      kieKlingV26Mode: state.setKieKlingV26Mode,
+      kieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
+      kieKlingV26Resolution: state.setKieKlingV26Resolution,
+      kieKlingV26CharacterOrientation: state.setKieKlingV26CharacterOrientation,
+      kieKlingV26Duration: state.setKieKlingV26Duration,
+      kieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
       // Kling Video O1
       falKlingVideoO1Mode: state.setFalKlingVideoO1Mode,
       falKlingVideoO1AspectRatio: state.setFalKlingVideoO1AspectRatio,
@@ -1074,10 +1106,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       // KIE Grok Imagine Video
       kieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
       kieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
-      // KIE Kling V2.6
-      kieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
-      kieKlingV26Duration: state.setKieKlingV26Duration,
-      kieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
       // KIE Hailuo 2.3
       kieHailuo23Mode: state.setKieHailuo23Mode,
       kieHailuo23Duration: state.setKieHailuo23Duration,
@@ -1197,6 +1225,32 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
 
+    // 检查 PPIO Kling 2.6 Pro 动作控制模式的必需条件
+    if (state.selectedModel === 'kling-2.6-pro' && state.ppioKling26Mode === 'motion-control') {
+      // 动作控制模式：必须上传1张图片 + 1个视频
+      if (state.uploadedImages.length !== 1) {
+        showAlert('图片必需', '动作控制模式需要上传1张图片（不能多也不能少）', 'warning')
+        return
+      }
+      if (state.uploadedVideoFiles.length !== 1) {
+        showAlert('视频必需', '动作控制模式需要上传1个视频（不能多也不能少）', 'warning')
+        return
+      }
+    }
+
+    // 检查 KIE Kling 2.6 动作控制模式的必需条件
+    if (state.selectedModel === 'kie-kling-v2-6' && state.kieKlingV26Mode === 'motion-control') {
+      // 动作控制模式：必须上传1张图片 + 1个视频
+      if (state.uploadedImages.length !== 1) {
+        showAlert('图片必需', '动作控制模式需要上传1张图片（不能多也不能少）', 'warning')
+        return
+      }
+      if (state.uploadedVideoFiles.length !== 1) {
+        showAlert('视频必需', '动作控制模式需要上传1个视频（不能多也不能少）', 'warning')
+        return
+      }
+    }
+
     try {
       const options = await buildGenerateOptions({
         currentModel,
@@ -1264,6 +1318,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         ppioKlingO1AspectRatio: state.ppioKlingO1AspectRatio,
         ppioKlingO1KeepAudio: state.ppioKlingO1KeepAudio,
         ppioKlingO1FastMode: state.ppioKlingO1FastMode,
+        // PPIO Kling 2.6 Pro 参数
+        ppioKling26Mode: state.ppioKling26Mode,
+        ppioKling26VideoDuration: state.ppioKling26VideoDuration,
+        ppioKling26AspectRatio: state.ppioKling26AspectRatio,
+        ppioKling26CfgScale: state.ppioKling26CfgScale,
+        ppioKling26Sound: state.ppioKling26Sound,
+        ppioKling26CharacterOrientation: state.ppioKling26CharacterOrientation,
+        ppioKling26KeepOriginalSound: state.ppioKling26KeepOriginalSound,
         ppioHailuo23FastMode: state.ppioHailuo23FastMode,
         ppioHailuo23EnablePromptExpansion: state.ppioHailuo23EnablePromptExpansion,
         ppioPixverse45FastMode: state.ppioPixverse45FastMode,
@@ -1372,15 +1434,21 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         kieZImageAspectRatio: state.kieZImageAspectRatio,
         kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
         kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
-        kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
-        kieKlingV26Duration: state.kieKlingV26Duration,
-        kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
         kieHailuo23Mode: state.kieHailuo23Mode,
         kieHailuo23Duration: state.kieHailuo23Duration,
         kieHailuo23Resolution: state.kieHailuo23Resolution,
         kieHailuo02Duration: state.kieHailuo02Duration,
         kieHailuo02Resolution: state.kieHailuo02Resolution,
         kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer,
+
+        // KIE Kling V2.6 参数
+        kieKlingV26Mode: state.kieKlingV26Mode,
+        kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
+        kieKlingV26Resolution: state.kieKlingV26Resolution,
+        kieKlingV26CharacterOrientation: state.kieKlingV26CharacterOrientation,
+        kieKlingV26Duration: state.kieKlingV26Duration,
+        kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
+
         // KIE Seedance V3 参数
         kieSeedanceV3Version: state.kieSeedanceV3Version,
         kieSeedanceV3AspectRatio: state.kieSeedanceV3AspectRatio,
@@ -1564,6 +1632,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         hailuo02FastMode={state.falHailuo02FastMode}
         kieSeedanceV3Version={state.kieSeedanceV3Version}
         ppioKlingO1Mode={state.ppioKlingO1Mode}
+        ppioKling26Mode={state.ppioKling26Mode}
+        kieKlingV26Mode={state.kieKlingV26Mode}
         modelscopeCustomModel={state.modelscopeCustomModel}
         onImageUpload={(files) => {
           const maxCount = getMaxImageCount(
@@ -1696,6 +1766,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               ppioPixverse45VideoResolution: state.ppioPixverse45VideoResolution,
               ppioWan25VideoDuration: state.ppioWan25VideoDuration,
               ppioSeedanceV1VideoDuration: state.ppioSeedanceV1VideoDuration,
+              // PPIO Kling 2.6 Pro 价格参数
+              ppioKling26Mode: state.ppioKling26Mode,
+              ppioKling26VideoDuration: state.ppioKling26VideoDuration,
+              ppioKling26Sound: state.ppioKling26Sound,
               // 模型特定参数 - Fal
               falNanoBananaNumImages: state.falNanoBananaNumImages,
               falNanoBananaProNumImages: state.falNanoBananaProNumImages,

@@ -897,13 +897,151 @@ export const ppioKlingO1Config: ModelConfig = {
       // 这样即使 mode 被意外切换，视频也会被正确保存
       const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
       const uploadedVideos = (context.params as any).uploadedVideos || []
-
       // 设置 uploadedVideos（用于重新编辑时的回退）
       if (uploadedVideos.length > 0) {
         options.uploadedVideos = uploadedVideos
       }
 
       if (uploadedVideoFiles.length > 0) {
+        const { saveUploadVideo } = await import('@/utils/save')
+        const setUploadedVideoFilePaths = (context.params as any).setUploadedVideoFilePaths
+        const uploadedVideoFilePaths = (context.params as any).uploadedVideoFilePaths || []
+
+        // 保存视频文件路径（用于历史记录恢复）
+        const paths: string[] = [...uploadedVideoFilePaths]
+        if (!paths[0]) {
+          const saved = await saveUploadVideo(uploadedVideoFiles[0], 'persist')
+          paths[0] = saved.fullPath
+        }
+
+        // 传递 File 对象给适配器（适配器会上传到 Fal CDN）
+        options.video = uploadedVideoFiles[0]
+        setUploadedVideoFilePaths(paths)
+        options.uploadedVideoFilePaths = paths
+      }
+    }
+  }
+}
+
+/**
+ * PPIO Kling 2.6 Pro 配置
+ * 支持 2 种模式：文/图生视频、动作控制
+ */
+export const kling26ProConfig: ModelConfig = {
+  id: 'kling-2.6-pro',
+  type: 'video',
+  provider: 'ppio',
+
+  paramMapping: {
+    mode: {
+      source: 'ppioKling26Mode',
+      defaultValue: 'text-image-to-video'
+    },
+    duration: {
+      source: ['ppioKling26VideoDuration', 'videoDuration'],
+      defaultValue: 5
+    },
+    aspectRatio: {
+      source: 'ppioKling26AspectRatio',
+      defaultValue: '16:9'
+    },
+    cfgScale: 'ppioKling26CfgScale',
+    sound: {
+      source: 'ppioKling26Sound',
+      defaultValue: false
+    },
+    characterOrientation: {
+      source: 'ppioKling26CharacterOrientation',
+      defaultValue: 'video'
+    },
+    keepOriginalSound: {
+      source: 'ppioKling26KeepOriginalSound',
+      defaultValue: true
+    }
+  },
+
+  features: {
+    modeSwitch: {
+      modeParamKey: 'ppioKling26Mode',
+      configs: {
+        'text-image-to-video': {
+          // 文/图生视频：支持0-1张图片
+          features: {
+            smartMatch: {
+              enabled: true,
+              paramKey: 'aspectRatio',
+              defaultRatio: '16:9'
+            },
+            imageUpload: {
+              enabled: true,
+              maxImages: 1,
+              mode: 'single',
+              paramKey: 'images',
+              convertToBlob: false
+            }
+          }
+        },
+        'motion-control': {
+          // 动作控制：需要1张图片 + 1个视频
+          features: {
+            imageUpload: {
+              enabled: true,
+              maxImages: 1,
+              mode: 'single',
+              paramKey: 'images',
+              convertToBlob: false
+            },
+            videoUpload: {
+              enabled: true,
+              maxVideos: 1,
+              paramKey: 'video'
+            }
+          }
+        }
+      }
+    }
+  },
+
+  customHandlers: {
+    validateParams: (params) => {
+      const mode = params.ppioKling26Mode
+      const imageCount = (params as any).uploadedImages?.length || 0
+      const videoFiles = (params as any).uploadedVideoFiles || []
+
+      if (mode === 'motion-control') {
+        if (imageCount < 1) {
+          throw new Error('动作控制模式需要上传1张图片')
+        }
+        if (videoFiles.length < 1) {
+          throw new Error('动作控制模式需要上传1个视频')
+        }
+      }
+    },
+    afterBuild: async (options, context) => {
+      const mode = context.params.ppioKling26Mode
+      const uploadedVideoFiles = (context.params as any).uploadedVideoFiles || []
+
+      // 处理图片上传（PPIO 使用 base64）
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+
+        const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+        const image = context.uploadedImages[0]
+        options.images = [image]
+
+        if (uploadedFilePaths[0]) {
+          options.uploadedFilePaths = [uploadedFilePaths[0]]
+        } else {
+          const blob = await dataUrlToBlob(image)
+          const saved = await saveUploadImage(blob, 'persist')
+          options.uploadedFilePaths = [saved.fullPath]
+          setUploadedFilePaths([saved.fullPath])
+        }
+      }
+
+      // 动作控制模式：处理视频上传
+      if (mode === 'motion-control' && uploadedVideoFiles.length > 0) {
         const { saveUploadVideo } = await import('@/utils/save')
         const setUploadedVideoFilePaths = (context.params as any).setUploadedVideoFilePaths
         const uploadedVideoFilePaths = (context.params as any).uploadedVideoFilePaths || []

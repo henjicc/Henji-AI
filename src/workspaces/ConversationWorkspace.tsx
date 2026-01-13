@@ -253,8 +253,16 @@ const ConversationWorkspace: React.FC = () => {
                 }
               } catch { }
             }
+
+            // 处理视频字段：将文件路径转换为可访问的 URL
+            let videos = task.videos
+            if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length > 0) {
+              videos = task.uploadedVideoFilePaths.map((p: string) => convertFileSrc(p))
+            }
+
             return {
               ...task,
+              videos,
               result: result ? { ...result, createdAt: result.createdAt ? new Date(result.createdAt) : new Date() } : undefined
             }
           })
@@ -1629,6 +1637,9 @@ const ConversationWorkspace: React.FC = () => {
     let videoUrls: string[] | undefined = undefined
     if (options?.uploadedVideoFilePaths && options.uploadedVideoFilePaths.length > 0) {
       videoUrls = options.uploadedVideoFilePaths.map((p: string) => convertFileSrc(p))
+    } else if (options?.uploadedVideos && options.uploadedVideos.length > 0) {
+      // 如果没有文件路径，但有上传的视频缩略图，使用缩略图
+      videoUrls = options.uploadedVideos
     }
 
     const newTask: GenerationTask = {
@@ -2353,9 +2364,15 @@ const ConversationWorkspace: React.FC = () => {
         throw new Error('当前适配器不支持继续查询')
       }
 
+      // 根据供应商类型传递不同的参数
+      // Fal: continuePolling(modelId, requestId, onProgress)
+      // PPIO/KIE/ModelScope: continuePolling(modelId, taskId, onProgress)
+      const taskIdOrRequestId = providerType === 'fal' ? task.requestId : task.serverTaskId
+      const modelIdParam = providerType === 'fal' ? task.modelId : task.model
+
       const result = await adapter.continuePolling(
-        task.modelId,
-        task.requestId,
+        modelIdParam,
+        taskIdOrRequestId,
         (status: any) => {
           logInfo('[App] 继续查询进度:', status.message)
           setTasks(prev => prev.map(t =>

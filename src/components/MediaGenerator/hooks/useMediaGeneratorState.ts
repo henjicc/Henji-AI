@@ -94,6 +94,23 @@ export const useMediaGeneratorState = () => {
   const [ppioKlingO1KeepAudio, setPpioKlingO1KeepAudio] = useState(true)
   const [ppioKlingO1FastMode, setPpioKlingO1FastMode] = useState(false)
 
+  // 视频 - Kling 2.6 Pro (派欧云)
+  const [ppioKling26Mode, setPpioKling26Mode] = useState<string>('text-image-to-video')
+  const [ppioKling26VideoDuration, setPpioKling26VideoDuration] = useState(5)
+  const [ppioKling26AspectRatio, setPpioKling26AspectRatio] = useState('16:9')
+  const [ppioKling26CfgScale, setPpioKling26CfgScale] = useState<number | undefined>(undefined)
+  const [ppioKling26Sound, setPpioKling26Sound] = useState(false)
+  const [ppioKling26CharacterOrientation, setPpioKling26CharacterOrientation] = useState<'video' | 'image'>('video')
+  const [ppioKling26KeepOriginalSound, setPpioKling26KeepOriginalSound] = useState(true)
+
+  // KIE Kling 2.6 (KIE)
+  const [kieKlingV26Mode, setKieKlingV26Mode] = useState<string>('text-image-to-video')
+  const [kieKlingV26AspectRatio, setKieKlingV26AspectRatio] = useState('16:9')
+  const [kieKlingV26Resolution, setKieKlingV26Resolution] = useState('720p')
+  const [kieKlingV26Duration, setKieKlingV26Duration] = useState('5')
+  const [kieKlingV26EnableAudio, setKieKlingV26EnableAudio] = useState(false)
+  const [kieKlingV26CharacterOrientation, setKieKlingV26CharacterOrientation] = useState<'video' | 'image'>('video')
+
   // Kling 2.5 Turbo 参数（派欧云）
   const [ppioKling25CfgScale, setPpioKling25CfgScale] = useState(0.5)
 
@@ -216,11 +233,6 @@ export const useMediaGeneratorState = () => {
   // 模型特定参数 - KIE Grok Imagine Video
   const [kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio] = useState('2:3')
   const [kieGrokImagineVideoMode, setKieGrokImagineVideoMode] = useState('normal')
-
-  // 模型特定参数 - KIE Kling V2.6
-  const [kieKlingV26AspectRatio, setKieKlingV26AspectRatio] = useState('16:9')
-  const [kieKlingV26Duration, setKieKlingV26Duration] = useState('5')
-  const [kieKlingV26EnableAudio, setKieKlingV26EnableAudio] = useState(false)
 
   // 模型特定参数 - KIE Hailuo 2.3
   const [kieHailuo23Mode, setKieHailuo23Mode] = useState('standard')
@@ -449,7 +461,24 @@ export const useMediaGeneratorState = () => {
     ppioKlingO1KeepAudio, setPpioKlingO1KeepAudio,
     ppioKlingO1FastMode, setPpioKlingO1FastMode,
 
-    // Z-Image-Turbo
+    // PPIO Kling 2.6 Pro
+    ppioKling26Mode, setPpioKling26Mode,
+    ppioKling26VideoDuration, setPpioKling26VideoDuration,
+    ppioKling26AspectRatio, setPpioKling26AspectRatio,
+    ppioKling26CfgScale, setPpioKling26CfgScale,
+    ppioKling26Sound, setPpioKling26Sound,
+    ppioKling26CharacterOrientation, setPpioKling26CharacterOrientation,
+    ppioKling26KeepOriginalSound, setPpioKling26KeepOriginalSound,
+
+    // KIE Kling 2.6
+    kieKlingV26Mode, setKieKlingV26Mode,
+    kieKlingV26AspectRatio, setKieKlingV26AspectRatio,
+    kieKlingV26Resolution, setKieKlingV26Resolution,
+    kieKlingV26Duration, setKieKlingV26Duration,
+    kieKlingV26EnableAudio, setKieKlingV26EnableAudio,
+    kieKlingV26CharacterOrientation, setKieKlingV26CharacterOrientation,
+
+    // Kling 2.5 Turbo（派欧云）
     falZImageTurboNumInferenceSteps, setFalZImageTurboNumInferenceSteps,
     falZImageTurboEnablePromptExpansion, setFalZImageTurboEnablePromptExpansion,
     falZImageTurboAcceleration, setFalZImageTurboAcceleration,
@@ -483,11 +512,6 @@ export const useMediaGeneratorState = () => {
     // KIE Grok Imagine Video
     kieGrokImagineVideoAspectRatio, setKieGrokImagineVideoAspectRatio,
     kieGrokImagineVideoMode, setKieGrokImagineVideoMode,
-
-    // KIE Kling V2.6
-    kieKlingV26AspectRatio, setKieKlingV26AspectRatio,
-    kieKlingV26Duration, setKieKlingV26Duration,
-    kieKlingV26EnableAudio, setKieKlingV26EnableAudio,
 
     // KIE Hailuo 2.3
     kieHailuo23Mode, setKieHailuo23Mode,

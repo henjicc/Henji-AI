@@ -324,6 +324,9 @@ export interface BuildOptionsParams {
   kieKlingV26AspectRatio?: string
   kieKlingV26Duration?: string
   kieKlingV26EnableAudio?: boolean
+  kieKlingV26Mode?: string
+  kieKlingV26Resolution?: string
+  kieKlingV26CharacterOrientation?: string
   kieHailuo23Mode?: string
   kieHailuo23Duration?: number
   kieHailuo23Resolution?: string
@@ -347,6 +350,15 @@ export interface BuildOptionsParams {
   ppioKlingO1AspectRatio?: string
   ppioKlingO1KeepAudio?: boolean
   ppioKlingO1FastMode?: boolean
+
+  // PPIO Kling 2.6 Pro 参数
+  ppioKling26Mode?: string
+  ppioKling26VideoDuration?: number
+  ppioKling26AspectRatio?: string
+  ppioKling26CfgScale?: number
+  ppioKling26Sound?: boolean
+  ppioKling26CharacterOrientation?: string
+  ppioKling26KeepOriginalSound?: boolean
 
   // PPIO Seedream 4.5 参数
   ppioSeedream45MaxImages?: number

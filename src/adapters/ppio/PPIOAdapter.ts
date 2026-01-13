@@ -166,6 +166,18 @@ export class PPIOAdapter extends BaseAdapter {
     return this.statusHandler.pollTaskStatus(taskId, modelId, onProgress)
   }
 
+  /**
+   * 继续轮询任务（用于超时恢复）
+   */
+  async continuePolling(
+    modelId: string,
+    taskId: string,
+    onProgress?: (status: any) => void
+  ): Promise<VideoResult> {
+    logInfo('[PPIOAdapter] 继续轮询任务:', { taskId, modelId })
+    return this.statusHandler.pollTaskStatus(taskId, modelId, onProgress)
+  }
+
   private handleError(error: any): Error {
     if (axios.isAxiosError(error)) {
       if (error.response) {

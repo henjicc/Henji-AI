@@ -178,6 +178,19 @@ export class ModelscopeAdapter extends BaseAdapter {
     return result
   }
 
+  /**
+   * 继续轮询任务（用于超时恢复）
+   */
+  async continuePolling(
+    _modelId: string,
+    taskId: string,
+    onProgress?: any
+  ): Promise<ImageResult> {
+    this.log('继续轮询任务:', { taskId })
+    // 复用 pollTaskStatus 方法
+    return this.pollTaskStatus(taskId, onProgress)
+  }
+
   private getStatusMessage(status: string): string {
     const messages: Record<string, string> = {
       'QUEUED': '排队中...',

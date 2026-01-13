@@ -118,34 +118,59 @@ export async function getVideoMetadata(videoFile: File): Promise<VideoMetadata> 
  * @param metadata 视频元数据
  * @returns 验证结果
  */
-export function validateVideo(metadata: VideoMetadata): VideoValidationResult {
+export interface VideoValidationOptions {
+  minDuration?: number
+  maxDuration?: number
+  minWidth?: number
+  maxWidth?: number
+  maxSizeMB?: number
+}
+
+/**
+ * 验证视频是否符合约束
+ * @param metadata 视频元数据
+ * @param options 验证选项
+ * @returns 验证结果
+ */
+export function validateVideo(
+  metadata: VideoMetadata,
+  options: VideoValidationOptions = {}
+): VideoValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
-  // 时长验证：3-10秒
-  if (metadata.duration < 3) {
-    errors.push(`视频时长过短（${metadata.duration.toFixed(1)}秒），最少需要3秒`)
-  } else if (metadata.duration > 10) {
-    errors.push(`视频时长过长（${metadata.duration.toFixed(1)}秒），最多支持10秒`)
+  const {
+    minDuration = 3,
+    maxDuration = 10,
+    minWidth = 720,
+    maxWidth = 2160,
+    maxSizeMB = 200
+  } = options
+
+  // 时长验证
+  if (metadata.duration < minDuration) {
+    errors.push(`视频时长过短（${metadata.duration.toFixed(1)}秒），最少需要${minDuration}秒`)
+  } else if (metadata.duration > maxDuration) {
+    errors.push(`视频时长过长（${metadata.duration.toFixed(1)}秒），最多支持${maxDuration}秒`)
   }
 
-  // 分辨率验证：720-2160px
+  // 分辨率验证
   const minDimension = Math.min(metadata.width, metadata.height)
   const maxDimension = Math.max(metadata.width, metadata.height)
 
-  if (minDimension < 720) {
-    errors.push(`视频分辨率过低（${metadata.width}x${metadata.height}），最小边至少需要720px`)
+  if (minDimension < minWidth) {
+    errors.push(`视频分辨率过低（${metadata.width}x${metadata.height}），最小边至少需要${minWidth}px`)
   }
 
-  if (maxDimension > 2160) {
-    errors.push(`视频分辨率过高（${metadata.width}x${metadata.height}），最大边不能超过2160px`)
+  if (maxDimension > maxWidth) {
+    errors.push(`视频分辨率过高（${metadata.width}x${metadata.height}），最大边不能超过${maxWidth}px`)
   }
 
-  // 文件大小验证：max 200MB
+  // 文件大小验证
   const fileSizeMB = metadata.fileSize / (1024 * 1024)
-  if (fileSizeMB > 200) {
-    errors.push(`文件大小过大（${fileSizeMB.toFixed(1)}MB），最大支持200MB`)
-  } else if (fileSizeMB > 150) {
+  if (fileSizeMB > maxSizeMB) {
+    errors.push(`文件大小过大（${fileSizeMB.toFixed(1)}MB），最大支持${maxSizeMB}MB`)
+  } else if (fileSizeMB > maxSizeMB * 0.75) {
     warnings.push(`文件较大（${fileSizeMB.toFixed(1)}MB），上传可能需要较长时间`)
   }
 

@@ -138,6 +138,17 @@ const PRICES: Record<string, any> = {
         edit: 1.218            // 视频编辑标准模式 ¥1.218/秒
     },
 
+    // 视频 - Kling 2.6 Pro (派欧云)
+    KLING_26_PRO: {
+        // 文/图生视频
+        '5s_no_audio': 2.5375,    // ¥2.5375
+        '10s_no_audio': 5.075,    // ¥5.075
+        '5s_audio': 5.075,        // ¥5.075
+        '10s_audio': 10.15,       // ¥10.15
+        // 动作控制
+        motionControlPerSecond: 0.5075  // ¥0.5075/秒
+    },
+
     // 视频 - Minimax Hailuo 2.3
     HAILUO_23: {
         text: {
@@ -875,6 +886,28 @@ export const pricingConfigs: PricingConfig[] = [
             }
 
             return pricePerSecond * duration
+        }
+    },
+    {
+        providerId: 'ppio',
+        modelId: 'kling-2.6-pro',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const mode = params.ppioKling26Mode || 'text-image-to-video'
+            const duration = params.ppioKling26VideoDuration || 5
+            const sound = params.ppioKling26Sound || false
+
+            // 动作控制模式：按秒计费
+            if (mode === 'motion-control') {
+                // 从上传的视频中获取时长，如果没有则使用默认值
+                const videoDuration = params.videoDuration || params.uploadedVideoDuration || 5
+                return PRICES.KLING_26_PRO.motionControlPerSecond * videoDuration
+            }
+
+            // 文/图生视频模式
+            const priceKey = `${duration}s_${sound ? 'audio' : 'no_audio'}`
+            return PRICES.KLING_26_PRO[priceKey] || PRICES.KLING_26_PRO['5s_no_audio']
         }
     },
     {

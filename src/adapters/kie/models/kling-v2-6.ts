@@ -30,8 +30,36 @@ export const kieKlingV26Route: KIEModelRoute = {
     const images = params.images || []
     const prompt = params.prompt || ''
     const hasImages = images.length > 0
+    // 获取自定义参数
+    const mode = params.kieKlingV26Mode || 'text-image-to-video'
+    const resolution = params.kieKlingV26Resolution || '720p'
+    const orientation = params.kieKlingV26CharacterOrientation || 'video'
+    const videoUrl = params.video // 已由 Adapter 上传并转换为 URL (如果是文件)
 
-    // 根据是否有图片选择端点
+    // 动作控制模式
+    if (mode === 'motion-control') {
+      if (!hasImages) {
+        throw new Error('动作控制模式需要上传一张参考图片')
+      }
+      if (!videoUrl) {
+        throw new Error('动作控制模式需要上传一个参考视频')
+      }
+
+      return {
+        requestData: {
+          model: 'kling-2.6/motion-control',
+          input: {
+            prompt: prompt,
+            input_urls: images, // 数组格式
+            video_urls: [videoUrl], // 数组格式
+            character_orientation: orientation,
+            mode: resolution
+          }
+        }
+      }
+    }
+
+    // 文/图生视频模式（只有在非动作控制模式下才会执行到这里）
     const model = hasImages
       ? 'kling-2.6/image-to-video'  // 图生视频
       : 'kling-2.6/text-to-video'   // 文生视频

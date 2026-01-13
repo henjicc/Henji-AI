@@ -81,6 +81,21 @@
           }
         },
         {
+          "id": "kling-2.6-pro",
+          "name": "可灵 2.6 Pro",
+          "type": "video",
+          "description": "支持文生视频、图生视频和动作控制，可生成带音频的高质量视频",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "动作控制"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 45
+          }
+        },
+        {
           "id": "minimax-hailuo-2.3",
           "name": "海螺 Hailuo 2.3",
           "type": "video",

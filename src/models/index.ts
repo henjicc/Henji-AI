@@ -12,6 +12,7 @@ export { seedream40Params } from './seedream-4.0'
 export { seedream45Params } from './ppio/seedream-4.5'
 export { klingTurbo25Params } from './kling-2.5-turbo'
 export { ppioKlingO1Params } from './ppio/kling-o1'
+export { ppioKling26ProParams } from './ppio/kling-2.6-pro'
 export { minimaxHailuo23Params } from './minimax-hailuo-2.3'
 export { viduQ1Params } from './vidu-q1'
 export { pixverseV45Params } from './pixverse-v4.5'
@@ -73,6 +74,7 @@ import { seedream40Params } from './seedream-4.0'
 import { seedream45Params } from './ppio/seedream-4.5'
 import { klingTurbo25Params } from './kling-2.5-turbo'
 import { ppioKlingO1Params } from './ppio/kling-o1'
+import { ppioKling26ProParams } from './ppio/kling-2.6-pro'
 import { minimaxHailuo23Params } from './minimax-hailuo-2.3'
 import { viduQ1Params } from './vidu-q1'
 import { pixverseV45Params } from './pixverse-v4.5'
@@ -118,6 +120,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'seedream-4.5': seedream45Params,
   'kling-2.5-turbo': klingTurbo25Params,
   'kling-o1': ppioKlingO1Params,
+  'kling-2.6-pro': ppioKling26ProParams,
   'minimax-hailuo-2.3': minimaxHailuo23Params,
   'minimax-hailuo-02': falAiMinimaxHailuo02Params, // Hailuo 02 使用独立的 Schema
   'vidu-q1': viduQ1Params,

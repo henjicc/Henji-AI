@@ -4,29 +4,68 @@ import { ParamDef } from '../types/schema'
  * KIE Kling V2.6 视频模型参数定义
  */
 export const kieKlingV26Params: ParamDef[] = [
-  // 宽高比参数（仅文生视频支持，图生视频时隐藏）
+  // 模式选择
+  {
+    id: 'kieKlingV26Mode',
+    type: 'dropdown',
+    label: '模式',
+    defaultValue: 'text-image-to-video',
+    options: [
+      { value: 'text-image-to-video', label: '文/图生视频' },
+      { value: 'motion-control', label: '动作控制' }
+    ],
+    className: 'min-w-[120px]'
+  },
+  // 宽高比参数（仅文生视频支持，图生视频和动作控制模式时隐藏）
   {
     id: 'kieKlingV26AspectRatio',
     type: 'dropdown',
     defaultValue: '16:9',
     resolutionConfig: {
       type: 'aspect_ratio',
-      smartMatch: false,  // Kling V2.6 不支持智能匹配
+      smartMatch: false,
       visualize: true,
       extractRatio: (value) => {
         const [w, h] = value.split(':').map(Number)
         return w / h
       }
-      // 注意：没有 qualityOptions，因为 Kling V2.6 不支持分辨率选择
     },
     options: [
       { value: '16:9', label: '16:9' },
       { value: '9:16', label: '9:16' },
       { value: '1:1', label: '1:1' }
     ],
-    // 图生视频时隐藏比例参数（API 不支持）
-    hidden: (values) => values.uploadedImages && values.uploadedImages.length > 0,
+    // 隐藏条件：上传了图片 OR 是动作控制模式
+    hidden: (values) => {
+      const isMotionControl = values.kieKlingV26Mode === 'motion-control'
+      const hasImages = values.uploadedImages && values.uploadedImages.length > 0
+      return isMotionControl || hasImages
+    },
     className: 'min-w-[100px]'
+  },
+  // 分辨率（仅动作控制模式显示）
+  {
+    id: 'kieKlingV26Resolution',
+    type: 'dropdown',
+    label: '分辨率',
+    defaultValue: '720p',
+    options: [
+      { value: '720p', label: '720p' },
+      { value: '1080p', label: '1080p' }
+    ],
+    hidden: (values) => values.kieKlingV26Mode !== 'motion-control'
+  },
+  // 角色方向（仅动作控制模式显示）
+  {
+    id: 'kieKlingV26CharacterOrientation',
+    type: 'dropdown',
+    label: '参考方向',
+    defaultValue: 'video',
+    options: [
+      { value: 'video', label: '参考视频' },
+      { value: 'image', label: '参考图像' }
+    ],
+    hidden: (values) => values.kieKlingV26Mode !== 'motion-control'
   },
   // 时长参数
   {
@@ -38,6 +77,7 @@ export const kieKlingV26Params: ParamDef[] = [
       { value: '5', label: '5秒' },
       { value: '10', label: '10秒' }
     ],
+    hidden: (values) => values.kieKlingV26Mode === 'motion-control',
     className: 'min-w-[50px]'
   },
   // 音频生成开关
@@ -45,25 +85,26 @@ export const kieKlingV26Params: ParamDef[] = [
     id: 'kieKlingV26EnableAudio',
     type: 'toggle',
     label: '生成音频',
-    defaultValue: false
+    defaultValue: false,
+    hidden: (values) => values.kieKlingV26Mode === 'motion-control'
   },
   // 以下参数不显示在UI中，但需要定义以防止意外显示
   {
     id: 'kieKlingV26Seed',
     type: 'number',
     label: '随机种子',
-    hidden: () => true  // 始终隐藏
+    hidden: () => true
   },
   {
     id: 'kieKlingV26NegativePrompt',
     type: 'text',
     label: '负面提示词',
-    hidden: () => true  // 始终隐藏
+    hidden: () => true
   },
   {
     id: 'kieKlingV26CfgScale',
     type: 'number',
     label: 'CFG Scale',
-    hidden: () => true  // 始终隐藏
+    hidden: () => true
   }
 ]

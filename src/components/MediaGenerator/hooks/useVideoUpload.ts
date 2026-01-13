@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { generateVideoThumbnail, validateVideo } from '@/utils/videoProcessing'
+import { generateVideoThumbnail, validateVideo, VideoValidationOptions } from '@/utils/videoProcessing'
 import { logError, logInfo } from '../../../utils/errorLogger'
 
 /**
@@ -20,7 +20,8 @@ export const useVideoUpload = (
   _uploadedVideoFiles: File[],
   setUploadedVideoFiles: (files: File[]) => void,
   setUploadedVideoFilePaths: (paths: string[]) => void,  // 新增：用于清空路径
-  onError?: (title: string, message: string) => void
+  onError?: (title: string, message: string) => void,
+  validationOptions?: VideoValidationOptions
 ) => {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
 
@@ -58,7 +59,7 @@ export const useVideoUpload = (
       logInfo('[useVideoUpload] 视频元数据:', metadata)
 
       // 验证视频
-      const validation = validateVideo(metadata)
+      const validation = validateVideo(metadata, validationOptions)
       if (!validation.valid) {
         if (onError) {
           onError('视频验证失败', validation.errors.join(', '))
@@ -91,7 +92,7 @@ export const useVideoUpload = (
       }
       setIsProcessingVideo(false)
     }
-  }, [setUploadedVideos, setUploadedVideoFiles])
+  }, [setUploadedVideos, setUploadedVideoFiles, validationOptions])
 
   /**
    * 移除视频

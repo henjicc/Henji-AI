@@ -185,6 +185,18 @@ export const kieKlingV26Config: ModelConfig = {
   provider: 'kie',
 
   paramMapping: {
+    kieKlingV26Mode: {
+      source: ['kieKlingV26Mode', 'mode'],
+      defaultValue: 'text-image-to-video'
+    },
+    kieKlingV26Resolution: {
+      source: ['kieKlingV26Resolution', 'resolution'],
+      defaultValue: '720p'
+    },
+    kieKlingV26CharacterOrientation: {
+      source: ['kieKlingV26CharacterOrientation', 'characterOrientation'],
+      defaultValue: 'video'
+    },
     aspect_ratio: {
       source: ['kieKlingV26AspectRatio', 'aspectRatio'],
       defaultValue: '16:9'
@@ -205,6 +217,12 @@ export const kieKlingV26Config: ModelConfig = {
       maxImages: 1,  // Kling V2.6 最多支持 1 张图片
       mode: 'single',
       paramKey: 'image_urls',  // 注意：API 使用 image_urls（复数，数组格式）
+      convertToBlob: false  // KIE 适配器会处理上传
+    },
+    videoUpload: {
+      enabled: true,
+      maxVideos: 1,  // 动作控制模式需要 1 个参考视频
+      paramKey: 'video',
       convertToBlob: false  // KIE 适配器会处理上传
     }
   },
