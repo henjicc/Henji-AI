@@ -63,6 +63,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [showConfirmResetDialog, setShowConfirmResetDialog] = useState(false)
   const [dialogOpacity, setDialogOpacity] = useState(0)
 
+  // 用于强制重新渲染
+  const [, setForceUpdate] = useState(0)
+
   // 弹窗动画效果
   useEffect(() => {
     if (showAlertDialog || showConfirmResetDialog || showConflictDialog || showMigrationDialog) {
@@ -992,16 +995,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             })()
                           }
                           options={[
-                            { label: 'KIE', value: 'kie' },
                             { label: 'BizyAir', value: 'bizyair' },
+                            { label: 'KIE', value: 'kie' },
                             { label: 'Fal.ai', value: 'fal' }
                           ]}
                           onSelect={(val) => {
                             import('../services/upload/UploadService').then(({ UploadService }) => {
                               UploadService.getInstance().setProvider(val as any)
                               // 强制重新渲染
-                              setApiKey(apiKey + ' ')
-                              setTimeout(() => setApiKey(apiKey), 0)
+                              setForceUpdate(Date.now())
                             })
                           }}
                           className="w-40"
@@ -1016,9 +1018,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                           onChange={(checked) => {
                             import('../services/upload/UploadService').then(({ UploadService }) => {
                               UploadService.getInstance().setFallbackEnabled(checked)
-                              // 强制重新渲染 (使用一个不太优雅但在FC内部简单的hacks)
-                              setApiKey(apiKey + ' ')
-                              setTimeout(() => setApiKey(apiKey), 0)
+                              // 强制重新渲染
+                              setForceUpdate(Date.now())
                             })
                           }}
                           className="w-full"

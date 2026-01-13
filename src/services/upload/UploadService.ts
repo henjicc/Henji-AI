@@ -9,7 +9,7 @@ export type UploadProviderType = 'fal' | 'kie' | 'bizyair'
 export class UploadService {
     private static instance: UploadService
     private providers: Map<UploadProviderType, UploadProvider> = new Map()
-    private currentProvider: UploadProviderType = 'kie'
+    private currentProvider: UploadProviderType = 'bizyair'
     private fallbackEnabled: boolean = true
 
     private constructor() {
@@ -60,7 +60,7 @@ export class UploadService {
 
     private getFallbackCandidates(): UploadProviderType[] {
         // 定义优先顺序
-        const priority: UploadProviderType[] = ['kie', 'bizyair', 'fal']
+        const priority: UploadProviderType[] = ['bizyair', 'kie', 'fal']
         // 过滤掉当前的，剩下的按优先级尝试
         return priority.filter(p => p !== this.currentProvider)
     }
@@ -141,9 +141,9 @@ export class UploadService {
             const provider = this.providers.get(type)
             if (provider && provider.isAvailable()) {
                 try {
-                    logInfo(`[UploadService] Trying fallback provider: ${provider.name}`)
+                    logInfo(`[UploadService]`, `Trying fallback provider: ${provider.name}`)
                     const results = await provider.uploadMultiple(files)
-                    logInfo(`[UploadService] Fallback to ${provider.name} successful`)
+                    logInfo(`[UploadService]`, `Fallback to ${provider.name} successful`)
                     return results
                 } catch (error) {
                     logError(`[UploadService] Fallback provider ${provider.name} failed:`, error)
