@@ -296,7 +296,8 @@
           "description": "快手可灵 2.6 Pro 视频生成模型，支持文生视频和图生视频，具有电影级视觉效果和原生音频生成",
           "functions": [
             "文生视频",
-            "图生视频"
+            "图生视频",
+            "动作控制"
           ],
           "progressConfig": {
             "type": "polling",
@@ -591,7 +592,8 @@
           "description": "基于 Kling V2.6 模型的高质量视频生成，支持文生视频和图生视频（最多1张图），支持音频生成",
           "functions": [
             "文生视频",
-            "图生视频"
+            "图生视频",
+            "动作控制"
           ],
           "progressConfig": {
             "type": "polling",
