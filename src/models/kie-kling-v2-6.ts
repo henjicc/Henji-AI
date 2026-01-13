@@ -43,12 +43,18 @@ export const kieKlingV26Params: ParamDef[] = [
     },
     className: 'min-w-[100px]'
   },
-  // 分辨率（仅动作控制模式显示）
+  // 分辨率（仅动作控制模式显示）- 使用面板形式
   {
     id: 'kieKlingV26Resolution',
     type: 'dropdown',
     label: '分辨率',
     defaultValue: '720p',
+    // 分辨率配置：使用面板显示
+    resolutionConfig: {
+      type: 'resolution',
+      smartMatch: false,
+      visualize: false
+    },
     options: [
       { value: '720p', label: '720p' },
       { value: '1080p', label: '1080p' }
@@ -59,11 +65,11 @@ export const kieKlingV26Params: ParamDef[] = [
   {
     id: 'kieKlingV26CharacterOrientation',
     type: 'dropdown',
-    label: '参考方向',
+    label: '人物朝向',
     defaultValue: 'video',
     options: [
-      { value: 'video', label: '参考视频' },
-      { value: 'image', label: '参考图像' }
+      { value: 'video', label: '与视频一致' },
+      { value: 'image', label: '与图片一致' }
     ],
     hidden: (values) => values.kieKlingV26Mode !== 'motion-control'
   },
