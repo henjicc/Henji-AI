@@ -122,6 +122,7 @@ export const ppioKling26ProParams: ParamDef[] = [
         id: 'ppioKling26CfgScale',
         type: 'number',
         label: 'CFG Scale',
+        defaultValue: 0.5,
         min: 0,
         max: 1,
         step: 0.01,

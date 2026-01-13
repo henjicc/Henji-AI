@@ -98,7 +98,7 @@ export const useMediaGeneratorState = () => {
   const [ppioKling26Mode, setPpioKling26Mode] = useState<string>('text-image-to-video')
   const [ppioKling26VideoDuration, setPpioKling26VideoDuration] = useState(5)
   const [ppioKling26AspectRatio, setPpioKling26AspectRatio] = useState('16:9')
-  const [ppioKling26CfgScale, setPpioKling26CfgScale] = useState<number | undefined>(undefined)
+  const [ppioKling26CfgScale, setPpioKling26CfgScale] = useState<number>(0.5)
   const [ppioKling26Sound, setPpioKling26Sound] = useState(false)
   const [ppioKling26CharacterOrientation, setPpioKling26CharacterOrientation] = useState<'video' | 'image'>('video')
   const [ppioKling26KeepOriginalSound, setPpioKling26KeepOriginalSound] = useState(true)
