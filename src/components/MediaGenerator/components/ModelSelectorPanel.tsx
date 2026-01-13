@@ -347,7 +347,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       </div>
 
       {/* 模型列表 - 可滚动区域 */}
-      <div ref={gridContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+      <div ref={gridContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-1">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           {filteredAndSortedModels.map(({ p, m }, index) => {
             const isHighlighted = index === highlightedIndex
