@@ -33,6 +33,7 @@ interface InputAreaProps {
   ppioKlingO1Mode?: string  // PPIO Kling O1 模式
   ppioKling26Mode?: string  // PPIO Kling 2.6 Pro 模式
   kieKlingV26Mode?: string  // KIE Kling 2.6 模式
+  falKlingV26ProMode?: string // Fal Kling 2.6 Pro 模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -85,6 +86,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   ppioKlingO1Mode,
   ppioKling26Mode,
   kieKlingV26Mode,
+  falKlingV26ProMode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -141,6 +143,7 @@ const InputArea: React.FC<InputAreaProps> = ({
       ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
         viduQ2Mode === 'video-extension') ||
       (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
+      ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control') ||
       (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control')
 
     if (!needsVideoUpload) {
@@ -181,7 +184,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
 
     setCurrentFileOrder(newOrder)
-  }, [uploadedVideos.length, uploadedImages.length, selectedModel, klingMode, ppioKlingO1Mode, ppioKling26Mode, kieKlingV26Mode, mode, viduQ2Mode])
+  }, [uploadedVideos.length, uploadedImages.length, selectedModel, klingMode, ppioKlingO1Mode, ppioKling26Mode, kieKlingV26Mode, mode, viduQ2Mode, falKlingV26ProMode])
   // 计算最大图片数
   const maxImageCount = getMaxImageCount(
     selectedModel,
@@ -267,6 +270,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
       viduQ2Mode === 'video-extension') ||
     (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
+    ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control') ||
     (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control')
 
   // 检查是否只需要视频（LTX-2 视频编辑模式 和 Vidu Q2 视频延长模式）
@@ -274,9 +278,10 @@ const InputArea: React.FC<InputAreaProps> = ({
     ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') && mode === 'retake-video') ||
     ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') && viduQ2Mode === 'video-extension')
 
-  // 检查是否是 Kling 动作控制模式 (支持 KIE 和 PPIO)
+  // 检查是否是 Kling 动作控制模式 (支持 KIE, PPIO 和 Fal)
   const isMotionControlMode = (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
-    (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control')
+    (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control') ||
+    ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control')
 
   // 辅助函数：获取视频时长
   const getVideoDuration = (file: File): Promise<number> => {

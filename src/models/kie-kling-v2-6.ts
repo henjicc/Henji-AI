@@ -67,6 +67,7 @@ export const kieKlingV26Params: ParamDef[] = [
     type: 'dropdown',
     label: '人物朝向',
     defaultValue: 'video',
+    tooltip: '默认为人物朝向与视频一致，此时角色动作/表情/运镜/朝向都会按照动作视频生成。可以通过提示词控制其他信息。最长支持30s生成时长。\n\n选择人物朝向与图片一致，此时角色动作/表情都会按照动作视频生成，朝向与图片中人物朝向一致，运镜及其他信息可以通过提示词自定义。最长支持10s生成时长。',
     options: [
       { value: 'video', label: '与视频一致' },
       { value: 'image', label: '与图片一致' }

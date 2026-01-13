@@ -271,7 +271,12 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
               falKlingV26ProAspectRatio: values.falKlingV26ProAspectRatio,
               falKlingV26ProGenerateAudio: values.falKlingV26ProGenerateAudio,
               falKlingV26ProCfgScale: values.falKlingV26ProCfgScale,
-              uploadedImages
+              falKlingV26ProMode: values.falKlingV26ProMode,
+              falKlingV26ProResolution: values.falKlingV26ProResolution,
+              falKlingV26ProCharacterOrientation: values.falKlingV26ProCharacterOrientation,
+              falKlingV26ProKeepOriginalSound: values.falKlingV26ProKeepOriginalSound,
+              uploadedImages,
+              uploadedVideos: values.uploadedVideos
             }}
             onChange={onChange}
           />

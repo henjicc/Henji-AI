@@ -654,7 +654,13 @@ export const falKlingV26ProConfig: ModelConfig = {
       defaultValue: true
     },
     // 负面提示词
-    negative_prompt: 'videoNegativePrompt'
+    negative_prompt: 'videoNegativePrompt',
+
+    // 动作控制参数
+    falKlingV26ProMode: 'falKlingV26ProMode',
+    falKlingV26ProResolution: 'falKlingV26ProResolution',
+    falKlingV26ProCharacterOrientation: 'falKlingV26ProCharacterOrientation',
+    falKlingV26ProKeepOriginalSound: 'falKlingV26ProKeepOriginalSound'
   },
 
   features: {
@@ -665,10 +671,15 @@ export const falKlingV26ProConfig: ModelConfig = {
       mode: 'single',
       paramKey: 'image_url',
       convertToBlob: false
+    },
+    videoUpload: {
+      enabled: true,
+      maxVideos: 1,
+      paramKey: 'video_url'
     }
   },
 
-  customHandlers: commonImageUploadHandler
+  customHandlers: commonMediaUploadHandler
 }
 
 /**

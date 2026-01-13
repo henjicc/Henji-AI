@@ -117,8 +117,10 @@ const PRICES: Record<string, any> = {
 
     // Kling Video v2.6 Pro 价格（美元/秒）
     KLING_VIDEO_V26_PRO: {
-        AUDIO_OFF: 0.07,  // 音频关闭
-        AUDIO_ON: 0.14    // 音频开启
+        AUDIO_OFF: 0.07,   // 音频关闭
+        AUDIO_ON: 0.14,    // 音频开启
+        MOTION_CONTROL_STANDARD: 0.07, // 动作控制 Standard (720p)
+        MOTION_CONTROL_PRO: 0.112      // 动作控制 Pro (1080p)
     },
 
     // 音频（每万字符）
@@ -833,6 +835,23 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
+            const mode = params.falKlingV26ProMode || 'text-image-to-video'
+
+            // 动作控制模式：按秒计费，根据分辨率区分价格
+            if (mode === 'motion-control') {
+                // 读取分辨率 (720p / 1080p)
+                const resolution = params.falKlingV26ProResolution || '720p'
+                // 获取视频时长 (优先使用 uploadedVideoDuration，其次 videoDuration，默认 5秒)
+                const duration = params.uploadedVideoDuration || params.videoDuration || 5
+
+                const pricePerSecondUSD = resolution === '1080p'
+                    ? PRICES.KLING_VIDEO_V26_PRO.MOTION_CONTROL_PRO
+                    : PRICES.KLING_VIDEO_V26_PRO.MOTION_CONTROL_STANDARD
+
+                return formatPrice(pricePerSecondUSD * USD_TO_CNY * duration)
+            }
+
+            // 文/图生视频模式
             const duration = params.videoDuration || 5
             const generateAudio = params.falKlingV26ProGenerateAudio !== undefined ? params.falKlingV26ProGenerateAudio : true
 

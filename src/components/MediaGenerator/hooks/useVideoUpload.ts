@@ -21,7 +21,8 @@ export const useVideoUpload = (
   setUploadedVideoFiles: (files: File[]) => void,
   setUploadedVideoFilePaths: (paths: string[]) => void,  // 新增：用于清空路径
   onError?: (title: string, message: string) => void,
-  validationOptions?: VideoValidationOptions
+  validationOptions?: VideoValidationOptions,
+  setUploadedVideoDuration?: (duration: number) => void // 新增：设置上传视频由于时长
 ) => {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
 
@@ -80,6 +81,11 @@ export const useVideoUpload = (
       setUploadedVideoFiles([videoFile]) // File 对象引用，点击生成时才读取
       setUploadedVideoFilePaths([]) // 【关键修复】清空旧路径，确保下次保存时生成新路径
 
+      // 保存视频时长
+      if (setUploadedVideoDuration) {
+        setUploadedVideoDuration(metadata.duration)
+      }
+
       // 清理元数据加载时创建的临时 URL
       URL.revokeObjectURL(videoElement.src)
       setIsProcessingVideo(false)
@@ -92,7 +98,7 @@ export const useVideoUpload = (
       }
       setIsProcessingVideo(false)
     }
-  }, [setUploadedVideos, setUploadedVideoFiles, validationOptions])
+  }, [setUploadedVideos, setUploadedVideoFiles, validationOptions, setUploadedVideoDuration])
 
   /**
    * 移除视频
@@ -101,7 +107,10 @@ export const useVideoUpload = (
     setUploadedVideos([])
     setUploadedVideoFiles([])
     setUploadedVideoFilePaths([]) // 【关键修复】同时清空路径
-  }, [setUploadedVideos, setUploadedVideoFiles, setUploadedVideoFilePaths])
+    if (setUploadedVideoDuration) {
+      setUploadedVideoDuration(0)
+    }
+  }, [setUploadedVideos, setUploadedVideoFiles, setUploadedVideoFilePaths, setUploadedVideoDuration])
 
   /**
    * 替换视频

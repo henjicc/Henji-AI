@@ -24,13 +24,54 @@ export const falAiKlingVideoV26ProRoute: FalModelRoute = {
     const {
       prompt = '',
       images = [],
+      videos = [], // FalAdapter 处理后的视频 URL 数组
       duration = 5,
       aspectRatio = '16:9',
       klingV26GenerateAudio = true,
-      klingV26CfgScale = 0.5
+      klingV26CfgScale = 0.5,
+      falKlingV26ProMode = 'text-image-to-video',
+      falKlingV26ProResolution = '720p',
+      falKlingV26ProCharacterOrientation = 'video',
+      falKlingV26ProKeepOriginalSound = true
     } = params
 
-    // 根据是否有图片选择端点
+    // 动作控制模式
+    if (falKlingV26ProMode === 'motion-control') {
+      if (!images || images.length === 0) {
+        throw new Error('Motion Control mode requires an input image')
+      }
+      if (!videos || videos.length === 0) {
+        throw new Error('Motion Control mode requires an input video')
+      }
+
+      // 根据分辨率选择端点 (Standard: 720p, Pro: 1080p)
+      const endpoint = falKlingV26ProResolution === '1080p'
+        ? 'fal-ai/kling-video/v2.6/pro/motion-control'
+        : 'fal-ai/kling-video/v2.6/standard/motion-control'
+
+      const modelId = `fal-ai/kling-video/v2.6/${falKlingV26ProResolution === '1080p' ? 'pro' : 'standard'}/motion-control`
+
+      const requestData: any = {
+        image_url: images[0],
+        video_url: videos[0],
+        character_orientation: falKlingV26ProCharacterOrientation,
+        keep_original_sound: falKlingV26ProKeepOriginalSound
+      }
+
+      if (prompt) {
+        requestData.prompt = prompt
+      }
+
+      logInfo('[Kling v2.6 Pro] 构建动作控制请求:', {
+        mode: 'motion-control',
+        endpoint,
+        requestData
+      })
+
+      return { endpoint, modelId, requestData }
+    }
+
+    // 文/图生视频模式
     const hasImages = images.length > 0
     const endpoint = hasImages
       ? 'fal-ai/kling-video/v2.6/pro/image-to-video'

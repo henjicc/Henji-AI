@@ -41,6 +41,7 @@ export const useMediaGeneratorState = () => {
   const [videoResolution, setVideoResolution] = useState('540p')
   const [videoSeed, setVideoSeed] = useState<number | undefined>(undefined)
   const [videoNegativePrompt, setVideoNegativePrompt] = useState('')
+  const [uploadedVideoDuration, setUploadedVideoDuration] = useState(0) // 上传视频的时长
 
   // 模型特定参数 - 派欧云 Kling 2.5 Turbo
   const [ppioKling25VideoDuration, setPpioKling25VideoDuration] = useState(5)
@@ -287,6 +288,10 @@ export const useMediaGeneratorState = () => {
   const [falKlingV26ProAspectRatio, setFalKlingV26ProAspectRatio] = useState('16:9')
   const [falKlingV26ProGenerateAudio, setFalKlingV26ProGenerateAudio] = useState(true)
   const [falKlingV26ProCfgScale, setFalKlingV26ProCfgScale] = useState(0.5)
+  const [falKlingV26ProMode, setFalKlingV26ProMode] = useState<string>('text-image-to-video')
+  const [falKlingV26ProResolution, setFalKlingV26ProResolution] = useState('720p')
+  const [falKlingV26ProCharacterOrientation, setFalKlingV26ProCharacterOrientation] = useState<'video' | 'image'>('video')
+  const [falKlingV26ProKeepOriginalSound, setFalKlingV26ProKeepOriginalSound] = useState(true)
 
   // Sora 2 参数（Fal）
   const [falSora2Mode, setFalSora2Mode] = useState<'standard' | 'pro'>('standard')
@@ -359,6 +364,7 @@ export const useMediaGeneratorState = () => {
     videoResolution, setVideoResolution,
     videoSeed, setVideoSeed,
     videoNegativePrompt, setVideoNegativePrompt,
+    uploadedVideoDuration, setUploadedVideoDuration,
 
     // Kling 2.5 Turbo（派欧云）
     ppioKling25CfgScale, setPpioKling25CfgScale,
@@ -566,6 +572,10 @@ export const useMediaGeneratorState = () => {
     falKlingV26ProAspectRatio, setFalKlingV26ProAspectRatio,
     falKlingV26ProGenerateAudio, setFalKlingV26ProGenerateAudio,
     falKlingV26ProCfgScale, setFalKlingV26ProCfgScale,
+    falKlingV26ProMode, setFalKlingV26ProMode,
+    falKlingV26ProResolution, setFalKlingV26ProResolution,
+    falKlingV26ProCharacterOrientation, setFalKlingV26ProCharacterOrientation,
+    falKlingV26ProKeepOriginalSound, setFalKlingV26ProKeepOriginalSound,
 
     // Sora 2（Fal）
     falSora2Mode, setFalSora2Mode,

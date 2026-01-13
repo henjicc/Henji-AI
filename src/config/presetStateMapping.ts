@@ -121,6 +121,10 @@ export interface PresetSetters {
     setFalKlingV26ProAspectRatio: (v: string) => void
     setFalKlingV26ProGenerateAudio: (v: boolean) => void
     setFalKlingV26ProCfgScale: (v: number) => void
+    setFalKlingV26ProMode: (v: string) => void
+    setFalKlingV26ProResolution: (v: string) => void
+    setFalKlingV26ProCharacterOrientation: (v: 'video' | 'image') => void
+    setFalKlingV26ProKeepOriginalSound: (v: boolean) => void
 
     // Sora 2
     setFalSora2Mode: (v: 'standard' | 'pro') => void
@@ -400,6 +404,10 @@ export function createPresetSetterMap(
         falKlingV26ProAspectRatio: setters.setFalKlingV26ProAspectRatio,
         falKlingV26ProGenerateAudio: setters.setFalKlingV26ProGenerateAudio,
         falKlingV26ProCfgScale: setters.setFalKlingV26ProCfgScale,
+        falKlingV26ProMode: setters.setFalKlingV26ProMode,
+        falKlingV26ProResolution: setters.setFalKlingV26ProResolution,
+        falKlingV26ProCharacterOrientation: setters.setFalKlingV26ProCharacterOrientation,
+        falKlingV26ProKeepOriginalSound: setters.setFalKlingV26ProKeepOriginalSound,
 
         // Sora 2
         falSora2Mode: setters.setFalSora2Mode,
