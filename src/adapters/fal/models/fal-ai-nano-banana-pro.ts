@@ -21,14 +21,14 @@ export const falAiNanoBananaProRoute = {
     }
 
     // 添加可选参数
-    if (params.falNanoBananaNumImages !== undefined) {
-      requestData.num_images = params.falNanoBananaNumImages
+    if (params.falNanoBananaProNumImages !== undefined) {
+      requestData.num_images = params.falNanoBananaProNumImages
     }
 
     // aspect_ratio: 不发送 'auto' 或 'smart'
     if (params.aspect_ratio !== undefined &&
-        params.aspect_ratio !== 'auto' &&
-        params.aspect_ratio !== 'smart') {
+      params.aspect_ratio !== 'auto' &&
+      params.aspect_ratio !== 'smart') {
       requestData.aspect_ratio = params.aspect_ratio
     }
 

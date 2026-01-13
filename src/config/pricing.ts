@@ -431,7 +431,7 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const numImages = params.num_images || 1
+            const numImages = params.falNanoBananaNumImages || params.num_images || 1
             return formatPrice(PRICES.NANO_BANANA * USD_TO_CNY * numImages)
         }
     },
@@ -441,7 +441,7 @@ export const pricingConfigs: PricingConfig[] = [
         currency: '¥',
         type: 'calculated',
         calculator: (params) => {
-            const numImages = params.num_images || 1
+            const numImages = params.falNanoBananaProNumImages || params.num_images || 1
             const basePrice = PRICES.NANO_BANANA_PRO * USD_TO_CNY * numImages
             // 4K 分辨率时价格为 2 倍
             const multiplier = params.resolution === '4K' ? 2 : 1

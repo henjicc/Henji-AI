@@ -5,12 +5,13 @@ import { ParamDef } from '../types/schema'
  */
 export const falAiNanoBananaParams: ParamDef[] = [
     {
-        id: 'falNanoBananaNum_images',
+        id: 'falNanoBananaNumImages',
         type: 'number',
         label: '数量',
         min: 1,
         max: 4,
         step: 1,
+        defaultValue: 1,
         widthClassName: 'w-20'
     },
     {

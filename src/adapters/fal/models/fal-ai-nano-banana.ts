@@ -29,8 +29,8 @@ export const falAiNanoBananaRoute = {
     // aspect_ratio: 不发送 'auto' 或 'smart'
     logInfo('[fal-ai-nano-banana] params.aspect_ratio:', params.aspect_ratio)
     if (params.aspect_ratio !== undefined &&
-        params.aspect_ratio !== 'auto' &&
-        params.aspect_ratio !== 'smart') {
+      params.aspect_ratio !== 'auto' &&
+      params.aspect_ratio !== 'smart') {
       logInfo('[fal-ai-nano-banana] Adding aspect_ratio to request:', params.aspect_ratio)
       requestData.aspect_ratio = params.aspect_ratio
     } else {
