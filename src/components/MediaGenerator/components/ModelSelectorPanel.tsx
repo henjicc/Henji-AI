@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
 import { providers, getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import PinyinMatch from 'pinyin-match'
 
@@ -157,14 +157,19 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
           score: calculateMatchScore(item.m.name, searchQuery.trim())
         }))
         .filter(item => item.score > 0)
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score
+          // 分数相同，按名称排序，确保顺序稳定
+          return a.m.name.localeCompare(b.m.name)
+        })
     }
 
     return items.map(item => ({ ...item, score: 100 }))
   }, [visibleProviders, modelFilterProvider, modelFilterType, modelFilterFunction, favoriteModels, searchQuery])
 
   // 当筛选条件变化时，重置高亮索引
-  useEffect(() => {
+  // 使用 useLayoutEffect 避免渲染闪烁（即先用旧 index 渲染了新列表）
+  useLayoutEffect(() => {
     // 尝试在过滤后的列表中找到当前选中的模型
     const index = filteredAndSortedModels.findIndex(
       item => item.p.id === selectedProvider && item.m.id === selectedModel
