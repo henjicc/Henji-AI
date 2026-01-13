@@ -29,6 +29,7 @@
     "@types/react-window": "^1.8.8",
     "axios": "^1.6.0",
     "pica": "^9.0.1",
+    "pinyin-match": "^1.2.10",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-virtuoso": "^4.15.0",

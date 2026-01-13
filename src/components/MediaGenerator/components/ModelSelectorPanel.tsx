@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { providers, getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
+import PinyinMatch from 'pinyin-match'
 
 interface ModelSelectorPanelProps {
   selectedProvider: string
@@ -16,8 +17,45 @@ interface ModelSelectorPanelProps {
 }
 
 /**
+ * 计算搜索匹配分数
+ * @param modelName 模型名称
+ * @param query 搜索查询
+ * @returns 匹配分数 (0 = 不匹配, 100 = 完全匹配)
+ */
+function calculateMatchScore(modelName: string, query: string): number {
+  if (!query) return 100 // 空查询匹配所有
+
+  const lowerName = modelName.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+
+  // 完全匹配
+  if (lowerName === lowerQuery) return 100
+
+  // 开头匹配
+  if (lowerName.startsWith(lowerQuery)) return 80
+
+  // 包含匹配
+  if (lowerName.includes(lowerQuery)) return 60
+
+  // 拼音匹配 (pinyin-match 返回匹配位置数组或 false)
+  const pinyinResult = PinyinMatch.match(modelName, query)
+  if (pinyinResult) return 40
+
+  // 不匹配
+  return 0
+}
+
+// 网格列数配置（与 CSS grid-cols 保持一致）
+const GRID_COLUMNS = {
+  default: 2,
+  sm: 3,
+  lg: 4,
+  xl: 5
+}
+
+/**
  * 模型选择面板
- * 从 MediaGenerator 中提取的模型选择UI（约90行）
+ * 从 MediaGenerator 中提取的模型选择UI
  */
 const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   selectedProvider,
@@ -36,6 +74,26 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
+
+  // 搜索状态
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // 键盘导航状态
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const gridContainerRef = useRef<HTMLDivElement>(null)
+  const highlightedItemRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  // 获取当前网格列数
+  const getColumnsCount = useCallback(() => {
+    if (typeof window === 'undefined') return GRID_COLUMNS.default
+    const width = window.innerWidth
+    if (width >= 1280) return GRID_COLUMNS.xl
+    if (width >= 1024) return GRID_COLUMNS.lg
+    if (width >= 640) return GRID_COLUMNS.sm
+    return GRID_COLUMNS.default
+  }, [])
 
   useEffect(() => {
     // 每次组件挂载时重新加载数据（因为可能是下拉面板重新打开）
@@ -56,15 +114,175 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     }
   }, [])
 
+  // 组件挂载时自动聚焦搜索框
+  useEffect(() => {
+    // 检查是否开启了自动聚焦配置（默认开启）
+    const shouldAutoFocusSearch = localStorage.getItem('enable_auto_focus_model_search') !== 'false'
+
+    // 使用 setTimeout 确保在 DOM 渲染完成后聚焦
+    const timer = setTimeout(() => {
+      if (shouldAutoFocusSearch) {
+        searchInputRef.current?.focus()
+      } else {
+        // 如果不聚焦搜索框，则聚焦面板容器，以确保键盘导航（方向键）可用
+        wrapperRef.current?.focus()
+      }
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [])
+
   // 获取过滤后的可见模型列表
   const visibleProviders = useMemo(() => {
     return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels)
   }, [hiddenProviders, hiddenTypes, hiddenModels])
 
+  // 过滤并排序后的模型列表
+  const filteredAndSortedModels = useMemo(() => {
+    const items = visibleProviders
+      .flatMap(p => p.models.map(m => ({ p, m })))
+      .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
+      .filter(item => {
+        if (modelFilterType === 'favorite') {
+          return favoriteModels.has(`${item.p.id}-${item.m.id}`)
+        }
+        return modelFilterType === 'all' ? true : item.m.type === modelFilterType
+      })
+      .filter(item => (modelFilterFunction === 'all' ? true : item.m.functions.includes(modelFilterFunction)))
+
+    // 如果有搜索查询，计算分数并过滤/排序
+    if (searchQuery.trim()) {
+      return items
+        .map(item => ({
+          ...item,
+          score: calculateMatchScore(item.m.name, searchQuery.trim())
+        }))
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+    }
+
+    return items.map(item => ({ ...item, score: 100 }))
+  }, [visibleProviders, modelFilterProvider, modelFilterType, modelFilterFunction, favoriteModels, searchQuery])
+
+  // 当筛选条件变化时，重置高亮索引
+  useEffect(() => {
+    // 尝试在过滤后的列表中找到当前选中的模型
+    const index = filteredAndSortedModels.findIndex(
+      item => item.p.id === selectedProvider && item.m.id === selectedModel
+    )
+    // 如果找到了，就定位到它；否则定位到第一个
+    setHighlightedIndex(index >= 0 ? index : 0)
+  }, [searchQuery, modelFilterProvider, modelFilterType, modelFilterFunction, filteredAndSortedModels, selectedProvider, selectedModel])
+
+  // 确保高亮索引在有效范围内
+  useEffect(() => {
+    if (highlightedIndex >= filteredAndSortedModels.length && filteredAndSortedModels.length > 0) {
+      setHighlightedIndex(filteredAndSortedModels.length - 1)
+    }
+  }, [filteredAndSortedModels.length, highlightedIndex])
+
+  // 滚动高亮项到可视区域
+  useEffect(() => {
+    if (highlightedItemRef.current && gridContainerRef.current) {
+      highlightedItemRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      })
+    }
+  }, [highlightedIndex])
+
+  // 键盘导航处理
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const totalItems = filteredAndSortedModels.length
+    if (totalItems === 0) return
+
+    const columns = getColumnsCount()
+
+    switch (e.key) {
+      case 'ArrowUp': {
+        e.preventDefault()
+        setHighlightedIndex(prev => {
+          const newIndex = prev - columns
+          return newIndex >= 0 ? newIndex : prev
+        })
+        break
+      }
+      case 'ArrowDown': {
+        e.preventDefault()
+        setHighlightedIndex(prev => {
+          const newIndex = prev + columns
+          return newIndex < totalItems ? newIndex : prev
+        })
+        break
+      }
+      case 'ArrowLeft': {
+        e.preventDefault()
+        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : prev))
+        break
+      }
+      case 'ArrowRight': {
+        e.preventDefault()
+        setHighlightedIndex(prev => (prev < totalItems - 1 ? prev + 1 : prev))
+        break
+      }
+      case 'Enter': {
+        e.preventDefault()
+        // 模拟点击高亮项，这样会触发 data-close-on-select 关闭面板
+        // 注意：PanelTrigger 监听的是 mousedown 事件来判断是否关闭
+        if (highlightedItemRef.current) {
+          // 1. 触发 PanelTrigger 的关闭逻辑 (它监听 document mousedown)
+          highlightedItemRef.current.dispatchEvent(new MouseEvent('mousedown', {
+            bubbles: true,
+            cancelable: true,
+            view: window
+          }))
+          // 2. 触发选择逻辑
+          highlightedItemRef.current.click()
+        } else {
+          const highlightedItem = filteredAndSortedModels[highlightedIndex]
+          if (highlightedItem) {
+            onModelSelect(highlightedItem.p.id, highlightedItem.m.id)
+          }
+        }
+        break
+      }
+    }
+  }, [filteredAndSortedModels, highlightedIndex, getColumnsCount, onModelSelect])
+
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div
+      ref={wrapperRef}
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      className="flex flex-col h-full min-h-0 outline-none"
+    >
       {/* 筛选区域 - 固定在顶部 */}
       <div className="flex-shrink-0 p-4 pb-0">
+        {/* 搜索框 */}
+        <div className="mb-3">
+          <div className="text-xs text-zinc-400 mb-2">搜索</div>
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="输入模型名称、拼音或首字母..."
+              className="w-full px-3 py-2 text-sm bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-zinc-600/50 transition-colors"
+                title="清除搜索"
+              >
+                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* 供应商 / 类型筛选 */}
         <div className="mb-3">
           <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
@@ -124,20 +342,22 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       </div>
 
       {/* 模型列表 - 可滚动区域 */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+      <div ref={gridContainerRef} className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-          {visibleProviders
-            .flatMap(p => p.models.map(m => ({ p, m })))
-            .filter(item => (modelFilterProvider === 'all' ? true : item.p.id === modelFilterProvider))
-            .filter(item => {
-              if (modelFilterType === 'favorite') {
-                return favoriteModels.has(`${item.p.id}-${item.m.id}`)
-              }
-              return modelFilterType === 'all' ? true : item.m.type === modelFilterType
-            })
-            .filter(item => (modelFilterFunction === 'all' ? true : item.m.functions.includes(modelFilterFunction)))
-            .map(({ p, m }) => (
-              <div key={`${p.id}-${m.id}`} data-close-on-select onClick={() => onModelSelect(p.id, m.id)} className={`relative px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${selectedProvider === p.id && selectedModel === m.id ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/30' : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'}`}>
+          {filteredAndSortedModels.map(({ p, m }, index) => {
+            const isHighlighted = index === highlightedIndex
+
+            return (
+              <div
+                key={`${p.id}-${m.id}`}
+                ref={isHighlighted ? highlightedItemRef : null}
+                data-close-on-select
+                onClick={() => onModelSelect(p.id, m.id)}
+                className={`relative px-3 py-3 cursor-pointer transition-colors duration-200 rounded-lg border ${isHighlighted
+                  ? 'bg-[#007eff]/20 text-[#66b3ff] border-[#007eff]/60 ring-1 ring-[#007eff]/60'
+                  : 'bg-zinc-700/40 hover:bg-zinc-700/60 border-zinc-700/50'
+                  }`}
+              >
                 {/* 收藏按钮 */}
                 <button
                   data-prevent-close
@@ -171,7 +391,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                   <span className="text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
                 </div>
               </div>
-            ))}
+            )
+          })}
         </div>
       </div>
     </div>
@@ -179,3 +400,5 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
 }
 
 export default ModelSelectorPanel
+
+

@@ -36,6 +36,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [enableQuickDownload, setEnableQuickDownload] = useState(false)
   const [quickDownloadButtonOnly, setQuickDownloadButtonOnly] = useState(false)
   const [quickDownloadPath, setQuickDownloadPath] = useState('')
+  const [enableAutoFocusModelSearch, setEnableAutoFocusModelSearch] = useState(true)
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
 
@@ -116,6 +117,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedQuickDownloadPath = localStorage.getItem('quick_download_path') || ''
     setQuickDownloadPath(savedQuickDownloadPath)
+
+    const savedAutoFocusSearch = localStorage.getItem('enable_auto_focus_model_search')
+    setEnableAutoFocusModelSearch(savedAutoFocusSearch !== 'false') // 默认开启
 
     // 加载更新检测配置
     const updateConfig = getUpdateConfig()
@@ -250,6 +254,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const handleQuickDownloadPathChange = (value: string) => {
     setQuickDownloadPath(value)
     localStorage.setItem('quick_download_path', value)
+  }
+
+  // 实时保存自动聚焦设置
+  const handleAutoFocusSearchChange = (value: boolean) => {
+    setEnableAutoFocusModelSearch(value)
+    localStorage.setItem('enable_auto_focus_model_search', value.toString())
   }
 
   // 实时保存更新检测启用设置
@@ -576,6 +586,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                       className="w-full"
                     />
                     <p className="mt-2 text-xs text-zinc-500">在生成面板显示预估费用</p>
+
+                    <div className="mt-4 pt-4 border-t border-zinc-700/30">
+                      <Toggle
+                        label="模型面板自动聚焦搜索框"
+                        checked={enableAutoFocusModelSearch}
+                        onChange={handleAutoFocusSearchChange}
+                        className="w-full"
+                      />
+                      <p className="mt-2 text-xs text-zinc-500">打开模型选择面板时自动聚焦到搜索输入框</p>
+                    </div>
                   </div>
                 </div>
 
@@ -648,11 +668,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             key={freq}
                             onClick={() => handleUpdateFrequencyChange(freq)}
                             disabled={!updateEnabled}
-                            className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${
-                              updateFrequency === freq
+                            className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${updateFrequency === freq
                                 ? 'bg-[#007eff] text-white'
                                 : 'bg-zinc-700/30 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                              } disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {getFrequencyLabel(freq)}
                           </button>
@@ -979,11 +998,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); closeDialog(setShowAlertDialog); }}
-                className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-colors ${
-                  alertType === 'success' ? 'bg-green-600/70 hover:bg-green-600' :
-                  alertType === 'error' ? 'bg-red-600/70 hover:bg-red-600' :
-                  'bg-yellow-600/70 hover:bg-yellow-600'
-                }`}
+                className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-colors ${alertType === 'success' ? 'bg-green-600/70 hover:bg-green-600' :
+                    alertType === 'error' ? 'bg-red-600/70 hover:bg-red-600' :
+                      'bg-yellow-600/70 hover:bg-yellow-600'
+                  }`}
               >
                 确定
               </button>
