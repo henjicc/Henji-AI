@@ -979,19 +979,40 @@ const ConversationWorkspace: React.FC = () => {
     }
   }, [isDraggingProgress])
 
-  const copyImageToClipboard = async (imageUrl: string) => {
+  const copyImageToClipboard = async (filePath?: string) => {
+    console.log('[复制图片] 开始', { filePath, timestamp: performance.now() })
+
+    if (!filePath) {
+      showNotification('复制失败: 无法获取图片路径', 'error')
+      return
+    }
+
     try {
-      const response = await fetch(imageUrl)
-      const blob = await response.blob()
+      const t1 = performance.now()
+      console.log('[复制图片] 调用 Rust invoke 开始', { t1 })
 
-      const arrayBuffer = await blob.arrayBuffer()
-      const uint8Array = new Uint8Array(arrayBuffer)
+      // 直接传递文件路径给 Rust，避免前端 fetch + IPC 传输大量数据
+      await invoke('copy_image_to_clipboard', { filePath })
 
-      // 直接将二进制数据发给 Rust 后端处理
-      // 0 依赖，0 前端开销，速度极快
-      await invoke('copy_image_to_clipboard', { imageData: Array.from(uint8Array) })
+      const t2 = performance.now()
+      console.log('[复制图片] Rust invoke 完成', { 耗时: `${(t2 - t1).toFixed(2)}ms` })
+
+      // Windows WebView2 可能在剪贴板操作后不立即重绘
+      // 使用最小延迟刷新事件循环并强制重绘
+      await new Promise<void>(resolve => {
+        setTimeout(() => {
+          void document.body.offsetHeight
+          resolve()
+        }, 1)
+      })
+
+      const t3 = performance.now()
+      console.log('[复制图片] 强制重绘完成', { 耗时: `${(t3 - t2).toFixed(2)}ms` })
 
       showNotification('复制成功', 'success')
+
+      const t4 = performance.now()
+      console.log('[复制图片] showNotification 调用完成', { 耗时: `${(t4 - t3).toFixed(2)}ms`, 总耗时: `${(t4 - t1).toFixed(2)}ms` })
     } catch (err) {
       logError('Copy failed:', err)
       setError('复制图片失败: ' + (err instanceof Error ? err.message : String(err)))
@@ -1003,10 +1024,11 @@ const ConversationWorkspace: React.FC = () => {
       clearTimeout(notificationTimeoutRef.current)
     }
     setNotification({ message, type })
-    // 稍微延迟显示以触发进入动画
-    requestAnimationFrame(() => {
+    // 使用 setTimeout 确保在所有平台上都能立即显示
+    // requestAnimationFrame 在 Windows 失去焦点时会暂停
+    setTimeout(() => {
       setNotificationVisible(true)
-    })
+    }, 0)
 
     notificationTimeoutRef.current = setTimeout(() => {
       setNotificationVisible(false)
@@ -1076,7 +1098,8 @@ const ConversationWorkspace: React.FC = () => {
             d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
         </svg>
       ),
-      onClick: async () => await copyImageToClipboard(imageUrl)
+      onClick: async () => await copyImageToClipboard(filePath),
+      disabled: !filePath
     },
     {
       id: 'download-image',

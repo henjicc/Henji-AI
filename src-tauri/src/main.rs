@@ -8,20 +8,42 @@ use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[tauri::command]
-fn copy_image_to_clipboard(app: tauri::AppHandle, image_data: Vec<u8>) -> Result<(), String> {
-    // 1. 使用 image crate 加载任意格式的图片数据 (支持 JPEG, PNG, WEBP 等)
-    let img = image::load_from_memory(&image_data).map_err(|e| format!("Failed to parse image: {}", e))?;
+fn copy_image_to_clipboard(app: tauri::AppHandle, file_path: String) -> Result<(), String> {
+    use std::time::Instant;
     
-    // 2. 转换为 RGBA8 格式
+    let t0 = Instant::now();
+    println!("[复制图片 Rust] 开始, 文件: {}", file_path);
+    
+    // 1. 直接从本地文件系统读取图片数据
+    let image_data = std::fs::read(&file_path)
+        .map_err(|e| format!("Failed to read image file: {}", e))?;
+    let t1 = Instant::now();
+    println!("[复制图片 Rust] 读取文件完成, 大小: {} bytes, 耗时: {:?}", image_data.len(), t1 - t0);
+    
+    // 2. 使用 image crate 加载图片数据 (支持 JPEG, PNG, WEBP 等)
+    let img = image::load_from_memory(&image_data)
+        .map_err(|e| format!("Failed to parse image: {}", e))?;
+    let t2 = Instant::now();
+    println!("[复制图片 Rust] 解析图片完成, 耗时: {:?}", t2 - t1);
+    
+    // 3. 转换为 RGBA8 格式
     let rgba = img.into_rgba8();
     let (width, height) = rgba.dimensions();
+    let t3 = Instant::now();
+    println!("[复制图片 Rust] 转换 RGBA8 完成, 尺寸: {}x{}, 耗时: {:?}", width, height, t3 - t2);
     
-    // 3. 构建 Tauri Image 对象
+    // 4. 构建 Tauri Image 对象
     let raw_data = rgba.into_raw();
     let tauri_image = tauri::image::Image::new(&raw_data, width, height);
+    let t4 = Instant::now();
+    println!("[复制图片 Rust] 构建 Image 完成, 耗时: {:?}", t4 - t3);
 
-    // 4. 写入剪贴板
-    app.clipboard().write_image(&tauri_image).map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    // 5. 写入剪贴板
+    app.clipboard().write_image(&tauri_image)
+        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    let t5 = Instant::now();
+    println!("[复制图片 Rust] 写入剪贴板完成, 耗时: {:?}", t5 - t4);
+    println!("[复制图片 Rust] 总耗时: {:?}", t5 - t0);
     
     Ok(())
 }

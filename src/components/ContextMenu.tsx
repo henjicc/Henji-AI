@@ -48,13 +48,26 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
                     <div
                         className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
                         onClick={async (e) => {
+                            const t0 = performance.now()
+                            console.log('[ContextMenu] 点击菜单项', { label: item.label, t0 })
+
                             e.preventDefault()
                             e.stopPropagation()
                             if (!item.disabled) {
                                 onClose()
-                                // 等待一小段时间确保菜单关闭动画完成，然后执行操作
-                                await new Promise(resolve => setTimeout(resolve, 50))
+                                const t1 = performance.now()
+                                console.log('[ContextMenu] 菜单关闭, 等待 16ms', { 耗时: `${(t1 - t0).toFixed(2)}ms` })
+
+                                // 菜单关闭后立即执行，16ms 足够一帧渲染
+                                await new Promise(resolve => setTimeout(resolve, 16))
+
+                                const t2 = performance.now()
+                                console.log('[ContextMenu] 16ms 等待结束, 执行 onClick', { 等待耗时: `${(t2 - t1).toFixed(2)}ms` })
+
                                 await item.onClick()
+
+                                const t3 = performance.now()
+                                console.log('[ContextMenu] onClick 执行完成', { onClick耗时: `${(t3 - t2).toFixed(2)}ms`, 总耗时: `${(t3 - t0).toFixed(2)}ms` })
                             }
                         }}
                     >

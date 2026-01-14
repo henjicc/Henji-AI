@@ -24,3 +24,34 @@ image = { version = "0.24", features = ["jpeg", "png"] }
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }
+
+# 在开发模式下为图片处理和剪贴板相关 crate 开启优化
+# 解决复制图片时延迟的问题（Debug 模式这些库非常慢）
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.zune-inflate]
+opt-level = 3
+
+# 剪贴板库优化
+[profile.dev.package.arboard]
+opt-level = 3
+
+# 其他图片处理相关
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.deflate]
+opt-level = 3
+
+[profile.dev.package.adler]
+opt-level = 3
+
+[profile.dev.package.crc32fast]
+opt-level = 3
