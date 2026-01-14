@@ -6,8 +6,8 @@ import ContextMenu from '../components/ContextMenu'
 import { MediaResult } from '../types'
 import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio } from '../utils/save'
 import { initializeDataDirectory, getDataRoot, convertPathString, convertPathArray } from '../utils/dataPath'
-import { convertBlobToPng } from '../utils/imageConversion'
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core'
 import AudioPlayer from '../components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
 import { useDragDrop } from '../contexts/DragDropContext'
@@ -982,23 +982,16 @@ const ConversationWorkspace: React.FC = () => {
   const copyImageToClipboard = async (imageUrl: string) => {
     try {
       const response = await fetch(imageUrl)
-      let blob = await response.blob()
+      const blob = await response.blob()
 
-      // 确保转换为 PNG，因为 Clipboard API 主要支持 PNG
-      if (blob.type !== 'image/png') {
-        try {
-          blob = await convertBlobToPng(blob)
-        } catch (e) {
-          logError('Image conversion failed:', e)
-          throw new Error('图片格式转换失败')
-        }
-      }
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
 
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob
-        })
-      ])
+      // 直接将二进制数据发给 Rust 后端处理
+      // 0 依赖，0 前端开销，速度极快
+      await invoke('copy_image_to_clipboard', { imageData: Array.from(uint8Array) })
+
+      showNotification('复制成功', 'success')
     } catch (err) {
       logError('Copy failed:', err)
       setError('复制图片失败: ' + (err instanceof Error ? err.message : String(err)))

@@ -5,7 +5,26 @@ mod clipboard_files;
 
 use tauri::Manager;
 
-/// 切换开发者工具的显示状态
+use tauri_plugin_clipboard_manager::ClipboardExt;
+
+#[tauri::command]
+fn copy_image_to_clipboard(app: tauri::AppHandle, image_data: Vec<u8>) -> Result<(), String> {
+    // 1. 使用 image crate 加载任意格式的图片数据 (支持 JPEG, PNG, WEBP 等)
+    let img = image::load_from_memory(&image_data).map_err(|e| format!("Failed to parse image: {}", e))?;
+    
+    // 2. 转换为 RGBA8 格式
+    let rgba = img.into_rgba8();
+    let (width, height) = rgba.dimensions();
+    
+    // 3. 构建 Tauri Image 对象
+    let raw_data = rgba.into_raw();
+    let tauri_image = tauri::image::Image::new(&raw_data, width, height);
+
+    // 4. 写入剪贴板
+    app.clipboard().write_image(&tauri_image).map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+    
+    Ok(())
+}
 #[tauri::command]
 fn toggle_devtools(app: tauri::AppHandle) {
   if let Some(window) = app.get_webview_window("main") {
@@ -27,7 +46,8 @@ pub fn run() {
       modelscope::modelscope_submit_task,
       modelscope::modelscope_check_status,
       toggle_devtools,
-      clipboard_files::read_clipboard_files
+      clipboard_files::read_clipboard_files,
+      copy_image_to_clipboard
     ])
     .setup(|app| {
       let app_local = app.path().app_local_data_dir().expect("get app local data dir");

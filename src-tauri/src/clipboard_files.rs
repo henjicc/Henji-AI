@@ -1,4 +1,6 @@
+#[cfg(target_os = "windows")]
 use std::fs;
+#[cfg(target_os = "windows")]
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 /// 读取剪贴板中的文件路径（Windows 专用）
@@ -120,6 +122,7 @@ pub struct ClipboardFile {
 }
 
 /// 根据文件扩展名获取 MIME 类型
+#[cfg(target_os = "windows")]
 fn get_mime_type(path: &str) -> String {
     if path.ends_with(".png") {
         "image/png".to_string()

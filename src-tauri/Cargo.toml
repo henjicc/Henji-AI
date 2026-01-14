@@ -9,7 +9,7 @@ edition = "2021"
 rust-version = "1.70"
 
 [dependencies]
-tauri = { version = "2.0.0", features = ["protocol-asset", "devtools"] }
+tauri = { version = "2.0.0", features = ["macos-private-api", "protocol-asset", "devtools", "image-png"] }
 tauri-plugin-fs = "2.0.0"
 tauri-plugin-dialog = "2.0.0"
 tauri-plugin-http = "2.0.0"
@@ -18,7 +18,9 @@ tauri-plugin-clipboard-manager = "2.0.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
+
 base64 = "0.21"
+image = { version = "0.24", features = ["jpeg", "png"] }
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }
