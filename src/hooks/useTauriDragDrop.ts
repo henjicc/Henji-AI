@@ -37,10 +37,38 @@ export function useTauriDragDrop(
             unlisteners.push(listen<DragDropPayload>('tauri://drag-drop', async (event) => {
                 setIsDragging(false)
 
-                // Note: event.payload.position are screen coordinates, while getBoundingClientRect is viewport relative.
-                // Strict bounds check is difficult without knowing window position. 
-                // For now, we accept the drop if it happens on the window.
-                // If we need strict checking, we would need to subtract window.screenX/Y from payload position.
+                try {
+                    // 获取当前窗口
+                    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+                    const appWindow = getCurrentWindow()
+
+                    // 获取窗口位置 (物理像素)
+                    const windowPos = await appWindow.innerPosition()
+                    const dropPos = event.payload.position
+
+                    // 计算相对坐标 (物理像素 -> CSS 像素)
+                    // dropPos 是屏幕绝对坐标，windowPos 是 WebView 左上角屏幕坐标
+                    const scaleFactor = window.devicePixelRatio
+                    const clientX = (dropPos.x - windowPos.x) / scaleFactor
+                    const clientY = (dropPos.y - windowPos.y) / scaleFactor
+
+                    // 命中测试
+                    const targetEl = document.elementFromPoint(clientX, clientY)
+                    const containerEl = elementRef.current
+
+                    // 如果没有命中任何元素，或者命中的元素不在我们的容器内，忽略此次 Drop
+                    if (!targetEl || !containerEl || !containerEl.contains(targetEl)) {
+                        // 可选：记录日志用于调试
+                        // console.log('[DragDrop] Drop ignored - outside target area', { clientX, clientY })
+                        return
+                    }
+                } catch (err) {
+                    console.error('[DragDrop] Hit test failed:', err)
+                    // 如果命中测试出错（例如获取窗口位置失败），为了安全起见，我们选择忽略或者允许？
+                    // 考虑到用户体验，如果出错可能就不处理了，或者默认行为。
+                    // 这里选择忽略，避免误触发。
+                    return
+                }
 
                 const paths = event.payload.paths
                 if (paths && paths.length > 0) {

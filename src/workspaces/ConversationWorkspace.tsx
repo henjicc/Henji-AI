@@ -1258,23 +1258,38 @@ const ConversationWorkspace: React.FC = () => {
     setIsDragging(false)
   }
 
-  // 历史记录图片拖拽开始 (使用自定义拖拽)
-  const handleHistoryImageDragStart = (e: React.MouseEvent, imageUrl: string, filePath?: string) => {
+  // 历史记录图片拖拽开始 (混合拖放：窗口内自定义预览 + 边缘触发原生拖放)
+  const handleHistoryImageDragStart = async (e: React.MouseEvent, imageUrl: string, filePath?: string) => {
     e.preventDefault()
     const initialX = e.clientX
     const initialY = e.clientY
 
+    // 预先生成缩略图（如果有文件路径）
+    let thumbnailPath: string | undefined
+    if (filePath) {
+      try {
+        const { generateThumbnail } = await import('../utils/imageConversion')
+        thumbnailPath = await generateThumbnail(imageUrl)
+      } catch (err) {
+        console.warn('[拖放] 生成缩略图失败:', err)
+      }
+    }
+
+    // 使用内部自定义拖放 + 边缘检测触发原生拖放
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = Math.abs(moveEvent.clientX - initialX)
       const deltaY = Math.abs(moveEvent.clientY - initialY)
       // If moved more than 5 pixels, consider it a drag
       if (deltaX > 5 || deltaY > 5) {
         isDraggingRef.current = true
+        // 启动自定义拖放，传入 filePath 和 thumbnailPath
+        // DragDropContext 会在检测到边缘时自动触发原生拖放
         startDrag(
           {
             type: 'image',
             imageUrl,
-            filePath,  // 传递原始文件路径
+            filePath,
+            thumbnailPath,
             sourceType: 'history'
           },
           imageUrl

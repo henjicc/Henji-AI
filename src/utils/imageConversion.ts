@@ -120,3 +120,76 @@ export async function extractImagesFromClipboard(e: ClipboardEvent): Promise<Fil
 
     return files
 }
+
+/**
+ * 生成缩略图并保存到临时文件
+ * 用于拖拽时的图标显示
+ * @param imageUrl 图片 URL
+ * @returns 临时文件路径
+ */
+export async function generateThumbnail(imageUrl: string): Promise<string> {
+    try {
+        // 动态导入 Tauri API
+        const { writeFile } = await import('@tauri-apps/plugin-fs')
+        const { tempDir, join } = await import('@tauri-apps/api/path')
+
+        // 1. 加载图片
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        await new Promise((resolve, reject) => {
+            img.onload = resolve
+            img.onerror = reject
+            img.src = imageUrl
+        })
+
+        // 2. 计算缩放尺寸 (最大 100x100)
+        const MAX_SIZE = 100
+        let width = img.width
+        let height = img.height
+
+        if (width > height) {
+            if (width > MAX_SIZE) {
+                height = height * (MAX_SIZE / width)
+                width = MAX_SIZE
+            }
+        } else {
+            if (height > MAX_SIZE) {
+                width = width * (MAX_SIZE / height)
+                height = MAX_SIZE
+            }
+        }
+
+        // 3. 绘制到 Canvas
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('Failed to get canvas context')
+
+        ctx.drawImage(img, 0, 0, width, height)
+
+        // 4. 转换为 Blob -> Uint8Array
+        const blob = await new Promise<Blob | null>(resolve =>
+            canvas.toBlob(resolve, 'image/png')
+        )
+        if (!blob) throw new Error('Failed to create thumbnail blob')
+
+        const arrayBuffer = await blob.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+
+        // 5. 保存到临时文件
+        // 使用随机文件名避免冲突
+        const tempPath = await tempDir()
+        const fileName = `drag-thumb-${Date.now()}-${Math.floor(Math.random() * 1000)}.png`
+        const filePath = await join(tempPath, fileName)
+
+        await writeFile(filePath, uint8Array)
+
+        return filePath
+    } catch (error) {
+        console.error('Failed to generate thumbnail:', error)
+        // 如果失败，返回原始 URL (如果是本地路径) 或者空
+        // 这里抛出错误，调用者可以降级处理
+        throw error
+    }
+}
