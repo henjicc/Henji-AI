@@ -123,6 +123,8 @@ const ConversationWorkspace: React.FC = () => {
   const [isBuffering, setIsBuffering] = useState(false)
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false)
   const [isControlsVisible, setIsControlsVisible] = useState(true)
+  const [showVolumeIndicator, setShowVolumeIndicator] = useState(false)
+  const volumeIndicatorTimer = React.useRef<number | null>(null)
 
   // 测试模式状态
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
@@ -919,18 +921,6 @@ const ConversationWorkspace: React.FC = () => {
     return () => { document.removeEventListener('click', handler) }
   }, [isSpeedMenuOpen])
 
-  useEffect(() => {
-    if (!isVolumeMenuOpen) return
-    const handler = (e: MouseEvent) => {
-      const d = volumeDisplayRef.current
-      const m = volumeMenuRef.current
-      const t = e.target as Node
-      if (d && m && t && !d.contains(t) && !m.contains(t)) setIsVolumeMenuOpen(false)
-    }
-    document.addEventListener('click', handler)
-    return () => { document.removeEventListener('click', handler) }
-  }, [isVolumeMenuOpen])
-
 
 
   useEffect(() => {
@@ -966,6 +956,69 @@ const ConversationWorkspace: React.FC = () => {
       setIsControlsVisible(true)
     }
   }, [isVideoViewerOpen])
+
+  // 视频播放器键盘快捷键
+  useEffect(() => {
+    if (!isVideoViewerOpen) return
+    // 存储估算的帧间隔（默认1/30秒）
+    let frameInterval = 1 / 30
+    let lastMediaTime = 0
+    let frameCount = 0
+
+    // 尝试使用requestVideoFrameCallback估算帧率
+    const v = videoRef.current
+    if (v && 'requestVideoFrameCallback' in v) {
+      const estimateFrameRate = (_: DOMHighResTimeStamp, metadata: { mediaTime: number }) => {
+        if (lastMediaTime > 0 && metadata.mediaTime > lastMediaTime) {
+          frameCount++
+          if (frameCount >= 5) {
+            // 取平均帧间隔
+            frameInterval = (metadata.mediaTime - lastMediaTime) / frameCount
+            frameCount = 0
+            lastMediaTime = metadata.mediaTime
+          }
+        } else {
+          lastMediaTime = metadata.mediaTime
+        }
+        if (isVideoViewerOpen) {
+          (v as any).requestVideoFrameCallback(estimateFrameRate)
+        }
+      }
+      (v as any).requestVideoFrameCallback(estimateFrameRate)
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const v = videoRef.current
+      if (!v) return
+      // 左右方向键：快进/快退
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        // Ctrl时步进1帧，否则1秒
+        const step = e.ctrlKey ? frameInterval : 1
+        const newTime = e.key === 'ArrowLeft'
+          ? Math.max(0, v.currentTime - step)
+          : Math.min(v.duration || 0, v.currentTime + step)
+        v.currentTime = newTime
+        setCurrentTime(newTime)
+      }
+      // 上下方向键：调整音量
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        const step = 0.05 // 5%
+        const newVolume = e.key === 'ArrowUp'
+          ? Math.min(1, volume + step)
+          : Math.max(0, volume - step)
+        setMuted(false)
+        setVolume(newVolume)
+        // 显示音量指示器
+        setShowVolumeIndicator(true)
+        if (volumeIndicatorTimer.current) clearTimeout(volumeIndicatorTimer.current)
+        volumeIndicatorTimer.current = window.setTimeout(() => setShowVolumeIndicator(false), 1000)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isVideoViewerOpen, volume])
 
   // 处理进度条拖动时的全局鼠标释放
   useEffect(() => {
@@ -3638,6 +3691,25 @@ const ConversationWorkspace: React.FC = () => {
               style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}
             >
               <div className="relative">
+                {/* 音量指示器 */}
+                <div
+                  className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
+                  style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
+                >
+                  {muted || volume === 0 ? (
+                    <svg viewBox="0 0 1024 1024" className="w-5 h-5" fill="currentColor">
+                      <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z"></path>
+                      <path d="M724.8 419.2a42.688 42.688 0 0 1 60.352 0l60.352 60.352 60.352-60.352a42.688 42.688 0 0 1 60.352 60.352L906.048 540.16l60.352 60.352a42.688 42.688 0 0 1-60.352 60.352l-60.352-60.352-60.352 60.352a42.688 42.688 0 0 1-60.352-60.352l60.352-60.352-60.352-60.608a42.688 42.688 0 0 1 0-60.352z"></path>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 1024 1024" className="w-5 h-5" fill="currentColor">
+                      <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z"></path>
+                      <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z"></path>
+                      <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z"></path>
+                    </svg>
+                  )}
+                  <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
+                </div>
                 <video
                   ref={videoRef}
                   src={currentVideoUrl}
@@ -3650,6 +3722,7 @@ const ConversationWorkspace: React.FC = () => {
                   onWaiting={() => { setIsBuffering(true) }}
                   onStalled={() => { setIsBuffering(true) }}
                   onClick={() => { if (videoRef.current) { if (isVideoPlaying) videoRef.current.pause(); else videoRef.current.play() } }}
+                  onWheel={(e) => { e.preventDefault(); const delta = e.deltaY > 0 ? -0.05 : 0.05; const newVolume = Math.min(1, Math.max(0, volume + delta)); setMuted(false); setVolume(newVolume); setShowVolumeIndicator(true); if (volumeIndicatorTimer.current) clearTimeout(volumeIndicatorTimer.current); volumeIndicatorTimer.current = window.setTimeout(() => setShowVolumeIndicator(false), 1000) }}
                   controls={false}
                 />
                 <button
@@ -3708,28 +3781,35 @@ const ConversationWorkspace: React.FC = () => {
                     </button>
                     <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
                     <div className="controls-right">
-                      <div className="speed-control">
-                        <div ref={volumeDisplayRef} className="speed-display" onClick={() => setIsVolumeMenuOpen(o => !o)} title="音量">
-                          <svg viewBox="0 0 1024 1024">
-                            <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z" fill="currentColor"></path>
-                            <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z" fill="currentColor"></path>
-                            <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z" fill="currentColor"></path>
-                          </svg>
+                      <div className="speed-control" onMouseEnter={() => setIsVolumeMenuOpen(true)} onMouseLeave={() => setIsVolumeMenuOpen(false)}>
+                        <div ref={volumeDisplayRef} className="speed-display" onClick={() => setMuted(m => !m)} title={muted ? '取消静音' : '静音'}>
+                          {muted || volume === 0 ? (
+                            <svg viewBox="0 0 1024 1024">
+                              <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z" fill="currentColor"></path>
+                              <path d="M724.8 419.2a42.688 42.688 0 0 1 60.352 0l60.352 60.352 60.352-60.352a42.688 42.688 0 0 1 60.352 60.352L906.048 540.16l60.352 60.352a42.688 42.688 0 0 1-60.352 60.352l-60.352-60.352-60.352 60.352a42.688 42.688 0 0 1-60.352-60.352l60.352-60.352-60.352-60.608a42.688 42.688 0 0 1 0-60.352z" fill="currentColor"></path>
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 1024 1024">
+                              <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z" fill="currentColor"></path>
+                              <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z" fill="currentColor"></path>
+                              <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z" fill="currentColor"></path>
+                            </svg>
+                          )}
                         </div>
                         <div ref={volumeMenuRef} className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`} onWheel={(e) => { e.preventDefault(); const d = e.deltaY > 0 ? -0.05 : 0.05; const next = Math.min(1, Math.max(0, (muted ? 0 : volume) + d)); setMuted(false); setVolume(next) }}>
                           <div className="volume-vertical">
                             <div className="volume-percent">{Math.round((muted ? 0 : volume) * 100)}</div>
                             <div className="volume-track" onClick={(e) => { const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); const percent = 1 - Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)); const v = percent; setMuted(false); setVolume(v) }}>
-                              <div className="volume-fill" style={{ height: `calc(${muted ? 0 : Math.round(volume * 100)}% + 7px)` }}></div>
-                              <div className="volume-thumb" style={{ bottom: `${muted ? 0 : Math.round(volume * 100)}%` }}></div>
+                              <div className="volume-fill" style={{ height: `calc(5px + (100% - 10px) * ${muted ? 0 : volume})` }}></div>
+                              <div className="volume-thumb" style={{ bottom: `calc(5px + (100% - 10px) * ${muted ? 0 : volume})` }}></div>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <div className="speed-control">
-                        <div ref={speedDisplayRef} className="speed-display" onClick={() => setIsSpeedMenuOpen(o => !o)}>{playbackRate}x</div>
+                      <div className="speed-control" onMouseEnter={() => setIsSpeedMenuOpen(true)} onMouseLeave={() => setIsSpeedMenuOpen(false)}>
+                        <div ref={speedDisplayRef} className="speed-display">{playbackRate}x</div>
                         <div ref={speedMenuRef} className={`speed-menu ${isSpeedMenuOpen ? 'active' : ''}`}>
-                          {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
+                          {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
                             <div key={s} className={`speed-option ${playbackRate === s ? 'active' : ''}`} onClick={() => { setPlaybackRate(s); setIsSpeedMenuOpen(false) }}>{s}x</div>
                           ))}
                         </div>

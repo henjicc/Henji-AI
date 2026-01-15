@@ -482,6 +482,19 @@ input[type="number"] {
   position: relative;
 }
 
+/* 扩展悬停区域，连接按钮和上方弹出的菜单 */
+/* 仅当菜单打开时才添加悬停桥接区域 */
+.speed-control:has(.speed-menu.active)::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  bottom: 100%;
+  height: 20px;
+  pointer-events: auto;
+}
+
+
 .speed-display {
   font-size: 14px;
   color: white;
@@ -490,6 +503,13 @@ input[type="number"] {
   border-radius: 4px;
   transition: all 0.2s;
   user-select: none;
+  text-align: center;
+}
+
+/* 倍速显示按钮固定宽度，避免切换时布局抖动 */
+.controls-right>.speed-control:nth-child(2) .speed-display {
+  width: 56px;
+  box-sizing: border-box;
 }
 
 .speed-display:hover {
@@ -511,7 +531,7 @@ input[type="number"] {
   background: rgba(30, 30, 30, 0.95);
   border-radius: 6px;
   padding: 8px;
-  margin-bottom: 10px;
+  padding-bottom: 18px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -528,6 +548,7 @@ input[type="number"] {
   transform: translateX(-50%) translateY(0);
 }
 
+
 .speed-option {
   padding: 8px 16px;
   color: white;
@@ -536,6 +557,7 @@ input[type="number"] {
   font-size: 14px;
   white-space: nowrap;
   transition: background 0.2s;
+  text-align: center;
 }
 
 .speed-option:hover {
@@ -578,21 +600,24 @@ input[type="number"] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .volume-percent {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 32px;
+  text-align: center;
 }
 
 .volume-track {
   position: relative;
-  width: 8px;
-  height: 120px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  width: 6px;
+  height: 140px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
   cursor: pointer;
 }
 
@@ -602,21 +627,24 @@ input[type="number"] {
   left: 0;
   width: 100%;
   background: #007eff;
-  border-radius: 4px;
+  border-radius: 3px;
+  pointer-events: none;
 }
 
 .volume-thumb {
   position: absolute;
   left: 50%;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 14px;
-  background: #007eff;
+  transform: translate(-50%, 50%);
+  width: 10px;
+  height: 10px;
+  background: #fff;
   border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
 }
 
 .volume-menu {
-  width: 64px;
+  width: 56px;
 }
 
 /* Context Menu Styles */
