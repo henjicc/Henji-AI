@@ -1264,14 +1264,18 @@ const ConversationWorkspace: React.FC = () => {
     const initialX = e.clientX
     const initialY = e.clientY
 
-    // 预先生成缩略图（如果有文件路径）
+    // 获取或创建图片缩略图（使用缓存系统）
     let thumbnailPath: string | undefined
+    let previewDataUrl: string = imageUrl  // 默认使用原图 URL
+
     if (filePath) {
       try {
-        const { generateThumbnail } = await import('../utils/imageConversion')
-        thumbnailPath = await generateThumbnail(imageUrl)
+        const { getOrCreateImageThumbnail } = await import('../utils/imageConversion')
+        const thumbnail = await getOrCreateImageThumbnail(filePath, imageUrl)
+        thumbnailPath = thumbnail.filePath
+        previewDataUrl = thumbnail.dataUrl
       } catch (err) {
-        console.warn('[拖放] 生成缩略图失败:', err)
+        console.warn('[拖放] 获取图片缩略图失败:', err)
       }
     }
 
@@ -1292,7 +1296,7 @@ const ConversationWorkspace: React.FC = () => {
             thumbnailPath,
             sourceType: 'history'
           },
-          imageUrl
+          previewDataUrl  // 使用缓存的缩略图 Data URL
         )
         // Remove listeners after starting drag
         window.removeEventListener('mousemove', handleMouseMove)
@@ -1319,6 +1323,68 @@ const ConversationWorkspace: React.FC = () => {
       return // Don't open viewer if we just finished dragging
     }
     openImageViewer(url, imageUrls, filePaths)
+  }
+
+  // 历史记录视频拖拽开始 (混合拖放：窗口内自定义预览 + 边缘触发原生拖放)
+  const handleHistoryVideoDragStart = async (e: React.MouseEvent, videoUrl: string, filePath?: string) => {
+    e.preventDefault()
+    const initialX = e.clientX
+    const initialY = e.clientY
+
+    // 获取或创建视频缩略图（使用缓存系统）
+    let thumbnailPath: string | undefined
+    let previewDataUrl: string = videoUrl  // 默认使用视频 URL
+
+    if (filePath) {
+      try {
+        const { getOrCreateVideoThumbnail } = await import('../utils/imageConversion')
+        const thumbnail = await getOrCreateVideoThumbnail(filePath, videoUrl)
+        thumbnailPath = thumbnail.filePath
+        previewDataUrl = thumbnail.dataUrl
+      } catch (err) {
+        console.warn('[拖放] 获取视频缩略图失败:', err)
+      }
+    }
+
+    // 使用内部自定义拖放 + 边缘检测触发原生拖放
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = Math.abs(moveEvent.clientX - initialX)
+      const deltaY = Math.abs(moveEvent.clientY - initialY)
+      if (deltaX > 5 || deltaY > 5) {
+        isDraggingRef.current = true
+        startDrag(
+          {
+            type: 'video',
+            imageUrl: videoUrl,
+            filePath,
+            thumbnailPath,
+            sourceType: 'history'
+          },
+          previewDataUrl  // 使用 Data URL 作为预览（可以在 img 标签显示）
+        )
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('mouseup', handleMouseUp)
+      }
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      setTimeout(() => {
+        isDraggingRef.current = false
+      }, 100)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Handle video click - prevent if dragging occurred
+  const handleHistoryVideoClick = (url: string, filePath?: string) => {
+    if (isDraggingRef.current) {
+      return // Don't open viewer if we just finished dragging
+    }
+    openVideoViewer(url, filePath)
   }
   // 自动处理下一个排队的任务
   const processNextTask = () => {
@@ -2695,11 +2761,18 @@ const ConversationWorkspace: React.FC = () => {
   const deleteTask = async (taskId: string) => {
     const target = tasks.find(t => t.id === taskId)
 
-    // 删除生成的结果文件
+    // 删除生成的结果文件及其缩略图缓存
     if (target?.result?.filePath) {
       const paths = target.result.filePath.includes('|||') ? target.result.filePath.split('|||') : [target.result.filePath]
       for (const p of paths) {
         try { await remove(p) } catch (e) { logError('[App] 删除单条文件失败', { data: [p, e] }) }
+        // 删除对应的缩略图缓存（图片和视频）
+        if (target.result.type === 'image' || target.result.type === 'video') {
+          try {
+            const { deleteThumbnailCache } = await import('../utils/imageConversion')
+            await deleteThumbnailCache(p)
+          } catch (e) { logError('[App] 删除缩略图缓存失败', { data: [p, e] }) }
+        }
       }
       if (target?.result?.type === 'audio') {
         for (const p of paths) {
@@ -2721,6 +2794,9 @@ const ConversationWorkspace: React.FC = () => {
           try {
             await remove(filePath)
             logInfo('[App] 删除上传文件(无引用):', filePath)
+            // 同时删除缩略图缓存
+            const { deleteThumbnailCache } = await import('../utils/imageConversion')
+            await deleteThumbnailCache(filePath)
           } catch (e) {
             logError('[App] 删除单条上传文件失败', { data: [filePath, e] })
           }
@@ -2743,6 +2819,9 @@ const ConversationWorkspace: React.FC = () => {
           try {
             await remove(filePath)
             logInfo('[App] 删除上传视频文件(无引用):', filePath)
+            // 同时删除缩略图缓存
+            const { deleteThumbnailCache } = await import('../utils/imageConversion')
+            await deleteThumbnailCache(filePath)
           } catch (e) {
             logError('[App] 删除单条上传视频文件失败', { data: [filePath, e] })
           }
@@ -3190,15 +3269,20 @@ const ConversationWorkspace: React.FC = () => {
                               )}
                               {task.result.type === 'video' && (
                                 <div
-                                  className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
-                                  onClick={() => openVideoViewer(task.result!.url, (task.result as any).filePath)}
+                                  className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-grab active:cursor-grabbing"
+                                  onClick={() => handleHistoryVideoClick(task.result!.url, (task.result as any).filePath)}
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation()
+                                    handleHistoryVideoDragStart(e, task.result!.url, (task.result as any).filePath)
+                                  }}
                                   onContextMenu={(e) => showMenu(e, getVideoThumbnailMenuItems(task.result!.filePath))}
                                 >
                                   <video
                                     src={task.result.url}
-                                    className="max-w-full max-h-full object-contain"
+                                    className="max-w-full max-h-full object-contain select-none"
+                                    draggable={false}
                                   />
-                                  <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                     <div className="h-10 w-10 rounded-full bg-zinc-900/60 backdrop-blur-sm flex items-center justify-center text-white">
                                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
                                         <path d="M8 5v14l11-7-11-7z" />

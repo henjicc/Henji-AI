@@ -42,6 +42,14 @@ export async function getWaveformsPath(): Promise<string> {
 }
 
 /**
+ * 获取 Thumbnails 子目录路径（图片和视频缩略图缓存）
+ */
+export async function getThumbnailsPath(): Promise<string> {
+  const root = await getDataRoot()
+  return await path.join(root, 'Thumbnails')
+}
+
+/**
  * 获取 Uploads 子目录路径
  */
 export async function getUploadsPath(): Promise<string> {
@@ -77,6 +85,7 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
     // 创建子目录
     await mkdir(await path.join(rootPath, 'Media'), { recursive: true })
     await mkdir(await path.join(rootPath, 'Waveforms'), { recursive: true })
+    await mkdir(await path.join(rootPath, 'Thumbnails'), { recursive: true })
     await mkdir(await path.join(rootPath, 'Uploads'), { recursive: true })
   } catch (error) {
     logError('初始化数据目录失败:', error)

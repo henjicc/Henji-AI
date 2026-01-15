@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, ReactNode, useRef, useCallback } from 'react'
 
 interface DragData {
-    type: 'image'
-    imageUrl: string
+    type: 'image' | 'video'
+    imageUrl: string  // 图片或视频的预览URL
     filePath?: string  // 原始文件路径 (仅 Tauri 环境，用于直接读取本地文件)
     thumbnailPath?: string  // 缩略图临时文件路径 (用于原生拖放图标)
     sourceType: 'history' | 'upload'
@@ -40,6 +40,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
     const previewRef = useRef<HTMLDivElement>(null)
     const dragDataRef = useRef<DragData | null>(null)
     const nativeDragTriggeredRef = useRef(false)
+    const isPositionedRef = useRef(false)  // 跟踪预览是否已定位
     // We keep dragPosition in state only for initial placement if needed, 
     // but we won't update it on every mouse move to prevent re-renders.
     const [dragPosition] = useState({ x: 0, y: 0 })
@@ -50,6 +51,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
         setDragData(data)
         dragDataRef.current = data
         nativeDragTriggeredRef.current = false
+        isPositionedRef.current = false  // 重置定位状态
         setPreviewUrl(preview)
     }, [])
 
@@ -97,6 +99,11 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             if (previewRef.current) {
                 previewRef.current.style.left = `${e.clientX - 32}px`
                 previewRef.current.style.top = `${e.clientY - 32}px`
+                // 首次定位后显示预览（避免闪烁到左上角）
+                if (!isPositionedRef.current) {
+                    isPositionedRef.current = true
+                    previewRef.current.style.opacity = '0.8'
+                }
             }
 
             // 边缘检测：当鼠标接近窗口边缘时，触发原生拖放
@@ -169,13 +176,13 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
                         top: 0,
                         pointerEvents: 'none',
                         zIndex: 9999,
-                        opacity: 0.8,
+                        opacity: 0,  // 初始隐藏，等待第一次 mousemove 后显示
                     }}
                 >
                     <img
                         src={previewUrl}
                         alt="Dragging"
-                        className="w-16 h-16 object-cover rounded-lg shadow-2xl border-2 border-[#007eff]"
+                        className="max-w-16 max-h-16 object-contain rounded-lg shadow-2xl border-2 border-[#007eff] bg-zinc-900/80"
                     />
                 </div>
             )}

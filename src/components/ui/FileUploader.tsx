@@ -174,7 +174,7 @@ export default function FileUploader({
                         const bytes = await readFile(dragData.filePath)
                         const mime = inferMimeFromPath(dragData.filePath)
                         const blob = new Blob([bytes], { type: mime })
-                        const filename = dragData.filePath.split(/[\\\/]/).pop() || `image-${Date.now()}.jpg`
+                        const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
                         file = new File([blob], filename, { type: mime })
                     } else {
                         // Fallback 到 URL 转换（开发环境或没有文件路径时）
@@ -185,9 +185,38 @@ export default function FileUploader({
                 } catch (error) {
                     logError('Failed to convert dragged image:', error)
                 }
+            } else if (dragData.type === 'video') {
+                try {
+                    let file: File
+
+                    // 视频只能通过文件路径读取
+                    if (dragData.filePath && isDesktop()) {
+                        const bytes = await readFile(dragData.filePath)
+                        const mime = inferVideoMimeFromPath(dragData.filePath)
+                        const blob = new Blob([bytes], { type: mime })
+                        const filename = dragData.filePath.split(/[\\/]/).pop() || `video-${Date.now()}.mp4`
+                        file = new File([blob], filename, { type: mime })
+                        handleFiles([file])
+                    } else {
+                        logError('Video drag requires a file path', {})
+                    }
+                } catch (error) {
+                    logError('Failed to convert dragged video:', error)
+                }
             }
             endDrag()
         }
+    }
+
+    // 推断视频 MIME 类型
+    const inferVideoMimeFromPath = (path: string): string => {
+        const lower = path.toLowerCase()
+        if (lower.endsWith('.mp4')) return 'video/mp4'
+        if (lower.endsWith('.webm')) return 'video/webm'
+        if (lower.endsWith('.mov')) return 'video/quicktime'
+        if (lower.endsWith('.avi')) return 'video/x-msvideo'
+        if (lower.endsWith('.mkv')) return 'video/x-matroska'
+        return 'video/mp4'
     }
 
     const itemRefs = useRef<(HTMLDivElement | null)[]>([])
