@@ -73,6 +73,14 @@ export interface PresetSetters {
     setPpioSeedanceV1AspectRatio: (v: string) => void
     setPpioSeedanceV1CameraFixed: (v: boolean) => void
 
+    // Seedance 1.5 Pro (派欧云)
+    setPpioSeedance15ProResolution: (v: string) => void
+    setPpioSeedance15ProAspectRatio: (v: string) => void
+    setPpioSeedance15ProDuration: (v: number) => void
+    setPpioSeedance15ProCameraFixed: (v: boolean) => void
+    setPpioSeedance15ProServiceTier: (v: string) => void
+    setPpioSeedance15ProGenerateAudio: (v: boolean) => void
+
     // Seedance v1 (Fal)
     setFalSeedanceV1Mode: (v: 'text-to-video' | 'image-to-video' | 'reference-to-video') => void
     setFalSeedanceV1Version: (v: 'lite' | 'pro') => void
@@ -352,6 +360,14 @@ export function createPresetSetterMap(
         ppioSeedanceV1Resolution: setters.setPpioSeedanceV1Resolution,
         ppioSeedanceV1AspectRatio: setters.setPpioSeedanceV1AspectRatio,
         ppioSeedanceV1CameraFixed: setters.setPpioSeedanceV1CameraFixed,
+
+        // Seedance 1.5 Pro (派欧云)
+        ppioSeedance15ProResolution: setters.setPpioSeedance15ProResolution,
+        ppioSeedance15ProAspectRatio: setters.setPpioSeedance15ProAspectRatio,
+        ppioSeedance15ProDuration: setters.setPpioSeedance15ProDuration,
+        ppioSeedance15ProCameraFixed: setters.setPpioSeedance15ProCameraFixed,
+        ppioSeedance15ProServiceTier: setters.setPpioSeedance15ProServiceTier,
+        ppioSeedance15ProGenerateAudio: setters.setPpioSeedance15ProGenerateAudio,
 
         // Seedance v1 (Fal)
         falSeedanceV1Mode: setters.setFalSeedanceV1Mode,

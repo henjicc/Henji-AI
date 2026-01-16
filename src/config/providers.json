@@ -168,6 +168,21 @@
           }
         },
         {
+          "id": "seedance-v1.5-pro",
+          "name": "即梦视频 3.5 Pro",
+          "type": "video",
+          "description": "文/图生视频，480p/720p，支持首尾帧、固定相机、音频生成和Batch模式",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "首尾帧"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 50
+          }
+        },
+        {
           "id": "minimax-speech-2.6",
           "name": "MiniMax Speech-2.6",
           "type": "audio",

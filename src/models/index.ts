@@ -18,6 +18,7 @@ export { viduQ1Params } from './vidu-q1'
 export { pixverseV45Params } from './pixverse-v4.5'
 export { wan25PreviewParams } from './wan-2.5-preview'
 export { seedanceV1Params } from './seedance-v1'
+export { ppioSeedance15ProParams } from './ppio/seedance-1.5-pro'
 export { minimaxSpeech26BasicParams, minimaxSpeech26AdvancedParams } from './minimax-speech-2.6'
 
 // Fal 模型
@@ -80,6 +81,7 @@ import { viduQ1Params } from './vidu-q1'
 import { pixverseV45Params } from './pixverse-v4.5'
 import { wan25PreviewParams } from './wan-2.5-preview'
 import { seedanceV1Params } from './seedance-v1'
+import { ppioSeedance15ProParams } from './ppio/seedance-1.5-pro'
 import { minimaxSpeech26BasicParams, minimaxSpeech26AdvancedParams } from './minimax-speech-2.6'
 import { falAiNanoBananaParams } from './fal-ai-nano-banana'
 import { falAiNanoBananaProParams } from './fal-ai-nano-banana-pro'
@@ -129,6 +131,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'seedance-v1': seedanceV1Params,
   'seedance-v1-lite': seedanceV1Params,
   'seedance-v1-pro': seedanceV1Params,
+  'seedance-v1.5-pro': ppioSeedance15ProParams,
   'minimax-speech-2.6': [...minimaxSpeech26BasicParams, ...minimaxSpeech26AdvancedParams],
   // Fal 模型 - 支持旧 ID 和新 ID
   'nano-banana': falAiNanoBananaParams,

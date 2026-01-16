@@ -8,6 +8,7 @@ import { viduQ1Route } from './vidu'
 import { pixverseV45Route } from './pixverse'
 import { wan25PreviewRoute } from './wan'
 import { seedanceV1Route } from './seedance'
+import { seedance15ProRoute } from './seedance-1.5-pro'
 import { minimaxSpeech26Route } from './minimax-speech-2.6'
 
 /**
@@ -34,6 +35,7 @@ export const ppioModelRoutes: ModelRoute[] = [
   pixverseV45Route,
   wan25PreviewRoute,
   seedanceV1Route,
+  seedance15ProRoute,
   minimaxSpeech26Route
 ]
 

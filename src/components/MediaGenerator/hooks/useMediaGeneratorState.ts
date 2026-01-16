@@ -139,6 +139,14 @@ export const useMediaGeneratorState = () => {
   const [ppioSeedanceV1CameraFixed, setPpioSeedanceV1CameraFixed] = useState(false)
   const [ppioSeedanceV1Variant, setPpioSeedanceV1Variant] = useState<'lite' | 'pro'>('lite')
 
+  // Seedance 1.5 Pro 参数（派欧云）
+  const [ppioSeedance15ProResolution, setPpioSeedance15ProResolution] = useState('720p')
+  const [ppioSeedance15ProAspectRatio, setPpioSeedance15ProAspectRatio] = useState('1:1')
+  const [ppioSeedance15ProDuration, setPpioSeedance15ProDuration] = useState(5)
+  const [ppioSeedance15ProCameraFixed, setPpioSeedance15ProCameraFixed] = useState(false)
+  const [ppioSeedance15ProServiceTier, setPpioSeedance15ProServiceTier] = useState('default')
+  const [ppioSeedance15ProGenerateAudio, setPpioSeedance15ProGenerateAudio] = useState(false)
+
   // Seedance v1 参数（Fal）
   const [falSeedanceV1Mode, setFalSeedanceV1Mode] = useState<'text-to-video' | 'image-to-video' | 'reference-to-video'>('text-to-video')
   const [falSeedanceV1Version, setFalSeedanceV1Version] = useState<'lite' | 'pro'>('lite')
@@ -392,6 +400,14 @@ export const useMediaGeneratorState = () => {
     ppioSeedanceV1AspectRatio, setPpioSeedanceV1AspectRatio,
     ppioSeedanceV1CameraFixed, setPpioSeedanceV1CameraFixed,
     ppioSeedanceV1Variant, setPpioSeedanceV1Variant,
+
+    // Seedance 1.5 Pro（派欧云）
+    ppioSeedance15ProResolution, setPpioSeedance15ProResolution,
+    ppioSeedance15ProAspectRatio, setPpioSeedance15ProAspectRatio,
+    ppioSeedance15ProDuration, setPpioSeedance15ProDuration,
+    ppioSeedance15ProCameraFixed, setPpioSeedance15ProCameraFixed,
+    ppioSeedance15ProServiceTier, setPpioSeedance15ProServiceTier,
+    ppioSeedance15ProGenerateAudio, setPpioSeedance15ProGenerateAudio,
 
     // Seedance v1（Fal）
     falSeedanceV1Mode, setFalSeedanceV1Mode,

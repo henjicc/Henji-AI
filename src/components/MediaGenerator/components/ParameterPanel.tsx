@@ -14,6 +14,7 @@ import {
   pixverseParams,
   wan25Params,
   seedanceParams,
+  ppioSeedance15ProParams,
   veoParams,
   seedreamParams,
   seedream45Params,
@@ -94,7 +95,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie' && selectedModel !== 'kling-2.6-pro') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie' && selectedModel !== 'kling-2.6-pro' && selectedModel !== 'seedance-v1.5-pro') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -438,7 +439,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           selectedModel !== 'kie-seedance-v3' &&
           selectedModel !== 'seedance-v3-kie' &&
           selectedModel !== 'kie-sora-2' &&
-          selectedModel !== 'sora-2-kie' && (
+          selectedModel !== 'sora-2-kie' &&
+          selectedModel !== 'seedance-v1.5-pro' && (
             <TextInput
               label="负面提示"
               value={values.videoNegativePrompt}
@@ -481,7 +483,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           selectedModel !== 'kie-seedance-v3' &&
           selectedModel !== 'seedance-v3-kie' &&
           selectedModel !== 'kie-sora-2' &&
-          selectedModel !== 'sora-2-kie' && (
+          selectedModel !== 'sora-2-kie' &&
+          selectedModel !== 'seedance-v1.5-pro' && (
             <NumberInput
               label="随机种子"
               value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
@@ -493,6 +496,25 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             />
           )}
       </>
+    )
+  }
+
+  // Seedance 1.5 Pro 参数（派欧云）
+  if (selectedModel === 'seedance-v1.5-pro') {
+    return (
+      <SchemaForm
+        schema={ppioSeedance15ProParams}
+        values={{
+          ppioSeedance15ProResolution: values.ppioSeedance15ProResolution,
+          ppioSeedance15ProAspectRatio: values.ppioSeedance15ProAspectRatio,
+          ppioSeedance15ProDuration: values.ppioSeedance15ProDuration,
+          ppioSeedance15ProCameraFixed: values.ppioSeedance15ProCameraFixed,
+          ppioSeedance15ProServiceTier: values.ppioSeedance15ProServiceTier,
+          ppioSeedance15ProGenerateAudio: values.ppioSeedance15ProGenerateAudio,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
     )
   }
 

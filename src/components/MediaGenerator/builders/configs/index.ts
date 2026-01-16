@@ -9,6 +9,7 @@ import {
   seedanceV1Config,
   seedanceV1LiteConfig,
   seedanceV1ProConfig,
+  seedance15ProConfig,
   viduQ1Config,
   kling25TurboConfig,
   ppioKlingO1Config,
@@ -94,6 +95,7 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(wan25PreviewConfig)
   optionsBuilder.registerConfig(seedream40Config)
   optionsBuilder.registerConfig(seedream45Config)
+  optionsBuilder.registerConfig(seedance15ProConfig)
 
   // Fal 图片模型
   optionsBuilder.registerConfig(nanoBananaConfig)

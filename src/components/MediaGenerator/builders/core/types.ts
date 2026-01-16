@@ -364,6 +364,14 @@ export interface BuildOptionsParams {
   ppioSeedream45MaxImages?: number
   ppioSeedream45OptimizePrompt?: boolean
 
+  // PPIO Seedance 1.5 Pro 参数
+  ppioSeedance15ProResolution?: string
+  ppioSeedance15ProAspectRatio?: string
+  ppioSeedance15ProDuration?: number
+  ppioSeedance15ProCameraFixed?: boolean
+  ppioSeedance15ProServiceTier?: string
+  ppioSeedance15ProGenerateAudio?: boolean
+
   // 智能分辨率计算函数
   calculateSmartResolution?: (img: string) => Promise<string>
   calculateSeedreamSmartResolution?: (img: string) => Promise<string>

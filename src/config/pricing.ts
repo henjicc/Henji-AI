@@ -230,6 +230,15 @@ const PRICES: Record<string, any> = {
         }
     },
 
+    // 视频 - Seedance 1.5 Pro (派欧云)
+    // 价格单位：人民币/秒
+    // 480P无声基准价0.08元/秒，720P约0.17元/秒
+    // 加声音价格翻倍，Batch模式价格减半
+    SEEDANCE_15_PRO: {
+        '480p': { noAudio: 0.08, withAudio: 0.16 },
+        '720p': { noAudio: 0.17, withAudio: 0.34 }
+    },
+
     // 视频 - Veo 3.1
     // 价格单位：美元/秒
     VEO31: {
@@ -1041,6 +1050,29 @@ export const pricingConfigs: PricingConfig[] = [
             const price = PRICES.SEEDANCE[variant]?.[duration]?.[resolution]?.[aspectGroup]
 
             return price || 0
+        }
+    },
+    {
+        providerId: 'ppio',
+        modelId: 'seedance-v1.5-pro',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const resolution = (params.ppioSeedance15ProResolution || '720p') as '480p' | '720p'
+            const duration = params.ppioSeedance15ProDuration || 5
+            const generateAudio = params.ppioSeedance15ProGenerateAudio || false
+            const serviceTier = params.ppioSeedance15ProServiceTier || 'default'
+
+            // 获取基础价格（人民币/秒）
+            const priceConfig = PRICES.SEEDANCE_15_PRO[resolution] || PRICES.SEEDANCE_15_PRO['720p']
+            let pricePerSecond = generateAudio ? priceConfig.withAudio : priceConfig.noAudio
+
+            // Batch模式价格减半
+            if (serviceTier === 'flex') {
+                pricePerSecond *= 0.5
+            }
+
+            return formatPrice(duration * pricePerSecond)
         }
     },
     {

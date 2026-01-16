@@ -342,6 +342,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     setPpioSeedanceV1Resolution: state.setPpioSeedanceV1Resolution,
     setPpioSeedanceV1AspectRatio: state.setPpioSeedanceV1AspectRatio,
     setPpioSeedanceV1CameraFixed: state.setPpioSeedanceV1CameraFixed,
+    // Seedance 1.5 Pro (派欧云)
+    setPpioSeedance15ProResolution: state.setPpioSeedance15ProResolution,
+    setPpioSeedance15ProAspectRatio: state.setPpioSeedance15ProAspectRatio,
+    setPpioSeedance15ProDuration: state.setPpioSeedance15ProDuration,
+    setPpioSeedance15ProCameraFixed: state.setPpioSeedance15ProCameraFixed,
+    setPpioSeedance15ProServiceTier: state.setPpioSeedance15ProServiceTier,
+    setPpioSeedance15ProGenerateAudio: state.setPpioSeedance15ProGenerateAudio,
     setFalSeedanceV1Mode: state.setFalSeedanceV1Mode,
     setFalSeedanceV1Version: state.setFalSeedanceV1Version,
     setFalSeedanceV1FastMode: state.setFalSeedanceV1FastMode,
@@ -1026,6 +1033,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       ppioSeedanceV1Resolution: state.setPpioSeedanceV1Resolution,
       ppioSeedanceV1AspectRatio: state.setPpioSeedanceV1AspectRatio,
       ppioSeedanceV1CameraFixed: state.setPpioSeedanceV1CameraFixed,
+      // Seedance 1.5 Pro（派欧云）
+      ppioSeedance15ProResolution: state.setPpioSeedance15ProResolution,
+      ppioSeedance15ProAspectRatio: state.setPpioSeedance15ProAspectRatio,
+      ppioSeedance15ProDuration: state.setPpioSeedance15ProDuration,
+      ppioSeedance15ProCameraFixed: state.setPpioSeedance15ProCameraFixed,
+      ppioSeedance15ProServiceTier: state.setPpioSeedance15ProServiceTier,
+      ppioSeedance15ProGenerateAudio: state.setPpioSeedance15ProGenerateAudio,
       // Seedance v1（Fal）
       falSeedanceV1Mode: state.setFalSeedanceV1Mode,
       falSeedanceV1Version: state.setFalSeedanceV1Version,
@@ -1371,6 +1385,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         ppioSeedanceV1Resolution: state.ppioSeedanceV1Resolution,
         ppioSeedanceV1AspectRatio: state.ppioSeedanceV1AspectRatio,
         ppioSeedanceV1CameraFixed: state.ppioSeedanceV1CameraFixed,
+        // Seedance 1.5 Pro（派欧云）参数
+        ppioSeedance15ProResolution: state.ppioSeedance15ProResolution,
+        ppioSeedance15ProAspectRatio: state.ppioSeedance15ProAspectRatio,
+        ppioSeedance15ProDuration: state.ppioSeedance15ProDuration,
+        ppioSeedance15ProCameraFixed: state.ppioSeedance15ProCameraFixed,
+        ppioSeedance15ProServiceTier: state.ppioSeedance15ProServiceTier,
+        ppioSeedance15ProGenerateAudio: state.ppioSeedance15ProGenerateAudio,
         // Seedance v1（Fal）参数
         falSeedanceV1Mode: state.falSeedanceV1Mode,
         falSeedanceV1Version: state.falSeedanceV1Version,
@@ -1827,6 +1848,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               ppioSeedanceV1Variant: state.ppioSeedanceV1Variant,
               ppioSeedanceV1Resolution: state.ppioSeedanceV1Resolution,
               ppioSeedanceV1AspectRatio: state.ppioSeedanceV1AspectRatio,
+              // Seedance 1.5 Pro（派欧云）
+              ppioSeedance15ProResolution: state.ppioSeedance15ProResolution,
+              ppioSeedance15ProAspectRatio: state.ppioSeedance15ProAspectRatio,
+              ppioSeedance15ProDuration: state.ppioSeedance15ProDuration,
+              ppioSeedance15ProCameraFixed: state.ppioSeedance15ProCameraFixed,
+              ppioSeedance15ProServiceTier: state.ppioSeedance15ProServiceTier,
+              ppioSeedance15ProGenerateAudio: state.ppioSeedance15ProGenerateAudio,
               // Seedance v1（Fal）
               falSeedanceV1Mode: state.falSeedanceV1Mode,
               falSeedanceV1Version: state.falSeedanceV1Version,

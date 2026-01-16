@@ -1061,3 +1061,90 @@ export const kling26ProConfig: ModelConfig = {
     }
   }
 }
+
+/**
+ * Seedance 1.5 Pro 配置（派欧云）
+ * 支持文生视频、图生视频、首尾帧
+ */
+export const seedance15ProConfig: ModelConfig = {
+  id: 'seedance-v1.5-pro',
+  type: 'video',
+  provider: 'ppio',
+
+  paramMapping: {
+    resolution: {
+      source: 'ppioSeedance15ProResolution',
+      defaultValue: '720p'
+    },
+    aspectRatio: {
+      source: 'ppioSeedance15ProAspectRatio',
+      defaultValue: '1:1'
+    },
+    duration: {
+      source: 'ppioSeedance15ProDuration',
+      defaultValue: 5
+    },
+    cameraFixed: 'ppioSeedance15ProCameraFixed',
+    serviceTier: 'ppioSeedance15ProServiceTier',
+    generateAudio: 'ppioSeedance15ProGenerateAudio'
+  },
+
+  features: {
+    smartMatch: {
+      enabled: true,
+      paramKey: 'aspectRatio',
+      defaultRatio: '1:1'
+    },
+    imageUpload: {
+      enabled: true,
+      maxImages: 2,
+      mode: 'multiple',
+      paramKey: 'images',
+      convertToBlob: false  // PPIO 使用 base64
+    }
+  },
+
+  customHandlers: {
+    afterBuild: async (options, context) => {
+      // PPIO 特殊的图片处理逻辑
+      if (context.uploadedImages.length > 0) {
+        const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+        const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+
+        const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+        const paths: string[] = []
+
+        // 处理第一张图片
+        const first = context.uploadedImages[0]
+        options.images = [first]
+
+        const p0 = uploadedFilePaths[0]
+        if (p0) {
+          paths.push(p0)
+        } else {
+          const blob1 = await dataUrlToBlob(first)
+          const saved1 = await saveUploadImage(blob1, 'persist', { maxDimension: 6000 })
+          paths.push(saved1.fullPath)
+        }
+
+        // 处理第二张图片（如果有，用于首尾帧模式）
+        if (context.uploadedImages.length > 1) {
+          const last = context.uploadedImages[1]
+          options.lastImage = last
+
+          const p1 = uploadedFilePaths[1]
+          if (p1) {
+            paths.push(p1)
+          } else {
+            const blob2 = await dataUrlToBlob(last)
+            const saved2 = await saveUploadImage(blob2, 'persist', { maxDimension: 6000 })
+            paths.push(saved2.fullPath)
+          }
+        }
+
+        options.uploadedFilePaths = paths
+        setUploadedFilePaths(paths)
+      }
+    }
+  }
+}
