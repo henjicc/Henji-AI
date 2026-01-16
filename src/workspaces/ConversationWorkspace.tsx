@@ -167,6 +167,9 @@ const ConversationWorkspace: React.FC = () => {
   // 图片拖动状态 - 用于动态调整底部面板 z-index
   const [isImageDragging, setIsImageDragging] = useState(false)
 
+  // 追踪最后一次右键点击时间，用于防止触摸板双指右击后意外触发拖动
+  const lastContextMenuTimeRef = React.useRef<number>(0)
+
   // 更新检测相关状态
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
   const [updateReleaseInfo, setUpdateReleaseInfo] = useState<any>(null)
@@ -1218,6 +1221,9 @@ const ConversationWorkspace: React.FC = () => {
   // 全局禁用默认右键菜单（但允许视频播放器使用原生菜单）
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
+      // 记录右键点击时间，用于防止触摸板双指右击后意外触发拖动
+      lastContextMenuTimeRef.current = Date.now()
+
       const target = e.target as HTMLElement
       // 如果是视频播放器中的 video 元素，允许原生右键菜单
       if (target.tagName === 'VIDEO' && target.closest('.video-viewer')) {
@@ -1313,6 +1319,16 @@ const ConversationWorkspace: React.FC = () => {
 
   // 历史记录图片拖拽开始 (混合拖放：窗口内自定义预览 + 边缘触发原生拖放)
   const handleHistoryImageDragStart = async (e: React.MouseEvent, imageUrl: string, filePath?: string) => {
+    // 只响应左键点击，防止右键菜单触发拖动
+    if (e.button !== 0) return
+
+    // 检查是否在右键点击冷却期内（500ms），防止触摸板双指右击产生的虚假 mousedown 事件
+    // macOS 触摸板双指右击时，可能会在 contextmenu 事件后触发一个 button=0 的 mousedown
+    const timeSinceContextMenu = Date.now() - lastContextMenuTimeRef.current
+    if (timeSinceContextMenu < 500) {
+      return  // 直接忽略这个 mousedown 事件
+    }
+
     e.preventDefault()
     const initialX = e.clientX
     const initialY = e.clientY
@@ -1334,10 +1350,11 @@ const ConversationWorkspace: React.FC = () => {
 
     // 使用内部自定义拖放 + 边缘检测触发原生拖放
     const handleMouseMove = (moveEvent: MouseEvent) => {
+
       const deltaX = Math.abs(moveEvent.clientX - initialX)
       const deltaY = Math.abs(moveEvent.clientY - initialY)
-      // If moved more than 5 pixels, consider it a drag
-      if (deltaX > 5 || deltaY > 5) {
+      // 使用 25 像素阈值，对触摸板更友好
+      if (deltaX > 25 || deltaY > 25) {
         isDraggingRef.current = true
         // 启动自定义拖放，传入 filePath 和 thumbnailPath
         // DragDropContext 会在检测到边缘时自动触发原生拖放
@@ -1380,6 +1397,16 @@ const ConversationWorkspace: React.FC = () => {
 
   // 历史记录视频拖拽开始 (混合拖放：窗口内自定义预览 + 边缘触发原生拖放)
   const handleHistoryVideoDragStart = async (e: React.MouseEvent, videoUrl: string, filePath?: string) => {
+    // 只响应左键点击，防止右键菜单触发拖动
+    if (e.button !== 0) return
+
+    // 检查是否在右键点击冷却期内（500ms），防止触摸板双指右击产生的虚假 mousedown 事件
+    // macOS 触摸板双指右击时，可能会在 contextmenu 事件后触发一个 button=0 的 mousedown
+    const timeSinceContextMenu = Date.now() - lastContextMenuTimeRef.current
+    if (timeSinceContextMenu < 500) {
+      return  // 直接忽略这个 mousedown 事件
+    }
+
     e.preventDefault()
     const initialX = e.clientX
     const initialY = e.clientY
@@ -1401,9 +1428,11 @@ const ConversationWorkspace: React.FC = () => {
 
     // 使用内部自定义拖放 + 边缘检测触发原生拖放
     const handleMouseMove = (moveEvent: MouseEvent) => {
+
       const deltaX = Math.abs(moveEvent.clientX - initialX)
       const deltaY = Math.abs(moveEvent.clientY - initialY)
-      if (deltaX > 5 || deltaY > 5) {
+      // 使用 25 像素阈值，对触摸板更友好
+      if (deltaX > 25 || deltaY > 25) {
         isDraggingRef.current = true
         startDrag(
           {

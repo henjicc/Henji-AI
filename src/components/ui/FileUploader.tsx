@@ -365,7 +365,8 @@ export default function FileUploader({
             const deltaX = Math.abs(e.clientX - startX)
             const deltaY = Math.abs(e.clientY - startY)
 
-            if (deltaX > 5 || deltaY > 5) {
+            // Higher threshold (25px) helps avoid accidental drag on macOS touchpad
+            if (deltaX > 25 || deltaY > 25) {
                 setDragState(prev => ({
                     ...prev,
                     isDragging: true
