@@ -996,8 +996,8 @@ const ConversationWorkspace: React.FC = () => {
       // 左右方向键：快进/快退
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
-        // Ctrl时步进1帧，否则1秒
-        const step = e.ctrlKey ? frameInterval : 1
+        // Ctrl或Cmd(Mac)时步进1帧，否则1秒
+        const step = (e.ctrlKey || e.metaKey) ? frameInterval : 1
         const newTime = e.key === 'ArrowLeft'
           ? Math.max(0, v.currentTime - step)
           : Math.min(v.duration || 0, v.currentTime + step)
