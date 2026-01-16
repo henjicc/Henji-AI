@@ -40,6 +40,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [quickDownloadButtonOnly, setQuickDownloadButtonOnly] = useState(false)
   const [quickDownloadPath, setQuickDownloadPath] = useState('')
   const [enableAutoFocusModelSearch, setEnableAutoFocusModelSearch] = useState(true)
+  const [maxConcurrentTasks, setMaxConcurrentTasks] = useState(2)
   const modalRef = useRef<HTMLDivElement>(null)
   const [closing, setClosing] = useState(false)
 
@@ -129,6 +130,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const savedAutoFocusSearch = localStorage.getItem('enable_auto_focus_model_search')
     setEnableAutoFocusModelSearch(savedAutoFocusSearch !== 'false') // 默认开启
+
+    const savedConcurrency = parseInt(localStorage.getItem('max_concurrent_tasks') || '2', 10)
+    setMaxConcurrentTasks(savedConcurrency)
 
     // 加载更新检测配置
     const updateConfig = getUpdateConfig()
@@ -275,6 +279,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const handleAutoFocusSearchChange = (value: boolean) => {
     setEnableAutoFocusModelSearch(value)
     localStorage.setItem('enable_auto_focus_model_search', value.toString())
+  }
+
+  // 实时保存并发任务数设置
+  const handleConcurrencyChange = (value: number) => {
+    const newValue = Math.max(1, Math.min(10, Math.round(value)))
+    setMaxConcurrentTasks(newValue)
+    localStorage.setItem('max_concurrent_tasks', newValue.toString())
+    // 触发自定义事件通知 TaskQueueManager
+    window.dispatchEvent(new Event('concurrencySettingChanged'))
   }
 
   // 实时保存更新检测启用设置
@@ -588,6 +601,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         更改后将自动迁移现有数据到新目录
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">并发设置</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <NumberInput
+                      label="最大并发任务数"
+                      value={maxConcurrentTasks}
+                      onChange={handleConcurrencyChange}
+                      min={1}
+                      max={10}
+                      step={1}
+                      widthClassName="w-full"
+                    />
+                    <p className="mt-2 text-xs text-zinc-500">同时进行生成的最大任务数量（默认为 2，最大 10）</p>
+                    <p className="mt-1 text-xs text-zinc-500">超出限制的任务将进入排队状态，等待前面的任务完成后自动开始</p>
                   </div>
                 </div>
 

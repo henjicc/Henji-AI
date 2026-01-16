@@ -3,6 +3,7 @@ import { apiService } from '../services/api'
 import MediaGenerator from '../components/MediaGenerator'
 import SettingsModal from '../components/SettingsModal'
 import ContextMenu from '../components/ContextMenu'
+import { taskQueueManager } from '../services/taskQueue'
 import { MediaResult } from '../types'
 import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio } from '../utils/save'
 import { initializeDataDirectory, getDataRoot, convertPathString, convertPathArray } from '../utils/dataPath'
@@ -1774,10 +1775,8 @@ const ConversationWorkspace: React.FC = () => {
         error: err instanceof Error ? err.message : '生成失败'
       })
     } finally {
-      setIsGenerating(false)
-      setIsGenerating(false)
-      // 自动处理下一个排队的任务
-      processNextTask()
+      // 任务结束状态由 TaskQueueManager 的 onComplete/onError 处理
+      // 这里只需要做资源清理
     }
   }
 
@@ -1848,12 +1847,50 @@ const ConversationWorkspace: React.FC = () => {
     setError(null)
 
 
-    // 如果没有任务在执行，立即开始
-    if (!isGenerating) {
-      // 不等待任务完成，让其在后台执行，以免阻塞UI导致无法排队
-      executeTask(taskId, newTask)
+    // 将任务放入队列管理器，由管理器调度执行
+    // 获取当前状态，如果是新创建的任务或者是重试/继续查询，状态都设为 queued
+    const isRunning = taskQueueManager.enqueue({
+      id: taskId,
+      execute: async () => {
+        setIsGenerating(true)
+        updateTask(taskId, { status: 'generating' })
+        try {
+          await executeTask(taskId, newTask)
+        } finally {
+          // 任务结束（无论成功失败），检查是否还有其他任务在运行
+          const runningCount = taskQueueManager.getRunningCount()
+          // 注意：这里 getRunningCount 包含了当前即将结束的此任务（因为是在 onComplete 回调之前执行的 execute 内容）
+          // 实际上我们应该检查是否已是最后一个运行的任务
+          if (runningCount <= 1) {
+            setIsGenerating(false)
+          }
+        }
+      },
+      onStart: () => {
+        // 任务开始时的回调
+        setIsGenerating(true)
+      },
+      onComplete: () => {
+        // 单个任务完成时的回调
+        const runningCount = taskQueueManager.getRunningCount()
+        if (runningCount === 0) {
+          setIsGenerating(false)
+        }
+      },
+      onError: (err) => {
+        logError('[App] Queue task error:', err)
+        const runningCount = taskQueueManager.getRunningCount()
+        if (runningCount === 0) {
+          setIsGenerating(false)
+        }
+      }
+    })
+
+    if (!isRunning) {
+      logInfo('[App] 任务已加入排队:', taskId)
+    } else {
+      logInfo('[App] 任务立即开始执行:', taskId)
     }
-    // 否则任务会保持queued状态，等待前一个任务完成
   }
 
   const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, _model?: string): Promise<any> => {
