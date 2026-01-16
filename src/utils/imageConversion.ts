@@ -350,7 +350,10 @@ export async function generateVideoPreviewDataUrl(videoUrl: string): Promise<str
 
         // 当视频跳转完成后（帧已准备好），截取图片
         video.onseeked = () => {
-            captureFrame()
+            // macOS/WebKit Fix: 延迟以确保帧数据准备就绪
+            setTimeout(() => {
+                captureFrame()
+            }, 200)
         }
 
         video.onerror = () => {
@@ -482,7 +485,11 @@ export async function generateAndCacheVideoThumbnail(videoPath: string, videoUrl
 
         // 当视频跳转完成后（帧已准备好），截取图片
         video.onseeked = () => {
-            captureFrame()
+            // macOS/WebKit Fix: seeked 事件触发时，视频帧可能还没完全准备好渲染到 Canvas 上
+            // 添加 200ms 延迟确保帧数据已解码
+            setTimeout(() => {
+                captureFrame()
+            }, 200)
         }
 
         video.onerror = () => {
