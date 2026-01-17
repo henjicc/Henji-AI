@@ -1333,6 +1333,7 @@ const ConversationWorkspace: React.FC = () => {
     e.preventDefault()
     const initialX = e.clientX
     const initialY = e.clientY
+    const mouseDownTime = Date.now()
 
     // 获取或创建图片缩略图（使用缓存系统）
     let thumbnailPath: string | undefined
@@ -1351,11 +1352,14 @@ const ConversationWorkspace: React.FC = () => {
 
     // 使用内部自定义拖放 + 边缘检测触发原生拖放
     const handleMouseMove = (moveEvent: MouseEvent) => {
-
       const deltaX = Math.abs(moveEvent.clientX - initialX)
       const deltaY = Math.abs(moveEvent.clientY - initialY)
-      // 使用 25 像素阈值，对触摸板更友好
-      if (deltaX > 25 || deltaY > 25) {
+      const timeSinceMouseDown = Date.now() - mouseDownTime
+
+      // 优化触控板体验：
+      // 1. 增加距离阈值到 40px，避免轻微手指移动触发拖拽
+      // 2. 要求按下时间超过 150ms，避免快速点击被误判为拖拽
+      if ((deltaX > 40 || deltaY > 40) && timeSinceMouseDown > 150) {
         isDraggingRef.current = true
         // 启动自定义拖放，传入 filePath 和 thumbnailPath
         // DragDropContext 会在检测到边缘时自动触发原生拖放
@@ -1378,10 +1382,11 @@ const ConversationWorkspace: React.FC = () => {
     const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
-      // Reset dragging flag after a short delay (onClick fires after mouseup)
-      setTimeout(() => {
+      // 立即重置拖拽标志，避免阻止点击事件
+      // onClick 事件在 mouseup 之后触发，所以需要在下一个事件循环中重置
+      requestAnimationFrame(() => {
         isDraggingRef.current = false
-      }, 100)
+      })
     }
 
     window.addEventListener('mousemove', handleMouseMove)
@@ -1411,6 +1416,7 @@ const ConversationWorkspace: React.FC = () => {
     e.preventDefault()
     const initialX = e.clientX
     const initialY = e.clientY
+    const mouseDownTime = Date.now()
 
     // 获取或创建视频缩略图（使用缓存系统）
     let thumbnailPath: string | undefined
@@ -1429,11 +1435,14 @@ const ConversationWorkspace: React.FC = () => {
 
     // 使用内部自定义拖放 + 边缘检测触发原生拖放
     const handleMouseMove = (moveEvent: MouseEvent) => {
-
       const deltaX = Math.abs(moveEvent.clientX - initialX)
       const deltaY = Math.abs(moveEvent.clientY - initialY)
-      // 使用 25 像素阈值，对触摸板更友好
-      if (deltaX > 25 || deltaY > 25) {
+      const timeSinceMouseDown = Date.now() - mouseDownTime
+
+      // 优化触控板体验：
+      // 1. 增加距离阈值到 40px，避免轻微手指移动触发拖拽
+      // 2. 要求按下时间超过 150ms，避免快速点击被误判为拖拽
+      if ((deltaX > 40 || deltaY > 40) && timeSinceMouseDown > 150) {
         isDraggingRef.current = true
         startDrag(
           {
@@ -1453,9 +1462,11 @@ const ConversationWorkspace: React.FC = () => {
     const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
-      setTimeout(() => {
+      // 立即重置拖拽标志，避免阻止点击事件
+      // onClick 事件在 mouseup 之后触发，所以需要在下一个事件循环中重置
+      requestAnimationFrame(() => {
         isDraggingRef.current = false
-      }, 100)
+      })
     }
 
     window.addEventListener('mousemove', handleMouseMove)
@@ -3421,42 +3432,63 @@ const ConversationWorkspace: React.FC = () => {
                                     el.removeEventListener('wheel', oldHandler)
                                   }
 
-                                  // 目标滚动位置
-                                  let targetScrollLeft = el.scrollLeft
-                                  let animationFrameId: number | null = null
+                                  // 保存目标滚动位置和动画ID到元素上，避免重复初始化
+                                  if ((el as any)._targetScrollLeft === undefined) {
+                                    (el as any)._targetScrollLeft = el.scrollLeft
+                                  }
+                                  if ((el as any)._animationFrameId === undefined) {
+                                    (el as any)._animationFrameId = null
+                                  }
 
                                   // 平滑滚动动画函数
                                   const smoothScroll = () => {
                                     const currentScrollLeft = el.scrollLeft
+                                    const targetScrollLeft = (el as any)._targetScrollLeft
                                     const distance = targetScrollLeft - currentScrollLeft
 
                                     // 如果距离很小，直接设置到目标位置
                                     if (Math.abs(distance) < 0.5) {
                                       el.scrollLeft = targetScrollLeft
-                                      animationFrameId = null
+                                      ;(el as any)._animationFrameId = null
                                       return
                                     }
 
                                     // 使用缓动函数（easing）实现平滑滚动
                                     // 每次移动剩余距离的 20%，实现减速效果
                                     el.scrollLeft += distance * 0.2
-                                    animationFrameId = requestAnimationFrame(smoothScroll)
+                                    ;(el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
                                   }
 
                                   // 创建新的滚轮处理器
                                   const wheelHandler = (e: WheelEvent) => {
-                                    if (e.deltaY !== 0) {
+                                    // 检查是否有横向滚动空间（即是否有多张图片）
+                                    const hasHorizontalScroll = el.scrollWidth > el.clientWidth
+
+                                    // 如果只有一张图片（没有横向滚动空间），不拦截滚轮事件，允许页面滚动
+                                    if (!hasHorizontalScroll) {
+                                      return
+                                    }
+
+                                    // 判断滚动方向：横向滚动优先
+                                    const isHorizontalScroll = Math.abs(e.deltaX) > Math.abs(e.deltaY)
+
+                                    if (isHorizontalScroll && e.deltaX !== 0) {
+                                      // 触控板左右滑动：使用 deltaX
                                       e.preventDefault()
+                                      ;(el as any)._targetScrollLeft += e.deltaX
+                                      ;(el as any)._targetScrollLeft = Math.max(0, Math.min((el as any)._targetScrollLeft, el.scrollWidth - el.clientWidth))
 
-                                      // 更新目标滚动位置
-                                      targetScrollLeft += e.deltaY
+                                      if ((el as any)._animationFrameId === null) {
+                                        ;(el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
+                                      }
+                                    } else if (!isHorizontalScroll && e.deltaY !== 0) {
+                                      // 鼠标滚轮或触控板上下滑动：使用 deltaY 控制横向滚动
+                                      e.preventDefault()
+                                      ;(el as any)._targetScrollLeft += e.deltaY
+                                      ;(el as any)._targetScrollLeft = Math.max(0, Math.min((el as any)._targetScrollLeft, el.scrollWidth - el.clientWidth))
 
-                                      // 限制滚动范围
-                                      targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, el.scrollWidth - el.clientWidth))
-
-                                      // 如果没有正在进行的动画，启动新动画
-                                      if (animationFrameId === null) {
-                                        animationFrameId = requestAnimationFrame(smoothScroll)
+                                      if ((el as any)._animationFrameId === null) {
+                                        ;(el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
                                       }
                                     }
                                   }
