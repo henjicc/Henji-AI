@@ -1153,7 +1153,7 @@ const ConversationWorkspace: React.FC = () => {
   }
 
   // 生成图片右键菜单项
-  const getImageMenuItems = (imageUrl: string, filePath?: string): MenuItem[] => [
+  const getImageMenuItems = (_imageUrl: string, filePath?: string): MenuItem[] => [
     {
       id: 'copy-image',
       label: '复制图片',
@@ -1488,20 +1488,7 @@ const ConversationWorkspace: React.FC = () => {
     }
     openVideoViewer(url, filePath)
   }
-  // 自动处理下一个排队的任务
-  const processNextTask = () => {
-    setTasks(currentTasks => {
-      const nextTask = currentTasks.find(t => t.status === 'queued')
 
-      if (nextTask) {
-        logInfo('[App] 自动开始下一个排队任务:', nextTask.id)
-        // 使用setTimeout确保状态更新后再执行
-        setTimeout(() => executeTask(nextTask.id, nextTask), 0)
-      }
-
-      return currentTasks
-    })
-  }
 
   // 独立的进度更新函数 - 不触发任务列表重新渲染
   const updateProgress = useCallback((taskId: string, progress: number) => {
@@ -2352,7 +2339,7 @@ const ConversationWorkspace: React.FC = () => {
       generatingTasks.forEach(t => {
         logInfo('[App] 🔄 发现生成中的任务:', {
           id: t.id,
-          originalStatus: (history.find((h: any) => h.id === t.id) as any)?.status,
+          originalStatus: (store.find((h: any) => h.id === t.id) as any)?.status,
           serverTaskId: t.serverTaskId,
           requestId: t.requestId,
           modelId: t.modelId,
