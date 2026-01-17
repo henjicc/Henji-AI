@@ -1,0 +1,557 @@
+/**
+ * Image Editor - 样式
+ */
+
+/* 编辑器容器 - 背景由外层wrapper提供 */
+.image-editor-container {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 顶部工具栏容器（双行布局） */
+.editor-toolbar-container {
+  display: flex;
+  flex-direction: column;
+  background: rgba(19, 19, 19, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+/* 工具栏行 */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 16px;
+}
+
+.toolbar-row-tools {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.toolbar-row-options {
+  padding: 6px 16px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+.toolbar-group:not(:last-child) {
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.toolbar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.toolbar-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.toolbar-button.active {
+  background: rgba(0, 126, 255, 0.2);
+  color: #007eff;
+}
+
+.toolbar-button-confirm {
+  background: rgba(0, 200, 83, 0.2);
+  color: #00c853;
+}
+
+.toolbar-button-confirm:hover:not(:disabled) {
+  background: rgba(0, 200, 83, 0.3);
+}
+
+.toolbar-button-cancel {
+  background: rgba(255, 64, 129, 0.2);
+  color: #ff4081;
+}
+
+.toolbar-button-cancel:hover:not(:disabled) {
+  background: rgba(255, 64, 129, 0.3);
+}
+
+/* 画布区域 */
+.editor-canvas-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.editor-stage-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 工具设置面板 */
+.tool-settings-panel {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: rgba(19, 19, 19, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.settings-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+/* 颜色选择器 */
+.color-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 126, 255, 0.5);
+}
+
+/* 滑块 */
+.settings-slider {
+  width: 100px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #007eff;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* 裁剪覆盖层 */
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.crop-mask {
+  fill: rgba(0, 0, 0, 0.6);
+}
+
+.crop-area {
+  position: absolute;
+  border: 2px dashed #007eff;
+  pointer-events: auto;
+  cursor: move;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #007eff;
+  border: 2px solid #fff;
+  border-radius: 2px;
+}
+
+.crop-handle-nw {
+  top: -6px;
+  left: -6px;
+  cursor: nw-resize;
+}
+
+.crop-handle-ne {
+  top: -6px;
+  right: -6px;
+  cursor: ne-resize;
+}
+
+.crop-handle-sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: sw-resize;
+}
+
+.crop-handle-se {
+  bottom: -6px;
+  right: -6px;
+  cursor: se-resize;
+}
+
+.crop-handle-n {
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: n-resize;
+}
+
+.crop-handle-s {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: s-resize;
+}
+
+.crop-handle-w {
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%);
+  cursor: w-resize;
+}
+
+.crop-handle-e {
+  top: 50%;
+  right: -6px;
+  transform: translateY(-50%);
+  cursor: e-resize;
+}
+
+/* 裁剪比例选择器 */
+.crop-ratio-selector {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  background: rgba(19, 19, 19, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.crop-ratio-button {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.crop-ratio-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.crop-ratio-button.active {
+  background: rgba(0, 126, 255, 0.2);
+  color: #007eff;
+}
+
+/* 底部信息栏 */
+.editor-bottom-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.editor-info-badge {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(19, 19, 19, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+/* 导航按钮 */
+.editor-nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(19, 19, 19, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editor-nav-button:hover {
+  background: rgba(40, 40, 40, 0.95);
+}
+
+/* 动画 */
+@keyframes editorFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes editorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.image-editor-container {
+  animation: editorFadeIn 0.4s ease-out;
+}
+
+.editor-toolbar-container {
+  animation: editorFadeIn 0.4s ease-out;
+}
+
+.editor-canvas-area {
+  animation: editorFadeIn 0.6s ease-out;
+}
+
+/* 工具提示 */
+.toolbar-tooltip {
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.toolbar-button:hover .toolbar-tooltip {
+  opacity: 1;
+}
+
+/* ==================== 统一工具栏样式 ==================== */
+
+/* 工具栏分隔符 */
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 8px;
+}
+
+/* 工具栏弹性空间 */
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* 工具选项区 */
+.toolbar-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 内联颜色选择器 */
+.inline-color-picker {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.inline-color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.inline-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.inline-color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 126, 255, 0.5);
+}
+
+/* 内联滑块 */
+.inline-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-slider-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.inline-slider-input {
+  width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+}
+
+.inline-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #007eff;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.inline-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.inline-slider-value {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* 裁剪比例按钮组 */
+.crop-ratio-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.crop-ratio-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.crop-ratio-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.crop-ratio-btn.active {
+  background: rgba(0, 126, 255, 0.25);
+  color: #007eff;
+}
+
+/* 裁剪操作按钮（应用/取消） */
+.crop-action-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: 4px;
+}
+
+.crop-action-confirm {
+  background: rgba(0, 200, 83, 0.2);
+  color: #00c853;
+}
+
+.crop-action-confirm:hover {
+  background: rgba(0, 200, 83, 0.35);
+}
+
+.crop-action-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.crop-action-cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}

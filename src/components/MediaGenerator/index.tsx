@@ -29,6 +29,8 @@ interface MediaGeneratorProps {
   isCollapsed?: boolean
   onToggleCollapse?: () => void
   isGenerating?: boolean
+  // 暴露 setUploadedImages 用于外部更新编辑后的图片
+  onSetUploadedImagesRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
 }
 
 /**
@@ -41,7 +43,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   onOpenSettings,
   onOpenClearHistory,
   onImageClick,
-  isGenerating
+  isGenerating,
+  onSetUploadedImagesRef
 }) => {
   // 使用统一的状态管理 hook
   const state = useMediaGeneratorState()
@@ -136,6 +139,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     state.uploadedFilePaths,
     state.setUploadedFilePaths
   )
+
+  // 暴露 setUploadedImages 给父组件以便编辑后更新
+  useEffect(() => {
+    if (onSetUploadedImagesRef) {
+      onSetUploadedImagesRef(state.setUploadedImages)
+    }
+  }, [onSetUploadedImagesRef, state.setUploadedImages])
 
   // 监听全局右键菜单的图片粘贴事件
   useEffect(() => {

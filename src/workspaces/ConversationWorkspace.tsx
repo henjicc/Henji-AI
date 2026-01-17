@@ -28,6 +28,8 @@ import { logError, logWarning, logInfo } from '../utils/errorLogger'
 import { shouldCheckForUpdates, updateLastCheckTime, isVersionIgnored } from '../utils/updateConfig'
 import { checkForUpdates, getCurrentVersion } from '../services/updateChecker'
 import UpdateDialog from '../components/UpdateDialog'
+import { ImageEditor, ImageEditState } from '../components/ImageEditor'
+import { saveEditState, loadEditState, deleteEditState } from '../utils/editStatePersistence'
 
 /**
  * 格式化模型显示名称
@@ -139,6 +141,12 @@ const ConversationWorkspace: React.FC = () => {
   const targetPositionRef = React.useRef({ x: 0, y: 0 })
   const animationFrameRef = React.useRef<number | null>(null)
   const scaleDisplayRef = React.useRef<HTMLDivElement>(null)
+
+  // 图片编辑器状态
+  const [isEditorMode, setIsEditorMode] = useState(false)
+  const [isFromUploadArea, setIsFromUploadArea] = useState(false)  // 标识图片是否来自上传区域
+  const imageEditStatesRef = React.useRef<Map<string, ImageEditState>>(new Map())
+  const setUploadedImagesRef = React.useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
 
   const speedDisplayRef = React.useRef<HTMLDivElement>(null)
   const speedMenuRef = React.useRef<HTMLDivElement>(null)
@@ -1904,6 +1912,27 @@ const ConversationWorkspace: React.FC = () => {
       videoUrls = options.uploadedVideos
     }
 
+    // 收集编辑状态（使用索引作为 Key，因为 URL 可能会变）
+    const imageEditStates = options?.images?.reduce((acc: any, url: string, index: number) => {
+      const state = imageEditStatesRef.current.get(url)
+      if (state) {
+        acc[index] = state // 使用索引作为 Key
+      }
+      return acc
+    }, {})
+
+    // 如果有编辑状态，保存到文件（懒加载优化）
+    let editStateFile: string | undefined = undefined
+    if (imageEditStates && Object.keys(imageEditStates).length > 0) {
+      try {
+        // 使用 taskId 作为文件名
+        editStateFile = await saveEditState(taskId, imageEditStates)
+        logInfo('[App] 已保存编辑状态到文件', editStateFile)
+      } catch (e) {
+        logError('[App] 保存编辑状态文件失败', e)
+      }
+    }
+
     const newTask: GenerationTask = {
       id: taskId,
       type,
@@ -1918,7 +1947,11 @@ const ConversationWorkspace: React.FC = () => {
       uploadedVideoFilePaths: options?.uploadedVideoFilePaths,  // 保存视频文件路径
       status: isGenerating ? 'queued' : 'pending', // 如果正在生成，则排队
       progress: 0,
-      options: options, // 保存完整参数（任务执行时需要）
+      options: {
+        ...options,
+        // 记录编辑状态文件名（不再直接保存 imageEditStates 对象）
+        editStateFile
+      }, // 保存完整参数（任务执行时需要）
     }
 
     // 立即添加到任务列表（最新的在最后）
@@ -2086,7 +2119,7 @@ const ConversationWorkspace: React.FC = () => {
     setIsSettingsOpen(false)
   }
 
-  const openImageViewer = (imageUrl: string, imageList?: string[], filePaths?: string[]) => {
+  const openImageViewer = (imageUrl: string, imageList?: string[], filePaths?: string[], fromUpload: boolean = false) => {
     if (imageList && imageList.length > 0) {
       setCurrentImageList(imageList)
       setCurrentImageIndex(imageList.indexOf(imageUrl))
@@ -2100,6 +2133,7 @@ const ConversationWorkspace: React.FC = () => {
       setCurrentFilePathList([])
     }
     setCurrentImage(imageUrl)
+    setIsFromUploadArea(fromUpload)  // 设置图片来源
 
     // 重置缩放和位置
     imageScaleRef.current = 1
@@ -2117,8 +2151,9 @@ const ConversationWorkspace: React.FC = () => {
     setViewerOpacity(0)
     setTimeout(() => {
       setIsImageViewerOpen(false)
+      setIsEditorMode(false)
       document.body.style.overflow = ''
-    }, 200)
+    }, 400)
   }
 
   const openVideoViewer = (url: string, filePath?: string) => {
@@ -2591,8 +2626,53 @@ const ConversationWorkspace: React.FC = () => {
       model: task.model,
       type: task.type,
       prompt: task.prompt,
-      options
     })
+
+    // 恢复编辑状态到 ref，以便后续如果再次重新生成或编辑能保留状态
+    // 恢复编辑状态到 ref，以便后续如果再次重新生成或编辑能保留状态
+    if (task.options?.editStateFile) {
+      // 优先从文件加载（新模式）
+      try {
+        const states = await loadEditState(task.options.editStateFile)
+        if (states && options.images) {
+          // 使用索引映射：states key 是 "0", "1" 等索引
+          // 我们需要将其映射到新的 options.images 对应的 URL 上
+          Object.entries(states).forEach(([key, value]) => {
+            const index = parseInt(key)
+            if (!isNaN(index) && options.images && options.images[index]) {
+              const newUrl = options.images[index]
+              imageEditStatesRef.current.set(newUrl, value as ImageEditState)
+            } else {
+              // 兼容旧模式：key 是 URL (Base64)
+              // 如果 options.images 中包含这个 key，直接恢复
+              if (options.images && options.images.includes(key)) {
+                imageEditStatesRef.current.set(key, value as ImageEditState)
+              }
+            }
+          })
+          logInfo('[App] 从文件恢复编辑状态成功', Object.keys(states).length)
+        }
+      } catch (e) {
+        logError('[App] 从文件恢复编辑状态失败:', e)
+      }
+    } else if (task.options?.imageEditStates) {
+      // 兼容旧模式（内联数据）
+      try {
+        Object.entries(task.options.imageEditStates).forEach(([key, value]) => {
+          // 尝试索引匹配
+          const index = parseInt(key)
+          if (!isNaN(index) && options.images && options.images[index]) {
+            const newUrl = options.images[index]
+            imageEditStatesRef.current.set(newUrl, value as ImageEditState)
+          } else {
+            // 原始 Key 匹配
+            imageEditStatesRef.current.set(key, value as ImageEditState)
+          }
+        })
+      } catch (e) {
+        logError('[App] 恢复历史编辑状态(内联)失败:', e)
+      }
+    }
 
     await handleGenerate(task.prompt, task.model, task.type, options)
   }
@@ -2655,6 +2735,46 @@ const ConversationWorkspace: React.FC = () => {
       }
     } else if (task.videos && task.videos.length) {
       videos = task.videos
+    }
+
+    // 恢复编辑状态到 ref
+    // 恢复编辑状态到 ref
+    if (task.options?.editStateFile) {
+      // 优先从文件加载（新模式）
+      try {
+        const states = await loadEditState(task.options.editStateFile)
+        if (states && images) { // 使用 images 而不是 options.images
+          Object.entries(states).forEach(([key, value]) => {
+            const index = parseInt(key)
+            if (!isNaN(index) && images && images[index]) {
+              const newUrl = images[index]
+              imageEditStatesRef.current.set(newUrl, value as ImageEditState)
+            } else {
+              // 兼容旧模式
+              imageEditStatesRef.current.set(key, value as ImageEditState)
+            }
+          })
+          logInfo('[App] 从文件恢复编辑状态成功', Object.keys(states).length)
+        }
+      } catch (e) {
+        logError('[App] 从文件恢复编辑状态失败:', e)
+      }
+    } else if (task.options?.imageEditStates) {
+      // 兼容旧模式
+      try {
+        Object.entries(task.options.imageEditStates).forEach(([key, value]) => {
+          const index = parseInt(key)
+          if (!isNaN(index) && images && images[index]) {
+            const newUrl = images[index]
+            imageEditStatesRef.current.set(newUrl, value as ImageEditState)
+          } else {
+            imageEditStatesRef.current.set(key, value as ImageEditState)
+          }
+        })
+        logInfo('[App] 已恢复历史编辑状态(内联)', Object.keys(task.options.imageEditStates).length)
+      } catch (e) {
+        logError('[App] 恢复历史编辑状态失败:', e)
+      }
     }
 
     window.dispatchEvent(new CustomEvent('reedit-content', {
@@ -2854,7 +2974,14 @@ const ConversationWorkspace: React.FC = () => {
 
       // 收集结果文件（这些不会被预设引用，直接删除）
       const resultFiles = new Set<string>()
+      const editStateFiles = new Set<string>() // 收集编辑状态文件列表
+
       tasks.forEach(t => {
+        // 收集编辑状态文件
+        if (t.options?.editStateFile) {
+          editStateFiles.add(t.options.editStateFile)
+        }
+
         const p = t.result?.filePath
         if (p) {
           if (p.includes('|||')) {
@@ -2868,6 +2995,11 @@ const ConversationWorkspace: React.FC = () => {
           }
         }
       })
+
+      // 删除编辑状态文件
+      for (const f of editStateFiles) {
+        try { await deleteEditState(f) } catch (e) { logError('[App] 删除编辑状态文件失败', { data: [f, e] }) }
+      }
 
       // 删除结果文件
       for (const f of resultFiles) {
@@ -2940,7 +3072,13 @@ const ConversationWorkspace: React.FC = () => {
 
       // 收集结果文件
       const resultFiles = new Set<string>()
+      const editStateFiles = new Set<string>()
+
       failedTasks.forEach(t => {
+        if (t.options?.editStateFile) {
+          editStateFiles.add(t.options.editStateFile)
+        }
+
         const p = t.result?.filePath
         if (p) {
           if (p.includes('|||')) {
@@ -2954,6 +3092,11 @@ const ConversationWorkspace: React.FC = () => {
           }
         }
       })
+
+      // 删除编辑状态文件
+      for (const f of editStateFiles) {
+        try { await deleteEditState(f) } catch (e) { logError('[App] 删除编辑状态文件(失败任务)失败', { data: [f, e] }) }
+      }
 
       // 删除结果文件
       for (const f of resultFiles) {
@@ -3047,6 +3190,11 @@ const ConversationWorkspace: React.FC = () => {
           try { await deleteWaveformCacheForAudio(p) } catch (e) { logError('[App] 删除单条波形缓存失败', { data: [p, e] }) }
         }
       }
+    }
+
+    // 删除编辑状态文件
+    if (target?.options?.editStateFile) {
+      try { await deleteEditState(target.options.editStateFile) } catch (e) { logError('[App] 删除单条编辑状态文件失败', { data: [target.options.editStateFile, e] }) }
     }
 
     // 删除上传的文件（图片） - 增强版引用计数（包含预设）
@@ -3449,14 +3597,14 @@ const ConversationWorkspace: React.FC = () => {
                                     // 如果距离很小，直接设置到目标位置
                                     if (Math.abs(distance) < 0.5) {
                                       el.scrollLeft = targetScrollLeft
-                                      ;(el as any)._animationFrameId = null
+                                        ; (el as any)._animationFrameId = null
                                       return
                                     }
 
                                     // 使用缓动函数（easing）实现平滑滚动
                                     // 每次移动剩余距离的 20%，实现减速效果
                                     el.scrollLeft += distance * 0.2
-                                    ;(el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
+                                      ; (el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
                                   }
 
                                   // 创建新的滚轮处理器
@@ -3475,20 +3623,20 @@ const ConversationWorkspace: React.FC = () => {
                                     if (isHorizontalScroll && e.deltaX !== 0) {
                                       // 触控板左右滑动：使用 deltaX
                                       e.preventDefault()
-                                      ;(el as any)._targetScrollLeft += e.deltaX
-                                      ;(el as any)._targetScrollLeft = Math.max(0, Math.min((el as any)._targetScrollLeft, el.scrollWidth - el.clientWidth))
+                                        ; (el as any)._targetScrollLeft += e.deltaX
+                                        ; (el as any)._targetScrollLeft = Math.max(0, Math.min((el as any)._targetScrollLeft, el.scrollWidth - el.clientWidth))
 
                                       if ((el as any)._animationFrameId === null) {
-                                        ;(el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
+                                        ; (el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
                                       }
                                     } else if (!isHorizontalScroll && e.deltaY !== 0) {
                                       // 鼠标滚轮或触控板上下滑动：使用 deltaY 控制横向滚动
                                       e.preventDefault()
-                                      ;(el as any)._targetScrollLeft += e.deltaY
-                                      ;(el as any)._targetScrollLeft = Math.max(0, Math.min((el as any)._targetScrollLeft, el.scrollWidth - el.clientWidth))
+                                        ; (el as any)._targetScrollLeft += e.deltaY
+                                        ; (el as any)._targetScrollLeft = Math.max(0, Math.min((el as any)._targetScrollLeft, el.scrollWidth - el.clientWidth))
 
                                       if ((el as any)._animationFrameId === null) {
-                                        ;(el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
+                                        ; (el as any)._animationFrameId = requestAnimationFrame(smoothScroll)
                                       }
                                     }
                                   }
@@ -3698,7 +3846,8 @@ const ConversationWorkspace: React.FC = () => {
                 isGenerating={isGenerating}
                 onOpenSettings={openSettings}
                 onOpenClearHistory={() => setIsConfirmClearOpen(true)}
-                onImageClick={openImageViewer}
+                onImageClick={(url: string, list: string[]) => openImageViewer(url, list, undefined, true)}
+                onSetUploadedImagesRef={(setter) => { setUploadedImagesRef.current = setter }}
                 isCollapsed={isPanelCollapsed}
                 onToggleCollapse={() => {
                   if (isPanelCollapsed) {
@@ -3762,145 +3911,209 @@ const ConversationWorkspace: React.FC = () => {
         </div>
       )}
 
-      {/* 图片查看器模态框 */}
+      {/* 图片查看器/编辑器 - 共享背景防止切换闪烁 */}
       {
         isImageViewerOpen && (
           <div
-            ref={imageViewerContainerRef}
-            className={"fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center p-4"}
-            style={{ opacity: viewerOpacity, transition: 'opacity 200ms ease', overscrollBehavior: 'contain' }}
-            onMouseMove={handleImageMouseMove}
-            onMouseUp={handleImageMouseUp}
-            onMouseLeave={handleImageMouseUp}
-            onClick={(e) => {
-              // 点击背景区域（不是图片内容）时关闭
-              if (e.target === e.currentTarget) {
-                closeImageViewer()
-              }
-            }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-lg z-50"
+            style={{ opacity: viewerOpacity, transition: 'opacity 400ms ease' }}
           >
-            {/* 图片容器 */}
-            <div className="relative">
-              <img
-                ref={imageViewerRef}
-                src={currentImage}
-                alt="Full size"
-                className={`select-none image-transition`}
-                style={{
-                  transform: viewerOpacity < 1
-                    ? `scale(${imageScaleRef.current * (0.97 + 0.03 * viewerOpacity)}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`
-                    : `scale(${imageScaleRef.current}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`,
-                  transition: viewerOpacity < 1 ? 'transform 200ms ease, opacity 200ms ease' : 'none',
-                  opacity: viewerOpacity,
-                  transformOrigin: 'center',
-                  width: '95vw',
-                  height: '95vh',
-                  objectFit: 'contain'
+            {isEditorMode && (
+              // 编辑模式 - 使用 ImageEditor
+              <ImageEditor
+                imageUrl={currentImage}
+                imageId={currentImage} // 使用 URL 作为唯一标识，解决删除后重传仍保留历史的问题
+                imageList={currentImageList}
+                currentIndex={currentImageIndex}
+                initialEditState={imageEditStatesRef.current.get(currentImage)}
+                onClose={() => {
+                  closeImageViewer()
                 }}
-                onLoad={(e) => {
-                  // 图片加载完成后，计算CSS缩放比例（相对于原始尺寸）
-                  const img = e.currentTarget
-                  if (img.naturalWidth && img.naturalHeight && img.offsetWidth && img.offsetHeight) {
-                    // 计算objectFit: contain下的实际显示尺寸
-                    const naturalRatio = img.naturalWidth / img.naturalHeight
-                    const layoutRatio = img.offsetWidth / img.offsetHeight
-
-                    let actualDisplayWidth
-                    if (naturalRatio > layoutRatio) {
-                      // 图片受宽度限制
-                      actualDisplayWidth = img.offsetWidth
-                    } else {
-                      // 图片受高度限制
-                      actualDisplayWidth = img.offsetHeight * naturalRatio
-                    }
-
-                    const cssScale = actualDisplayWidth / img.naturalWidth
-                    cssScaleRef.current = cssScale
-                    // imageScaleRef存储相对于布局尺寸的缩放，初始为1
-                    imageScaleRef.current = 1
-                    targetScaleRef.current = 1
-                    imagePositionRef.current = { x: 0, y: 0 }
-                    targetPositionRef.current = { x: 0, y: 0 }
-                    updateImageTransform()
+                onSave={(dataUrl, editState) => {
+                  // 保存编辑状态，使用新的 URL 作为 Key
+                  imageEditStatesRef.current.set(dataUrl, editState)
+                  // 更新当前图片
+                  setCurrentImage(dataUrl)
+                  setCurrentImageList(prev => {
+                    const updated = [...prev]
+                    updated[currentImageIndex] = dataUrl
+                    return updated
+                  })
+                  // 更新上传区域的图片
+                  if (setUploadedImagesRef.current) {
+                    setUploadedImagesRef.current(prev => {
+                      const updated = [...prev]
+                      updated[currentImageIndex] = dataUrl
+                      return updated
+                    })
                   }
+                  // 退出编辑器并关闭查看器
+                  closeImageViewer()
                 }}
-                onMouseDown={handleImageMouseDown}
-                onMouseMove={(e) => {
-                  // 动态设置cursor样式：只有在实际图片内容上才显示手抓形状
-                  const isOnContent = isClickOnImageContent(e)
-                  e.currentTarget.style.cursor = isOnContent ? (isDragging ? 'grabbing' : 'grab') : 'default'
-                }}
-                onClick={(e) => {
-                  // 判断是否点击在实际图片内容上
-                  if (isClickOnImageContent(e)) {
-                    // 点击图片内容，阻止冒泡，不关闭查看器
-                    e.stopPropagation()
+                onNavigate={(direction) => {
+                  if (direction === 'prev') {
+                    navigateImage('prev')
                   } else {
-                    // 点击透明区域，直接关闭查看器
-                    closeImageViewer()
+                    navigateImage('next')
                   }
                 }}
-                onContextMenu={(e) => {
-                  const filePath = currentFilePathList[currentImageIndex]
-                  showMenu(e, getImageMenuItems(currentImage, filePath))
-                }}
-                draggable={false}
               />
-            </div>
+            )}
 
-            {/* 底部信息栏和切换按钮 - 移到查看器容器的直接子元素 */}
-            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-              {/* 切换按钮组 */}
-              {currentImageList.length > 1 && (
-                <div className="flex items-center gap-3">
+            {/* 查看模式 - 原有的图片查看器 (始终渲染，通过透明度控制显示/隐藏以实现平滑过渡) */}
+            <div
+              ref={imageViewerContainerRef}
+              className={`absolute inset-0 flex items-center justify-center p-4 transition-opacity duration-400 ease-in-out ${isEditorMode ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+              style={{ overscrollBehavior: 'contain' }}
+              onMouseMove={handleImageMouseMove}
+              onMouseUp={handleImageMouseUp}
+              onMouseLeave={handleImageMouseUp}
+              onClick={(e) => {
+                // 点击背景区域（不是图片内容）时关闭
+                if (e.target === e.currentTarget) {
+                  closeImageViewer()
+                }
+              }}
+            >
+              {/* 顶部编辑按钮 - 只有来自上传区域的图片才显示 */}
+              {isFromUploadArea && (
+                <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10">
                   <button
-                    onClick={() => navigateImage('prev')}
-                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    onClick={() => setIsEditorMode(true)}
+                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors flex items-center gap-2"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
-                  </button>
-                  <button
-                    onClick={() => navigateImage('next')}
-                    className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    编辑图片
                   </button>
                 </div>
               )}
 
-              {/* 信息按钮组 */}
-              <div className="flex items-center gap-4">
-                {/* 导航指示器和计数器 */}
+              {/* 图片容器 */}
+              <div className="relative">
+                <img
+                  ref={imageViewerRef}
+                  src={currentImage}
+                  alt="Full size"
+                  className={`select-none image-transition`}
+                  style={{
+                    transform: viewerOpacity < 1
+                      ? `scale(${imageScaleRef.current * (0.95 + 0.05 * viewerOpacity)}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`
+                      : `scale(${imageScaleRef.current}) translate(${imagePositionRef.current.x / imageScaleRef.current}px, ${imagePositionRef.current.y / imageScaleRef.current}px)`,
+                    transition: viewerOpacity < 1 ? 'transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 400ms ease' : 'none',
+                    opacity: viewerOpacity,
+                    transformOrigin: 'center',
+                    width: '95vw',
+                    height: '95vh',
+                    objectFit: 'contain'
+                  }}
+                  onLoad={(e) => {
+                    // 图片加载完成后，计算CSS缩放比例（相对于原始尺寸）
+                    const img = e.currentTarget
+                    if (img.naturalWidth && img.naturalHeight && img.offsetWidth && img.offsetHeight) {
+                      // 计算objectFit: contain下的实际显示尺寸
+                      const naturalRatio = img.naturalWidth / img.naturalHeight
+                      const layoutRatio = img.offsetWidth / img.offsetHeight
+
+                      let actualDisplayWidth
+                      if (naturalRatio > layoutRatio) {
+                        // 图片受宽度限制
+                        actualDisplayWidth = img.offsetWidth
+                      } else {
+                        // 图片受高度限制
+                        actualDisplayWidth = img.offsetHeight * naturalRatio
+                      }
+
+                      const cssScale = actualDisplayWidth / img.naturalWidth
+                      cssScaleRef.current = cssScale
+                      // imageScaleRef存储相对于布局尺寸的缩放，初始为1
+                      imageScaleRef.current = 1
+                      targetScaleRef.current = 1
+                      imagePositionRef.current = { x: 0, y: 0 }
+                      targetPositionRef.current = { x: 0, y: 0 }
+                      updateImageTransform()
+                    }
+                  }}
+                  onMouseDown={handleImageMouseDown}
+                  onMouseMove={(e) => {
+                    // 动态设置cursor样式：只有在实际图片内容上才显示手抓形状
+                    const isOnContent = isClickOnImageContent(e)
+                    e.currentTarget.style.cursor = isOnContent ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                  }}
+                  onClick={(e) => {
+                    // 判断是否点击在实际图片内容上
+                    if (isClickOnImageContent(e)) {
+                      // 点击图片内容，阻止冒泡，不关闭查看器
+                      e.stopPropagation()
+                    } else {
+                      // 点击透明区域，直接关闭查看器
+                      closeImageViewer()
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    const filePath = currentFilePathList[currentImageIndex]
+                    showMenu(e, getImageMenuItems(currentImage, filePath))
+                  }}
+                  draggable={false}
+                />
+              </div>
+
+              {/* 底部信息栏和切换按钮 - 移到查看器容器的直接子元素 */}
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+                {/* 切换按钮组 */}
                 {currentImageList.length > 1 && (
-                  <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                    {currentImageIndex + 1} / {currentImageList.length}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => navigateImage('prev')}
+                      className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => navigateImage('next')}
+                      className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                   </div>
                 )}
 
-                {/* 缩放比例显示 */}
-                <div ref={scaleDisplayRef} className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
-                  100%
+                {/* 信息按钮组 */}
+                <div className="flex items-center gap-4">
+                  {/* 导航指示器和计数器 */}
+                  {currentImageList.length > 1 && (
+                    <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                      {currentImageIndex + 1} / {currentImageList.length}
+                    </div>
+                  )}
+
+                  {/* 缩放比例显示 */}
+                  <div ref={scaleDisplayRef} className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                    100%
+                  </div>
+
+                  {/* 重置按钮 */}
+                  <button
+                    onClick={resetImageView}
+                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                  >
+                    重置视图
+                  </button>
+
+                  {/* 关闭按钮 */}
+                  <button
+                    onClick={closeImageViewer}
+                    className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                  >
+                    关闭
+                  </button>
                 </div>
-
-                {/* 重置按钮 */}
-                <button
-                  onClick={resetImageView}
-                  className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
-                >
-                  重置视图
-                </button>
-
-                {/* 关闭按钮 */}
-                <button
-                  onClick={closeImageViewer}
-                  className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
-                >
-                  关闭
-                </button>
               </div>
             </div>
           </div>
@@ -4094,13 +4307,15 @@ const ConversationWorkspace: React.FC = () => {
       />
 
       {/* 更新提示对话框 */}
-      {showUpdateDialog && updateReleaseInfo && (
-        <UpdateDialog
-          releaseInfo={updateReleaseInfo}
-          currentVersion={getCurrentVersion()}
-          onClose={() => setShowUpdateDialog(false)}
-        />
-      )}
+      {
+        showUpdateDialog && updateReleaseInfo && (
+          <UpdateDialog
+            releaseInfo={updateReleaseInfo}
+            currentVersion={getCurrentVersion()}
+            onClose={() => setShowUpdateDialog(false)}
+          />
+        )
+      }
     </div >
   )
 }
