@@ -6,6 +6,7 @@ import * as path from '@tauri-apps/api/path'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { getMediaPath, getWaveformsPath, getUploadsPath, getDataRoot } from './dataPath'
 import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { detectFileType, MediaType } from './fileTypeDetector'
 
 export const isDesktop = (): boolean => {
   const w: any = typeof window !== 'undefined' ? window : {}
@@ -38,10 +39,25 @@ export async function saveImageFromUrl(url: string, filename?: string): Promise<
   const res = await httpFetch(url, { method: 'GET' })
   const buf = await res.arrayBuffer()
   const array = new Uint8Array(buf)
-  // 内容类型可能不可用，基于 URL 简单判断
-  const lower = url.toLowerCase()
-  const ext = lower.includes('.png') ? 'png' : lower.includes('.jpg') || lower.includes('.jpeg') ? 'jpg' : 'png'
-  const name = filename ?? `image-${Date.now()}.${ext}`
+
+  // 使用新的文件类型检测系统
+  const contentType = res.headers.get('content-type')
+  const fileBuffer = array.length > 4096 ? array.slice(0, 4096) : array
+
+  const fileType = await detectFileType({
+    url,
+    mediaType: 'image',
+    contentType,
+    fileBuffer
+  })
+
+  logInfo('[save] 检测到图片类型:', {
+    extension: fileType.extension,
+    method: fileType.detectionMethod,
+    contentType: fileType.mimeType
+  })
+
+  const name = filename ?? `image-${Date.now()}.${fileType.extension}`
   const saved = await saveBinary(array, name)
   logInfo('[save] image saved', saved.fullPath)
   return saved
@@ -58,9 +74,25 @@ export async function saveVideoFromUrl(url: string, filename?: string): Promise<
       const res = await httpFetch(url, { method: 'GET' })
       const buf = await res.arrayBuffer()
       const array = new Uint8Array(buf)
-      const lower = url.toLowerCase()
-      const ext = lower.includes('.mp4') ? 'mp4' : lower.includes('.webm') ? 'webm' : 'mp4'
-      const name = filename ?? `video-${Date.now()}.${ext}`
+
+      // 使用新的文件类型检测系统
+      const contentType = res.headers.get('content-type')
+      const fileBuffer = array.length > 4096 ? array.slice(0, 4096) : array
+
+      const fileType = await detectFileType({
+        url,
+        mediaType: 'video',
+        contentType,
+        fileBuffer
+      })
+
+      logInfo('[save] 检测到视频类型:', {
+        extension: fileType.extension,
+        method: fileType.detectionMethod,
+        contentType: fileType.mimeType
+      })
+
+      const name = filename ?? `video-${Date.now()}.${fileType.extension}`
       const saved = await saveBinary(array, name)
       logInfo('[save] video saved', saved.fullPath)
       return saved
@@ -98,9 +130,25 @@ export async function saveAudioFromUrl(url: string, filename?: string): Promise<
   const res = await httpFetch(url, { method: 'GET' })
   const buf = await res.arrayBuffer()
   const array = new Uint8Array(buf)
-  const lower = url.toLowerCase()
-  const ext = lower.includes('.mp3') ? 'mp3' : lower.includes('.wav') ? 'wav' : lower.includes('.flac') ? 'flac' : lower.includes('.pcm') ? 'pcm' : 'mp3'
-  const name = filename ?? `audio-${Date.now()}.${ext}`
+
+  // 使用新的文件类型检测系统
+  const contentType = res.headers.get('content-type')
+  const fileBuffer = array.length > 4096 ? array.slice(0, 4096) : array
+
+  const fileType = await detectFileType({
+    url,
+    mediaType: 'audio',
+    contentType,
+    fileBuffer
+  })
+
+  logInfo('[save] 检测到音频类型:', {
+    extension: fileType.extension,
+    method: fileType.detectionMethod,
+    contentType: fileType.mimeType
+  })
+
+  const name = filename ?? `audio-${Date.now()}.${fileType.extension}`
   const saved = await saveBinary(array, name)
   logInfo('[save] audio saved', saved.fullPath)
   return saved
