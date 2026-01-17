@@ -1624,6 +1624,25 @@ const ConversationWorkspace: React.FC = () => {
             result = await apiService.generateImage(input, model, {
               ...options,
               onProgress: (status: any) => {
+                // 【关键修复】如果收到 TASK_CREATED 状态，立即保存 taskId/requestId
+                if (status.status === 'TASK_CREATED') {
+                  if (status.taskId) {
+                    logInfo('[App] 🆔 收到任务ID (图片-PPIO/KIE)，立即保存:', status.taskId)
+                    updateTask(taskId, {
+                      serverTaskId: status.taskId,
+                      message: status.message || '任务已创建'
+                    })
+                  } else if (status.requestId && status.modelId) {
+                    logInfo('[App] 🆔 收到请求ID (图片-Fal)，立即保存:', { requestId: status.requestId, modelId: status.modelId })
+                    updateTask(taskId, {
+                      requestId: status.requestId,
+                      modelId: status.modelId,
+                      message: status.message || '任务已创建'
+                    })
+                  }
+                  return
+                }
+
                 const now = Date.now()
                 // 限流：至少间隔 300ms 才更新一次
                 if (now - lastUpdateTime < 300) return
@@ -1690,10 +1709,32 @@ const ConversationWorkspace: React.FC = () => {
           break
         case 'video':
           let videoLastUpdateTime = 0
+          logInfo('[App] 🎬 开始视频生成任务:', { taskId, model })
+
           result = await apiService.generateVideo(input, model, {
             ...options,
             onProgress: (status: any) => {
               const now = Date.now()
+
+              // 【关键修复】如果收到 TASK_CREATED 状态，立即保存 taskId/requestId
+              if (status.status === 'TASK_CREATED') {
+                if (status.taskId) {
+                  logInfo('[App] 🆔 收到任务ID (PPIO/KIE)，立即保存:', status.taskId)
+                  updateTask(taskId, {
+                    serverTaskId: status.taskId,
+                    message: status.message || '任务已创建'
+                  })
+                } else if (status.requestId && status.modelId) {
+                  logInfo('[App] 🆔 收到请求ID (Fal)，立即保存:', { requestId: status.requestId, modelId: status.modelId })
+                  updateTask(taskId, {
+                    requestId: status.requestId,
+                    modelId: status.modelId,
+                    message: status.message || '任务已创建'
+                  })
+                }
+                return
+              }
+
               // 限流：至少间隔 300ms 才更新一次
               if (now - videoLastUpdateTime < 300) return
               videoLastUpdateTime = now
@@ -1708,9 +1749,41 @@ const ConversationWorkspace: React.FC = () => {
             }
           })
 
+          logInfo('[App] 📦 视频生成 API 返回结果:', {
+            hasResult: !!result,
+            status: result?.status,
+            taskId: result?.taskId,
+            requestId: result?.requestId,
+            modelId: result?.modelId,
+            hasUrl: !!result?.url
+          })
+
+          // 【新增】检查是否为超时状态
+          if (result?.status === 'timeout') {
+            logInfo('[App] ⏱️ 检测到轮询超时，保存任务ID以便后续恢复:', {
+              taskId: result.taskId,
+              requestId: result.requestId,
+              modelId: result.modelId
+            })
+            updateTask(taskId, {
+              status: 'timeout',
+              serverTaskId: result.taskId,  // 保存 taskId 用于后续重试
+              requestId: result.requestId,  // 保存 requestId（Fal 使用）
+              modelId: result.modelId,      // 保存 modelId（Fal 使用）
+              message: result.message || '轮询超时，任务可能仍在处理中'
+            })
+            logInfo('[App] ✅ 超时任务已更新，serverTaskId:', result.taskId)
+            return  // 提前返回，不继续处理
+          }
+
           // 如果返回了 taskId 而非最终结果，说明需要 App 层轮询（向后兼容）
           if (result.taskId) {
-            updateTask(taskId, { serverTaskId: result.taskId })
+            logInfo('[App] 💾 保存 serverTaskId 到任务对象:', result.taskId)
+            updateTask(taskId, {
+              serverTaskId: result.taskId,
+              requestId: result.requestId,
+              modelId: result.modelId
+            })
             result = await pollTaskStatus(result.taskId, taskId, model)
           }
           break
@@ -2216,6 +2289,42 @@ const ConversationWorkspace: React.FC = () => {
           images
         }
       }))
+
+      // 【诊断日志】记录加载的任务信息
+      const videoTasks = loaded.filter(t => t.type === 'video')
+      const generatingTasks = videoTasks.filter(t => t.status === 'generating' || t.status === 'pending' || t.status === 'queued')
+      const timeoutTasks = videoTasks.filter(t => t.status === 'timeout')
+
+      logInfo('[App] 📂 从历史记录加载任务:', {
+        totalTasks: loaded.length,
+        videoTasks: videoTasks.length,
+        generatingTasks: generatingTasks.length,
+        timeoutTasks: timeoutTasks.length
+      })
+
+      // 【诊断日志】详细记录每个生成中/超时的视频任务
+      generatingTasks.forEach(t => {
+        logInfo('[App] 🔄 发现生成中的任务:', {
+          id: t.id,
+          originalStatus: (history.find((h: any) => h.id === t.id) as any)?.status,
+          serverTaskId: t.serverTaskId,
+          requestId: t.requestId,
+          modelId: t.modelId,
+          willConvertToTimeout: !!(t.serverTaskId || (t.requestId && t.modelId)),
+          newStatus: t.status
+        })
+      })
+
+      timeoutTasks.forEach(t => {
+        logInfo('[App] ⏱️ 发现超时任务:', {
+          id: t.id,
+          serverTaskId: t.serverTaskId,
+          requestId: t.requestId,
+          modelId: t.modelId,
+          message: t.message
+        })
+      })
+
       setTasks(loaded)
       setIsTasksLoaded(true)
     }
@@ -2339,7 +2448,7 @@ const ConversationWorkspace: React.FC = () => {
         const relativeUploadedVideoFilePaths = await convertPathArray(t.uploadedVideoFilePaths, dataRoot, true)
         const relativeResultFilePath = t.result?.filePath ? await convertPathString(t.result.filePath, dataRoot, true) : undefined
 
-        return {
+        const taskToSave = {
           id: t.id,
           type: t.type,
           prompt: t.prompt,
@@ -2368,10 +2477,33 @@ const ConversationWorkspace: React.FC = () => {
             createdAt: t.result.createdAt
           } : undefined
         }
+
+        // 【诊断日志】记录保存的任务信息
+        if (t.type === 'video' && (t.status === 'generating' || t.status === 'timeout')) {
+          logInfo('[App] 💾 保存视频任务到历史记录:', {
+            id: t.id,
+            status: t.status,
+            serverTaskId: t.serverTaskId,
+            requestId: t.requestId,
+            modelId: t.modelId,
+            message: t.message
+          })
+        }
+
+        return taskToSave
       }))
 
       const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
       const limitedTasks = tasksToSave.slice(-maxHistory)
+
+      // 【诊断日志】记录即将写入的任务数量
+      const videoTasks = limitedTasks.filter((t: any) => t.type === 'video')
+      logInfo('[App] 📝 写入历史记录文件:', {
+        totalTasks: limitedTasks.length,
+        videoTasks: videoTasks.length,
+        tasksWithServerTaskId: videoTasks.filter((t: any) => t.serverTaskId).length
+      })
+
       writeJsonToAppData('history.json', limitedTasks).catch(e => logError('write history failed', e))
     }
 
@@ -2529,13 +2661,6 @@ const ConversationWorkspace: React.FC = () => {
   }
 
   const handleContinuePolling = async (task: GenerationTask) => {
-    // 处理 PPIO 任务 (Video)
-    if (task.serverTaskId) {
-      logInfo('[App] 继续查询 PPIO 任务:', task.serverTaskId)
-      await retryPolling(task)
-      return
-    }
-
     // 根据任务模型确定供应商类型
     const providerObj = providers.find(p => p.models.some(m => m.id === task.model))
     if (!providerObj) {
@@ -2543,7 +2668,20 @@ const ConversationWorkspace: React.FC = () => {
     }
     const providerType = providerObj.id as 'ppio' | 'fal' | 'modelscope' | 'kie'
 
-    logInfo(`[App] 继续查询 ${providerType} 队列:`, { requestId: task.requestId, modelId: task.modelId })
+    // 【修复】根据供应商类型判断使用哪个方法
+    // PPIO 视频任务使用 retryPolling（因为它有特殊的轮询逻辑）
+    // 其他任务使用 continuePolling
+    if (providerType === 'ppio' && task.type === 'video' && task.serverTaskId) {
+      logInfo('[App] 继续查询 PPIO 视频任务:', task.serverTaskId)
+      await retryPolling(task)
+      return
+    }
+
+    logInfo(`[App] 继续查询 ${providerType} 队列:`, {
+      requestId: task.requestId,
+      modelId: task.modelId,
+      serverTaskId: task.serverTaskId
+    })
 
     try {
       // 更新任务状态为生成中

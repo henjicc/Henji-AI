@@ -77,37 +77,52 @@ export class PPIOStatusHandler {
 
     logInfo('[PPIOStatusHandler] 开始轮询:', { taskId, modelId, estimatedPolls })
 
-    const result = await pollUntilComplete<VideoResult>({
-      checkFn: async () => {
-        const status = await this.checkStatus(taskId)
-        return {
-          status: status.status,
-          result: status.result as VideoResult | undefined
-        }
-      },
-      isComplete: (status) => status === 'TASK_STATUS_SUCCEED' || status === 'TASK_STATUS_SUCCEEDED',
-      isFailed: (status) => status === 'TASK_STATUS_FAILED',
-      onProgress: (progress, status) => {
-        if (onProgress) {
-          let message = '生成中...'
-          if (status === 'TASK_STATUS_QUEUED') {
-            message = '排队中...'
-          } else if (status === 'TASK_STATUS_PROCESSING') {
-            message = '正在生成...'
+    try {
+      const result = await pollUntilComplete<VideoResult>({
+        checkFn: async () => {
+          const status = await this.checkStatus(taskId)
+          return {
+            status: status.status,
+            result: status.result as VideoResult | undefined
           }
+        },
+        isComplete: (status) => status === 'TASK_STATUS_SUCCEED' || status === 'TASK_STATUS_SUCCEEDED',
+        isFailed: (status) => status === 'TASK_STATUS_FAILED',
+        onProgress: (progress, status) => {
+          if (onProgress) {
+            let message = '生成中...'
+            if (status === 'TASK_STATUS_QUEUED') {
+              message = '排队中...'
+            } else if (status === 'TASK_STATUS_PROCESSING') {
+              message = '正在生成...'
+            }
 
-          onProgress({
-            status: status as any,
-            progress,
-            message
-          })
-        }
-      },
-      interval: PPIO_CONFIG.pollInterval,
-      maxAttempts: PPIO_CONFIG.maxPollAttempts,
-      estimatedAttempts: estimatedPolls
-    })
+            onProgress({
+              status: status as any,
+              progress,
+              message
+            })
+          }
+        },
+        interval: PPIO_CONFIG.pollInterval,
+        maxAttempts: PPIO_CONFIG.maxPollAttempts,
+        estimatedAttempts: estimatedPolls
+      })
 
-    return result
+      return result
+    } catch (error) {
+      // 【新增】捕获超时错误，返回超时状态而非抛出错误
+      if (error instanceof Error && error.message === 'Polling timeout') {
+        logInfo('[PPIOStatusHandler] 轮询超时，返回超时状态以便后续重试')
+        // 返回超时状态，包含 taskId 以便后续重试
+        return {
+          status: 'timeout',
+          message: '轮询超时，任务可能仍在处理中',
+          taskId: taskId
+        } as VideoResult
+      }
+      // 其他错误继续抛出
+      throw error
+    }
   }
 }

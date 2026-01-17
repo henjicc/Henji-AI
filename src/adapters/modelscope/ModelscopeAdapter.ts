@@ -69,8 +69,22 @@ export class ModelscopeAdapter extends BaseAdapter {
 
       this.log('魔搭API响应:', response)
 
+      // 【关键修复】立即通过 onProgress 回调传递 taskId，让 App 层尽早保存
+      if (params.onProgress) {
+        params.onProgress({
+          status: 'TASK_CREATED',
+          taskId: response.task_id,
+          message: '任务已创建，开始轮询...'
+        })
+      }
+
       // 4. 开始轮询任务状态
-      return await this.pollTaskStatus(response.task_id, params.onProgress)
+      const result = await this.pollTaskStatus(response.task_id, params.onProgress)
+      // 【修改】确保返回结果包含 taskId，用于超时恢复
+      return {
+        ...result,
+        taskId: response.task_id
+      }
     } catch (error) {
       logError('[ModelscopeAdapter] generateImage 错误:', error)
       logError('[ModelscopeAdapter] 请求数据:', JSON.stringify(requestData, null, 2))
@@ -107,71 +121,87 @@ export class ModelscopeAdapter extends BaseAdapter {
     // PENDING和PROCESSING状态都会计入次数
     const estimatedPolls = 6
 
-    const result = await pollUntilComplete<ImageResult>({
-      checkFn: async () => {
-        const status = await this.checkStatus(taskId)
+    try {
+      const result = await pollUntilComplete<ImageResult>({
+        checkFn: async () => {
+          const status = await this.checkStatus(taskId)
 
-        // 记录完整的状态响应，便于调试
-        this.log('任务状态查询结果:', status)
+          // 记录完整的状态响应，便于调试
+          this.log('任务状态查询结果:', status)
 
-        // 如果任务完成，返回图片URL
-        if (status.task_status === 'SUCCEED' && status.output_images) {
-          const urls = status.output_images
-          const combinedUrl = Array.isArray(urls) && urls.length > 1 ? urls.join('|||') : urls[0]
+          // 如果任务完成，返回图片URL
+          if (status.task_status === 'SUCCEED' && status.output_images) {
+            const urls = status.output_images
+            const combinedUrl = Array.isArray(urls) && urls.length > 1 ? urls.join('|||') : urls[0]
 
-          // 保存图片到本地
-          try {
-            this.log('开始保存图片到本地...')
-            const savedResult = await this.saveMediaLocally(combinedUrl, 'image')
-            this.log('图片保存成功:', savedResult)
+            // 保存图片到本地
+            try {
+              this.log('开始保存图片到本地...')
+              const savedResult = await this.saveMediaLocally(combinedUrl, 'image')
+              this.log('图片保存成功:', savedResult)
 
-            return {
-              status: 'SUCCEED',
-              result: {
-                url: savedResult.url,
-                filePath: savedResult.filePath,
-                status: 'completed'
+              return {
+                status: 'SUCCEED',
+                result: {
+                  url: savedResult.url,
+                  filePath: savedResult.filePath,
+                  status: 'completed'
+                }
               }
-            }
-          } catch (error) {
-            this.log('图片保存失败，使用远程URL:', error)
-            return {
-              status: 'SUCCEED',
-              result: {
-                url: combinedUrl,
-                status: 'completed'
+            } catch (error) {
+              this.log('图片保存失败，使用远程URL:', error)
+              return {
+                status: 'SUCCEED',
+                result: {
+                  url: combinedUrl,
+                  status: 'completed'
+                }
               }
             }
           }
-        }
 
-        // 如果任务失败，记录详细错误信息
-        if (status.task_status === 'FAILED') {
-          logError('[ModelscopeAdapter] 任务失败，完整响应:', JSON.stringify(status, null, 2))
-        }
+          // 如果任务失败，记录详细错误信息
+          if (status.task_status === 'FAILED') {
+            logError('[ModelscopeAdapter] 任务失败，完整响应:', JSON.stringify(status, null, 2))
+          }
 
+          return {
+            status: status.task_status,
+            result: undefined
+          }
+        },
+        isComplete: (status) => status === 'SUCCEED',
+        isFailed: (status) => status === 'FAILED',
+        onProgress: (progress, status) => {
+          if (onProgress) {
+            onProgress({
+              status: status as any,
+              progress,
+              message: this.getStatusMessage(status)
+            })
+          }
+        },
+        interval: MODELSCOPE_CONFIG.pollInterval,
+        maxAttempts: MODELSCOPE_CONFIG.maxPollAttempts,
+        estimatedAttempts: estimatedPolls
+      })
+
+      return result
+    } catch (error) {
+      // 【新增】捕获超时错误，返回超时状态而非抛出错误
+      if (error instanceof Error && error.message === 'Polling timeout') {
+        this.log('轮询超时，返回超时状态以便后续重试')
+        // 返回超时状态，包含 taskId 以便后续重试
         return {
-          status: status.task_status,
-          result: undefined
-        }
-      },
-      isComplete: (status) => status === 'SUCCEED',
-      isFailed: (status) => status === 'FAILED',
-      onProgress: (progress, status) => {
-        if (onProgress) {
-          onProgress({
-            status: status as any,
-            progress,
-            message: this.getStatusMessage(status)
-          })
-        }
-      },
-      interval: MODELSCOPE_CONFIG.pollInterval,
-      maxAttempts: MODELSCOPE_CONFIG.maxPollAttempts,
-      estimatedAttempts: estimatedPolls
-    })
-
-    return result
+          status: 'timeout',
+          message: '轮询超时，任务可能仍在处理中',
+          taskId: taskId,
+          url: ''
+        } as ImageResult
+      }
+      // 其他错误继续抛出
+      throw error
+    }
   }
 
   /**

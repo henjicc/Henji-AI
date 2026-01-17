@@ -135,10 +135,29 @@ export class PPIOAdapter extends BaseAdapter {
 
       const taskId = response.data.task_id
 
+      logInfo('[PPIOAdapter] ✅ 任务创建成功，taskId:', taskId)
+
       // 4. 如果提供了进度回调，在 Adapter 内部轮询
       if (finalParams.onProgress) {
+        // 【关键修复】立即通过 onProgress 回调传递 taskId，让 App 层尽早保存
+        finalParams.onProgress({
+          status: 'TASK_CREATED',
+          taskId: taskId,
+          message: '任务已创建，开始轮询...'
+        })
+
         logInfo('[PPIOAdapter] 开始内部轮询，taskId:', taskId)
-        return await this.statusHandler.pollTaskStatus(taskId, finalParams.model, finalParams.onProgress)
+        const result = await this.statusHandler.pollTaskStatus(taskId, finalParams.model, finalParams.onProgress)
+        // 【修改】确保返回结果包含 taskId，用于超时恢复
+        logInfo('[PPIOAdapter] 📦 轮询完成，返回结果:', {
+          status: result.status,
+          hasUrl: !!result.url,
+          taskId: taskId
+        })
+        return {
+          ...result,
+          taskId: taskId
+        }
       }
 
       // 5. 否则返回 taskId，让 App 层控制轮询

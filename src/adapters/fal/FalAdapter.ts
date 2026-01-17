@@ -256,6 +256,7 @@ export class FalAdapter extends BaseAdapter {
         // 队列模式：使用 fal.subscribe 自动轮询
         logInfo('', '[FalAdapter] 使用队列模式')
         this.pollCount = 0
+        let capturedRequestId: string | undefined
 
         const result = await fal.subscribe(submitPath, {
           input: requestData,
@@ -263,6 +264,19 @@ export class FalAdapter extends BaseAdapter {
           onQueueUpdate: (update: any) => {
             if (params.onProgress) {
               this.pollCount++
+
+              // 【关键修复】捕获 request_id 并立即通知 App 层
+              if (update.request_id && !capturedRequestId) {
+                capturedRequestId = update.request_id
+                params.onProgress({
+                  status: 'TASK_CREATED',
+                  requestId: update.request_id,
+                  modelId: routeModelId,
+                  message: '任务已创建，开始轮询...'
+                })
+                logInfo('[FalAdapter] 🆔 图片任务已创建，requestId:', update.request_id)
+              }
+
               const progress = this.calculateProgress(update, routeModelId)
               const message = this.getStatusMessage(update)
 
@@ -301,31 +315,68 @@ export class FalAdapter extends BaseAdapter {
 
   /**
    * 继续轮询（用于超时恢复）
-   * 注意：官方 SDK 的 subscribe 会自动处理轮询，不需要手动恢复
-   * 保留此方法以保持接口兼容性
    */
   async continuePolling(
     modelId: string,
     requestId: string,
-    _onProgress?: (status: ProgressStatus) => void
+    onProgress?: (status: ProgressStatus) => void
   ): Promise<ImageResult> {
     logInfo('[FalAdapter] 继续查询:', { modelId, requestId })
 
     try {
       this.pollCount = 0
 
-      // 使用官方 SDK 的 queue.result 获取结果
-      const result = await fal.queue.result(modelId, {
-        requestId: requestId
-      })
+      // 【修复】使用 queue.status 轮询状态，而不是 subscribe
+      // 因为 subscribe 需要原始输入参数，而我们在超时后已经丢失了
+      const pollStatus = async (): Promise<ImageResult> => {
+        const statusResponse = await fal.queue.status(modelId, {
+          requestId: requestId,
+          logs: true
+        })
 
-      logInfo('[FalAdapter] 恢复查询完成:', result)
+        this.pollCount++
+        logInfo('[FalAdapter] 恢复轮询状态:', {
+          status: statusResponse.status,
+          pollCount: this.pollCount
+        })
 
-      const parsedResult = await parseImageResponse(result)
-      return {
-        ...parsedResult,
-        status: 'completed'
+        // 如果已完成，获取结果
+        if (statusResponse.status === 'COMPLETED') {
+          const result = await fal.queue.result(modelId, {
+            requestId: requestId
+          })
+          logInfo('[FalAdapter] 恢复查询完成:', result)
+          const parsedResult = await parseImageResponse(result)
+          return {
+            ...parsedResult,
+            status: 'completed'
+          }
+        }
+
+        // 如果还在进行中，通知进度并继续轮询
+        if (statusResponse.status === 'IN_PROGRESS' || statusResponse.status === 'IN_QUEUE') {
+          const progress = this.calculateProgress(statusResponse, modelId)
+          const message = this.getStatusMessage(statusResponse)
+
+          if (onProgress) {
+            onProgress({
+              status: statusResponse.status as any,
+              queue_position: (statusResponse as any).queue_position,
+              message,
+              progress
+            })
+          }
+
+          // 等待后继续轮询
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          return pollStatus()
+        }
+
+        // 其他状态（失败等）
+        throw new Error(`Task failed with status: ${statusResponse.status}`)
       }
+
+      return await pollStatus()
     } catch (error) {
       logError('[FalAdapter] continuePolling 错误:', error)
       throw this.handleError(error)
@@ -387,12 +438,26 @@ export class FalAdapter extends BaseAdapter {
       // 3. 如果提供了 onProgress 回调，使用 subscribe 自动轮询
       if (params.onProgress) {
         this.pollCount = 0
+        let capturedRequestId: string | undefined
 
         const result = await fal.subscribe(endpoint, {
           input: requestData,
           logs: true,
           onQueueUpdate: (update: any) => {
             this.pollCount++
+            // 【新增】捕获 request_id 用于超时恢复
+            if (update.request_id && !capturedRequestId) {
+              capturedRequestId = update.request_id
+              // 【关键修复】立即通知 App 层保存 requestId
+              params.onProgress!({
+                status: 'TASK_CREATED',
+                requestId: update.request_id,
+                modelId: modelId,
+                message: '任务已创建，开始轮询...'
+              })
+              logInfo('[FalAdapter] 🆔 任务已创建，requestId:', update.request_id)
+            }
+
             const progress = this.calculateProgress(update, modelId)
             const message = this.getStatusMessage(update)
 
@@ -416,7 +481,13 @@ export class FalAdapter extends BaseAdapter {
         logInfo('[FalAdapter] 视频生成完成:', result)
 
         // 解析响应数据
-        return await parseVideoResponse(result, this)
+        const parsedResult = await parseVideoResponse(result, this)
+        // 【修改】确保返回结果包含 requestId 和 modelId，用于超时恢复
+        return {
+          ...parsedResult,
+          requestId: capturedRequestId || (result as any).request_id,
+          modelId: modelId
+        }
       }
 
       // 4. 否则只提交任务，返回 taskId

@@ -178,7 +178,19 @@ export class KIEAdapter extends BaseAdapter {
 
       // 如果提供了进度回调，内部轮询
       if (params.onProgress) {
-        return await this.pollTaskStatus(taskId, params.model, params.onProgress)
+        // 【关键修复】立即通过 onProgress 回调传递 taskId，让 App 层尽早保存
+        params.onProgress({
+          status: 'TASK_CREATED',
+          taskId: taskId,
+          message: '任务已创建，开始轮询...'
+        })
+
+        const result = await this.pollTaskStatus(taskId, params.model, params.onProgress)
+        // 【修改】确保返回结果包含 taskId，用于超时恢复
+        return {
+          ...result,
+          taskId: taskId
+        }
       }
 
       // 否则返回 taskId
@@ -262,7 +274,19 @@ export class KIEAdapter extends BaseAdapter {
 
       // 如果提供了进度回调，内部轮询
       if (params.onProgress) {
-        return await this.pollVideoTaskStatus(taskId, params.model, params.onProgress)
+        // 【关键修复】立即通过 onProgress 回调传递 taskId，让 App 层尽早保存
+        params.onProgress({
+          status: 'TASK_CREATED',
+          taskId: taskId,
+          message: '任务已创建，开始轮询...'
+        })
+
+        const result = await this.pollVideoTaskStatus(taskId, params.model, params.onProgress)
+        // 【修改】确保返回结果包含 taskId，用于超时恢复
+        return {
+          ...result,
+          taskId: taskId
+        }
       }
 
       // 否则返回 taskId
@@ -373,68 +397,96 @@ export class KIEAdapter extends BaseAdapter {
 
     let pollCount = 0
 
-    const result = await pollUntilComplete<VideoResult>({
-      checkFn: async () => {
-        pollCount++
-        const statusData = await this.checkStatus(taskId)
+    try {
+      const result = await pollUntilComplete<VideoResult>({
+        checkFn: async () => {
+          pollCount++
+          const statusData = await this.checkStatus(taskId)
 
-        // 映射 KIE 状态到标准状态
-        const status = this.mapKIEStatus(statusData.state)
+          // 映射 KIE 状态到标准状态
+          const status = this.mapKIEStatus(statusData.state)
 
-        this.log(`[视频轮询 ${pollCount}/${estimatedPolls}] 任务状态:`, {
-          taskId,
-          kieState: statusData.state,
-          status,
-          createTime: statusData.createTime,
-          updateTime: statusData.updateTime
-        })
-
-        // 如果成功，解析结果
-        if (status === 'COMPLETED' && statusData.resultJson) {
-          this.log('视频任务完成，解析结果...')
-          const resultData = JSON.parse(statusData.resultJson)
-          const videoResult = await parseVideoResponse(resultData, this)
-          return { status, result: videoResult }
-        }
-
-        // 如果失败，返回错误信息
-        if (status === 'FAILED') {
-          this.log('视频任务失败:', statusData.failMsg)
-          throw new Error(statusData.failMsg || '视频任务失败')
-        }
-
-        return { status, result: undefined }
-      },
-      isComplete: (status) => status === 'COMPLETED',
-      isFailed: (status) => status === 'FAILED',
-      onProgress: (progress, status) => {
-        if (onProgress) {
-          onProgress({
-            status: status as any,
-            progress,
-            message: this.getStatusMessage(status)
+          this.log(`[视频轮询 ${pollCount}/${estimatedPolls}] 任务状态:`, {
+            taskId,
+            kieState: statusData.state,
+            status,
+            createTime: statusData.createTime,
+            updateTime: statusData.updateTime
           })
-        }
-      },
-      interval: KIE_CONFIG.pollInterval,
-      maxAttempts: KIE_CONFIG.maxPollAttempts,
-      estimatedAttempts: estimatedPolls
-    })
 
-    return result
+          // 如果成功，解析结果
+          if (status === 'COMPLETED' && statusData.resultJson) {
+            this.log('视频任务完成，解析结果...')
+            const resultData = JSON.parse(statusData.resultJson)
+            const videoResult = await parseVideoResponse(resultData, this)
+            return { status, result: videoResult }
+          }
+
+          // 如果失败，返回错误信息
+          if (status === 'FAILED') {
+            this.log('视频任务失败:', statusData.failMsg)
+            throw new Error(statusData.failMsg || '视频任务失败')
+          }
+
+          return { status, result: undefined }
+        },
+        isComplete: (status) => status === 'COMPLETED',
+        isFailed: (status) => status === 'FAILED',
+        onProgress: (progress, status) => {
+          if (onProgress) {
+            onProgress({
+              status: status as any,
+              progress,
+              message: this.getStatusMessage(status)
+            })
+          }
+        },
+        interval: KIE_CONFIG.pollInterval,
+        maxAttempts: KIE_CONFIG.maxPollAttempts,
+        estimatedAttempts: estimatedPolls
+      })
+
+      return result
+    } catch (error) {
+      // 【新增】捕获超时错误，返回超时状态而非抛出错误
+      if (error instanceof Error && error.message === 'Polling timeout') {
+        this.log('轮询超时，返回超时状态以便后续重试')
+        // 返回超时状态，包含 taskId 以便后续重试
+        return {
+          status: 'timeout',
+          message: '轮询超时，任务可能仍在处理中',
+          taskId: taskId,
+          url: ''
+        } as VideoResult
+      }
+      // 其他错误继续抛出
+      throw error
+    }
   }
 
   /**
    * 继续轮询任务（用于超时恢复）
+   * 注意：需要根据 modelId 判断是图片还是视频任务
    */
   async continuePolling(
     modelId: string,
     taskId: string,
     onProgress?: any
-  ): Promise<VideoResult> {
+  ): Promise<ImageResult | VideoResult> {
     this.log('继续轮询任务:', { taskId, modelId })
-    // 复用 pollVideoTaskStatus 方法
-    return this.pollVideoTaskStatus(taskId, modelId, onProgress)
+
+    // 【修复】根据模型判断任务类型
+    // 图片模型：grok-imagine
+    // 视频模型：kling-v1, kling-v1.5, kling-v1.6 等
+    const isImageModel = modelId.includes('grok-imagine')
+
+    if (isImageModel) {
+      // 图片任务：使用 pollTaskStatus
+      return this.pollTaskStatus(taskId, modelId, onProgress)
+    } else {
+      // 视频任务：使用 pollVideoTaskStatus
+      return this.pollVideoTaskStatus(taskId, modelId, onProgress)
+    }
   }
 
   /**
