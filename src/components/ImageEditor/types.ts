@@ -167,7 +167,7 @@ export interface EditorOperation {
 
 export interface ImageEditState {
     imageId: string
-    originalDataUrl: string
+    originalSrc: string
     operations: EditorOperation[]
     currentIndex: number  // 当前操作位置，-1 表示初始状态
     canvas: CanvasState
@@ -275,10 +275,10 @@ export interface EditorHistoryHook {
 
 // ==================== 初始状态工厂 ====================
 
-export function createInitialEditState(imageId: string, originalDataUrl: string): ImageEditState {
+export function createInitialEditState(imageId: string, originalSrc: string): ImageEditState {
     return {
         imageId,
-        originalDataUrl,
+        originalSrc,
         operations: [],
         currentIndex: -1,
         canvas: {

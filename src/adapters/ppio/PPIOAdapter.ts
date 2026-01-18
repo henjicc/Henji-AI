@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { readFile } from '@tauri-apps/plugin-fs'
 import {
   BaseAdapter,
   GenerateImageParams,
@@ -35,17 +36,60 @@ export class PPIOAdapter extends BaseAdapter {
     this.statusHandler = new PPIOStatusHandler(this.apiClient, this)
   }
 
+  private async resolveToBlobOrUrl(pathOrUrl: string): Promise<string | Blob> {
+    if (!pathOrUrl) return pathOrUrl
+    if (pathOrUrl.startsWith('http') && !pathOrUrl.includes('asset.localhost') && !pathOrUrl.includes('tauri.localhost')) {
+      return pathOrUrl
+    }
+    if (pathOrUrl.startsWith('data:')) {
+      return pathOrUrl
+    }
+
+    // Local file handling
+    let filePath = pathOrUrl
+    if (filePath.startsWith('asset:') || filePath.startsWith('tauri:') || filePath.includes('localhost')) {
+      try {
+        const url = new URL(filePath)
+        filePath = decodeURIComponent(url.pathname)
+        // Ensure absolute path logic if needed
+      } catch (e) {
+        // use as is
+      }
+    }
+
+    // Read file
+    const data = await readFile(filePath)
+    const ext = filePath.split('.').pop()?.toLowerCase() || 'dat'
+    let mime = 'application/octet-stream'
+    if (['jpg', 'jpeg'].includes(ext)) mime = 'image/jpeg'
+    if (ext === 'png') mime = 'image/png'
+    if (ext === 'webp') mime = 'image/webp'
+    if (ext === 'mp4') mime = 'video/mp4'
+    if (ext === 'webm') mime = 'video/webm'
+    if (ext === 'mp3') mime = 'audio/mpeg'
+    if (ext === 'wav') mime = 'audio/wav'
+
+    return new Blob([data], { type: mime })
+  }
+
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
       // 0. 处理文件上传 (使用通用上传服务)
       let finalParams = { ...params }
-      if (params.images && params.images.some(img => img.startsWith('data:'))) {
+      const imagesNeedUpload = params.images && params.images.length > 0 && params.images.some(img =>
+        img.startsWith('data:') || img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
+      )
+
+      if (imagesNeedUpload) {
         try {
           const { UploadService } = await import('../../services/upload/UploadService')
           const uploadService = UploadService.getInstance()
           this.log('开始处理图片上传 (provider: ' + uploadService.getCurrentProvider() + ')...')
 
-          const uploadedUrls = await uploadService.uploadFiles(params.images)
+          // Convert all local files/base64 to uploadable format
+          const filesToUpload = await Promise.all(params.images!.map(img => this.resolveToBlobOrUrl(img)))
+          const uploadedUrls = await uploadService.uploadFiles(filesToUpload)
+
           finalParams.images = uploadedUrls
           // 同时更新 imageUrls 兼容旧代码
           finalParams.imageUrls = uploadedUrls
@@ -83,25 +127,35 @@ export class PPIOAdapter extends BaseAdapter {
 
       // 0. 处理文件上传 (使用通用上传服务)
       let finalParams = { ...params }
-      if ((params.images && params.images.some(img => img.startsWith('data:'))) ||
-        (params.video && typeof params.video !== 'string') ||
-        (typeof params.video === 'string' && params.video.startsWith('data:'))) {
+      const hasImages = params.images && params.images.length > 0
+      const hasVideo = !!params.video
 
+      const imagesNeedUpload = hasImages && params.images!.some(img =>
+        img.startsWith('data:') || img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
+      )
+      const videoNeedsUpload = hasVideo && (
+        (typeof params.video === 'string' && (params.video.startsWith('data:') || params.video.startsWith('asset:') || params.video.startsWith('tauri:') || params.video.startsWith('/')))
+        // Or if it's not a string (Blob/File) - logic below handles conversion
+      )
+
+      if (imagesNeedUpload || videoNeedsUpload) {
         try {
           const { UploadService } = await import('../../services/upload/UploadService')
           const uploadService = UploadService.getInstance()
           this.log('开始处理文件上传 (provider: ' + uploadService.getCurrentProvider() + ')...')
 
           // 上传图片
-          if (params.images && params.images.length > 0) {
-            const uploadedUrls = await uploadService.uploadFiles(params.images)
+          if (hasImages && imagesNeedUpload) {
+            const filesToUpload = await Promise.all(params.images!.map(img => this.resolveToBlobOrUrl(img)))
+            const uploadedUrls = await uploadService.uploadFiles(filesToUpload)
             finalParams.images = uploadedUrls
             this.log('图片上传完成:', uploadedUrls)
           }
 
           // 上传视频
-          if (params.video) {
-            const videoUrl = await uploadService.uploadFile(params.video)
+          if (hasVideo && videoNeedsUpload && typeof params.video === 'string') {
+            const fileToUpload = await this.resolveToBlobOrUrl(params.video)
+            const videoUrl = await uploadService.uploadFile(fileToUpload)
             finalParams.video = videoUrl
             this.log('视频上传完成:', videoUrl)
           }

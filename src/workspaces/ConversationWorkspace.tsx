@@ -5,7 +5,7 @@ import SettingsModal from '../components/SettingsModal'
 import ContextMenu from '../components/ContextMenu'
 import { taskQueueManager } from '../services/taskQueue'
 import { MediaResult } from '../types'
-import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio } from '../utils/save'
+import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio, saveBase64ToUploads, dataUrlToBlob, ensureCompressedJpegBytesWithPica, saveBytesToUploads } from '../utils/save'
 import { initializeDataDirectory, getDataRoot, convertPathString, convertPathArray } from '../utils/dataPath'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { invoke } from '@tauri-apps/api/core'
@@ -147,6 +147,7 @@ const ConversationWorkspace: React.FC = () => {
   const [isFromUploadArea, setIsFromUploadArea] = useState(false)  // 标识图片是否来自上传区域
   const imageEditStatesRef = React.useRef<Map<string, ImageEditState>>(new Map())
   const setUploadedImagesRef = React.useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
+  const setUploadedFilePathsRef = React.useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
 
   const speedDisplayRef = React.useRef<HTMLDivElement>(null)
   const speedMenuRef = React.useRef<HTMLDivElement>(null)
@@ -1860,6 +1861,73 @@ const ConversationWorkspace: React.FC = () => {
   }
 
   const handleGenerate = async (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => {
+    // 【延迟保存逻辑】处理 options.images 中的 Base64 图片
+    // 在生成前将编辑好的图片保存为文件，并更新 editState
+    if (options && options.images && options.images.length > 0) {
+      if (!options.uploadedFilePaths) options.uploadedFilePaths = new Array(options.images.length).fill('')
+
+      const newImages = [...options.images]
+      const newFilePaths = [...(options.uploadedFilePaths || [])]
+      let hasChanges = false
+
+      for (let i = 0; i < newImages.length; i++) {
+        const img = newImages[i]
+
+        // 如果是 Base64，说明是新编辑的图片（延迟保存）
+        if (img.startsWith('data:')) {
+          logInfo('[App] Saving delayed edited image (auto-compressed to JPEG):', { index: i })
+          try {
+            // 1. Convert PNG to JPEG and save (compressed)
+            const blob = await dataUrlToBlob(img)
+            const jpegBytes = await ensureCompressedJpegBytesWithPica(blob)
+            const savedEdited = await saveBytesToUploads(jpegBytes, 'image/jpeg')
+            const editedDisplaySrc = savedEdited.displaySrc
+
+            // 2. 获取并更新编辑状态
+            const editState = imageEditStatesRef.current.get(img) // 使用 base64 key 查找
+            if (editState) {
+              // 检查原图是否需要保存 (Fix Issue 2: Original Image Loss)
+              let finalOriginalSrc = editState.originalSrc
+              if (finalOriginalSrc && finalOriginalSrc.startsWith('data:')) {
+                const savedOrg = await saveBase64ToUploads(finalOriginalSrc)
+                finalOriginalSrc = savedOrg.displaySrc
+                logInfo('[App] Saved delayed original image:', savedOrg.fullPath)
+              }
+
+              // 更新 state 对象 (Fix Issue 1: Base64 Bloat)
+              const newEditState: ImageEditState = {
+                ...editState,
+                imageId: savedEdited.relativePath, // 使用相对路径作为 ID
+                originalSrc: finalOriginalSrc
+              }
+
+              // 更新 ref 中的存储 (移除旧 key，添加新 key)
+              imageEditStatesRef.current.delete(img)
+              imageEditStatesRef.current.set(editedDisplaySrc, newEditState)
+
+              logInfo('[App] Updated EditState for saved image', { imageId: newEditState.imageId })
+            }
+
+            // 3. 更新 images 和 filePaths
+            newImages[i] = editedDisplaySrc
+            newFilePaths[i] = savedEdited.fullPath
+            hasChanges = true
+
+          } catch (e) {
+            logError('[App] Failed to save delayed image:', e)
+          }
+        }
+      }
+
+      if (hasChanges) {
+        options.images = newImages
+        options.uploadedFilePaths = newFilePaths
+
+        // 同步回 MediaGenerator 保持 UI 一致
+        if (setUploadedImagesRef.current) setUploadedImagesRef.current(newImages)
+        if (setUploadedFilePathsRef.current) setUploadedFilePathsRef.current(newFilePaths)
+      }
+    }
     if (!input.trim() && (!options || !options.images || options.images.length === 0)) {
       setError('请输入内容或上传图片')
       return
@@ -3835,6 +3903,7 @@ const ConversationWorkspace: React.FC = () => {
                 onOpenClearHistory={() => setIsConfirmClearOpen(true)}
                 onImageClick={(url: string, list: string[]) => openImageViewer(url, list, undefined, true)}
                 onSetUploadedImagesRef={(setter) => { setUploadedImagesRef.current = setter }}
+                onSetUploadedFilePathsRef={(setter) => { setUploadedFilePathsRef.current = setter }}
                 isCollapsed={isPanelCollapsed}
                 onToggleCollapse={() => {
                   if (isPanelCollapsed) {
@@ -3917,16 +3986,24 @@ const ConversationWorkspace: React.FC = () => {
                   closeImageViewer()
                 }}
                 onSave={(dataUrl, editState) => {
-                  // 保存编辑状态，使用新的 URL 作为 Key
-                  imageEditStatesRef.current.set(dataUrl, editState)
-                  // 更新当前图片
+                  // 延迟保存模式：编辑确认时只更新内存状态，文件在点击"生成"时才保存
+                  // 1. 更新编辑状态到内存（使用 dataUrl 作为临时 key）
+                  const newEditState: ImageEditState = {
+                    ...editState,
+                    imageId: dataUrl,
+                    originalSrc: editState.originalSrc // 保持原图引用
+                  }
+                  imageEditStatesRef.current.set(dataUrl, newEditState)
+
+                  // 2. 更新 UI 显示（使用 base64 dataUrl）
                   setCurrentImage(dataUrl)
                   setCurrentImageList(prev => {
                     const updated = [...prev]
                     updated[currentImageIndex] = dataUrl
                     return updated
                   })
-                  // 更新上传区域的图片
+
+                  // 3. 更新上传区域的图片显示
                   if (setUploadedImagesRef.current) {
                     setUploadedImagesRef.current(prev => {
                       const updated = [...prev]
@@ -3934,8 +4011,20 @@ const ConversationWorkspace: React.FC = () => {
                       return updated
                     })
                   }
-                  // 退出编辑器并关闭查看器
+
+                  // 4. 清除对应位置的 uploadedFilePaths（标记为需要保存）
+                  // 空字符串表示这个位置的图片已被编辑，需要在生成时重新保存
+                  if (setUploadedFilePathsRef.current) {
+                    setUploadedFilePathsRef.current(prev => {
+                      const updated = [...prev]
+                      updated[currentImageIndex] = '' // 清空路径，标记需要保存
+                      return updated
+                    })
+                  }
+
+                  // 5. 关闭编辑器
                   closeImageViewer()
+                  logInfo('[App] Edit confirmed (delayed save mode)', { index: currentImageIndex })
                 }}
                 onNavigate={(direction) => {
                   if (direction === 'prev') {
@@ -3966,7 +4055,29 @@ const ConversationWorkspace: React.FC = () => {
               {isFromUploadArea && (
                 <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10">
                   <button
-                    onClick={() => setIsEditorMode(true)}
+                    onClick={async () => {
+                      // 尝试加载历史编辑状态
+                      if (!imageEditStatesRef.current.has(currentImage)) {
+                        try {
+                          const filename = currentImage.split('/').pop()
+                          if (filename) {
+                            const loaded = await loadEditState(filename)
+                            if (loaded) {
+                              // 兼容旧数据
+                              if (loaded.originalDataUrl && !loaded.originalSrc) {
+                                loaded.originalSrc = loaded.originalDataUrl
+                                delete loaded.originalDataUrl
+                              }
+                              imageEditStatesRef.current.set(currentImage, loaded as ImageEditState)
+                              logInfo('[App] Restore edit state success', filename)
+                            }
+                          }
+                        } catch (e) {
+                          logError('[App] Restore edit state failed', e)
+                        }
+                      }
+                      setIsEditorMode(true)
+                    }}
                     className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors flex items-center gap-2"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

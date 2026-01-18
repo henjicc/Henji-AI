@@ -389,7 +389,7 @@ function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
   return `data:${mime};base64,${base64}`
 }
 
-async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+export async function sha256Hex(buf: ArrayBuffer): Promise<string> {
   const hashBuf = await crypto.subtle.digest('SHA-256', buf)
   const hashArr = Array.from(new Uint8Array(hashBuf))
   return hashArr.map(b => b.toString(16).padStart(2, '0')).join('')
@@ -409,7 +409,7 @@ export async function saveUploadImage(fileOrBlob: File | Blob, mode: 'memory' | 
     cached = { bytes, dataUrl, displaySrc, compressedHash }
     uploadCache.set(originalHash, cached)
   }
-  const name = `upload-${cached.compressedHash}.${ext}`
+  const name = `${cached.compressedHash}.${ext}`
   const uploadsPath = await getUploadsPath()
   const full = await path.join(uploadsPath, name)
   if (mode === 'persist') {
@@ -443,7 +443,7 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
   const hash = await sha256Hex(originalBuf)
 
   // 生成文件名和路径
-  const name = `upload-video-${hash}.${ext}`
+  const name = `${hash}.${ext}`
   const uploadsPath = await getUploadsPath()
   const full = await path.join(uploadsPath, name)
 
@@ -477,6 +477,47 @@ export async function saveUploadVideo(file: File, mode: 'memory' | 'persist' = '
   }
 }
 
+/**
+ * 保存 Base64 图片到 Uploads 目录
+ */
+export async function saveBase64ToUploads(base64: string): Promise<{ fullPath: string; displaySrc: string; relativePath: string }> {
+  // 1. Parse base64
+  const matches = base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+  if (!matches || matches.length !== 3) {
+    throw new Error('Invalid base64 string')
+  }
+  const type = matches[1]
+  const data = atob(matches[2])
+  const len = data.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    bytes[i] = data.charCodeAt(i)
+  }
+
+  // 2. Hash
+  const hash = await sha256Hex(bytes.buffer)
+  const ext = type.split('/')[1] === 'jpeg' ? 'jpg' : (type.split('/')[1] || 'png')
+  const name = `${hash}.${ext}`
+
+  // 3. Path
+  const uploadsPath = await getUploadsPath()
+  const full = await path.join(uploadsPath, name)
+
+  // 4. Save if not exists
+  await mkdir(uploadsPath, { recursive: true })
+  let exists = false
+  try { await readFile(full); exists = true } catch { }
+  if (!exists) {
+    await writeFile(full, bytes)
+    logInfo('[save] base64 image persisted', full)
+  } else {
+    logInfo('[save] base64 image already exists (hash match)', full)
+  }
+
+  const displaySrc = convertFileSrc(full)
+  return { fullPath: full, displaySrc, relativePath: name }
+}
+
 export async function deleteUploads(paths: string[]): Promise<void> {
   for (const p of paths) {
     try { await remove(p) } catch (e) { logError('[save] delete upload failed', { data: [p, e] }) }
@@ -506,7 +547,7 @@ export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   }
 }
 
-async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?: number; quality?: number; maxDimension?: number }): Promise<Uint8Array> {
+export async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?: number; quality?: number; maxDimension?: number }): Promise<Uint8Array> {
   const maxPixels = opts?.maxPixels ?? 17_000_000
   const quality = opts?.quality ?? 0.85
   let bitmap: ImageBitmap | null = null
@@ -574,6 +615,34 @@ async function ensureCompressedJpegBytesWithPica(blob: Blob, opts?: { maxPixels?
   } finally {
     cleanup.forEach(fn => { try { fn() } catch { } })
   }
+}
+
+/**
+ * 保存字节数据到 Uploads 目录 (带哈希去重)
+ */
+export async function saveBytesToUploads(bytes: Uint8Array, mimeType: string): Promise<{ fullPath: string; displaySrc: string; relativePath: string }> {
+  // 1. Hash
+  const hash = await sha256Hex(bytes.buffer as ArrayBuffer)
+  const ext = mimeType.split('/')[1] === 'jpeg' ? 'jpg' : (mimeType.split('/')[1] || 'dat')
+  const name = `${hash}.${ext}`
+
+  // 2. Path
+  const uploadsPath = await getUploadsPath()
+  const full = await path.join(uploadsPath, name)
+
+  // 3. Save if not exists
+  await mkdir(uploadsPath, { recursive: true })
+  let exists = false
+  try { await readFile(full); exists = true } catch { }
+  if (!exists) {
+    await writeFile(full, bytes)
+    logInfo('[save] bytes persisted', full)
+  } else {
+    logInfo('[save] bytes already exists (hash match)', full)
+  }
+
+  const displaySrc = convertFileSrc(full)
+  return { fullPath: full, displaySrc, relativePath: name }
 }
 
 export async function writeJsonToAppData(relPath: string, data: any): Promise<void> {

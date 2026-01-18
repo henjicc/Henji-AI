@@ -68,9 +68,10 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     const drawStartRef = useRef({ x: 0, y: 0 })
 
     // 文字输入状态
-    const [isEditingText, setIsEditingText] = useState(false)
-    const [textInputValue, setTextInputValue] = useState('')
     const [textInputPos, setTextInputPos] = useState({ x: 0, y: 0 })
+    const [textInputValue, setTextInputValue] = useState('')
+    const [isEditingText, setIsEditingText] = useState(false)
+    const [textEditingId, setTextEditingId] = useState<string | null>(null)
 
     // ==================== Refs ====================
     const stageRef = useRef<Konva.Stage>(null)
@@ -84,7 +85,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     // ==================== 编辑历史 ====================
     const initState = useMemo(() => initialEditState || {
         imageId,
-        originalDataUrl: imageUrl,
+        originalSrc: imageUrl,
         operations: [],
         currentIndex: -1,
         canvas: {
@@ -113,7 +114,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         img.crossOrigin = 'anonymous'
         // 关键修复：如果存在编辑状态（即重新编辑），优先加载原始图片（clean image）作为底图
         // 否则使用传入的 imageUrl（可能是初始上传的图片）
-        const srcToLoad = editState?.originalDataUrl || imageUrl
+        const srcToLoad = editState?.originalSrc || imageUrl
         img.src = srcToLoad
         img.onload = () => {
             setImage(img)
@@ -125,7 +126,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 height: img.height * 0.8,
             })
         }
-    }, [imageUrl, editState?.originalDataUrl])
+    }, [imageUrl, editState?.originalSrc])
 
     // ==================== 自适应默认值 ====================
     useEffect(() => {
@@ -394,6 +395,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         else if (currentTool === 'text') {
             setTextInputPos({ x: stagePos.x, y: stagePos.y })
             setTextInputValue('')
+            setTextEditingId(null) // 确认为新建文本，清除编辑ID
             setIsEditingText(true)
             setTimeout(() => textInputRef.current?.focus(), 50)
         }
@@ -488,38 +490,63 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     // ==================== 文字输入 ====================
     const handleTextConfirm = useCallback(() => {
         if (textInputValue.trim()) {
-            // 将输入框的 Stage 坐标（屏幕坐标）转换为 Image 坐标（Group内部坐标）
-            let imageX = textInputPos.x
-            let imageY = textInputPos.y
+            // 如果是编辑已有文本
+            if (textEditingId) {
+                const newAnnotations = editState.canvas.annotations.map(a => {
+                    if (a.id === textEditingId && a.type === 'text') {
+                        return { ...a, text: textInputValue }
+                    }
+                    return a
+                })
+                const newCanvas: CanvasState = {
+                    ...editState.canvas,
+                    annotations: newAnnotations,
+                }
+                pushOperation({ type: 'modify_annotation', data: { id: textEditingId } }, newCanvas)
+            } else {
+                // 如果是新建文本
+                // 将输入框的 Stage 坐标（屏幕坐标）转换为 Image 坐标（Group内部坐标）
+                let imageX = textInputPos.x
+                let imageY = textInputPos.y
 
-            if (contentGroupRef.current) {
-                const transform = contentGroupRef.current.getAbsoluteTransform().copy()
-                transform.invert()
-                const imagePoint = transform.point(textInputPos)
-                imageX = imagePoint.x
-                imageY = imagePoint.y
-            }
+                if (contentGroupRef.current) {
+                    const transform = contentGroupRef.current.getAbsoluteTransform().copy()
+                    transform.invert()
+                    const imagePoint = transform.point(textInputPos)
+                    imageX = imagePoint.x
+                    imageY = imagePoint.y
+                }
 
-            const newText: TextAnnotation = {
-                id: generateId(),
-                type: 'text',
-                x: imageX,
-                y: imageY,
-                text: textInputValue,
-                fontSize: toolSettings.fontSize,
-                fontFamily: toolSettings.fontFamily,
-                fill: toolSettings.strokeColor,
+                const newText: TextAnnotation = {
+                    id: generateId(),
+                    type: 'text',
+                    x: imageX,
+                    y: imageY,
+                    text: textInputValue,
+                    fontSize: toolSettings.fontSize,
+                    fontFamily: toolSettings.fontFamily,
+                    fill: toolSettings.strokeColor,
+                }
+                const newAnnotations = [...editState.canvas.annotations, newText]
+                const newCanvas: CanvasState = {
+                    ...editState.canvas,
+                    annotations: newAnnotations,
+                }
+                pushOperation({ type: 'add_annotation', data: { annotation: newText } }, newCanvas)
             }
-            const newAnnotations = [...editState.canvas.annotations, newText]
+        } else if (textEditingId) {
+            // 如果编辑内容为空，则删除该文本
+            const newAnnotations = editState.canvas.annotations.filter(a => a.id !== textEditingId)
             const newCanvas: CanvasState = {
                 ...editState.canvas,
                 annotations: newAnnotations,
             }
-            pushOperation({ type: 'add_annotation', data: { annotation: newText } }, newCanvas)
+            pushOperation({ type: 'delete_annotation', data: { id: textEditingId } }, newCanvas)
         }
         setIsEditingText(false)
         setTextInputValue('')
-    }, [textInputValue, textInputPos, toolSettings, editState.canvas, pushOperation])
+        setTextEditingId(null)
+    }, [textInputValue, textInputPos, toolSettings, editState.canvas, pushOperation, textEditingId])
 
     // ==================== 标注拖拽结束 ====================
     // 按照 Konva 官方最佳实践：直接使用 node.x() 和 node.y() 作为新位置
@@ -880,6 +907,26 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                         fontFamily={text.fontFamily}
                         fill={text.fill}
                         {...commonProps}
+                        onDblClick={(e) => {
+                            e.cancelBubble = true
+                            const node = e.target
+                            const absPos = node.getAbsolutePosition()
+
+                            // 设置编辑状态
+                            setTextEditingId(text.id)
+                            setTextInputValue(text.text)
+                            setTextInputPos(absPos)
+                            setIsEditingText(true)
+
+                            // 同步当前工具设置为文本工具的样式，以便输入框样式匹配
+                            // 注意：这里可能需要更新 toolSettings，但为了简单起见，且避免副作用
+                            // 我们暂不更新全局 toolSettings，只让输入框显示逻辑处理
+                            // 不过输入框的样式是直接读 toolSettings 的，所以这里如果要完美体验，
+                            // 可能需要临时 override 输入框的样式，或者确实更新 toolSettings
+
+                            // 延时聚焦
+                            setTimeout(() => textInputRef.current?.focus(), 50)
+                        }}
                     />
                 )
             }
@@ -1113,9 +1160,27 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                                 position: 'absolute',
                                 left: textInputPos.x,
                                 top: textInputPos.y,
-                                fontSize: toolSettings.fontSize * (displaySize.width > 0 ? stageSize.width / displaySize.width : 1),
-                                color: toolSettings.strokeColor,
-                                fontFamily: toolSettings.fontFamily,
+                                fontSize: (() => {
+                                    if (textEditingId) {
+                                        const ann = editState.canvas.annotations.find(a => a.id === textEditingId) as TextAnnotation | undefined
+                                        if (ann) return ann.fontSize * (displaySize.width > 0 ? stageSize.width / displaySize.width : 1)
+                                    }
+                                    return toolSettings.fontSize * (displaySize.width > 0 ? stageSize.width / displaySize.width : 1)
+                                })(),
+                                color: (() => {
+                                    if (textEditingId) {
+                                        const ann = editState.canvas.annotations.find(a => a.id === textEditingId) as TextAnnotation | undefined
+                                        if (ann) return ann.fill
+                                    }
+                                    return toolSettings.strokeColor
+                                })(),
+                                fontFamily: (() => {
+                                    if (textEditingId) {
+                                        const ann = editState.canvas.annotations.find(a => a.id === textEditingId) as TextAnnotation | undefined
+                                        if (ann) return ann.fontFamily
+                                    }
+                                    return toolSettings.fontFamily
+                                })(),
                                 background: 'rgba(255,255,255,0.9)',
                                 border: '2px solid #007eff',
                                 borderRadius: '4px',
@@ -1132,6 +1197,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                                 if (e.key === 'Escape') {
                                     setIsEditingText(false)
                                     setTextInputValue('')
+                                    setTextEditingId(null)
                                 }
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault()

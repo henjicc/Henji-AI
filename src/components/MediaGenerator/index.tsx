@@ -31,6 +31,8 @@ interface MediaGeneratorProps {
   isGenerating?: boolean
   // 暴露 setUploadedImages 用于外部更新编辑后的图片
   onSetUploadedImagesRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
+  // 暴露 setUploadedFilePaths 用于外部同步更新文件路径
+  onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
 }
 
 /**
@@ -44,7 +46,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   onOpenClearHistory,
   onImageClick,
   isGenerating,
-  onSetUploadedImagesRef
+  onSetUploadedImagesRef,
+  onSetUploadedFilePathsRef
 }) => {
   // 使用统一的状态管理 hook
   const state = useMediaGeneratorState()
@@ -146,6 +149,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       onSetUploadedImagesRef(state.setUploadedImages)
     }
   }, [onSetUploadedImagesRef, state.setUploadedImages])
+
+  // 暴露 setUploadedFilePaths 给父组件以便编辑后同步路径
+  useEffect(() => {
+    if (onSetUploadedFilePathsRef) {
+      onSetUploadedFilePathsRef(state.setUploadedFilePaths)
+    }
+  }, [onSetUploadedFilePathsRef, state.setUploadedFilePaths])
 
   // 监听全局右键菜单的图片粘贴事件
   useEffect(() => {
