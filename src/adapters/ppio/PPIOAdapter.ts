@@ -74,30 +74,43 @@ export class PPIOAdapter extends BaseAdapter {
 
   async generateImage(params: GenerateImageParams): Promise<ImageResult> {
     try {
-      // 0. 处理文件上传 (使用通用上传服务)
+      // 0. 处理图片转换为 base64（PPIO 图片生成使用 base64 传递）
       let finalParams = { ...params }
-      const imagesNeedUpload = params.images && params.images.length > 0 && params.images.some(img =>
-        img.startsWith('data:') || img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
+      const imagesNeedConversion = params.images && params.images.length > 0 && params.images.some(img =>
+        img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
       )
 
-      if (imagesNeedUpload) {
+      if (imagesNeedConversion) {
         try {
-          const { UploadService } = await import('../../services/upload/UploadService')
-          const uploadService = UploadService.getInstance()
-          this.log('开始处理图片上传 (provider: ' + uploadService.getCurrentProvider() + ')...')
+          this.log('开始将本地图片转换为 base64...')
 
-          // Convert all local files/base64 to uploadable format
-          const filesToUpload = await Promise.all(params.images!.map(img => this.resolveToBlobOrUrl(img)))
-          const uploadedUrls = await uploadService.uploadFiles(filesToUpload)
+          // 将本地文件转换为 base64
+          const base64Images = await Promise.all(params.images!.map(async (img) => {
+            // 如果已经是 base64 或 URL，直接返回
+            if (img.startsWith('data:') || img.startsWith('http')) {
+              return img
+            }
 
-          finalParams.images = uploadedUrls
-          // 同时更新 imageUrls 兼容旧代码
-          finalParams.imageUrls = uploadedUrls
+            // 读取本地文件并转换为 base64
+            const blob = await this.resolveToBlobOrUrl(img)
+            if (typeof blob === 'string') {
+              return blob
+            }
 
-          this.log('图片上传完成:', uploadedUrls)
+            // Blob 转 base64
+            return new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+          }))
+
+          finalParams.images = base64Images
+          this.log('图片转换完成，共 ' + base64Images.length + ' 张')
         } catch (error) {
-          this.log('图片上传失败:', error)
-          throw new Error(`图片上传失败: ${error instanceof Error ? error.message : String(error)}`)
+          this.log('图片转换失败:', error)
+          throw new Error(`图片转换失败: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
 
@@ -125,44 +138,67 @@ export class PPIOAdapter extends BaseAdapter {
       // 输出日志方便调试
       logInfo('[PPIOAdapter] generateVideo 调用参数:', params)
 
-      // 0. 处理文件上传 (使用通用上传服务)
+      // 0. 处理文件转换（PPIO 视频生成：图片用 base64，视频用上传服务）
       let finalParams = { ...params }
       const hasImages = params.images && params.images.length > 0
       const hasVideo = !!params.video
 
-      const imagesNeedUpload = hasImages && params.images!.some(img =>
-        img.startsWith('data:') || img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
-      )
-      const videoNeedsUpload = hasVideo && (
-        (typeof params.video === 'string' && (params.video.startsWith('data:') || params.video.startsWith('asset:') || params.video.startsWith('tauri:') || params.video.startsWith('/')))
-        // Or if it's not a string (Blob/File) - logic below handles conversion
+      // 处理图片：转换为 base64
+      const imagesNeedConversion = hasImages && params.images!.some(img =>
+        img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
       )
 
-      if (imagesNeedUpload || videoNeedsUpload) {
+      if (imagesNeedConversion) {
+        try {
+          this.log('开始将图片转换为 base64...')
+
+          const base64Images = await Promise.all(params.images!.map(async (img) => {
+            // 如果已经是 base64 或 URL，直接返回
+            if (img.startsWith('data:') || img.startsWith('http')) {
+              return img
+            }
+
+            // 读取本地文件并转换为 base64
+            const blob = await this.resolveToBlobOrUrl(img)
+            if (typeof blob === 'string') {
+              return blob
+            }
+
+            // Blob 转 base64
+            return new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result as string)
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+          }))
+
+          finalParams.images = base64Images
+          this.log('图片转换完成，共 ' + base64Images.length + ' 张')
+        } catch (error) {
+          this.log('图片转换失败:', error)
+          throw new Error(`图片转换失败: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+
+      // 处理视频：使用上传服务
+      const videoNeedsUpload = hasVideo && (
+        (typeof params.video === 'string' && (params.video.startsWith('data:') || params.video.startsWith('asset:') || params.video.startsWith('tauri:') || params.video.startsWith('/')))
+      )
+
+      if (videoNeedsUpload && typeof params.video === 'string') {
         try {
           const { UploadService } = await import('../../services/upload/UploadService')
           const uploadService = UploadService.getInstance()
-          this.log('开始处理文件上传 (provider: ' + uploadService.getCurrentProvider() + ')...')
+          this.log('开始上传视频文件 (provider: ' + uploadService.getCurrentProvider() + ')...')
 
-          // 上传图片
-          if (hasImages && imagesNeedUpload) {
-            const filesToUpload = await Promise.all(params.images!.map(img => this.resolveToBlobOrUrl(img)))
-            const uploadedUrls = await uploadService.uploadFiles(filesToUpload)
-            finalParams.images = uploadedUrls
-            this.log('图片上传完成:', uploadedUrls)
-          }
-
-          // 上传视频
-          if (hasVideo && videoNeedsUpload && typeof params.video === 'string') {
-            const fileToUpload = await this.resolveToBlobOrUrl(params.video)
-            const videoUrl = await uploadService.uploadFile(fileToUpload)
-            finalParams.video = videoUrl
-            this.log('视频上传完成:', videoUrl)
-          }
-
+          const fileToUpload = await this.resolveToBlobOrUrl(params.video)
+          const videoUrl = await uploadService.uploadFile(fileToUpload)
+          finalParams.video = videoUrl
+          this.log('视频上传完成:', videoUrl)
         } catch (error) {
-          this.log('文件上传失败:', error)
-          throw new Error(`文件上传失败: ${error instanceof Error ? error.message : String(error)}`)
+          this.log('视频上传失败:', error)
+          throw new Error(`视频上传失败: ${error instanceof Error ? error.message : String(error)}`)
         }
       }
 
