@@ -111,5 +111,4 @@
       - 负面提示词
     代码修改:
       - 目标文件: "@src/components/MediaGenerator/components/ParameterPanel.tsx"
-        行号: 91
         操作: 添加相关排除参数
