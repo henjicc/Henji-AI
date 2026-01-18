@@ -70,6 +70,10 @@ export const useVideoUpload = (
         return
       }
 
+      // 【关键修复】立即释放用于验证的 blob URL，避免 WebKit 后续访问已释放的 URL
+      // 注意：generateVideoThumbnail 会创建自己的 blob URL
+      URL.revokeObjectURL(videoElement.src)
+
       // 2. 生成缩略图（用于预览）
       logInfo('', '[useVideoUpload] 生成缩略图...')
       const thumbnail = await generateVideoThumbnail(videoFile)
@@ -86,8 +90,6 @@ export const useVideoUpload = (
         setUploadedVideoDuration(metadata.duration)
       }
 
-      // 清理元数据加载时创建的临时 URL
-      URL.revokeObjectURL(videoElement.src)
       setIsProcessingVideo(false)
 
       logInfo('', '[useVideoUpload] 视频上传完成（未读取内容，节省内存）')

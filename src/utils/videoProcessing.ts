@@ -29,19 +29,23 @@ export async function generateVideoThumbnail(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    video.preload = 'metadata'
+    video.preload = 'auto'  // 使用 auto 确保加载足够的数据
     video.muted = true
+    video.playsInline = true
 
     const objectUrl = URL.createObjectURL(videoFile)
-    video.src = objectUrl
 
-    video.addEventListener('loadedmetadata', () => {
-      // 确保时间点不超过视频时长
-      const seekTime = Math.min(timeOffset, video.duration - 0.1)
-      video.currentTime = seekTime
-    })
+    // 清理函数：确保在释放 blob URL 之前停止视频加载
+    const cleanup = () => {
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+      URL.revokeObjectURL(objectUrl)
+      video.remove()
+    }
 
-    video.addEventListener('seeked', () => {
+    // 实际截图逻辑
+    const captureFrame = () => {
       try {
         const canvas = document.createElement('canvas')
         canvas.width = video.videoWidth
@@ -55,23 +59,33 @@ export async function generateVideoThumbnail(
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
         const thumbnail = canvas.toDataURL('image/jpeg', 0.8)
 
-        // 清理资源
-        URL.revokeObjectURL(objectUrl)
-        video.remove()
-
+        cleanup()
         resolve(thumbnail)
       } catch (error) {
-        URL.revokeObjectURL(objectUrl)
-        video.remove()
+        cleanup()
         reject(error)
       }
-    })
+    }
+
+    video.addEventListener('loadedmetadata', () => {
+      // 确保时间点不超过视频时长，且至少为 0.1 秒（避免第一帧可能是黑的）
+      const seekTime = Math.min(Math.max(0.1, timeOffset), Math.max(0.1, video.duration - 0.1))
+      video.currentTime = seekTime
+    }, { once: true })
+
+    video.addEventListener('seeked', () => {
+      // 【macOS/WebKit 修复】seeked 事件触发时，视频帧可能还没完全准备好渲染
+      // 添加 200ms 延迟确保帧数据已解码
+      setTimeout(captureFrame, 200)
+    }, { once: true })
 
     video.addEventListener('error', (e) => {
-      URL.revokeObjectURL(objectUrl)
-      video.remove()
+      cleanup()
       reject(new Error(`视频加载失败: ${e}`))
-    })
+    }, { once: true })
+
+    video.src = objectUrl
+    video.load()  // 显式调用 load() 开始加载
   })
 }
 

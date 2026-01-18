@@ -100,6 +100,10 @@ export const useMixedFileUpload = (onError?: (title: string, message: string) =>
         return
       }
 
+      // 【关键修复】立即释放用于验证的 blob URL，避免 WebKit 后续访问已释放的 URL
+      // 注意：generateVideoThumbnail 会创建自己的 blob URL
+      URL.revokeObjectURL(videoElement.src)
+
       // 2. 生成缩略图
       logInfo('', '[useMixedFileUpload] 生成缩略图...')
       const thumbnail = await generateVideoThumbnail(videoFile)
@@ -111,7 +115,6 @@ export const useMixedFileUpload = (onError?: (title: string, message: string) =>
         if (onError) {
           onError('视频数量限制', `最多只能上传 ${maxCount} 个视频`)
         }
-        URL.revokeObjectURL(videoElement.src)
         setIsProcessing(false)
         return
       }
@@ -123,7 +126,6 @@ export const useMixedFileUpload = (onError?: (title: string, message: string) =>
         file: videoFile
       }])
 
-      URL.revokeObjectURL(videoElement.src)
       logInfo('', '[useMixedFileUpload] 视频上传完成')
     } catch (error) {
       logError('[useMixedFileUpload] 视频处理失败:', error)
@@ -210,6 +212,9 @@ export const useMixedFileUpload = (onError?: (title: string, message: string) =>
           return
         }
 
+        // 【关键修复】立即释放用于验证的 blob URL
+        URL.revokeObjectURL(videoElement.src)
+
         const thumbnail = await generateVideoThumbnail(newFile)
 
         setUploadedFiles(prev => {
@@ -222,8 +227,6 @@ export const useMixedFileUpload = (onError?: (title: string, message: string) =>
           }
           return updated
         })
-
-        URL.revokeObjectURL(videoElement.src)
       }
     } catch (error) {
       logError('[useMixedFileUpload] 替换文件失败:', error)
