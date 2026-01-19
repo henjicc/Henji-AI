@@ -38,22 +38,31 @@ export class PPIOAdapter extends BaseAdapter {
 
   private async resolveToBlobOrUrl(pathOrUrl: string): Promise<string | Blob> {
     if (!pathOrUrl) return pathOrUrl
-    if (pathOrUrl.startsWith('http') && !pathOrUrl.includes('asset.localhost') && !pathOrUrl.includes('tauri.localhost')) {
+
+    // 如果是普通的 HTTP/HTTPS URL（不包含 localhost），直接返回
+    if (pathOrUrl.startsWith('http') && !pathOrUrl.includes('localhost')) {
       return pathOrUrl
     }
+
+    // 如果是 base64 data URL，直接返回
     if (pathOrUrl.startsWith('data:')) {
       return pathOrUrl
     }
 
-    // Local file handling
+    // Local file handling - 处理本地文件路径
     let filePath = pathOrUrl
-    if (filePath.startsWith('asset:') || filePath.startsWith('tauri:') || filePath.includes('localhost')) {
+
+    // 处理 asset.localhost 或 tauri.localhost 格式的 URL
+    if (filePath.includes('localhost') || filePath.startsWith('asset:') || filePath.startsWith('tauri:')) {
       try {
         const url = new URL(filePath)
         filePath = decodeURIComponent(url.pathname)
-        // Ensure absolute path logic if needed
+        // Windows 路径修正：移除开头的 '/'
+        if (filePath.match(/^\/[A-Z]:/i)) {
+          filePath = filePath.substring(1)
+        }
       } catch (e) {
-        // use as is
+        // 如果不是有效的 URL，直接使用原始路径
       }
     }
 
@@ -77,7 +86,7 @@ export class PPIOAdapter extends BaseAdapter {
       // 0. 处理图片转换为 base64（PPIO 图片生成使用 base64 传递）
       let finalParams = { ...params }
       const imagesNeedConversion = params.images && params.images.length > 0 && params.images.some(img =>
-        img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
+        img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/') || (img.startsWith('http') && img.includes('localhost'))
       )
 
       if (imagesNeedConversion) {
@@ -86,12 +95,17 @@ export class PPIOAdapter extends BaseAdapter {
 
           // 将本地文件转换为 base64
           const base64Images = await Promise.all(params.images!.map(async (img) => {
-            // 如果已经是 base64 或 URL，直接返回
-            if (img.startsWith('data:') || img.startsWith('http')) {
+            // 如果已经是 base64，直接返回
+            if (img.startsWith('data:')) {
               return img
             }
 
-            // 读取本地文件并转换为 base64
+            // 如果是公开的远程 URL（非 localhost），直接返回
+            if (img.startsWith('http') && !img.includes('localhost')) {
+              return img
+            }
+
+            // 本地文件或 localhost URL，读取并转换为 base64
             const blob = await this.resolveToBlobOrUrl(img)
             if (typeof blob === 'string') {
               return blob
@@ -145,7 +159,7 @@ export class PPIOAdapter extends BaseAdapter {
 
       // 处理图片：转换为 base64
       const imagesNeedConversion = hasImages && params.images!.some(img =>
-        img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/')
+        img.startsWith('asset:') || img.startsWith('tauri:') || img.startsWith('/') || (img.startsWith('http') && img.includes('localhost'))
       )
 
       if (imagesNeedConversion) {
@@ -153,12 +167,17 @@ export class PPIOAdapter extends BaseAdapter {
           this.log('开始将图片转换为 base64...')
 
           const base64Images = await Promise.all(params.images!.map(async (img) => {
-            // 如果已经是 base64 或 URL，直接返回
-            if (img.startsWith('data:') || img.startsWith('http')) {
+            // 如果已经是 base64，直接返回
+            if (img.startsWith('data:')) {
               return img
             }
 
-            // 读取本地文件并转换为 base64
+            // 如果是公开的远程 URL（非 localhost），直接返回
+            if (img.startsWith('http') && !img.includes('localhost')) {
+              return img
+            }
+
+            // 本地文件或 localhost URL，读取并转换为 base64
             const blob = await this.resolveToBlobOrUrl(img)
             if (typeof blob === 'string') {
               return blob

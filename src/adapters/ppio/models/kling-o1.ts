@@ -65,8 +65,8 @@ export const klingO1Route = {
           throw new Error('参考生视频模式需要上传视频')
         }
 
-        // 上传视频到 Fal CDN
-        const videoUrl = await uploadVideoToFal(video)
+        // 上传视频到通用上传服务
+        const videoUrl = await uploadVideoToGeneralService(video)
 
         endpoint = '/async/kling-o1-ref2v'
         requestData.video = videoUrl
@@ -85,8 +85,8 @@ export const klingO1Route = {
           throw new Error('视频编辑模式需要上传视频')
         }
 
-        // 上传视频到 Fal CDN
-        const editVideoUrl = await uploadVideoToFal(video)
+        // 上传视频到通用上传服务
+        const editVideoUrl = await uploadVideoToGeneralService(video)
 
         endpoint = '/async/kling-o1-video-edit'
         requestData.video = editVideoUrl
@@ -113,46 +113,22 @@ export const klingO1Route = {
 }
 
 /**
- * 上传视频到 Fal CDN
- * 将 File 对象转换为 base64，然后上传到 Fal CDN 获取 URL
+ * 上传视频到通用上传服务
+ * 支持 File 对象或 URL 字符串
  */
-async function uploadVideoToFal(video: File | string): Promise<string> {
+async function uploadVideoToGeneralService(video: File | string): Promise<string> {
   // 如果已经是 URL，直接返回
   if (typeof video === 'string') {
     return video
   }
 
   try {
-    // 将 File 转换为 base64
-    const base64 = await fileToBase64(video)
+    // 使用通用上传服务
+    const { UploadService } = await import('@/services/upload/UploadService')
+    const uploadService = UploadService.getInstance()
 
-    // 获取 Fal API Key
-    const falApiKey = localStorage.getItem('fal_api_key')
-    if (!falApiKey) {
-      throw new Error('未配置 Fal API Key，无法上传视频')
-    }
-
-    // 上传到 Fal CDN
-    const { uploadToFalCDN } = await import('@/utils/falUpload')
-    const url = await uploadToFalCDN(base64, falApiKey)
-
-    return url
+    return await uploadService.uploadFile(video)
   } catch (error) {
     throw new Error(`视频上传失败: ${error instanceof Error ? error.message : String(error)}`)
   }
-}
-
-/**
- * 将 File 对象转换为 base64 字符串
- */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result)
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }

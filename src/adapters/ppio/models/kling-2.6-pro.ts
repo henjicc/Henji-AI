@@ -37,15 +37,15 @@ export const kling26ProRoute = {
                 throw new Error('动作控制模式需要上传图片')
             }
 
-            // 上传视频到 Fal CDN
-            const videoUrl = await uploadToFalAndGetUrl(video)
+            // 上传视频到通用上传服务
+            const videoUrl = await uploadToGeneralService(video)
 
-            // 上传图片到 Fal CDN
-            const imageUrl = await uploadToFalAndGetUrl(images[0])
+            // 图片直接使用（PPIOAdapter 已处理为 base64 或 public URL）
+            // const imageUrl = await uploadToGeneralService(images[0])
 
             endpoint = '/async/kling-v2.6-pro-motion-control'
             requestData.video = videoUrl
-            requestData.image = imageUrl
+            requestData.image = images[0]
             requestData.character_orientation = characterOrientation
             requestData.keep_original_sound = keepOriginalSound
         } else {
@@ -74,50 +74,43 @@ export const kling26ProRoute = {
 }
 
 /**
- * 上传文件（视频或图片）到 Fal CDN
+ * 上传文件（视频或图片）到通用上传服务
  * 支持 File 对象或 Data URI 字符串
  */
-async function uploadToFalAndGetUrl(file: File | string): Promise<string> {
+async function uploadToGeneralService(file: File | string): Promise<string> {
     // 如果是字符串且不是 Data URI，认为是 URL，直接返回
     if (typeof file === 'string' && !file.startsWith('data:')) {
         return file
     }
 
     try {
-        let base64: string
+        // 使用通用上传服务
+        const { UploadService } = await import('@/services/upload/UploadService')
+        const uploadService = UploadService.getInstance()
+
+        // 如果是 File 对象，直接上传
         if (file instanceof File) {
-            base64 = await fileToBase64(file)
-        } else {
-            base64 = file // 已经是 Data URI
+            return await uploadService.uploadFile(file)
         }
 
-        // 获取 Fal API Key
-        const falApiKey = localStorage.getItem('fal_api_key')
-        if (!falApiKey) {
-            throw new Error('未配置 Fal API Key，无法上传文件')
-        }
-
-        // 上传到 Fal CDN
-        const { uploadToFalCDN } = await import('@/utils/falUpload')
-        const url = await uploadToFalCDN(base64, falApiKey)
-
-        return url
+        // 如果是 Data URI，转换为 Blob 后上传
+        const blob = dataURItoBlob(file)
+        return await uploadService.uploadFile(blob)
     } catch (error) {
         throw new Error(`文件上传失败: ${error instanceof Error ? error.message : String(error)}`)
     }
 }
 
 /**
- * 将 File 对象转换为 base64 字符串
+ * 将 Data URI 转换为 Blob
  */
-function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-            const result = reader.result as string
-            resolve(result)
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-    })
+function dataURItoBlob(dataURI: string): Blob {
+    const byteString = atob(dataURI.split(',')[1])
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0]
+    const ab = new ArrayBuffer(byteString.length)
+    const ia = new Uint8Array(ab)
+    for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
+    }
+    return new Blob([ab], { type: mimeString })
 }
