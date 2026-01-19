@@ -22,23 +22,10 @@ ppio{ModelName}{ParameterName}
 
 ---
 
-## 核心特性与架构
+## 关键设计原则
 
-### PPIO 适配器的特点
-
-| 特性 | PPIO | Fal |
-|------|------|-----|
-| **图片上传** | 使用 base64 编码 | 自动上传到 fal CDN |
-| **轮询方式** | 手动轮询 | SDK 自动轮询 |
-| **本地保存** | 视频保存本地，音频仅返回 URL | App.tsx 统一处理 |
-| **状态查询** | 统一端点 `/async/task-result` | SDK 自动处理 |
-
-### 关键设计原则
-
-1. **Base64 编码**: 图片由 UI 层处理，模型路由直接使用 `params.images`
-2. **手动轮询**: 使用 `PPIOStatusHandler` 类处理任务状态轮询
-3. **本地保存**: 视频调用 `saveMediaLocally`，音频仅返回 URL
-4. **模型路由**: 每个模型有独立的路由文件，定义如何构建 API 请求
+1. **模型路由**: 每个模型有独立的路由文件，定义如何构建 API 请求
+2. **优先创建新文件**: 部分模型由于早期开发的原因，命名不规范，没有携带具体的版本号，在后续添加同一个模型的新版本时，应该优先创建新的符合规范的文件，而不是在原始文件上进行修改
 
 ---
 
@@ -493,19 +480,4 @@ const options = await buildGenerateOptions({
 | 数组 | `source: ['ppioParam', 'genericParam']` | 带回退 |
 | 对象 | `{ source: 'param', defaultValue: 5 }` | 带默认值 |
 
-### 与 Fal 适配器对比
-
-| 特性 | PPIO | Fal |
-|------|------|-----|
-| 图片上传 | base64 编码 | 自动上传到 CDN |
-| 轮询方式 | 手动轮询 | SDK 自动轮询 |
-| 本地保存 | Adapter 内部处理 | App.tsx 统一处理 |
-| 状态查询 | `/async/task-result` | SDK 自动处理 |
-
 ---
-
-## 参考资料
-
-- https://docs.ppinfra.com/
-- [ai-guide-new-model.md](./ai-guide-new-model.md)
-- [ai-guide-fal.md](./ai-guide-fal.md)

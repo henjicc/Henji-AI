@@ -1,6 +1,6 @@
 .qoder/
 .trae/
-.claude/
+.claude/settings.local.json
 .cargo/
 docs/GITHUB_ACTIONS_GUIDE.md
 # Dependencies
