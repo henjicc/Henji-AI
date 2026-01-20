@@ -14,7 +14,7 @@ export class PPIOStatusHandler {
   constructor(
     private apiClient: AxiosInstance,
     private adapter: any
-  ) {}
+  ) { }
 
   /**
    * 检查任务状态
@@ -113,7 +113,7 @@ export class PPIOStatusHandler {
     } catch (error) {
       // 【新增】捕获超时错误，返回超时状态而非抛出错误
       if (error instanceof Error && error.message === 'Polling timeout') {
-        logInfo('[PPIOStatusHandler] 轮询超时，返回超时状态以便后续重试')
+        logInfo('[PPIOStatusHandler] 轮询超时，返回超时状态以便后续重试', { taskId })
         // 返回超时状态，包含 taskId 以便后续重试
         return {
           status: 'timeout',

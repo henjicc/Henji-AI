@@ -2,6 +2,7 @@
 .trae/
 .claude/settings.local.json
 .cargo/
+.codex/
 docs/GITHUB_ACTIONS_GUIDE.md
 # Dependencies
 node_modules/
