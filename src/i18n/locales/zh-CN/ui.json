@@ -1,0 +1,33 @@
+{
+  "generate": "生成",
+  "generating": "生成中...",
+  "cancel": "取消",
+  "save": "保存",
+  "download": "下载",
+  "delete": "删除",
+  "upload": "上传",
+  "retry": "重试",
+
+  "input": {
+    "label": "提示词",
+    "placeholder": "输入提示词...",
+    "required": "提示词为必填项"
+  },
+
+  "customModels": {
+    "title": "自定义模型管理",
+    "add": "添加模型",
+    "addModel": "添加自定义模型",
+    "name": "模型名称",
+    "url": "ModelScope URL",
+    "description": "描述",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "enable": "启用",
+    "disable": "禁用",
+    "confirmDelete": "确定要删除此自定义模型吗？",
+    "empty": "还没有添加自定义模型",
+    "loading": "加载中...",
+    "addFailed": "添加失败"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "title": "Errors",
+  "unknown": "Unknown error",
+  "network": "Network error",
+  "timeout": "Request timeout",
+  "unauthorized": "Unauthorized",
+  "forbidden": "Forbidden",
+  "notFound": "Not found",
+  "serverError": "Server error",
+
+  "messages": {
+    "apiKeyMissing": "API key is missing",
+    "apiKeyInvalid": "API key is invalid",
+    "modelNotFound": "Model not found",
+    "parameterInvalid": "Invalid parameter",
+    "generationFailed": "Generation failed",
+    "uploadFailed": "Upload failed",
+    "downloadFailed": "Download failed"
+  }
+}

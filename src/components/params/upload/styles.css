@@ -1,0 +1,188 @@
+/**
+ * 上传组件样式
+ */
+
+/* ImageUpload 和 VideoUpload 通用样式 */
+.image-upload-wrapper,
+.video-upload-wrapper {
+  margin-bottom: 16px;
+}
+
+.upload-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* UploadArea 样式 */
+.upload-area {
+  width: 120px;
+  height: 120px;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background-color: #fafafa;
+}
+
+.upload-area:hover:not(.disabled):not(.uploading) {
+  border-color: #1890ff;
+  background-color: #f0f8ff;
+}
+
+.upload-area.dragging {
+  border-color: #1890ff;
+  background-color: #e6f7ff;
+  transform: scale(1.02);
+}
+
+.upload-area.uploading {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.upload-area.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background-color: #f5f5f5;
+}
+
+/* 上传提示 */
+.upload-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.upload-icon {
+  color: #8c8c8c;
+}
+
+.upload-text {
+  font-size: 14px;
+  color: #595959;
+}
+
+.upload-limit {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+/* 上传进度 */
+.upload-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #f0f0f0;
+  border-top-color: #1890ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* FilePreview 样式 */
+.file-preview {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #d9d9d9;
+  background-color: #fafafa;
+}
+
+.preview-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image,
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 预览操作按钮 */
+.preview-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.file-preview:hover .preview-actions {
+  opacity: 1;
+}
+
+.preview-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.preview-btn:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  transform: scale(1.1);
+}
+
+.preview-btn-edit {
+  background-color: rgba(24, 144, 255, 0.8);
+}
+
+.preview-btn-edit:hover {
+  background-color: rgba(24, 144, 255, 1);
+}
+
+.preview-btn-delete {
+  background-color: rgba(255, 77, 79, 0.8);
+}
+
+.preview-btn-delete:hover {
+  background-color: rgba(255, 77, 79, 1);
+}
+
+/* 预览元数据 */
+.preview-metadata {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 8px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}

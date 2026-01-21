@@ -1,0 +1,226 @@
+/**
+ * ResolutionPanel 样式
+ */
+
+/* 面板容器 */
+.resolution-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+/* AspectRatioSelector 样式 */
+.aspect-ratio-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aspect-ratio-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.aspect-ratio-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  background-color: rgba(63, 63, 70, 0.5);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgb(212, 212, 216);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.aspect-ratio-option:hover {
+  background-color: rgba(82, 82, 91, 0.5);
+}
+
+.aspect-ratio-option.selected {
+  background-color: #007eff;
+  color: white;
+  border-color: #007eff;
+}
+
+.aspect-ratio-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+}
+
+.aspect-ratio-box {
+  border: 2px solid currentColor;
+}
+
+.aspect-ratio-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* QualityTierSelector 样式 */
+.quality-tier-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quality-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.quality-tier-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  background-color: rgba(63, 63, 70, 0.5);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgb(212, 212, 216);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.quality-tier-option:hover {
+  background-color: rgba(82, 82, 91, 0.5);
+}
+
+.quality-tier-option.selected {
+  background-color: #007eff;
+  color: white;
+  border-color: #007eff;
+}
+
+.quality-tier-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.quality-tier-description {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* CustomSizeInput 样式 */
+.custom-size-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-size-field {
+  flex: 1;
+  padding: 8px 12px;
+  background-color: rgba(63, 63, 70, 0.5);
+  border: 1px solid rgba(63, 63, 70, 0.5);
+  border-radius: 4px;
+  color: rgb(212, 212, 216);
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.custom-size-field:focus {
+  outline: none;
+  border-color: #007eff;
+  background-color: rgba(63, 63, 70, 0.8);
+}
+
+.custom-size-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ratio-lock-button {
+  padding: 8px;
+  background-color: rgba(63, 63, 70, 0.5);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgb(161, 161, 170);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ratio-lock-button:hover {
+  background-color: rgba(82, 82, 91, 0.5);
+  color: rgb(212, 212, 216);
+}
+
+.ratio-lock-button.locked {
+  background-color: #007eff;
+  color: white;
+}
+
+.ratio-lock-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.custom-size-unit {
+  font-size: 12px;
+  color: rgb(161, 161, 170);
+}
+
+/* PresetResolutionSelector 样式 */
+.preset-resolution-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-resolution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.preset-resolution-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  background-color: rgba(63, 63, 70, 0.5);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgb(212, 212, 216);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.preset-resolution-option:hover {
+  background-color: rgba(82, 82, 91, 0.5);
+}
+
+.preset-resolution-option.selected {
+  background-color: #007eff;
+  color: white;
+  border-color: #007eff;
+}
+
+.preset-resolution-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.preset-resolution-ratio {
+  font-size: 11px;
+  opacity: 0.8;
+}

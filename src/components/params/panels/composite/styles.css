@@ -1,0 +1,22 @@
+/**
+ * CompositePanel 样式
+ */
+
+/* 面板容器 */
+.composite-panel {
+  padding: 16px;
+}
+
+/* 组件容器 */
+.composite-panel-component {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 组件标签 */
+.composite-component-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(161, 161, 170);
+}

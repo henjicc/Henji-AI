@@ -1,0 +1,322 @@
+/**
+ * 模型验证器
+ *
+ * 验证 ModelDefinition 配置的完整性和正确性
+ */
+
+import { ModelDefinition, ParamDef } from '../types'
+
+/**
+ * 验证错误类
+ */
+export class ModelValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ModelValidationError'
+  }
+}
+
+/**
+ * 验证模型定义
+ *
+ * @param model - 模型定义
+ * @throws {ModelValidationError} 如果验证失败
+ */
+export function validateModel(model: ModelDefinition): void {
+  // 1. 验证元数据
+  validateMeta(model)
+
+  // 2. 验证参数定义
+  validateParams(model)
+
+  // 3. 验证联动规则
+  validateLinkages(model)
+
+  // 4. 验证端点配置
+  validateEndpoints(model)
+
+  // 5. 验证价格配置
+  validatePricing(model)
+}
+
+/**
+ * 验证元数据
+ */
+function validateMeta(model: ModelDefinition): void {
+  const { meta } = model
+
+  // 检查必需字段
+  if (!meta.id || typeof meta.id !== 'string') {
+    throw new ModelValidationError('Model meta.id is required and must be a string')
+  }
+
+  if (!meta.provider || typeof meta.provider !== 'string') {
+    throw new ModelValidationError('Model meta.provider is required and must be a string')
+  }
+
+  if (!meta.type || !['image', 'video', 'audio'].includes(meta.type)) {
+    throw new ModelValidationError('Model meta.type must be one of: image, video, audio')
+  }
+
+  if (!meta.name) {
+    throw new ModelValidationError('Model meta.name is required')
+  }
+
+  // 验证 name 格式
+  if (typeof meta.name !== 'string' && typeof meta.name !== 'object') {
+    throw new ModelValidationError('Model meta.name must be a string or I18nText object')
+  }
+
+  if (typeof meta.name === 'object') {
+    if (!meta.name.zh && !meta.name.en) {
+      throw new ModelValidationError('Model meta.name I18nText must have at least zh or en')
+    }
+  }
+
+  // 验证别名（如果存在）
+  if (meta.aliases) {
+    if (!Array.isArray(meta.aliases)) {
+      throw new ModelValidationError('Model meta.aliases must be an array')
+    }
+
+    meta.aliases.forEach((alias, index) => {
+      if (typeof alias !== 'string') {
+        throw new ModelValidationError(`Model meta.aliases[${index}] must be a string`)
+      }
+    })
+  }
+
+  // 验证标签（如果存在）
+  if (meta.tags) {
+    if (!Array.isArray(meta.tags)) {
+      throw new ModelValidationError('Model meta.tags must be an array')
+    }
+  }
+
+  // 验证轮询配置（如果存在）
+  if (meta.polling) {
+    if (typeof meta.polling.interval !== 'number' || meta.polling.interval <= 0) {
+      throw new ModelValidationError('Model meta.polling.interval must be a positive number')
+    }
+
+    if (typeof meta.polling.maxAttempts !== 'number' || meta.polling.maxAttempts <= 0) {
+      throw new ModelValidationError('Model meta.polling.maxAttempts must be a positive number')
+    }
+  }
+}
+
+/**
+ * 验证参数定义
+ */
+function validateParams(model: ModelDefinition): void {
+  const { params } = model
+
+  if (!Array.isArray(params)) {
+    throw new ModelValidationError('Model params must be an array')
+  }
+
+  // 参数 ID 唯一性检查
+  const paramIds = new Set<string>()
+
+  params.forEach((param, index) => {
+    validateParam(param, index)
+
+    // 检查 ID 唯一性
+    if (paramIds.has(param.id)) {
+      throw new ModelValidationError(`Duplicate param ID: ${param.id}`)
+    }
+    paramIds.add(param.id)
+  })
+}
+
+/**
+ * 验证单个参数定义
+ */
+function validateParam(param: ParamDef, index: number): void {
+  const prefix = `Model params[${index}]`
+
+  // 检查必需字段
+  if (!param.id || typeof param.id !== 'string') {
+    throw new ModelValidationError(`${prefix}.id is required and must be a string`)
+  }
+
+  if (!param.component) {
+    throw new ModelValidationError(`${prefix}.component is required`)
+  }
+
+  const validComponents = [
+    'text',
+    'number',
+    'slider',
+    'dropdown',
+    'switch',
+    'radio',
+    'panel',
+    'image-upload',
+    'video-upload',
+    'resolution',
+    'aspect-ratio'
+  ]
+
+  if (!validComponents.includes(param.component)) {
+    throw new ModelValidationError(
+      `${prefix}.component must be one of: ${validComponents.join(', ')}`
+    )
+  }
+
+  if (typeof param.order !== 'number') {
+    throw new ModelValidationError(`${prefix}.order must be a number`)
+  }
+
+  if (!param.name) {
+    throw new ModelValidationError(`${prefix}.name is required`)
+  }
+
+  if (param.default === undefined) {
+    throw new ModelValidationError(`${prefix}.default is required`)
+  }
+
+  // 验证特定组件类型的字段
+  if (param.component === 'dropdown' || param.component === 'radio') {
+    if (!('options' in param) || !Array.isArray(param.options)) {
+      throw new ModelValidationError(`${prefix}.options is required for ${param.component}`)
+    }
+  }
+
+  if (param.component === 'slider' || param.component === 'number') {
+    if (!('min' in param) || typeof param.min !== 'number') {
+      throw new ModelValidationError(`${prefix}.min is required for ${param.component}`)
+    }
+    if (!('max' in param) || typeof param.max !== 'number') {
+      throw new ModelValidationError(`${prefix}.max is required for ${param.component}`)
+    }
+  }
+}
+
+/**
+ * 验证联动规则
+ */
+function validateLinkages(model: ModelDefinition): void {
+  const { linkages, params } = model
+
+  if (!linkages) return
+
+  if (!Array.isArray(linkages)) {
+    throw new ModelValidationError('Model linkages must be an array')
+  }
+
+  const paramIds = new Set(params.map((p) => p.id))
+
+  linkages.forEach((linkage, index) => {
+    const prefix = `Model linkages[${index}]`
+
+    // 检查必需字段
+    if (!linkage.trigger) {
+      throw new ModelValidationError(`${prefix}.trigger is required`)
+    }
+
+    if (!linkage.effect) {
+      throw new ModelValidationError(`${prefix}.effect is required`)
+    }
+
+    // 验证触发器参数存在
+    const triggers = Array.isArray(linkage.trigger) ? linkage.trigger : [linkage.trigger]
+    triggers.forEach((trigger) => {
+      const baseParam = trigger.split('.')[0]
+      if (!paramIds.has(baseParam)) {
+        throw new ModelValidationError(
+          `${prefix}.trigger references non-existent param: ${trigger}`
+        )
+      }
+    })
+
+    // 验证目标参数存在（根据联动类型）
+    if ('target' in linkage && linkage.target) {
+      const baseParam = linkage.target.split('.')[0]
+      if (!paramIds.has(baseParam)) {
+        throw new ModelValidationError(
+          `${prefix}.target references non-existent param: ${linkage.target}`
+        )
+      }
+    }
+
+    if ('targets' in linkage && linkage.targets) {
+      linkage.targets.forEach((target) => {
+        const baseParam = target.split('.')[0]
+        if (!paramIds.has(baseParam)) {
+          throw new ModelValidationError(
+            `${prefix}.targets references non-existent param: ${target}`
+          )
+        }
+      })
+    }
+  })
+}
+
+/**
+ * 验证端点配置
+ */
+function validateEndpoints(model: ModelDefinition): void {
+  const { endpoints } = model
+
+  if (!endpoints) {
+    throw new ModelValidationError('Model endpoints is required')
+  }
+
+  // 如果是字符串，直接返回（固定端点）
+  if (typeof endpoints === 'string') {
+    return
+  }
+
+  // 如果是对象，检查是否有 default 或 rules 或 selector
+  if (typeof endpoints === 'object') {
+    const hasDefault = 'default' in endpoints && typeof endpoints.default === 'string'
+    const hasRules = 'rules' in endpoints && Array.isArray(endpoints.rules)
+    const hasSelector = 'selector' in endpoints && typeof endpoints.selector === 'function'
+
+    if (!hasDefault && !hasRules && !hasSelector) {
+      throw new ModelValidationError(
+        'Model endpoints must have at least one of: default, rules, selector'
+      )
+    }
+
+    // 验证 rules
+    if (hasRules) {
+      endpoints.rules!.forEach((rule, index) => {
+        if (!rule.endpoint || typeof rule.endpoint !== 'string') {
+          throw new ModelValidationError(`Model endpoints.rules[${index}].endpoint is required`)
+        }
+      })
+    }
+  } else {
+    throw new ModelValidationError('Model endpoints must be a string or EndpointConfig object')
+  }
+}
+
+/**
+ * 验证价格配置
+ */
+function validatePricing(model: ModelDefinition): void {
+  const { pricing } = model
+
+  if (!pricing) {
+    throw new ModelValidationError('Model pricing is required')
+  }
+
+  if (!pricing.currency || typeof pricing.currency !== 'string') {
+    throw new ModelValidationError('Model pricing.currency is required and must be a string')
+  }
+
+  // 必须有 fixed 或 calculator 之一
+  const hasFixed = typeof pricing.fixed === 'number'
+  const hasCalculator = typeof pricing.calculator === 'function'
+
+  if (!hasFixed && !hasCalculator) {
+    throw new ModelValidationError('Model pricing must have either fixed or calculator')
+  }
+
+  // 如果有 fixed，检查是否为非负数
+  if (hasFixed && pricing.fixed! < 0) {
+    throw new ModelValidationError('Model pricing.fixed must be non-negative')
+  }
+}

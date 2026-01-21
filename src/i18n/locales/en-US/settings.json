@@ -1,0 +1,11 @@
+{
+  "title": "Settings",
+  "language": "Language",
+  "theme": "Theme",
+  "apiKeys": "API Keys",
+  "about": "About",
+  "version": "Version",
+  "save": "Save Settings",
+  "reset": "Reset Settings",
+  "confirmReset": "Are you sure you want to reset all settings?"
+}

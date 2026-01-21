@@ -1,0 +1,11 @@
+{
+  "title": "设置",
+  "language": "语言",
+  "theme": "主题",
+  "apiKeys": "API 密钥",
+  "about": "关于",
+  "version": "版本",
+  "save": "保存设置",
+  "reset": "重置设置",
+  "confirmReset": "确定要重置所有设置吗？"
+}

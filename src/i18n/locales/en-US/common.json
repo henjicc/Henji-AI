@@ -1,0 +1,34 @@
+{
+  "confirm": "Confirm",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "close": "Close",
+  "add": "Add",
+  "remove": "Remove",
+  "loading": "Loading...",
+  "error": "Error",
+  "success": "Success",
+  "warning": "Warning",
+  "info": "Info",
+
+  "status": {
+    "queued": "Queued",
+    "processing": "Processing",
+    "completed": "Completed",
+    "failed": "Failed",
+    "timeout": "Timeout"
+  },
+
+  "actions": {
+    "retry": "Retry",
+    "download": "Download",
+    "copy": "Copy",
+    "paste": "Paste",
+    "clear": "Clear",
+    "reset": "Reset",
+    "apply": "Apply",
+    "preview": "Preview"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "generate": "Generate",
+  "generating": "Generating...",
+  "cancel": "Cancel",
+  "save": "Save",
+  "download": "Download",
+  "delete": "Delete",
+  "upload": "Upload",
+  "retry": "Retry",
+
+  "input": {
+    "label": "Prompt",
+    "placeholder": "Enter prompt...",
+    "required": "Prompt is required"
+  },
+
+  "customModels": {
+    "title": "Custom Model Manager",
+    "add": "Add Model",
+    "addModel": "Add Custom Model",
+    "name": "Model Name",
+    "url": "ModelScope URL",
+    "description": "Description",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "confirmDelete": "Are you sure you want to delete this custom model?",
+    "empty": "No custom models added yet",
+    "loading": "Loading...",
+    "addFailed": "Failed to add"
+  }
+}

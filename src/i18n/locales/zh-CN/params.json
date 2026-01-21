@@ -1,0 +1,27 @@
+{
+  "title": "参数",
+  "prompt": "提示词",
+  "negativePrompt": "负面提示词",
+  "width": "宽度",
+  "height": "高度",
+  "aspectRatio": "宽高比",
+  "steps": "步数",
+  "seed": "随机种子",
+  "guidanceScale": "引导系数",
+  "numOutputs": "输出数量",
+  "quality": "质量",
+  "style": "风格",
+  "model": "模型",
+
+  "placeholders": {
+    "prompt": "请输入提示词...",
+    "negativePrompt": "请输入负面提示词...",
+    "seed": "留空则随机生成"
+  },
+
+  "tips": {
+    "prompt": "描述你想要生成的内容",
+    "negativePrompt": "描述你不想要的内容",
+    "seed": "使用相同的种子可以生成相似的结果"
+  }
+}

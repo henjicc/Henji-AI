@@ -1,0 +1,10 @@
+{
+  "title": "历史记录",
+  "empty": "暂无历史记录",
+  "clear": "清空历史",
+  "confirmClear": "确定要清空所有历史记录吗？",
+  "delete": "删除",
+  "confirmDelete": "确定要删除这条记录吗？",
+  "loadMore": "加载更多",
+  "noMore": "没有更多了"
+}

@@ -1,0 +1,19 @@
+{
+  "title": "Models",
+  "selectModel": "Select Model",
+  "customModel": "Custom Model",
+  "builtInModel": "Built-in Model",
+
+  "types": {
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio"
+  },
+
+  "providers": {
+    "ppio": "PPIO",
+    "fal": "Fal",
+    "modelscope": "ModelScope",
+    "kie": "KIE"
+  }
+}

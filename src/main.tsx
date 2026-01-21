@@ -5,6 +5,7 @@ import './index.css'
 import './styles/scrollbar.css'
 import { DragDropProvider } from './contexts/DragDropContext'
 import GlobalContextMenuProvider from './contexts/GlobalContextMenuProvider'
+import './i18n'  // 初始化 i18n
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>

@@ -1,0 +1,10 @@
+{
+  "title": "History",
+  "empty": "No history yet",
+  "clear": "Clear History",
+  "confirmClear": "Are you sure you want to clear all history?",
+  "delete": "Delete",
+  "confirmDelete": "Are you sure you want to delete this record?",
+  "loadMore": "Load More",
+  "noMore": "No more records"
+}

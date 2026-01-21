@@ -1,0 +1,27 @@
+{
+  "title": "Parameters",
+  "prompt": "Prompt",
+  "negativePrompt": "Negative Prompt",
+  "width": "Width",
+  "height": "Height",
+  "aspectRatio": "Aspect Ratio",
+  "steps": "Steps",
+  "seed": "Seed",
+  "guidanceScale": "Guidance Scale",
+  "numOutputs": "Number of Outputs",
+  "quality": "Quality",
+  "style": "Style",
+  "model": "Model",
+
+  "placeholders": {
+    "prompt": "Enter your prompt...",
+    "negativePrompt": "Enter negative prompt...",
+    "seed": "Leave empty for random"
+  },
+
+  "tips": {
+    "prompt": "Describe what you want to generate",
+    "negativePrompt": "Describe what you don't want",
+    "seed": "Use the same seed for similar results"
+  }
+}

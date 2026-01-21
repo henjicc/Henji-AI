@@ -10,15 +10,33 @@ import {
   toggleTestMode,
   type TestModeState
 } from '@/utils/testMode'
+import { ParamFlowViewer } from './debug/ParamFlowViewer'
+import { ExportPanel } from './debug/ExportPanel'
+import type { ParamFlowRecord } from '@/core/debug/types'
 
 interface TestModePanelProps {
   isOpen: boolean
   onClose: () => void
+  flowRecords?: ParamFlowRecord[]
+  onExportFlowRecord?: (record: ParamFlowRecord) => void
+  modelId?: string
+  params?: Record<string, any>
+  context?: Record<string, any>
 }
 
-const TestModePanel: React.FC<TestModePanelProps> = ({ isOpen, onClose }) => {
+const TestModePanel: React.FC<TestModePanelProps> = ({
+  isOpen,
+  onClose,
+  flowRecords = [],
+  onExportFlowRecord,
+  modelId,
+  params,
+  context
+}) => {
   const [state, setState] = useState<TestModeState>(getTestModeState())
   const [opacity, setOpacity] = useState(0)
+  const [showFlowTracking, setShowFlowTracking] = useState(false)
+  const [activeTab, setActiveTab] = useState<'options' | 'export'>('options')
 
   useEffect(() => {
     if (isOpen) {
@@ -136,8 +154,36 @@ const TestModePanel: React.FC<TestModePanelProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* 测试选项 */}
+        {/* 标签页切换 */}
         {state.enabled && (
+          <div className="mb-6">
+            <div className="flex gap-2 border-b border-zinc-700/50">
+              <button
+                onClick={() => setActiveTab('options')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'options'
+                    ? 'text-yellow-500 border-b-2 border-yellow-500'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                测试选项
+              </button>
+              <button
+                onClick={() => setActiveTab('export')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'export'
+                    ? 'text-yellow-500 border-b-2 border-yellow-500'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                配置导出
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 测试选项 */}
+        {state.enabled && activeTab === 'options' && (
           <div className="mb-6">
             <h3 className="text-white font-medium mb-3">测试选项</h3>
             <div className="space-y-3">
@@ -188,12 +234,49 @@ const TestModePanel: React.FC<TestModePanelProps> = ({ isOpen, onClose }) => {
                   className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
                 />
               </label>
+
+              {/* 参数流转追踪 */}
+              <label className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors">
+                <div>
+                  <div className="text-white text-sm">启用参数流转追踪</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    追踪参数从 UI 输入到 API 请求的完整流程
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showFlowTracking}
+                  onChange={(e) => setShowFlowTracking(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+                />
+              </label>
             </div>
           </div>
         )}
 
+        {/* 参数流转追踪可视化 */}
+        {state.enabled && activeTab === 'options' && showFlowTracking && flowRecords.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-white font-medium mb-3">参数流转追踪</h3>
+            {flowRecords.map((record, index) => (
+              <ParamFlowViewer
+                key={index}
+                record={record}
+                onExport={onExportFlowRecord ? () => onExportFlowRecord(record) : undefined}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* 配置导出面板 */}
+        {state.enabled && activeTab === 'export' && modelId && params && (
+          <div className="mb-6">
+            <ExportPanel modelId={modelId} params={params} context={context} />
+          </div>
+        )}
+
         {/* 最后的请求参数 */}
-        {state.enabled && state.lastParams && (
+        {state.enabled && activeTab === 'options' && state.lastParams && (
           <div>
             <h3 className="text-white font-medium mb-3">最后的请求参数</h3>
             <div className="bg-black/50 rounded-lg p-4 border border-zinc-700/50 max-h-[300px] overflow-y-auto">
