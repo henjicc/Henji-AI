@@ -128,6 +128,15 @@ export const useMediaGeneratorState = () => {
   const [ppioWan25PromptExtend, setPpioWan25PromptExtend] = useState(true)
   const [ppioWan25Audio, setPpioWan25Audio] = useState(true)
 
+  // Wan 2.6 参数（派欧云）
+  const [ppioWan26Mode, setPpioWan26Mode] = useState<string>('text-image-to-video')
+  const [ppioWan26AspectRatio, setPpioWan26AspectRatio] = useState('16:9')
+  const [ppioWan26Quality, setPpioWan26Quality] = useState('720P')
+  const [ppioWan26VideoDuration, setPpioWan26VideoDuration] = useState(5)
+  const [ppioWan26ShotType, setPpioWan26ShotType] = useState('multi')
+  const [ppioWan26Audio, setPpioWan26Audio] = useState(true)
+  const [ppioWan26PromptExtend, setPpioWan26PromptExtend] = useState(false)
+
   // Wan 2.5 参数（Fal）
   const [falWan25AspectRatio, setFalWan25AspectRatio] = useState('16:9')
   const [falWan25Resolution, setFalWan25Resolution] = useState('1080p')

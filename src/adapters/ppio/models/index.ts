@@ -7,6 +7,7 @@ import { minimaxHailuo02Route } from './minimax-hailuo-02'
 import { viduQ1Route } from './vidu'
 import { pixverseV45Route } from './pixverse'
 import { wan25PreviewRoute } from './wan'
+import { wan26Route } from './wan-2.6'
 import { seedanceV1Route } from './seedance'
 import { seedance15ProRoute } from './seedance-1.5-pro'
 import { minimaxSpeech26Route } from './minimax-speech-2.6'
@@ -34,6 +35,7 @@ export const ppioModelRoutes: ModelRoute[] = [
   viduQ1Route,
   pixverseV45Route,
   wan25PreviewRoute,
+  wan26Route,
   seedanceV1Route,
   seedance15ProRoute,
   minimaxSpeech26Route

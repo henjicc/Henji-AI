@@ -63,6 +63,20 @@ export interface PresetSetters {
     setPpioHailuo23FastMode: (v: boolean) => void
     setPpioHailuo23EnablePromptExpansion: (v: boolean) => void
 
+    // Wan 2.5
+    setPpioWan25Size: (v: string) => void
+    setPpioWan25PromptExtend: (v: boolean) => void
+    setPpioWan25Audio: (v: boolean) => void
+
+    // Wan 2.6
+    setPpioWan26Mode: (v: string) => void
+    setPpioWan26AspectRatio: (v: string) => void
+    setPpioWan26Quality: (v: string) => void
+    setPpioWan26VideoDuration: (v: number) => void
+    setPpioWan26ShotType: (v: string) => void
+    setPpioWan26Audio: (v: boolean) => void
+    setPpioWan26PromptExtend: (v: boolean) => void
+
     // Pixverse
     setPpioPixverse45FastMode: (v: boolean) => void
     setPpioPixverse45Style: (v: string | undefined) => void

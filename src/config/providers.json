@@ -153,6 +153,21 @@
           }
         },
         {
+          "id": "wan-2.6",
+          "name": "Wan 2.6",
+          "type": "video",
+          "description": "支持文生视频、图生视频、参考生视频三种模式，720P/1080P 双档位",
+          "functions": [
+            "文生视频",
+            "图生视频",
+            "参考生视频"
+          ],
+          "progressConfig": {
+            "type": "polling",
+            "expectedPolls": 40
+          }
+        },
+        {
           "id": "seedance-v1",
           "name": "即梦视频 3.0",
           "type": "video",

@@ -34,6 +34,7 @@ interface InputAreaProps {
   ppioKling26Mode?: string  // PPIO Kling 2.6 Pro 模式
   kieKlingV26Mode?: string  // KIE Kling 2.6 模式
   falKlingV26ProMode?: string // Fal Kling 2.6 Pro 模式
+  ppioWan26Mode?: string  // PPIO Wan 2.6 模式
 
   // 魔搭自定义模型 ID
   modelscopeCustomModel?: string
@@ -87,6 +88,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   ppioKling26Mode,
   kieKlingV26Mode,
   falKlingV26ProMode,
+  ppioWan26Mode,
   modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
@@ -144,7 +146,8 @@ const InputArea: React.FC<InputAreaProps> = ({
         viduQ2Mode === 'video-extension') ||
       (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
       ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control') ||
-      (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control')
+      (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control') ||
+      (selectedModel === 'wan-2.6' && ppioWan26Mode === 'reference-to-video')
 
     if (!needsVideoUpload) {
       // 非混合模式，清空顺序
@@ -184,7 +187,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
 
     setCurrentFileOrder(newOrder)
-  }, [uploadedVideos.length, uploadedImages.length, selectedModel, klingMode, ppioKlingO1Mode, ppioKling26Mode, kieKlingV26Mode, mode, viduQ2Mode, falKlingV26ProMode])
+  }, [uploadedVideos.length, uploadedImages.length, selectedModel, klingMode, ppioKlingO1Mode, ppioKling26Mode, kieKlingV26Mode, mode, viduQ2Mode, falKlingV26ProMode, ppioWan26Mode])
   // 计算最大图片数
   const maxImageCount = getMaxImageCount(
     selectedModel,

@@ -1,0 +1,248 @@
+任务信息:
+  任务目标: "适配 PPIO Wan 2.6 视频生成模型"
+
+模型基础信息:
+  显示名称: Wan 2.6
+  类型: 视频
+  功能列表:
+    - 文生视频
+    - 图生视频
+    - 参考生视频
+  价格:
+    描述: "720P 档位：¥0.6 每秒，1080P 档位：¥1.0 每秒"
+    计算方式: "基础价格 × 时长（秒）"
+    示例:
+      - "720P 5秒视频 = ¥0.6 × 5 = ¥3.0"
+      - "1080P 10秒视频 = ¥1.0 × 10 = ¥10.0"
+
+参数配置:
+  按序号顺序设置:
+
+    # 序号 1: 模式选择（需要显示，支持手动切换）
+    - 序号: 1
+      参数名称: 模式
+      组件类型: 下拉框
+      默认值: 文/图生视频
+      选项:
+        - 名称: 文/图生视频
+          对应端点1: /async/wan2.6-t2v
+          对应端点2: /async/wan2.6-i2v
+          最小图片数量: 0
+          最大图片数量: 1
+          最小视频数量: 0
+          最大视频数量: 0
+          说明: "无图片时使用 t2v 端点，有图片时使用 i2v 端点"
+
+        - 名称: 参考生视频
+          对应端点1: /async/wan2.6-v2v
+          最小图片数量: 0
+          最大图片数量: 0
+          最小视频数量: 0
+          最大视频数量: 3
+          支持视频上传: true
+          说明: "支持上传 0-3 个视频作为参考，传递到 reference_video_urls 参数"
+
+    # 序号 2: 分辨率（特殊面板：比例 + 质量档位）
+    - 序号: 2
+      参数名称: 分辨率
+      组件类型: 特殊面板 UniversalResolutionSelector
+      显示结构:
+        上部: 比例选择器（可视化矩形框）
+        下部: 质量档位选择器
+
+      比例选项:
+        - 比例: "16:9"
+          720P对应数值: "1280*720"
+          1080P对应数值: "1920*1080"
+        - 比例: "9:16"
+          720P对应数值: "720*1280"
+          1080P对应数值: "1080*1920"
+        - 比例: "1:1"
+          720P对应数值: "960*960"
+          1080P对应数值: "1440*1440"
+        - 比例: "4:3"
+          720P对应数值: "1088*832"
+          1080P对应数值: "1632*1248"
+        - 比例: "3:4"
+          720P对应数值: "832*1088"
+          1080P对应数值: "1248*1632"
+
+      质量档位选项:
+        - 名称: 720P
+          价格系数: 0.6
+        - 名称: 1080P
+          价格系数: 1.0
+
+      默认值:
+        比例: "16:9"
+        质量: "720P"
+        对应数值: "1280*720"
+
+      参数传递逻辑:
+        文生视频端点:
+          参数名: size
+          传递格式: "具体数值"
+          示例: "1920*1080"
+        图生视频端点:
+          参数名: resolution
+          传递格式: "质量档位"
+          示例: "1080P"
+        参考生视频端点:
+          参数名: size
+          传递格式: "具体数值"
+          示例: "1920*1080"
+
+      交互逻辑:
+        - "图生视频模式下，自动添加智能选项"
+        - "当用户上传图片后，自动切换到智能选项"
+        - "智能选项会自动匹配上传图片的比例"
+
+    # 序号 3: 时长
+    - 序号: 3
+      参数名称: 时长
+      组件类型: 下拉框
+      默认值: 5
+      选项:
+        文/图生视频模式:
+          - 值: 5
+            显示: "5s"
+          - 值: 10
+            显示: "10s"
+          - 值: 15
+            显示: "15s"
+        参考生视频模式:
+          - 值: 5
+            显示: "5s"
+          - 值: 10
+            显示: "10s"
+      显示条件: "根据当前模式动态调整选项"
+      价格影响: "时长直接影响价格，价格 = 质量价格系数 × 时长"
+
+    # 序号 4: 镜头类型
+    - 序号: 4
+      参数名称: 镜头类型
+      组件类型: 下拉框
+      默认值: multi
+      选项:
+        - 值: single
+          显示: "单镜头"
+        - 值: multi
+          显示: "多镜头"
+      API参数名: shot_type
+
+    # 序号 5: 生成音频
+    - 序号: 5
+      参数名称: 生成音频
+      组件类型: 开关
+      默认值: true
+      API参数名: audio
+      说明: "参数优先级：audio_url > audio，仅在 audio_url 为空时生效"
+
+    # 序号 6: 提示词优化
+    - 序号: 6
+      参数名称: 提示词优化
+      组件类型: 开关
+      默认值: false
+      API参数名: prompt_extend
+      说明: "开启后使用大模型对输入 prompt 进行智能改写，对于较短的 prompt 生成效果提升明显，但会增加耗时"
+
+  无需显示的参数:
+    描述: "这些参数不在 UI 中显示，部分参数在发送 API 请求时需要传递固定值"
+    参数列表:
+      - 参数名: seed
+        API参数名: seed
+        是否传递: 否
+        说明: "随机种子，系统自动生成"
+
+      - 参数名: negative_prompt
+        API参数名: negative_prompt
+        是否传递: 否
+        说明: "负面提示词，暂不支持"
+
+      - 参数名: watermark
+        API参数名: watermark
+        是否传递: 是
+        传递值: false
+        说明: "水印标识，统一发送 false（不添加水印）"
+
+      - 参数名: audio_url
+        API参数名: audio_url
+        是否传递: 否
+        说明: "音频文件 URL，暂不支持"
+
+      - 参数名: template
+        API参数名: template
+        是否传递: 否
+        说明: "视频特效模板，仅图生视频端点支持，暂不启用"
+
+      - 参数名: reference_video_urls
+        API参数名: reference_video_urls
+        是否传递: 是（仅参考生视频模式）
+        说明: "参考视频 URL 数组，最多 3 个，需要实现视频上传功能"
+
+  代码修改:
+    - 目标文件: "@src/components/MediaGenerator/components/ParameterPanel.tsx"
+      操作: 添加 seed、negative_prompt 到排除参数列表
+
+API 端点信息:
+  基础URL: https://api.ppio.com/v3
+  端点列表:
+    - 端点路径: /async/wan2.6-t2v
+      功能: 文生视频
+      请求方式: POST
+      必填参数: [prompt]
+      可选参数: [audio_url, negative_prompt, seed, size, audio, duration, shot_type, watermark, prompt_extend]
+
+    - 端点路径: /async/wan2.6-i2v
+      功能: 图生视频
+      请求方式: POST
+      必填参数: [prompt, img_url]
+      可选参数: [template, audio_url, negative_prompt, seed, audio, duration, shot_type, watermark, resolution, prompt_extend]
+
+    - 端点路径: /async/wan2.6-v2v
+      功能: 参考生视频
+      请求方式: POST
+      必填参数: [prompt, reference_video_urls]
+      可选参数: [audio_url, negative_prompt, seed, size, audio, duration, shot_type, watermark, prompt_extend]
+
+特殊说明:
+  视频上传:
+    需求: "参考生视频模式需要支持上传 0-3 个视频"
+    实现方式: "使用通用上传服务（UploadService），参考 kling-o1 的 uploadVideoToGeneralService 实现"
+    前端配置: "需要在 InputArea.tsx 中注册视频上传逻辑"
+    参考文档: "@.claude/skills/适配新模型/resources/常见问题/新模型视频上传适配指南.md"
+
+  图片处理:
+    图生视频模式: "使用纯 Base64 编码（不带 data:image/png;base64, 前缀），与其他 PPIO 模型保持一致"
+
+  分辨率面板:
+    设计模式: "比例 + 质量档位"
+    实现要点:
+      - "用户通过比例和质量档位的组合来选择"
+      - "内部转换为对应的具体数值或档位名称"
+      - "不同端点传递不同格式的参数"
+    参考模型: "可参考其他 PPIO 视频模型的分辨率面板实现"
+
+技术实现要点:
+  参数命名规范: "所有参数使用 ppio 前缀，格式为 ppioWan26{ParameterName}"
+
+  示例参数名:
+    - ppioWan26Mode
+    - ppioWan26AspectRatio
+    - ppioWan26Quality
+    - ppioWan26VideoDuration
+    - ppioWan26ShotType
+    - ppioWan26Audio
+    - ppioWan26PromptExtend
+
+  价格计算:
+    计算器类型: calculated
+    计算逻辑: |
+      const quality = params.ppioWan26Quality || '720P'
+      const duration = params.ppioWan26VideoDuration || 5
+      const pricePerSecond = quality === '1080P' ? 1.0 : 0.6
+      return pricePerSecond * duration
+
+  轮询配置:
+    预估轮询次数: 40
+    说明: "视频生成预计 1-2 分钟完成"

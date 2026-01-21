@@ -17,6 +17,7 @@ export { minimaxHailuo23Params } from './minimax-hailuo-2.3'
 export { viduQ1Params } from './vidu-q1'
 export { pixverseV45Params } from './pixverse-v4.5'
 export { wan25PreviewParams } from './wan-2.5-preview'
+export { ppioWan26Params } from './ppio/wan-2.6'
 export { seedanceV1Params } from './seedance-v1'
 export { ppioSeedance15ProParams } from './ppio/seedance-1.5-pro'
 export { minimaxSpeech26BasicParams, minimaxSpeech26AdvancedParams } from './minimax-speech-2.6'
@@ -80,6 +81,7 @@ import { minimaxHailuo23Params } from './minimax-hailuo-2.3'
 import { viduQ1Params } from './vidu-q1'
 import { pixverseV45Params } from './pixverse-v4.5'
 import { wan25PreviewParams } from './wan-2.5-preview'
+import { ppioWan26Params } from './ppio/wan-2.6'
 import { seedanceV1Params } from './seedance-v1'
 import { ppioSeedance15ProParams } from './ppio/seedance-1.5-pro'
 import { minimaxSpeech26BasicParams, minimaxSpeech26AdvancedParams } from './minimax-speech-2.6'
@@ -128,6 +130,7 @@ export const modelSchemaMap: Record<string, ParamDef[]> = {
   'vidu-q1': viduQ1Params,
   'pixverse-v4.5': pixverseV45Params,
   'wan-2.5-preview': wan25PreviewParams,
+  'wan-2.6': ppioWan26Params,
   'seedance-v1': seedanceV1Params,
   'seedance-v1-lite': seedanceV1Params,
   'seedance-v1-pro': seedanceV1Params,

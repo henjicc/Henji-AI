@@ -191,6 +191,13 @@ export interface BuildOptionsParams {
   ppioWan25Size?: string
   ppioWan25PromptExtend?: boolean
   ppioWan25Audio?: boolean
+  ppioWan26Mode?: string
+  ppioWan26AspectRatio?: string
+  ppioWan26Quality?: string
+  ppioWan26VideoDuration?: number
+  ppioWan26ShotType?: string
+  ppioWan26Audio?: boolean
+  ppioWan26PromptExtend?: boolean
   ppioSeedanceV1VideoDuration?: number
   ppioSeedanceV1Variant?: 'lite' | 'pro'
   ppioSeedanceV1Resolution?: string

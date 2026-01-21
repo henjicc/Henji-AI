@@ -1148,3 +1148,86 @@ export const seedance15ProConfig: ModelConfig = {
     }
   }
 }
+
+/**
+ * Wan 2.6 配置（派欧云）
+ * 支持三种模式：文生视频、图生视频、参考生视频
+ */
+export const wan26Config: ModelConfig = {
+  id: 'wan-2.6',
+  type: 'video',
+  provider: 'ppio',
+
+  paramMapping: {
+    mode: {
+      source: 'ppioWan26Mode',
+      defaultValue: 'text-image-to-video'
+    },
+    aspectRatio: {
+      source: 'ppioWan26AspectRatio',
+      defaultValue: '16:9'
+    },
+    quality: {
+      source: 'ppioWan26Quality',
+      defaultValue: '720P'
+    },
+    duration: {
+      source: ['ppioWan26VideoDuration', 'videoDuration'],
+      defaultValue: 5
+    },
+    shotType: {
+      source: 'ppioWan26ShotType',
+      defaultValue: 'multi'
+    },
+    audio: {
+      source: 'ppioWan26Audio',
+      defaultValue: true
+    },
+    promptExtend: {
+      source: 'ppioWan26PromptExtend',
+      defaultValue: false
+    }
+  },
+
+  features: {
+    imageUpload: {
+      enabled: true,
+      maxImages: 1,
+      mode: 'single',
+      paramKey: 'images',
+      convertToBlob: false
+    },
+    videoUpload: {
+      enabled: true,
+      maxVideos: 3,
+      paramKey: 'videos'
+    }
+  },
+
+  customHandlers: {
+    afterBuild: async (options, context) => {
+      const mode = options.mode || 'text-image-to-video'
+      const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
+      const setUploadedFilePaths = (context.params as any).setUploadedFilePaths
+      const uploadedFilePaths = (context.params as any).uploadedFilePaths || []
+
+      if (mode === 'text-image-to-video' && context.uploadedImages.length > 0) {
+        const image = context.uploadedImages[0]
+        options.images = [image]
+
+        if (!uploadedFilePaths[0]) {
+          const blob = await dataUrlToBlob(image)
+          const saved = await saveUploadImage(blob, 'persist')
+          setUploadedFilePaths([saved.fullPath])
+          options.uploadedFilePaths = [saved.fullPath]
+        } else {
+          options.uploadedFilePaths = [uploadedFilePaths[0]]
+        }
+      }
+
+      if (mode === 'reference-to-video' && context.uploadedVideoFiles && context.uploadedVideoFiles.length > 0) {
+        options.videos = context.uploadedVideoFiles.slice(0, 3)
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@ import {
   minimaxHailuo02Config,
   pixverseV45Config,
   wan25PreviewConfig,
+  wan26Config,
   seedream40Config,
   seedream45Config
 } from './ppio-models'
@@ -93,6 +94,7 @@ export function registerAllConfigs() {
   optionsBuilder.registerConfig(minimaxHailuo02Config)
   optionsBuilder.registerConfig(pixverseV45Config)
   optionsBuilder.registerConfig(wan25PreviewConfig)
+  optionsBuilder.registerConfig(wan26Config)
   optionsBuilder.registerConfig(seedream40Config)
   optionsBuilder.registerConfig(seedream45Config)
   optionsBuilder.registerConfig(seedance15ProConfig)

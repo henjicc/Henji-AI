@@ -13,6 +13,7 @@ import {
   hailuoParams,
   pixverseParams,
   wan25Params,
+  ppioWan26Params,
   seedanceParams,
   ppioSeedance15ProParams,
   veoParams,
@@ -95,7 +96,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }
 
   // 视频模型参数
-  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie' && selectedModel !== 'kling-2.6-pro' && selectedModel !== 'seedance-v1.5-pro') {
+  if (currentModel?.type === 'video' && selectedModel !== 'vidu-q1' && selectedModel !== 'kie-grok-imagine-video' && selectedModel !== 'grok-imagine-video-kie' && selectedModel !== 'kie-kling-v2-6' && selectedModel !== 'kling-v2-6-kie' && selectedModel !== 'kie-hailuo-2-3' && selectedModel !== 'hailuo-2-3-kie' && selectedModel !== 'kie-hailuo-02' && selectedModel !== 'hailuo-02-kie' && selectedModel !== 'kie-seedance-v3' && selectedModel !== 'seedance-v3-kie' && selectedModel !== 'kie-sora-2' && selectedModel !== 'sora-2-kie' && selectedModel !== 'kling-2.6-pro' && selectedModel !== 'seedance-v1.5-pro' && selectedModel !== 'wan-2.6') {
     return (
       <>
         {/* Hailuo 参数 */}
@@ -440,7 +441,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           selectedModel !== 'seedance-v3-kie' &&
           selectedModel !== 'kie-sora-2' &&
           selectedModel !== 'sora-2-kie' &&
-          selectedModel !== 'seedance-v1.5-pro' && (
+          selectedModel !== 'seedance-v1.5-pro' &&
+          selectedModel !== 'wan-2.6' && (
             <TextInput
               label="负面提示"
               value={values.videoNegativePrompt}
@@ -484,7 +486,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           selectedModel !== 'seedance-v3-kie' &&
           selectedModel !== 'kie-sora-2' &&
           selectedModel !== 'sora-2-kie' &&
-          selectedModel !== 'seedance-v1.5-pro' && (
+          selectedModel !== 'seedance-v1.5-pro' &&
+          selectedModel !== 'wan-2.6' && (
             <NumberInput
               label="随机种子"
               value={typeof values.videoSeed === 'number' ? values.videoSeed : 0}
@@ -496,6 +499,26 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
             />
           )}
       </>
+    )
+  }
+
+  // PPIO Wan 2.6 参数
+  if (selectedModel === 'wan-2.6') {
+    return (
+      <SchemaForm
+        schema={ppioWan26Params}
+        values={{
+          ppioWan26Mode: values.ppioWan26Mode,
+          ppioWan26AspectRatio: values.ppioWan26AspectRatio,
+          ppioWan26Quality: values.ppioWan26Quality,
+          ppioWan26VideoDuration: values.ppioWan26VideoDuration,
+          ppioWan26ShotType: values.ppioWan26ShotType,
+          ppioWan26Audio: values.ppioWan26Audio,
+          ppioWan26PromptExtend: values.ppioWan26PromptExtend,
+          uploadedImages
+        }}
+        onChange={onChange}
+      />
     )
   }
 

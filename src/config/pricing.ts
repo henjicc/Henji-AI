@@ -200,6 +200,13 @@ const PRICES: Record<string, any> = {
         '1080p': { 5: 5, 10: 10 }
     },
 
+    // 视频 - Wan 2.6 (派欧云)
+    // 价格单位：人民币/秒
+    WAN_26: {
+        '720P': 0.6,   // ¥0.6/秒
+        '1080P': 1.0   // ¥1.0/秒
+    },
+
     // 视频 - Seedance V1
     // 结构: Variant -> Duration -> Resolution -> AspectGroup -> Price
     // AspectGroup: 'wide'(21:9/9:21), 'standard'(16:9/9:16), 'classic'(4:3/3:4), 'square'(1:1)
@@ -1032,6 +1039,19 @@ export const pricingConfigs: PricingConfig[] = [
             }
 
             return PRICES.WAN[resolution]?.[duration as 5 | 10] || 0
+        }
+    },
+    {
+        providerId: 'ppio',
+        modelId: 'wan-2.6',
+        currency: '¥',
+        type: 'calculated',
+        calculator: (params) => {
+            const quality = params.ppioWan26Quality || params.quality || '720P'
+            const duration = params.ppioWan26VideoDuration || params.videoDuration || 5
+
+            const pricePerSecond = PRICES.WAN_26[quality as '720P' | '1080P'] || PRICES.WAN_26['720P']
+            return formatPrice(pricePerSecond * duration)
         }
     },
     {
