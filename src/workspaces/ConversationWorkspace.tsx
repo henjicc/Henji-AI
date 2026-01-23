@@ -2750,7 +2750,9 @@ const ConversationWorkspace: React.FC = () => {
           const arr: string[] = []
           for (const p of task.uploadedFilePaths) {
             // 明确使用 image/jpeg MIME 类型，与 saveUploadImage 保持一致
-            const data = await fileToDataUrl(p, 'image/jpeg')
+            // 确保路径是绝对路径
+            const absolutePath = await resolveFilePath(p)
+            const data = await fileToDataUrl(absolutePath, 'image/jpeg')
             arr.push(data)
           }
           options.images = arr
@@ -2769,7 +2771,9 @@ const ConversationWorkspace: React.FC = () => {
         try {
           const arr: string[] = []
           for (const p of task.uploadedVideoFilePaths) {
-            const data = await fileToDataUrl(p)
+            // 确保路径是绝对路径
+            const absolutePath = await resolveFilePath(p)
+            const data = await fileToDataUrl(absolutePath)
             arr.push(data)
           }
           options.videos = arr
