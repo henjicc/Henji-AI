@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { apiService } from '../services/api'
+import { GenerationService } from '@/core/services/GenerationService'
+import { ProviderError } from '@/core/providers/base'
 import MediaGenerator from '../components/MediaGenerator'
 import SettingsModal from '../components/SettingsModal'
 import ContextMenu from '../components/ContextMenu'
 import { taskQueueManager } from '../services/taskQueue'
 import { MediaResult } from '../types'
-import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio, saveBase64ToUploads, dataUrlToBlob, ensureCompressedJpegBytesWithPica, saveBytesToUploads } from '../utils/save'
+import { isDesktop, saveImageFromUrl, saveAudioFromUrl, fileToBlobSrc, fileToDataUrl, readJsonFromAppData, writeJsonToAppData, downloadMediaFile, quickDownloadMediaFile, deleteWaveformCacheForAudio, saveBase64ToUploads, dataUrlToBlob, ensureCompressedJpegBytesWithPica, saveBytesToUploads, resolveFilePath } from '../utils/save'
 import { initializeDataDirectory, getDataRoot, convertPathString, convertPathArray } from '../utils/dataPath'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { invoke } from '@tauri-apps/api/core'
@@ -13,7 +15,7 @@ import AudioPlayer from '../components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
 import { useDragDrop } from '../contexts/DragDropContext'
 import { useContextMenu, MenuItem } from '../hooks/useContextMenu'
-import { providers } from '../config/providers'
+import { getModelDisplayName, getProviderDisplayName } from '../utils/modelHelpers'
 import { ProgressBar } from '../components/ui/ProgressBar'
 import { calculateProgress } from '../utils/progress'
 import { loadPresets } from '../utils/preset'
@@ -30,24 +32,15 @@ import { checkForUpdates, getCurrentVersion } from '../services/updateChecker'
 import UpdateDialog from '../components/UpdateDialog'
 import { ImageEditor, ImageEditState } from '../components/ImageEditor'
 import { saveEditState, loadEditState, deleteEditState } from '../utils/editStatePersistence'
+import { registry } from '@/core/ModelRegistry'
+import { databaseService } from '../services/database/DatabaseService'
 
 /**
  * 格式化模型显示名称
  * @param modelId 模型ID
  * @returns 格式化后的显示名称，格式为"供应商：模型名称"
  */
-const formatModelDisplayName = (modelId: string): string => {
-  // 遍历所有供应商
-  for (const provider of providers) {
-    // 在当前供应商的模型列表中查找匹配的模型
-    const model = provider.models.find(m => m.id === modelId)
-    if (model) {
-      return `${provider.name}：${model.name}`
-    }
-  }
-  // 如果找不到，返回原始 ID
-  return modelId
-}
+const formatModelDisplayName = getModelDisplayName
 
 // 定义生成任务类型
 interface GenerationTask {
@@ -98,6 +91,7 @@ const ConversationWorkspace: React.FC = () => {
   const dragStartRef = useRef({ x: 0, y: 0 })
 
   const [isTasksLoaded, setIsTasksLoaded] = useState(false)
+  const isInitialLoadRef = React.useRef(true) // 标记是否为初始加载，防止加载后立即保存
   const [isUserAtBottom, setIsUserAtBottom] = useState(true)
   const [viewerOpacity, setViewerOpacity] = useState(0)
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
@@ -202,6 +196,195 @@ const ConversationWorkspace: React.FC = () => {
       }
     }
     init()
+  }, [])
+
+  // 从数据库加载历史记录
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        // 等待数据库初始化完成
+        let retries = 0
+        const maxRetries = 10
+        while (retries < maxRetries) {
+          try {
+            // 尝试访问数据库，如果数据库未初始化会抛出错误
+            logInfo('[App] 尝试从数据库加载历史记录... (尝试', retries + 1, '/', maxRetries, ')')
+            const historyRecords = await databaseService.getHistory()
+            logInfo('[App] 从数据库加载了', historyRecords.length, '条历史记录')
+
+            // 获取数据根目录（用于路径转换）
+            const dataRoot = isDesktop() ? await getDataRoot() : ''
+
+            // 将 HistoryRecord 转换为 GenerationTask，并处理文件路径
+            const loadedTasks: GenerationTask[] = await Promise.all(historyRecords.map(async record => {
+              // 处理结果文件路径（从相对路径转换为绝对路径，再转换为 Tauri URL）
+              let result = record.filePath ? {
+                type: record.type, // 添加 type 字段
+                url: record.filePath,
+                filePath: record.filePath,
+                prompt: record.prompt,
+                createdAt: new Date()
+              } : undefined
+
+              if (result && result.filePath && isDesktop()) {
+                try {
+                  // 将相对路径转换为绝对路径
+                  const absoluteFilePath = await convertPathString(result.filePath, dataRoot, false)
+                  if (absoluteFilePath) {
+                    if (typeof absoluteFilePath === 'string' && absoluteFilePath.includes('|||')) {
+                      // 处理多个文件的情况
+                      const paths = absoluteFilePath.split('|||')
+                      const displayUrls: string[] = []
+                      for (const p of paths) {
+                        try {
+                          // 使用 fileToBlobSrc 读取文件并创建 blob URL
+                          const blobUrl = await fileToBlobSrc(p)
+                          displayUrls.push(blobUrl)
+                        } catch (e) {
+                          logError('[App] 读取文件失败:', p, e)
+                          // 回退到 convertFileSrc
+                          displayUrls.push(convertFileSrc(p.replace(/\\/g, '/')))
+                        }
+                      }
+                      logInfo('[App] 🔍 多文件 Blob URLs:', displayUrls.length)
+                      result = { ...result, filePath: absoluteFilePath, url: displayUrls.join('|||') }
+                    } else {
+                      // 单个文件 - 使用 fileToBlobSrc 读取文件并创建 blob URL
+                      try {
+                        const blobUrl = await fileToBlobSrc(absoluteFilePath)
+                        result = { ...result, filePath: absoluteFilePath, url: blobUrl }
+                      } catch (e) {
+                        logError('[App] 读取文件失败，回退到 convertFileSrc:', e)
+                        // 回退到 convertFileSrc
+                        const normalizedPath = absoluteFilePath.replace(/\\/g, '/')
+                        result = { ...result, filePath: absoluteFilePath, url: convertFileSrc(normalizedPath) }
+                      }
+                    }
+                  }
+                } catch (error) {
+                  logError('[App] 转换文件路径失败:', error)
+                }
+              }
+
+              // 处理上传的图片路径（从相对路径转换为绝对路径）
+              let images = (record.params as any)?.images
+              const uploadedFilePaths = (record.params as any)?.uploadedFilePaths
+              if (uploadedFilePaths && uploadedFilePaths.length && isDesktop()) {
+                try {
+                  // 将相对路径转换为绝对路径
+                  const absolutePaths = await convertPathArray(uploadedFilePaths, dataRoot, false)
+                  if (absolutePaths) {
+                    // 使用 fileToBlobSrc 读取文件并创建 blob URL
+                    const blobUrls: string[] = []
+                    for (const p of absolutePaths) {
+                      try {
+                        const blobUrl = await fileToBlobSrc(p)
+                        blobUrls.push(blobUrl)
+                      } catch (e) {
+                        // 回退到 convertFileSrc
+                        blobUrls.push(convertFileSrc(p.replace(/\\/g, '/')))
+                      }
+                    }
+                    images = blobUrls
+                  }
+                } catch (error) {
+                  logError('[App] 转换图片路径失败:', error)
+                }
+              }
+
+              // 处理上传的视频路径（从相对路径转换为绝对路径）
+              let videos = (record.params as any)?.videos
+              const uploadedVideoFilePaths = (record.params as any)?.uploadedVideoFilePaths
+              if (uploadedVideoFilePaths && uploadedVideoFilePaths.length && isDesktop()) {
+                try {
+                  // 将相对路径转换为绝对路径
+                  const absolutePaths = await convertPathArray(uploadedVideoFilePaths, dataRoot, false)
+                  if (absolutePaths) {
+                    // 使用 fileToBlobSrc 读取文件并创建 blob URL
+                    const blobUrls: string[] = []
+                    for (const p of absolutePaths) {
+                      try {
+                        const blobUrl = await fileToBlobSrc(p)
+                        blobUrls.push(blobUrl)
+                      } catch (e) {
+                        // 回退到 convertFileSrc
+                        blobUrls.push(convertFileSrc(p.replace(/\\/g, '/')))
+                      }
+                    }
+                    videos = blobUrls
+                  }
+                } catch (error) {
+                  logError('[App] 转换视频路径失败:', error)
+                }
+              }
+
+              const task = {
+                id: record.id,
+                type: record.type,
+                prompt: record.prompt,
+                model: record.modelId,
+                provider: record.providerId,
+                status: record.status as any,
+                result,
+                error: record.errorMessage,
+                serverTaskId: record.taskId,
+                dimensions: undefined,
+                duration: record.duration ? String(record.duration) : undefined,
+                // 从 params 中恢复其他字段
+                ...(record.params && typeof record.params === 'object' ? {
+                  images,
+                  videos,
+                  size: (record.params as any).size,
+                  uploadedFilePaths: uploadedFilePaths, // 保留相对路径用于重新生成
+                  uploadedVideoFilePaths: uploadedVideoFilePaths, // 保留相对路径用于重新生成
+                  options: record.params
+                } : {})
+              }
+
+              return task
+            }))
+
+            // 反转数组顺序：数据库返回 DESC（最新在前），但 UI 需要最新在底部
+            // 所以需要反转为 ASC 顺序（最旧在前，最新在后）
+            setTasks(loadedTasks.reverse())
+            setIsTasksLoaded(true)
+            // 延迟重置初始加载标志，确保保存逻辑不会在加载后立即触发
+            setTimeout(() => {
+              isInitialLoadRef.current = false
+            }, 2000)
+            logInfo('[App] 历史记录加载完成')
+            break // 成功加载，退出循环
+          } catch (error: any) {
+            if (error.message && error.message.includes('Database not initialized')) {
+              // 数据库未初始化，等待后重试
+              retries++
+              if (retries < maxRetries) {
+                logInfo('[App] 数据库未初始化，等待 100ms 后重试...')
+                await new Promise(resolve => setTimeout(resolve, 100))
+              } else {
+                logError('[App] 数据库初始化超时，放弃加载历史记录')
+                setIsTasksLoaded(true)
+                // 即使加载失败，也要重置初始加载标志
+                setTimeout(() => {
+                  isInitialLoadRef.current = false
+                }, 2000)
+              }
+            } else {
+              // 其他错误，直接抛出
+              throw error
+            }
+          }
+        }
+      } catch (error) {
+        logError('[App] 加载历史记录失败:', error)
+        setIsTasksLoaded(true)
+        // 即使加载失败，也要重置初始加载标志
+        setTimeout(() => {
+          isInitialLoadRef.current = false
+        }, 2000)
+      }
+    }
+    loadHistory()
   }, [])
 
   // 应用启动时检查更新
@@ -1517,6 +1700,47 @@ const ConversationWorkspace: React.FC = () => {
     })
   }, [updateProgress])
 
+  /**
+   * 新系统适配函数 - 使用 GenerationService 替代旧的 apiService
+   *
+   * 这是一个临时适配层，用于平滑过渡到新系统
+   * 未来会完全重构为新系统的调用方式
+   */
+  const generateWithNewService = useCallback(async (
+    modelId: string,
+    input: string,
+    options: any
+  ) => {
+    const generationService = GenerationService.getInstance()
+
+    logInfo('[App] 🚀 使用新系统 GenerationService 生成:', { modelId, input, options })
+
+    // 构建新系统的参数
+    const params: Record<string, any> = {
+      prompt: input,      // 图片/视频使用 prompt
+      text: input,        // 音频使用 text
+      ...options
+    }
+
+    try {
+      // 调用新系统
+      const result = await generationService.generate(modelId, params)
+
+      logInfo('[App] ✅ 新系统生成成功:', result)
+
+      // 新系统已经自动保存到本地，直接返回结果
+      return result
+    } catch (error) {
+      logError('[App] ❌ 新系统生成失败:', error)
+
+      // 统一错误处理
+      if (error instanceof ProviderError) {
+        throw new Error(error.toUserMessage())
+      }
+      throw error
+    }
+  }, [])
+
   // 执行单个任务
   const executeTask = async (taskId: string, task?: GenerationTask) => {
     setIsGenerating(true)
@@ -1550,10 +1774,10 @@ const ConversationWorkspace: React.FC = () => {
         options.images = taskToExecute.images
       }
 
-      // 动态初始化适配器
-      const providerObj = providers.find(p => p.models.some(m => m.id === model))
-      if (providerObj) {
-        const providerType = providerObj.id as 'ppio' | 'fal' | 'modelscope' | 'kie'
+      // 动态初始化适配器（使用新架构的 ModelRegistry）
+      const modelInfo = registry.getModelInfo(model)
+      if (modelInfo) {
+        const providerType = modelInfo.provider as 'ppio' | 'fal' | 'modelscope' | 'kie'
 
         // 获取对应的 API Key
         let apiKey = ''
@@ -1568,7 +1792,8 @@ const ConversationWorkspace: React.FC = () => {
         }
 
         if (!apiKey) {
-          throw new Error(`请先在设置中配置 ${providerObj.name} 的 API Key`)
+          const providerDisplayName = getProviderDisplayName(modelInfo.provider)
+          throw new Error(`请先在设置中配置 ${providerDisplayName} 的 API Key`)
         }
 
         // 初始化对应的适配器
@@ -1593,7 +1818,7 @@ const ConversationWorkspace: React.FC = () => {
           let lastUpdateTime = 0
 
           // 检查是否是魔搭模型
-          const isModelscopeModel = providerObj?.id === 'modelscope'
+          const isModelscopeModel = modelInfo.provider === 'modelscope'
 
           if ((model === 'seedream-4.0' || model === 'bytedance-seedream-v4') && !isModelscopeModel) {
             const startTime = Date.now()
@@ -1628,42 +1853,8 @@ const ConversationWorkspace: React.FC = () => {
           }
 
           try {
-            result = await apiService.generateImage(input, model, {
-              ...options,
-              onProgress: (status: any) => {
-                // 【关键修复】如果收到 TASK_CREATED 状态，立即保存 taskId/requestId
-                if (status.status === 'TASK_CREATED') {
-                  if (status.taskId) {
-                    logInfo('[App] 🆔 收到任务ID (图片-PPIO/KIE)，立即保存:', status.taskId)
-                    updateTask(taskId, {
-                      serverTaskId: status.taskId,
-                      message: status.message || '任务已创建'
-                    })
-                  } else if (status.requestId && status.modelId) {
-                    logInfo('[App] 🆔 收到请求ID (图片-Fal)，立即保存:', { requestId: status.requestId, modelId: status.modelId })
-                    updateTask(taskId, {
-                      requestId: status.requestId,
-                      modelId: status.modelId,
-                      message: status.message || '任务已创建'
-                    })
-                  }
-                  return
-                }
-
-                const now = Date.now()
-                // 限流：至少间隔 300ms 才更新一次
-                if (now - lastUpdateTime < 300) return
-                lastUpdateTime = now
-
-                // 使用独立的进度状态
-                updateProgress(taskId, status.progress || 0)
-
-                // 只在有 message 时才更新任务状态
-                if (status.message) {
-                  updateTask(taskId, { message: status.message })
-                }
-              }
-            })
+            // 使用新系统 GenerationService（替代旧的 apiService）
+            result = await generateWithNewService(model, input, options)
           } finally {
             // 清除定时器
             if (progressTimer) {
@@ -1676,7 +1867,7 @@ const ConversationWorkspace: React.FC = () => {
             logInfo('[App] 检测到队列超时:', result)
             updateTask(taskId, {
               status: 'timeout',
-              provider: providerObj?.id,
+              provider: modelInfo.provider,
               requestId: result.requestId,
               modelId: result.modelId,
               message: result.message || '等待超时，任务依然在处理中'
@@ -1718,43 +1909,8 @@ const ConversationWorkspace: React.FC = () => {
           let videoLastUpdateTime = 0
           logInfo('[App] 🎬 开始视频生成任务:', { taskId, model })
 
-          result = await apiService.generateVideo(input, model, {
-            ...options,
-            onProgress: (status: any) => {
-              const now = Date.now()
-
-              // 【关键修复】如果收到 TASK_CREATED 状态，立即保存 taskId/requestId
-              if (status.status === 'TASK_CREATED') {
-                if (status.taskId) {
-                  logInfo('[App] 🆔 收到任务ID (PPIO/KIE)，立即保存:', status.taskId)
-                  updateTask(taskId, {
-                    serverTaskId: status.taskId,
-                    message: status.message || '任务已创建'
-                  })
-                } else if (status.requestId && status.modelId) {
-                  logInfo('[App] 🆔 收到请求ID (Fal)，立即保存:', { requestId: status.requestId, modelId: status.modelId })
-                  updateTask(taskId, {
-                    requestId: status.requestId,
-                    modelId: status.modelId,
-                    message: status.message || '任务已创建'
-                  })
-                }
-                return
-              }
-
-              // 限流：至少间隔 300ms 才更新一次
-              if (now - videoLastUpdateTime < 300) return
-              videoLastUpdateTime = now
-
-              // 使用独立的进度状态
-              updateProgress(taskId, status.progress || 0)
-
-              // 只在有 message 时才更新任务状态
-              if (status.message) {
-                updateTask(taskId, { message: status.message })
-              }
-            }
-          })
+          // 使用新系统 GenerationService（替代旧的 apiService）
+          result = await generateWithNewService(model, input, options)
 
           logInfo('[App] 📦 视频生成 API 返回结果:', {
             hasResult: !!result,
@@ -1796,7 +1952,8 @@ const ConversationWorkspace: React.FC = () => {
           break
         case 'audio':
           logInfo('[App] generateAudio 调用参数:', { input, model, options })
-          result = await apiService.generateAudio(input, model, options)
+          // 使用新系统 GenerationService（替代旧的 apiService）
+          result = await generateWithNewService(model, input, options)
           // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
           if (result && result.url && isDesktop() && !(result as any).filePath) {
             try {
@@ -1950,9 +2107,9 @@ const ConversationWorkspace: React.FC = () => {
       return // 不继续执行实际的生成逻辑
     }
 
-    // 查找供应商信息
-    const providerObj = providers.find(p => p.models.some(m => m.id === model))
-    const providerId = providerObj?.id
+    // 查找供应商信息（使用新架构的 ModelRegistry）
+    const modelInfo = registry.getModelInfo(model)
+    const providerId = modelInfo?.provider
 
     // 创建新的生成任务
     const taskId = Date.now().toString()
@@ -2318,11 +2475,13 @@ const ConversationWorkspace: React.FC = () => {
     return `${m}:${sec < 10 ? '0' : ''}${sec}`
   }
 
-  // 加载历史（优先文件，其次本地存储）
+  // 加载历史（已禁用旧数据，使用新的 SQLite 数据库）
+  // 注意：此 useEffect 已被第199-277行的数据库加载逻辑取代，保留代码仅供参考
+  /*
   useEffect(() => {
     const load = async () => {
-      const fileHistory = isDesktop() ? await readJsonFromAppData<any[]>('history.json') : null
-      const store = fileHistory ?? (() => { try { return JSON.parse(localStorage.getItem('generationTasks') || '[]') } catch { return [] } })()
+      // 不再加载旧的 history.json 和 localStorage，从空白开始
+      const store: any[] = []
 
       const dataRoot = isDesktop() ? await getDataRoot() : ''
 
@@ -2431,6 +2590,7 @@ const ConversationWorkspace: React.FC = () => {
     }
     load()
   }, [])
+  */
 
   useEffect(() => {
     if (isTasksLoaded && tasks.length > 0) {
@@ -2451,164 +2611,107 @@ const ConversationWorkspace: React.FC = () => {
     }
   }, [])
 
-  // 保存历史到文件（避免本地存储配额）
-  // 重要：只保存 filePath，不保存 url 字段，防止 base64 数据膨胀 history.json
+  // 保存历史到数据库（监听 tasks 变化）
   useEffect(() => {
     if (!isTasksLoaded) return
     if (!isDesktop()) return
-
-    const saveHistory = async () => {
-      const dataRoot = await getDataRoot()
-      const filteredTasks = tasks.filter(t => t.status === 'success' || t.status === 'error' || t.status === 'timeout' || t.status === 'pending' || t.status === 'generating')
-
-      const tasksToSave = await Promise.all(filteredTasks.map(async t => {
-        // 清理 options 中的 base64 数据，防止 history.json 膨胀
-        const sanitizedOptions = t.options ? { ...t.options } : undefined
-        if (sanitizedOptions) {
-          // 1. 删除已知的包含 base64 数据的字段（黑名单，性能优化）
-          delete sanitizedOptions.images
-          delete sanitizedOptions.image_url
-          delete sanitizedOptions.uploadedImages
-          delete sanitizedOptions.videos
-          delete sanitizedOptions.video_url
-          delete sanitizedOptions.uploadedVideos
-          delete sanitizedOptions.image_input  // KIE 模型的图片 URL 数组
-
-          // Seedream 4.5 specific cleanup
-          if (sanitizedOptions.sequential_image_generation_options) {
-            // Deep clean nested options if necessary, but sequential_image_generation_options typically contains numbers
-          }
-
-          // 2. 自动检测并删除其他可能包含 base64 数据的字段（兜底保护）
-          // 这样添加新模型时不需要手动更新清理代码
-          const safeFields = new Set([
-            'uploadedFilePaths', 'uploadedVideoFilePaths', // 文件路径字段（需要保留）
-            'prompt', 'model', 'size', 'duration', 'aspectRatio', 'resolution', // 基础参数
-            'seed', 'guidanceScale', 'numInferenceSteps', 'negativePrompt', // 生成参数
-            'hailuoVersion', 'hailuoFastMode', 'hailuoResolution', 'hailuo02Version', 'hailuo02FastMode', 'hailuo02Resolution', // Hailuo 参数
-            'prompt_optimizer', 'falNanoBananaNumImages', 'falNanoBananaAspectRatio', // 其他模型参数
-            'mode', 'veoAspectRatio', 'veoResolution', 'veoEnhancePrompt', 'veoGenerateAudio', 'veoAutoFix', 'fastMode', // Veo 参数
-            'seedanceMode', 'seedanceVersion', 'seedanceAspectRatio', 'videoDuration', 'seedanceResolution', 'seedanceCameraFixed', 'seedanceFastMode', // Seedance 参数
-            'soraMode', 'soraAspectRatio', 'soraResolution', // Sora 参数
-            'ltxResolution', 'ltxFps', 'ltxGenerateAudio', 'ltxFastMode', 'ltxRetakeStartTime', 'ltxRetakeMode', // LTX 参数
-            'viduQ2Mode', 'falViduQ2VideoDuration', 'viduQ2AspectRatio', 'viduQ2Resolution', 'viduQ2MovementAmplitude', 'viduQ2Bgm', 'viduQ2FastMode', // Vidu 参数
-            'falPixverse55VideoDuration', 'pixverseAspectRatio', 'pixverseResolution', 'pixverseStyle', 'pixverseThinkingType', 'pixverseGenerateAudio', 'pixverseMultiClip', // Pixverse 参数
-            'wanAspectRatio', 'wanResolution', 'wanPromptExpansion', // Wan 参数
-            'klingV26CfgScale', 'klingV26GenerateAudio', 'aspectRatio', 'keepAudio', 'elements', // Kling 参数
-            'customWidth', 'customHeight', 'selectedResolution', 'resolutionQuality', 'imageSize', // 分辨率参数
-            'falZImageTurboNumInferenceSteps', 'falZImageTurboEnablePromptExpansion', 'falZImageTurboAcceleration', 'falZImageTurboImageSize', // Z-Image 参数
-            'num_images', 'aspect_ratio', 'enable_safety_checker', 'negative_prompt', 'video_negative_prompt', 'videoNegativePrompt', // 通用参数
-            'falSeedream40NumImages', 'falKlingImageO1NumImages', 'falKlingImageO1AspectRatio', // 其他图片模型参数
-            'falKlingVideoO1Mode', 'falKlingVideoO1VideoDuration', 'falKlingVideoO1AspectRatio', 'falKlingVideoO1KeepAudio', 'falKlingVideoO1Elements', // Kling Video O1 参数
-            'falKlingV26ProVideoDuration', 'falKlingV26ProAspectRatio', 'falKlingV26ProCfgScale', 'falKlingV26ProGenerateAudio', // Kling V2.6 Pro 参数
-            'falSora2Mode', 'falSora2VideoDuration', 'falSora2AspectRatio', 'falSora2Resolution', // Sora 2 参数
-            'falLtx2Mode', 'falLtx2RetakeDuration', 'falLtx2VideoDuration', 'falLtx2Resolution', 'falLtx2Fps', 'falLtx2GenerateAudio', 'falLtx2FastMode', 'falLtx2RetakeStartTime', 'falLtx2RetakeMode', // LTX 2 参数
-            'falViduQ2Mode', 'falViduQ2VideoDuration', 'falViduQ2AspectRatio', 'falViduQ2Resolution', 'falViduQ2MovementAmplitude', 'falViduQ2Bgm', 'falViduQ2FastMode', // Vidu Q2 参数
-            'falPixverse55VideoDuration', 'falPixverse55AspectRatio', 'falPixverse55Resolution', 'falPixverse55Style', 'falPixverse55ThinkingType', 'falPixverse55GenerateAudio', 'falPixverse55MultiClip', // Pixverse V5.5 参数
-            'falWan25VideoDuration', 'falWan25AspectRatio', 'falWan25Resolution', 'falWan25PromptExpansion', // Wan 2.5 参数
-            'falHailuo23Duration', 'falHailuo23PromptOptimizer', 'falHailuo23Resolution', 'falHailuo23FastMode', // Hailuo 2.3 参数
-            'falHailuo02Duration', 'falHailuo02PromptOptimizer', 'falHailuo02Resolution', 'falHailuo02FastMode', // Hailuo 02 参数
-            'falSeedanceV1Mode', 'falSeedanceV1Version', 'ppioSeedanceV1AspectRatio', 'falSeedanceV1VideoDuration', 'ppioSeedanceV1Resolution', 'ppioSeedanceV1CameraFixed', 'falSeedanceV1FastMode', // Seedance V1 参数
-            'falVeo31Mode', 'falVeo31VideoDuration', 'falVeo31AspectRatio', 'falVeo31Resolution', 'falVeo31EnhancePrompt', 'falVeo31GenerateAudio', 'falVeo31AutoFix', 'falVeo31FastMode', // Veo 3.1 参数
-            'numImages', 'num_inference_steps', 'guidance_scale' // 其他通用参数
-          ])
-
-          for (const key in sanitizedOptions) {
-            if (safeFields.has(key)) continue // 跳过安全字段
-
-            const value = sanitizedOptions[key]
-            // 检测是否为 base64 数据：
-            // 1. 字符串类型
-            // 2. 以 data: 开头（data URI）
-            // 3. 或者长度超过 1000 字符（可能是 base64 字符串）
-            if (typeof value === 'string' && (value.startsWith('data:') || value.length > 1000)) {
-              logWarning('', `[History] 自动删除疑似 base64 数据字段: ${key} (长度: ${value.length})`)
-              delete sanitizedOptions[key]
-            }
-            // 检测数组中是否包含 base64 数据
-            else if (Array.isArray(value) && value.length > 0) {
-              const firstItem = value[0]
-              if (typeof firstItem === 'string' && (firstItem.startsWith('data:') || firstItem.length > 1000)) {
-                logWarning('', `[History] 自动删除疑似 base64 数据数组字段: ${key} (数组长度: ${value.length})`)
-                delete sanitizedOptions[key]
-              }
-            }
-          }
-
-          // 转换 options 中的路径为相对路径
-          if (sanitizedOptions.uploadedFilePaths) {
-            sanitizedOptions.uploadedFilePaths = await convertPathArray(sanitizedOptions.uploadedFilePaths, dataRoot, true)
-          }
-          if (sanitizedOptions.uploadedVideoFilePaths) {
-            sanitizedOptions.uploadedVideoFilePaths = await convertPathArray(sanitizedOptions.uploadedVideoFilePaths, dataRoot, true)
-          }
-        }
-
-        // 转换路径为相对路径
-        const relativeUploadedFilePaths = await convertPathArray(t.uploadedFilePaths, dataRoot, true)
-        const relativeUploadedVideoFilePaths = await convertPathArray(t.uploadedVideoFilePaths, dataRoot, true)
-        const relativeResultFilePath = t.result?.filePath ? await convertPathString(t.result.filePath, dataRoot, true) : undefined
-
-        const taskToSave = {
-          id: t.id,
-          type: t.type,
-          prompt: t.prompt,
-          model: t.model,
-          provider: t.provider, // 保存供应商信息
-          // images: t.images, // 移除：不再直接保存 base64 图片数据，依赖 uploadedFilePaths 恢复
-          videos: t.videos, // 保存上传的视频缩略图（用于历史记录显示）
-          size: t.size,
-          dimensions: t.dimensions, // 保存实际媒体尺寸
-          duration: t.duration, // 保存实际媒体时长
-          status: t.status,
-          error: t.error,
-          uploadedFilePaths: relativeUploadedFilePaths,
-          uploadedVideoFilePaths: relativeUploadedVideoFilePaths,  // 保存视频文件路径（相对路径）
-          options: sanitizedOptions, // 保存清理后的生成参数（不含 base64 数据）
-          requestId: t.requestId, // 保存请求ID（用于超时恢复）
-          modelId: t.modelId, // 保存模型ID（用于超时恢复）
-          serverTaskId: t.serverTaskId, // 保存服务端任务ID（用于超时恢复）
-          message: t.message, // 保存状态消息
-          result: t.result ? {
-            id: t.result.id,
-            type: t.result.type,
-            filePath: relativeResultFilePath, // 保存相对路径
-            // 明确不保存 url 字段，防止 base64 数据或远程 URL 被保存
-            prompt: t.result.prompt,
-            createdAt: t.result.createdAt
-          } : undefined
-        }
-
-        // 【诊断日志】记录保存的任务信息
-        if (t.type === 'video' && (t.status === 'generating' || t.status === 'timeout')) {
-          logInfo('[App] 💾 保存视频任务到历史记录:', {
-            id: t.id,
-            status: t.status,
-            serverTaskId: t.serverTaskId,
-            requestId: t.requestId,
-            modelId: t.modelId,
-            message: t.message
-          })
-        }
-
-        return taskToSave
-      }))
-
-      const maxHistory = parseInt(localStorage.getItem('max_history_count') || '50', 10)
-      const limitedTasks = tasksToSave.slice(-maxHistory)
-
-      // 【诊断日志】记录即将写入的任务数量
-      const videoTasks = limitedTasks.filter((t: any) => t.type === 'video')
-      logInfo('[App] 📝 写入历史记录文件:', {
-        totalTasks: limitedTasks.length,
-        videoTasks: videoTasks.length,
-        tasksWithServerTaskId: videoTasks.filter((t: any) => t.serverTaskId).length
-      })
-
-      writeJsonToAppData('history.json', limitedTasks).catch(e => logError('write history failed', e))
+    // 防止在初始加载时触发保存（避免删除数据库中的历史记录）
+    if (isInitialLoadRef.current) {
+      logInfo('[App] 跳过初始加载时的保存操作')
+      return
     }
 
-    saveHistory()
+    const saveHistory = async () => {
+      try {
+        // 获取数据根目录（用于路径转换）
+        const dataRoot = await getDataRoot()
+
+        // 过滤需要保存的任务（排除临时状态）
+        const tasksToSave = tasks.filter(t =>
+          t.status === 'success' ||
+          t.status === 'error' ||
+          t.status === 'timeout' ||
+          t.status === 'pending' ||
+          t.status === 'queued' ||
+          t.status === 'generating'
+        )
+
+        logInfo('[App] 保存历史记录到数据库，共', tasksToSave.length, '条')
+
+        // 同步数据库：删除不在列表中的记录，更新或插入存在的记录
+        const allRecords = await databaseService.getHistory()
+        const taskIds = new Set(tasksToSave.map(t => t.id))
+
+        // 删除数据库中但不在当前列表中的记录
+        for (const record of allRecords) {
+          if (!taskIds.has(record.id)) {
+            await databaseService.deleteHistory(record.id)
+            logInfo('[App] 从数据库删除过期记录:', record.id)
+          }
+        }
+
+        // 更新或插入当前列表中的记录
+        for (const task of tasksToSave) {
+          const existingRecord = allRecords.find(r => r.id === task.id)
+
+          // 清理 options 中的 base64 数据
+          const sanitizedOptions = task.options ? { ...task.options } : {}
+          if (sanitizedOptions) {
+            delete sanitizedOptions.images
+            delete sanitizedOptions.image_url
+            delete sanitizedOptions.uploadedImages
+            delete sanitizedOptions.videos
+            delete sanitizedOptions.video_url
+            delete sanitizedOptions.uploadedVideos
+          }
+
+          // 转换文件路径为相对路径
+          let relativeFilePath: string | undefined = undefined
+          if (task.result?.filePath) {
+            relativeFilePath = await convertPathString(task.result.filePath, dataRoot, true)
+          }
+
+          // 转换上传的文件路径为相对路径
+          if (task.uploadedFilePaths && task.uploadedFilePaths.length > 0) {
+            sanitizedOptions.uploadedFilePaths = await convertPathArray(task.uploadedFilePaths, dataRoot, true)
+          }
+          if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length > 0) {
+            sanitizedOptions.uploadedVideoFilePaths = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, true)
+          }
+
+          const historyRecord = {
+            id: task.id,
+            providerId: task.provider || '',
+            modelId: task.model,
+            type: task.type,
+            prompt: task.prompt,
+            params: sanitizedOptions,
+            filePath: relativeFilePath,
+            taskId: task.serverTaskId,
+            status: task.status,
+            errorMessage: task.error,
+            cost: undefined,
+            duration: task.duration ? parseFloat(task.duration) : undefined
+          }
+
+          if (existingRecord) {
+            // 更新现有记录
+            await databaseService.updateHistory(task.id, historyRecord)
+          } else {
+            // 插入新记录
+            await databaseService.insertHistory(historyRecord)
+          }
+        }
+
+        logInfo('[App] 历史记录保存完成')
+      } catch (error) {
+        logError('[App] 保存历史记录失败:', error)
+      }
+    }
+
+    // 延迟保存，避免频繁写入
+    const timer = setTimeout(saveHistory, 1000)
+    return () => clearTimeout(timer)
   }, [tasks, isTasksLoaded])
 
   // 检查是否有保存的API密钥
@@ -2740,7 +2843,9 @@ const ConversationWorkspace: React.FC = () => {
       try {
         const arr: string[] = []
         for (const p of task.uploadedFilePaths) {
-          const data = await fileToDataUrl(p)
+          // 解析为绝对路径（处理相对路径）
+          const absolutePath = await resolveFilePath(p)
+          const data = await fileToDataUrl(absolutePath)
           arr.push(data)
         }
         images = arr
@@ -2768,8 +2873,10 @@ const ConversationWorkspace: React.FC = () => {
         const arr: string[] = []
         for (const p of task.uploadedVideoFilePaths) {
           try {
+            // 解析为绝对路径（处理相对路径）
+            const absolutePath = await resolveFilePath(p)
             // 简单验证文件是否存在
-            await fileToDataUrl(p)
+            await fileToDataUrl(absolutePath)
             // 视频这里我们不需要 base64 数据用于显示（因为太大了），
             // 这个 videos 数组主要是为了兼顾旧逻辑
             // 实际使用的是 uploadedVideoFilePaths
@@ -2847,12 +2954,12 @@ const ConversationWorkspace: React.FC = () => {
   }
 
   const handleContinuePolling = async (task: GenerationTask) => {
-    // 根据任务模型确定供应商类型
-    const providerObj = providers.find(p => p.models.some(m => m.id === task.model))
-    if (!providerObj) {
+    // 根据任务模型确定供应商类型（使用新架构的 ModelRegistry）
+    const modelInfo = registry.getModelInfo(task.model)
+    if (!modelInfo) {
       throw new Error(`未找到模型 ${task.model} 对应的供应商`)
     }
-    const providerType = providerObj.id as 'ppio' | 'fal' | 'modelscope' | 'kie'
+    const providerType = modelInfo.provider as 'ppio' | 'fal' | 'modelscope' | 'kie'
 
     // 【修复】根据供应商类型判断使用哪个方法
     // PPIO 视频任务使用 retryPolling（因为它有特殊的轮询逻辑）
@@ -2889,7 +2996,8 @@ const ConversationWorkspace: React.FC = () => {
       }
 
       if (!apiKey) {
-        throw new Error(`请先在设置中配置 ${providerObj.name} 的 API Key`)
+        const providerDisplayName = getProviderDisplayName(modelInfo.provider)
+        throw new Error(`请先在设置中配置 ${providerDisplayName} 的 API Key`)
       }
 
       apiService.setApiKey(apiKey)
@@ -3015,7 +3123,7 @@ const ConversationWorkspace: React.FC = () => {
   }
 
   // 清除所有历史记录
-  const clearAllHistory = () => {
+  const clearAllHistory = async () => {
     setTasks([])
     localStorage.removeItem('generationTasks')
   }

@@ -27,7 +27,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
   // 计算图标尺寸
   const getIconSize = (ratio: string): { width: number; height: number } => {
     const [w, h] = ratio.split(':').map(Number)
-    const maxSize = 32
+    const maxSize = 28
     const scale = Math.min(maxSize / w, maxSize / h)
     return {
       width: Math.round(w * scale),
@@ -53,31 +53,33 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
           </button>
         )}
 
-        {options.map((option) => {
-          const iconSize = option.icon || getIconSize(option.value)
-          const label = getI18nText(option.label, i18n.language)
+        {options
+          .filter(option => !(smartMatchEnabled && option.value === 'smart'))
+          .map((option) => {
+            const iconSize = option.icon || getIconSize(option.value)
+            const label = getI18nText(option.label, i18n.language)
 
-          return (
-            <button
-              key={option.value}
-              onClick={() => onChange(option.value)}
-              className={`aspect-ratio-option ${value === option.value ? 'selected' : ''}`}
-            >
-              {visualize && (
-                <div className="aspect-ratio-icon">
-                  <div
-                    className="aspect-ratio-box"
-                    style={{
-                      width: `${iconSize.width}px`,
-                      height: `${iconSize.height}px`
-                    }}
-                  />
-                </div>
-              )}
-              <span className="aspect-ratio-label">{label}</span>
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={option.value}
+                onClick={() => onChange(option.value)}
+                className={`aspect-ratio-option ${value === option.value ? 'selected' : ''}`}
+              >
+                {visualize && (
+                  <div className="aspect-ratio-icon">
+                    <div
+                      className="aspect-ratio-box"
+                      style={{
+                        width: `${iconSize.width}px`,
+                        height: `${iconSize.height}px`
+                      }}
+                    />
+                  </div>
+                )}
+                <span className="aspect-ratio-label">{label}</span>
+              </button>
+            )
+          })}
       </div>
     </div>
   )

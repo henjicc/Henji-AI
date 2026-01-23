@@ -4,7 +4,7 @@
  * 定义工具节点的配置格式
  */
 
-import type { I18nText } from './common'
+import type { I18nText } from './I18nText'
 import type { InputPort, OutputPort } from './NodePort'
 import type { NodeOutput } from './ModelNode'
 import type { ParamDef } from './ParamDef'

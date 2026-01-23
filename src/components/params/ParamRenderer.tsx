@@ -4,126 +4,50 @@
  * 根据参数定义自动选择和渲染对应的 UI 组件
  */
 
-import React, { useMemo, useCallback } from 'react'
-import type { ParamDef } from '@/core/types/ParamDef'
-import { getI18nText } from '@/utils/i18n'
+import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
+import { panelRegistry } from '@/core/panels/PanelRegistry'
+import { getI18nText } from '@/core/types/I18nText'
 
-// 导入基础组件（这些组件需要在 Phase 2.1 中实现）
-// 暂时使用占位符，实际实现时需要替换
-const TextInput = ({ value, onChange, label, placeholder, multiline, maxLength, disabled }: any) => (
-  <div className="param-input">
-    <label>{label}</label>
-    {multiline ? (
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        disabled={disabled}
-      />
-    ) : (
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        disabled={disabled}
-      />
-    )}
-  </div>
-)
+// 导入真实的新系统组件
+import { TextInput } from './base/TextInput'
+import { NumberInput } from './base/NumberInput'
+import { SliderInput } from './base/SliderInput'
+import { DropdownInput } from './base/DropdownInput'
+import { SwitchInput } from './base/SwitchInput'
+import { RadioInput } from './base/RadioInput'
+import { ImageUpload } from './upload/ImageUpload'
+import { VideoUpload } from './upload/VideoUpload'
 
-const NumberInput = ({ value, onChange, label, min, max, step, placeholder, disabled }: any) => (
-  <div className="param-input">
-    <label>{label}</label>
-    <input
-      type="number"
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      min={min}
-      max={max}
-      step={step}
-      placeholder={placeholder}
-      disabled={disabled}
-    />
-  </div>
-)
+// 导入特殊面板
+import { CompositePanel } from './panels/CompositePanel'
 
-const SliderInput = ({ value, onChange, label, min, max, step, unit, marks, showInput, disabled }: any) => (
-  <div className="param-input">
-    <label>{label}</label>
-    <input
-      type="range"
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      min={min}
-      max={max}
-      step={step}
-      disabled={disabled}
-    />
-    {showInput !== false && (
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        min={min}
-        max={max}
-        step={step}
-        disabled={disabled}
-      />
-    )}
-    {unit && <span>{unit}</span>}
-  </div>
-)
+// 导入 UI 组件
+import PanelTrigger from '@/components/ui/PanelTrigger'
+import Tooltip from '@/components/ui/Tooltip'
 
-const DropdownInput = ({ value, onChange, label, options, searchable, placeholder, disabled }: any) => (
-  <div className="param-input">
-    <label>{label}</label>
-    <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
-      {placeholder && <option value="">{placeholder}</option>}
-      {options?.map((opt: any) => (
-        <option key={opt.value} value={opt.value} disabled={opt.disabled}>
-          {typeof opt.label === 'string' ? opt.label : opt.label?.zh || opt.label?.en}
-        </option>
-      ))}
-    </select>
-  </div>
-)
+/**
+ * 格式化面板显示值
+ * 用于 PanelTrigger 的 display 属性
+ */
+function formatPanelDisplayValue(value: any, panel: string): string {
+  if (!value) return '未设置'
 
-const SwitchInput = ({ value, onChange, label, onLabel, offLabel, disabled }: any) => (
-  <div className="param-input">
-    <label>{label}</label>
-    <input
-      type="checkbox"
-      checked={value}
-      onChange={(e) => onChange(e.target.checked)}
-      disabled={disabled}
-    />
-    {value ? onLabel : offLabel}
-  </div>
-)
+  // ResolutionPanel 的显示逻辑
+  if (panel === 'resolution') {
+    if (value.aspectRatio === 'smart') return '智能'
+    if (value.aspectRatio) {
+      const quality = value.quality ? ` (${value.quality})` : ''
+      return `${value.aspectRatio}${quality}`
+    }
+    if (value.preset) return value.preset
+    if (value.width && value.height) return `${value.width}×${value.height}`
+  }
 
-const RadioInput = ({ value, onChange, label, options, direction, disabled }: any) => (
-  <div className="param-input">
-    <label>{label}</label>
-    <div style={{ display: 'flex', flexDirection: direction === 'horizontal' ? 'row' : 'column' }}>
-      {options?.map((opt: any) => (
-        <label key={opt.value}>
-          <input
-            type="radio"
-            value={opt.value}
-            checked={value === opt.value}
-            onChange={(e) => onChange(opt.value)}
-            disabled={disabled || opt.disabled}
-          />
-          {typeof opt.label === 'string' ? opt.label : opt.label?.zh || opt.label?.en}
-        </label>
-      ))}
-    </div>
-  </div>
-)
+  // 默认显示
+  return JSON.stringify(value)
+}
 
 // 组件映射表
 const COMPONENT_MAP = {
@@ -133,20 +57,22 @@ const COMPONENT_MAP = {
   dropdown: DropdownInput,
   switch: SwitchInput,
   radio: RadioInput,
-  // 特殊组件将在后续添加
-  'image-upload': null,
-  'video-upload': null,
+  'image-upload': ImageUpload,
+  'video-upload': VideoUpload,
+  composite: CompositePanel,
+  // 其他特殊组件将在需要时添加
   resolution: null,
   'aspect-ratio': null,
   panel: null,
 } as const
 
 interface ParamRendererProps {
-  paramDef: ParamDef
+  param: ParamDef
   value: any
   onChange: (value: any) => void
-  allParams: Record<string, any>
-  getFilteredOptions?: (paramId: string) => any[]
+  allValues: Record<string, any>
+  uploadedImages?: string[]
+  uploadedVideos?: string[]
   disabled?: boolean
 }
 
@@ -156,159 +82,118 @@ interface ParamRendererProps {
  * 根据参数定义自动渲染对应的 UI 组件
  */
 export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
-  paramDef,
+  param,
   value,
   onChange,
-  allParams,
-  getFilteredOptions,
+  allValues,
+  uploadedImages = [],
+  uploadedVideos = [],
   disabled: externalDisabled = false
 }) => {
   const { i18n } = useTranslation()
 
-  // 检查是否应该显示
+  // 检查是否应该显示（基于 linkages 中的 Hide 效果）
   const isVisible = useMemo(() => {
-    if (!paramDef.visible) return true
-
-    if (typeof paramDef.visible.condition === 'function') {
-      return paramDef.visible.condition(allParams)
-    }
-
-    if (typeof paramDef.visible.condition === 'string') {
-      try {
-        // 简单的表达式求值
-        const fn = new Function('params', `
-          with (params) {
-            return ${paramDef.visible.condition}
-          }
-        `)
-        return fn(allParams)
-      } catch (error) {
-        console.error('Visible condition evaluation error:', error)
-        return true
-      }
-    }
-
+    // 这里可以添加基于 linkages 的可见性逻辑
+    // 暂时默认显示
     return true
-  }, [paramDef.visible, allParams])
-
-  // 检查是否应该禁用
-  const isDisabled = useMemo(() => {
-    if (externalDisabled) return true
-    if (!paramDef.disabled) return false
-
-    if (typeof paramDef.disabled.condition === 'function') {
-      return paramDef.disabled.condition(allParams)
-    }
-
-    return false
-  }, [paramDef.disabled, allParams, externalDisabled])
+  }, [param, allValues])
 
   // 如果不可见，返回 null
   if (!isVisible) {
     return null
   }
 
+  // 处理 composite 类型（特殊面板）
+  if (param.type === 'composite') {
+    const compositeParam = param as CompositePanelDef
+
+    // 如果指定了 panel 字段，使用 PanelRegistry 获取对应的面板组件
+    if (compositeParam.panel) {
+      const PanelComponent = panelRegistry.get(compositeParam.panel as any)
+
+      if (PanelComponent) {
+        // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
+        const panelContent = (
+          <PanelTrigger
+            label={param.name?.zh || param.name?.en || param.id}
+            display={formatPanelDisplayValue(value, compositeParam.panel)}
+            className="w-auto min-w-[100px]"
+            panelWidth={320}
+            alignment="aboveCenter"
+            closeOnPanelClick={false}
+            renderPanel={() => (
+              <PanelComponent
+                value={value}
+                onChange={onChange}
+                config={compositeParam.config}
+              />
+            )}
+          />
+        )
+
+        // 如果有 tooltip，包装 Tooltip
+        if (param.tooltip) {
+          return (
+            <Tooltip
+              content={getI18nText(param.tooltip, i18n.language)}
+              delay={500}
+            >
+              {panelContent}
+            </Tooltip>
+          )
+        }
+
+        return panelContent
+      } else {
+        console.warn(`Panel "${compositeParam.panel}" not found in registry`)
+      }
+    }
+
+    // 如果没有指定 panel 或找不到，使用默认的 CompositePanel
+    return (
+      <CompositePanel
+        config={compositeParam.config}
+        value={value || {}}
+        onChange={onChange}
+      />
+    )
+  }
+
   // 获取组件
-  const Component = COMPONENT_MAP[paramDef.component as keyof typeof COMPONENT_MAP]
+  const Component = COMPONENT_MAP[param.type as keyof typeof COMPONENT_MAP]
 
   if (!Component) {
     return (
-      <div className="param-renderer-error" data-param-id={paramDef.id}>
-        <span>Unknown component type: {paramDef.component}</span>
+      <div className="param-renderer-error" data-param-id={param.id}>
+        <span>Unknown component type: {param.type}</span>
       </div>
     )
   }
 
-  // 获取显示文本
-  const label = getI18nText(paramDef.name, i18n.language)
-  const tooltip = paramDef.tooltip ? getI18nText(paramDef.tooltip, i18n.language) : undefined
-
-  // 通用属性
-  const commonProps = {
-    value,
-    onChange,
-    disabled: isDisabled,
-    label,
-    tooltip
-  }
-
-  // 组件特定属性
-  let specificProps = {}
-
-  switch (paramDef.component) {
-    case 'text':
-      if ('placeholder' in paramDef) {
-        specificProps = {
-          placeholder: paramDef.placeholder ? getI18nText(paramDef.placeholder, i18n.language) : undefined,
-          multiline: paramDef.multiline,
-          maxLength: paramDef.maxLength
-        }
-      }
-      break
-
-    case 'number':
-      if ('min' in paramDef) {
-        specificProps = {
-          min: paramDef.min,
-          max: paramDef.max,
-          step: paramDef.step,
-          placeholder: paramDef.placeholder ? getI18nText(paramDef.placeholder, i18n.language) : undefined
-        }
-      }
-      break
-
-    case 'slider':
-      if ('min' in paramDef) {
-        specificProps = {
-          min: paramDef.min,
-          max: paramDef.max,
-          step: paramDef.step,
-          unit: paramDef.unit,
-          marks: paramDef.marks,
-          showInput: paramDef.showInput
-        }
-      }
-      break
-
-    case 'dropdown':
-      if ('options' in paramDef) {
-        specificProps = {
-          options: getFilteredOptions ? getFilteredOptions(paramDef.id) : paramDef.options,
-          searchable: paramDef.searchable,
-          placeholder: paramDef.placeholder ? getI18nText(paramDef.placeholder, i18n.language) : undefined
-        }
-      }
-      break
-
-    case 'switch':
-      if ('onLabel' in paramDef) {
-        specificProps = {
-          onLabel: paramDef.onLabel ? getI18nText(paramDef.onLabel, i18n.language) : undefined,
-          offLabel: paramDef.offLabel ? getI18nText(paramDef.offLabel, i18n.language) : undefined
-        }
-      }
-      break
-
-    case 'radio':
-      if ('options' in paramDef) {
-        specificProps = {
-          options: paramDef.options,
-          direction: paramDef.direction
-        }
-      }
-      break
-  }
-
-  return (
-    <div className="param-renderer" data-param-id={paramDef.id}>
-      <Component {...commonProps} {...specificProps} />
-      {isDisabled && paramDef.disabled?.message && (
-        <div className="param-disabled-message">
-          {getI18nText(paramDef.disabled.message, i18n.language)}
-        </div>
-      )}
-    </div>
+  // 渲染普通组件（传递 param 对象）
+  const renderedComponent = (
+    <Component
+      param={param as any}
+      value={value}
+      onChange={onChange}
+      disabled={externalDisabled}
+    />
   )
+
+  // 如果有 tooltip，包装 Tooltip
+  if (param.tooltip) {
+    return (
+      <Tooltip
+        content={getI18nText(param.tooltip, i18n.language)}
+        delay={500}
+      >
+        {renderedComponent}
+      </Tooltip>
+    )
+  }
+
+  return renderedComponent
 })
 
 ParamRenderer.displayName = 'ParamRenderer'

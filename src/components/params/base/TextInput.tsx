@@ -9,6 +9,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TextParamDef } from '@/core/types'
+import { getI18nText } from '@/core/types/I18nText'
 
 interface TextInputProps {
   param: TextParamDef
@@ -23,14 +24,11 @@ export const TextInput: React.FC<TextInputProps> = ({
   onChange,
   disabled = false
 }) => {
-  const { t } = useTranslation()
+  const { i18n } = useTranslation()
 
   // 获取显示名称（支持 i18n）
-  const displayName = param.displayName
-    ? (typeof param.displayName === 'string'
-        ? param.displayName
-        : t(param.displayName.key, param.displayName.fallback))
-    : param.id
+  const displayName = getI18nText(param.name, i18n.language)
+  const placeholder = getI18nText(param.placeholder || '', i18n.language)
 
   // 处理输入变化
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -40,44 +38,38 @@ export const TextInput: React.FC<TextInputProps> = ({
   // 多行文本输入
   if (param.multiline) {
     return (
-      <div className="text-input-wrapper">
-        <label className="param-label">
+      <div className="w-auto">
+        <label className="block text-sm font-medium text-zinc-300 mb-1.5">
           {displayName}
-          {param.required && <span className="required-mark">*</span>}
+          {param.required && <span className="text-red-500 ml-1">*</span>}
         </label>
         <textarea
           value={value || ''}
           onChange={handleChange}
           disabled={disabled}
-          placeholder={param.placeholder}
+          placeholder={placeholder}
           rows={param.rows || 4}
-          className="text-input text-input-multiline"
+          className="w-full min-h-[80px] px-3 py-2 bg-zinc-800/70 border border-zinc-700/50 rounded text-zinc-100 placeholder-zinc-500 resize-y transition-colors hover:border-[#007eff]/50 focus:border-[#007eff] focus:ring-1 focus:ring-[#007eff]/20 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
         />
-        {param.description && (
-          <div className="param-description">{param.description}</div>
-        )}
       </div>
     )
   }
 
   // 单行文本输入
   return (
-    <div className="text-input-wrapper">
-      <label className="param-label">
+    <div className="w-auto">
+      <label className="block text-sm font-medium text-zinc-300 mb-1.5">
         {displayName}
-        {param.required && <span className="required-mark">*</span>}
+        {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       <input
         type="text"
         value={value || ''}
         onChange={handleChange}
         disabled={disabled}
-        placeholder={param.placeholder}
-        className="text-input"
+        placeholder={placeholder}
+        className="w-full h-[38px] px-3 bg-zinc-800/70 border border-zinc-700/50 rounded text-zinc-100 placeholder-zinc-500 transition-colors hover:border-[#007eff]/50 focus:border-[#007eff] focus:ring-1 focus:ring-[#007eff]/20 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
       />
-      {param.description && (
-        <div className="param-description">{param.description}</div>
-      )}
     </div>
   )
 }

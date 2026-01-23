@@ -6,7 +6,7 @@
 
 import { panelRegistry } from './PanelRegistry'
 import { ResolutionPanel } from '@/components/params/panels/ResolutionPanel'
-import { ModelSelectorPanel } from '@/components/MediaGenerator/components/ModelSelectorPanel'
+import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSelectorPanel'
 import { CompositePanel } from '@/components/params/panels/CompositePanel'
 import { registerDefaultComponents } from '@/components/params/panels/composite/registerDefaultComponents'
 
@@ -27,7 +27,7 @@ export function registerDefaultPanels(): void {
   panelRegistry.register('composite', CompositePanel)
 
   // 开发模式下输出注册信息
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[PanelRegistry] Registered panels:', panelRegistry.listRegistered())
+  if (import.meta.env.DEV) {
+    // console.log('[PanelRegistry] Registered panels:', panelRegistry.listRegistered())
   }
 }

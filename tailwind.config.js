@@ -16,6 +16,30 @@ export default {
           border: '#404040',
           accent: '#007eff',
         }
+      },
+      keyframes: {
+        scaleIn: {
+          '0%': { opacity: '0', transform: 'scale(0.95)' },
+          '100%': { opacity: '1', transform: 'scale(1)' }
+        },
+        'scale-in': {
+          '0%': { opacity: '0', transform: 'scale(0.95)' },
+          '100%': { opacity: '1', transform: 'scale(1)' }
+        },
+        'scale-out': {
+          '0%': { opacity: '1', transform: 'scale(1)' },
+          '100%': { opacity: '0', transform: 'scale(0.95)' }
+        },
+        radioDotAppear: {
+          '0%': { transform: 'translate(-50%, -50%) scale(0)' },
+          '100%': { transform: 'translate(-50%, -50%) scale(1)' }
+        }
+      },
+      animation: {
+        'scale-in': 'scale-in 0.1s ease-out',
+        'scale-out': 'scale-out 0.2s ease-out',
+        'scaleIn': 'scaleIn 0.1s ease-out',
+        'radioDotAppear': 'radioDotAppear 0.2s ease-out'
       }
     },
   },

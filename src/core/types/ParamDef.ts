@@ -25,7 +25,7 @@ export interface BaseParamDef {
   /**
    * 组件类型
    */
-  component: ComponentType
+  type: ComponentType
 
   /**
    * 参数显示顺序
@@ -47,6 +47,18 @@ export interface BaseParamDef {
    * 鼠标悬停时显示
    */
   tooltip?: I18nText
+
+  /**
+   * 详细描述（可选，支持国际化）
+   *
+   * 在组件下方显示具体说明
+   */
+  description?: I18nText
+
+  /**
+   * 是否必填（默认 false）
+   */
+  required?: boolean
 
   /**
    * 值类型
@@ -102,7 +114,7 @@ export interface BaseParamDef {
  * ```
  */
 export interface TextParamDef extends BaseParamDef {
-  component: 'text'
+  type: 'text'
   valueType: 'string'
 
   /**
@@ -124,6 +136,11 @@ export interface TextParamDef extends BaseParamDef {
    * 是否必需（默认 false）
    */
   required?: boolean
+
+  /**
+   * 行数（仅多行时有效，默认 4）
+   */
+  rows?: number
 }
 
 /**
@@ -146,7 +163,7 @@ export interface TextParamDef extends BaseParamDef {
  * ```
  */
 export interface NumberParamDef extends BaseParamDef {
-  component: 'number'
+  type: 'number'
   valueType: 'number'
 
   /**
@@ -196,7 +213,7 @@ export interface NumberParamDef extends BaseParamDef {
  * ```
  */
 export interface SliderParamDef extends BaseParamDef {
-  component: 'slider'
+  type: 'slider'
   valueType: 'number'
 
   /**
@@ -254,7 +271,7 @@ export interface SliderParamDef extends BaseParamDef {
  * ```
  */
 export interface DropdownParamDef extends BaseParamDef {
-  component: 'dropdown'
+  type: 'dropdown'
   valueType: 'string' | 'number'
 
   /**
@@ -311,7 +328,7 @@ export interface DropdownParamDef extends BaseParamDef {
  * ```
  */
 export interface SwitchParamDef extends BaseParamDef {
-  component: 'switch'
+  type: 'switch'
   valueType: 'boolean'
 
   /**
@@ -347,7 +364,7 @@ export interface SwitchParamDef extends BaseParamDef {
  * ```
  */
 export interface RadioParamDef extends BaseParamDef {
-  component: 'radio'
+  type: 'radio'
   valueType: 'string' | 'number'
 
   /**
@@ -389,7 +406,7 @@ export interface RadioParamDef extends BaseParamDef {
  * ```
  */
 export interface PanelParamDef extends BaseParamDef {
-  component: 'panel'
+  type: 'panel'
   valueType: 'object'
 
   /**
@@ -437,13 +454,25 @@ export interface PanelParamDef extends BaseParamDef {
  * ```
  */
 export interface ImageUploadParamDef extends BaseParamDef {
-  component: 'image-upload'
+  type: 'image-upload'
   valueType: 'array'
 
   /**
    * 最大上传数量（默认 1）
    */
   maxCount?: number
+
+  /**
+   * 上传格式
+   * 'base64' - 返回 base64 字符串
+   * 'url' - 返回图片 URL (需要适配器支持文件上传)
+   */
+  format?: 'base64' | 'url'
+
+  /**
+   * base64 格式是否包含前缀 (data:image/...)
+   */
+  base64Prefix?: boolean
 
   /**
    * 接受的文件类型（可选）
@@ -490,7 +519,7 @@ export interface ImageUploadParamDef extends BaseParamDef {
  * ```
  */
 export interface VideoUploadParamDef extends BaseParamDef {
-  component: 'video-upload'
+  type: 'video-upload'
   valueType: 'array'
 
   /**
@@ -554,7 +583,7 @@ export interface VideoUploadParamDef extends BaseParamDef {
  * ```
  */
 export interface ResolutionParamDef extends BaseParamDef {
-  component: 'resolution'
+  type: 'resolution'
   valueType: 'string'
 
   /**
@@ -593,7 +622,7 @@ export interface ResolutionParamDef extends BaseParamDef {
  * ```
  */
 export interface AspectRatioParamDef extends BaseParamDef {
-  component: 'aspect-ratio'
+  type: 'aspect-ratio'
   valueType: 'string'
 
   /**

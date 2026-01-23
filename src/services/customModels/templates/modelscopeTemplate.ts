@@ -5,7 +5,7 @@
  */
 
 import { CustomModelConfig } from '@/core/types/CustomModel'
-import { ParamDefinition } from '@/core/types/ModelDefinition'
+import { ParamDef } from '@/core/types'
 
 /**
  * 创建 ModelScope 自定义模型配置
@@ -16,22 +16,26 @@ export function createModelscopeCustomModelConfig(
   modelUrl: string,
   type: 'image' | 'video' | 'audio'
 ): CustomModelConfig {
-  const baseParams: ParamDefinition[] = [
+  const baseParams: ParamDef[] = [
     {
       id: 'prompt',
-      label: '提示词',
-      type: 'textarea',
-      defaultValue: '',
+      component: 'text',
+      order: 1,
+      name: { zh: '提示词', en: 'Prompt' },
+      valueType: 'string',
+      default: '',
       required: true,
-      apiField: 'input.prompt'
+      api: 'input.prompt'
     },
     {
       id: 'negativePrompt',
-      label: '负面提示词',
-      type: 'textarea',
-      defaultValue: '',
+      component: 'text',
+      order: 2,
+      name: { zh: '负面提示词', en: 'Negative Prompt' },
+      valueType: 'string',
+      default: '',
       required: false,
-      apiField: 'input.negative_prompt'
+      api: 'input.negative_prompt'
     }
   ]
 
@@ -40,33 +44,39 @@ export function createModelscopeCustomModelConfig(
     baseParams.push(
       {
         id: 'width',
-        label: '宽度',
-        type: 'number',
-        defaultValue: 1024,
+        component: 'number',
+        order: 3,
+        name: { zh: '宽度', en: 'Width' },
+        valueType: 'number',
+        default: 1024,
         min: 512,
         max: 2048,
         step: 64,
-        apiField: 'parameters.width'
+        api: 'parameters.width'
       },
       {
         id: 'height',
-        label: '高度',
-        type: 'number',
-        defaultValue: 1024,
+        component: 'number',
+        order: 4,
+        name: { zh: '高度', en: 'Height' },
+        valueType: 'number',
+        default: 1024,
         min: 512,
         max: 2048,
         step: 64,
-        apiField: 'parameters.height'
+        api: 'parameters.height'
       },
       {
         id: 'numInferenceSteps',
-        label: '推理步数',
-        type: 'number',
-        defaultValue: 20,
+        component: 'number',
+        order: 5,
+        name: { zh: '推理步数', en: 'Inference Steps' },
+        valueType: 'number',
+        default: 20,
         min: 1,
         max: 100,
         step: 1,
-        apiField: 'parameters.num_inference_steps'
+        api: 'parameters.num_inference_steps'
       }
     )
   }

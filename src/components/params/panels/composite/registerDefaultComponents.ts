@@ -21,7 +21,7 @@ export function registerDefaultComponents(): void {
   componentRegistry.register('preset-resolution', PresetResolutionSelector)
 
   // 开发模式下输出注册信息
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[ComponentRegistry] Registered components:', componentRegistry.listRegistered())
+  if (import.meta.env.DEV) {
+    // console.log('[ComponentRegistry] Registered components:', componentRegistry.listRegistered())
   }
 }

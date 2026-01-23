@@ -7,9 +7,11 @@
 
 import { ModelTag } from './ModelTags'
 import { I18nText } from './I18nText'
-import { EndpointConfig } from './EndpointConfig'
-import { RequestConfig } from './RequestConfig'
-import { PricingConfig } from './PricingConfig'
+import type { EndpointConfig } from './EndpointConfig'
+import type { RequestConfig } from './RequestConfig'
+import type { PricingConfig } from './PricingConfig'
+import type { ParamDef } from './ParamDef'
+import type { Linkage } from './Linkage'
 
 /**
  * 模型类型

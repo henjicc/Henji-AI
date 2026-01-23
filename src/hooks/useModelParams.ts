@@ -263,7 +263,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
       }
 
       // 只有 dropdown 和 radio 有 options
-      if (paramDef.component !== 'dropdown' && paramDef.component !== 'radio') {
+      if (paramDef.type !== 'dropdown' && paramDef.type !== 'radio') {
         return []
       }
 

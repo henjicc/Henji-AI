@@ -4,7 +4,7 @@
  * 定义工具节点的结构和类型
  */
 
-import type { I18nText } from './common'
+import type { I18nText } from './I18nText'
 import type { InputPort, OutputPort } from './NodePort'
 import type { NodeOutput } from './ModelNode'
 

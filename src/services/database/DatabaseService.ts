@@ -5,6 +5,8 @@
  */
 
 import Database from '@tauri-apps/plugin-sql'
+import { appLocalDataDir, join } from '@tauri-apps/api/path'
+import { exists, mkdir } from '@tauri-apps/plugin-fs'
 import type {
   DatabaseService as IDatabaseService,
   HistoryRecord,
@@ -15,9 +17,9 @@ import type {
   PresetQueryOptions,
 } from './types'
 
-class DatabaseService implements IDatabaseService {
+export class DatabaseService implements IDatabaseService {
   private db: Database | null = null
-  private dbPath = 'sqlite:henji.db'
+  private dbPath: string | null = null
 
   /**
    * Initialize database connection
@@ -26,12 +28,98 @@ class DatabaseService implements IDatabaseService {
     if (this.db) return
 
     try {
+      // 获取应用数据目录
+      const appDataDir = await appLocalDataDir()
+      // 使用 join 确保路径正确
+      const henjiDir = await join(appDataDir, 'Henji-AI')
+
+      // 确保 Henji-AI 目录存在
+      const dirExists = await exists(henjiDir)
+      if (!dirExists) {
+        await mkdir(henjiDir, { recursive: true })
+      }
+
+      // 设置数据库路径
+      const dbPath = await join(henjiDir, 'henji.db')
+      this.dbPath = `sqlite:${dbPath}`
+
       this.db = await Database.load(this.dbPath)
-      console.log('[Database] Connected successfully')
+      // console.log('[Database] Connected successfully to:', this.dbPath)
+
+      // 创建表结构
+      await this.createTables()
+      // console.log('[Database] Tables initialized')
     } catch (error) {
       console.error('[Database] Connection failed:', error)
       throw new Error(`Database initialization failed: ${error}`)
     }
+  }
+
+  /**
+   * Create database tables if they don't exist
+   */
+  private async createTables(): Promise<void> {
+    const db = this.ensureConnected()
+
+    // 创建历史记录表
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS history (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        prompt TEXT,
+        params TEXT NOT NULL,
+        file_path TEXT,
+        task_id TEXT,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        cost REAL,
+        duration INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    // 创建预设表
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS presets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        model_id TEXT,
+        params TEXT NOT NULL,
+        is_favorite INTEGER DEFAULT 0,
+        use_count INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    // 创建设置表
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    // 创建自定义模型表
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS custom_models (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        provider_id TEXT NOT NULL,
+        base_model TEXT,
+        config TEXT NOT NULL,
+        is_enabled INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
   }
 
   /**
@@ -129,6 +217,73 @@ class DatabaseService implements IDatabaseService {
     )
 
     return rows.length > 0 ? this.mapHistoryRow(rows[0]) : null
+  }
+
+  async updateHistory(
+    id: string,
+    updates: Partial<Omit<HistoryRecord, 'id' | 'createdAt' | 'updatedAt'>>
+  ): Promise<void> {
+    const db = this.ensureConnected()
+
+    const fields: string[] = []
+    const values: any[] = []
+
+    if (updates.providerId !== undefined) {
+      fields.push('provider_id = ?')
+      values.push(updates.providerId)
+    }
+    if (updates.modelId !== undefined) {
+      fields.push('model_id = ?')
+      values.push(updates.modelId)
+    }
+    if (updates.type !== undefined) {
+      fields.push('type = ?')
+      values.push(updates.type)
+    }
+    if (updates.prompt !== undefined) {
+      fields.push('prompt = ?')
+      values.push(updates.prompt)
+    }
+    if (updates.params !== undefined) {
+      fields.push('params = ?')
+      values.push(JSON.stringify(updates.params))
+    }
+    if (updates.filePath !== undefined) {
+      fields.push('file_path = ?')
+      values.push(updates.filePath)
+    }
+    if (updates.taskId !== undefined) {
+      fields.push('task_id = ?')
+      values.push(updates.taskId)
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?')
+      values.push(updates.status)
+    }
+    if (updates.errorMessage !== undefined) {
+      fields.push('error_message = ?')
+      values.push(updates.errorMessage)
+    }
+    if (updates.cost !== undefined) {
+      fields.push('cost = ?')
+      values.push(updates.cost)
+    }
+    if (updates.duration !== undefined) {
+      fields.push('duration = ?')
+      values.push(updates.duration)
+    }
+
+    if (fields.length === 0) {
+      return
+    }
+
+    fields.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(id)
+
+    await db.execute(
+      `UPDATE history SET ${fields.join(', ')} WHERE id = ?`,
+      values
+    )
   }
 
   async deleteHistory(id: string): Promise<void> {

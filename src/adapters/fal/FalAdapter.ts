@@ -220,18 +220,12 @@ export class FalAdapter extends BaseAdapter {
         : params
       const { submitPath, modelId: routeModelId, requestData } = await route.buildImageRequest(requestParams)
 
-      // 构建日志对象，只包含有值的字段
-      const logRequestData: any = { ...requestData }
-      if (requestData.image_urls) {
-        logRequestData.image_urls = `[${requestData.image_urls.length} images]`
-      }
-
-      logInfo('[FalAdapter] 提交请求:', {
-        submitPath,
-        modelId: routeModelId,
-        syncMode: requestData.sync_mode,
-        requestData: logRequestData
-      })
+      // 🚀 打印实际请求参数
+      console.group(`🚀 Fal API Request: ${params.model}`)
+      console.log('📍 Submit Path:', submitPath)
+      console.log('🆔 Model ID:', routeModelId)
+      console.log('📦 Request Data:', JSON.stringify(requestData, null, 2))
+      console.groupEnd()
 
       // 3. 检查是否为同步模式
       if (requestData.sync_mode === true) {
@@ -273,7 +267,7 @@ export class FalAdapter extends BaseAdapter {
                   requestId: update.request_id,
                   modelId: routeModelId,
                   message: '任务已创建，开始轮询...'
-                })
+                } as any)
                 logInfo('[FalAdapter] 🆔 图片任务已创建，requestId:', update.request_id)
               }
 
@@ -373,7 +367,7 @@ export class FalAdapter extends BaseAdapter {
         }
 
         // 其他状态（失败等）
-        throw new Error(`Task failed with status: ${statusResponse.status}`)
+        throw new Error(`Task failed with status: ${(statusResponse as any).status}`)
       }
 
       return await pollStatus()
@@ -420,20 +414,12 @@ export class FalAdapter extends BaseAdapter {
       }
       const { endpoint, modelId, requestData } = await route.buildVideoRequest(requestParams)
 
-      // 构建日志对象，只包含有值的字段
-      const logRequestData: any = { ...requestData }
-      if (requestData.image_url) {
-        logRequestData.image_url = 'Image URL provided'
-      }
-      if (requestData.image_urls) {
-        logRequestData.image_urls = `[${requestData.image_urls.length} images]`
-      }
-
-      logInfo('[FalAdapter] 提交视频生成请求:', {
-        endpoint,
-        modelId,
-        requestData: logRequestData
-      })
+      // 🚀 打印实际请求参数
+      console.group(`🚀 Fal API Request: ${params.model}`)
+      console.log('📍 Endpoint:', endpoint)
+      console.log('🆔 Model ID:', modelId)
+      console.log('📦 Request Data:', JSON.stringify(requestData, null, 2))
+      console.groupEnd()
 
       // 3. 如果提供了 onProgress 回调，使用 subscribe 自动轮询
       if (params.onProgress) {

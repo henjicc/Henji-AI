@@ -58,17 +58,17 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
   }
 
   // 数值范围检查
-  if (paramDef.component === 'slider' || paramDef.component === 'number') {
-    if ('min' in paramDef && value < paramDef.min) {
+  if (paramDef.type === 'slider' || paramDef.type === 'number') {
+    if ('min' in paramDef && paramDef.min !== undefined && value < paramDef.min) {
       return false
     }
-    if ('max' in paramDef && value > paramDef.max) {
+    if ('max' in paramDef && paramDef.max !== undefined && value > paramDef.max) {
       return false
     }
   }
 
   // 选项检查
-  if (paramDef.component === 'dropdown' || paramDef.component === 'radio') {
+  if (paramDef.type === 'dropdown' || paramDef.type === 'radio') {
     if ('options' in paramDef && paramDef.options) {
       const validValues = paramDef.options.map((opt) => opt.value)
       if (!validValues.includes(value)) {

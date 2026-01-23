@@ -20,9 +20,8 @@ class PanelRegistry {
    */
   register(type: PanelType, component: React.ComponentType<any>): void {
     if (this.panels.has(type)) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn(`Panel type "${type}" is already registered. Overwriting.`)
-      }
+      // 已注册则跳过（支持 React StrictMode 的双重调用）
+      return
     }
     this.panels.set(type, component)
   }
@@ -54,7 +53,7 @@ class PanelRegistry {
     const Component = this.panels.get(config.type)
 
     if (!Component) {
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.error(`Unknown panel type: ${config.type}. Available panels:`, this.listRegistered())
       }
       return null

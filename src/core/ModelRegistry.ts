@@ -136,6 +136,38 @@ export class ModelRegistry {
   }
 
   /**
+   * 注销模型
+   *
+   * @param modelId - 模型 ID
+   */
+  unregister(modelId: string): void {
+    const model = this.models.get(modelId)
+    if (!model) {
+      console.warn(`Model not found: ${modelId}`)
+      return
+    }
+
+    // 1. 从主索引删除
+    this.models.delete(modelId)
+
+    // 2. 删除别名
+    model.meta.aliases?.forEach((alias) => {
+      this.models.delete(alias)
+    })
+
+    // 3. 从供应商索引删除
+    this.modelsByProvider.get(model.meta.provider)?.delete(modelId)
+
+    // 4. 从类型索引删除
+    this.modelsByType.get(model.meta.type)?.delete(modelId)
+
+    // 5. 从标签索引删除
+    model.meta.tags?.forEach((tag) => {
+      this.modelsByTag.get(tag)?.delete(modelId)
+    })
+  }
+
+  /**
    * 批量注册模型
    *
    * @param models - 模型定义数组
@@ -200,7 +232,7 @@ export class ModelRegistry {
    * ```typescript
    * const schema = registry.getSchema('nano-banana')
    * schema.forEach(param => {
-   *   console.log(param.id, param.component, param.default)
+   *   console.log(param.id, param.type, param.default)
    * })
    * ```
    */
@@ -372,7 +404,26 @@ export class ModelRegistry {
       if (typeof endpoints === 'object') {
         // 2.1 使用 selector 函数
         if (endpoints.selector) {
-          return endpoints.selector(params)
+          const selectorResult = endpoints.selector(params)
+
+          console.log(`[ModelRegistry.selectEndpoint] Model: ${modelId}, selector returned: "${selectorResult}"`)
+
+          // 如果有 routes 配置，selector 返回的是键，需要从 routes 中查找实际路径
+          if ((endpoints as any).routes) {
+            const routes = (endpoints as any).routes
+            console.log(`[ModelRegistry.selectEndpoint] Routes available:`, Object.keys(routes))
+            if (routes[selectorResult]) {
+              // 返回键，让 RequestBuilder.getEndpoint 从 routes 中查找
+              console.log(`[ModelRegistry.selectEndpoint] Found route for key "${selectorResult}":`, routes[selectorResult])
+              return selectorResult
+            }
+            // 如果 routes 中没有找到，可能 selector 直接返回的是路径
+            console.log(`[ModelRegistry.selectEndpoint] Key "${selectorResult}" not found in routes, returning as-is`)
+            return selectorResult
+          }
+
+          // 没有 routes，selector 直接返回路径
+          return selectorResult
         }
 
         // 2.2 使用 rules 规则选择

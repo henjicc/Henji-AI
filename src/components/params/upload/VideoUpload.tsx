@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import type { VideoUploadParamDef } from '@/core/types'
 import { UploadArea } from './UploadArea'
 import { FilePreview } from './FilePreview'
+import { getI18nText } from '@/core/types/I18nText'
 
 interface VideoUploadProps {
   param: VideoUploadParamDef
@@ -30,19 +31,16 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
   onChange,
   disabled = false
 }) => {
-  const { t } = useTranslation()
+  const { i18n } = useTranslation()
 
   // 获取显示名称
-  const displayName = param.displayName
-    ? (typeof param.displayName === 'string'
-        ? param.displayName
-        : t(param.displayName.key, param.displayName.fallback))
-    : param.id
+  const displayName = getI18nText(param.name, i18n.language)
 
   // 处理上传
   const handleUpload = async (file: File) => {
-    if (value.length >= param.maxCount) {
-      alert(`最多上传 ${param.maxCount} 个视频`)
+    const maxCount = param.maxCount || 1
+    if (value.length >= maxCount) {
+      alert(`最多上传 ${maxCount} 个视频`)
       return
     }
 
@@ -84,7 +82,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
           />
         ))}
 
-        {value.length < param.maxCount && (
+        {value.length < (param.maxCount || 1) && (
           <UploadArea
             accept={['video/mp4', 'video/webm', 'video/quicktime']}
             maxSize={100}
@@ -95,7 +93,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
       </div>
 
       {param.description && (
-        <div className="param-description">{param.description}</div>
+        <div className="param-description">{getI18nText(param.description, i18n.language)}</div>
       )}
     </div>
   )

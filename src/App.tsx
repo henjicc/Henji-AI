@@ -3,10 +3,10 @@ import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
 import { DragDropProvider } from './contexts/DragDropContext'
 import GlobalContextMenuProvider from './contexts/GlobalContextMenuProvider'
-import { migrateAllData } from './utils/parameterMigration'
-import { migratePresetsFromLocalStorage, needsPresetMigration } from './services/presets/migration'
 import { databaseService } from './services/database/DatabaseService'
 import { getCustomModelService } from './services/customModels/CustomModelService'
+import { loadAllModels } from './core/loaders'
+import { registerDefaultPanels } from './core/panels'
 
 /**
  * 简化后的 App 组件
@@ -19,26 +19,24 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('conversation')
   const [isReady, setIsReady] = useState(false)
 
-  // 数据迁移 - 在应用启动时执行一次
+  // 应用初始化
   useEffect(() => {
     const initializeApp = async () => {
-      // 1. 初始化数据库
-      await databaseService.init()
+      // 0. 注册默认面板（必须在使用前注册）
+      registerDefaultPanels()
 
-      // 2. 迁移旧参数数据
-      migrateAllData()
-
-      // 3. 迁移预设数据
-      if (needsPresetMigration()) {
-        try {
-          const result = await migratePresetsFromLocalStorage()
-          console.log(`[App] Preset migration completed: ${result.migratedCount} presets migrated`)
-        } catch (error) {
-          console.error('[App] Preset migration failed:', error)
-        }
+      // 1. 加载所有模型到 ModelRegistry
+      try {
+        const stats = await loadAllModels()
+        // console.log('[App] Models loaded:', stats)
+      } catch (error) {
+        console.error('[App] Failed to load models:', error)
       }
 
-      // 4. 加载启用的自定义模型
+      // 2. 初始化数据库
+      await databaseService.init()
+
+      // 3. 加载启用的自定义模型
       try {
         const customModelService = getCustomModelService(databaseService)
         await customModelService.loadEnabledModels()

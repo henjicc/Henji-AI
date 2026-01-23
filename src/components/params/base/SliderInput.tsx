@@ -6,9 +6,10 @@
  * 支持禁用和条件显示
  */
 
-import React, { useState } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SliderParamDef } from '@/core/types'
+import { getI18nText } from '@/core/types/I18nText'
 
 interface SliderInputProps {
   param: SliderParamDef
@@ -23,25 +24,16 @@ export const SliderInput: React.FC<SliderInputProps> = ({
   onChange,
   disabled = false
 }) => {
-  const { t } = useTranslation()
-  const [isDragging, setIsDragging] = useState(false)
+  const { i18n } = useTranslation()
 
   // 获取显示名称（支持 i18n）
-  const displayName = param.displayName
-    ? (typeof param.displayName === 'string'
-        ? param.displayName
-        : t(param.displayName.key, param.displayName.fallback))
-    : param.id
+  const displayName = getI18nText(param.name, i18n.language)
 
   // 处理滑块变化
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parseFloat(e.target.value)
     onChange(newValue)
   }
-
-  // 处理拖动状态
-  const handleMouseDown = () => setIsDragging(true)
-  const handleMouseUp = () => setIsDragging(false)
 
   // 计算标记位置
   const marks = param.marks || []
@@ -50,47 +42,42 @@ export const SliderInput: React.FC<SliderInputProps> = ({
   const step = param.step ?? 1
 
   return (
-    <div className="slider-input-wrapper">
-      <label className="param-label">
-        {displayName}
-        {param.required && <span className="required-mark">*</span>}
-        <span className="slider-value">{value}</span>
-      </label>
-      <div className={`slider-container ${isDragging ? 'dragging' : ''}`}>
+    <div className="w-auto min-w-[200px]">
+      <div className="flex justify-between items-center mb-1.5">
+        <label className="text-sm font-medium text-zinc-300">
+          {displayName}
+          {param.required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+        <span className="text-sm font-semibold text-[#007eff]">{value}</span>
+      </div>
+      <div className="relative py-2">
         <input
           type="range"
           value={value ?? min}
           onChange={handleChange}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onTouchStart={handleMouseDown}
-          onTouchEnd={handleMouseUp}
           disabled={disabled}
           min={min}
           max={max}
           step={step}
-          className="slider-input"
+          className="w-full h-1.5 bg-zinc-700/50 rounded-full appearance-none cursor-grab active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#007eff] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:hover:shadow-[0_0_0_4px_rgba(0,126,255,0.2)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#007eff] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
         />
-        {marks.length > 0 && (
-          <div className="slider-marks">
-            {marks.map((mark, index) => {
-              const position = ((mark.value - min) / (max - min)) * 100
-              return (
-                <div
-                  key={index}
-                  className="slider-mark"
-                  style={{ left: `${position}%` }}
-                >
-                  <div className="slider-mark-dot" />
-                  <div className="slider-mark-label">{mark.label}</div>
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
-      {param.description && (
-        <div className="param-description">{param.description}</div>
+      {marks.length > 0 && (
+        <div className="relative h-5 mt-2">
+          {marks.map((mark, index) => {
+            const position = ((mark.value - min) / (max - min)) * 100
+            return (
+              <div
+                key={index}
+                className="absolute transform -translate-x-1/2 text-center"
+                style={{ left: `${position}%` }}
+              >
+                <div className="w-2 h-2 rounded-full bg-zinc-700/50 mx-auto mb-1" />
+                <span className="text-xs text-zinc-500 whitespace-nowrap">{mark.label}</span>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )

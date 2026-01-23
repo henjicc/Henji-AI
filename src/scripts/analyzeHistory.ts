@@ -6,7 +6,7 @@
 
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { appLocalDataDir, join } from '@tauri-apps/api/path'
-import type { LegacyHistoryItem, MigrationStats } from './types'
+import type { LegacyHistoryItem, MigrationStats } from './migration/types'
 
 /**
  * Analyze history.json file

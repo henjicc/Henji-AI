@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import { CustomModel, AddCustomModelInput, UpdateCustomModelInput } from '@/core/types/CustomModel'
 import { DatabaseService } from '@/services/database/DatabaseService'
 import { CustomModelRecord } from '@/services/database/types'
-import { registry } from '@/core/registry/ModelRegistry'
+import { registry } from '@/core'
 import { createModelscopeCustomModelConfig } from './templates/modelscopeTemplate'
 
 /**
@@ -134,7 +134,7 @@ export class CustomModelService {
       this.registerToRegistry(model)
     }
 
-    console.log(`[CustomModelService] Loaded ${enabledModels.length} custom models`)
+    // console.log(`[CustomModelService] Loaded ${enabledModels.length} custom models`)
   }
 
   /**

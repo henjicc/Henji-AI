@@ -20,9 +20,8 @@ class ComponentRegistry {
    */
   register(type: ComponentType, component: React.ComponentType<any>): void {
     if (this.components.has(type)) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn(`Component type "${type}" is already registered. Overwriting.`)
-      }
+      // 已注册则跳过（支持 React StrictMode 的双重调用）
+      return
     }
     this.components.set(type, component)
   }

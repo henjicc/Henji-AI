@@ -175,7 +175,6 @@ export function migrateAllData(): void {
   // 检查是否已经迁移过
   const migrated = localStorage.getItem('params_migrated_v1');
   if (migrated === 'true') {
-    console.log('✅ 数据已迁移，跳过');
     return;
   }
 

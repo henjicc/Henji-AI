@@ -75,7 +75,7 @@ export class ModelscopeAdapter extends BaseAdapter {
           status: 'TASK_CREATED',
           taskId: response.task_id,
           message: '任务已创建，开始轮询...'
-        })
+        } as any)
       }
 
       // 4. 开始轮询任务状态

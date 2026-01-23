@@ -4,7 +4,7 @@
  * 根据参数和上下文自动选择正确的 API 端点
  */
 
-import type { EndpointConfig, RouteDefinition } from '../types'
+import type { EndpointConfig } from '../types'
 
 /**
  * 选择结果接口
@@ -16,9 +16,9 @@ export interface SelectResult {
   endpoint: string
 
   /**
-   * 路由定义
+   * 路由信息
    */
-  route: RouteDefinition
+  route: { path: string; method?: string }
 }
 
 /**
@@ -60,7 +60,7 @@ export interface SelectContext {
  * 3. 规则选择器（条件表达式数组）
  */
 export class EndpointSelector {
-  constructor(private config: EndpointConfig) {}
+  constructor(private config: EndpointConfig) { }
 
   /**
    * 选择端点
@@ -99,12 +99,12 @@ export class EndpointSelector {
    */
   private selectEndpoint(params: Record<string, any>, context: SelectContext): string {
     // 1. 单端点简化配置
-    if ('default' in this.config && typeof this.config.default === 'string') {
+    if (typeof this.config === 'object' && 'default' in this.config && typeof this.config.default === 'string') {
       return 'default'
     }
 
     // 2. 函数选择器
-    if ('select' in this.config && typeof this.config.select === 'function') {
+    if (typeof this.config === 'object' && 'select' in this.config && typeof this.config.select === 'function') {
       const result = this.config.select(params, context)
       if (!result) {
         throw new Error('[EndpointSelector] Function selector returned null/undefined')
@@ -113,8 +113,8 @@ export class EndpointSelector {
     }
 
     // 3. 规则选择器
-    if ('select' in this.config && this.config.select && 'rules' in this.config.select) {
-      const rules = this.config.select.rules
+    if (typeof this.config === 'object' && 'select' in this.config && this.config.select && typeof this.config.select === 'object' && 'rules' in this.config.select) {
+      const rules = (this.config.select as any).rules
       for (const rule of rules) {
         // 无条件规则（默认端点）
         if (!rule.condition) {
@@ -172,15 +172,15 @@ export class EndpointSelector {
    * @param endpointKey - 端点键
    * @returns 路由定义
    */
-  private getRoute(endpointKey: string): RouteDefinition | undefined {
+  private getRoute(endpointKey: string): { path: string; method?: string } | undefined {
     // 单端点简化配置
-    if ('default' in this.config && typeof this.config.default === 'string') {
+    if (typeof this.config === 'object' && 'default' in this.config && typeof this.config.default === 'string') {
       return { path: this.config.default, method: 'POST' }
     }
 
     // 多端点配置
-    if ('routes' in this.config && this.config.routes) {
-      return this.config.routes[endpointKey]
+    if (typeof this.config === 'object' && 'routes' in this.config && this.config.routes) {
+      return (this.config.routes as any)[endpointKey]
     }
 
     return undefined

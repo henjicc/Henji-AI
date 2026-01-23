@@ -150,7 +150,7 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
         {showCreateDialog && (
           <CreatePresetDialog
             currentModelId={currentModelId}
-            onSave={createPreset}
+            onSave={async (input) => { await createPreset(input) }}
             onClose={() => setShowCreateDialog(false)}
           />
         )}

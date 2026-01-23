@@ -1,7 +1,11 @@
 import React, { useState } from 'react'
-import { providers, getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
+import { getAvailableProviders } from '../utils/modelHelpers'
+import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
 
 const ModelSettingsPanel: React.FC = () => {
+  // 获取所有可用的 providers
+  const providers = getAvailableProviders()
+
   // 使用惰性初始化，直接从 localStorage 读取初始值
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())

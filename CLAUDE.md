@@ -1,288 +1,289 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+使用中文回复，每次回复开头都添加"💡"
+除非用户要求，否则禁止创建文档，禁止在处理完问题后创建总结文档
 
-## Project Overview
+## 项目概述
 
-Henji-AI (痕迹AI) is a Tauri-based desktop application that aggregates multiple AI providers (PPIO, Fal, ModelScope, KIE) for generating images, videos, and audio through a unified interface. The application uses an adapter pattern to abstract provider-specific APIs.
+Henji-AI（痕迹AI）是基于 Tauri 的桌面应用，聚合多个 AI 提供商（PPIO、Fal、ModelScope、KIE）生成图像、视频和音频。采用适配器模式抽象 API，配置驱动架构定义模型。
 
-## Development Commands
+## 常用命令
 
-### Frontend Development
 ```bash
-npm install              # Install dependencies
-npm run dev              # Vite dev server only
-npm run build            # TypeScript compilation + Vite build
-npm run preview          # Preview production build
-npm run lint             # Run ESLint
-npm run lint:fix         # Auto-fix ESLint issues
+npm install              # 安装依赖
+npm run dev              # 运行 Vite 开发服务器
+npm run build            # 构建前端
+npm run tauri:dev        # 运行 Tauri 开发模式（Windows 需要 MSVC）
+npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
 ```
 
-### Tauri Development
-```bash
-# Windows (requires Visual Studio Build Tools)
-npm run tauri:dev        # Development mode with hot reload
-npm run tauri:build      # Production build (generates MSI)
-npm run tauri:build:ci   # CI build without VS environment setup
+**注意**: 项目使用 `@/` 作为 `src/` 的路径别名
 
-# macOS (requires Xcode Command Line Tools)
-npm run tauri:dev:mac    # Development mode
-npm run tauri:build:mac  # Production build (generates DMG)
+## 核心架构原则
+
+**关键：解耦是本项目架构的基础，始终优先考虑关注点分离**
+
+### 1. 配置驱动架构（最重要）
+
+所有模型特定行为必须在配置中定义，而非代码：
+
+- UI 渲染由 `src/models/{provider}/*.model.ts` 中的参数 schema 驱动
+- 使用 `defineModel()` 定义模型，自动注册到 `ModelRegistry`
+- **禁止**在 UI 组件中写 `if (modelId === 'specific-model')`
+- **禁止**在通用组件中硬编码模型特定逻辑
+- 需要模型特定行为时，扩展模型定义 schema
+
+### 2. 提供商隔离模式
+
+内部系统与外部 API 完全隔离：
+
+- 所有外部 API 调用必须通过 `src/core/providers/`（新系统）
+- **禁止**在组件或服务中直接使用 `fetch()` 或 `axios`
+- 每个提供商有自己的 Provider 类实现 `ProviderHandler` 接口
+- Provider 处理所有提供商特定细节（认证、请求格式、响应解析、轮询）
+- 通过 `GenerationService` 统一调用各提供商
+
+**注意**：旧的 `src/adapters/` 正在被淘汰，不要在新代码中使用
+
+### 3. 严格解耦
+
+- **层级分离**: 组件不包含业务逻辑，业务逻辑不直接调用 API，Provider 不包含 UI 逻辑
+- **文件大小限制**: 每个文件最多 400 行（硬性约束）
+  - 超过 350 行时必须重构：提取子组件、移动逻辑到 hooks、提取工具函数
+- **单一职责**: 每个文件/类/函数只做一件事，如果描述时用到"和"字，就需要拆分
+- **禁止跨层导入**:
+  - 组件不能导入 `providers/` 或 `adapters/`
+  - Provider 不能导入 `components/`
+  - 模型不能导入 `services/` 或 `components/`
+  - 使用 `core/` 作为层间桥梁
+
+## 目录结构
+
+```
+src/
+├── adapters/          # 旧系统：Adapter 类（正在被淘汰）
+│   ├── base/          # BaseAdapter 抽象基类
+│   ├── fal/           # Fal.ai 适配器
+│   ├── kie/           # KIE 适配器
+│   ├── modelscope/    # ModelScope 适配器
+│   └── ppio/          # PPIO 适配器
+├── components/        # React UI 组件（纯展示）
+├── core/              # 系统核心（新架构）
+│   ├── ModelRegistry.ts      # 模型注册中心
+│   ├── defineModel.ts        # 模型定义辅助函数
+│   ├── providers/            # 新系统：Provider 类（正在建立）
+│   │   ├── base/             # ProviderHandler 基类
+│   │   └── PPIOProvider.ts   # PPIO 提供商实现
+│   ├── services/             # 新系统：GenerationService
+│   │   └── GenerationService.ts  # 统一生成服务
+│   ├── linkage/              # 参数联动引擎
+│   ├── request/              # 请求构建器
+│   └── types/                # 核心类型定义
+├── models/            # 模型定义（新架构）
+│   ├── fal/           # Fal 提供商模型（*.model.ts）
+│   ├── kie/           # KIE 提供商模型（*.model.ts）
+│   └── ppio/          # PPIO 提供商模型（*.model.ts）
+├── services/          # 旧系统：服务层（部分保留）
+├── hooks/             # 可复用 React 逻辑
+├── utils/             # 纯工具函数
+└── workspaces/        # 主工作区组件
 ```
 
-Build artifacts are located in `src-tauri/target/release/bundle/`
+**架构迁移状态（重要）：**
 
-## Architecture
+项目正在进行重大架构迁移，从 Adapter 系统迁移到 Provider 系统：
 
-### Adapter Pattern Implementation
+- **旧系统**（正在淘汰）：
+  - `src/adapters/` - Adapter 类（BaseAdapter + 各提供商 Adapter）
+  - `src/services/api.ts` - 旧的 API 服务
+  - 旧模型文件：`src/models/*.ts`（已删除）
+  - 手动配置：`src/components/MediaGenerator/builders/`（已删除）
 
-The core architecture uses a **Factory + Strategy pattern** to integrate multiple AI providers:
+- **新系统**（正在建立）：
+  - `src/core/providers/` - Provider 类（ProviderHandler + 各提供商 Provider）
+  - `src/core/services/GenerationService.ts` - 统一生成服务
+  - 模型定义：`src/models/{provider}/*.model.ts` + `defineModel()`
+  - 配置驱动：所有行为由 schema 定义
 
-```
-MediaGenerator (UI)
-    ↓
-ApiService (Singleton)
-    ↓
-AdapterFactory.createAdapter(config)
-    ↓
-BaseAdapter (Abstract)
-    ↓
-├── PPIOAdapter
-├── FalAdapter
-├── KIEAdapter
-└── ModelscopeAdapter
-```
+- **迁移进度**：
+  - ✅ 任务01：Provider 基础架构已完成
+  - ✅ 任务02：GenerationService 已完成
+  - ✅ 任务03-1：PPIOProvider 已完成
+  - 🔄 任务03-2：PPIO 模型映射进行中
+  - ⏳ 任务04-07：测试、迁移其他提供商、清理旧代码
 
-**Key Files:**
-- `src/adapters/base/BaseAdapter.ts` - Abstract base class defining the adapter interface
-- `src/adapters/index.ts` - `AdapterFactory` with `createAdapter()` method
-- `src/services/api.ts` - `ApiService` singleton managing adapter lifecycle
+**开发指南：**
+- **新模型开发**：使用新系统（`defineModel` + Provider）
+- **修改现有模型**：优先在新系统中修改
+- **不要依赖 adapters**：该目录将被删除
+- **参考迁移计划**：`迁移计划_新系统完全替代adapters/清单.md`
 
-### Model Routing System
+## 关键约束（不可违反）
 
-Each adapter implements a **route-based model system** that maps model IDs to request builders:
+### 解耦约束
+
+1. **文件大小限制：最多 400 行**
+   - 这是硬性限制，不是建议
+   - 达到 350 行时开始重构
+   - 大文件是解耦不足的代码异味
+
+2. **禁止跨层导入**
+   - 组件不能导入 `providers/` 或 `adapters/`
+   - Provider 不能导入 `components/`
+   - 模型不能导入 `services/` 或 `components/`
+   - 违反表示架构理解错误
+
+3. **禁止直接 API 调用**
+   - 所有外部 API 必须通过 `src/core/providers/`（新系统）
+   - 禁止在组件/服务中直接使用 `fetch()` 或 `axios`
+   - **不要使用** `src/adapters/`（旧系统，正在淘汰）
+
+4. **禁止模型特定 UI 逻辑**
+   - UI 组件必须是通用的，由模型 schema 驱动
+   - 禁止在组件中写 `if (modelId === 'specific-model')`
+   - 需要模型特定行为时，扩展模型定义 schema
+
+### 类型安全约束
+
+5. **禁止 `any` 类型**
+   - 到处使用正确的 TypeScript 类型
+   - 例外情况需要详细注释说明原因
+
+6. **显式返回类型**
+   - 所有导出函数应有显式返回类型
+
+### 配置约束
+
+7. **配置优于代码**
+   - 使用模型定义，而非 if-else 语句处理模型特定行为
+   - 扩展 schema，不要添加特殊情况
+   - 如果你在添加基于模型 ID 的 switch 语句，说明做错了
+
+## 添加新模型
+
+### 步骤 1: 创建模型文件
+
+在 `src/models/{provider}/{model-name}.model.ts` 中：
 
 ```typescript
-interface ModelRoute {
-  matches: (modelId: string) => boolean
-  buildImageRequest?: (params) => { endpoint, requestData }
-  buildVideoRequest?: (params) => { endpoint, requestData }
-  buildAudioRequest?: (params) => { endpoint, requestData }
-}
-```
+import { defineModel } from '@/core'
 
-**Route Registration:**
-- `src/adapters/ppio/models/index.ts` - PPIO model routes
-- `src/adapters/fal/models/index.ts` - Fal model routes
-- `src/adapters/kie/models/index.ts` - KIE model routes
-- `src/adapters/modelscope/models/index.ts` - ModelScope model routes
-
-**Flow:** `adapter.generateImage()` → `findRoute(modelId)` → `route.buildImageRequest()` → API call
-
-### Provider-Specific Implementations
-
-**PPIO Adapter** (`src/adapters/ppio/PPIOAdapter.ts`)
-- Uses Axios for HTTP requests
-- Polling via `PPIOStatusHandler` class
-- Config: `src/adapters/ppio/config.ts` (base URL, poll interval: 3000ms, max attempts: 120)
-
-**Fal Adapter** (`src/adapters/fal/FalAdapter.ts`)
-- Uses official `@fal-ai/client` SDK
-- Automatic polling via `fal.subscribe()`
-- Handles image/video uploads to Fal CDN
-- Config: `src/adapters/fal/config.ts` (model-specific poll counts)
-
-**KIE Adapter** (`src/adapters/kie/KIEAdapter.ts`)
-- Uses Axios with separate upload client
-- Uploads images to KIE CDN before processing
-- Status mapping: waiting → QUEUED, generating → PROCESSING, success → COMPLETED
-- Config: `src/adapters/kie/config.ts` (poll interval: 3000ms, max attempts: 200)
-
-**ModelScope Adapter** (`src/adapters/modelscope/ModelscopeAdapter.ts`)
-- Uses Tauri backend via `invoke()` for API calls
-- Optional Fal CDN integration for image uploads
-- Currently supports image generation only
-
-### Configuration System
-
-**Provider Registry** (`src/config/providers.ts`)
-- Loads from `providers.json`
-- Defines provider metadata and available models
-- Structure: `Provider { id, name, type, models[] }`
-
-**Model Parameter System** (`src/models/index.ts`)
-- Centralized `modelSchemaMap` mapping model IDs to parameter schemas
-- Key functions:
-  - `getModelSchema(modelId)` - Get parameter schema
-  - `getModelDefaultValues(modelId)` - Extract default values
-  - `getAutoSwitchValues(modelId, currentValues)` - Conditional parameter switching
-  - `getSmartMatchValues(modelId, imageDataUrl, currentValues)` - Intelligent aspect ratio matching
-
-**Model Parameter Files:**
-- `src/models/ppio/` - PPIO model parameters
-- `src/models/fal/` - Fal model parameters
-- `src/models/modelscope/` - ModelScope model parameters
-- `src/models/kie/` - KIE model parameters
-
-### Response Parsing
-
-Each adapter has provider-specific parsers:
-- `src/adapters/ppio/parsers/index.ts` - PPIO response parsing
-- `src/adapters/fal/parsers/imageParser.ts` - Fal response parsing
-- `src/adapters/kie/parsers/` - KIE response parsing
-
-### Data Storage
-
-- **API Keys:** localStorage
-- **History:** AppLocalData (`Henji-AI/history.json`)
-- **Media Files:** AppLocalData (`Henji-AI/Media/`)
-- **Cache:** AppLocalData (`Henji-AI/Uploads/`, `Henji-AI/Waveforms/`)
-
-## Adding New AI Models or Providers
-
-See **[docs/model-adaptation-guide.md](docs/model-adaptation-guide.md)** for detailed instructions on:
-1. Defining model parameter schemas
-2. Implementing adapter routes
-3. Registering models in the system
-
-### Quick Steps:
-
-**Adding a new model to an existing provider:**
-1. Create parameter schema in `src/models/{provider}/{model-name}.ts`
-2. Register in `src/models/index.ts` modelSchemaMap
-3. Add route in `src/adapters/{provider}/models/index.ts`
-4. Update `providers.json` with model metadata
-
-**Adding a new provider:**
-1. Create adapter class extending `BaseAdapter` in `src/adapters/{provider}/`
-2. Implement `generateImage()`, `generateVideo()`, `generateAudio()` methods
-3. Create model routes in `src/adapters/{provider}/models/`
-4. Add provider case in `AdapterFactory.createAdapter()`
-5. Create parameter schemas in `src/models/{provider}/`
-6. Update `providers.json` with provider metadata
-
-## Troubleshooting & FAQ Resources
-
-When encountering difficult problems, check the **`docs/FAQ/`** directory for detailed troubleshooting guides:
-
-- **`fal-model-integration-issues.md`** - Common issues when integrating Fal models:
-  - Price calculation not updating
-  - Image upload button display issues
-  - Parameter auto-switching failures
-  - Auto-restore behavior problems
-  - Incomplete parameter passing
-
-- **`history-json-base64-bloat.md`** - Solutions for history.json file bloat:
-  - Base64 data causing file size issues
-  - Proper cleanup of image/video data in history
-  - Best practices for new model integration
-
-- **`配置驱动架构-常见问题.md`** - Configuration-driven architecture issues:
-  - Parameters not appearing in API requests
-  - autoSwitch not working or being too aggressive
-  - Price estimation not updating
-  - Image upload button visibility issues
-
-- **`新模型参数-同步更新清单.md`** - Checklist for adding new model parameters:
-  - Required updates across multiple files
-  - TypeScript type definitions
-  - Common mistakes and missing locations
-  - Quick verification methods
-
-These FAQs contain detailed root cause analysis, step-by-step solutions, and debugging techniques for common problems encountered during model adaptation.
-
-## Key Interfaces
-
-```typescript
-// Core parameter types (src/adapters/base/BaseAdapter.ts)
-interface GenerateImageParams {
-  prompt: string
-  model: string
-  images?: string[]
-  imageUrls?: string[]
-  aspect_ratio?: string
-  onProgress?: (status: ProgressStatus) => void
-  [key: string]: any
-}
-
-interface GenerateVideoParams {
-  prompt: string
-  model: string
-  mode?: 'text-image-to-video' | 'start-end-frame' | 'reference-to-video'
-  images?: string[]
-  videos?: string[]
-  aspectRatio?: string
-  onProgress?: (status: ProgressStatus) => void
-  [key: string]: any
-}
-
-// Result types
-interface ImageResult {
-  url: string
-  taskId?: string
-  filePath?: string
-  status?: 'completed' | 'timeout'
-}
-
-interface VideoResult {
-  taskId?: string
-  url?: string
-  filePath?: string
-  status?: string
-}
-
-// Progress callback
-interface ProgressStatus {
-  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED'
-  queue_position?: number
-  message?: string
-  progress?: number
-}
-```
-
-## Platform-Specific Notes
-
-### Windows
-- Requires Visual Studio Build Tools (MSVC)
-- Uses custom build script that sets up VS environment
-- Window controls use Windows-specific styling
-
-### macOS
-- Requires Xcode Command Line Tools
-- Uses separate build scripts (`tauri:dev:mac`, `tauri:build:mac`)
-- Window controls use macOS-specific styling
-
-### Cross-Platform Compatibility
-- File paths use Tauri API (`@tauri-apps/plugin-fs`)
-- HTTP requests use Tauri plugin (`@tauri-apps/plugin-http`)
-- Avoid platform-specific path separators
-
-## Common Patterns
-
-### Polling Pattern
-All adapters implement polling for async operations:
-- PPIO: `PPIOStatusHandler.pollTaskStatus()`
-- Fal: `fal.subscribe()` with automatic polling
-- KIE: Direct polling with status mapping
-- ModelScope: Backend-managed polling via Tauri
-
-### Progress Callbacks
-Use `onProgress` callback for real-time status updates:
-```typescript
-await adapter.generateImage({
-  prompt: "...",
-  onProgress: (status) => {
-    console.log(status.status, status.progress)
+export const myModel = defineModel({
+  meta: {
+    id: 'unique-model-id',
+    provider: 'provider-name',
+    type: 'video',  // 'image' | 'video' | 'audio'
+    name: { zh: '中文名', en: 'English Name' },
+    tags: ['text-to-video'],
+    polling: { interval: 3000, maxAttempts: 120 }
+  },
+  params: [
+    {
+      id: 'prompt',
+      type: 'text',
+      order: 1,
+      name: { zh: '提示词', en: 'Prompt' },
+      default: '',
+      required: true
+    }
+    // ... 更多参数
+  ],
+  linkages: [
+    // 可选：参数交互规则
+  ],
+  endpoints: {
+    selector: (params) => '/api/endpoint'
+  },
+  request: {
+    builder: (params) => ({
+      prompt: params.prompt
+      // ... 映射到 API 格式
+    })
   }
 })
 ```
 
-### Error Handling
-All adapters use `BaseAdapter.formatError()` for consistent error formatting.
+### 步骤 2: 导出模型
 
-## Testing
+在 `src/models/{provider}/index.ts` 中：
+```typescript
+export * from './my-model.model'
+```
 
-No test suite is currently configured. When adding tests:
-- Use the existing ESLint configuration
-- Follow TypeScript strict mode conventions
-- Test adapter implementations independently
+### 步骤 3: 验证
+
+```bash
+npm run build  # 验证 TypeScript 编译
+npm run dev    # 在应用中测试
+```
+
+模型将自动被发现和注册。
+
+## 参数类型
+
+- `text`: 文本输入
+- `number`: 数字输入
+- `slider`: 滑块
+- `dropdown`: 下拉选择
+- `radio`: 单选按钮组
+- `switch`: 布尔开关
+- `image-upload`: 图片上传
+- `video-upload`: 视频上传
+- `composite`: 自定义面板组件
+
+## 联动系统
+
+联动定义参数交互，执行优先级：
+1. `reset` - 重置为默认值
+2. `filterOptions` - 过滤选项
+3. `filterRange` - 调整范围
+4. `setValue` - 设置值
+5. `autoSwitch` - 条件切换
+6. `disable` - 禁用参数
+7. `hide` - 隐藏参数
+8. `custom` - 自定义逻辑
+
+## 调试工具（开发模式）
+
+浏览器控制台：
+
+```javascript
+window.__MODEL_REGISTRY__      // 查看所有注册的模型
+window.__listModels()          // 表格格式列出模型
+window.__getModelStats()       // 显示注册表统计
+window.__reloadModels()        // 重新加载所有模型
+```
+
+## 常见问题
+
+**模型未显示：**
+- 检查文件命名：必须以 `.model.ts` 结尾
+- 检查文件位置：必须在 `src/models/` 中
+- 运行 `npm run build` 检查 TypeScript 错误
+
+**联动不工作：**
+- 验证 `trigger` 和 `target` 参数 ID
+- 检查 `condition` 函数逻辑
+
+**请求格式错误：**
+- 在 `request.builder()` 中添加 console.log
+- 验证参数值类型
+
+## 技术栈
+
+- **框架**: Tauri 2.0 (Rust 后端)
+- **前端**: React 18 + TypeScript
+- **构建工具**: Vite 4
+- **样式**: Tailwind CSS
+- **数据库**: SQLite (Tauri 插件)
+- **国际化**: i18next
+
+## 重要文件
+
+- `src/core/ModelRegistry.ts` - 模型注册中心
+- `src/core/defineModel.ts` - 模型定义辅助函数
+- `src/core/providers/base/` - Provider 基类（新系统）
+- `src/core/services/GenerationService.ts` - 统一生成服务（新系统）
+- `src/App.tsx` - 应用入口
+- `docs/开发规范与架构指南.md` - 详细架构指南（中文）
+- `迁移计划_新系统完全替代adapters/清单.md` - 架构迁移计划

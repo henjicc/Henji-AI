@@ -65,6 +65,7 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_clipboard_manager::init())
     .plugin(tauri_plugin_drag::init())  // 支持拖放图片到外部应用
+    .plugin(tauri_plugin_sql::Builder::default().build())  // SQLite 数据库支持
     .invoke_handler(tauri::generate_handler![
       modelscope::modelscope_submit_task,
       modelscope::modelscope_check_status,

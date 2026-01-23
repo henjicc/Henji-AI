@@ -26,7 +26,7 @@ export class ApiService {
     }
 
     this.adapter = AdapterFactory.createAdapter(fullConfig)
-    logInfo('[ApiService] 适配器已初始化', fullConfig)
+    // logInfo('[ApiService] 适配器已初始化', fullConfig)
   }
 
   async generateImage(prompt: string, model: string, options?: any) {

@@ -42,7 +42,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
               )
               newValue[linkage.target] = updatedValue
             } catch (error) {
-              if (process.env.NODE_ENV === 'development') {
+              if (import.meta.env.DEV) {
                 console.error(`Linkage error: ${linkage.source} -> ${linkage.target}`, error)
               }
             }
@@ -68,7 +68,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
 
     const Component = componentRegistry.get(componentConfig.type)
     if (!Component) {
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         console.warn(`Unknown component type: ${componentConfig.type}`)
       }
       return null

@@ -4,7 +4,7 @@
  * 定义特殊面板的类型和配置接口
  */
 
-import type { I18nText, Params } from './index'
+import type { I18nText } from './I18nText'
 
 /**
  * 面板类型枚举
@@ -109,8 +109,8 @@ export interface SpecialPanelConfig {
   onChange: (value: any) => void
 
   /** 显示条件 */
-  showWhen?: (params: Params) => boolean
+  showWhen?: (params: Record<string, any>) => boolean
 
   /** 禁用条件 */
-  disabled?: (params: Params) => boolean
+  disabled?: (params: Record<string, any>) => boolean
 }

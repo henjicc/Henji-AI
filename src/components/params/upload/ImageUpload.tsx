@@ -4,13 +4,14 @@
  * 图片上传组件，支持拖拽、预览、编辑和智能匹配
  */
 
-import React, { useState } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ImageUploadParamDef } from '@/core/types'
 import { UploadArea } from './UploadArea'
 import { FilePreview } from './FilePreview'
 import { fileToBase64 } from '@/utils/fileConverter'
 import { calculateAspectRatio } from '@/utils/smartMatch'
+import { getI18nText } from '@/core/types/I18nText'
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
@@ -33,20 +34,17 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   onSmartMatch,
   disabled = false
 }) => {
-  const { t } = useTranslation()
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const { i18n } = useTranslation()
+  // const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   // 获取显示名称
-  const displayName = param.displayName
-    ? (typeof param.displayName === 'string'
-        ? param.displayName
-        : t(param.displayName.key, param.displayName.fallback))
-    : param.id
+  const displayName = getI18nText(param.name, i18n.language)
 
   // 处理上传
   const handleUpload = async (file: File) => {
-    if (value.length >= param.maxCount) {
-      alert(`最多上传 ${param.maxCount} 张图片`)
+    const maxCount = param.maxCount || 1
+    if (value.length >= maxCount) {
+      alert(`最多上传 ${maxCount} 张图片`)
       return
     }
 
@@ -84,7 +82,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 
   // 处理编辑
   const handleEdit = (index: number) => {
-    setEditingIndex(index)
+    // setEditingIndex(index)
     // TODO: 集成 ImageEditor
     console.log('Edit image at index:', index)
   }
@@ -113,7 +111,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           )
         })}
 
-        {value.length < param.maxCount && (
+        {value.length < (param.maxCount || 1) && (
           <UploadArea
             accept={['image/png', 'image/jpeg', 'image/webp', 'image/jpg']}
             maxSize={10}
@@ -124,7 +122,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       </div>
 
       {param.description && (
-        <div className="param-description">{param.description}</div>
+        <div className="param-description">{getI18nText(param.description, i18n.language)}</div>
       )}
     </div>
   )

@@ -183,7 +183,7 @@ export class KIEAdapter extends BaseAdapter {
           status: 'TASK_CREATED',
           taskId: taskId,
           message: '任务已创建，开始轮询...'
-        })
+        } as any)
 
         const result = await this.pollTaskStatus(taskId, params.model, params.onProgress)
         // 【修改】确保返回结果包含 taskId，用于超时恢复

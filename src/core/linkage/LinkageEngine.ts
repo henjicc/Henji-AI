@@ -119,7 +119,7 @@ export class LinkageEngine {
     }
 
     // 只有 dropdown 和 radio 有 options
-    if (paramDef.component !== 'dropdown' && paramDef.component !== 'radio') {
+    if (paramDef.type !== 'dropdown' && paramDef.type !== 'radio') {
       return []
     }
 
@@ -172,7 +172,7 @@ export class LinkageEngine {
     }
 
     // 只有 slider 和 number 有范围
-    if (paramDef.component !== 'slider' && paramDef.component !== 'number') {
+    if (paramDef.type !== 'slider' && paramDef.type !== 'number') {
       return null
     }
 

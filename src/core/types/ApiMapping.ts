@@ -48,10 +48,7 @@ export type ApiTransform = (value: any, allParams?: Record<string, any>) => Reco
  * }
  * ```
  */
-export interface ApiMapping {
-  [endpoint: string]: string | ApiTransform
-  default?: string | ApiTransform
-}
+export type ApiMapping = Record<string, string | ApiTransform>
 
 /**
  * API 配置（完整配置）

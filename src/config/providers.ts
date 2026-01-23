@@ -13,6 +13,7 @@ export interface Model {
   type: 'image' | 'video' | 'audio'
   description: string
   functions: string[]
+  tags?: string[]
 }
 
 // 类型转换，确保数据符合接口定义
@@ -73,9 +74,13 @@ export function saveHiddenModels(hiddenModels: Set<string>): void {
 export function getVisibleProviders(
   hiddenProviders: Set<string>,
   hiddenTypes: Set<string>,
-  hiddenModels: Set<string>
+  hiddenModels: Set<string>,
+  providersData?: Provider[]
 ): Provider[] {
-  return providers.map(provider => ({
+  // 如果没有传入 providersData，使用旧的 providers（向后兼容）
+  const sourceProviders = providersData || providers
+
+  return sourceProviders.map(provider => ({
     ...provider,
     models: provider.models.filter(model => {
       // 供应商被隐藏

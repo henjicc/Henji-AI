@@ -4,7 +4,7 @@
  * 用于存储用户添加的自定义模型配置
  */
 
-import { ParamDefinition } from './ModelDefinition'
+import { ParamDef } from './ParamDef'
 
 /**
  * 自定义模型配置
@@ -36,7 +36,7 @@ export interface CustomModelConfig {
     tags: string[]
   }
 
-  params: ParamDefinition[]
+  params: ParamDef[]
 
   endpoints: {
     primary: string

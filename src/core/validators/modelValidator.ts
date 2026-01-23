@@ -140,27 +140,28 @@ function validateParam(param: ParamDef, index: number): void {
     throw new ModelValidationError(`${prefix}.id is required and must be a string`)
   }
 
-  if (!param.component) {
-    throw new ModelValidationError(`${prefix}.component is required`)
+  if (!param.type) {
+    throw new ModelValidationError(`${prefix}.type is required`)
   }
 
-  const validComponents = [
+  const validTypes = [
     'text',
+    'textarea',
     'number',
     'slider',
     'dropdown',
     'switch',
     'radio',
-    'panel',
+    'composite',
     'image-upload',
     'video-upload',
     'resolution',
     'aspect-ratio'
   ]
 
-  if (!validComponents.includes(param.component)) {
+  if (!validTypes.includes(param.type)) {
     throw new ModelValidationError(
-      `${prefix}.component must be one of: ${validComponents.join(', ')}`
+      `${prefix}.type must be one of: ${validTypes.join(', ')}`
     )
   }
 
@@ -168,27 +169,29 @@ function validateParam(param: ParamDef, index: number): void {
     throw new ModelValidationError(`${prefix}.order must be a number`)
   }
 
-  if (!param.name) {
-    throw new ModelValidationError(`${prefix}.name is required`)
+  // 接受 name 或 label 字段（兼容不同格式）
+  if (!param.name && !('label' in param)) {
+    throw new ModelValidationError(`${prefix}.name or label is required`)
   }
 
-  if (param.default === undefined) {
-    throw new ModelValidationError(`${prefix}.default is required`)
+  // 接受 default 或 defaultValue 字段（兼容不同格式）
+  if (param.default === undefined && !('defaultValue' in param)) {
+    throw new ModelValidationError(`${prefix}.default or defaultValue is required`)
   }
 
   // 验证特定组件类型的字段
-  if (param.component === 'dropdown' || param.component === 'radio') {
+  if (param.type === 'dropdown' || param.type === 'radio') {
     if (!('options' in param) || !Array.isArray(param.options)) {
-      throw new ModelValidationError(`${prefix}.options is required for ${param.component}`)
+      throw new ModelValidationError(`${prefix}.options is required for ${param.type}`)
     }
   }
 
-  if (param.component === 'slider' || param.component === 'number') {
+  if (param.type === 'slider' || param.type === 'number') {
     if (!('min' in param) || typeof param.min !== 'number') {
-      throw new ModelValidationError(`${prefix}.min is required for ${param.component}`)
+      throw new ModelValidationError(`${prefix}.min is required for ${param.type}`)
     }
     if (!('max' in param) || typeof param.max !== 'number') {
-      throw new ModelValidationError(`${prefix}.max is required for ${param.component}`)
+      throw new ModelValidationError(`${prefix}.max is required for ${param.type}`)
     }
   }
 }
@@ -221,9 +224,11 @@ function validateLinkages(model: ModelDefinition): void {
 
     // 验证触发器参数存在
     const triggers = Array.isArray(linkage.trigger) ? linkage.trigger : [linkage.trigger]
-    triggers.forEach((trigger) => {
+    triggers.forEach((trigger: string) => {
       const baseParam = trigger.split('.')[0]
-      if (!paramIds.has(baseParam)) {
+      // Allow context parameters that are not explicitly defined in model params
+      const contextParams = ['images', 'videos', 'uploadedImages', 'uploadedVideos']
+      if (!paramIds.has(baseParam) && !contextParams.includes(baseParam)) {
         throw new ModelValidationError(
           `${prefix}.trigger references non-existent param: ${trigger}`
         )
@@ -241,7 +246,7 @@ function validateLinkages(model: ModelDefinition): void {
     }
 
     if ('targets' in linkage && linkage.targets) {
-      linkage.targets.forEach((target) => {
+      linkage.targets.forEach((target: string) => {
         const baseParam = target.split('.')[0]
         if (!paramIds.has(baseParam)) {
           throw new ModelValidationError(

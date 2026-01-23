@@ -4,7 +4,8 @@
  * 定义从 ModelDefinition 到 ModelNode 的转换接口
  */
 
-import type { ModelDefinition, ParamDef } from './model'
+import type { ModelDefinition } from './ModelDefinition'
+import type { ParamDef } from './ParamDef'
 import type { ModelNode } from './ModelNode'
 import type { InputPort, OutputPort } from './NodePort'
 

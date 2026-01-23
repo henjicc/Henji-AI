@@ -4,7 +4,7 @@
  * 定义节点的输入和输出端口类型
  */
 
-import type { I18nText } from './common'
+import type { I18nText } from './I18nText'
 
 /**
  * 端口数据类型

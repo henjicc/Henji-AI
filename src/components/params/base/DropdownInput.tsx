@@ -9,6 +9,8 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DropdownParamDef } from '@/core/types'
+import { getI18nText } from '@/core/types/I18nText'
+import Dropdown from '@/components/ui/Dropdown'
 
 interface DropdownInputProps {
   param: DropdownParamDef
@@ -23,48 +25,35 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
   onChange,
   disabled = false
 }) => {
-  const { t } = useTranslation()
+  const { i18n } = useTranslation()
 
   // 获取显示名称（支持 i18n）
-  const displayName = param.displayName
-    ? (typeof param.displayName === 'string'
-        ? param.displayName
-        : t(param.displayName.key, param.displayName.fallback))
-    : param.id
+  const displayName = getI18nText(param.name, i18n.language)
 
-  // 处理选择变化
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onChange(e.target.value)
-  }
+  // 转换选项格式
+  const options = param.options.map((option) => ({
+    label: getI18nText(option.label, i18n.language),
+    value: option.value
+  }))
+
+  // 获取当前选中项的显示文本
+  const selectedOption = options.find(opt => opt.value === value)
+  const displayValue = selectedOption?.label || ''
 
   return (
-    <div className="dropdown-input-wrapper">
-      <label className="param-label">
+    <div className="w-auto">
+      <label className="block text-sm font-medium text-zinc-300 mb-1.5">
         {displayName}
-        {param.required && <span className="required-mark">*</span>}
+        {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      <select
+      <Dropdown
         value={value || ''}
-        onChange={handleChange}
+        display={displayValue}
+        options={options}
+        onSelect={onChange}
         disabled={disabled}
-        className="dropdown-input"
-      >
-        {!param.required && <option value="">-- Select --</option>}
-        {param.options.map((option) => {
-          const optionLabel = typeof option.label === 'string'
-            ? option.label
-            : t(option.label.key, option.label.fallback)
-
-          return (
-            <option key={option.value} value={option.value}>
-              {optionLabel}
-            </option>
-          )
-        })}
-      </select>
-      {param.description && (
-        <div className="param-description">{param.description}</div>
-      )}
+        buttonClassName="w-full"
+      />
     </div>
   )
 }

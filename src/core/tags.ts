@@ -3,7 +3,7 @@
  */
 
 import { ModelTag } from './types/ModelTags'
-import { providers } from '../config/providers'
+import { getAvailableProviders } from '../utils/modelHelpers'
 
 /**
  * 模型标签映射表（运行时构建）
@@ -21,6 +21,7 @@ function initializeTagsMap(): Map<string, Set<ModelTag>> {
   const map = new Map<string, Set<ModelTag>>()
 
   // 遍历所有 providers 和 models
+  const providers = getAvailableProviders()
   providers.forEach(provider => {
     provider.models.forEach(model => {
       const tags = new Set<ModelTag>()

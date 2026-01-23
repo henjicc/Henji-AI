@@ -83,13 +83,13 @@ export class ExportService {
    * @param options - 导出选项
    * @returns 导出数据
    */
-  exportAPIRequest(
+  async exportAPIRequest(
     modelId: string,
     params: Record<string, any>,
     context: Record<string, any> = {},
     options: ExportOptions = {}
-  ): ExportData {
-    const request = requestBuilder.build(modelId, params, { context })
+  ): Promise<ExportData> {
+    const request = await requestBuilder.build(modelId, params, { context })
 
     return this.createExportData('api-request', modelId, request, options)
   }

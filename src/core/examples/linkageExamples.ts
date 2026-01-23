@@ -23,7 +23,7 @@ export const kling26ProLinkages: Linkage[] = [
     trigger: 'mode',
     effect: 'hide',
     targets: ['images'],
-    condition: (mode) => mode === 'text-to-video',
+    condition: (mode: string) => mode === 'text-to-video',
     description: '文生视频模式下隐藏图片上传'
   },
 
@@ -32,7 +32,7 @@ export const kling26ProLinkages: Linkage[] = [
     trigger: 'mode',
     effect: 'hide',
     targets: ['referenceVideo'],
-    condition: (mode) => mode !== 'motion-control',
+    condition: (mode: string) => mode !== 'motion-control',
     description: '仅在动作控制模式下显示视频上传'
   },
 
@@ -41,7 +41,7 @@ export const kling26ProLinkages: Linkage[] = [
     trigger: 'fastMode',
     effect: 'disable',
     targets: ['cfgScale'],
-    condition: (fastMode) => fastMode === true,
+    condition: (fastMode: boolean) => fastMode === true,
     reason: '快速模式下不可调整 CFG 系数'
   },
 
@@ -50,7 +50,7 @@ export const kling26ProLinkages: Linkage[] = [
     trigger: 'fastMode',
     effect: 'setValue',
     target: 'cfgScale',
-    value: (fastMode) => (fastMode ? 0.5 : 1.0),
+    value: (fastMode: boolean) => (fastMode ? 0.5 : 1.0),
     description: '快速模式下自动设置 CFG 系数为 0.5'
   },
 
@@ -59,7 +59,7 @@ export const kling26ProLinkages: Linkage[] = [
     trigger: 'mode',
     effect: 'filterRange',
     target: 'duration',
-    filter: (mode) => {
+    filter: (mode: string) => {
       if (mode === 'motion-control') {
         return { min: 3, max: 30, step: 1 }
       }
@@ -78,7 +78,7 @@ export const seedream40Linkages: Linkage[] = [
     trigger: 'resolution',
     effect: 'filterRange',
     target: 'maxImages',
-    filter: (resolution) => {
+    filter: (resolution: string) => {
       const [width, height] = resolution.split('x').map(Number)
       const is4K = width >= 3840 || height >= 3840
 
@@ -97,7 +97,7 @@ export const seedream40Linkages: Linkage[] = [
     trigger: 'images',
     effect: 'autoSwitch',
     target: 'mode',
-    condition: (images) => images && images.length > 0,
+    condition: (images: any[]) => images && images.length > 0,
     value: 'image-to-image',
     noRestore: false,
     description: '上传图片后自动切换为图生图模式'
@@ -121,7 +121,7 @@ export const viduQ1Linkages: Linkage[] = [
     trigger: 'mode',
     effect: 'filterRange',
     target: 'images.maxCount',
-    filter: (mode) => {
+    filter: (mode: string) => {
       if (mode === 'start-end-frame') {
         // 首尾帧模式需要 2 张图片
         return { min: 2, max: 2 }
@@ -141,7 +141,7 @@ export const viduQ1Linkages: Linkage[] = [
     trigger: 'mode',
     effect: 'filterOptions',
     target: 'duration',
-    filter: (mode, options) => {
+    filter: (mode: string, options: any[]) => {
       if (mode === 'reference-to-video') {
         // 参考模式只支持 4 秒和 8 秒
         return options.filter((o) => o.value === 4 || o.value === 8)
@@ -155,7 +155,7 @@ export const viduQ1Linkages: Linkage[] = [
   {
     trigger: 'mode',
     effect: 'custom',
-    handler: (mode, allParams, updateParam) => {
+    handler: (mode: string, allParams: any, updateParam: any) => {
       if (mode === 'reference-to-video') {
         // 参考模式下自动调整多个参数
         updateParam('duration', 4)
@@ -176,8 +176,8 @@ export const nanoBananaLinkages: Linkage[] = [
     trigger: 'images',
     effect: 'autoSwitch',
     target: 'aspectRatio',
-    condition: (images) => images && images.length > 0,
-    value: (images, allParams) => {
+    condition: (images: any[]) => images && images.length > 0,
+    value: (images: any[], allParams: any) => {
       // 获取第一张图片的宽高比
       const firstImage = images[0]
       if (firstImage && firstImage.dimensions) {
@@ -197,7 +197,7 @@ export const nanoBananaLinkages: Linkage[] = [
     trigger: 'images',
     effect: 'setValue',
     target: 'numImages',
-    value: (images) => {
+    value: (images: any[]) => {
       if (images && images.length > 0) {
         // 有参考图片时，默认生成 1 张
         return 1
@@ -224,7 +224,7 @@ export const priorityExampleLinkages: Linkage[] = [
     trigger: 'mode',
     effect: 'custom',
     priority: 0, // 覆盖默认优先级（custom 默认为 8）
-    handler: (mode, allParams, updateParam) => {
+    handler: (mode: string, allParams: any, updateParam: any) => {
       console.log('模式切换前的准备工作')
     },
     description: '在重置之前执行的自定义逻辑'
@@ -248,7 +248,7 @@ export const debounceExampleLinkages: Linkage[] = [
     trigger: 'cfgScale',
     effect: 'custom',
     debounce: 300, // 300ms 防抖
-    handler: (cfgScale, allParams, updateParam) => {
+    handler: (cfgScale: number, allParams: any, updateParam: any) => {
       // 复杂的参数计算...
       console.log('CFG Scale 调整为:', cfgScale)
     },

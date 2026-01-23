@@ -1,24 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { providers } from '@/config/providers'
-import ParamRow from '@/components/ui/ParamRow'
-import PanelTrigger from '@/components/ui/PanelTrigger'
+import React, { useEffect } from 'react'
+import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import PresetPanel from '@/components/PresetPanel'
-import { createPresetSetterMap } from '@/config/presetStateMapping'
-import { getModelDefaultValues, getAutoSwitchValues } from '@/models'
 
-// 导入提取的模块
-import { useMediaGeneratorState } from './hooks/useMediaGeneratorState'
+// 导入新的模块化组件
+import { useUIState } from './state/useUIState'
+import { useModelState } from './state/useModelState'
+import { useModelVisibility } from './hooks/useModelVisibility'
+import { useGenerationHandler } from './hooks/useGenerationHandler'
 import { useImageUpload } from './hooks/useImageUpload'
 import { useVideoUpload } from './hooks/useVideoUpload'
-import { buildGenerateOptions } from './builders/optionsBuilder'
-import { calculateSmartResolution, calculateSeedreamSmartResolution, calculatePPIOSeedreamSmartResolution, getActualResolution } from './utils/resolutionUtils'
-import { getMaxImageCount } from './utils/constants'
+import { PresetManager } from './preset/PresetManager'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
-import InputArea, { FileOrderItem } from './components/InputArea'
+import InputArea from './components/InputArea'
 import AlertDialog from '../ui/AlertDialog'
-import { logError, logInfo } from '../../utils/errorLogger'
+import PanelTrigger from '../ui/PanelTrigger'
+import { getMaxImageCount } from './utils/constants'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -29,15 +27,14 @@ interface MediaGeneratorProps {
   isCollapsed?: boolean
   onToggleCollapse?: () => void
   isGenerating?: boolean
-  // 暴露 setUploadedImages 用于外部更新编辑后的图片
   onSetUploadedImagesRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
-  // 暴露 setUploadedFilePaths 用于外部同步更新文件路径
   onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
 }
 
 /**
- * MediaGenerator 主组件 - 简化版
- * 从 2345 行简化到约 300 行
+ * MediaGenerator 主组件 - 重构版
+ * 从 2069 行简化到 < 250 行
+ * 使用模块化架构和配置驱动设计
  */
 const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   onGenerate,
@@ -49,117 +46,70 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   onSetUploadedImagesRef,
   onSetUploadedFilePathsRef
 }) => {
-  // 使用统一的状态管理 hook
-  const state = useMediaGeneratorState()
+  // 1. UI 状态管理
+  const uiState = useUIState()
 
-  // 获取当前选择的供应商和模型（需要在 useEffect 之前定义）
-  const currentProvider = providers.find(p => p.id === state.selectedProvider)
-  const currentModel = currentProvider?.models.find(m => m.id === state.selectedModel)
+  // 2. 模型参数管理（使用新系统）
+  const modelState = useModelState(uiState.selectedModel, uiState)
 
-  // 追踪模型可见性变化，用于强制重新渲染模型选择面板
-  const [modelVisibilityVersion, setModelVisibilityVersion] = useState(0)
-
-  // 混合文件顺序状态（用于支持视频+图片混合排序）
-  const [fileOrder, setFileOrder] = useState<FileOrderItem[]>([])
-
-  // 全局 AlertDialog 状态
-  const [alertDialog, setAlertDialog] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    type: 'info' | 'warning' | 'error'
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    type: 'warning'
-  })
-
-  // 显示提示弹窗的函数
-  const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
-    setAlertDialog({ isOpen: true, title, message, type })
-  }
-
-  // 监听模型可见性变化事件
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      // 更新版本号，强制重新渲染模型选择面板
-      setModelVisibilityVersion(v => v + 1)
-
-      // 立即检查当前选中的模型是否还可见
-      const { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } = await import('@/config/providers')
-
-      const hiddenProviders = getHiddenProviders()
-      const hiddenTypes = getHiddenTypes()
-      const hiddenModels = getHiddenModels()
-
-      // 检查当前选中的模型是否被隐藏
-      const currentModelKey = `${state.selectedProvider}-${state.selectedModel}`
-      const isProviderHidden = hiddenProviders.has(state.selectedProvider)
-
-      // 获取当前模型的类型
-      const currentProvider = providers.find(p => p.id === state.selectedProvider)
-      const currentModel = currentProvider?.models.find(m => m.id === state.selectedModel)
-      const isTypeHidden = currentModel && hiddenTypes.has(currentModel.type)
-      const isModelHidden = hiddenModels.has(currentModelKey)
-
-      if (isProviderHidden || isTypeHidden || isModelHidden) {
-        // 当前模型被隐藏，切换到第一个可见的模型
-        const visibleProviders = getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels)
-
-        if (visibleProviders.length > 0 && visibleProviders[0].models.length > 0) {
-          const firstProvider = visibleProviders[0]
-          const firstModel = firstProvider.models[0]
-
-          // 切换到第一个可见的模型
-          state.setSelectedProvider(firstProvider.id)
-          state.setSelectedModel(firstModel.id)
-
-          // 加载新模型的默认参数
-          const defaultValues = getModelDefaultValues(firstModel.id)
-          if (defaultValues) {
-            Object.entries(defaultValues).forEach(([key, value]) => {
-              const setter = (state as any)[`set${key.charAt(0).toUpperCase()}${key.slice(1)}`]
-              if (setter && typeof setter === 'function') {
-                setter(value)
-              }
-            })
-          }
-        }
-      }
-    }
-
-    window.addEventListener('modelVisibilityChanged', handleVisibilityChange)
-    return () => {
-      window.removeEventListener('modelVisibilityChanged', handleVisibilityChange)
-    }
-  }, [state.selectedProvider, state.selectedModel, state])
-
-  // 使用图片上传 hook
-  const imageUpload = useImageUpload(
-    state.uploadedImages,
-    state.setUploadedImages,
-    state.uploadedFilePaths,
-    state.setUploadedFilePaths
+  // 3. 模型可见性管理
+  useModelVisibility(
+    uiState.selectedProvider,
+    uiState.selectedModel,
+    uiState.setSelectedProvider,
+    uiState.setSelectedModel,
+    modelState.resetParams
   )
 
-  // 暴露 setUploadedImages 给父组件以便编辑后更新
+  // 4. 文件上传管理
+  const imageUpload = useImageUpload(
+    uiState.uploadedImages,
+    uiState.setUploadedImages,
+    uiState.uploadedFilePaths,
+    uiState.setUploadedFilePaths
+  )
+
+  const videoUpload = useVideoUpload(
+    uiState.uploadedVideos,
+    uiState.setUploadedVideos,
+    uiState.uploadedVideoFiles,
+    uiState.setUploadedVideoFiles,
+    uiState.setUploadedVideoFilePaths,
+    undefined,
+    undefined,
+    uiState.setUploadedVideoDuration
+  )
+
+  // 5. 生成请求处理
+  const { handleGenerate: handleGenerateRequest } = useGenerationHandler(
+    uiState.selectedModel,
+    uiState.input,
+    modelState,
+    uiState.uploadedImages,
+    uiState.uploadedVideos,
+    onGenerate
+  )
+
+  // 获取当前选择的供应商和模型
+  const providers = getAvailableProviders()
+  const currentProvider = providers.find(p => p.id === uiState.selectedProvider)
+  const currentModel = getModelInfo(uiState.selectedModel)
+
+  // 6. 暴露 setter 给父组件
   useEffect(() => {
     if (onSetUploadedImagesRef) {
-      onSetUploadedImagesRef(state.setUploadedImages)
+      onSetUploadedImagesRef(uiState.setUploadedImages)
     }
-  }, [onSetUploadedImagesRef, state.setUploadedImages])
+  }, [onSetUploadedImagesRef, uiState.setUploadedImages])
 
-  // 暴露 setUploadedFilePaths 给父组件以便编辑后同步路径
   useEffect(() => {
     if (onSetUploadedFilePathsRef) {
-      onSetUploadedFilePathsRef(state.setUploadedFilePaths)
+      onSetUploadedFilePathsRef(uiState.setUploadedFilePaths)
     }
-  }, [onSetUploadedFilePathsRef, state.setUploadedFilePaths])
+  }, [onSetUploadedFilePathsRef, uiState.setUploadedFilePaths])
 
-  // 监听全局右键菜单的图片粘贴事件
+  // 7. 监听全局右键菜单的图片粘贴事件
   useEffect(() => {
-    // 辅助函数：将 base64 数据 URL 转换为 File
     const dataUrlToFile = (dataUrl: string, fileName: string): File | null => {
       try {
         const arr = dataUrl.split(',')
@@ -178,1495 +128,176 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
 
-    // 辅助函数：获取最大图片数
     const getMaxCount = () => getMaxImageCount(
-      state.selectedModel,
-      state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-        (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-          (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-            (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-              (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-                (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-                  undefined
+      uiState.selectedModel,
+      modelState.params.mode || modelState.params.version
     )
 
     const handleGlobalPasteImage = async (e: Event) => {
       const customEvent = e as CustomEvent<{
-        files?: File[],
-        clipboardFiles?: Array<{ data: string; mimeType: string; name: string }>,
-        imageBlob?: Blob,
+        files?: File[]
+        clipboardFiles?: Array<{ data: string; mimeType: string; name: string }>
+        imageBlob?: Blob
         imageType?: string
       }>
       const detail = customEvent.detail
 
-      // 处理从文件管理器复制的文件（通过 Rust 命令读取）
       if (detail?.clipboardFiles && detail.clipboardFiles.length > 0) {
         const files: File[] = []
-        for (const cf of detail.clipboardFiles) {
-          const file = dataUrlToFile(cf.data, cf.name)
-          if (file) {
-            files.push(file)
-          }
+        for (const clipFile of detail.clipboardFiles) {
+          const file = dataUrlToFile(clipFile.data, clipFile.name)
+          if (file) files.push(file)
         }
         if (files.length > 0) {
-          imageUpload.handleImageFileUpload(files, getMaxCount())
+          await imageUpload.handleImageFileUpload(files, getMaxCount())
         }
-        return
-      }
-
-      // 处理剪贴板中的图片 Blob（截图等）
-      if (detail?.imageBlob) {
-        const extension = detail.imageType?.split('/')[1] || 'png'
-        const file = new File([detail.imageBlob], `clipboard-${Date.now()}.${extension}`, {
+      } else if (detail?.files && detail.files.length > 0) {
+        await imageUpload.handleImageFileUpload(detail.files, getMaxCount())
+      } else if (detail?.imageBlob) {
+        const file = new File([detail.imageBlob], 'pasted-image.png', {
           type: detail.imageType || 'image/png'
         })
-        imageUpload.handleImageFileUpload([file], getMaxCount())
+        await imageUpload.handleImageFileUpload([file], getMaxCount())
+      }
+    }
+
+    window.addEventListener('globalPasteImage', handleGlobalPasteImage)
+    return () => window.removeEventListener('globalPasteImage', handleGlobalPasteImage)
+  }, [uiState.selectedModel, modelState.params, imageUpload])
+
+  // 8. 生成按钮处理（带验证）
+  const handleGenerate = async () => {
+    if ((!uiState.input.trim() && uiState.uploadedImages.length === 0) || isLoading) return
+
+    // === 模型特定验证 ===
+
+    // 1. Seedance v1 Pro 快速模式限制
+    if ((uiState.selectedModel === 'fal-ai-bytedance-seedance-v1' ||
+      uiState.selectedModel === 'bytedance-seedance-v1') &&
+      modelState.params.falSeedanceV1Version === 'pro' &&
+      modelState.params.falSeedanceV1FastMode &&
+      modelState.params.falSeedanceV1Mode === 'image-to-video' &&
+      uiState.uploadedImages.length >= 2) {
+      uiState.showAlert(
+        '不支持的参数组合',
+        'Pro模型的快速模式不支持结束帧（首尾帧）',
+        'warning'
+      )
+      return
+    }
+
+    // 2. KIE Hailuo 2.3 必需条件
+    if (uiState.selectedModel === 'kie-hailuo-2-3' ||
+      uiState.selectedModel === 'hailuo-2-3-kie') {
+      if (uiState.uploadedImages.length === 0) {
+        uiState.showAlert(
+          '图片必需',
+          'KIE 海螺 2.3 是图生视频模型，必须上传图片才能生成',
+          'warning'
+        )
         return
       }
-
-      // 直接传入的文件
-      if (detail?.files && detail.files.length > 0) {
-        imageUpload.handleImageFileUpload(detail.files, getMaxCount())
+      if (!uiState.input.trim()) {
+        uiState.showAlert(
+          '提示词必需',
+          '请输入提示词描述期望的视频效果',
+          'warning'
+        )
+        return
       }
     }
 
-    // 导入事件名称
-    import('@/contexts/GlobalContextMenuProvider').then(({ PASTE_IMAGE_EVENT }) => {
-      document.addEventListener(PASTE_IMAGE_EVENT, handleGlobalPasteImage)
-    })
+    // 3. Kling O1 多模式验证
+    if (uiState.selectedModel === 'kling-o1') {
+      const mode = modelState.params.ppioKlingO1Mode || 'text-image-to-video'
 
-    return () => {
-      import('@/contexts/GlobalContextMenuProvider').then(({ PASTE_IMAGE_EVENT }) => {
-        document.removeEventListener(PASTE_IMAGE_EVENT, handleGlobalPasteImage)
-      })
-    }
-  }, [state.selectedModel, state.ppioViduQ1Mode, state.falVeo31Mode, state.falSeedanceV1Mode, state.falViduQ2Mode, state.falHailuo02FastMode, state.kieSeedanceV3Version, imageUpload])
-
-  // 视频验证选项
-  const videoValidationOptions = useMemo(() => {
-    // Kling Motion Control (PPIO 2.6 Pro & KIE 2.6 & Fal 2.6 Pro)
-    if ((state.selectedModel === 'kling-2.6-pro' && state.ppioKling26Mode === 'motion-control') ||
-      (state.selectedModel === 'kie-kling-v2-6' && state.kieKlingV26Mode === 'motion-control') ||
-      ((state.selectedModel === 'fal-ai-kling-video-v2.6-pro' || state.selectedModel === 'kling-video-v2.6-pro') && state.falKlingV26ProMode === 'motion-control')) {
-      return {
-        minDuration: 3,
-        maxDuration: 30, // 3-30s (动作控制模式支持最长30秒)
-        maxSizeMB: 100
+      if (mode === 'start-end-frame' && uiState.uploadedImages.length !== 2) {
+        uiState.showAlert(
+          '图片必需',
+          '首尾帧模式需要上传2张图片',
+          'warning'
+        )
+        return
+      }
+      if (mode === 'reference-to-video' && uiState.uploadedVideoFiles.length === 0) {
+        uiState.showAlert(
+          '视频必需',
+          '参考生视频模式需要上传视频才能生成',
+          'warning'
+        )
+        return
+      }
+      if (mode === 'video-edit' && uiState.uploadedVideoFiles.length === 0) {
+        uiState.showAlert(
+          '视频必需',
+          '视频编辑模式需要上传视频才能生成',
+          'warning'
+        )
+        return
       }
     }
-    // 默认使用 validateVideo 内部定义的默认值 (3-10s, 200MB)
-    return undefined
-  }, [state.selectedModel, state.ppioKling26Mode, state.kieKlingV26Mode])
 
-  // 使用视频上传 hook
-  const videoUpload = useVideoUpload(
-    state.uploadedVideos,
-    state.setUploadedVideos,
-    state.uploadedVideoFiles,
-    state.setUploadedVideoFiles,
-    state.setUploadedVideoFilePaths, // 【关键修复】传递路径设置函数，用于删除/上传视频时清空旧路径
-    showAlert,
-    videoValidationOptions,
-    state.setUploadedVideoDuration
-  )
+    // 4. 动作控制模式验证 (PPIO/Fal/KIE Kling 2.6)
+    const isKling26PPIO = uiState.selectedModel === 'kling-2.6-pro' && modelState.params.ppioKling26Mode === 'motion-control'
+    const isKling26Fal = (uiState.selectedModel === 'fal-ai-kling-video-v2.6-pro' || uiState.selectedModel === 'kling-video-v2.6-pro') &&
+      modelState.params.falKlingV26ProMode === 'motion-control'
+    const isKling26KIE = (uiState.selectedModel === 'kie-kling-v2-6' || uiState.selectedModel === 'kling-v2-6-kie') &&
+      modelState.params.kieKlingV26Mode === 'motion-control'
 
-  // 预设参数映射（用于预设功能和重新编辑功能）
-  const setterMap = useMemo(() => createPresetSetterMap({
-    setInput: state.setInput,
-    setSelectedProvider: state.setSelectedProvider,
-    setSelectedModel: state.setSelectedModel,
-    setUploadedImages: state.setUploadedImages,
-    setSelectedResolution: state.setSelectedResolution,
-    setResolutionQuality: state.setResolutionQuality,
-    setCustomWidth: state.setCustomWidth,
-    setCustomHeight: state.setCustomHeight,
-    setMaxImages: state.setMaxImages,
-    setNumImages: state.setNumImages,
-    setAspectRatio: state.setAspectRatio,
-    setResolution: state.setResolution,
-    setModelscopeImageSize: state.setModelscopeImageSize,
-    setFalVeo31Mode: state.setFalVeo31Mode,
-    setFalVeo31AspectRatio: state.setFalVeo31AspectRatio,
-    setFalVeo31Resolution: state.setFalVeo31Resolution,
-    setFalVeo31EnhancePrompt: state.setFalVeo31EnhancePrompt,
-    setFalVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
-    setFalVeo31AutoFix: state.setFalVeo31AutoFix,
-    setFalVeo31FastMode: state.setFalVeo31FastMode,
-    setFalHailuo23Duration: state.setFalHailuo23Duration,
-    setFalHailuo23Resolution: state.setFalHailuo23Resolution,
-    setFalHailuo23FastMode: state.setFalHailuo23FastMode,
-    setFalHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
-    setFalHailuo02Duration: state.setFalHailuo02Duration,
-    setFalHailuo02Resolution: state.setFalHailuo02Resolution,
-    setFalHailuo02FastMode: state.setFalHailuo02FastMode,
-    setFalHailuo02PromptOptimizer: state.setFalHailuo02PromptOptimizer,
-    setVideoDuration: state.setVideoDuration,
-    setVideoResolution: state.setVideoResolution,
-    setVideoAspectRatio: state.setVideoAspectRatio,
-    setVideoNegativePrompt: state.setVideoNegativePrompt,
-    setVideoSeed: state.setVideoSeed,
-    // 模型特定参数 - 派欧云
-    setPpioKling25VideoDuration: state.setPpioKling25VideoDuration,
-    setPpioKling25VideoAspectRatio: state.setPpioKling25VideoAspectRatio,
-    setPpioKlingO1Mode: state.setPpioKlingO1Mode,
-    setPpioKlingO1VideoDuration: state.setPpioKlingO1VideoDuration,
-    setPpioKlingO1AspectRatio: state.setPpioKlingO1AspectRatio,
-    setPpioKlingO1KeepAudio: state.setPpioKlingO1KeepAudio,
-    setPpioKlingO1FastMode: state.setPpioKlingO1FastMode,
-    setPpioHailuo23VideoDuration: state.setPpioHailuo23VideoDuration,
-    setPpioHailuo23VideoResolution: state.setPpioHailuo23VideoResolution,
-    setPpioPixverse45VideoAspectRatio: state.setPpioPixverse45VideoAspectRatio,
-    setPpioPixverse45VideoResolution: state.setPpioPixverse45VideoResolution,
-    setPpioWan25VideoDuration: state.setPpioWan25VideoDuration,
-    setPpioSeedanceV1VideoDuration: state.setPpioSeedanceV1VideoDuration,
-    // 模型特定参数 - Fal
-    setFalNanoBananaAspectRatio: state.setFalNanoBananaAspectRatio,
-    setFalNanoBananaNumImages: state.setFalNanoBananaNumImages,
-    setFalNanoBananaProAspectRatio: state.setFalNanoBananaProAspectRatio,
-    setFalNanoBananaProNumImages: state.setFalNanoBananaProNumImages,
-    setFalNanoBananaProResolution: state.setFalNanoBananaProResolution,
-    setFalKlingImageO1AspectRatio: state.setFalKlingImageO1AspectRatio,
-    setFalKlingImageO1NumImages: state.setFalKlingImageO1NumImages,
-    setFalKlingImageO1Resolution: state.setFalKlingImageO1Resolution,
-    setFalZImageTurboImageSize: state.setFalZImageTurboImageSize,
-    setFalZImageTurboNumImages: state.setFalZImageTurboNumImages,
-    setFalSeedream40NumImages: state.setFalSeedream40NumImages,
-    // PPIO Seedream 4.5
-    setPpioSeedream45MaxImages: state.setPpioSeedream45MaxImages,
-    setPpioSeedream45OptimizePrompt: state.setPpioSeedream45OptimizePrompt,
-    setFalWan25VideoDuration: state.setFalWan25VideoDuration,
-    setFalSeedanceV1VideoDuration: state.setFalSeedanceV1VideoDuration,
-    setFalVeo31VideoDuration: state.setFalVeo31VideoDuration,
-    setFalSora2VideoDuration: state.setFalSora2VideoDuration,
-    setFalLtx2VideoDuration: state.setFalLtx2VideoDuration,
-    setFalViduQ2VideoDuration: state.setFalViduQ2VideoDuration,
-    setFalPixverse55VideoDuration: state.setFalPixverse55VideoDuration,
-    setFalKlingV26ProVideoDuration: state.setFalKlingV26ProVideoDuration,
-    setFalKlingVideoO1VideoDuration: state.setFalKlingVideoO1VideoDuration,
-    setFalKlingVideoO1Mode: state.setFalKlingVideoO1Mode,
-    setFalKlingVideoO1AspectRatio: state.setFalKlingVideoO1AspectRatio,
-    setFalKlingVideoO1KeepAudio: state.setFalKlingVideoO1KeepAudio,
-    setFalKlingVideoO1Elements: state.setFalKlingVideoO1Elements,
-    setPpioViduQ1VideoDuration: state.setPpioViduQ1VideoDuration,
-    setPpioViduQ1Mode: state.setPpioViduQ1Mode,
-    setPpioViduQ1AspectRatio: state.setPpioViduQ1AspectRatio,
-    setPpioViduQ1Style: state.setPpioViduQ1Style,
-    setPpioViduQ1MovementAmplitude: state.setPpioViduQ1MovementAmplitude,
-    setPpioViduQ1Bgm: state.setPpioViduQ1Bgm,
-    setPpioKling25CfgScale: state.setPpioKling25CfgScale,
-    setPpioHailuo23FastMode: state.setPpioHailuo23FastMode,
-    setPpioHailuo23EnablePromptExpansion: state.setPpioHailuo23EnablePromptExpansion,
-    setPpioPixverse45FastMode: state.setPpioPixverse45FastMode,
-    setPpioPixverse45Style: state.setPpioPixverse45Style,
-    setPpioSeedanceV1Variant: state.setPpioSeedanceV1Variant,
-    setPpioSeedanceV1Resolution: state.setPpioSeedanceV1Resolution,
-    setPpioSeedanceV1AspectRatio: state.setPpioSeedanceV1AspectRatio,
-    setPpioSeedanceV1CameraFixed: state.setPpioSeedanceV1CameraFixed,
-    // Seedance 1.5 Pro (派欧云)
-    setPpioSeedance15ProResolution: state.setPpioSeedance15ProResolution,
-    setPpioSeedance15ProAspectRatio: state.setPpioSeedance15ProAspectRatio,
-    setPpioSeedance15ProDuration: state.setPpioSeedance15ProDuration,
-    setPpioSeedance15ProCameraFixed: state.setPpioSeedance15ProCameraFixed,
-    setPpioSeedance15ProServiceTier: state.setPpioSeedance15ProServiceTier,
-    setPpioSeedance15ProGenerateAudio: state.setPpioSeedance15ProGenerateAudio,
-    setFalSeedanceV1Mode: state.setFalSeedanceV1Mode,
-    setFalSeedanceV1Version: state.setFalSeedanceV1Version,
-    setFalSeedanceV1FastMode: state.setFalSeedanceV1FastMode,
-    setPpioWan25Size: state.setPpioWan25Size,
-    setPpioWan25PromptExtend: state.setPpioWan25PromptExtend,
-    setPpioWan25Audio: state.setPpioWan25Audio,
-    setPpioWan26Mode: state.setPpioWan26Mode,
-    setPpioWan26AspectRatio: state.setPpioWan26AspectRatio,
-    setPpioWan26Quality: state.setPpioWan26Quality,
-    setPpioWan26VideoDuration: state.setPpioWan26VideoDuration,
-    setPpioWan26ShotType: state.setPpioWan26ShotType,
-    setPpioWan26Audio: state.setPpioWan26Audio,
-    setPpioWan26PromptExtend: state.setPpioWan26PromptExtend,
-    setFalWan25AspectRatio: state.setFalWan25AspectRatio,
-    setFalWan25Resolution: state.setFalWan25Resolution,
-    setFalWan25PromptExpansion: state.setFalWan25PromptExpansion,
-    setUploadedVideos: state.setUploadedVideos,
-    setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
-    setFalKlingV26ProAspectRatio: state.setFalKlingV26ProAspectRatio,
-    setFalKlingV26ProGenerateAudio: state.setFalKlingV26ProGenerateAudio,
-    setFalKlingV26ProCfgScale: state.setFalKlingV26ProCfgScale,
-    setFalKlingV26ProMode: state.setFalKlingV26ProMode,
-    setFalKlingV26ProResolution: state.setFalKlingV26ProResolution,
-    setFalKlingV26ProCharacterOrientation: state.setFalKlingV26ProCharacterOrientation,
-    setFalKlingV26ProKeepOriginalSound: state.setFalKlingV26ProKeepOriginalSound,
-    setFalSora2Mode: state.setFalSora2Mode,
-    setFalSora2AspectRatio: state.setFalSora2AspectRatio,
-    setFalSora2Resolution: state.setFalSora2Resolution,
-    setFalLtx2Mode: state.setFalLtx2Mode,
-    setFalLtx2Resolution: state.setFalLtx2Resolution,
-    setFalLtx2Fps: state.setFalLtx2Fps,
-    setFalLtx2GenerateAudio: state.setFalLtx2GenerateAudio,
-    setFalLtx2FastMode: state.setFalLtx2FastMode,
-    setFalLtx2RetakeDuration: state.setFalLtx2RetakeDuration,
-    setFalLtx2RetakeStartTime: state.setFalLtx2RetakeStartTime,
-    setFalLtx2RetakeMode: state.setFalLtx2RetakeMode,
-    setFalViduQ2Mode: state.setFalViduQ2Mode,
-    setFalViduQ2AspectRatio: state.setFalViduQ2AspectRatio,
-    setFalViduQ2Resolution: state.setFalViduQ2Resolution,
-    setFalViduQ2MovementAmplitude: state.setFalViduQ2MovementAmplitude,
-    setFalViduQ2Bgm: state.setFalViduQ2Bgm,
-    setFalViduQ2FastMode: state.setFalViduQ2FastMode,
-    setFalPixverse55AspectRatio: state.setFalPixverse55AspectRatio,
-    setFalPixverse55Resolution: state.setFalPixverse55Resolution,
-    setFalPixverse55Style: state.setFalPixverse55Style,
-    setFalPixverse55ThinkingType: state.setFalPixverse55ThinkingType,
-    setFalPixverse55GenerateAudio: state.setFalPixverse55GenerateAudio,
-    setFalPixverse55MultiClip: state.setFalPixverse55MultiClip,
-    setMinimaxVoiceId: state.setMinimaxVoiceId,
-    setMinimaxAudioSpec: state.setMinimaxAudioSpec,
-    setMinimaxAudioEmotion: state.setMinimaxAudioEmotion,
-    setMinimaxLanguageBoost: state.setMinimaxLanguageBoost,
-    setMinimaxAudioVol: state.setMinimaxAudioVol,
-    setMinimaxAudioPitch: state.setMinimaxAudioPitch,
-    setMinimaxAudioSpeed: state.setMinimaxAudioSpeed,
-    setMinimaxAudioSampleRate: state.setMinimaxAudioSampleRate,
-    setMinimaxAudioBitrate: state.setMinimaxAudioBitrate,
-    setMinimaxAudioFormat: state.setMinimaxAudioFormat,
-    setMinimaxAudioChannel: state.setMinimaxAudioChannel,
-    setMinimaxLatexRead: state.setMinimaxLatexRead,
-    setMinimaxTextNormalization: state.setMinimaxTextNormalization,
-    setFalZImageTurboNumInferenceSteps: state.setFalZImageTurboNumInferenceSteps,
-    setFalZImageTurboEnablePromptExpansion: state.setFalZImageTurboEnablePromptExpansion,
-    setFalZImageTurboAcceleration: state.setFalZImageTurboAcceleration,
-    setResolutionBaseSize: state.setResolutionBaseSize,
-    // 魔搭模型参数
-    setModelscopeSteps: state.setModelscopeSteps,
-    setModelscopeGuidance: state.setModelscopeGuidance,
-    setModelscopeNegativePrompt: state.setModelscopeNegativePrompt,
-    setModelscopeCustomModel: state.setModelscopeCustomModel,
-    // KIE 模型参数
-    setKieNanoBananaAspectRatio: state.setKieNanoBananaAspectRatio,
-    setKieNanoBananaResolution: state.setKieNanoBananaResolution,
-    setKieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
-    setKieSeedreamAspectRatio: state.setKieSeedreamAspectRatio,
-    setKieSeedreamQuality: state.setKieSeedreamQuality,
-    setKieSeedream40AspectRatio: state.setKieSeedream40AspectRatio,
-    setKieSeedream40Resolution: state.setKieSeedream40Resolution,
-    setKieSeedream40MaxImages: state.setKieSeedream40MaxImages,
-    setKieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
-    setKieZImageAspectRatio: state.setKieZImageAspectRatio,
-    setKieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
-    setKieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
-    // PPIO Kling 2.6 Pro 参数
-    setPpioKling26Mode: state.setPpioKling26Mode,
-    setPpioKling26VideoDuration: state.setPpioKling26VideoDuration,
-    setPpioKling26AspectRatio: state.setPpioKling26AspectRatio,
-    setPpioKling26CfgScale: state.setPpioKling26CfgScale,
-    setPpioKling26Sound: state.setPpioKling26Sound,
-    setPpioKling26CharacterOrientation: state.setPpioKling26CharacterOrientation,
-    setPpioKling26KeepOriginalSound: state.setPpioKling26KeepOriginalSound,
-    // KIE Kling V2.6 参数
-    setKieKlingV26Mode: state.setKieKlingV26Mode,
-    setKieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
-    setKieKlingV26Resolution: state.setKieKlingV26Resolution,
-    setKieKlingV26Duration: state.setKieKlingV26Duration,
-    setKieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
-    setKieKlingV26CharacterOrientation: state.setKieKlingV26CharacterOrientation,
-    // KIE Hailuo 2.3 参数
-    setKieHailuo23Mode: state.setKieHailuo23Mode,
-    setKieHailuo23Duration: state.setKieHailuo23Duration,
-    setKieHailuo23Resolution: state.setKieHailuo23Resolution,
-    // KIE Hailuo 02 参数
-    setKieHailuo02Duration: state.setKieHailuo02Duration,
-    setKieHailuo02Resolution: state.setKieHailuo02Resolution,
-    setKieHailuo02PromptOptimizer: state.setKieHailuo02PromptOptimizer,
-    // KIE Seedance V3 参数
-    setKieSeedanceV3Version: state.setKieSeedanceV3Version,
-    setKieSeedanceV3AspectRatio: state.setKieSeedanceV3AspectRatio,
-    setKieSeedanceV3Resolution: state.setKieSeedanceV3Resolution,
-    setKieSeedanceV3Duration: state.setKieSeedanceV3Duration,
-    setKieSeedanceV3CameraFixed: state.setKieSeedanceV3CameraFixed,
-    setKieSeedanceV3FastMode: state.setKieSeedanceV3FastMode,
-    // KIE Sora 2 参数
-    setKieSora2Mode: state.setKieSora2Mode,
-    setKieSora2AspectRatio: state.setKieSora2AspectRatio,
-    setKieSora2Duration: state.setKieSora2Duration,
-    setKieSora2Quality: state.setKieSora2Quality
-  }), [])
+    if (isKling26PPIO || isKling26Fal || isKling26KIE) {
+      if (uiState.uploadedImages.length !== 1) {
+        uiState.showAlert(
+          '图片必需',
+          '动作控制模式需要上传1张图片（不能多也不能少）',
+          'warning'
+        )
+        return
+      }
+      if (uiState.uploadedVideoFiles.length !== 1) {
+        uiState.showAlert(
+          '视频必需',
+          '动作控制模式需要上传1个视频（不能多也不能少）',
+          'warning'
+        )
+        return
+      }
+    }
 
-  // 收藏模型管理
-  const saveFavorites = (favorites: Set<string>) => {
-    localStorage.setItem('favorite_models', JSON.stringify([...favorites]))
+    // 验证通过，执行生成
+    handleGenerateRequest()
   }
 
-  const toggleFavorite = (e: React.MouseEvent, providerId: string, modelId: string) => {
+  // 9. 预设加载处理
+  const handleLoadPreset = (presetData: any) => {
+    const params = PresetManager.loadPreset(presetData, uiState.selectedModel)
+    Object.entries(params).forEach(([key, value]) => {
+      modelState.setParam(key, value)
+    })
+  }
+
+
+
+  // 11. 收藏模型切换
+  const handleToggleFavorite = (e: React.MouseEvent, providerId: string, modelId: string) => {
     e.stopPropagation()
     const key = `${providerId}-${modelId}`
-    state.setFavoriteModels(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(key)) {
-        newSet.delete(key)
+    uiState.setFavoriteModels(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
       } else {
-        newSet.add(key)
+        next.add(key)
       }
-      saveFavorites(newSet)
-      return newSet
+      return next
     })
-  }
-
-  // 从 localStorage 加载收藏的模型
-  useEffect(() => {
-    const saved = localStorage.getItem('favorite_models')
-    if (saved) {
-      try {
-        const favArray = JSON.parse(saved)
-        state.setFavoriteModels(new Set(favArray))
-      } catch {
-        state.setFavoriteModels(new Set())
-      }
-    }
-  }, [])
-
-  // 向 App 发送拖动状态变化事件
-  useEffect(() => {
-    const event = new CustomEvent('imageDragStateChanged', {
-      detail: { isDragging: imageUpload.isDraggingImage }
-    })
-    window.dispatchEvent(event)
-  }, [imageUpload.isDraggingImage])
-
-  // 向父组件暴露当前状态
-  useEffect(() => {
-    const event = new CustomEvent('generatorStateChanged', {
-      detail: {
-        modelName: currentModel?.id || state.selectedModel,
-        prompt: state.input
-      }
-    })
-    window.dispatchEvent(event)
-  }, [state.selectedModel, state.input, currentModel])
-
-  // 监听分辨率选项变化（即梦 4.0 和 ByteDance Seedream v4）
-  useEffect(() => {
-    if (state.selectedResolution === 'smart' || state.isManualInput) return
-    const resolution = getActualResolution(state.selectedResolution, state.resolutionQuality)
-    if (resolution && resolution.includes('x')) {
-      const [w, h] = resolution.split('x')
-      state.setCustomWidth(w)
-      state.setCustomHeight(h)
-    }
-  }, [state.selectedResolution, state.resolutionQuality])
-
-  // 使用 ref 来防止 Z-Image-Turbo 的 useEffect 死循环
-  const isUpdatingFromImageSizeRef = useRef(false)
-  const isUpdatingFromCustomSizeRef = useRef(false)
-
-  // 监听 Z-Image-Turbo 的 imageSize 和 resolutionBaseSize 变化，自动更新 customWidth 和 customHeight
-  useEffect(() => {
-    logInfo('[Z-Image-Turbo] imageSize or baseSize changed:', {
-      selectedModel: state.selectedModel,
-      modelscopeImageSize: state.modelscopeImageSize,
-      baseSize: state.resolutionBaseSize,
-      currentWidth: state.customWidth,
-      currentHeight: state.customHeight,
-      isUpdatingFromCustomSize: isUpdatingFromCustomSizeRef.current
-    })
-
-    if (state.selectedModel !== 'fal-ai-z-image-turbo') return
-    if (!state.modelscopeImageSize) return
-
-    // 如果是从 customSize 更新触发的，跳过
-    if (isUpdatingFromCustomSizeRef.current) {
-      logInfo('', '[Z-Image-Turbo] Skipping update (triggered by customSize change)')
-      isUpdatingFromCustomSizeRef.current = false
-      return
-    }
-
-    // 如果是 "自定义"，不做任何处理，保持当前的 customWidth 和 customHeight
-    if (state.modelscopeImageSize === '自定义') {
-      logInfo('[Z-Image-Turbo] imageSize is 自定义, skipping update', {})
-      return
-    }
-
-    // 如果是比例格式（如 "4:3"），使用基数动态计算分辨率
-    if (state.modelscopeImageSize.includes(':')) {
-      const [w, h] = state.modelscopeImageSize.split(':').map(Number)
-      if (!isNaN(w) && !isNaN(h)) {
-        // 使用基数计算分辨率
-        import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
-          const baseSize = state.resolutionBaseSize || 1440 // 默认 1440
-          const size = calculateResolution(baseSize, w, h)
-          logInfo('[Z-Image-Turbo] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
-
-          const newWidth = String(size.width)
-          const newHeight = String(size.height)
-
-          // 只有当值真的不同时才更新
-          if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
-            logInfo('[Z-Image-Turbo] Updating customWidth and customHeight to:', size)
-            isUpdatingFromImageSizeRef.current = true
-            state.setCustomWidth(newWidth)
-            state.setCustomHeight(newHeight)
-          }
-        })
-      }
-    }
-  }, [state.modelscopeImageSize, state.resolutionBaseSize, state.selectedModel])
-
-  // 监听 customWidth 和 customHeight 变化，反向匹配比例（Z-Image-Turbo）
-  // 只有用户手动修改时才触发
-  useEffect(() => {
-    logInfo('[Z-Image-Turbo] customWidth/Height changed:', {
-      selectedModel: state.selectedModel,
-      customWidth: state.customWidth,
-      customHeight: state.customHeight,
-      currentImageSize: state.modelscopeImageSize,
-      isUpdatingFromImageSize: isUpdatingFromImageSizeRef.current
-    })
-
-    if (state.selectedModel !== 'fal-ai-z-image-turbo') return
-    if (!state.customWidth || !state.customHeight) return
-
-    // 如果是从 imageSize 更新触发的，跳过
-    if (isUpdatingFromImageSizeRef.current) {
-      logInfo('', '[Z-Image-Turbo] Skipping update (triggered by imageSize change)')
-      isUpdatingFromImageSizeRef.current = false
-      return
-    }
-
-    const width = parseInt(state.customWidth)
-    const height = parseInt(state.customHeight)
-    if (isNaN(width) || isNaN(height)) return
-
-    // 检查是否完全匹配某个预设尺寸（基于当前基数动态计算）
-    let matchedRatio: string | null = null
-    const baseSize = state.resolutionBaseSize || 1440
-
-    // 定义所有支持的比例
-    const aspectRatios = [
-      '21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16', '9:21'
-    ]
-
-    // 动态计算每个比例的分辨率并匹配
-    import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
-      for (const ratio of aspectRatios) {
-        const [w, h] = ratio.split(':').map(Number)
-        const size = calculateResolution(baseSize, w, h)
-
-        if (size.width === width && size.height === height) {
-          matchedRatio = ratio
-          break
-        }
-      }
-
-      logInfo('[Z-Image-Turbo] Matched ratio:', matchedRatio)
-
-      // 如果找到匹配的比例，自动选中
-      if (matchedRatio && state.modelscopeImageSize !== matchedRatio) {
-        logInfo('[Z-Image-Turbo] Setting imageSize to matched ratio:', matchedRatio)
-        isUpdatingFromCustomSizeRef.current = true
-        state.setModelscopeImageSize(matchedRatio)
-      }
-      // 如果没有匹配的比例，设置为 "自定义"
-      else if (!matchedRatio && state.modelscopeImageSize !== '自定义') {
-        logInfo('', '[Z-Image-Turbo] Setting imageSize to 自定义')
-        isUpdatingFromCustomSizeRef.current = true
-        state.setModelscopeImageSize('自定义')
-      }
-    })
-  }, [state.customWidth, state.customHeight, state.selectedModel, state.resolutionBaseSize])
-
-  // 监听魔搭模型的 imageSize 和 resolutionBaseSize 变化，自动更新 customWidth 和 customHeight
-  useEffect(() => {
-    // 检查是否是魔搭模型
-    const isModelscopeModel =
-      state.selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
-      state.selectedModel === 'Qwen/Qwen-Image' ||
-      state.selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
-      state.selectedModel === 'modelscope-custom'
-
-    if (!isModelscopeModel) return
-    if (!state.modelscopeImageSize) return
-
-    logInfo('[ModelScope] imageSize or baseSize changed:', {
-      selectedModel: state.selectedModel,
-      modelscopeImageSize: state.modelscopeImageSize,
-      baseSize: state.resolutionBaseSize,
-      currentWidth: state.customWidth,
-      currentHeight: state.customHeight
-    })
-
-    // 如果是 "自定义"，不做任何处理
-    if (state.modelscopeImageSize === '自定义') {
-      logInfo('[ModelScope] imageSize is 自定义, skipping update', {})
-      return
-    }
-
-    // 如果是比例格式（如 "4:3"），使用基数动态计算分辨率
-    if (state.modelscopeImageSize.includes(':')) {
-      const [w, h] = state.modelscopeImageSize.split(':').map(Number)
-      if (!isNaN(w) && !isNaN(h)) {
-        // 使用基数计算分辨率
-        import('@/utils/resolutionCalculator').then(({ calculateResolution }) => {
-          const baseSize = state.resolutionBaseSize || 1024 // 默认 1024
-          const size = calculateResolution(baseSize, w, h)
-          logInfo('[ModelScope] Calculated size:', { ratio: state.modelscopeImageSize, baseSize, size })
-
-          const newWidth = String(size.width)
-          const newHeight = String(size.height)
-
-          // 只有当值真的不同时才更新
-          if (state.customWidth !== newWidth || state.customHeight !== newHeight) {
-            logInfo('[ModelScope] Updating customWidth and customHeight to:', size)
-            state.setCustomWidth(newWidth)
-            state.setCustomHeight(newHeight)
-          }
-        })
-      }
-    }
-  }, [state.modelscopeImageSize, state.resolutionBaseSize, state.selectedModel])
-
-  // 监听重新编辑事件
-  const isRestoringRef = useRef(false)
-  useEffect(() => {
-    const handleReedit = async (event: CustomEvent) => {
-      const { prompt, images, uploadedFilePaths, videos, uploadedVideoFilePaths, model, provider, options } = event.detail as any
-
-      // 标记正在恢复状态，防止 useEffect 重置参数
-      isRestoringRef.current = true
-
-      state.setInput(prompt || '')
-
-      // 恢复模型选择
-      if (model) {
-        let targetProvider = provider
-        if (!targetProvider) {
-          // 如果 provider 缺失（旧历史记录），尝试从 model 推断
-          const p = providers.find(p => p.models.some(m => m.id === model))
-          if (p) targetProvider = p.id
-        }
-
-        if (targetProvider) {
-          handleModelSelect(targetProvider, model)
-        }
-      }
-
-      // 恢复图片
-      if (images && Array.isArray(images)) {
-        state.setUploadedImages(images)
-      }
-      if (uploadedFilePaths && Array.isArray(uploadedFilePaths)) {
-        state.setUploadedFilePaths(uploadedFilePaths)
-      } else {
-        state.setUploadedFilePaths([])
-      }
-
-      // 恢复视频
-      // 【关键修复】使用 uploadedVideoFilePaths 从本地读取视频，生成缩略图
-      // videos 现在是视频文件 URL，不是缩略图，需要从本地文件重新生成
-      // 【优化】延迟设置所有状态，直到缩略图生成完成，避免 UI 闪烁
-      if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths) && uploadedVideoFilePaths.length > 0) {
-        // 异步处理：读取本地视频文件，生成缩略图和 File 对象
-        // 注意：不立即设置 uploadedVideoFilePaths，等缩略图准备好后一起设置
-        Promise.all(uploadedVideoFilePaths.map(async (filePath: string, index: number) => {
-          try {
-            // 使用 Tauri API 读取本地视频文件
-            const { readFile } = await import('@tauri-apps/plugin-fs')
-            const { generateVideoThumbnail } = await import('@/utils/videoProcessing')
-
-            // 读取文件内容
-            const bytes = await readFile(filePath)
-            const blob = new Blob([bytes], { type: 'video/mp4' })
-            const file = new File([blob], `video-${index}.mp4`, { type: 'video/mp4' })
-
-            // 生成缩略图
-            const thumbnail = await generateVideoThumbnail(file)
-
-            logInfo('[MediaGenerator] 视频恢复成功:', { path: filePath, thumbnailLength: thumbnail.length })
-            return { file, thumbnail, path: filePath }
-          } catch (e) {
-            logError('[MediaGenerator] 视频恢复失败:', { path: filePath, error: e })
-            return null
-          }
-        })).then(results => {
-          const validResults = results.filter(r => r !== null) as { file: File, thumbnail: string, path: string }[]
-          if (validResults.length > 0) {
-            // 【关键】一次性设置所有状态，避免 UI 闪烁
-            state.setUploadedVideos(validResults.map(r => r.thumbnail))  // 先设置缩略图
-            state.setUploadedVideoFiles(validResults.map(r => r.file))
-            state.setUploadedVideoFilePaths(validResults.map(r => r.path))  // 最后设置路径
-          }
-        })
-      } else if (videos && Array.isArray(videos)) {
-        // 旧逻辑回退：如果没有 uploadedVideoFilePaths，尝试使用 videos
-        state.setUploadedVideos(videos)
-        state.setUploadedVideoFilePaths([])
-      } else {
-        state.setUploadedVideoFilePaths([])
-      }
-
-      // 恢复参数 - 同时处理 UI 参数和 API 参数
-      if (options) {
-        logInfo('[MediaGenerator] Restore - Model:', model)
-        logInfo('[MediaGenerator] Restore - Options keys:', Object.keys(options))
-        logInfo('[MediaGenerator] Restore - Options:', options)
-
-        const paramsToRestore: Record<string, any> = {}
-
-        // 1. 首先直接恢复已存在的 UI 参数（新的历史记录）
-        for (const [key, value] of Object.entries(options)) {
-          if (key in setterMap) {
-            paramsToRestore[key] = value
-            logInfo('', `[MediaGenerator] Restore - Direct UI param: ${key} = ${JSON.stringify(value)}`)
-          }
-        }
-
-        logInfo('[MediaGenerator] Restore - Direct UI params count:', Object.keys(paramsToRestore).length)
-
-        // 2. 对于没有 UI 参数的情况，尝试反向映射 API 参数（旧的历史记录）
-        const { reverseMapOptions } = await import('./builders/optionsBuilder')
-        const reverseMappedParams = reverseMapOptions(model, options)
-
-        logInfo('[MediaGenerator] Restore - Reverse mapped params:', reverseMappedParams)
-
-        // 合并反向映射的参数（UI 参数优先）
-        for (const [key, value] of Object.entries(reverseMappedParams)) {
-          if (!(key in paramsToRestore)) {
-            paramsToRestore[key] = value
-            logInfo('', `[MediaGenerator] Restore - Reverse mapped: ${key} = ${JSON.stringify(value)}`)
-          } else {
-            logInfo('', `[MediaGenerator] Restore - Skipped (already exists): ${key}`)
-          }
-        }
-
-        logInfo('[MediaGenerator] Restore - Final params to restore:', paramsToRestore)
-
-        // 使用 setterMap 恢复所有参数
-        let restoredCount = 0
-        for (const [key, value] of Object.entries(paramsToRestore)) {
-          const setter = setterMap[key]
-          if (setter && value !== undefined && value !== null) {
-            setter(value)
-            restoredCount++
-            logInfo('', `[MediaGenerator] Restore - Applied: ${key} = ${JSON.stringify(value)}`)
-          } else if (!setter) {
-            logInfo('', `[MediaGenerator] Restore - No setter for: ${key}`)
-          }
-        }
-
-        logInfo('', `[MediaGenerator] Restore - Successfully restored ${restoredCount} parameters`)
-      }
-
-      // 恢复完成后重置标记
-      setTimeout(() => {
-        isRestoringRef.current = false
-      }, 100)
-    }
-
-    window.addEventListener('reedit-content', handleReedit as unknown as EventListener)
-    return () => {
-      window.removeEventListener('reedit-content', handleReedit as unknown as EventListener)
-    }
-  }, [setterMap])
-
-  // 自动应用模型 Schema 中定义的默认值
-  useEffect(() => {
-    if (isRestoringRef.current) return // 重新编辑时不重置
-
-    const defaults = getModelDefaultValues(state.selectedModel)
-
-    // 应用所有默认值
-    for (const [key, value] of Object.entries(defaults)) {
-      const setter = setterMap[key]
-      if (setter) {
-        setter(value)
-      }
-    }
-  }, [state.selectedModel, setterMap])
-
-  // 使用 ref 追踪上一次的关键状态，避免无限循环
-  const prevAutoSwitchStateRef = useRef({
-    selectedModel: state.selectedModel,
-    uploadedImagesLength: state.uploadedImages.length,
-    uploadedVideosLength: state.uploadedVideos.length,
-    modelscopeCustomModel: state.modelscopeCustomModel,
-    falSeedanceV1Mode: state.falSeedanceV1Mode,
-    falHailuo02FastMode: state.falHailuo02FastMode,
-    kieSeedanceV3Version: state.kieSeedanceV3Version,
-    kieSeedanceV3FastMode: state.kieSeedanceV3FastMode
-  })
-
-  // 自动应用模型 Schema 中定义的自动切换规则
-  useEffect(() => {
-    if (isRestoringRef.current) return // 重新编辑时不切换
-
-    const prev = prevAutoSwitchStateRef.current
-    const hasChanged =
-      prev.selectedModel !== state.selectedModel ||
-      prev.uploadedImagesLength !== state.uploadedImages.length ||
-      prev.uploadedVideosLength !== state.uploadedVideos.length ||
-      prev.modelscopeCustomModel !== state.modelscopeCustomModel ||
-      prev.falSeedanceV1Mode !== state.falSeedanceV1Mode ||
-      prev.falHailuo02FastMode !== state.falHailuo02FastMode ||
-      prev.kieSeedanceV3Version !== state.kieSeedanceV3Version ||
-      prev.kieSeedanceV3FastMode !== state.kieSeedanceV3FastMode
-
-    // 只有当关键状态真正改变时才执行自动切换
-    if (!hasChanged) return
-
-    // 更新 ref
-    prevAutoSwitchStateRef.current = {
-      selectedModel: state.selectedModel,
-      uploadedImagesLength: state.uploadedImages.length,
-      uploadedVideosLength: state.uploadedVideos.length,
-      modelscopeCustomModel: state.modelscopeCustomModel,
-      falSeedanceV1Mode: state.falSeedanceV1Mode,
-      falHailuo02FastMode: state.falHailuo02FastMode,
-      kieSeedanceV3Version: state.kieSeedanceV3Version,
-      kieSeedanceV3FastMode: state.kieSeedanceV3FastMode
-    }
-
-    const switches = getAutoSwitchValues(state.selectedModel, state)
-
-    // 应用所有自动切换
-    for (const [key, value] of Object.entries(switches)) {
-      const setter = setterMap[key]
-      if (setter) {
-        setter(value)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.selectedModel, state.uploadedImages.length, state.uploadedVideos.length, state.modelscopeCustomModel, state.falSeedanceV1Mode, state.falHailuo02FastMode, state.kieSeedanceV3Version, state.kieSeedanceV3FastMode])
-
-  // 注意：智能匹配已移除，现在只在生成时（optionsBuilder.ts）执行
-  // 当用户上传图片时，autoSwitch 会自动将参数设置为 'smart'
-  // 生成时，optionsBuilder.ts 会将 'smart' 转换为实际匹配的比例值
-
-
-  // 模型选择处理
-  const handleModelSelect = (providerId: string, modelId: string) => {
-    state.setSelectedProvider(providerId)
-    state.setSelectedModel(modelId)
-
-    // 根据模型截断图片
-    const max = getMaxImageCount(
-      modelId,
-      modelId === 'vidu-q1' ? state.ppioViduQ1Mode :
-        (modelId === 'veo3.1' || modelId === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-          (modelId === 'fal-ai-bytedance-seedance-v1' || modelId === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-            (modelId === 'fal-ai-vidu-q2' || modelId === 'vidu-q2') ? state.falViduQ2Mode :
-              (modelId === 'fal-ai-minimax-hailuo-02' || modelId === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-                (modelId === 'kie-seedance-v3' || modelId === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-                  undefined
-    )
-    if (state.uploadedImages.length > max) {
-      state.setUploadedImages(prev => prev.slice(0, max))
-      state.setUploadedFilePaths(prev => prev.slice(0, max))
-    }
-  }
-
-  // 参数变更处理
-  const handleSchemaChange = (id: string, value: any) => {
-    const setterMap: Record<string, (v: any) => void> = {
-      // 通用视频参数（向后兼容）
-      videoDuration: state.setVideoDuration,
-      videoAspectRatio: state.setVideoAspectRatio,
-      videoResolution: state.setVideoResolution,
-      videoNegativePrompt: state.setVideoNegativePrompt,
-      videoSeed: state.setVideoSeed,
-      // 模型特定参数 - 派欧云
-      ppioKling25VideoDuration: state.setPpioKling25VideoDuration,
-      ppioKling25VideoAspectRatio: state.setPpioKling25VideoAspectRatio,
-      ppioHailuo23VideoDuration: state.setPpioHailuo23VideoDuration,
-      ppioHailuo23VideoResolution: state.setPpioHailuo23VideoResolution,
-      ppioPixverse45VideoAspectRatio: state.setPpioPixverse45VideoAspectRatio,
-      ppioPixverse45VideoResolution: state.setPpioPixverse45VideoResolution,
-      ppioWan25VideoDuration: state.setPpioWan25VideoDuration,
-      ppioSeedanceV1VideoDuration: state.setPpioSeedanceV1VideoDuration,
-      // 模型特定参数 - Fal
-      falNanoBananaAspectRatio: state.setFalNanoBananaAspectRatio,
-      falNanoBananaNumImages: state.setFalNanoBananaNumImages,
-      falNanoBananaProAspectRatio: state.setFalNanoBananaProAspectRatio,
-      falNanoBananaProNumImages: state.setFalNanoBananaProNumImages,
-      falNanoBananaProResolution: state.setFalNanoBananaProResolution,
-      falKlingImageO1AspectRatio: state.setFalKlingImageO1AspectRatio,
-      falKlingImageO1NumImages: state.setFalKlingImageO1NumImages,
-      falKlingImageO1Resolution: state.setFalKlingImageO1Resolution,
-      falZImageTurboImageSize: state.setFalZImageTurboImageSize,
-      falZImageTurboNumImages: state.setFalZImageTurboNumImages,
-      falSeedream40NumImages: state.setFalSeedream40NumImages,
-      // PPIO Seedream 4.5
-      ppioSeedream45MaxImages: state.setPpioSeedream45MaxImages,
-      ppioSeedream45OptimizePrompt: state.setPpioSeedream45OptimizePrompt,
-      falWan25VideoDuration: state.setFalWan25VideoDuration,
-      falSeedanceV1VideoDuration: state.setFalSeedanceV1VideoDuration,
-      falVeo31VideoDuration: state.setFalVeo31VideoDuration,
-      falSora2VideoDuration: state.setFalSora2VideoDuration,
-      falLtx2VideoDuration: state.setFalLtx2VideoDuration,
-      falViduQ2VideoDuration: state.setFalViduQ2VideoDuration,
-      falPixverse55VideoDuration: state.setFalPixverse55VideoDuration,
-      falKlingV26ProVideoDuration: state.setFalKlingV26ProVideoDuration,
-      falKlingVideoO1VideoDuration: state.setFalKlingVideoO1VideoDuration,
-      // Vidu
-      ppioViduQ1VideoDuration: state.setPpioViduQ1VideoDuration,
-      ppioViduQ1Mode: state.setPpioViduQ1Mode,
-      ppioViduQ1AspectRatio: state.setPpioViduQ1AspectRatio,
-      ppioViduQ1Style: state.setPpioViduQ1Style,
-      ppioViduQ1MovementAmplitude: state.setPpioViduQ1MovementAmplitude,
-      ppioViduQ1Bgm: state.setPpioViduQ1Bgm,
-      // Kling
-      ppioKling25CfgScale: state.setPpioKling25CfgScale,
-      // PPIO Kling O1
-      ppioKlingO1Mode: state.setPpioKlingO1Mode,
-      ppioKlingO1VideoDuration: state.setPpioKlingO1VideoDuration,
-      ppioKlingO1AspectRatio: state.setPpioKlingO1AspectRatio,
-      ppioKlingO1KeepAudio: state.setPpioKlingO1KeepAudio,
-      ppioKlingO1FastMode: state.setPpioKlingO1FastMode,
-      // PPIO Kling 2.6 Pro
-      ppioKling26Mode: state.setPpioKling26Mode,
-      ppioKling26VideoDuration: state.setPpioKling26VideoDuration,
-      ppioKling26AspectRatio: state.setPpioKling26AspectRatio,
-      ppioKling26CfgScale: state.setPpioKling26CfgScale,
-      ppioKling26Sound: state.setPpioKling26Sound,
-      ppioKling26CharacterOrientation: state.setPpioKling26CharacterOrientation,
-      ppioKling26KeepOriginalSound: state.setPpioKling26KeepOriginalSound,
-
-      // KIE Kling V2.6
-      kieKlingV26Mode: state.setKieKlingV26Mode,
-      kieKlingV26AspectRatio: state.setKieKlingV26AspectRatio,
-      kieKlingV26Resolution: state.setKieKlingV26Resolution,
-      kieKlingV26CharacterOrientation: state.setKieKlingV26CharacterOrientation,
-      kieKlingV26Duration: state.setKieKlingV26Duration,
-      kieKlingV26EnableAudio: state.setKieKlingV26EnableAudio,
-      // Kling Video O1
-      falKlingVideoO1Mode: state.setFalKlingVideoO1Mode,
-      falKlingVideoO1AspectRatio: state.setFalKlingVideoO1AspectRatio,
-      falKlingVideoO1KeepAudio: state.setFalKlingVideoO1KeepAudio,
-      // Kling v2.6 Pro
-      falKlingV26ProMode: state.setFalKlingV26ProMode,
-      falKlingV26ProResolution: state.setFalKlingV26ProResolution,
-      falKlingV26ProCharacterOrientation: state.setFalKlingV26ProCharacterOrientation,
-      falKlingV26ProKeepOriginalSound: state.setFalKlingV26ProKeepOriginalSound,
-      falKlingV26ProAspectRatio: state.setFalKlingV26ProAspectRatio,
-      falKlingV26ProGenerateAudio: state.setFalKlingV26ProGenerateAudio,
-      falKlingV26ProCfgScale: state.setFalKlingV26ProCfgScale,
-      ppioPixverse45Style: state.setPpioPixverse45Style,
-      // Wan（派欧云）
-      ppioWan25Size: state.setPpioWan25Size,
-      ppioWan25PromptExtend: state.setPpioWan25PromptExtend,
-      ppioWan25Audio: state.setPpioWan25Audio,
-      // Wan 2.6（派欧云）
-      ppioWan26Mode: state.setPpioWan26Mode,
-      ppioWan26AspectRatio: state.setPpioWan26AspectRatio,
-      ppioWan26Quality: state.setPpioWan26Quality,
-      ppioWan26VideoDuration: state.setPpioWan26VideoDuration,
-      ppioWan26ShotType: state.setPpioWan26ShotType,
-      ppioWan26Audio: state.setPpioWan26Audio,
-      ppioWan26PromptExtend: state.setPpioWan26PromptExtend,
-      // Wan（Fal）
-      falWan25AspectRatio: state.setFalWan25AspectRatio,
-      falWan25Resolution: state.setFalWan25Resolution,
-      wanResolution: state.setFalWan25Resolution,  // qualityKey 映射
-      falWan25PromptExpansion: state.setFalWan25PromptExpansion,
-      // Seedance（派欧云）
-      ppioSeedanceV1Variant: state.setPpioSeedanceV1Variant,
-      ppioSeedanceV1Resolution: state.setPpioSeedanceV1Resolution,
-      ppioSeedanceV1AspectRatio: state.setPpioSeedanceV1AspectRatio,
-      ppioSeedanceV1CameraFixed: state.setPpioSeedanceV1CameraFixed,
-      // Seedance 1.5 Pro（派欧云）
-      ppioSeedance15ProResolution: state.setPpioSeedance15ProResolution,
-      ppioSeedance15ProAspectRatio: state.setPpioSeedance15ProAspectRatio,
-      ppioSeedance15ProDuration: state.setPpioSeedance15ProDuration,
-      ppioSeedance15ProCameraFixed: state.setPpioSeedance15ProCameraFixed,
-      ppioSeedance15ProServiceTier: state.setPpioSeedance15ProServiceTier,
-      ppioSeedance15ProGenerateAudio: state.setPpioSeedance15ProGenerateAudio,
-      // Seedance v1（Fal）
-      falSeedanceV1Mode: state.setFalSeedanceV1Mode,
-      falSeedanceV1Version: state.setFalSeedanceV1Version,
-      falSeedanceV1FastMode: state.setFalSeedanceV1FastMode,
-      seedanceResolution: state.setPpioSeedanceV1Resolution,  // qualityKey 映射
-      // Veo
-      falVeo31Mode: state.setFalVeo31Mode,
-      falVeo31AspectRatio: state.setFalVeo31AspectRatio,
-      falVeo31Resolution: state.setFalVeo31Resolution,
-      veoResolution: state.setFalVeo31Resolution,  // qualityKey 映射
-      falVeo31EnhancePrompt: state.setFalVeo31EnhancePrompt,
-      falVeo31GenerateAudio: state.setFalVeo31GenerateAudio,
-      falVeo31AutoFix: state.setFalVeo31AutoFix,
-      falVeo31FastMode: state.setFalVeo31FastMode,
-      // MiniMax Hailuo 2.3（Fal）
-      falHailuo23Duration: state.setFalHailuo23Duration,
-      falHailuo23Resolution: state.setFalHailuo23Resolution,
-      hailuoResolution: state.setFalHailuo23Resolution,  // 别名映射
-      falHailuo23FastMode: state.setFalHailuo23FastMode,
-      falHailuo23PromptOptimizer: state.setFalHailuo23PromptOptimizer,
-      // MiniMax Hailuo 02（Fal）
-      falHailuo02Duration: state.setFalHailuo02Duration,
-      falHailuo02Resolution: state.setFalHailuo02Resolution,
-      hailuo02Resolution: state.setFalHailuo02Resolution,  // 别名映射
-      falHailuo02FastMode: state.setFalHailuo02FastMode,
-      falHailuo02PromptOptimizer: state.setFalHailuo02PromptOptimizer,
-      // Sora 2
-      falSora2Mode: state.setFalSora2Mode,
-      falSora2AspectRatio: state.setFalSora2AspectRatio,
-      falSora2Resolution: state.setFalSora2Resolution,
-      soraResolution: state.setFalSora2Resolution,  // qualityKey 映射
-      // LTX-2
-      falLtx2Mode: state.setFalLtx2Mode,
-      falLtx2Resolution: state.setFalLtx2Resolution,
-      falLtx2Fps: state.setFalLtx2Fps,
-      falLtx2GenerateAudio: state.setFalLtx2GenerateAudio,
-      falLtx2FastMode: state.setFalLtx2FastMode,
-      falLtx2RetakeDuration: state.setFalLtx2RetakeDuration,
-      falLtx2RetakeStartTime: state.setFalLtx2RetakeStartTime,
-      falLtx2RetakeMode: state.setFalLtx2RetakeMode,
-      // Vidu Q2
-      falViduQ2Mode: state.setFalViduQ2Mode,
-      falViduQ2AspectRatio: state.setFalViduQ2AspectRatio,
-      falViduQ2Resolution: state.setFalViduQ2Resolution,
-      viduQ2Resolution: state.setFalViduQ2Resolution,  // qualityKey 映射
-      falViduQ2MovementAmplitude: state.setFalViduQ2MovementAmplitude,
-      falViduQ2Bgm: state.setFalViduQ2Bgm,
-      falViduQ2FastMode: state.setFalViduQ2FastMode,
-      // Pixverse V5.5
-      falPixverse55AspectRatio: state.setFalPixverse55AspectRatio,
-      falPixverse55Resolution: state.setFalPixverse55Resolution,
-      pixverseResolution: state.setFalPixverse55Resolution,  // qualityKey 映射
-      falPixverse55Style: state.setFalPixverse55Style,
-      falPixverse55ThinkingType: state.setFalPixverse55ThinkingType,
-      falPixverse55GenerateAudio: state.setFalPixverse55GenerateAudio,
-      falPixverse55MultiClip: state.setFalPixverse55MultiClip,
-      // Seedream
-      maxImages: state.setMaxImages,
-      selectedResolution: state.setSelectedResolution,
-      resolutionQuality: state.setResolutionQuality,
-      // 通用图片参数（向后兼容）
-      numImages: state.setNumImages,
-      num_images: state.setNumImages,
-      aspectRatio: state.setAspectRatio,
-      resolution: state.setResolution,
-      // Z-Image-Turbo
-      modelscopeImageSize: state.setModelscopeImageSize,
-      customWidth: state.setCustomWidth,
-      customHeight: state.setCustomHeight,
-      resolutionBaseSize: state.setResolutionBaseSize,
-      falZImageTurboNumInferenceSteps: state.setFalZImageTurboNumInferenceSteps,
-      falZImageTurboEnablePromptExpansion: state.setFalZImageTurboEnablePromptExpansion,
-      falZImageTurboAcceleration: state.setFalZImageTurboAcceleration,
-      // 魔搭
-      modelscopeSteps: state.setModelscopeSteps,
-      modelscopeGuidance: state.setModelscopeGuidance,
-      modelscopeNegativePrompt: state.setModelscopeNegativePrompt,
-      modelscopeCustomModel: state.setModelscopeCustomModel,
-      // KIE Nano Banana Pro
-      kieNanoBananaAspectRatio: state.setKieNanoBananaAspectRatio,
-      kieNanoBananaResolution: state.setKieNanoBananaResolution,
-      kieNanoBananaOutputFormat: state.setKieNanoBananaOutputFormat,
-      // KIE Seedream 4.5
-      kieSeedreamAspectRatio: state.setKieSeedreamAspectRatio,
-      kieSeedreamQuality: state.setKieSeedreamQuality,
-      // KIE Seedream 4.0
-      kieSeedream40AspectRatio: state.setKieSeedream40AspectRatio,
-      kieSeedream40Resolution: state.setKieSeedream40Resolution,
-      kieSeedream40MaxImages: state.setKieSeedream40MaxImages,
-      // KIE Grok Imagine
-      kieGrokImagineAspectRatio: state.setKieGrokImagineAspectRatio,
-      // KIE Z-Image
-      kieZImageAspectRatio: state.setKieZImageAspectRatio,
-      // KIE Grok Imagine Video
-      kieGrokImagineVideoAspectRatio: state.setKieGrokImagineVideoAspectRatio,
-      kieGrokImagineVideoMode: state.setKieGrokImagineVideoMode,
-      // KIE Hailuo 2.3
-      kieHailuo23Mode: state.setKieHailuo23Mode,
-      kieHailuo23Duration: state.setKieHailuo23Duration,
-      kieHailuo23Resolution: state.setKieHailuo23Resolution,
-      // KIE Hailuo 02
-      kieHailuo02Duration: state.setKieHailuo02Duration,
-      kieHailuo02Resolution: state.setKieHailuo02Resolution,
-      kieHailuo02PromptOptimizer: state.setKieHailuo02PromptOptimizer,
-      // KIE Seedance V3
-      kieSeedanceV3Version: state.setKieSeedanceV3Version,
-      kieSeedanceV3AspectRatio: state.setKieSeedanceV3AspectRatio,
-      kieSeedanceV3Resolution: state.setKieSeedanceV3Resolution,
-      kieSeedanceV3Duration: state.setKieSeedanceV3Duration,
-      kieSeedanceV3CameraFixed: state.setKieSeedanceV3CameraFixed,
-      kieSeedanceV3FastMode: state.setKieSeedanceV3FastMode,
-      // KIE Sora 2
-      kieSora2Mode: state.setKieSora2Mode,
-      kieSora2AspectRatio: state.setKieSora2AspectRatio,
-      kieSora2Duration: state.setKieSora2Duration,
-      kieSora2Quality: state.setKieSora2Quality,
-      // 音频
-      minimaxVoiceId: state.setMinimaxVoiceId,
-      minimaxAudioSpec: state.setMinimaxAudioSpec,
-      minimaxAudioEmotion: state.setMinimaxAudioEmotion,
-      minimaxLanguageBoost: state.setMinimaxLanguageBoost,
-      minimaxAudioVol: state.setMinimaxAudioVol,
-      minimaxAudioPitch: state.setMinimaxAudioPitch,
-      minimaxAudioSpeed: state.setMinimaxAudioSpeed,
-      minimaxAudioSampleRate: state.setMinimaxAudioSampleRate,
-      minimaxAudioBitrate: state.setMinimaxAudioBitrate,
-      minimaxAudioFormat: state.setMinimaxAudioFormat,
-      minimaxAudioChannel: state.setMinimaxAudioChannel,
-      minimaxLatexRead: state.setMinimaxLatexRead,
-      minimaxTextNormalization: state.setMinimaxTextNormalization
-    }
-
-    // 直接设置值，保持界面显示为 'smart'
-    const setter = setterMap[id]
-    if (setter) {
-      setter(value)
-    }
-
-    // 特殊处理：当切换自定义模型时，检查是否需要清空图片
-    if (id === 'modelscopeCustomModel' && value) {
-      try {
-        const stored = localStorage.getItem('modelscope_custom_models')
-        if (stored) {
-          const models = JSON.parse(stored)
-          const selectedModel = models.find((m: any) => m.id === value)
-
-          // 如果切换到的是图片生成模型（不支持图片编辑），清空已上传的图片
-          if (selectedModel && selectedModel.modelType && !selectedModel.modelType.imageEditing) {
-            if (state.uploadedImages.length > 0) {
-              state.setUploadedImages([])
-              state.setUploadedFilePaths([])
-            }
-          }
-        }
-      } catch (e) {
-        logError('Failed to check model type:', e)
-      }
-    }
-  }
-
-  // 弹窗状态
-  const [isWarningDialogOpen, setIsWarningDialogOpen] = React.useState(false)
-  const [warningOpacity, setWarningOpacity] = React.useState(0)
-
-  // 生成处理
-  const handleGenerate = async () => {
-    if ((!state.input.trim() && state.uploadedImages.length === 0) || isLoading) return
-
-    // 检查 Seedance v1 Fast 模式的限制
-    if ((state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') &&
-      state.falSeedanceV1Version === 'pro' &&
-      state.falSeedanceV1FastMode &&
-      state.falSeedanceV1Mode === 'image-to-video' &&
-      state.uploadedImages.length >= 2) {
-      // 显示警告弹窗
-      setIsWarningDialogOpen(true)
-      setTimeout(() => setWarningOpacity(1), 10)
-      return
-    }
-
-    // 检查 KIE Hailuo 2.3 的必需条件
-    if (state.selectedModel === 'kie-hailuo-2-3' || state.selectedModel === 'hailuo-2-3-kie') {
-      if (state.uploadedImages.length === 0) {
-        showAlert('图片必需', 'KIE 海螺 2.3 是图生视频模型，必须上传图片才能生成', 'warning')
-        return
-      }
-      if (!state.input.trim()) {
-        showAlert('提示词必需', '请输入提示词描述期望的视频效果', 'warning')
-        return
-      }
-    }
-
-    // 检查 PPIO Kling O1 的必需条件
-    if (state.selectedModel === 'kling-o1') {
-      const mode = state.ppioKlingO1Mode || 'text-image-to-video'
-
-      // 首尾帧模式：必须上传2张图片
-      if (mode === 'start-end-frame' && state.uploadedImages.length !== 2) {
-        showAlert('图片必需', '首尾帧模式需要上传2张图片', 'warning')
-        return
-      }
-
-      // 参考生视频模式：必须上传1个视频
-      if (mode === 'reference-to-video' && state.uploadedVideoFiles.length === 0) {
-        showAlert('视频必需', '参考生视频模式需要上传视频才能生成', 'warning')
-        return
-      }
-
-      // 视频编辑模式：必须上传1个视频
-      if (mode === 'video-edit' && state.uploadedVideoFiles.length === 0) {
-        showAlert('视频必需', '视频编辑模式需要上传视频才能生成', 'warning')
-        return
-      }
-    }
-
-    // 检查 PPIO Kling 2.6 Pro 动作控制模式的必需条件
-    if (state.selectedModel === 'kling-2.6-pro' && state.ppioKling26Mode === 'motion-control') {
-      // 动作控制模式：必须上传1张图片 + 1个视频
-      if (state.uploadedImages.length !== 1) {
-        showAlert('图片必需', '动作控制模式需要上传1张图片（不能多也不能少）', 'warning')
-        return
-      }
-      if (state.uploadedVideoFiles.length !== 1) {
-        showAlert('视频必需', '动作控制模式需要上传1个视频（不能多也不能少）', 'warning')
-        return
-      }
-    }
-
-    // 检查 Fal Kling 2.6 Pro 动作控制模式的必需条件
-    if ((state.selectedModel === 'kling-video-v2.6-pro' || state.selectedModel === 'fal-ai-kling-video-v2.6-pro') && state.falKlingV26ProMode === 'motion-control') {
-      // 动作控制模式：必须上传1张图片 + 1个视频
-      if (state.uploadedImages.length !== 1) {
-        showAlert('图片必需', '动作控制模式需要上传1张图片（不能多也不能少）', 'warning')
-        return
-      }
-      if (state.uploadedVideoFiles.length !== 1) {
-        showAlert('视频必需', '动作控制模式需要上传1个视频（不能多也不能少）', 'warning')
-        return
-      }
-    }
-
-    // 检查 KIE Kling 2.6 动作控制模式的必需条件
-    if (state.selectedModel === 'kie-kling-v2-6' && state.kieKlingV26Mode === 'motion-control') {
-      // 动作控制模式：必须上传1张图片 + 1个视频
-      if (state.uploadedImages.length !== 1) {
-        showAlert('图片必需', '动作控制模式需要上传1张图片（不能多也不能少）', 'warning')
-        return
-      }
-      if (state.uploadedVideoFiles.length !== 1) {
-        showAlert('视频必需', '动作控制模式需要上传1个视频（不能多也不能少）', 'warning')
-        return
-      }
-    }
-
-    try {
-      const options = await buildGenerateOptions({
-        currentModel,
-        selectedModel: state.selectedModel,
-        uploadedImages: state.uploadedImages,
-        uploadedFilePaths: state.uploadedFilePaths,
-        setUploadedFilePaths: state.setUploadedFilePaths,
-        uploadedVideoFilePaths: state.uploadedVideoFilePaths,
-        setUploadedVideoFilePaths: state.setUploadedVideoFilePaths,
-        fileOrder, // 传递文件顺序
-        selectedResolution: state.selectedResolution,
-        resolutionQuality: state.resolutionQuality,
-        customWidth: state.customWidth,
-        customHeight: state.customHeight,
-        isManualInput: state.isManualInput,
-        maxImages: state.maxImages,
-        numImages: state.numImages,
-        aspectRatio: state.aspectRatio,
-        resolution: state.resolution,
-        videoDuration: state.videoDuration,
-        videoAspectRatio: state.videoAspectRatio,
-        videoResolution: state.videoResolution,
-        videoNegativePrompt: state.videoNegativePrompt,
-        videoSeed: state.videoSeed,
-        // 模型特定参数 - 派欧云
-        ppioKling25VideoDuration: state.ppioKling25VideoDuration,
-        ppioKling25VideoAspectRatio: state.ppioKling25VideoAspectRatio,
-        ppioHailuo23VideoDuration: state.ppioHailuo23VideoDuration,
-        ppioHailuo23VideoResolution: state.ppioHailuo23VideoResolution,
-        ppioPixverse45VideoAspectRatio: state.ppioPixverse45VideoAspectRatio,
-        ppioPixverse45VideoResolution: state.ppioPixverse45VideoResolution,
-        ppioWan25VideoDuration: state.ppioWan25VideoDuration,
-        ppioSeedanceV1VideoDuration: state.ppioSeedanceV1VideoDuration,
-        // 模型特定参数 - Fal
-        falNanoBananaAspectRatio: state.falNanoBananaAspectRatio,
-        falNanoBananaNumImages: state.falNanoBananaNumImages,
-        falNanoBananaProAspectRatio: state.falNanoBananaProAspectRatio,
-        falNanoBananaProNumImages: state.falNanoBananaProNumImages,
-        falKlingImageO1AspectRatio: state.falKlingImageO1AspectRatio,
-        falKlingImageO1NumImages: state.falKlingImageO1NumImages,
-        falZImageTurboImageSize: state.falZImageTurboImageSize,
-        falZImageTurboNumImages: state.falZImageTurboNumImages,
-        falSeedream40NumImages: state.falSeedream40NumImages,
-        // PPIO Seedream 4.5 参数
-        ppioSeedream45MaxImages: state.ppioSeedream45MaxImages,
-        ppioSeedream45OptimizePrompt: state.ppioSeedream45OptimizePrompt,
-        falWan25VideoDuration: state.falWan25VideoDuration,
-        falSeedanceV1VideoDuration: state.falSeedanceV1VideoDuration,
-        falVeo31VideoDuration: state.falVeo31VideoDuration,
-        falSora2VideoDuration: state.falSora2VideoDuration,
-        falLtx2VideoDuration: state.falLtx2VideoDuration,
-        falViduQ2VideoDuration: state.falViduQ2VideoDuration,
-        falPixverse55VideoDuration: state.falPixverse55VideoDuration,
-        falKlingV26ProVideoDuration: state.falKlingV26ProVideoDuration,
-        falKlingVideoO1VideoDuration: state.falKlingVideoO1VideoDuration,
-        ppioViduQ1Mode: state.ppioViduQ1Mode,
-        ppioViduQ1Style: state.ppioViduQ1Style,
-        ppioViduQ1MovementAmplitude: state.ppioViduQ1MovementAmplitude,
-        ppioViduQ1Bgm: state.ppioViduQ1Bgm,
-        ppioViduQ1AspectRatio: state.ppioViduQ1AspectRatio,
-        ppioKling25CfgScale: state.ppioKling25CfgScale,
-        // PPIO Kling O1 参数
-        ppioKlingO1Mode: state.ppioKlingO1Mode,
-        ppioKlingO1VideoDuration: state.ppioKlingO1VideoDuration,
-        ppioKlingO1AspectRatio: state.ppioKlingO1AspectRatio,
-        ppioKlingO1KeepAudio: state.ppioKlingO1KeepAudio,
-        ppioKlingO1FastMode: state.ppioKlingO1FastMode,
-        // PPIO Kling 2.6 Pro 参数
-        ppioKling26Mode: state.ppioKling26Mode,
-        ppioKling26VideoDuration: state.ppioKling26VideoDuration,
-        ppioKling26AspectRatio: state.ppioKling26AspectRatio,
-        ppioKling26CfgScale: state.ppioKling26CfgScale,
-        ppioKling26Sound: state.ppioKling26Sound,
-        ppioKling26CharacterOrientation: state.ppioKling26CharacterOrientation,
-        ppioKling26KeepOriginalSound: state.ppioKling26KeepOriginalSound,
-        ppioHailuo23FastMode: state.ppioHailuo23FastMode,
-        ppioHailuo23EnablePromptExpansion: state.ppioHailuo23EnablePromptExpansion,
-        ppioPixverse45FastMode: state.ppioPixverse45FastMode,
-        ppioPixverse45Style: state.ppioPixverse45Style,
-        // Wan（派欧云）
-        ppioWan25Size: state.ppioWan25Size,
-        ppioWan25PromptExtend: state.ppioWan25PromptExtend,
-        ppioWan25Audio: state.ppioWan25Audio,
-        // Wan 2.6（派欧云）
-        ppioWan26Mode: state.ppioWan26Mode,
-        ppioWan26AspectRatio: state.ppioWan26AspectRatio,
-        ppioWan26Quality: state.ppioWan26Quality,
-        ppioWan26VideoDuration: state.ppioWan26VideoDuration,
-        ppioWan26ShotType: state.ppioWan26ShotType,
-        ppioWan26Audio: state.ppioWan26Audio,
-        ppioWan26PromptExtend: state.ppioWan26PromptExtend,
-        // Wan（Fal）
-        falWan25AspectRatio: state.falWan25AspectRatio,
-        falWan25Resolution: state.falWan25Resolution,
-        falWan25PromptExpansion: state.falWan25PromptExpansion,
-        ppioSeedanceV1Variant: state.ppioSeedanceV1Variant,
-        ppioSeedanceV1Resolution: state.ppioSeedanceV1Resolution,
-        ppioSeedanceV1AspectRatio: state.ppioSeedanceV1AspectRatio,
-        ppioSeedanceV1CameraFixed: state.ppioSeedanceV1CameraFixed,
-        // Seedance 1.5 Pro（派欧云）参数
-        ppioSeedance15ProResolution: state.ppioSeedance15ProResolution,
-        ppioSeedance15ProAspectRatio: state.ppioSeedance15ProAspectRatio,
-        ppioSeedance15ProDuration: state.ppioSeedance15ProDuration,
-        ppioSeedance15ProCameraFixed: state.ppioSeedance15ProCameraFixed,
-        ppioSeedance15ProServiceTier: state.ppioSeedance15ProServiceTier,
-        ppioSeedance15ProGenerateAudio: state.ppioSeedance15ProGenerateAudio,
-        // Seedance v1（Fal）参数
-        falSeedanceV1Mode: state.falSeedanceV1Mode,
-        falSeedanceV1Version: state.falSeedanceV1Version,
-        falSeedanceV1FastMode: state.falSeedanceV1FastMode,
-        falVeo31Mode: state.falVeo31Mode,
-        falVeo31AspectRatio: state.falVeo31AspectRatio,
-        falVeo31Resolution: state.falVeo31Resolution,
-        falVeo31EnhancePrompt: state.falVeo31EnhancePrompt,
-        falVeo31GenerateAudio: state.falVeo31GenerateAudio,
-        falVeo31AutoFix: state.falVeo31AutoFix,
-        falVeo31FastMode: state.falVeo31FastMode,
-        // MiniMax Hailuo 2.3（Fal）参数
-        falHailuo23Duration: state.falHailuo23Duration,
-        falHailuo23Resolution: state.falHailuo23Resolution,
-        falHailuo23FastMode: state.falHailuo23FastMode,
-        falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
-        // MiniMax Hailuo 02（Fal）参数
-        falHailuo02Duration: state.falHailuo02Duration,
-        falHailuo02Resolution: state.falHailuo02Resolution,
-        falHailuo02FastMode: state.falHailuo02FastMode,
-        falHailuo02PromptOptimizer: state.falHailuo02PromptOptimizer,
-        falKlingVideoO1Mode: state.falKlingVideoO1Mode,
-        falKlingVideoO1AspectRatio: state.falKlingVideoO1AspectRatio,
-        falKlingVideoO1KeepAudio: state.falKlingVideoO1KeepAudio,
-        falKlingVideoO1Elements: state.falKlingVideoO1Elements,
-        uploadedVideos: state.uploadedVideos,
-        uploadedVideoFiles: state.uploadedVideoFiles,
-        falKlingV26ProAspectRatio: state.falKlingV26ProAspectRatio,
-        falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
-        falKlingV26ProCfgScale: state.falKlingV26ProCfgScale,
-        falSora2Mode: state.falSora2Mode,
-        falSora2AspectRatio: state.falSora2AspectRatio,
-        falSora2Resolution: state.falSora2Resolution,
-        // LTX-2 参数
-        falLtx2Mode: state.falLtx2Mode,
-        falLtx2Resolution: state.falLtx2Resolution,
-        falLtx2Fps: state.falLtx2Fps,
-        falLtx2GenerateAudio: state.falLtx2GenerateAudio,
-        falLtx2FastMode: state.falLtx2FastMode,
-        falLtx2RetakeDuration: state.falLtx2RetakeDuration,
-        falLtx2RetakeStartTime: state.falLtx2RetakeStartTime,
-        falLtx2RetakeMode: state.falLtx2RetakeMode,
-        // Vidu Q2 参数
-        falViduQ2Mode: state.falViduQ2Mode,
-        falViduQ2AspectRatio: state.falViduQ2AspectRatio,
-        falViduQ2Resolution: state.falViduQ2Resolution,
-        falViduQ2MovementAmplitude: state.falViduQ2MovementAmplitude,
-        falViduQ2Bgm: state.falViduQ2Bgm,
-        falViduQ2FastMode: state.falViduQ2FastMode,
-        // Pixverse V5.5 参数
-        falPixverse55AspectRatio: state.falPixverse55AspectRatio,
-        falPixverse55Resolution: state.falPixverse55Resolution,
-        falPixverse55Style: state.falPixverse55Style,
-        falPixverse55ThinkingType: state.falPixverse55ThinkingType,
-        falPixverse55GenerateAudio: state.falPixverse55GenerateAudio,
-        falPixverse55MultiClip: state.falPixverse55MultiClip,
-        minimaxAudioSpeed: state.minimaxAudioSpeed,
-        minimaxAudioEmotion: state.minimaxAudioEmotion,
-        minimaxVoiceId: state.minimaxVoiceId,
-        minimaxAudioSpec: state.minimaxAudioSpec,
-        minimaxAudioVol: state.minimaxAudioVol,
-        minimaxAudioPitch: state.minimaxAudioPitch,
-        minimaxAudioSampleRate: state.minimaxAudioSampleRate,
-        minimaxAudioBitrate: state.minimaxAudioBitrate,
-        minimaxAudioFormat: state.minimaxAudioFormat,
-        minimaxAudioChannel: state.minimaxAudioChannel,
-        minimaxLatexRead: state.minimaxLatexRead,
-        minimaxTextNormalization: state.minimaxTextNormalization,
-        minimaxLanguageBoost: state.minimaxLanguageBoost,
-        modelscopeImageSize: state.modelscopeImageSize,
-        falZImageTurboNumInferenceSteps: state.falZImageTurboNumInferenceSteps,
-        falZImageTurboEnablePromptExpansion: state.falZImageTurboEnablePromptExpansion,
-        falZImageTurboAcceleration: state.falZImageTurboAcceleration,
-        // 魔搭模型参数
-        resolutionBaseSize: state.resolutionBaseSize,
-        modelscopeSteps: state.modelscopeSteps,
-        modelscopeGuidance: state.modelscopeGuidance,
-        modelscopeNegativePrompt: state.modelscopeNegativePrompt,
-        modelscopeCustomModel: state.modelscopeCustomModel,
-        // KIE 模型参数
-        kieNanoBananaAspectRatio: state.kieNanoBananaAspectRatio,
-        kieNanoBananaResolution: state.kieNanoBananaResolution,
-        kieNanoBananaOutputFormat: state.kieNanoBananaOutputFormat,
-        kieSeedreamAspectRatio: state.kieSeedreamAspectRatio,
-        kieSeedreamQuality: state.kieSeedreamQuality,
-        kieSeedream40AspectRatio: state.kieSeedream40AspectRatio,
-        kieSeedream40Resolution: state.kieSeedream40Resolution,
-        kieSeedream40MaxImages: state.kieSeedream40MaxImages,
-        kieGrokImagineAspectRatio: state.kieGrokImagineAspectRatio,
-        kieZImageAspectRatio: state.kieZImageAspectRatio,
-        kieGrokImagineVideoAspectRatio: state.kieGrokImagineVideoAspectRatio,
-        kieGrokImagineVideoMode: state.kieGrokImagineVideoMode,
-        kieHailuo23Mode: state.kieHailuo23Mode,
-        kieHailuo23Duration: state.kieHailuo23Duration,
-        kieHailuo23Resolution: state.kieHailuo23Resolution,
-        kieHailuo02Duration: state.kieHailuo02Duration,
-        kieHailuo02Resolution: state.kieHailuo02Resolution,
-        kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer,
-
-        // KIE Kling V2.6 参数
-        kieKlingV26Mode: state.kieKlingV26Mode,
-        kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
-        kieKlingV26Resolution: state.kieKlingV26Resolution,
-        kieKlingV26CharacterOrientation: state.kieKlingV26CharacterOrientation,
-        kieKlingV26Duration: state.kieKlingV26Duration,
-        kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
-
-        // KIE Seedance V3 参数
-        kieSeedanceV3Version: state.kieSeedanceV3Version,
-        kieSeedanceV3AspectRatio: state.kieSeedanceV3AspectRatio,
-        kieSeedanceV3Resolution: state.kieSeedanceV3Resolution,
-        kieSeedanceV3Duration: state.kieSeedanceV3Duration,
-        kieSeedanceV3CameraFixed: state.kieSeedanceV3CameraFixed,
-        kieSeedanceV3FastMode: state.kieSeedanceV3FastMode,
-        // KIE Sora 2 参数
-        kieSora2Mode: state.kieSora2Mode,
-        kieSora2AspectRatio: state.kieSora2AspectRatio,
-        kieSora2Duration: state.kieSora2Duration,
-        kieSora2Quality: state.kieSora2Quality,
-        calculateSmartResolution: (img) => calculateSmartResolution(img, state.resolutionQuality),
-        calculateSeedreamSmartResolution: (img) => calculateSeedreamSmartResolution(img, state.resolutionQuality),
-        calculatePPIOSeedreamSmartResolution: (img) => calculatePPIOSeedreamSmartResolution(img, state.resolutionQuality)
-      })
-
-      // 保留原始 UI 参数值（用于重新编辑时恢复）
-      // 这些参数可能在 buildGenerateOptions 中被智能匹配转换，但我们需要保留原始值
-      const originalUIParams: Record<string, any> = {}
-
-      // 自动提取模型特定的 UI 参数（基于配置驱动架构）
-      const { optionsBuilder } = await import('./builders/configs')
-      const config = optionsBuilder.getConfig(state.selectedModel)
-
-      logInfo('[MediaGenerator] Save - Model:', state.selectedModel)
-      logInfo('[MediaGenerator] Save - Config found:', !!config)
-      logInfo('[MediaGenerator] Save - API options keys:', Object.keys(options))
-
-      if (config && config.paramMapping) {
-        logInfo('[MediaGenerator] Save - ParamMapping keys:', Object.keys(config.paramMapping))
-
-        // 遍历参数映射，提取所有 UI 参数
-        for (const [apiKey, mapping] of Object.entries(config.paramMapping)) {
-          let uiKey: string | undefined
-
-          if (typeof mapping === 'string') {
-            uiKey = mapping
-          } else if (typeof mapping === 'object' && mapping !== null && 'source' in mapping) {
-            const source = mapping.source
-            if (typeof source === 'string') {
-              uiKey = source
-            } else if (Array.isArray(source) && source.length > 0) {
-              // 改进：尝试每个 key，使用第一个存在的值
-              for (const key of source) {
-                if (key in state && (state as any)[key] !== undefined) {
-                  uiKey = key
-                  break
-                }
-              }
-              // 如果都不存在，使用第一个作为默认值（向后兼容）
-              if (!uiKey) {
-                uiKey = source[0]
-              }
-            }
-          }
-
-          // 如果找到了 UI 参数名，从 state 中读取值并保存
-          if (uiKey && uiKey in state) {
-            const value = (state as any)[uiKey]
-            originalUIParams[uiKey] = value
-            logInfo('', `[MediaGenerator] Save - Extracted: ${apiKey} -> ${uiKey} = ${JSON.stringify(value)}`)
-          } else if (uiKey) {
-            logInfo('', `[MediaGenerator] Save - Skipped (not in state): ${apiKey} -> ${uiKey}`)
-          }
-        }
-      }
-
-      // 兼容旧的手动添加方式（向后兼容）
-      // Nano Banana 和 Nano Banana Pro 的 aspectRatio
-      if (state.selectedModel === 'nano-banana' || state.selectedModel === 'nano-banana-pro' ||
-        state.selectedModel === 'fal-ai-nano-banana' || state.selectedModel === 'fal-ai-nano-banana-pro') {
-        if (!('aspectRatio' in originalUIParams)) {
-          originalUIParams.aspectRatio = state.aspectRatio
-          logInfo('[MediaGenerator] Save - Manual add: aspectRatio =', state.aspectRatio)
-        }
-      }
-
-      // ByteDance Seedream v4 和 Seedream 4.0 的 selectedResolution
-      if (state.selectedModel === 'bytedance-seedream-v4' ||
-        state.selectedModel === 'fal-ai-bytedance-seedream-v4' ||
-        state.selectedModel === 'seedream-4.0') {
-        if (!('selectedResolution' in originalUIParams)) {
-          originalUIParams.selectedResolution = state.selectedResolution
-          logInfo('[MediaGenerator] Save - Manual add: selectedResolution =', state.selectedResolution)
-        }
-      }
-
-      logInfo('[MediaGenerator] Save - Final UI params:', originalUIParams)
-      logInfo('[MediaGenerator] Save - Final options keys:', Object.keys({ ...options, ...originalUIParams }))
-      logInfo('[MediaGenerator] Save - options.images length:', options.images?.length)
-      logInfo('[MediaGenerator] Save - options.images:', options.images)
-
-      // 将原始 UI 参数合并到 options 中
-      // 重要：保护 images、uploadedFilePaths、uploadedVideos、uploadedVideoFilePaths 字段不被覆盖
-      // 这些字段在 buildGenerateOptions 中已经被正确处理（包括首尾帧模式的2张图片）
-      const { images: _images, uploadedFilePaths: _paths, uploadedVideos: _videos, uploadedVideoFilePaths: _videoPaths, ...safeUIParams } = originalUIParams
-      const finalOptions = { ...options, ...safeUIParams }
-
-      logInfo('[MediaGenerator] Save - finalOptions.images length:', finalOptions.images?.length)
-      logInfo('[MediaGenerator] Save - finalOptions.images:', finalOptions.images)
-
-      let finalInput = state.input
-      // PPIO Seedream 4.0: 使用 maxImages
-      if (state.selectedModel === 'seedream-4.0' && state.maxImages > 1) {
-        finalInput = `生成${state.maxImages}张图片。${state.input}`
-      }
-      // KIE Seedream 4.0: 使用 kieSeedream40MaxImages
-      if (state.selectedModel === 'kie-seedream-4.0' && state.kieSeedream40MaxImages > 1) {
-        finalInput = `生成${state.kieSeedream40MaxImages}张图片。${state.input}`
-      }
-
-      onGenerate(finalInput, state.selectedModel, currentModel?.type || 'image', finalOptions)
-    } catch (error: any) {
-      showAlert('生成失败', error.message, 'error')
-    }
   }
 
   return (
     <div className="w-full max-w-5xl mx-auto">
-      {/* 参数行 */}
-      <ParamRow className="mb-4">
+      {/* 顶部参数行：模型选择器 + 参数面板 */}
+      <div className="flex flex-wrap items-end gap-4 mb-4">
         {/* 模型选择器 */}
         <PanelTrigger
-          key={`model-selector-${modelVisibilityVersion}`}
           label="模型"
           display={`${currentProvider?.name}：${currentModel?.name || '选择'}`}
           className="w-auto min-w-[180px] flex-shrink-0"
@@ -1679,388 +310,131 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           }}
           renderPanel={() => (
             <ModelSelectorPanel
-              selectedProvider={state.selectedProvider}
-              selectedModel={state.selectedModel}
-              modelFilterProvider={state.modelFilterProvider}
-              modelFilterType={state.modelFilterType}
-              modelFilterFunction={state.modelFilterFunction}
-              favoriteModels={state.favoriteModels}
-              onModelSelect={handleModelSelect}
-              onFilterProviderChange={state.setModelFilterProvider}
-              onFilterTypeChange={state.setModelFilterType}
-              onFilterFunctionChange={state.setModelFilterFunction}
-              onToggleFavorite={toggleFavorite}
+              selectedProvider={uiState.selectedProvider}
+              selectedModel={uiState.selectedModel}
+              modelFilterProvider={uiState.modelFilterProvider}
+              modelFilterType={uiState.modelFilterType}
+              modelFilterFunction={uiState.modelFilterFunction}
+              favoriteModels={uiState.favoriteModels}
+              onModelSelect={(pid, mid) => {
+                uiState.setSelectedProvider(pid)
+                uiState.setSelectedModel(mid)
+                modelState.resetParams()
+              }}
+              onFilterProviderChange={uiState.setModelFilterProvider}
+              onFilterTypeChange={uiState.setModelFilterType}
+              onFilterFunctionChange={uiState.setModelFilterFunction}
+              onToggleFavorite={handleToggleFavorite}
             />
           )}
         />
 
-
         {/* 参数配置面板 */}
         <ParameterPanel
           currentModel={currentModel}
-          selectedModel={state.selectedModel}
-          uploadedImages={state.uploadedImages}
-          values={{
-            ...state
-          }}
-          onChange={handleSchemaChange}
+          selectedModel={uiState.selectedModel}
+          uploadedImages={uiState.uploadedImages}
+          values={modelState.params}
+          onChange={modelState.setParam}
         />
-      </ParamRow>
+      </div>
 
       {/* 输入区域 */}
       <InputArea
-        input={state.input}
-        setInput={state.setInput}
-        currentModel={currentModel}
-        selectedModel={state.selectedModel}
-        uploadedImages={state.uploadedImages}
-        isLoading={isLoading}
-        isGenerating={isGenerating}
-        viduMode={state.ppioViduQ1Mode}
-        veoMode={state.falVeo31Mode}
-        klingMode={state.falKlingVideoO1Mode}
-        mode={state.falLtx2Mode}
-        seedanceMode={state.falSeedanceV1Mode}
-        viduQ2Mode={state.falViduQ2Mode}
-        hailuo02FastMode={state.falHailuo02FastMode}
-        kieSeedanceV3Version={state.kieSeedanceV3Version}
-        ppioKlingO1Mode={state.ppioKlingO1Mode}
-        ppioKling26Mode={state.ppioKling26Mode}
-        kieKlingV26Mode={state.kieKlingV26Mode}
-        falKlingV26ProMode={state.falKlingV26ProMode}
-        modelscopeCustomModel={state.modelscopeCustomModel}
-        onImageUpload={(files) => {
-          const maxCount = getMaxImageCount(
-            state.selectedModel,
-            state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-              (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-                (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-                  (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-                    (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-                      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-                        undefined
-          )
-          imageUpload.handleImageFileUpload(files, maxCount)
-        }}
+        input={uiState.input}
+        setInput={uiState.setInput}
+        uploadedImages={uiState.uploadedImages}
+        uploadedVideos={uiState.uploadedVideos}
+        fileOrder={uiState.fileOrder}
+        onFileOrderChange={uiState.setFileOrder}
+        onImageUpload={(files) => imageUpload.handleImageFileUpload(
+          files,
+          getMaxImageCount(uiState.selectedModel, modelState.params.mode || modelState.params.version)
+        )}
+        onVideoUpload={videoUpload.handleVideoUpload}
         onImageRemove={imageUpload.removeImage}
+        onVideoRemove={videoUpload.handleVideoRemove}
         onImageReplace={imageUpload.handleImageReplace}
         onImageReorder={imageUpload.handleImageReorder}
         onImageClick={onImageClick}
-        onPaste={(e) => {
-          const maxCount = getMaxImageCount(
-            state.selectedModel,
-            state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-              (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-                (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-                  (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-                    (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-                      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-                        undefined
-          )
-          imageUpload.handlePaste(e, maxCount)
-        }}
-        onImageDrop={(files) => {
-          const maxCount = getMaxImageCount(
-            state.selectedModel,
-            state.selectedModel === 'vidu-q1' ? state.ppioViduQ1Mode :
-              (state.selectedModel === 'veo3.1' || state.selectedModel === 'fal-ai-veo-3.1') ? state.falVeo31Mode :
-                (state.selectedModel === 'fal-ai-bytedance-seedance-v1' || state.selectedModel === 'bytedance-seedance-v1') ? state.falSeedanceV1Mode :
-                  (state.selectedModel === 'fal-ai-vidu-q2' || state.selectedModel === 'vidu-q2') ? state.falViduQ2Mode :
-                    (state.selectedModel === 'fal-ai-minimax-hailuo-02' || state.selectedModel === 'minimax-hailuo-02-fal') && state.falHailuo02FastMode ? 'fast' :
-                      (state.selectedModel === 'kie-seedance-v3' || state.selectedModel === 'seedance-v3-kie') ? state.kieSeedanceV3Version :
-                        undefined
-          )
-          imageUpload.handleImageFileDrop(files, maxCount)
-        }}
+        onPaste={(e) => imageUpload.handlePaste(
+          e,
+          getMaxImageCount(uiState.selectedModel, modelState.params.mode || modelState.params.version)
+        )}
+        onImageDrop={(files) => imageUpload.handleImageFileDrop(
+          files,
+          getMaxImageCount(uiState.selectedModel, modelState.params.mode || modelState.params.version)
+        )}
         onDragStateChange={imageUpload.setIsDraggingImage}
-        uploadedVideos={state.uploadedVideos}
-        onVideoUpload={videoUpload.handleVideoUpload}
-        onVideoRemove={videoUpload.handleVideoRemove}
         onVideoReplace={videoUpload.handleVideoReplace}
         onVideoClick={(videoUrl: string) => {
-          // 打开视频查看器，使用 File 对象创建预览 URL
-          const index = state.uploadedVideos.indexOf(videoUrl)
-          const videoFile = index >= 0 ? state.uploadedVideoFiles[index] : undefined
-
+          const index = uiState.uploadedVideos.indexOf(videoUrl)
+          const videoFile = index >= 0 ? uiState.uploadedVideoFiles[index] : undefined
           if (videoFile) {
-            // 从 File 对象创建临时 Object URL 用于预览
             const videoObjectUrl = URL.createObjectURL(videoFile)
-            // 触发自定义事件，让 App.tsx 打开视频查看器
             window.dispatchEvent(new CustomEvent('open-video-viewer', {
-              detail: {
-                url: videoObjectUrl,
-                thumbnail: videoUrl, // 传递缩略图用于显示
-                isTemporary: true // 标记这是临时 URL，需要在关闭时清理
-              }
+              detail: { videoUrl: videoObjectUrl }
             }))
           }
         }}
-        fileOrder={fileOrder}
-        onFileOrderChange={setFileOrder}
+        selectedModel={uiState.selectedModel}
+        currentModel={currentModel}
+        isLoading={isLoading}
+        isGenerating={isGenerating}
         onGenerate={handleGenerate}
       />
 
-      {/* 操作按钮 */}
-      <div className="flex flex-wrap gap-3 mt-4 justify-between items-center">
-        <button
-          onClick={onOpenClearHistory}
-          disabled={isLoading}
-          className="px-4 py-2 bg-red-600/60 hover:bg-red-600/80 backdrop-blur-lg rounded-lg transition-all duration-300 border border-red-700/50 flex items-center text-sm"
-          title="清除历史"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          清除历史
-        </button>
-        <button
-          onClick={onOpenSettings}
-          className="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-zinc-700/50 flex items-center text-sm"
-          title="设置"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          设置
-        </button>
+      {/* 底部工具栏：按钮 + 价格估算 */}
+      <div className="flex items-center justify-between mt-4">
+        <div className="flex items-center gap-2">
+          {/* 清除历史按钮 */}
+          <button
+            onClick={onOpenClearHistory}
+            className="h-9 px-4 inline-flex items-center justify-center rounded-lg bg-red-600/70 hover:bg-red-600 text-white text-sm transition-colors"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            清除历史
+          </button>
 
-        {/* 预设按钮 */}
-        <PresetPanel
-          getCurrentState={() => ({ ...state })}
-          onLoadPreset={(params: Record<string, any>) => {
-            for (const [key, value] of Object.entries(params)) {
-              const setter = setterMap[key]
-              if (setter && value !== undefined && value !== null) {
-                setter(value)
-              }
-            }
-          }}
-          disabled={isLoading}
-        />
+          {/* 设置按钮 */}
+          <button
+            onClick={onOpenSettings}
+            className="h-9 px-4 inline-flex items-center justify-center rounded-lg bg-zinc-700/60 hover:bg-zinc-600/60 text-white text-sm transition-colors"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            设置
+          </button>
+
+          {/* 预设面板 */}
+          <PresetPanel
+            getCurrentState={() => ({
+              ...modelState.params,
+              input: uiState.input
+            })}
+            onLoadPreset={handleLoadPreset}
+          />
+        </div>
 
         {/* 价格估算 */}
-        <div className="ml-auto">
-          <PriceEstimate
-            providerId={state.selectedProvider}
-            modelId={state.selectedModel}
-            params={{
-              // 通用参数（作为回退值）
-              numImages: state.numImages,
-              num_images: state.numImages,
-              maxImages: state.maxImages,
-              uploadedImages: state.uploadedImages,
-              resolution: state.resolution,
-              videoDuration: state.videoDuration,
-              uploadedVideoDuration: state.uploadedVideoDuration,
-              videoResolution: state.videoResolution,
-              // 模型特定参数 - 派欧云
-              ppioKling25VideoDuration: state.ppioKling25VideoDuration,
-              ppioHailuo23VideoDuration: state.ppioHailuo23VideoDuration,
-              ppioHailuo23VideoResolution: state.ppioHailuo23VideoResolution,
-              ppioPixverse45VideoResolution: state.ppioPixverse45VideoResolution,
-              ppioWan25VideoDuration: state.ppioWan25VideoDuration,
-              ppioWan26Mode: state.ppioWan26Mode,
-              ppioWan26Quality: state.ppioWan26Quality,
-              ppioWan26VideoDuration: state.ppioWan26VideoDuration,
-              ppioSeedanceV1VideoDuration: state.ppioSeedanceV1VideoDuration,
-              // PPIO Kling 2.6 Pro 价格参数
-              ppioKling26Mode: state.ppioKling26Mode,
-              ppioKling26VideoDuration: state.ppioKling26VideoDuration,
-              ppioKling26Sound: state.ppioKling26Sound,
-              // 模型特定参数 - Fal
-              falNanoBananaNumImages: state.falNanoBananaNumImages,
-              falNanoBananaProNumImages: state.falNanoBananaProNumImages,
-              falKlingImageO1NumImages: state.falKlingImageO1NumImages,
-              falZImageTurboNumImages: state.falZImageTurboNumImages,
-              falSeedream40NumImages: state.falSeedream40NumImages,
-              falWan25VideoDuration: state.falWan25VideoDuration,
-              falSeedanceV1VideoDuration: state.falSeedanceV1VideoDuration,
-              falVeo31VideoDuration: state.falVeo31VideoDuration,
-              falSora2VideoDuration: state.falSora2VideoDuration,
-              falLtx2VideoDuration: state.falLtx2VideoDuration,
-              falViduQ2VideoDuration: state.falViduQ2VideoDuration,
-              falPixverse55VideoDuration: state.falPixverse55VideoDuration,
-              falKlingV26ProVideoDuration: state.falKlingV26ProVideoDuration,
-              falKlingV26ProMode: state.falKlingV26ProMode,
-              falKlingV26ProResolution: state.falKlingV26ProResolution,
-              falKlingV26ProGenerateAudio: state.falKlingV26ProGenerateAudio,
-              falKlingVideoO1VideoDuration: state.falKlingVideoO1VideoDuration,
-              ppioViduQ1VideoDuration: state.ppioViduQ1VideoDuration,
-              ppioViduQ1Mode: state.ppioViduQ1Mode,
-              ppioHailuo23FastMode: state.ppioHailuo23FastMode,
-              ppioPixverse45FastMode: state.ppioPixverse45FastMode,
-              // Seedance（派欧云）
-              ppioSeedanceV1Variant: state.ppioSeedanceV1Variant,
-              ppioSeedanceV1Resolution: state.ppioSeedanceV1Resolution,
-              ppioSeedanceV1AspectRatio: state.ppioSeedanceV1AspectRatio,
-              // Seedance 1.5 Pro（派欧云）
-              ppioSeedance15ProResolution: state.ppioSeedance15ProResolution,
-              ppioSeedance15ProAspectRatio: state.ppioSeedance15ProAspectRatio,
-              ppioSeedance15ProDuration: state.ppioSeedance15ProDuration,
-              ppioSeedance15ProCameraFixed: state.ppioSeedance15ProCameraFixed,
-              ppioSeedance15ProServiceTier: state.ppioSeedance15ProServiceTier,
-              ppioSeedance15ProGenerateAudio: state.ppioSeedance15ProGenerateAudio,
-              // Seedance v1（Fal）
-              falSeedanceV1Mode: state.falSeedanceV1Mode,
-              falSeedanceV1Version: state.falSeedanceV1Version,
-              falSeedanceV1FastMode: state.falSeedanceV1FastMode,
-              falWan25Resolution: state.falWan25Resolution,
-              falVeo31Mode: state.falVeo31Mode,  // Veo 3.1 模式
-              falVeo31GenerateAudio: state.falVeo31GenerateAudio,
-              falVeo31FastMode: state.falVeo31FastMode,
-              falVeo31AspectRatio: state.falVeo31AspectRatio,
-              falVeo31Resolution: state.falVeo31Resolution,
-              falVeo31EnhancePrompt: state.falVeo31EnhancePrompt,
-              falVeo31AutoFix: state.falVeo31AutoFix,
-              // MiniMax Hailuo 2.3（Fal）参数
-              falHailuo23Duration: state.falHailuo23Duration,
-              falHailuo23Resolution: state.falHailuo23Resolution,
-              falHailuo23FastMode: state.falHailuo23FastMode,
-              falHailuo23PromptOptimizer: state.falHailuo23PromptOptimizer,
-              // 用于价格计算的映射
-              hailuoVersion: state.falHailuo23Resolution === '1080P' ? 'pro' : 'standard',
-              hailuoFastMode: state.falHailuo23FastMode,
-              duration: state.falHailuo23Duration,
-              images: state.uploadedImages,
-              // MiniMax Hailuo 02（Fal）参数
-              falHailuo02Duration: state.falHailuo02Duration,
-              falHailuo02Resolution: state.falHailuo02Resolution,
-              falHailuo02FastMode: state.falHailuo02FastMode,
-              falHailuo02PromptOptimizer: state.falHailuo02PromptOptimizer,
-              falKlingVideoO1Mode: state.falKlingVideoO1Mode,
-              falSora2Mode: state.falSora2Mode,
-              falSora2Resolution: state.falSora2Resolution,
-              // LTX-2 参数
-              ltxMode: state.falLtx2Mode,  // LTX-2 模式（使用 ltxMode 避免冲突）
-              falLtx2Resolution: state.falLtx2Resolution,
-              falLtx2FastMode: state.falLtx2FastMode,
-              falLtx2RetakeDuration: state.falLtx2RetakeDuration,  // 视频编辑模式的时长
-              // Vidu Q2 参数
-              falViduQ2Mode: state.falViduQ2Mode,
-              falViduQ2AspectRatio: state.falViduQ2AspectRatio,
-              falViduQ2Resolution: state.falViduQ2Resolution,
-              falViduQ2MovementAmplitude: state.falViduQ2MovementAmplitude,
-              falViduQ2Bgm: state.falViduQ2Bgm,
-              falViduQ2FastMode: state.falViduQ2FastMode,
-              // Pixverse V5.5 参数
-              falPixverse55AspectRatio: state.falPixverse55AspectRatio,
-              falPixverse55Resolution: state.falPixverse55Resolution,
-              falPixverse55Style: state.falPixverse55Style,
-              falPixverse55ThinkingType: state.falPixverse55ThinkingType,
-              falPixverse55GenerateAudio: state.falPixverse55GenerateAudio,
-              falPixverse55MultiClip: state.falPixverse55MultiClip,
-              input: state.input,
-              minimaxAudioSpec: state.minimaxAudioSpec,
-              // KIE 模型参数
-              kieNanoBananaResolution: state.kieNanoBananaResolution,
-              kieSeedreamQuality: state.kieSeedreamQuality,
-              kieSeedream40MaxImages: state.kieSeedream40MaxImages,
-              kieSeedream40Resolution: state.kieSeedream40Resolution,
-              // KIE Kling V2.6 参数
-              kieKlingV26Mode: state.kieKlingV26Mode,
-              kieKlingV26AspectRatio: state.kieKlingV26AspectRatio,
-              kieKlingV26Resolution: state.kieKlingV26Resolution,
-              kieKlingV26Duration: state.kieKlingV26Duration,
-              kieKlingV26EnableAudio: state.kieKlingV26EnableAudio,
-              // KIE Hailuo 2.3 参数
-              kieHailuo23Mode: state.kieHailuo23Mode,
-              kieHailuo23Duration: state.kieHailuo23Duration,
-              kieHailuo23Resolution: state.kieHailuo23Resolution,
-              // KIE Hailuo 02 参数
-              kieHailuo02Duration: state.kieHailuo02Duration,
-              kieHailuo02Resolution: state.kieHailuo02Resolution,
-              kieHailuo02PromptOptimizer: state.kieHailuo02PromptOptimizer,
-              // KIE Seedance V3 参数
-              kieSeedanceV3Version: state.kieSeedanceV3Version,
-              kieSeedanceV3Resolution: state.kieSeedanceV3Resolution,
-              kieSeedanceV3Duration: state.kieSeedanceV3Duration,
-              kieSeedanceV3FastMode: state.kieSeedanceV3FastMode,
-              // KIE Sora 2 参数
-              kieSora2Mode: state.kieSora2Mode,
-              kieSora2Duration: state.kieSora2Duration,
-              kieSora2Quality: state.kieSora2Quality
-            }}
-          />
-        </div>
+        <PriceEstimate
+          providerId={uiState.selectedProvider}
+          modelId={uiState.selectedModel}
+          params={modelState.params}
+        />
       </div>
-
-      {/* 警告弹窗 */}
-      {isWarningDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            style={{ opacity: warningOpacity, transition: 'opacity 180ms ease' }}
-            onClick={() => {
-              setWarningOpacity(0)
-              setTimeout(() => setIsWarningDialogOpen(false), 180)
-            }}
-          />
-          <div
-            className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
-            style={{
-              opacity: warningOpacity,
-              transform: `scale(${0.97 + 0.03 * warningOpacity})`,
-              transition: 'opacity 180ms ease, transform 180ms ease'
-            }}
-          >
-            <div className="text-white text-base">不支持的参数组合</div>
-            <div className="text-zinc-300 text-sm mt-2">
-              Pro模型的快速模式不支持结束帧（首尾帧）
-              <br />
-              <br />
-              请选择以下操作之一：
-            </div>
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  // 切换到 Lite 版本
-                  state.setFalSeedanceV1Version('lite')
-                  setWarningOpacity(0)
-                  setTimeout(() => setIsWarningDialogOpen(false), 180)
-                }}
-                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-blue-600/70 hover:bg-blue-600 text-white text-sm transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-                切换到Lite模型
-              </button>
-              <button
-                onClick={() => {
-                  // 关闭快速模式
-                  state.setFalSeedanceV1FastMode(false)
-                  setWarningOpacity(0)
-                  setTimeout(() => setIsWarningDialogOpen(false), 180)
-                }}
-                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-yellow-600/70 hover:bg-yellow-600 text-white text-sm transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                关闭快速模式
-              </button>
-              <button
-                onClick={() => {
-                  setWarningOpacity(0)
-                  setTimeout(() => setIsWarningDialogOpen(false), 180)
-                }}
-                className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-zinc-600/60 text-sm transition-colors"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 全局 Alert Dialog */}
       <AlertDialog
-        isOpen={alertDialog.isOpen}
-        title={alertDialog.title}
-        message={alertDialog.message}
-        type={alertDialog.type}
-        onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
+        isOpen={uiState.alertDialog.isOpen}
+        title={uiState.alertDialog.title}
+        message={uiState.alertDialog.message}
+        type={uiState.alertDialog.type}
+        onClose={() => uiState.setAlertDialog({ ...uiState.alertDialog, isOpen: false })}
       />
     </div>
   )

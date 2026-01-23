@@ -9,6 +9,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NumberParamDef } from '@/core/types'
+import { getI18nText } from '@/core/types/I18nText'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -23,14 +24,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   onChange,
   disabled = false
 }) => {
-  const { t } = useTranslation()
+  const { i18n } = useTranslation()
 
   // 获取显示名称（支持 i18n）
-  const displayName = param.displayName
-    ? (typeof param.displayName === 'string'
-        ? param.displayName
-        : t(param.displayName.key, param.displayName.fallback))
-    : param.id
+  const displayName = getI18nText(param.name, i18n.language)
 
   // 处理输入变化
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,20 +68,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   }
 
   return (
-    <div className="number-input-wrapper">
-      <label className="param-label">
+    <div className="w-auto">
+      <label className="block text-sm font-medium text-zinc-300 mb-1.5">
         {displayName}
-        {param.required && <span className="required-mark">*</span>}
+        {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      <div className="number-input-control">
-        <button
-          type="button"
-          className="number-input-btn"
-          onClick={handleDecrement}
-          disabled={disabled || (param.min !== undefined && value <= param.min)}
-        >
-          -
-        </button>
+      <div className="relative inline-block">
         <input
           type="number"
           value={value ?? ''}
@@ -93,20 +82,27 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           min={param.min}
           max={param.max}
           step={param.step || 1}
-          className="number-input"
+          className="w-20 bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed"
         />
-        <button
-          type="button"
-          className="number-input-btn"
-          onClick={handleIncrement}
-          disabled={disabled || (param.max !== undefined && value >= param.max)}
-        >
-          +
-        </button>
+        <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+          <button
+            type="button"
+            onClick={handleIncrement}
+            disabled={disabled || (param.max !== undefined && value >= param.max)}
+            className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer flex items-center justify-center"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            onClick={handleDecrement}
+            disabled={disabled || (param.min !== undefined && value <= param.min)}
+            className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer flex items-center justify-center"
+          >
+            ▼
+          </button>
+        </div>
       </div>
-      {param.description && (
-        <div className="param-description">{param.description}</div>
-      )}
     </div>
   )
 }

@@ -25,7 +25,7 @@ export class NodeConverter implements INodeConverter {
   private static instance: NodeConverter
   private cache: Map<string, ModelNode> = new Map()
 
-  private constructor() {}
+  private constructor() { }
 
   /**
    * 获取单例实例
@@ -80,7 +80,7 @@ export class NodeConverter implements INodeConverter {
 
     for (const param of params) {
       // 跳过纯 UI 参数（如分隔符）
-      if (param.component === 'divider') continue
+      if ((param.type as string) === 'divider') continue
 
       // 基础端口
       const port: InputPort = {
@@ -126,7 +126,7 @@ export class NodeConverter implements INodeConverter {
    * 参数类型转换为端口类型
    */
   private paramTypeToPortType(param: ParamDef): PortDataType {
-    switch (param.component) {
+    switch (param.type) {
       case 'text':
       case 'dropdown':
         return 'string'
@@ -141,7 +141,7 @@ export class NodeConverter implements INodeConverter {
         return 'video'
       case 'panel':
         // 根据面板类型决定
-        if (param.panelType === 'resolution') return 'object'
+        if ((param as any).panelType === 'resolution') return 'object'
         return 'any'
       default:
         return 'any'
@@ -182,9 +182,9 @@ export class NodeConverter implements INodeConverter {
         const params = this.inputsToParams(inputs, model.params)
 
         // 2. 使用 RequestBuilder 构建请求
-        const request = requestBuilder.build(model.meta.id, params, {
-          context: context || {}
-        })
+        // const _request = requestBuilder.build(model.meta.id, params, {
+        //   context: context || {}
+        // })
 
         // 3. 调用适配器（这里简化处理，实际应该通过 ApiService）
         // TODO: 集成 ApiService 进行实际调用
@@ -250,7 +250,7 @@ export class NodeConverter implements INodeConverter {
     }
     if (filter?.tags) {
       models = models.filter(m =>
-        filter.tags!.some(tag => m.meta.tags?.includes(tag))
+        filter.tags!.some(tag => m.meta.tags?.includes(tag as any))
       )
     }
 

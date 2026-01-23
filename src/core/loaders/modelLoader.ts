@@ -27,23 +27,16 @@ interface LoadStats {
 /**
  * 加载所有模型文件
  *
- * 使用 Vite 的 import.meta.glob 自动扫描 src/models/**/*.model.ts 文件
+ * 使用 Vite 的 import.meta.glob 自动扫描所有 .model.ts 文件
  * 并自动注册到 ModelRegistry
  *
  * @returns 加载统计信息
- *
- * @example
- * ```typescript
- * import { loadAllModels } from '@/core/loaders'
- *
- * async function initApp() {
- *   const stats = await loadAllModels()
- *   console.log(`Loaded ${stats.success} models`)
- * }
- * ```
  */
 export async function loadAllModels(): Promise<LoadStats> {
-  console.log('[ModelLoader] 🚀 Loading models...')
+  // console.log('[ModelLoader] 🚀 Loading models...')
+
+  // 清空现有的注册表，防止重复注册（例如在 React StrictMode 下）
+  registry.clear()
 
   const startTime = performance.now()
 
@@ -80,7 +73,6 @@ export async function loadAllModels(): Promise<LoadStats> {
       // 3. 注册到 ModelRegistry
       registry.register(model)
 
-      console.log(`[ModelLoader] ✓ Loaded: ${model.meta.id} (${path})`)
       successCount++
     } catch (error) {
       console.error(`[ModelLoader] ✗ Failed to load ${path}:`, error)
@@ -93,9 +85,9 @@ export async function loadAllModels(): Promise<LoadStats> {
 
   // 输出加载摘要
   const total = successCount + errorCount
-  console.log(
-    `[ModelLoader] 📊 Complete: ${successCount}/${total} loaded, ${errorCount} failed (${duration.toFixed(2)}ms)`
-  )
+  // console.log(
+  //   `[ModelLoader] 📊 Complete: ${successCount}/${total} loaded, ${errorCount} failed (${duration.toFixed(2)}ms)`
+  // )
 
   // 如果有失败的模型，输出详细错误信息
   if (failedModels.length > 0 && import.meta.env.DEV) {

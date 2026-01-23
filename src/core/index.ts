@@ -13,6 +13,9 @@ export { ModelRegistry, registry } from './ModelRegistry'
 // 模型验证器
 export { validateModel, ModelValidationError } from './validators/modelValidator'
 
+// 模型定义辅助函数
+export { defineModel } from './defineModel'
+
 // 标签系统
 export * from './tags'
 

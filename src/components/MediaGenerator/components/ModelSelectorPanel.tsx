@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
-import { providers, getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
+import { getAvailableProviders } from '@/utils/modelHelpers'
+import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import PinyinMatch from 'pinyin-match'
 
 interface ModelSelectorPanelProps {
@@ -131,10 +132,15 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     return () => clearTimeout(timer)
   }, [])
 
+  // 获取所有可用的供应商（用于筛选按钮）
+  const allProviders = useMemo(() => {
+    return getAvailableProviders()
+  }, [])
+
   // 获取过滤后的可见模型列表
   const visibleProviders = useMemo(() => {
-    return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels)
-  }, [hiddenProviders, hiddenTypes, hiddenModels])
+    return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels, allProviders)
+  }, [hiddenProviders, hiddenTypes, hiddenModels, allProviders])
 
   // 过滤并排序后的模型列表
   const filteredAndSortedModels = useMemo(() => {
@@ -293,7 +299,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
           <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => onFilterProviderChange('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
-            {providers.map(p => (
+            {allProviders.map(p => (
               <button key={p.id} onClick={() => onFilterProviderChange(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
             ))}
             <div className="w-px bg-zinc-600/50 mx-1"></div>

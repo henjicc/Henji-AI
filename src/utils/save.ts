@@ -6,7 +6,7 @@ import * as path from '@tauri-apps/api/path'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { getMediaPath, getWaveformsPath, getUploadsPath, getDataRoot } from './dataPath'
 import { logError, logWarning, logInfo } from '../utils/errorLogger'
-import { detectFileType, MediaType } from './fileTypeDetector'
+import { detectFileType } from './fileTypeDetector'
 
 export const isDesktop = (): boolean => {
   const w: any = typeof window !== 'undefined' ? window : {}
@@ -351,7 +351,7 @@ export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promis
   const bytes = await readFile(fullPath)
   const blob = new Blob([bytes], { type: mimeHint || inferMimeFromPath(fullPath) })
   const url = URL.createObjectURL(blob)
-  logInfo('[save] display blob created', fullPath)
+  // logInfo('[save] display blob created', fullPath)
   return url
 }
 
@@ -379,6 +379,32 @@ export async function fileToDataUrl(fullPath: string, mimeHint?: string): Promis
   })
   reader.readAsDataURL(blob)
   return p
+}
+
+/**
+ * 解析文件路径为绝对路径
+ *
+ * 处理逻辑：
+ * - 如果是绝对路径（Windows: C:\, D:\, etc; Unix: /），直接返回
+ * - 如果是相对路径（Uploads/..., Media/...），解析为数据目录下的绝对路径
+ *
+ * @param filePath - 文件路径（可能是相对或绝对路径）
+ * @returns Promise<绝对路径>
+ */
+export async function resolveFilePath(filePath: string): Promise<string> {
+  // 检查是否为绝对路径
+  const isAbsolute =
+    /^[a-zA-Z]:[\\\/]/.test(filePath) || // Windows: C:\, D:\
+    /^\//.test(filePath) ||               // Unix: /
+    /^\\\\/.test(filePath)                // Windows UNC: \\server\share
+
+  if (isAbsolute) {
+    return filePath
+  }
+
+  // 相对路径，解析为数据目录下的路径
+  const dataRoot = await getDataRoot()
+  return await path.join(dataRoot, filePath)
 }
 
 const uploadCache: Map<string, { bytes: Uint8Array; dataUrl: string; displaySrc: string; compressedHash: string }> = new Map()

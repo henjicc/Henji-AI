@@ -4,9 +4,9 @@
  * 定义模型节点的结构和执行接口
  */
 
-import type { I18nText } from './common'
+import type { I18nText } from './I18nText'
 import type { InputPort, OutputPort } from './NodePort'
-import type { ProgressStatus } from './progress'
+import type { ProgressStatus } from '../../adapters/base/BaseAdapter'
 
 /**
  * 节点输出

@@ -61,6 +61,6 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
 /**
  * 判断是否为 I18nText 对象
  */
-export function isI18nTextObject(text: I18nText): text is Record<string, string> {
+export function isI18nTextObject(text: I18nText): text is Exclude<I18nText, string> {
   return typeof text === 'object' && text !== null
 }

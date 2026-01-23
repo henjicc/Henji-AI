@@ -3,6 +3,7 @@
 .claude/settings.local.json
 .cargo/
 .codex/
+old-Henji-AI/
 docs/GITHUB_ACTIONS_GUIDE.md
 # Dependencies
 node_modules/

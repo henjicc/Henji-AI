@@ -61,7 +61,7 @@ export function cleanHistoryItem(
     delete params.videoDataUrl
 
     // Convert timestamp to ISO string
-    const createdAt = new Date(legacy.timestamp).toISOString()
+
 
     // Convert to new format
     return {

@@ -137,6 +137,12 @@ export class PPIOAdapter extends BaseAdapter {
       // 2. 构建请求
       const { endpoint, requestData } = await route.buildImageRequest(finalParams)
 
+      // 🚀 打印实际请求参数
+      console.group(`🚀 PPIO API Request: ${finalParams.model}`)
+      console.log('📍 Endpoint:', endpoint)
+      console.log('📦 Request Data:', JSON.stringify(requestData, null, 2))
+      console.groupEnd()
+
       // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)
 
@@ -230,8 +236,11 @@ export class PPIOAdapter extends BaseAdapter {
       // 2. 构建请求
       const { endpoint, requestData } = await route.buildVideoRequest(finalParams)
 
-      logInfo('[PPIOAdapter] API端点:', endpoint)
-      logInfo('[PPIOAdapter] 请求数据:', requestData)
+      // 🚀 打印实际请求参数
+      console.group(`🚀 PPIO API Request: ${finalParams.model}`)
+      console.log('📍 Endpoint:', endpoint)
+      console.log('📦 Request Data:', JSON.stringify(requestData, null, 2))
+      console.groupEnd()
 
       // 3. 发送请求
       const response = await this.apiClient.post(endpoint, requestData)

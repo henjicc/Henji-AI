@@ -2,17 +2,17 @@
 import { logError, logInfo } from '../../utils/errorLogger'
 export abstract class BaseAdapter {
   name: string
-  
+
   constructor(name: string) {
     this.name = name
   }
-  
+
   // 抽象方法：由具体适配器实现
   abstract generateImage(params: GenerateImageParams): Promise<ImageResult>
   abstract generateVideo(params: GenerateVideoParams): Promise<VideoResult>
   abstract generateAudio(params: GenerateAudioParams): Promise<AudioResult>
   abstract checkStatus(taskId: string): Promise<TaskStatus>
-  
+
   // 通用方法：保存媒体到本地
   protected async saveMediaLocally(url: string, type: 'image' | 'video' | 'audio'): Promise<{ url: string; filePath?: string }> {
     // 项目只考虑桌面环境，直接执行保存逻辑
@@ -75,7 +75,7 @@ export abstract class BaseAdapter {
     }
     return { url }
   }
-  
+
   // 通用方法：格式化错误消息
   protected formatError(error: any): Error {
     logError(`[${this.name}] 错误:`, error)
@@ -84,7 +84,7 @@ export abstract class BaseAdapter {
     }
     return new Error(`未知错误: ${JSON.stringify(error)}`)
   }
-  
+
   // 通用方法：记录日志
   protected log(message: string, data?: any): void {
     logInfo(`[${this.name}] ${message}`, data)
@@ -101,10 +101,13 @@ export interface MediaGeneratorAdapter {
 }
 
 export interface ProgressStatus {
-  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED'
+  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'TASK_CREATED'
   queue_position?: number
   message?: string
   progress?: number
+  requestId?: string
+  taskId?: string
+  modelId?: string
 }
 
 export interface GenerateImageParams {
@@ -179,6 +182,8 @@ export interface VideoResult {
   url?: string
   filePath?: string
   status?: string
+  requestId?: string
+  modelId?: string
 }
 
 export interface AudioResult {
