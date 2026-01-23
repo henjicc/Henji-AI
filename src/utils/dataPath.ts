@@ -463,7 +463,11 @@ export async function convertPathArray(
 ): Promise<string[] | undefined> {
   if (!paths || paths.length === 0) return paths
 
+  // 过滤空字符串，避免后续处理空路径
+  const validPaths = paths.filter(p => p && p.trim() !== '')
+  if (validPaths.length === 0) return undefined
+
   return Promise.all(
-    paths.map(p => toRelative ? toRelativePath(p, dataRoot) : toAbsolutePath(p, dataRoot))
+    validPaths.map(p => toRelative ? toRelativePath(p, dataRoot) : toAbsolutePath(p, dataRoot))
   )
 }

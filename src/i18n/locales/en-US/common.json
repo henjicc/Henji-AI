@@ -12,6 +12,8 @@
   "success": "Success",
   "warning": "Warning",
   "info": "Info",
+  "on": "On",
+  "off": "Off",
 
   "status": {
     "queued": "Queued",

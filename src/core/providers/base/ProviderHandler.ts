@@ -134,6 +134,12 @@ export abstract class ProviderHandler {
       this.log('Parameters preprocessed', { preprocessedParams })
 
       // 步骤3: 执行 API 调用
+      // 输出最终发送的请求数据（图片显示摘要而非完整 base64）
+      this.log('🚀 Final API request', {
+        url: request.url,
+        body: this.summarizeRequestBody(preprocessedParams)
+      })
+
       const response = await this.execute(request.url, preprocessedParams)
 
       this.log('API response received', { response })
@@ -432,6 +438,45 @@ export abstract class ProviderHandler {
     if (this.debug) {
       console.log(`[${this.providerName}]`, message, data || '')
     }
+  }
+
+  /**
+   * 摘要化请求体（用于日志输出）
+   * 将 base64 图片数据替换为摘要信息，避免日志过长
+   *
+   * @param body - 请求体
+   * @returns 摘要化后的请求体
+   */
+  protected summarizeRequestBody(body: Record<string, any>): Record<string, any> {
+    const summarized: Record<string, any> = {}
+
+    for (const [key, value] of Object.entries(body)) {
+      if (Array.isArray(value)) {
+        // 处理数组（可能是图片数组）
+        summarized[key] = value.map((item, index) => {
+          if (typeof item === 'string' && item.startsWith('data:')) {
+            // base64 数据，显示摘要
+            const mimeMatch = item.match(/^data:([^;]+);/)
+            const mimeType = mimeMatch ? mimeMatch[1] : 'unknown'
+            const base64Part = item.split(',')[1] || ''
+            const sizeKB = Math.round((base64Part.length * 3) / 4 / 1024)
+            return `[BASE64 ${mimeType} ~${sizeKB}KB]`
+          }
+          return item
+        })
+      } else if (typeof value === 'string' && value.startsWith('data:')) {
+        // 单个 base64 数据
+        const mimeMatch = value.match(/^data:([^;]+);/)
+        const mimeType = mimeMatch ? mimeMatch[1] : 'unknown'
+        const base64Part = value.split(',')[1] || ''
+        const sizeKB = Math.round((base64Part.length * 3) / 4 / 1024)
+        summarized[key] = `[BASE64 ${mimeType} ~${sizeKB}KB]`
+      } else {
+        summarized[key] = value
+      }
+    }
+
+    return summarized
   }
 
   /**

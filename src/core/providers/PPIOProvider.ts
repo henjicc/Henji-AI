@@ -56,21 +56,42 @@ export class PPIOProvider extends ProviderHandler {
     this.log('开始预处理参数', { modelId: model.meta.id })
 
     // 1. 处理图片：转为 base64
+    // 注意：同时处理 images（复数）和 image（单数）两种字段名
+    // 因为不同 API 使用不同的字段名
+    const fieldsToProcess: Array<{ field: string; data: string[] }> = []
+
     if (params.images && Array.isArray(params.images) && params.images.length > 0) {
-      this.log('开始转换图片为 base64...', { count: params.images.length })
+      fieldsToProcess.push({ field: 'images', data: params.images })
+    }
+    if (params.image && Array.isArray(params.image) && params.image.length > 0) {
+      fieldsToProcess.push({ field: 'image', data: params.image })
+    }
+
+    if (fieldsToProcess.length > 0) {
+      this.log('开始转换图片为 base64...', {
+        fields: fieldsToProcess.map(f => ({ field: f.field, count: f.data.length }))
+      })
 
       try {
-        processedParams.images = await this.convertImagesToBase64(params.images)
+        // 只转换一次（使用第一个有效的图片数组）
+        const primaryField = fieldsToProcess[0]
+        const convertedImages = await this.convertImagesToBase64(primaryField.data)
+
+        // 更新所有图片字段为转换后的 base64
+        for (const { field } of fieldsToProcess) {
+          processedParams[field] = convertedImages
+        }
 
         // 保存图片文件路径（用于历史记录）
         const existingPaths = params.uploadedFilePaths || []
         processedParams.uploadedFilePaths = await this.saveUploadedFilePaths(
-          processedParams.images,
+          convertedImages,
           existingPaths
         )
 
         this.log('图片处理完成', {
-          count: processedParams.images.length,
+          count: convertedImages.length,
+          fields: fieldsToProcess.map(f => f.field),
           paths: processedParams.uploadedFilePaths,
         })
       } catch (error) {

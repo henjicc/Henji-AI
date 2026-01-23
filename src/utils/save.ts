@@ -392,6 +392,11 @@ export async function fileToDataUrl(fullPath: string, mimeHint?: string): Promis
  * @returns Promise<绝对路径>
  */
 export async function resolveFilePath(filePath: string): Promise<string> {
+  // 检查空路径
+  if (!filePath || filePath.trim() === '') {
+    throw new Error('Empty file path provided')
+  }
+
   // 检查是否为绝对路径
   const isAbsolute =
     /^[a-zA-Z]:[\\\/]/.test(filePath) || // Windows: C:\, D:\

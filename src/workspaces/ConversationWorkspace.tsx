@@ -2741,14 +2741,15 @@ const ConversationWorkspace: React.FC = () => {
       options.size = task.size
     }
 
-    // 如果有 uploadedFilePaths，需要重建 base64 图片数据
-    if (task.uploadedFilePaths && task.uploadedFilePaths.length > 0) {
-      options.uploadedFilePaths = task.uploadedFilePaths
+    // 如果有 uploadedFilePaths，需要重建 base64 图片数据（过滤空路径）
+    const validFilePaths = task.uploadedFilePaths?.filter(p => p && p.trim() !== '')
+    if (validFilePaths && validFilePaths.length > 0) {
+      options.uploadedFilePaths = validFilePaths
       // 尝试重建 base64，使用正确的 MIME 类型（image/jpeg）
       if (!options.images) {
         try {
           const arr: string[] = []
-          for (const p of task.uploadedFilePaths) {
+          for (const p of validFilePaths) {
             // 明确使用 image/jpeg MIME 类型，与 saveUploadImage 保持一致
             // 确保路径是绝对路径
             const absolutePath = await resolveFilePath(p)
@@ -2842,11 +2843,12 @@ const ConversationWorkspace: React.FC = () => {
   const handleReedit = async (task: GenerationTask) => {
     let images: string[] | undefined = undefined
 
-    // 尝试从文件路径恢复图片
-    if (task.uploadedFilePaths && task.uploadedFilePaths.length) {
+    // 尝试从文件路径恢复图片（过滤空路径）
+    const validFilePaths = task.uploadedFilePaths?.filter(p => p && p.trim() !== '')
+    if (validFilePaths && validFilePaths.length) {
       try {
         const arr: string[] = []
-        for (const p of task.uploadedFilePaths) {
+        for (const p of validFilePaths) {
           // 解析为绝对路径（处理相对路径）
           const absolutePath = await resolveFilePath(p)
           const data = await fileToDataUrl(absolutePath)
