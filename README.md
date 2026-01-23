@@ -95,23 +95,6 @@ Windows 用户如果在启动时遇到了报错，请尝试安装 [WebView2 运�
 - **HTTP 客户端**: Axios
 - **图片处理**: Pica
 
-## 项目结构
-
-```
-Henji-AI/
-├── src/                      # 前端源码
-│   ├── adapters/            # API 适配器（派欧云、fal、魔搭）
-│   ├── components/          # React 组件
-│   ├── config/              # 供应商和模型配置
-│   ├── services/            # 业务逻辑层
-│   ├── types/               # TypeScript 类型定义
-│   └── utils/               # 工具函数
-├── src-tauri/               # Tauri 后端
-│   ├── src/                 # Rust 源码
-│   ├── icons/               # 应用图标
-│   └── Cargo.toml           # Rust 依赖
-└── .github/workflows/       # GitHub Actions CI/CD
-```
 
 ## 开发指南
 

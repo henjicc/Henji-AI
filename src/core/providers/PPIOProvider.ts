@@ -14,8 +14,10 @@ import {
   ProviderError,
   ProviderErrorCode,
   createPollingTimeoutError,
+  createInvalidResponseError,
 } from './base/errors'
-import { PollingConfig } from './base/types'
+import { PollingConfig, GenerateResult } from './base/types'
+import { saveImageFromUrl, saveVideoFromUrl, saveAudioFromUrl } from '@/utils/save'
 
 /**
  * PPIO Provider 类
@@ -472,5 +474,95 @@ export class PPIOProvider extends ProviderHandler {
       response?.result?.url ||
       ''
     )
+  }
+
+  /**
+   * 保存媒体文件到本地（覆盖基类方法）
+   *
+   * PPIO 特定处理：支持多张图片保存
+   * 多张图片时，URL 和路径用 ||| 分隔
+   *
+   * @param response - API 响应数据
+   * @param type - 媒体类型
+   * @returns Promise<生成结果>
+   */
+  protected async saveMedia(
+    response: any,
+    type: 'image' | 'video' | 'audio'
+  ): Promise<GenerateResult> {
+    try {
+      // 检查是否有多张图片
+      if (type === 'image' && response?.images && response.images.length > 1) {
+        this.log('检测到多张图片，开始批量保存', { count: response.images.length })
+
+        const urls: string[] = []
+        const filePaths: string[] = []
+
+        for (const img of response.images) {
+          const url = typeof img === 'string' ? img : (img.image_url || '')
+          if (url) {
+            urls.push(url)
+            try {
+              const { fullPath } = await saveImageFromUrl(url)
+              filePaths.push(fullPath)
+              this.log('图片保存成功', { url: url.substring(0, 50) + '...', filePath: fullPath })
+            } catch (error) {
+              this.log('图片保存失败，跳过', { url: url.substring(0, 50) + '...', error })
+              filePaths.push('')
+            }
+          }
+        }
+
+        // 用 ||| 分隔多个 URL 和路径
+        const combinedUrl = urls.join('|||')
+        const combinedFilePath = filePaths.join('|||')
+
+        this.log('多图片保存完成', { count: urls.length, filePaths: filePaths.length })
+
+        return {
+          url: combinedUrl,
+          filePath: combinedFilePath,
+          status: 'completed',
+          metadata: response,
+        }
+      }
+
+      // 单张图片或其他类型，使用基类逻辑
+      const url = this.extractMediaUrl(response)
+
+      if (!url) {
+        throw createInvalidResponseError(
+          this.providerName,
+          response,
+          'No media URL found in response'
+        )
+      }
+
+      let filePath: string
+
+      if (type === 'image') {
+        const { fullPath } = await saveImageFromUrl(url)
+        filePath = fullPath
+      } else if (type === 'video') {
+        const { fullPath } = await saveVideoFromUrl(url)
+        filePath = fullPath
+      } else if (type === 'audio') {
+        const { fullPath } = await saveAudioFromUrl(url)
+        filePath = fullPath
+      } else {
+        throw new Error(`Unsupported media type: ${type}`)
+      }
+
+      this.log('媒体文件已保存到本地', { url, filePath })
+
+      return {
+        url,
+        filePath,
+        status: 'completed',
+        metadata: response,
+      }
+    } catch (error) {
+      throw ProviderError.fromError(error, this.providerName)
+    }
   }
 }

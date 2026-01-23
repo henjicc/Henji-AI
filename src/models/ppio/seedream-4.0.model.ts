@@ -206,8 +206,16 @@ export const seedream40Model = defineModel({
 
     request: {
         builder: async (params) => {
+            // 处理组图数量：当 maxImages > 1 时，在 prompt 前添加"生成X张"
+            // 兼容两种参数格式：maxImages（参数ID）和 max_images（API字段名）
+            const maxImages = params.maxImages || params.max_images || 1
+            let finalPrompt = params.prompt
+            if (maxImages > 1) {
+                finalPrompt = `生成${maxImages}张图片。${params.prompt}`
+            }
+
             const requestData: Record<string, unknown> = {
-                prompt: params.prompt,
+                prompt: finalPrompt,
                 watermark: false
             }
 
@@ -307,8 +315,7 @@ export const seedream40Model = defineModel({
                 requestData.images = params.images
             }
 
-            // 处理组图设置
-            const maxImages = params.maxImages || 1
+            // 处理组图设置（maxImages 已在函数开头声明）
             if (maxImages > 1) {
                 requestData.sequential_image_generation = 'auto'
                 requestData.max_images = maxImages

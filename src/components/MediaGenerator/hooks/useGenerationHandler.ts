@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import { registry } from '@/core/ModelRegistry'
-import { RequestBuilder } from '@/core/request/RequestBuilder'
 import type { ModelState } from '../state/useModelState'
 
 /**
@@ -27,38 +26,20 @@ export const useGenerationHandler = (
 
     const modelType = modelInfo.type || 'image'
 
-    // 使用新系统的 RequestBuilder
-    const builder = new RequestBuilder()
-
-    // 合并 UI 状态和模型参数
-    const allParams = {
-      ...modelState.params,
-      prompt: input,
+    // 准备生成选项
+    // 直接传递原始参数，让 GenerationService 统一构建请求
+    // 避免双重构建导致参数丢失
+    const options = {
+      ...modelState.params,  // 传递所有模型参数（包括 maxImages 等）
       images: uploadedImages,
       videos: uploadedVideos
     }
 
-    try {
-      // 构建请求（支持异步 builder）
-      const result = await builder.build(selectedModel, allParams, { debug: false })
+    console.log('[GenerationHandler] Generated options:', options)
+    console.log('[GenerationHandler] Model type:', modelType)
 
-      // 准备生成选项（兼容旧的 onGenerate 接口）
-      const options = {
-        ...result.body,
-        // 保留必要的上传文件引用
-        uploadedImages,
-        uploadedVideos
-      }
-
-      console.log('[GenerationHandler] Generated options:', options)
-      console.log('[GenerationHandler] Model type:', modelType)
-
-      // 调用生成回调
-      onGenerate(input, selectedModel, modelType, options)
-    } catch (error) {
-      console.error('[GenerationHandler] Error building request:', error)
-      throw error
-    }
+    // 调用生成回调
+    onGenerate(input, selectedModel, modelType, options)
   }, [selectedModel, input, modelState.params, uploadedImages, uploadedVideos, onGenerate])
 
   return { handleGenerate }
