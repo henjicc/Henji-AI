@@ -13,6 +13,10 @@ export const minimaxHailuo02Model = defineModel({
     description: 'Minimax 海螺 02 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 2 },
+    videos: { max: 0 }
+  },
   params: [
     // 1. 时长
     {

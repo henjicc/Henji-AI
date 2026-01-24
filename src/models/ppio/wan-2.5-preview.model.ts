@@ -23,6 +23,10 @@ export const wan25PreviewModel = defineModel({
       maxDurationMs: 180000
     }
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     // 1. 时长
     {

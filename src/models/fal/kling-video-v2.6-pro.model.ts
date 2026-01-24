@@ -13,6 +13,44 @@ export const klingVideoV26ProModel = defineModel({
     description: 'Kling Video V2.6 Pro 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'falKlingV26ProMode === "motion-control"',
+        images: { exact: 1 },
+        videos: { exact: 1 },
+        videoConstraints: {
+          maxSizeMB: 100,
+          minDurationSec: 3,
+          maxDurationSec: 30
+        }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'kling-v26-motion-image',
+      when: 'falKlingV26ProMode === "motion-control"',
+      require: { images: { exact: 1 } },
+      message: {
+        title: '图片必需',
+        message: '动作控制模式需要上传1张图片（不能多也不能少）',
+        type: 'warning'
+      }
+    },
+    {
+      id: 'kling-v26-motion-video',
+      when: 'falKlingV26ProMode === "motion-control"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '动作控制模式需要上传1个视频（不能多也不能少）',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'falKlingV26ProMode',

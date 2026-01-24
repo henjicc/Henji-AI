@@ -23,6 +23,29 @@ export const wan26Model = defineModel({
       expectedAttempts: 45
     }
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'ppioWan26Mode === "reference-to-video"',
+        images: { max: 0 },
+        videos: { exact: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'wan-26-reference-video',
+      when: 'ppioWan26Mode === "reference-to-video"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '参考生视频模式需要上传视频才能生成',
+        type: 'warning'
+      }
+    }
+  ],
 
   params: [
     // 1. Mode selection

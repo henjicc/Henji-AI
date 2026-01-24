@@ -15,6 +15,10 @@ export const pixverseV45Model = defineModel({
     description: 'PixVerse V4.5 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     // 1. 宽高比（文生视频）
     {

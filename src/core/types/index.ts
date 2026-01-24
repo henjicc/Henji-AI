@@ -48,6 +48,23 @@ export type {
   SmartMatchConfig
 } from './ConditionTypes'
 
+// 输入限制
+export type {
+  InputLimits,
+  InputLimitsConfig,
+  InputLimitsResolver,
+  InputLimitRule,
+  InputCountLimit,
+  VideoConstraints
+} from './InputLimits'
+
+// 生成要求
+export type {
+  GenerationRequirement,
+  RequirementMessage,
+  RequirementCount
+} from './GenerationRequirements'
+
 // 参数定义
 export type {
   ParamDef,

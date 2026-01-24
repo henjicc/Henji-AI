@@ -29,6 +29,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const ref = useRef<HTMLDivElement | null>(null)
   const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [minWidthPx, setMinWidthPx] = useState<number | null>(null)
+  const lastMinWidthRef = useRef<number | null>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -64,6 +65,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const arrowSpace = 24
       const borderWidth = (parseFloat(cs.borderLeftWidth || '1') + parseFloat(cs.borderRightWidth || '1')) || 2
       const minW = Math.ceil(textWidth + paddingLeft + paddingRight + arrowSpace + borderWidth)
+      if (lastMinWidthRef.current === minW) return
+      lastMinWidthRef.current = minW
       setMinWidthPx(minW)
     }
     computeMinWidth()
@@ -189,4 +192,3 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     </div>
   )
 }
-

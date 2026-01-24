@@ -14,6 +14,10 @@ export const hailuo23Model = defineModel({
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-hailuo-2.3', 'minimax-hailuo-2.3-fal']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'falHailuo23Version',

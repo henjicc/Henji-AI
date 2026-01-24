@@ -16,6 +16,10 @@ export const kieGrokImagineModel = defineModel({
     tags: ['text-to-image', 'provider-kie'],
     aliases: ['grok-imagine-kie']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieGrokImagineAspectRatio',

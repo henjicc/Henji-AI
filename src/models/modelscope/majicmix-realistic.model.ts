@@ -19,6 +19,10 @@ export const modelscopeMajicMixRealisticModel = defineModel({
       expectedAttempts: 40
     }
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'modelscopeImageSize',

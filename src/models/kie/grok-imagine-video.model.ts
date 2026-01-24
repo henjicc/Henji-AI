@@ -13,13 +13,17 @@ export const kieGrokImagineVideoModel = defineModel({
     type: 'video',
     name: { zh: 'Grok Imagine 视频', en: 'Grok Imagine Video' },
     description: { zh: 'KIE Grok Imagine 视频生成模型', en: 'KIE Grok Imagine video generation model' },
-    tags: ['text-to-video', 'image-to-video', 'provider-kie'],
+    tags: ['text-to-video', 'image-to-video', 'english-prompt-only', 'provider-kie'],
     aliases: ['grok-imagine-video-kie'],
     polling: {
       interval: 3000,
       maxAttempts: 120,
       expectedAttempts: 40
     }
+  },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
   },
   params: [
     {

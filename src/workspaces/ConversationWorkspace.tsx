@@ -20,7 +20,6 @@ import { ProgressBar } from '../components/ui/ProgressBar'
 import { loadPresets } from '../utils/preset'
 import { canDeleteFile } from '../utils/fileRefCount'
 import { getMediaDimensions, getMediaDurationFormatted } from '../utils/mediaDimensions'
-import { migrateAllData } from '../utils/parameterMigration'
 import TestModeIndicator from '../components/TestModeIndicator'
 import TestModePanel from '../components/TestModePanel'
 import TestModeParamsDisplay from '../components/TestModeParamsDisplay'
@@ -175,11 +174,6 @@ const ConversationWorkspace: React.FC = () => {
   // 更新检测相关状态
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
   const [updateReleaseInfo, setUpdateReleaseInfo] = useState<any>(null)
-
-  // 数据迁移 - 在应用启动时执行一次
-  useEffect(() => {
-    migrateAllData()
-  }, [])
 
   // 初始化数据目录
   useEffect(() => {
@@ -1526,18 +1520,21 @@ const ConversationWorkspace: React.FC = () => {
     const mouseDownTime = Date.now()
 
     // 获取或创建图片缩略图（使用缓存系统）
+    // 注意：不要 await，避免错过 mouseup 导致误触发拖拽
     let thumbnailPath: string | undefined
     let previewDataUrl: string = imageUrl  // 默认使用原图 URL
 
     if (filePath) {
-      try {
-        const { getOrCreateImageThumbnail } = await import('../utils/imageConversion')
-        const thumbnail = await getOrCreateImageThumbnail(filePath, imageUrl)
-        thumbnailPath = thumbnail.filePath
-        previewDataUrl = thumbnail.dataUrl
-      } catch (err) {
-        console.warn('[拖放] 获取图片缩略图失败:', err)
-      }
+      void (async () => {
+        try {
+          const { getOrCreateImageThumbnail } = await import('../utils/imageConversion')
+          const thumbnail = await getOrCreateImageThumbnail(filePath, imageUrl)
+          thumbnailPath = thumbnail.filePath
+          previewDataUrl = thumbnail.dataUrl
+        } catch (err) {
+          console.warn('[拖放] 获取图片缩略图失败:', err)
+        }
+      })()
     }
 
     // 使用内部自定义拖放 + 边缘检测触发原生拖放
@@ -1609,18 +1606,21 @@ const ConversationWorkspace: React.FC = () => {
     const mouseDownTime = Date.now()
 
     // 获取或创建视频缩略图（使用缓存系统）
+    // 注意：不要 await，避免错过 mouseup 导致误触发拖拽
     let thumbnailPath: string | undefined
     let previewDataUrl: string = videoUrl  // 默认使用视频 URL
 
     if (filePath) {
-      try {
-        const { getOrCreateVideoThumbnail } = await import('../utils/imageConversion')
-        const thumbnail = await getOrCreateVideoThumbnail(filePath, videoUrl)
-        thumbnailPath = thumbnail.filePath
-        previewDataUrl = thumbnail.dataUrl
-      } catch (err) {
-        console.warn('[拖放] 获取视频缩略图失败:', err)
-      }
+      void (async () => {
+        try {
+          const { getOrCreateVideoThumbnail } = await import('../utils/imageConversion')
+          const thumbnail = await getOrCreateVideoThumbnail(filePath, videoUrl)
+          thumbnailPath = thumbnail.filePath
+          previewDataUrl = thumbnail.dataUrl
+        } catch (err) {
+          console.warn('[拖放] 获取视频缩略图失败:', err)
+        }
+      })()
     }
 
     // 使用内部自定义拖放 + 边缘检测触发原生拖放

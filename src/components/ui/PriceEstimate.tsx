@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { calculatePrice, getPricingConfig } from '../../config/pricing'
+import { registry } from '@/core/ModelRegistry'
 
 interface PriceEstimateProps {
     providerId: string
@@ -7,15 +7,14 @@ interface PriceEstimateProps {
     params: any
 }
 
-const PriceEstimate: React.FC<PriceEstimateProps> = ({ providerId, modelId, params }) => {
-    // 获取模型价格配置
-    const config = useMemo(() => getPricingConfig(providerId, modelId), [providerId, modelId])
+const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
+    const model = useMemo(() => registry.getModel(modelId), [modelId])
 
     // 计算价格
     const price = useMemo(() => {
-        if (!config) return null
-        return calculatePrice(providerId, modelId, params)
-    }, [providerId, modelId, params, config])
+        if (!model) return null
+        return registry.calculatePrice(modelId, params)
+    }, [model, modelId, params])
 
     // 检查用户是否开启价格显示
     const [showPrice, setShowPrice] = useState(() => {
@@ -41,7 +40,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ providerId, modelId, para
     }, [])
 
     // 如果不显示、无配置或价格为null，则不渲染
-    if (!showPrice || !config || price === null) {
+    if (!showPrice || !model || price === null) {
         return null
     }
 
@@ -54,9 +53,11 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ providerId, modelId, para
     }
 
     // 生成价格显示文本
+    const currency = model.pricing.currency || '¥'
+
     const priceDisplay = typeof price === 'number'
-        ? `${config.currency}${formatPrice(price)}`
-        : `${config.currency}${formatPrice(price.min)}-${formatPrice(price.max)}`
+        ? `${currency}${formatPrice(price)}`
+        : `${currency}${formatPrice(price.min)}-${formatPrice(price.max)}`
 
     return (
         <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-700/50 backdrop-blur-sm">

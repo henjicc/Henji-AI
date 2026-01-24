@@ -28,6 +28,10 @@ export const kieSora2Model = defineModel({
       expectedAttempts: 50
     }
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieSora2Mode',

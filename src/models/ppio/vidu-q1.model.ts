@@ -13,6 +13,32 @@ export const viduQ1Model = defineModel({
     description: 'Vidu Q1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'ppioViduQ1Mode === "start-end-frame"',
+        images: { exact: 2 }
+      },
+      {
+        when: 'ppioViduQ1Mode === "reference-to-video"',
+        images: { max: 7 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'vidu-q1-start-end-frame',
+      when: 'ppioViduQ1Mode === "start-end-frame"',
+      require: { images: { exact: 2 } },
+      message: {
+        title: '图片必需',
+        message: '首尾帧模式需要上传2张图片',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     // 1. 模式
     {

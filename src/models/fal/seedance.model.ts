@@ -14,6 +14,46 @@ export const seedanceModel = defineModel({
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-bytedance-seedance', 'bytedance-seedance-v1']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'falSeedanceV1Mode === "image-to-video"',
+        images: { max: 2 }
+      },
+      {
+        when: 'falSeedanceV1Mode === "reference-to-video"',
+        images: { max: 12 }
+      },
+      {
+        when: 'falSeedanceV1Mode === "image-to-video" && falSeedanceV1Version === "pro" && falSeedanceV1FastMode === true',
+        images: { max: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'seedance-image-to-video',
+      when: 'falSeedanceV1Mode === "image-to-video"',
+      require: { images: { min: 1 } },
+      message: {
+        title: '图片必需',
+        message: '图生视频模式需要上传至少1张图片',
+        type: 'warning'
+      }
+    },
+    {
+      id: 'seedance-reference-to-video',
+      when: 'falSeedanceV1Mode === "reference-to-video"',
+      require: { images: { min: 1 } },
+      message: {
+        title: '图片必需',
+        message: '参考生视频模式需要上传图片才能生成',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'falSeedanceV1Mode',

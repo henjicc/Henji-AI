@@ -1,4 +1,4 @@
-import { providers } from '@/config/providers'
+import { registry } from '@/core/ModelRegistry'
 
 /**
  * 进度配置类型
@@ -28,14 +28,37 @@ export interface ProgressConfig {
  * ```
  */
 export function getProgressConfig(modelId: string): ProgressConfig {
-    for (const provider of providers) {
-        const model = provider.models.find(m => m.id === modelId)
-        if (model && (model as any).progressConfig) {
-            return (model as any).progressConfig
+    const model = registry.getModel(modelId)
+    if (!model) {
+        return {
+            type: 'polling',
+            expectedPolls: 40
         }
     }
 
-    // 默认配置：使用轮询，预期40次
+    const progress = model.meta.progress
+
+    if (progress?.mode === 'time') {
+        return {
+            type: 'time',
+            expectedDuration: progress.baseDurationMs
+        }
+    }
+
+    if (progress?.mode === 'polling') {
+        return {
+            type: 'polling',
+            expectedPolls: progress.baseAttempts
+        }
+    }
+
+    if (model.meta.polling) {
+        return {
+            type: 'polling',
+            expectedPolls: model.meta.polling.expectedAttempts || model.meta.polling.maxAttempts
+        }
+    }
+
     return {
         type: 'polling',
         expectedPolls: 40

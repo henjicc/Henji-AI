@@ -12,12 +12,16 @@ export const modelscopeFluxKreaDevModel = defineModel({
     type: 'image',
     name: { zh: 'FLUX.1-Krea-dev', en: 'FLUX.1-Krea-dev' },
     description: { zh: '魔搭 FLUX.1-Krea-dev 文生图模型', en: 'ModelScope FLUX.1-Krea-dev text-to-image model' },
-    tags: ['text-to-image', 'provider-modelscope'],
+    tags: ['text-to-image', 'english-prompt-only', 'provider-modelscope'],
     polling: {
       interval: 3000,
       maxAttempts: 120,
       expectedAttempts: 40
     }
+  },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 }
   },
   params: [
     {

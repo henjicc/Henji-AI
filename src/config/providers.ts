@@ -1,4 +1,4 @@
-import providersData from './providers.json'
+import { getAvailableProviders } from '@/utils/modelHelpers'
 
 export interface Provider {
   id: string
@@ -16,14 +16,14 @@ export interface Model {
   tags?: string[]
 }
 
-// 类型转换，确保数据符合接口定义
-export const providers: Provider[] = providersData.providers.map(provider => ({
-  ...provider,
-  models: provider.models.map(model => ({
-    ...model,
-    type: model.type as 'image' | 'video' | 'audio'
-  }))
-}))
+/**
+ * 获取当前可用的 Provider 列表（基于 ModelRegistry）
+ *
+ * 注意：不再依赖 providers.json，统一以模型定义为准。
+ */
+export function getProviders(): Provider[] {
+  return getAvailableProviders() as Provider[]
+}
 
 // 获取隐藏的供应商列表
 export function getHiddenProviders(): Set<string> {
@@ -77,8 +77,8 @@ export function getVisibleProviders(
   hiddenModels: Set<string>,
   providersData?: Provider[]
 ): Provider[] {
-  // 如果没有传入 providersData，使用旧的 providers（向后兼容）
-  const sourceProviders = providersData || providers
+  // 如果没有传入 providersData，使用注册中心的 Provider 列表
+  const sourceProviders = providersData || getProviders()
 
   return sourceProviders.map(provider => ({
     ...provider,

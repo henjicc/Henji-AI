@@ -26,7 +26,7 @@ function initializeTagsMap(): Map<string, Set<ModelTag>> {
     provider.models.forEach(model => {
       const tags = new Set<ModelTag>()
 
-      // 从 providers.json 中读取 tags 字段
+      // 从模型定义中读取 tags 字段
       if (model.tags && Array.isArray(model.tags)) {
         model.tags.forEach(tag => tags.add(tag as ModelTag))
       }

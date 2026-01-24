@@ -14,6 +14,16 @@ export const hailuo02Model = defineModel({
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-hailuo-02', 'minimax-hailuo-02-fal']
   },
+  inputLimits: {
+    images: { max: 2 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'falHailuo02FastMode === true',
+        images: { max: 1 }
+      }
+    ]
+  },
   params: [
     {
       id: 'falHailuo02Version',

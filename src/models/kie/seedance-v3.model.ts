@@ -21,6 +21,10 @@ export const kieSeedanceV3Model = defineModel({
       expectedAttempts: 50
     }
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieSeedanceV3Version',

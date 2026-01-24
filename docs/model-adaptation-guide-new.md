@@ -7,7 +7,7 @@
 ## 核心流程
 
 ```
-创建模型文件 → 定义模型配置 → 注册到 ModelRegistry → 更新 providers.json
+创建模型文件 → 定义模型配置 → 自动注册到 ModelRegistry
 ```
 
 ## 快速开始
@@ -74,19 +74,7 @@ params: [
 ]
 ```
 
-### 3. 注册到模型索引
-
-**位置**: `src/models/{provider}/index.ts`
-
-```typescript
-import { yourModel } from './your-model.model'
-
-export {
-  yourModel
-}
-```
-
-### 4. 验证编译
+### 3. 验证编译
 
 ```bash
 npx tsc --noEmit
@@ -99,3 +87,8 @@ npx tsc --noEmit
 - 中等复杂: `src/models/fal/nano-banana.model.ts`
 - 复杂模型: `src/models/ppio/kling-o1.model.ts`
 
+## 说明
+
+- 模型会被 `loadAllModels()` 自动扫描并注册，无需手动维护 `providers.json` 或 `index.ts`。
+- 价格、进度、端点等配置统一在 `*.model.ts` 中完成。
+- 新增供应商时，仅需新增对应的 Provider 文件（例如 `src/core/providers/PPIOProvider.ts`）。

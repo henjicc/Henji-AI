@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import FileUploader from '@/components/ui/FileUploader'
 import AlertDialog from '@/components/ui/AlertDialog'
-import { getMaxImageCount } from '../utils/constants'
-import { logError } from '../../../utils/errorLogger'
+import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
+import { hasTag } from '@/core/tags'
 
 /**
  * 文件顺序项：记录每个位置是视频还是图片，以及在原数组中的索引
@@ -17,27 +18,10 @@ interface InputAreaProps {
   setInput: (value: string) => void
   currentModel: any
   selectedModel: string
+  modelParams: Record<string, unknown>
   uploadedImages: string[]
   isLoading: boolean
   isGenerating?: boolean
-
-  // Vidu/Veo/Kling/LTX-2/Seedance/Vidu Q2 模式（用于计算最大图片数）
-  viduMode?: string
-  veoMode?: string
-  klingMode?: string
-  mode?: string  // LTX-2 模式
-  seedanceMode?: string  // Seedance v1 模式
-  viduQ2Mode?: string  // Vidu Q2 模式
-  hailuo02FastMode?: boolean  // Hailuo 02 快速模式
-  kieSeedanceV3Version?: string  // KIE Seedance V3 版本
-  ppioKlingO1Mode?: string  // PPIO Kling O1 模式
-  ppioKling26Mode?: string  // PPIO Kling 2.6 Pro 模式
-  kieKlingV26Mode?: string  // KIE Kling 2.6 模式
-  falKlingV26ProMode?: string // Fal Kling 2.6 Pro 模式
-  ppioWan26Mode?: string  // PPIO Wan 2.6 模式
-
-  // 魔搭自定义模型 ID
-  modelscopeCustomModel?: string
 
   // 图片处理回调
   onImageUpload: (files: File[]) => void
@@ -73,23 +57,10 @@ const InputArea: React.FC<InputAreaProps> = ({
   setInput,
   currentModel,
   selectedModel,
+  modelParams,
   uploadedImages,
   isLoading,
   isGenerating,
-  viduMode,
-  veoMode,
-  klingMode,
-  mode,
-  seedanceMode,
-  viduQ2Mode,
-  hailuo02FastMode,
-  kieSeedanceV3Version,
-  ppioKlingO1Mode,
-  ppioKling26Mode,
-  kieKlingV26Mode,
-  falKlingV26ProMode,
-  ppioWan26Mode,
-  modelscopeCustomModel,
   onImageUpload,
   onImageRemove,
   onImageReplace,
@@ -132,33 +103,63 @@ const InputArea: React.FC<InputAreaProps> = ({
     setAlertDialog({ isOpen: true, title, message, type })
   }
 
-  // 当 uploadedVideos 或 uploadedImages 变化时，重建文件顺序
-  useEffect(() => {
-    // 只在混合上传模式下才需要维护顺序
-    const needsVideoUpload =
-      ((selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
-        (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')) ||
-      (selectedModel === 'kling-o1' &&
-        (ppioKlingO1Mode === 'reference-to-video' || ppioKlingO1Mode === 'video-edit')) ||
-      ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
-        mode === 'retake-video') ||
-      ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
-        viduQ2Mode === 'video-extension') ||
-      (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
-      ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control') ||
-      (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control') ||
-      (selectedModel === 'wan-2.6' && ppioWan26Mode === 'reference-to-video')
+  const inputLimits = resolveInputLimits(
+    selectedModel,
+    modelParams,
+    { imagesCount: uploadedImages.length, videosCount: uploadedVideos.length }
+  )
+  const maxImageCount = inputLimits.images.max
+  const minImageCount = inputLimits.images.min
+  const maxVideoCount = inputLimits.videos.max
+  const minVideoCount = inputLimits.videos.min
+  const videoConstraints = inputLimits.videoConstraints
+  const needsVideoUpload = maxVideoCount > 0
+  const needsVideoOnly = needsVideoUpload && maxImageCount === 0
+  const isMultiple = maxImageCount > 1
+  const shouldShowUpload = currentModel?.type !== 'audio' && (maxImageCount > 0 || needsVideoUpload)
+  const isEnglishPromptOnly = hasTag(selectedModel, 'english-prompt-only')
 
+  const formatLimitText = (min: number, max: number, unit: string) => {
+    if (max <= 0) return ''
+    if (min === max) return `${max}${unit}`
+    if (min > 0) return `${min}-${max}${unit}`
+    return `最多${max}${unit}`
+  }
+
+  const uploadHint = (() => {
     if (!needsVideoUpload) {
-      // 非混合模式，清空顺序
-      setCurrentFileOrder([])
+      return `上传图片（${formatLimitText(minImageCount, maxImageCount, '张图片')}）`
+    }
+
+    if (needsVideoOnly) {
+      return `上传视频（${formatLimitText(minVideoCount, maxVideoCount, '个视频')}）`
+    }
+
+    const videoText = formatLimitText(minVideoCount, maxVideoCount, '个视频')
+    const imageText = formatLimitText(minImageCount, maxImageCount, '张图片')
+    const fixedCounts = minVideoCount === maxVideoCount && minImageCount === maxImageCount
+    return fixedCounts
+      ? `上传${videoText} + ${imageText}（不能多也不能少）`
+      : `上传视频和图片（${videoText} + ${imageText}）`
+  })()
+
+  const isSameOrder = (a: FileOrderItem[], b: FileOrderItem[]) => {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].type !== b[i].type || a[i].index !== b[i].index) return false
+    }
+    return true
+  }
+
+  useEffect(() => {
+    if (!needsVideoUpload) {
+      if (currentFileOrder.length > 0) {
+        setCurrentFileOrder([])
+      }
       return
     }
 
-    // 构建新的文件顺序
     const newOrder: FileOrderItem[] = []
-
-    // 检查现有顺序中的文件是否还存在
     const existingVideoIndices = new Set<number>()
     const existingImageIndices = new Set<number>()
 
@@ -172,119 +173,41 @@ const InputArea: React.FC<InputAreaProps> = ({
       }
     })
 
-    // 添加新上传的视频（不在现有顺序中的）
     for (let i = 0; i < uploadedVideos.length; i++) {
       if (!existingVideoIndices.has(i)) {
         newOrder.push({ type: 'video', index: i })
       }
     }
 
-    // 添加新上传的图片（不在现有顺序中的）
     for (let i = 0; i < uploadedImages.length; i++) {
       if (!existingImageIndices.has(i)) {
         newOrder.push({ type: 'image', index: i })
       }
     }
 
-    setCurrentFileOrder(newOrder)
-  }, [uploadedVideos.length, uploadedImages.length, selectedModel, klingMode, ppioKlingO1Mode, ppioKling26Mode, kieKlingV26Mode, mode, viduQ2Mode, falKlingV26ProMode, ppioWan26Mode])
-  // 计算最大图片数
-  const maxImageCount = getMaxImageCount(
+    if (!isSameOrder(currentFileOrder, newOrder)) {
+      setCurrentFileOrder(newOrder)
+    }
+  }, [needsVideoUpload, uploadedVideos.length, uploadedImages.length, currentFileOrder])
+
+  const requirementCheck = validateGenerationRequirements(
     selectedModel,
-    selectedModel === 'vidu-q1' ? viduMode :
-      (selectedModel === 'veo3.1' || selectedModel === 'fal-ai-veo-3.1') ? veoMode :
-        (selectedModel === 'fal-ai-bytedance-seedance-v1' || selectedModel === 'bytedance-seedance-v1') ? seedanceMode :
-          (selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') ? viduQ2Mode :
-            (selectedModel === 'fal-ai-minimax-hailuo-02' || selectedModel === 'minimax-hailuo-02-fal') && hailuo02FastMode ? 'fast' :
-              (selectedModel === 'kie-seedance-v3' || selectedModel === 'seedance-v3-kie') ? kieSeedanceV3Version :
-                undefined
+    modelParams,
+    {
+      prompt: input,
+      imagesCount: uploadedImages.length,
+      videosCount: uploadedVideos.length
+    }
   )
 
-  // 是否允许多选
-  const isMultiple =
-    (selectedModel === 'vidu-q1' && viduMode === 'reference-to-video') ||
-    selectedModel === 'minimax-hailuo-02' ||
-    (selectedModel === 'veo3.1' && veoMode === 'reference-to-video') ||
-    ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') && viduQ2Mode === 'reference-to-video') ||
-    (selectedModel !== 'kling-2.5-turbo' &&
-      selectedModel !== 'minimax-hailuo-2.3' &&
-      selectedModel !== 'wan-2.5-preview')
-
-  // 检查是否是魔搭模型（不包括自定义模型，因为自定义模型需要单独判断）
-  const isModelscopeModel =
-    selectedModel === 'Tongyi-MAI/Z-Image-Turbo' ||
-    selectedModel === 'Qwen/Qwen-Image' ||
-    selectedModel === 'black-forest-labs/FLUX.1-Krea-dev' ||
-    selectedModel === 'MusePublic/14_ckpt_SD_XL' ||
-    selectedModel === 'MusePublic/majicMIX_realistic'
-
-  // 检查自定义模型是否支持图片编辑
-  const isModelscopeCustomWithImageEditing = selectedModel === 'modelscope-custom' && (() => {
-    if (!modelscopeCustomModel) return false
-
-    try {
-      const stored = localStorage.getItem('modelscope_custom_models')
-      if (stored) {
-        const models = JSON.parse(stored)
-        const currentModel = models.find((m: any) => m.id === modelscopeCustomModel)
-        if (currentModel && currentModel.modelType) {
-          return currentModel.modelType.imageEditing === true
-        }
-      }
-    } catch (e) {
-      logError('Failed to check custom model type:', e)
-    }
-    return false
-  })()
-
-  // 检查是否是 Qwen-Image-Edit-2509
-  const isQwenImageEdit = selectedModel === 'Qwen/Qwen-Image-Edit-2509'
-
-  // 计算生成按钮是否禁用
   const isGenerateDisabled = () => {
     if (isLoading) return true
-
-    // Qwen-Image-Edit-2509 必须同时有提示词和图片
-    if (isQwenImageEdit) {
-      return !input.trim() || uploadedImages.length === 0
+    if (currentModel?.type === 'audio' && !input.trim()) return true
+    if (currentModel?.type !== 'audio' && !input.trim() && uploadedImages.length === 0 && uploadedVideos.length === 0) {
+      return true
     }
-
-    // KIE Hailuo 2.3 必须同时有提示词和图片
-    if (selectedModel === 'kie-hailuo-2-3' || selectedModel === 'hailuo-2-3-kie') {
-      return !input.trim() || uploadedImages.length === 0
-    }
-
-    // 其他模型的逻辑保持不变
-    return !input.trim() && (currentModel?.type !== 'audio' && uploadedImages.length === 0)
+    return !requirementCheck.ok
   }
-
-  // 检查是否需要显示视频上传
-  // 1. Kling Video O1 的视频编辑和视频参考模式（支持视频+图片）
-  // 2. PPIO Kling O1 的参考生视频和视频编辑模式（支持视频+图片）
-  // 3. LTX-2 的视频编辑模式（仅支持视频）
-  // 4. Vidu Q2 的视频延长模式（仅支持视频）
-  const needsVideoUpload =
-    ((selectedModel === 'fal-ai-kling-video-o1' || selectedModel === 'kling-video-o1') &&
-      (klingMode === 'video-to-video-edit' || klingMode === 'video-to-video-reference')) ||
-    (selectedModel === 'kling-o1' &&
-      (ppioKlingO1Mode === 'reference-to-video' || ppioKlingO1Mode === 'video-edit')) ||
-    ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') &&
-      mode === 'retake-video') ||
-    ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') &&
-      viduQ2Mode === 'video-extension') ||
-    (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
-    ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control') ||
-    (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control')
-
-  // 检查是否只需要视频（LTX-2 视频编辑模式 和 Vidu Q2 视频延长模式）
-  const needsVideoOnly =
-    ((selectedModel === 'fal-ai-ltx-2' || selectedModel === 'ltx-2') && mode === 'retake-video') ||
-    ((selectedModel === 'fal-ai-vidu-q2' || selectedModel === 'vidu-q2') && viduQ2Mode === 'video-extension')
-
-  // 检查是否是 Kling 动作控制模式 (支持 KIE, PPIO 和 Fal)
-  const isMotionControlMode = (selectedModel === 'kling-2.6-pro' && ppioKling26Mode === 'motion-control') ||
-    (selectedModel === 'kie-kling-v2-6' && kieKlingV26Mode === 'motion-control') ||
-    ((selectedModel === 'fal-ai-kling-video-v2.6-pro' || selectedModel === 'kling-video-v2.6-pro') && falKlingV26ProMode === 'motion-control')
 
   // 辅助函数：获取视频时长
   const getVideoDuration = (file: File): Promise<number> => {
@@ -314,53 +237,56 @@ const InputArea: React.FC<InputAreaProps> = ({
     const currentImageCount = uploadedImages.length
 
     // 处理视频：只有在没有视频时才能上传
-    if (videoFiles.length > 0 && onVideoUpload && currentVideoCount === 0) {
+    if (videoFiles.length > 0 && onVideoUpload && currentVideoCount < maxVideoCount) {
       const file = videoFiles[0]
 
-      // 动作控制模式：检查视频大小和时长
-      if (isMotionControlMode) {
-        // 1. 检查大小 (≤ 100MB)
-        const MAX_SIZE = 100 * 1024 * 1024 // 100MB
-        if (file.size > MAX_SIZE) {
-          showAlert('视频大小限制', '文件大小不能超过 100MB', 'warning')
-          return
-        }
-
-        // 2. 检查时长 (3-30s)
-        try {
-          const duration = await getVideoDuration(file)
-          if (duration < 3 || duration > 30) {
-            showAlert('视频时长限制', `视频时长需在 3-30 秒之间（当前${duration.toFixed(1)}秒）`, 'warning')
+      if (videoConstraints) {
+        if (videoConstraints.maxSizeMB) {
+          const maxSizeBytes = videoConstraints.maxSizeMB * 1024 * 1024
+          if (file.size > maxSizeBytes) {
+            showAlert('视频大小限制', `文件大小不能超过 ${videoConstraints.maxSizeMB}MB`, 'warning')
             return
           }
-        } catch (e) {
-          showAlert('视频验证失败', '无法读取视频文件信息，请检查文件是否损坏', 'error')
-          return
+        }
+
+        if (videoConstraints.minDurationSec || videoConstraints.maxDurationSec) {
+          try {
+            const duration = await getVideoDuration(file)
+            if (videoConstraints.minDurationSec && duration < videoConstraints.minDurationSec) {
+              showAlert(
+                '视频时长限制',
+                `视频时长需 ≥ ${videoConstraints.minDurationSec} 秒（当前${duration.toFixed(1)}秒）`,
+                'warning'
+              )
+              return
+            }
+            if (videoConstraints.maxDurationSec && duration > videoConstraints.maxDurationSec) {
+              showAlert(
+                '视频时长限制',
+                `视频时长需 ≤ ${videoConstraints.maxDurationSec} 秒（当前${duration.toFixed(1)}秒）`,
+                'warning'
+              )
+              return
+            }
+          } catch (e) {
+            showAlert('视频验证失败', '无法读取视频文件信息，请检查文件是否损坏', 'error')
+            return
+          }
         }
       }
 
       onVideoUpload([file])
-    } else if (videoFiles.length > 0 && currentVideoCount > 0) {
-      // 已有视频，提示用户
-      showAlert('视频数量限制', '最多只能上传1个视频，请先删除现有视频', 'warning')
+    } else if (videoFiles.length > 0 && currentVideoCount >= maxVideoCount) {
+      showAlert('视频数量限制', `最多只能上传${maxVideoCount}个视频，请先删除现有视频`, 'warning')
     }
 
     // 处理图片：检查是否还有空位
     if (imageFiles.length > 0 && !needsVideoOnly) {
-      // 动作控制模式：只允许1张图片
-      if (isMotionControlMode) {
-        if (currentImageCount >= 1) {
-          showAlert('图片数量限制', '动作控制模式只能上传1张图片，请先删除现有图片', 'warning')
-        } else {
-          onImageUpload([imageFiles[0]])
-        }
+      const availableImageSlots = maxImageCount - currentImageCount
+      if (availableImageSlots > 0) {
+        onImageUpload(imageFiles)
       } else {
-        const availableImageSlots = maxImageCount - currentImageCount
-        if (availableImageSlots > 0) {
-          onImageUpload(imageFiles)
-        } else {
-          showAlert('图片数量限制', `最多只能上传${maxImageCount}张图片`, 'warning')
-        }
+        showAlert('图片数量限制', `最多只能上传${maxImageCount}张图片`, 'warning')
       }
     }
   }
@@ -460,42 +386,20 @@ const InputArea: React.FC<InputAreaProps> = ({
 
   // 计算混合上传的最大文件数
   const mixedMaxCount = needsVideoUpload
-    ? (needsVideoOnly ? 1 : 1 + maxImageCount)
+    ? (needsVideoOnly ? maxVideoCount : maxVideoCount + maxImageCount)
     : maxImageCount
 
   // 检查是否应该隐藏上传按钮
   const shouldHideUploadButton = (() => {
-    // KIE Grok Imagine 视频模型：已上传1张图片时隐藏
-    if ((selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie') &&
-      uploadedImages.length >= 1) {
-      return true
-    }
-
-    // KIE 可灵2.6 文/图生视频模式：API 只支持1张图片
-    if ((selectedModel === 'kie-kling-v2-6' || selectedModel === 'kling-v2-6-kie') &&
-      kieKlingV26Mode !== 'motion-control' &&
-      uploadedImages.length >= 1) {
-      return true
-    }
-
     // 混合上传模式：检查是否达到上限
     if (needsVideoUpload && !needsVideoOnly) {
       const currentVideoCount = uploadedVideos.length
       const currentImageCount = uploadedImages.length
-
-      // 动作控制模式：1视频+1图片时隐藏
-      if (isMotionControlMode && currentVideoCount >= 1 && currentImageCount >= 1) {
-        return true
-      }
-
-      // 其他混合模式：视频和图片都达到上限时隐藏
-      if (!isMotionControlMode && currentVideoCount >= 1 && currentImageCount >= maxImageCount) {
-        return true
-      }
+      return currentVideoCount >= maxVideoCount && currentImageCount >= maxImageCount
     }
 
     // 纯视频模式：已有1个视频时隐藏
-    if (needsVideoOnly && uploadedVideos.length >= 1) {
+    if (needsVideoOnly && uploadedVideos.length >= maxVideoCount) {
       return true
     }
 
@@ -510,21 +414,11 @@ const InputArea: React.FC<InputAreaProps> = ({
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 统一的文件上传区域（支持视频+图片混合上传） */}
-      {currentModel?.type !== 'audio' &&
-        selectedModel !== 'fal-ai-z-image-turbo' &&
-        selectedModel !== 'kie-grok-imagine' &&
-        selectedModel !== 'grok-imagine-kie' &&
-        !isModelscopeModel &&
-        // 自定义模型：只有支持图片编辑的才显示图片上传
-        !(selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing) && (
+      {shouldShowUpload && (
           <div className="mb-3">
             {needsVideoUpload && (
               <div className="text-xs text-zinc-400 mb-2">
-                {needsVideoOnly
-                  ? '上传视频（仅支持1个视频）'
-                  : isMotionControlMode
-                    ? '上传1个视频 + 1张图片（不能多也不能少）'
-                    : `上传视频和图片（视频1个 + 图片最多${maxImageCount}张）`}
+                {uploadHint}
               </div>
             )}
             <FileUploader
@@ -579,13 +473,13 @@ const InputArea: React.FC<InputAreaProps> = ({
           placeholder={
             currentModel?.type === 'audio'
               ? '输入要合成的文本'
-              : (selectedModel === 'kie-grok-imagine-video' || selectedModel === 'grok-imagine-video-kie' || selectedModel === 'black-forest-labs/FLUX.1-Krea-dev')
+              : isEnglishPromptOnly
                 ? '描述想要生成的内容（仅支持英文提示词）'
                 : '描述想要生成的内容'
           }
           className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${
             // 音频模型或没有图片上传组件的模型：使用较大高度
-            currentModel?.type === 'audio' || selectedModel === 'fal-ai-z-image-turbo' || selectedModel === 'kie-grok-imagine' || selectedModel === 'grok-imagine-kie' || isModelscopeModel || (selectedModel === 'modelscope-custom' && !isModelscopeCustomWithImageEditing)
+            currentModel?.type === 'audio' || !shouldShowUpload
               ? 'min-h-[176px]'
               : 'min-h-[100px]'
             } resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}

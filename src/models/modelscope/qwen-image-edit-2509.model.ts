@@ -19,6 +19,30 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
       expectedAttempts: 40
     }
   },
+  inputLimits: {
+    images: { exact: 1 },
+    videos: { max: 0 }
+  },
+  requirements: [
+    {
+      id: 'qwen-image-edit-image',
+      require: { images: { exact: 1 } },
+      message: {
+        title: '图片必需',
+        message: '图像编辑需要上传1张图片',
+        type: 'warning'
+      }
+    },
+    {
+      id: 'qwen-image-edit-prompt',
+      require: { prompt: true },
+      message: {
+        title: '提示词必需',
+        message: '请输入编辑需求的提示词',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'modelscopeImageSize',

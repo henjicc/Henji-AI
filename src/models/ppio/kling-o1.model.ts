@@ -23,6 +23,58 @@ export const klingO1Model = defineModel({
       expectedAttempts: 60
     }
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'ppioKlingO1Mode === "start-end-frame"',
+        images: { exact: 2 }
+      },
+      {
+        when: 'ppioKlingO1Mode === "reference-to-video"',
+        images: { max: 7 },
+        videos: { exact: 1 }
+      },
+      {
+        when: 'ppioKlingO1Mode === "video-edit"',
+        images: { max: 4 },
+        videos: { exact: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'kling-o1-start-end-frame-images',
+      when: 'ppioKlingO1Mode === "start-end-frame"',
+      require: { images: { exact: 2 } },
+      message: {
+        title: '图片必需',
+        message: '首尾帧模式需要上传2张图片',
+        type: 'warning'
+      }
+    },
+    {
+      id: 'kling-o1-reference-video',
+      when: 'ppioKlingO1Mode === "reference-to-video"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '参考生视频模式需要上传视频才能生成',
+        type: 'warning'
+      }
+    },
+    {
+      id: 'kling-o1-video-edit',
+      when: 'ppioKlingO1Mode === "video-edit"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '视频编辑模式需要上传视频才能生成',
+        type: 'warning'
+      }
+    }
+  ],
 
   params: [
     // 1. Mode selection

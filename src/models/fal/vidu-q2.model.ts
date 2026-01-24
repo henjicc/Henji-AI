@@ -13,6 +13,37 @@ export const viduQ2Model = defineModel({
     description: 'Vidu Q2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'viduQ2Mode === "image-to-video"',
+        images: { max: 1 }
+      },
+      {
+        when: 'viduQ2Mode === "reference-to-video"',
+        images: { max: 7 }
+      },
+      {
+        when: 'viduQ2Mode === "video-extension"',
+        images: { max: 0 },
+        videos: { exact: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'vidu-q2-video-extension',
+      when: 'viduQ2Mode === "video-extension"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '视频延长模式需要上传1个视频才能生成',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'viduQ2Mode',

@@ -5,6 +5,40 @@
 import { defineModel } from '@/core'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
 
+const MODELSCOPE_CUSTOM_STORAGE_KEY = 'modelscope_custom_models'
+
+const getCustomModel = (modelId: string): { id?: string; modelType?: { imageEditing?: boolean } } | undefined => {
+  try {
+    if (typeof localStorage === 'undefined') return undefined
+    const stored = localStorage.getItem(MODELSCOPE_CUSTOM_STORAGE_KEY)
+    if (!stored) return undefined
+    const parsed = JSON.parse(stored)
+    if (!Array.isArray(parsed)) return undefined
+    return parsed.find((item: unknown) => {
+      if (!item || typeof item !== 'object') return false
+      const record = item as Record<string, unknown>
+      return record.id === modelId
+    }) as { id?: string; modelType?: { imageEditing?: boolean } } | undefined
+  } catch {
+    return undefined
+  }
+}
+
+const resolveCustomInputLimits = (params: Record<string, unknown>) => {
+  const customId = typeof params.modelscopeCustomModel === 'string' ? params.modelscopeCustomModel.trim() : ''
+  if (!customId) {
+    return { images: { max: 0 }, videos: { max: 0 } }
+  }
+
+  const model = getCustomModel(customId)
+  const supportsImageEditing = model?.modelType?.imageEditing === true
+
+  return {
+    images: { max: supportsImageEditing ? 1 : 0 },
+    videos: { max: 0 }
+  }
+}
+
 export const modelscopeCustomModel = defineModel({
   meta: {
     id: 'modelscope-custom',
@@ -19,6 +53,7 @@ export const modelscopeCustomModel = defineModel({
       expectedAttempts: 40
     }
   },
+  inputLimits: resolveCustomInputLimits,
   params: [
     {
       id: 'modelscopeCustomModel',

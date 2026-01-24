@@ -38,9 +38,10 @@ export const useModelVisibility = (
       const currentModel = currentProvider?.models.find(m => m.id === selectedModel)
       const isTypeHidden = currentModel && hiddenTypes.has(currentModel.type)
       const isModelHidden = hiddenModels.has(currentModelKey)
+      const isInvalidSelection = !currentProvider || !currentModel
 
       // 如果当前模型被隐藏，切换到第一个可见的模型
-      if (isProviderHidden || isTypeHidden || isModelHidden) {
+      if (isInvalidSelection || isProviderHidden || isTypeHidden || isModelHidden) {
         const visibleProviders = getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels)
 
         if (visibleProviders.length > 0 && visibleProviders[0].models.length > 0) {

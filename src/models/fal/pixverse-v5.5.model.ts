@@ -13,6 +13,10 @@ export const pixverseV55Model = defineModel({
     description: 'PixVerse V5.5 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 2 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'pixverseAspectRatio',

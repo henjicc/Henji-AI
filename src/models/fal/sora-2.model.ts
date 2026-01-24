@@ -13,6 +13,10 @@ export const sora2Model = defineModel({
     description: 'Sora 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'falSora2Mode',

@@ -14,6 +14,10 @@ export const wan25PreviewModel = defineModel({
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-wan-2.5-preview', 'wan-25-preview']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'falWan25VideoDuration',

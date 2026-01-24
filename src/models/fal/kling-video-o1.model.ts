@@ -13,6 +13,33 @@ export const klingVideoO1Model = defineModel({
     description: 'Kling Video O1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 2 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'falKlingVideoO1Mode === "reference-to-video"',
+        images: { max: 7 }
+      },
+      {
+        when: 'falKlingVideoO1Mode === "video-to-video-edit" || falKlingVideoO1Mode === "video-to-video-reference"',
+        images: { max: 7 },
+        videos: { exact: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'kling-video-o1-video-edit',
+      when: 'falKlingVideoO1Mode === "video-to-video-edit" || falKlingVideoO1Mode === "video-to-video-reference"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '视频编辑/参考模式需要上传1个视频才能生成',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'falKlingVideoO1Mode',

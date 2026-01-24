@@ -136,9 +136,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   }, [])
 
   // 获取所有可用的供应商（用于筛选按钮）
-  const allProviders = useMemo(() => {
-    return getAvailableProviders()
-  }, [])
+  const allProviders = getAvailableProviders()
 
   // 获取过滤后的可见模型列表
   const visibleProviders = useMemo(() => {
@@ -408,5 +406,4 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
 }
 
 export default ModelSelectorPanel
-
 

@@ -1,18 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FileOrderItem } from '../components/InputArea'
-
+import { getAvailableProviders } from '@/utils/modelHelpers'
 /**
  * 纯 UI 状态管理（不包含模型参数）
  * 职责：管理界面交互状态
  * 文件大小: < 100 行
  */
 export const useUIState = () => {
-  // 基础 UI 状态
-  const [input, setInput] = useState('')
-  const [selectedProvider, setSelectedProvider] = useState('ppio')
-  const [selectedModel, setSelectedModel] = useState('seedream-4.0')
+  const providersSnapshot = getAvailableProviders()
+  const providersSignature = providersSnapshot.map(p => `${p.id}:${p.models.map(m => m.id).join(',')}`).join('|')
+  const defaultSelection = (providersSnapshot[0] && providersSnapshot[0].models[0])
+    ? { providerId: providersSnapshot[0].id, modelId: providersSnapshot[0].models[0].id }
+    : { providerId: '', modelId: '' }
 
-  // 文件上传状态
+  const [input, setInput] = useState('')
+  const [selectedProvider, setSelectedProvider] = useState(defaultSelection.providerId)
+  const [selectedModel, setSelectedModel] = useState(defaultSelection.modelId)
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([])
   const [uploadedVideos, setUploadedVideos] = useState<string[]>([])
@@ -21,13 +24,11 @@ export const useUIState = () => {
   const [fileOrder, setFileOrder] = useState<FileOrderItem[]>([])
   const [uploadedVideoDuration, setUploadedVideoDuration] = useState(0)
 
-  // 模型筛选状态
   const [modelFilterProvider, setModelFilterProvider] = useState<string>('all')
   const [modelFilterType, setModelFilterType] = useState<'all' | 'favorite' | 'image' | 'video' | 'audio'>('all')
   const [modelFilterFunction, setModelFilterFunction] = useState<string>('all')
   const [favoriteModels, setFavoriteModels] = useState<Set<string>>(new Set())
 
-  // 弹窗状态
   const [alertDialog, setAlertDialog] = useState({
     isOpen: false,
     title: '',
@@ -35,13 +36,29 @@ export const useUIState = () => {
     type: 'warning' as 'info' | 'warning' | 'error'
   })
 
-  // 显示提示弹窗的函数
-  const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
+  const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') =>
     setAlertDialog({ isOpen: true, title, message, type })
-  }
+  useEffect(() => {
+    const currentProviders = getAvailableProviders()
+    if (currentProviders.length === 0) return
+
+    const isValidSelection = currentProviders.some(
+      provider =>
+        provider.id === selectedProvider &&
+        provider.models.some(model => model.id === selectedModel)
+    )
+
+    if (!isValidSelection) {
+      const firstProvider = currentProviders[0]
+      const firstModel = firstProvider.models[0]
+      if (firstModel) {
+        setSelectedProvider(firstProvider.id)
+        setSelectedModel(firstModel.id)
+      }
+    }
+  }, [providersSignature, selectedProvider, selectedModel])
 
   return {
-    // 基础状态
     input,
     setInput,
     selectedProvider,
@@ -49,7 +66,6 @@ export const useUIState = () => {
     selectedModel,
     setSelectedModel,
 
-    // 文件上传状态
     uploadedImages,
     setUploadedImages,
     uploadedFilePaths,
@@ -65,7 +81,6 @@ export const useUIState = () => {
     uploadedVideoDuration,
     setUploadedVideoDuration,
 
-    // 模型筛选状态
     modelFilterProvider,
     setModelFilterProvider,
     modelFilterType,
@@ -75,7 +90,6 @@ export const useUIState = () => {
     favoriteModels,
     setFavoriteModels,
 
-    // 弹窗状态
     alertDialog,
     setAlertDialog,
     showAlert

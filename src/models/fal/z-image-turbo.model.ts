@@ -14,6 +14,10 @@ export const zImageTurboModel = defineModel({
     description: 'Z-Image Turbo 快速图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image', 'fast']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 }
+  },
   params: [
     // 1. 图片尺寸
     {

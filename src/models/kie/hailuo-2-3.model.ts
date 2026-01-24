@@ -21,6 +21,30 @@ export const kieHailuo23Model = defineModel({
       expectedAttempts: 40
     }
   },
+  inputLimits: {
+    images: { exact: 1 },
+    videos: { max: 0 }
+  },
+  requirements: [
+    {
+      id: 'hailuo-2-3-image',
+      require: { images: { exact: 1 } },
+      message: {
+        title: '图片必需',
+        message: '海螺 2.3 是图生视频模型，必须上传1张图片才能生成',
+        type: 'warning'
+      }
+    },
+    {
+      id: 'hailuo-2-3-prompt',
+      require: { prompt: true },
+      message: {
+        title: '提示词必需',
+        message: '请输入提示词描述期望的视频效果',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'kieHailuo23Mode',

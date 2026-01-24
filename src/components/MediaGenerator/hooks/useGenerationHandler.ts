@@ -14,6 +14,8 @@ export const useGenerationHandler = (
   uploadedImages: string[],
   uploadedVideos: string[],
   uploadedVideoFiles: File[],
+  uploadedFilePaths: string[],
+  uploadedVideoFilePaths: string[],
   onGenerate: (input: string, model: string, type: string, options: any) => void
 ) => {
   const handleGenerate = useCallback(async () => {
@@ -34,6 +36,8 @@ export const useGenerationHandler = (
       ...modelState.params,  // 传递所有模型参数（包括 maxImages 等）
       images: uploadedImages,
       videos: uploadedVideos,
+      uploadedFilePaths,
+      uploadedVideoFilePaths,
       // 仅用于需要参考视频的模型
       video: uploadedVideoFiles[0]
     }
@@ -43,7 +47,17 @@ export const useGenerationHandler = (
 
     // 调用生成回调
     onGenerate(input, selectedModel, modelType, options)
-  }, [selectedModel, input, modelState.params, uploadedImages, uploadedVideos, onGenerate])
+  }, [
+    selectedModel,
+    input,
+    modelState.params,
+    uploadedImages,
+    uploadedVideos,
+    uploadedVideoFiles,
+    uploadedFilePaths,
+    uploadedVideoFilePaths,
+    onGenerate
+  ])
 
   return { handleGenerate }
 }

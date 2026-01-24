@@ -12,6 +12,8 @@ import type { RequestConfig } from './RequestConfig'
 import type { PricingConfig } from './PricingConfig'
 import type { ParamDef } from './ParamDef'
 import type { Linkage } from './Linkage'
+import type { InputLimits } from './InputLimits'
+import type { GenerationRequirement } from './GenerationRequirements'
 
 /**
  * 模型类型
@@ -322,6 +324,16 @@ export interface ModelDefinition {
    * 详细类型将在 Phase 1-1-3 中定义
    */
   linkages?: Linkage[]
+
+  /**
+   * Generation requirements (optional)
+   */
+  requirements?: GenerationRequirement[]
+
+  /**
+   * Input limits for uploads (optional)
+   */
+  inputLimits?: InputLimits
 
   /**
    * 端点配置

@@ -17,7 +17,8 @@ import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
 import AlertDialog from '../ui/AlertDialog'
 import PanelTrigger from '../ui/PanelTrigger'
-import { getMaxImageCount } from './utils/constants'
+import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
@@ -100,6 +101,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uiState.uploadedImages,
     uiState.uploadedVideos,
     uiState.uploadedVideoFiles,
+    uiState.uploadedFilePaths,
+    uiState.uploadedVideoFilePaths,
     onGenerate
   )
 
@@ -107,6 +110,52 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const providers = getAvailableProviders()
   const currentProvider = providers.find(p => p.id === uiState.selectedProvider)
   const currentModel = getModelInfo(uiState.selectedModel)
+  const inputLimits = resolveInputLimits(
+    uiState.selectedModel,
+    modelState.params,
+    { imagesCount: uiState.uploadedImages.length, videosCount: uiState.uploadedVideos.length }
+  )
+  const maxImageCount = inputLimits.images.max
+
+  useEffect(() => {
+    if (maxImageCount === 0 && uiState.uploadedImages.length > 0) {
+      uiState.setUploadedImages([])
+      uiState.setUploadedFilePaths([])
+      return
+    }
+
+    if (uiState.uploadedImages.length > maxImageCount) {
+      uiState.setUploadedImages(prev => prev.slice(0, maxImageCount))
+      uiState.setUploadedFilePaths(prev => prev.slice(0, maxImageCount))
+    }
+  }, [maxImageCount, uiState.uploadedImages.length, uiState.setUploadedImages, uiState.setUploadedFilePaths])
+
+  useEffect(() => {
+    const maxVideoCount = inputLimits.videos.max
+    if (maxVideoCount === 0 && uiState.uploadedVideos.length > 0) {
+      uiState.setUploadedVideos([])
+      uiState.setUploadedVideoFiles([])
+      uiState.setUploadedVideoFilePaths([])
+      uiState.setUploadedVideoDuration(0)
+      return
+    }
+
+    if (uiState.uploadedVideos.length > maxVideoCount) {
+      uiState.setUploadedVideos(prev => prev.slice(0, maxVideoCount))
+      uiState.setUploadedVideoFiles(prev => prev.slice(0, maxVideoCount))
+      uiState.setUploadedVideoFilePaths(prev => prev.slice(0, maxVideoCount))
+      if (maxVideoCount === 0) {
+        uiState.setUploadedVideoDuration(0)
+      }
+    }
+  }, [
+    inputLimits.videos.max,
+    uiState.uploadedVideos.length,
+    uiState.setUploadedVideos,
+    uiState.setUploadedVideoFiles,
+    uiState.setUploadedVideoFilePaths,
+    uiState.setUploadedVideoDuration
+  ])
 
   // 6. 暴露 setter 给父组件
   useEffect(() => {
@@ -141,10 +190,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       }
     }
 
-    const getMaxCount = () => getMaxImageCount(
+    const getMaxCount = () => resolveInputLimits(
       uiState.selectedModel,
-      modelState.params.mode || modelState.params.version
-    )
+      modelState.params,
+      { imagesCount: uiState.uploadedImages.length, videosCount: uiState.uploadedVideos.length }
+    ).images.max
 
     const handleGlobalPasteImage = async (e: Event) => {
       const customEvent = e as CustomEvent<{
@@ -269,103 +319,36 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
   // 9. 生成按钮处理（带验证）
   const handleGenerate = async () => {
-    if ((!uiState.input.trim() && uiState.uploadedImages.length === 0) || isLoading) return
+    if (isLoading) return
 
-    // === 模型特定验证 ===
+    const requirementCheck = validateGenerationRequirements(
+      uiState.selectedModel,
+      modelState.params,
+      {
+        prompt: uiState.input,
+        imagesCount: uiState.uploadedImages.length,
+        videosCount: uiState.uploadedVideos.length
+      }
+    )
 
-    // 1. Seedance v1 Pro 快速模式限制
-    if ((uiState.selectedModel === 'fal-ai-bytedance-seedance-v1' ||
-      uiState.selectedModel === 'bytedance-seedance-v1') &&
-      modelState.params.falSeedanceV1Version === 'pro' &&
-      modelState.params.falSeedanceV1FastMode &&
-      modelState.params.falSeedanceV1Mode === 'image-to-video' &&
-      uiState.uploadedImages.length >= 2) {
+    if (!requirementCheck.ok && requirementCheck.message) {
       uiState.showAlert(
-        '不支持的参数组合',
-        'Pro模型的快速模式不支持结束帧（首尾帧）',
-        'warning'
+        requirementCheck.message.title,
+        requirementCheck.message.message,
+        requirementCheck.message.type || 'warning'
       )
       return
     }
 
-    // 2. KIE Hailuo 2.3 必需条件
-    if (uiState.selectedModel === 'kie-hailuo-2-3' ||
-      uiState.selectedModel === 'hailuo-2-3-kie') {
-      if (uiState.uploadedImages.length === 0) {
-        uiState.showAlert(
-          '图片必需',
-          'KIE 海螺 2.3 是图生视频模型，必须上传图片才能生成',
-          'warning'
-        )
-        return
-      }
-      if (!uiState.input.trim()) {
-        uiState.showAlert(
-          '提示词必需',
-          '请输入提示词描述期望的视频效果',
-          'warning'
-        )
-        return
-      }
+    const hasAnyInput = uiState.input.trim().length > 0 ||
+      uiState.uploadedImages.length > 0 ||
+      uiState.uploadedVideos.length > 0
+
+    if (!hasAnyInput) {
+      uiState.showAlert('缺少输入', '请输入提示词或上传素材后再生成', 'warning')
+      return
     }
 
-    // 3. Kling O1 多模式验证
-    if (uiState.selectedModel === 'kling-o1') {
-      const mode = modelState.params.ppioKlingO1Mode || 'text-image-to-video'
-
-      if (mode === 'start-end-frame' && uiState.uploadedImages.length !== 2) {
-        uiState.showAlert(
-          '图片必需',
-          '首尾帧模式需要上传2张图片',
-          'warning'
-        )
-        return
-      }
-      if (mode === 'reference-to-video' && uiState.uploadedVideoFiles.length === 0) {
-        uiState.showAlert(
-          '视频必需',
-          '参考生视频模式需要上传视频才能生成',
-          'warning'
-        )
-        return
-      }
-      if (mode === 'video-edit' && uiState.uploadedVideoFiles.length === 0) {
-        uiState.showAlert(
-          '视频必需',
-          '视频编辑模式需要上传视频才能生成',
-          'warning'
-        )
-        return
-      }
-    }
-
-    // 4. 动作控制模式验证 (PPIO/Fal/KIE Kling 2.6)
-    const isKling26PPIO = uiState.selectedModel === 'kling-2.6-pro' && modelState.params.ppioKling26Mode === 'motion-control'
-    const isKling26Fal = (uiState.selectedModel === 'fal-ai-kling-video-v2.6-pro' || uiState.selectedModel === 'kling-video-v2.6-pro') &&
-      modelState.params.falKlingV26ProMode === 'motion-control'
-    const isKling26KIE = (uiState.selectedModel === 'kie-kling-v2-6' || uiState.selectedModel === 'kling-v2-6-kie') &&
-      modelState.params.kieKlingV26Mode === 'motion-control'
-
-    if (isKling26PPIO || isKling26Fal || isKling26KIE) {
-      if (uiState.uploadedImages.length !== 1) {
-        uiState.showAlert(
-          '图片必需',
-          '动作控制模式需要上传1张图片（不能多也不能少）',
-          'warning'
-        )
-        return
-      }
-      if (uiState.uploadedVideoFiles.length !== 1) {
-        uiState.showAlert(
-          '视频必需',
-          '动作控制模式需要上传1个视频（不能多也不能少）',
-          'warning'
-        )
-        return
-      }
-    }
-
-    // 验证通过，执行生成
     handleGenerateRequest()
   }
 
@@ -451,7 +434,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onFileOrderChange={uiState.setFileOrder}
         onImageUpload={(files) => imageUpload.handleImageFileUpload(
           files,
-          getMaxImageCount(uiState.selectedModel, modelState.params.mode || modelState.params.version)
+          maxImageCount
         )}
         onVideoUpload={videoUpload.handleVideoUpload}
         onImageRemove={imageUpload.removeImage}
@@ -461,11 +444,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         onImageClick={onImageClick}
         onPaste={(e) => imageUpload.handlePaste(
           e,
-          getMaxImageCount(uiState.selectedModel, modelState.params.mode || modelState.params.version)
+          maxImageCount
         )}
         onImageDrop={(files) => imageUpload.handleImageFileDrop(
           files,
-          getMaxImageCount(uiState.selectedModel, modelState.params.mode || modelState.params.version)
+          maxImageCount
         )}
         onDragStateChange={imageUpload.setIsDraggingImage}
         onVideoReplace={videoUpload.handleVideoReplace}
@@ -481,9 +464,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         }}
         selectedModel={uiState.selectedModel}
         currentModel={currentModel}
+        modelParams={modelState.params}
         isLoading={isLoading}
         isGenerating={isGenerating}
-        modelscopeCustomModel={modelState.params.modelscopeCustomModel}
         onGenerate={handleGenerate}
       />
 

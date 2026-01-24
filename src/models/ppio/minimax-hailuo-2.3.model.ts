@@ -15,6 +15,10 @@ export const minimaxHailuo23Model = defineModel({
     description: 'Minimax 海螺 2.3 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 }
+  },
   params: [
     // 1. 时长
     {

@@ -21,6 +21,10 @@ export const kieHailuo02Model = defineModel({
       expectedAttempts: 40
     }
   },
+  inputLimits: {
+    images: { max: 2 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieHailuo02Duration',

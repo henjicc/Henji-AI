@@ -57,7 +57,7 @@ export const seedream40Model = defineModel({
         progress: {
             mode: 'time',
             baseDurationMs: 20000,
-            perUnitMs: 15000,
+            perUnitMs: 20000,
             scaleWith: 'maxImages',
             maxDurationMs: 180000
         }

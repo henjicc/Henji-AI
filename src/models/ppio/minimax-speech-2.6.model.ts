@@ -13,6 +13,10 @@ export const minimaxSpeech26Model = defineModel({
     description: 'Minimax Speech 2.6 音频生成模型，支持高质量语音合成',
     tags: ['audio', 'text-to-speech', 'voice-synthesis']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 }
+  },
   params: [
     // 1. 音频规格
     {

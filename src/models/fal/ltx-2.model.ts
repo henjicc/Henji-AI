@@ -13,6 +13,33 @@ export const ltx2Model = defineModel({
     description: 'LTX 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'falLtx2Mode === "image-to-video"',
+        images: { max: 1 }
+      },
+      {
+        when: 'falLtx2Mode === "retake-video"',
+        images: { max: 0 },
+        videos: { exact: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'ltx-2-retake-video',
+      when: 'falLtx2Mode === "retake-video"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '视频编辑模式需要上传1个视频才能生成',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
     {
       id: 'falLtx2Mode',
