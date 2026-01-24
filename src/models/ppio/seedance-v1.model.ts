@@ -100,7 +100,7 @@ export const seedanceV1Model = defineModel({
   endpoints: {
     selector: async (params) => {
       const images = params.images || []
-      const variant = params.variant || 'lite'
+      const variant = params.ppioSeedanceV1Variant || params.variant || 'lite'
 
       if (images.length > 0) {
         return `/async/seedance-v1-${variant}-i2v`
@@ -112,23 +112,29 @@ export const seedanceV1Model = defineModel({
   request: {
     builder: (params) => {
       const images = params.images || []
-      const resolution = params.resolution || '720p'
-      const aspect = params.aspect_ratio || '16:9'
-      const duration = params.duration || 5
-      const camera_fixed = params.camera_fixed || false
+      const resolution = params.ppioSeedanceV1Resolution || params.resolution || '720p'
+      const aspect = params.ppioSeedanceV1AspectRatio || params.aspect_ratio || '16:9'
+      const duration = params.ppioSeedanceV1VideoDuration || params.duration || 5
+      const camera_fixed = params.ppioSeedanceV1CameraFixed || params.camera_fixed || false
       const prompt = params.prompt || ''
 
       const requestData: any = {
         prompt,
         resolution,
-        aspect_ratio: aspect,
         duration,
         camera_fixed,
         seed: -1
       }
 
+      if (aspect && aspect !== 'smart') {
+        requestData.aspect_ratio = aspect
+      }
+
       if (images.length > 0) {
         requestData.image = images[0]
+        if (images.length > 1) {
+          requestData.last_image = images[1]
+        }
       }
 
       return requestData

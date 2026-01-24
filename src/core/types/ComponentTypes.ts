@@ -34,6 +34,7 @@ export type ComponentType =
   | 'radio'
   // 复合组件
   | 'panel'
+  | 'composite'
   | 'image-upload'
   | 'video-upload'
   // 特殊组件

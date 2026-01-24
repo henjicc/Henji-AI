@@ -2663,6 +2663,7 @@ const ConversationWorkspace: React.FC = () => {
             delete sanitizedOptions.videos
             delete sanitizedOptions.video_url
             delete sanitizedOptions.uploadedVideos
+            delete sanitizedOptions.video
           }
 
           // 转换文件路径为相对路径

@@ -4,77 +4,120 @@
 
 import { defineModel } from '@/core'
 
+const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
+
+function mapSeedream40ImageSize(ratio: string): string {
+  if (!ratio) return 'square_hd'
+  if (ratio.includes('_')) return ratio
+  if (ratio === '1:1') return 'square_hd'
+
+  const [w, h] = ratio.split(':').map(Number)
+  if (!w || !h) return 'square_hd'
+
+  const prefix = w / h > 1 ? 'landscape' : 'portrait'
+
+  if (ratio === '4:3' || ratio === '3:4') return `${prefix}_4_3`
+  if (ratio === '3:2' || ratio === '2:3') return `${prefix}_3_2`
+  if (ratio === '16:9' || ratio === '9:16') return `${prefix}_16_9`
+  if (ratio === '21:9') return 'landscape_21_9'
+
+  return 'square_hd'
+}
+
 export const kieSeedream40Model = defineModel({
   meta: {
     id: 'kie-seedream-4.0',
     provider: 'kie',
     type: 'image',
-    name: 'Seedream 4.0',
-    description: 'Seedream 4.0 图片生成模型',
-    tags: ['image', 'text-to-image', 'image-to-image']
+    name: { zh: '即梦图片 4.0', en: 'Seedream 4.0' },
+    description: { zh: 'KIE Seedream 4.0 图像生成模型', en: 'KIE Seedream 4.0 image generation model' },
+    tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-kie'],
+    aliases: ['seedream-4.0-kie']
   },
   params: [
     {
       id: 'kieSeedream40AspectRatio',
       type: 'dropdown',
       order: 1,
-      label: { zh: '宽高比', en: 'Aspect Ratio' },
-      defaultValue: '1:1',
+      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      default: '1:1',
       options: [
-        { value: 'smart', label: '智能' },
+        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
         { value: '1:1', label: '1:1' },
+        { value: '4:3', label: '4:3' },
+        { value: '3:4', label: '3:4' },
+        { value: '3:2', label: '3:2' },
+        { value: '2:3', label: '2:3' },
         { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' }
+        { value: '9:16', label: '9:16' },
+        { value: '21:9', label: '21:9' }
       ]
-    }
-  ],
-  linkages: [
+    },
     {
-      trigger: 'uploadedImages',
-      effect: 'autoSwitch',
-      target: 'kieSeedream40AspectRatio',
-      condition: (images) => images?.length > 0,
-      value: 'smart'
+      id: 'kieSeedream40Resolution',
+      type: 'dropdown',
+      order: 2,
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '2K',
+      options: [
+        { value: '2K', label: '2K' },
+        { value: '4K', label: '4K' }
+      ]
+    },
+    {
+      id: 'kieSeedream40MaxImages',
+      type: 'number',
+      order: 3,
+      name: { zh: '数量', en: 'Max Images' },
+      default: 1,
+      min: 1,
+      max: 6,
+      step: 1
     }
   ],
-  endpoints: {
-    selector: async (params) => {
-      const images = params.images || []
-      return images.length === 0
-        ? 'seedream/4.0-text-to-image'
-        : 'seedream/4.0-edit'
-    }
-  },
+  linkages: [],
+  endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
       const images = params.images || []
-      const modelName = images.length === 0
-        ? 'seedream/4.0-text-to-image'
-        : 'seedream/4.0-edit'
+      const prompt = params.prompt || ''
+      const aspectRatio = params.kieSeedream40AspectRatio || params.image_size || params.aspect_ratio
+      const resolution = params.kieSeedream40Resolution || params.image_resolution || params.resolution
+      const maxImages = params.kieSeedream40MaxImages || params.max_images || params.maxImages
 
-      const requestData: any = {
-        model: modelName,
-        input: {
-          prompt: params.prompt || ''
-        }
+      const modelName = images.length === 0
+        ? 'bytedance/seedream-v4-text-to-image'
+        : 'bytedance/seedream-v4-edit'
+
+      const input: Record<string, unknown> = { prompt }
+
+      if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+        input.image_size = mapSeedream40ImageSize(String(aspectRatio))
       }
 
-      if (params.aspect_ratio && params.aspect_ratio !== 'smart' && params.aspect_ratio !== 'auto') {
-        requestData.input.aspect_ratio = params.aspect_ratio
+      if (resolution) {
+        input.image_resolution = resolution
+      }
+
+      if (maxImages !== undefined) {
+        input.max_images = maxImages
       }
 
       if (images.length > 0) {
-        requestData.input.image_urls = images
+        input.image_urls = images
       }
 
-      return requestData
+      return {
+        model: modelName,
+        input
+      }
     }
   },
   pricing: {
     currency: '¥',
     calculator: () => 0.12,
-    description: '基础价格 ¥0.12/张'
+    description: '基础价格 ¥0.12/次'
   }
 })
 
-export default kieSeedream40Model;
+export default kieSeedream40Model

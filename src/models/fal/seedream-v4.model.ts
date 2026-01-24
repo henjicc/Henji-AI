@@ -21,7 +21,14 @@ export const seedreamV4Model = defineModel({
       name: { zh: '生成数量', en: 'Number of Images' },
       default: 1,
       min: 1,
-      max: 4
+      max: 6
+    },
+    {
+      id: 'imageSize',
+      order: 2,
+      type: 'text',
+      name: { zh: '尺寸', en: 'Image Size' },
+      default: '2048*2048'
     }
   ],
   linkages: [],
@@ -47,7 +54,7 @@ export const seedreamV4Model = defineModel({
       const requestData: any = {
         prompt,
         image_size: imageSize,
-        num_images: params.num_images || 1,
+        num_images: params.falSeedream40NumImages || 1,
         enable_safety_checker: false
       }
 

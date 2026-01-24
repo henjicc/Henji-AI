@@ -12,6 +12,7 @@ import type { I18nText } from './I18nText'
 export type PanelType =
   | 'resolution'        // 分辨率面板
   | 'model-selector'    // 模型选择面板
+  | 'modelscope-custom-model' // ModelScope 自定义模型面板
   | 'voice-selector'    // 音色选择面板
   | 'style-gallery'     // 风格画廊面板
   | 'color-picker'      // 颜色选择器面板

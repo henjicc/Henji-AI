@@ -16,7 +16,7 @@ const PARAM_RENAME_MAP: Record<string, Record<string, string>> = {
     "numImages": "falSeedream40NumImages"
   },
   "fal-ai-kling-image-o1": {
-    "num_images": "falKlingImageO1Num_images",
+    "num_images": "falKlingImageO1NumImages",
     "aspectRatio": "falKlingImageO1AspectRatio"
   },
   "fal-ai-kling-video-v2.6-pro": {
@@ -26,11 +26,11 @@ const PARAM_RENAME_MAP: Record<string, Record<string, string>> = {
     "videoDuration": "falLtx2VideoDuration"
   },
   "fal-ai-nano-banana-pro": {
-    "num_images": "falNanoBananaProNum_images",
+    "num_images": "falNanoBananaProNumImages",
     "aspectRatio": "falNanoBananaProAspectRatio"
   },
   "fal-ai-nano-banana": {
-    "num_images": "falNanoBananaNum_images",
+    "num_images": "falNanoBananaNumImages",
     "aspectRatio": "falNanoBananaAspectRatio"
   },
   "fal-ai-pixverse-v5.5": {

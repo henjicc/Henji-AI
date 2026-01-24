@@ -115,7 +115,7 @@ export const wan26Model = defineModel({
       type: 'switch',
       order: 7,
       name: { zh: '提示词扩展', en: 'Prompt Extend' },
-      default: false,
+      default: true,
       apiField: 'prompt_extend'
     }
   ],
@@ -134,33 +134,33 @@ export const wan26Model = defineModel({
   ],
   endpoints: {
     selector: (params) => {
-      const mode = params.mode || 'text-image-to-video'
+      const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
 
-
       if (mode === 'reference-to-video') {
-        return '/async/wan2.6-ref2v'
-      } else if (images.length > 0) {
-        return '/async/wan2.6-i2v'
-      } else {
-        return '/async/wan2.6-t2v'
+        return '/async/wan2.6-v2v'
       }
+      if (images.length > 0) {
+        return '/async/wan2.6-i2v'
+      }
+      return '/async/wan2.6-t2v'
     }
   },
   request: {
     builder: (params) => {
-      const mode = params.mode || 'text-image-to-video'
+      const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
       const videos = params.videos || []
-      const aspectRatio = params.aspect_ratio || '16:9'
-      const quality = params.quality || '720P'
-      const duration = params.duration || 5
-      const shotType = params.shot_type || 'multi'
-      const audio = params.audio !== undefined ? params.audio : true
-      const promptExtend = params.prompt_extend || false
+      const video = params.video || videos[0]
+      const aspectRatio = params.ppioWan26AspectRatio || params.aspect_ratio || '16:9'
+      const quality = params.ppioWan26Quality || params.quality || '720P'
+      const duration = params.ppioWan26VideoDuration || params.duration || 5
+      const shotType = params.ppioWan26ShotType || params.shot_type || 'multi'
+      const audio = params.ppioWan26Audio !== undefined ? params.ppioWan26Audio : (params.audio !== undefined ? params.audio : true)
+      const promptExtend = params.ppioWan26PromptExtend !== undefined ? params.ppioWan26PromptExtend : (params.prompt_extend !== undefined ? params.prompt_extend : true)
       const prompt = (params.prompt || '').slice(0, 2000)
+      const negativePrompt = params.ppioWan26NegativePrompt || params.negative_prompt
 
-      // Resolution mapping table
       const resolutionMap: Record<string, Record<string, string>> = {
         '16:9': { '720P': '1280*720', '1080P': '1920*1080' },
         '9:16': { '720P': '720*1280', '1080P': '1080*1920' },
@@ -169,26 +169,44 @@ export const wan26Model = defineModel({
         '3:4': { '720P': '832*1088', '1080P': '1248*1632' }
       }
 
-      const requestData: any = {
-        prompt,
-        duration,
-        shot_type: shotType,
-        audio,
-        prompt_extend: promptExtend,
-        watermark: false
+      const input: Record<string, any> = { prompt }
+      if (negativePrompt) {
+        input.negative_prompt = negativePrompt
+      }
+      if (params.audio_url) {
+        input.audio_url = params.audio_url
       }
 
       if (mode === 'reference-to-video') {
-        requestData.video_url = videos[0]
-        requestData.resolution = resolutionMap[aspectRatio]?.[quality] || '1280*720'
+        if (video) {
+          input.reference_video_urls = [video]
+        }
       } else if (images.length > 0) {
-        requestData.img_url = images[0]
-        requestData.resolution = quality
-      } else {
-        requestData.resolution = resolutionMap[aspectRatio]?.[quality] || '1280*720'
+        input.img_url = images[0]
+        if (params.template) {
+          input.template = params.template
+        }
       }
 
-      return requestData
+      const parameters: Record<string, any> = {
+        audio,
+        duration,
+        shot_type: shotType,
+        watermark: false,
+        prompt_extend: promptExtend
+      }
+
+      if (params.seed !== undefined) {
+        parameters.seed = params.seed
+      }
+
+      if (mode === 'reference-to-video' || images.length === 0) {
+        parameters.size = resolutionMap[aspectRatio]?.[quality] || '1280*720'
+      } else {
+        parameters.resolution = quality
+      }
+
+      return { input, parameters }
     }
   },
   pricing: {

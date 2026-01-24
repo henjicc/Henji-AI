@@ -3,7 +3,6 @@
  */
 
 import { defineModel } from '@/core'
-import { normalizeHailuo } from './utils'
 
 export const minimaxHailuo02Model = defineModel({
   meta: {
@@ -17,65 +16,48 @@ export const minimaxHailuo02Model = defineModel({
   params: [
     // 1. 时长
     {
-      id: 'falHailuo02Duration',
+      id: 'ppioHailuo02Duration',
       type: 'dropdown',
       order: 1,
       name: { zh: '时长', en: 'Duration' },
-      default: '6',
+      default: 6,
       options: [
-        { value: '6', label: '6s' },
-        { value: '10', label: '10s' }
+        { value: 6, label: '6s' },
+        { value: 10, label: '10s' }
       ],
       apiField: 'duration'
     },
     // 2. 分辨率
     {
-      id: 'falHailuo02Resolution',
+      id: 'ppioHailuo02Resolution',
       type: 'dropdown',
       order: 2,
       name: { zh: '分辨率', en: 'Resolution' },
       default: '768P',
       options: [
-        { value: '512P', label: '512P' },
         { value: '768P', label: '768P' },
         { value: '1080P', label: '1080P' }
       ],
       apiField: 'resolution'
     },
-    // 3. 快速模式
+    // 3. 提示词优化
     {
-      id: 'falHailuo02FastMode',
+      id: 'ppioHailuo02PromptExtend',
       type: 'switch',
       order: 3,
-      name: { zh: '快速模式', en: 'Fast Mode' },
-      default: false,
-      apiField: 'fast_mode'
-    },
-    // 4. 提示词优化
-    {
-      id: 'falHailuo02PromptOptimizer',
-      type: 'switch',
-      order: 4,
       name: { zh: '提示词优化', en: 'Prompt Optimizer' },
       default: true,
       apiField: 'enable_prompt_expansion'
     }
   ],
   linkages: [
-    // Hide fast mode when not exactly 1 image
-    {
-      trigger: 'uploadedImages',
-      effect: 'hide',
-      targets: ['falHailuo02FastMode'],
-      condition: (images) => (images?.length || 0) !== 1
-    },
     // Disable 1080P when duration is 10s
     {
-      trigger: 'falHailuo02Duration',
+      trigger: 'ppioHailuo02Duration',
       effect: 'filterOptions',
-      target: 'falHailuo02Resolution',
+      target: 'ppioHailuo02Resolution',
       filter: (duration, options) => {
-        if (duration === '10') {
+        if (duration === 10) {
           return options.filter(opt => opt.value !== '1080P')
         }
         return options
@@ -90,11 +72,13 @@ export const minimaxHailuo02Model = defineModel({
   request: {
     builder: (params) => {
       const images = params.images || []
-      const { duration, resolution } = normalizeHailuo(
-        parseInt(params.duration || '6'),
-        params.resolution
-      )
-      const enable = params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion
+      // Inline normalizeHailuo logic
+      const durationInput = params.ppioHailuo02Duration || params.duration
+      const duration = durationInput === 10 ? 10 : 6
+
+      const resInput = (params.ppioHailuo02Resolution || params.resolution || '').toUpperCase()
+      const resolution = duration === 10 ? '768P' : (resInput === '1080P' ? '1080P' : '768P')
+      const enable = params.ppioHailuo02PromptExtend === undefined ? (params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion) : params.ppioHailuo02PromptExtend
       const prompt = params.prompt || ''
 
       const requestData: any = {
@@ -117,10 +101,10 @@ export const minimaxHailuo02Model = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const duration = params.falHailuo02Duration || '6'
-      const resolution = params.falHailuo02Resolution || '768P'
+      const duration = params.ppioHailuo02Duration || 6
+      const resolution = params.ppioHailuo02Resolution || '768P'
       const basePrice = 0.4
-      const durationMultiplier = duration === '10' ? 10 / 6 : 1
+      const durationMultiplier = duration === 10 ? 10 / 6 : 1
       const resolutionMultiplier = resolution === '1080P' ? 1.5 : 1
       return basePrice * durationMultiplier * resolutionMultiplier
     },

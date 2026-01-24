@@ -5,7 +5,6 @@
  */
 
 import { defineModel } from '@/core'
-import { normalizePixverseResolution } from './utils'
 
 export const pixverseV45Model = defineModel({
   meta: {
@@ -26,8 +25,10 @@ export const pixverseV45Model = defineModel({
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
+        { value: '4:3', label: '4:3' },
         { value: '9:16', label: '9:16' },
-        { value: '1:1', label: '1:1' }
+        { value: '1:1', label: '1:1' },
+        { value: '3:4', label: '3:4' }
       ],
       apiField: 'aspect_ratio'
     },
@@ -106,25 +107,24 @@ export const pixverseV45Model = defineModel({
   request: {
     builder: (params) => {
       const images = params.images || []
-      const resolution = normalizePixverseResolution(params.resolution)
-      const aspectRatio = params.aspect_ratio || '16:9'
-      const fastMode = params.fast_mode || false
+      const resInput = (params.ppioPixverse45VideoResolution || params.resolution || '').toLowerCase()
+      const allowed = ['360p', '540p', '720p', '1080p']
+      const resolution = allowed.includes(resInput) ? resInput : '540p'
+      const aspectRatio = params.ppioPixverse45VideoAspectRatio || params.aspect_ratio || '16:9'
+      const fastMode = params.ppioPixverse45FastMode !== undefined ? params.ppioPixverse45FastMode : (params.fast_mode || false)
       const prompt = params.prompt || ''
-      const negativePrompt = params.negative_prompt || ''
+      const negativePrompt = params.ppioPixverse45NegativePrompt || params.negative_prompt || ''
 
       // Fast mode doesn't support 1080p
       const finalResolution = fastMode && resolution === '1080p' ? '720p' : resolution
 
       if (images.length > 0) {
         // Image-to-video
-        const img0 = images[0]
-        const base64 = typeof img0 === 'string' && img0.startsWith('data:') ? img0.split(',')[1] : img0
-
         return {
           prompt,
-          image: base64,
+          image: images[0],
           resolution: finalResolution,
-          negative_prompt: negativePrompt,
+          ...(negativePrompt ? { negative_prompt: String(negativePrompt).slice(0, 2048) } : {}),
           fast_mode: fastMode
         }
       } else {
@@ -133,7 +133,7 @@ export const pixverseV45Model = defineModel({
           prompt,
           aspect_ratio: aspectRatio,
           resolution: finalResolution,
-          negative_prompt: negativePrompt,
+          ...(negativePrompt ? { negative_prompt: String(negativePrompt).slice(0, 2048) } : {}),
           fast_mode: fastMode
         }
       }

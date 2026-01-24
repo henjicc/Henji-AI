@@ -59,6 +59,7 @@ export type {
   SwitchParamDef,
   RadioParamDef,
   PanelParamDef,
+  CompositePanelDef,
   ImageUploadParamDef,
   VideoUploadParamDef,
   ResolutionParamDef,

@@ -6,31 +6,100 @@ import { defineModel } from '@/core'
 
 export const wan25PreviewModel = defineModel({
   meta: {
-    id: 'fal-ai-wan-2.5-preview',
+    id: 'fal-ai-wan-25-preview',
     provider: 'fal',
     type: 'video',
     name: 'Wan 2.5 Preview',
     description: 'Wan 2.5 Preview 视频生成模型',
-    tags: ['video', 'text-to-video', 'image-to-video']
+    tags: ['video', 'text-to-video', 'image-to-video'],
+    aliases: ['fal-ai-wan-2.5-preview', 'wan-25-preview']
   },
-  params: [],
+  params: [
+    {
+      id: 'falWan25VideoDuration',
+      order: 1,
+      type: 'dropdown',
+      name: { zh: '时长', en: 'Duration' },
+      default: 5,
+      options: [
+        { value: 5, label: '5s' },
+        { value: 10, label: '10s' }
+      ]
+    },
+    {
+      id: 'falWan25AspectRatio',
+      order: 2,
+      type: 'dropdown',
+      name: { zh: '比例', en: 'Aspect Ratio' },
+      default: '16:9',
+      options: [
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' },
+        { value: '1:1', label: '1:1' }
+      ]
+    },
+    {
+      id: 'falWan25Resolution',
+      order: 3,
+      type: 'dropdown',
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '1080p',
+      options: [
+        { value: '480p', label: '480p' },
+        { value: '720p', label: '720p' },
+        { value: '1080p', label: '1080p' }
+      ]
+    },
+    {
+      id: 'falWan25PromptExpansion',
+      order: 4,
+      type: 'switch',
+      name: { zh: '提示词扩展', en: 'Prompt Expansion' },
+      default: true
+    }
+  ],
   linkages: [],
   endpoints: {
     selector: async (params) => {
       const images = params.images || []
       return images.length > 0
-        ? 'fal-ai/wan/v2.5-preview/image-to-video'
-        : 'fal-ai/wan/v2.5-preview'
+        ? 'fal-ai/wan-25-preview/image-to-video'
+        : 'fal-ai/wan-25-preview/text-to-video'
     }
   },
   request: {
     builder: (params) => {
       const images = params.images || []
       const prompt = params.prompt || ''
-      const requestData: any = { prompt }
-      if (images.length > 0) {
-        requestData.image_urls = images
+      const duration = params.falWan25VideoDuration || 5
+      const aspectRatio = params.falWan25AspectRatio
+      const resolution = params.falWan25Resolution
+      const promptExpansion = params.falWan25PromptExpansion
+
+      const requestData: any = {
+        prompt,
+        enable_safety_checker: false,
+        duration: `${duration}`
       }
+
+      if (promptExpansion !== undefined) {
+        requestData.enable_prompt_expansion = promptExpansion
+      }
+
+      if (images.length > 0) {
+        requestData.image_url = images[0]
+        if (resolution) {
+          requestData.resolution = resolution.toLowerCase()
+        }
+      } else {
+        if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+          requestData.aspect_ratio = aspectRatio
+        }
+        if (resolution) {
+          requestData.resolution = resolution.toLowerCase()
+        }
+      }
+
       return requestData
     }
   },

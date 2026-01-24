@@ -13,6 +13,7 @@ export const useGenerationHandler = (
   modelState: ModelState,
   uploadedImages: string[],
   uploadedVideos: string[],
+  uploadedVideoFiles: File[],
   onGenerate: (input: string, model: string, type: string, options: any) => void
 ) => {
   const handleGenerate = useCallback(async () => {
@@ -32,7 +33,9 @@ export const useGenerationHandler = (
     const options = {
       ...modelState.params,  // 传递所有模型参数（包括 maxImages 等）
       images: uploadedImages,
-      videos: uploadedVideos
+      videos: uploadedVideos,
+      // 仅用于需要参考视频的模型
+      video: uploadedVideoFiles[0]
     }
 
     console.log('[GenerationHandler] Generated options:', options)

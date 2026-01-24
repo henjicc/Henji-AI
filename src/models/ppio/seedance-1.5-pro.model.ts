@@ -31,14 +31,15 @@ export const seedance15ProModel = defineModel({
       type: 'dropdown',
       order: 1,
       name: { zh: '分辨率', en: 'Resolution' },
-      default: '1:1',
+      default: 'adaptive',
       options: [
         { value: '16:9', label: '16:9' },
         { value: '4:3', label: '4:3' },
         { value: '1:1', label: '1:1' },
         { value: '3:4', label: '3:4' },
         { value: '9:16', label: '9:16' },
-        { value: '21:9', label: '21:9' }
+        { value: '21:9', label: '21:9' },
+        { value: 'adaptive', label: { zh: '智能', en: 'Adaptive' } }
       ],
       apiField: 'aspect_ratio'
     },
@@ -84,7 +85,7 @@ export const seedance15ProModel = defineModel({
       type: 'switch',
       order: 4,
       name: { zh: '生成音频', en: 'Generate Audio' },
-      default: false,
+      default: true,
       apiField: 'generate_audio'
     },
 
@@ -126,9 +127,9 @@ export const seedance15ProModel = defineModel({
       condition: (images: string[], allParams: Record<string, any>) => {
         const imageCount = images?.length || 0
         const currentRatio = allParams.ppioSeedance15ProAspectRatio
-        return imageCount > 0 && currentRatio !== 'smart'
+        return imageCount > 0 && currentRatio !== 'adaptive'
       },
-      value: 'smart'
+      value: 'adaptive'
     },
 
     // AutoSwitch 2: Delete all images → reset to default
@@ -139,9 +140,9 @@ export const seedance15ProModel = defineModel({
       condition: (images: string[], allParams: Record<string, any>) => {
         const imageCount = images?.length || 0
         const currentRatio = allParams.ppioSeedance15ProAspectRatio
-        return imageCount === 0 && currentRatio === 'smart'
+        return imageCount === 0 && currentRatio === 'adaptive'
       },
-      value: '1:1'
+      value: 'adaptive'
     },
 
     // FilterOptions: Add smart option when images are uploaded
@@ -154,7 +155,7 @@ export const seedance15ProModel = defineModel({
         if (imageCount > 0) {
           // Add smart option at the beginning
           return [
-            { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+            { value: 'adaptive', label: { zh: '智能', en: 'Adaptive' } },
             ...options
           ]
         }
@@ -166,32 +167,18 @@ export const seedance15ProModel = defineModel({
     selector: (params) => {
       const images = params.images || []
 
-      if (images.length === 2) {
-        // Start-end-frame mode
-        return '/async/seedance-v1.5-pro-start-end-frame'
-      } else if (images.length === 1) {
-        // Image-to-video mode
-        return '/async/seedance-v1.5-pro-i2v'
-      } else {
-        // Text-to-video mode
-        return '/async/seedance-v1.5-pro-t2v'
-      }
+      return images.length > 0 ? '/async/seedance-v1.5-pro-i2v' : '/async/seedance-v1.5-pro-t2v'
     }
   },
   request: {
     builder: (params) => {
       const images = params.images || []
-      const resolution = params.resolution || '720p'
-      const duration = params.duration || 5
-      const cameraFixed = params.camera_fixed || false
-      const serviceTier = params.service_tier || 'default'
-      const generateAudio = params.generate_audio || false
-
-      // Get aspect ratio, use smartMatchedRatio if ratio is 'smart'
-      let ratio = params.ratio || '1:1'
-      if (ratio === 'smart' && params.smartMatchedRatio) {
-        ratio = params.smartMatchedRatio
-      }
+      const resolution = params.ppioSeedance15ProResolution || params.resolution || '720p'
+      const duration = params.ppioSeedance15ProDuration || params.duration || 5
+      const cameraFixed = params.ppioSeedance15ProCameraFixed || params.camera_fixed || false
+      const serviceTier = params.ppioSeedance15ProServiceTier || params.service_tier || 'default'
+      const generateAudio = params.ppioSeedance15ProGenerateAudio !== undefined ? params.ppioSeedance15ProGenerateAudio : (params.generate_audio !== undefined ? params.generate_audio : true)
+      const ratio = params.ppioSeedance15ProAspectRatio || params.ratio || 'adaptive'
 
       const requestData: any = {
         prompt: params.prompt,
@@ -200,7 +187,10 @@ export const seedance15ProModel = defineModel({
         duration,
         camera_fixed: cameraFixed,
         service_tier: serviceTier,
-        generate_audio: generateAudio
+        generate_audio: generateAudio,
+        fps: 24,
+        seed: -1,
+        watermark: false
       }
 
       // Add image(s) if present

@@ -3,7 +3,7 @@
  *
  * 特性：
  * - 所有图片转为 base64 格式
- * - 视频上传到 Fal CDN
+ * - 视频上传到通用文件上传服务
  * - 异步任务轮询
  * - 自动保存上传文件路径
  */
@@ -18,6 +18,8 @@ import {
 } from './base/errors'
 import { PollingConfig, GenerateResult } from './base/types'
 import { saveImageFromUrl, saveVideoFromUrl, saveAudioFromUrl } from '@/utils/save'
+import { UploadService } from '@/services/upload/UploadService'
+import { isDataURI, isLocalPath } from './base/utils'
 
 /**
  * PPIO Provider 类
@@ -40,7 +42,7 @@ export class PPIOProvider extends ProviderHandler {
    *
    * PPIO 特定处理：
    * 1. 图片转为 base64 格式
-   * 2. 视频上传到 Fal CDN
+   * 2. 视频上传到通用文件上传服务
    * 3. 保存上传文件路径
    *
    * @param model - 模型定义
@@ -100,14 +102,14 @@ export class PPIOProvider extends ProviderHandler {
       }
     }
 
-    // 2. 处理视频：上传到 Fal CDN（如果有）
+    // 2. 处理视频：上传到通用文件上传服务（如果有）
     if (params.video) {
       this.log('检测到视频参数，开始处理...', {
         type: params.video instanceof File ? 'File' : 'string',
       })
 
       try {
-        processedParams.video = await this.uploadVideoToFalCDN(params.video)
+        processedParams.video = await this.uploadVideoToGeneralUpload(params.video)
 
         // 保存视频文件路径（如果是 File 对象）
         if (params.video instanceof File) {
@@ -123,6 +125,50 @@ export class PPIOProvider extends ProviderHandler {
         this.log('视频处理完成', { url: processedParams.video })
       } catch (error) {
         this.log('视频处理失败', { error })
+        throw ProviderError.fromError(error, this.providerName)
+      }
+    }
+
+    // 3. 处理参考视频数组：reference_video_urls
+    if (Array.isArray(params.reference_video_urls) && params.reference_video_urls.length > 0) {
+      this.log('检测到 reference_video_urls，开始处理...', {
+        count: params.reference_video_urls.length
+      })
+
+      try {
+        const processedRefs: string[] = []
+        for (const item of params.reference_video_urls) {
+          if (item instanceof File) {
+            if (params.video && item === params.video && processedParams.video) {
+              processedRefs.push(processedParams.video)
+            } else {
+              const url = await this.uploadVideoToGeneralUpload(item)
+              processedRefs.push(url)
+            }
+          } else if (typeof item === 'string' && item.startsWith('http')) {
+            processedRefs.push(item)
+          } else if (processedParams.video && item === processedParams.video) {
+            processedRefs.push(processedParams.video)
+          } else if (processedParams.video && !item) {
+            processedRefs.push(processedParams.video)
+          } else if (typeof item === 'string') {
+            const url = await this.uploadVideoToGeneralUpload(item)
+            processedRefs.push(url)
+          }
+        }
+
+        if (processedRefs.length > 0) {
+          processedParams.reference_video_urls = processedRefs
+        }
+
+        // 如果 reference_video_urls 使用了 video 上传结果，避免重复发送 video 字段
+        if (processedParams.video && processedRefs.includes(processedParams.video)) {
+          delete processedParams.video
+        }
+
+        this.log('reference_video_urls 处理完成', { count: processedRefs.length })
+      } catch (error) {
+        this.log('reference_video_urls 处理失败', { error })
         throw ProviderError.fromError(error, this.providerName)
       }
     }
@@ -259,7 +305,7 @@ export class PPIOProvider extends ProviderHandler {
   }
 
   /**
-   * 上传视频到 Fal CDN
+   * 上传视频到通用文件上传服务
    *
    * 处理逻辑：
    * - 如果已经是 http(s) URL → 直接返回
@@ -269,35 +315,105 @@ export class PPIOProvider extends ProviderHandler {
    * @param video - 视频（File 对象或 URL 字符串）
    * @returns Promise<视频 URL>
    */
-  private async uploadVideoToFalCDN(video: File | string): Promise<string> {
+  private async uploadVideoToGeneralUpload(video: File | string): Promise<string> {
     // 1. 如果已经是 URL，直接返回
     if (typeof video === 'string' && video.startsWith('http')) {
       this.log('视频已经是 URL，直接使用', { url: video })
       return video
     }
 
-    // 2. 上传 File 对象到 Fal CDN
-    if (video instanceof File) {
-      const falApiKey = this.getFalApiKey()
-      if (!falApiKey) {
+    // 2. Data URI → Blob 上传
+    if (typeof video === 'string' && isDataURI(video)) {
+      try {
+        const blob = this.dataURItoBlob(video)
+        const uploadService = UploadService.getInstance()
+        const url = await uploadService.uploadFile(blob, 'video.bin')
+        this.log('视频上传成功', { url })
+        return url
+      } catch (error: any) {
+        this.log('视频上传失败', { error })
         throw new ProviderError(
-          'Fal API 密钥未配置（视频上传需要 Fal CDN）',
+          `视频上传失败: ${error.message}`,
           this.providerName,
-          ProviderErrorCode.API_KEY_MISSING
+          ProviderErrorCode.UPLOAD_FAILED,
+          { originalError: error }
         )
       }
+    }
 
+    // 3. 将本地路径/asset 转为 Blob 并上传
+    if (typeof video === 'string') {
+      if (video.startsWith('http://asset.localhost/')) {
+        try {
+          const encodedPath = video.replace('http://asset.localhost/', '')
+          const decodedPath = decodeURIComponent(encodedPath)
+          const blob = await this.readLocalFile(decodedPath)
+          const uploadService = UploadService.getInstance()
+          const url = await uploadService.uploadFile(blob, 'video.mp4')
+          this.log('视频上传成功', { url })
+          return url
+        } catch (error: any) {
+          this.log('视频上传失败', { error })
+          throw new ProviderError(
+            `视频上传失败: ${error.message}`,
+            this.providerName,
+            ProviderErrorCode.UPLOAD_FAILED,
+            { originalError: error }
+          )
+        }
+      }
+
+      if (video.startsWith('http://tauri.localhost/')) {
+        try {
+          const encodedPath = video.replace('http://tauri.localhost/', '')
+          const decodedPath = decodeURIComponent(encodedPath)
+          const blob = await this.readLocalFile(decodedPath)
+          const uploadService = UploadService.getInstance()
+          const url = await uploadService.uploadFile(blob, 'video.mp4')
+          this.log('视频上传成功', { url })
+          return url
+        } catch (error: any) {
+          this.log('视频上传失败', { error })
+          throw new ProviderError(
+            `视频上传失败: ${error.message}`,
+            this.providerName,
+            ProviderErrorCode.UPLOAD_FAILED,
+            { originalError: error }
+          )
+        }
+      }
+
+      if (isLocalPath(video)) {
+        try {
+          const blob = await this.readLocalFile(video)
+          const uploadService = UploadService.getInstance()
+          const url = await uploadService.uploadFile(blob, 'video.mp4')
+          this.log('视频上传成功', { url })
+          return url
+        } catch (error: any) {
+          this.log('视频上传失败', { error })
+          throw new ProviderError(
+            `视频上传失败: ${error.message}`,
+            this.providerName,
+            ProviderErrorCode.UPLOAD_FAILED,
+            { originalError: error }
+          )
+        }
+      }
+    }
+
+    // 4. 上传 File 对象
+    if (video instanceof File) {
       try {
-        const fal = await import('@fal-ai/client')
-        fal.config({ credentials: falApiKey })
+        const uploadService = UploadService.getInstance()
 
-        this.log('开始上传视频到 Fal CDN...', {
+        this.log('开始上传视频到通用上传服务...', {
           name: video.name,
           size: video.size,
           type: video.type,
         })
 
-        const url = await fal.storage.upload(video)
+        const url = await uploadService.uploadFile(video, video.name)
 
         this.log('视频上传成功', { url })
         return url

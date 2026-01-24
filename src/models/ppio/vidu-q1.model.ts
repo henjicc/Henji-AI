@@ -40,7 +40,7 @@ export const viduQ1Model = defineModel({
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
       ],
-      apiField: 'aspectRatio'
+      apiField: 'aspect_ratio'
     },
     // 3. 风格
     {
@@ -68,7 +68,7 @@ export const viduQ1Model = defineModel({
         { value: 'medium', label: '中' },
         { value: 'large', label: '大' }
       ],
-      apiField: 'movementAmplitude'
+      apiField: 'movement_amplitude'
     },
     // 5. 生成音频
     {
@@ -138,7 +138,7 @@ export const viduQ1Model = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const mode = params.mode || 'text-image-to-video'
+      const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
 
       switch (mode) {
@@ -155,16 +155,18 @@ export const viduQ1Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const mode = params.mode || 'text-image-to-video'
+      const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
       const prompt = params.prompt || ''
+      const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto'
+      const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false)
 
       const requestData: any = {
         prompt,
-        duration: params.duration || 5,
-        resolution: params.resolution || '1080p',
-        movement_amplitude: params.movement_amplitude || 'auto',
-        bgm: params.bgm || false
+        duration: 5,
+        resolution: '1080p',
+        movement_amplitude: movementAmplitude,
+        bgm
       }
 
       if (params.seed !== undefined) {
@@ -176,8 +178,8 @@ export const viduQ1Model = defineModel({
           if (images.length > 0) {
             requestData.images = [images[0]]
           } else {
-            requestData.aspect_ratio = params.aspect_ratio || '16:9'
-            requestData.style = params.style || 'general'
+            requestData.aspect_ratio = params.ppioViduQ1AspectRatio || params.aspect_ratio || '16:9'
+            requestData.style = params.ppioViduQ1Style || params.style || 'general'
           }
           break
         case 'start-end-frame':
@@ -188,7 +190,7 @@ export const viduQ1Model = defineModel({
         case 'reference-to-video':
           if (images.length > 0) {
             requestData.images = images.slice(0, 7)
-            requestData.aspect_ratio = params.aspect_ratio || '16:9'
+            requestData.aspect_ratio = params.ppioViduQ1AspectRatio || params.aspect_ratio || '16:9'
           }
           break
       }

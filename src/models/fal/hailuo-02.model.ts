@@ -6,31 +6,119 @@ import { defineModel } from '@/core'
 
 export const hailuo02Model = defineModel({
   meta: {
-    id: 'fal-ai-hailuo-02',
+    id: 'fal-ai-minimax-hailuo-02',
     provider: 'fal',
     type: 'video',
-    name: 'Hailuo 02',
-    description: 'Hailuo 02 视频生成模型',
-    tags: ['video', 'text-to-video', 'image-to-video']
+    name: 'MiniMax Hailuo 02',
+    description: 'MiniMax Hailuo 02 视频生成模型',
+    tags: ['video', 'text-to-video', 'image-to-video'],
+    aliases: ['fal-ai-hailuo-02', 'minimax-hailuo-02-fal']
   },
-  params: [],
+  params: [
+    {
+      id: 'falHailuo02Version',
+      order: 1,
+      type: 'dropdown',
+      name: { zh: '版本', en: 'Version' },
+      default: 'standard',
+      options: [
+        { value: 'standard', label: 'Standard' },
+        { value: 'pro', label: 'Pro' }
+      ]
+    },
+    {
+      id: 'falHailuo02Duration',
+      order: 2,
+      type: 'dropdown',
+      name: { zh: '时长', en: 'Duration' },
+      default: '6',
+      options: [
+        { value: '6', label: '6s' },
+        { value: '10', label: '10s' }
+      ]
+    },
+    {
+      id: 'falHailuo02Resolution',
+      order: 3,
+      type: 'dropdown',
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '768P',
+      options: [
+        { value: '512P', label: '512P' },
+        { value: '768P', label: '768P' },
+        { value: '1080P', label: '1080P' }
+      ]
+    },
+    {
+      id: 'falHailuo02FastMode',
+      order: 4,
+      type: 'switch',
+      name: { zh: '快速模式', en: 'Fast Mode' },
+      default: false
+    },
+    {
+      id: 'falHailuo02PromptOptimizer',
+      order: 5,
+      type: 'switch',
+      name: { zh: '提示词优化', en: 'Prompt Optimizer' },
+      default: true
+    }
+  ],
   linkages: [],
   endpoints: {
     selector: async (params) => {
       const images = params.images || []
-      return images.length > 0
-        ? 'fal-ai/hailuo/video/o2/image-to-video'
-        : 'fal-ai/hailuo/video/o2'
+      const imageCount = images.length
+      const version = params.falHailuo02Version || 'standard'
+      const fastMode = params.falHailuo02FastMode === true
+
+      if (imageCount === 0) {
+        return version === 'pro'
+          ? 'fal-ai/minimax/hailuo-02/pro/text-to-video'
+          : 'fal-ai/minimax/hailuo-02/standard/text-to-video'
+      }
+
+      if (imageCount === 1 && fastMode) {
+        return 'fal-ai/minimax/hailuo-02-fast/image-to-video'
+      }
+
+      if (version === 'pro') {
+        return 'fal-ai/minimax/hailuo-02/pro/image-to-video'
+      }
+
+      return 'fal-ai/minimax/hailuo-02/standard/image-to-video'
     }
   },
   request: {
     builder: (params) => {
       const images = params.images || []
       const prompt = params.prompt || ''
+      const version = params.falHailuo02Version || 'standard'
+      const resolution = params.falHailuo02Resolution || '768P'
+      const duration = params.falHailuo02Duration || '6'
+      const promptOptimizer = params.falHailuo02PromptOptimizer !== false
+
       const requestData: any = { prompt }
-      if (images.length > 0) {
-        requestData.image_urls = images
+
+      if (promptOptimizer !== undefined) {
+        requestData.prompt_optimizer = promptOptimizer
       }
+
+      if (version === 'standard') {
+        requestData.duration = duration
+      }
+
+      if (version === 'standard' && images.length > 0 && params.falHailuo02FastMode !== true) {
+        requestData.resolution = resolution
+      }
+
+      if (images.length === 1) {
+        requestData.image_url = images[0]
+      } else if (images.length >= 2) {
+        requestData.first_frame_image_url = images[0]
+        requestData.last_frame_image_url = images[1]
+      }
+
       return requestData
     }
   },

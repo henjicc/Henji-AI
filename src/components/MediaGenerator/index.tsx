@@ -99,6 +99,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     modelState,
     uiState.uploadedImages,
     uiState.uploadedVideos,
+    uiState.uploadedVideoFiles,
     onGenerate
   )
 
@@ -482,6 +483,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         currentModel={currentModel}
         isLoading={isLoading}
         isGenerating={isGenerating}
+        modelscopeCustomModel={modelState.params.modelscopeCustomModel}
         onGenerate={handleGenerate}
       />
 

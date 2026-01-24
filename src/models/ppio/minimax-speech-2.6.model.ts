@@ -142,7 +142,7 @@ export const minimaxSpeech26Model = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const spec = params.spec || 'hd'
+      const spec = params.minimaxAudioSpec || params.spec || 'hd'
       return spec === 'turbo' ? '/minimax-speech-2.6-turbo' : '/minimax-speech-2.6-hd'
     }
   },
@@ -157,21 +157,20 @@ export const minimaxSpeech26Model = defineModel({
 
       // Build voice_setting
       const voice_setting: any = {}
-      if (params.voice_id) voice_setting.voice_id = params.voice_id
-      if (params.speed !== undefined) voice_setting.speed = params.speed
-      if (params.vol !== undefined) voice_setting.vol = params.vol
-      if (params.pitch !== undefined) voice_setting.pitch = params.pitch
-      if (params.emotion) voice_setting.emotion = params.emotion
-      if (Object.keys(voice_setting).length > 0) {
-        requestData.voice_setting = voice_setting
-      }
+      const voiceId = params.minimaxVoiceId || params.voice_id
+      if (voiceId) voice_setting.voice_id = voiceId
+      if (params.minimaxAudioSpeed !== undefined) voice_setting.speed = params.minimaxAudioSpeed
+      if (params.minimaxAudioVol !== undefined) voice_setting.vol = params.minimaxAudioVol
+      if (params.minimaxAudioPitch !== undefined) voice_setting.pitch = params.minimaxAudioPitch
+      if (params.minimaxAudioEmotion) voice_setting.emotion = params.minimaxAudioEmotion
+      requestData.voice_setting = voice_setting
 
       // Build audio_setting
       const audio_setting: any = {}
-      if (params.sample_rate !== undefined) audio_setting.sample_rate = params.sample_rate
-      if (params.bitrate !== undefined) audio_setting.bitrate = params.bitrate
-      if (params.format) audio_setting.format = params.format
-      if (params.channel !== undefined) audio_setting.channel = params.channel
+      if (params.minimaxAudioSampleRate !== undefined) audio_setting.sample_rate = params.minimaxAudioSampleRate
+      if (params.minimaxAudioBitrate !== undefined) audio_setting.bitrate = params.minimaxAudioBitrate
+      if (params.minimaxAudioFormat) audio_setting.format = params.minimaxAudioFormat
+      if (params.minimaxAudioChannel !== undefined) audio_setting.channel = params.minimaxAudioChannel
       if (Object.keys(audio_setting).length > 0) {
         requestData.audio_setting = audio_setting
       }

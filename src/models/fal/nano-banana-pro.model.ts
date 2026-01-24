@@ -24,17 +24,38 @@ export const nanoBananaProModel = defineModel({
       min: 1,
       max: 4
     },
-    // 2. 分辨率
+    // 2. 宽高比
     {
-      id: 'falNanoBananaProResolution',
+      id: 'falNanoBananaProAspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
-      default: '1024x1024',
+      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      default: '1:1',
       options: [
-        { value: '512x512', label: '512x512' },
-        { value: '1024x1024', label: '1024x1024' },
-        { value: '2048x2048', label: '2048x2048' }
+        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: '1:1', label: '1:1' },
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' },
+        { value: '21:9', label: '21:9' },
+        { value: '3:2', label: '3:2' },
+        { value: '2:3', label: '2:3' },
+        { value: '4:3', label: '4:3' },
+        { value: '3:4', label: '3:4' },
+        { value: '5:4', label: '5:4' },
+        { value: '4:5', label: '4:5' }
+      ]
+    },
+    // 3. 分辨率
+    {
+      id: 'falNanoBananaProResolution',
+      order: 3,
+      type: 'dropdown',
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '2K',
+      options: [
+        { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' },
+        { value: '4K', label: '4K' }
       ]
     }
   ],
@@ -52,16 +73,17 @@ export const nanoBananaProModel = defineModel({
 
       const requestData: any = { prompt }
 
-      if (params.num_images !== undefined) {
-        requestData.num_images = params.num_images
+      if (params.falNanoBananaProNumImages !== undefined) {
+        requestData.num_images = params.falNanoBananaProNumImages
       }
 
-      if (params.resolution !== undefined) {
-        requestData.resolution = params.resolution
+      if (params.falNanoBananaProResolution !== undefined) {
+        requestData.resolution = params.falNanoBananaProResolution
       }
 
-      if (params.aspect_ratio && params.aspect_ratio !== 'auto' && params.aspect_ratio !== 'smart') {
-        requestData.aspect_ratio = params.aspect_ratio
+      const aspectRatio = params.falNanoBananaProAspectRatio
+      if (aspectRatio && aspectRatio !== 'auto' && aspectRatio !== 'smart') {
+        requestData.aspect_ratio = aspectRatio
       }
 
       if (images.length > 0) {

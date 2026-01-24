@@ -8,6 +8,13 @@ import { I18nText } from './I18nText'
 import { ComponentType, ValueType } from './ComponentTypes'
 import { ApiConfig } from './ApiMapping'
 import { VisibleCondition, DisabledCondition, SmartMatchConfig } from './ConditionTypes'
+import type {
+  PanelType,
+  ResolutionPanelConfig,
+  VoiceSelectorConfig,
+  CompositePanelConfig,
+  CustomPanelConfig
+} from './PanelTypes'
 
 /**
  * 基础参数定义
@@ -426,6 +433,26 @@ export interface PanelParamDef extends BaseParamDef {
 }
 
 /**
+ * 复合面板参数
+ *
+ * 支持通过面板注册中心渲染特殊面板
+ */
+export interface CompositePanelDef extends BaseParamDef {
+  type: 'composite'
+  valueType: ValueType
+
+  /**
+   * 绑定的面板类型（可选）
+   */
+  panel?: PanelType
+
+  /**
+   * 面板配置（可选）
+   */
+  config?: ResolutionPanelConfig | VoiceSelectorConfig | CompositePanelConfig | CustomPanelConfig
+}
+
+/**
  * 图片上传参数
  *
  * @example
@@ -650,6 +677,7 @@ export type ParamDef =
   | SwitchParamDef
   | RadioParamDef
   | PanelParamDef
+  | CompositePanelDef
   | ImageUploadParamDef
   | VideoUploadParamDef
   | ResolutionParamDef

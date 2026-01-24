@@ -22,15 +22,34 @@ export const klingImageO1Model = defineModel({
       name: { zh: '生成数量', en: 'Number of Images' },
       default: 1,
       min: 1,
-      max: 4
+      max: 9
     },
-    // 2. 分辨率
+    // 2. 宽高比
+    {
+      id: 'falKlingImageO1AspectRatio',
+      order: 2,
+      type: 'dropdown',
+      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      default: '1:1',
+      options: [
+        { value: 'auto', label: { zh: '智能', en: 'Auto' } },
+        { value: '1:1', label: '1:1' },
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' },
+        { value: '4:3', label: '4:3' },
+        { value: '3:4', label: '3:4' },
+        { value: '3:2', label: '3:2' },
+        { value: '2:3', label: '2:3' },
+        { value: '21:9', label: '21:9' }
+      ]
+    },
+    // 3. 分辨率
     {
       id: 'falKlingImageO1Resolution',
-      order: 2,
+      order: 3,
       type: 'text',
       name: { zh: '分辨率', en: 'Resolution' },
-      default: '1024x1024'
+      default: '2K'
     }
   ],
   linkages: [
@@ -48,8 +67,18 @@ export const klingImageO1Model = defineModel({
         image_urls: images
       }
 
-      if (params.num_images !== undefined && params.num_images > 0) {
-        requestData.num_images = params.num_images
+      if (params.falKlingImageO1NumImages !== undefined && params.falKlingImageO1NumImages > 0) {
+        requestData.num_images = params.falKlingImageO1NumImages
+      }
+
+      const aspectRatio = params.falKlingImageO1AspectRatio
+      if (aspectRatio && aspectRatio !== 'auto') {
+        requestData.aspect_ratio = aspectRatio
+      }
+
+      const resolution = params.falKlingImageO1Resolution
+      if (resolution) {
+        requestData.resolution = resolution
       }
 
       return requestData

@@ -19,6 +19,9 @@ import {
   ProviderErrorCode,
 } from '@/core/providers/base'
 import { PPIOProvider } from '@/core/providers/PPIOProvider'
+import { FalProvider } from '@/core/providers/FalProvider'
+import { KIEProvider } from '@/core/providers/KIEProvider'
+import { ModelscopeProvider } from '@/core/providers/ModelscopeProvider'
 
 /**
  * GenerationService 单例类
@@ -187,25 +190,13 @@ export class GenerationService {
         return new PPIOProvider(apiKey)
 
       case 'fal':
-        // TODO: 任务05 中实现
-        throw new Error(
-          'FalProvider not implemented yet. Will be implemented in task 05.'
-        )
-      // return new FalProvider(apiKey)
+        return new FalProvider(apiKey)
 
       case 'kie':
-        // TODO: 任务06 中实现
-        throw new Error(
-          'KIEProvider not implemented yet. Will be implemented in task 06.'
-        )
-      // return new KIEProvider(apiKey)
+        return new KIEProvider(apiKey)
 
       case 'modelscope':
-        // TODO: 任务06 中实现（如需要）
-        throw new Error(
-          'ModelscopeProvider not implemented yet. Will be implemented in task 06.'
-        )
-      // return new ModelscopeProvider(apiKey)
+        return new ModelscopeProvider(apiKey)
 
       default:
         throw new Error(`Unsupported provider: ${providerName}`)

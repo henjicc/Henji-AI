@@ -87,11 +87,13 @@ export const kling25TurboModel = defineModel({
   request: {
     builder: (params) => {
       const images = params.images || []
-      const duration = params.duration || 5
-      const cfgScale = params.cfg_scale || 0.5
-      const mode = params.mode || 'pro'
+      const duration = params.ppioKling25TurboDuration || params.duration || 5
+      const cfgScale = params.ppioKling25TurboCfgScale ?? params.cfg_scale ?? 0.5
+      const mode = params.ppioKling25TurboMode || params.mode || 'pro'
       const prompt = (params.prompt || '').slice(0, 2500)
-      const negativePrompt = params.negative_prompt ? params.negative_prompt.slice(0, 2500) : undefined
+      const negativePrompt = params.ppioKling25TurboNegativePrompt
+        ? String(params.ppioKling25TurboNegativePrompt).slice(0, 2500)
+        : (params.negative_prompt ? String(params.negative_prompt).slice(0, 2500) : undefined)
 
       const requestData: any = {
         prompt,
@@ -106,12 +108,10 @@ export const kling25TurboModel = defineModel({
 
       if (images.length > 0) {
         // 图生视频
-        const img0 = images[0]
-        const base64 = typeof img0 === 'string' && img0.startsWith('data:') ? img0.split(',')[1] : img0
-        requestData.image = base64
+        requestData.image = images[0]
       } else {
         // 文生视频
-        const aspectRatio = params.aspect_ratio || '16:9'
+        const aspectRatio = params.ppioKling25TurboAspectRatio || params.aspect_ratio || '16:9'
         requestData.aspect_ratio = aspectRatio
       }
 

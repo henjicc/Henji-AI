@@ -5,7 +5,6 @@
  */
 
 import { defineModel } from '@/core'
-import { normalizeHailuo } from './utils'
 
 export const minimaxHailuo23Model = defineModel({
   meta: {
@@ -97,7 +96,7 @@ export const minimaxHailuo23Model = defineModel({
   endpoints: {
     selector: async (params) => {
       const images = params.images || []
-      const isFast = params.fast_mode && images.length > 0
+      const isFast = params.ppioHailuo23FastMode && images.length > 0
 
       if (images.length > 0) {
         return isFast ? '/async/minimax-hailuo-2.3-fast-i2v' : '/async/minimax-hailuo-2.3-i2v'
@@ -109,8 +108,12 @@ export const minimaxHailuo23Model = defineModel({
   request: {
     builder: (params) => {
       const images = params.images || []
-      const { duration, resolution } = normalizeHailuo(params.duration, params.resolution)
-      const enable = params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion
+      const durationInput = params.ppioHailuo23VideoDuration || params.duration
+      const duration = durationInput === 10 ? 10 : 6
+
+      const resInput = (params.ppioHailuo23VideoResolution || params.resolution || '').toUpperCase()
+      const resolution = duration === 10 ? '768P' : (resInput === '1080P' ? '1080P' : '768P')
+      const enable = params.ppioHailuo23PromptExtend === undefined ? (params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion) : params.ppioHailuo23PromptExtend
       const prompt = params.prompt || ''
 
       const requestData: any = {

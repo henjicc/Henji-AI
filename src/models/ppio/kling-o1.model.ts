@@ -30,6 +30,7 @@ export const klingO1Model = defineModel({
       id: 'ppioKlingO1Mode',
       type: 'dropdown',
       order: 1,
+      valueType: 'string',
       name: { zh: '模式', en: 'Mode' },
       default: 'text-image-to-video',
       options: [
@@ -37,8 +38,7 @@ export const klingO1Model = defineModel({
         { value: 'start-end-frame', label: { zh: '首尾帧', en: 'Start-End Frame' } },
         { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } },
         { value: 'video-edit', label: { zh: '视频编辑', en: 'Video Edit' } }
-      ],
-      apiField: 'mode'
+      ]
     },
 
     // 2. Duration parameter
@@ -46,13 +46,13 @@ export const klingO1Model = defineModel({
       id: 'ppioKlingO1VideoDuration',
       type: 'dropdown',
       order: 2,
+      valueType: 'number',
       name: { zh: '时长', en: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
         { value: 10, label: '10s' }
-      ],
-      apiField: 'duration'
+      ]
     },
 
     // 3. Aspect ratio parameter
@@ -60,14 +60,14 @@ export const klingO1Model = defineModel({
       id: 'ppioKlingO1AspectRatio',
       type: 'dropdown',
       order: 3,
+      valueType: 'string',
       name: { zh: '宽高比', en: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
-      ],
-      apiField: 'aspectRatio'
+      ]
     },
 
     // 4. Keep audio parameter
@@ -75,9 +75,9 @@ export const klingO1Model = defineModel({
       id: 'ppioKlingO1KeepAudio',
       type: 'switch',
       order: 4,
+      valueType: 'boolean',
       name: { zh: '保留音频', en: 'Keep Audio' },
-      default: true,
-      apiField: 'keepAudio'
+      default: true
     },
 
     // 5. Fast mode parameter
@@ -85,9 +85,9 @@ export const klingO1Model = defineModel({
       id: 'ppioKlingO1FastMode',
       type: 'switch',
       order: 5,
+      valueType: 'boolean',
       name: { zh: '快速模式', en: 'Fast Mode' },
-      default: false,
-      apiField: 'fastMode'
+      default: false
     }
   ],
   linkages: [
@@ -166,7 +166,7 @@ export const klingO1Model = defineModel({
   ],
   endpoints: {
     selector: (params) => {
-      const mode = params.mode || 'text-image-to-video'
+      const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
 
       switch (mode) {
@@ -189,65 +189,67 @@ export const klingO1Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const mode = params.mode || 'text-image-to-video'
+      const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
       const videos = params.videos || []
-      const duration = params.duration || 5
-      const aspectRatio = params.aspect_ratio || '16:9'
-      const keepAudio = params.keep_audio !== undefined ? params.keep_audio : true
-      const fastMode = params.fast_mode || false
+      const video = params.video || videos[0]
+      const duration = params.ppioKlingO1VideoDuration || params.duration || 5
+      const aspectRatio = params.ppioKlingO1AspectRatio || params.aspect_ratio || '16:9'
+      const keepAudio = params.ppioKlingO1KeepAudio !== undefined ? params.ppioKlingO1KeepAudio : (params.keep_original_sound !== undefined ? params.keep_original_sound : true)
+      const fastMode = params.ppioKlingO1FastMode !== undefined ? params.ppioKlingO1FastMode : (params.fast_mode || false)
       const prompt = (params.prompt || '').slice(0, 2500)
-
-      const requestData: any = {
-        prompt,
-        duration
-      }
 
       // Mode-specific logic
       switch (mode) {
         case 'text-image-to-video':
           if (images.length === 0) {
             // Text-to-video
-            requestData.aspect_ratio = aspectRatio
+            return {
+              prompt,
+              duration,
+              aspect_ratio: aspectRatio
+            }
           } else {
             // Image-to-video
-            requestData.image = images[0]
-            if (images.length > 1) {
-              requestData.last_image = images[1]
+            return {
+              prompt,
+              duration,
+              image: images[0],
+              ...(images.length > 1 ? { last_image: images[1] } : {}),
+              aspect_ratio: aspectRatio
             }
-            requestData.aspect_ratio = aspectRatio
           }
-          break
-
         case 'start-end-frame':
-          requestData.image = images[0]
-          requestData.last_image = images[1]
-          requestData.aspect_ratio = aspectRatio
-          break
+          return {
+            prompt,
+            duration,
+            image: images[0],
+            ...(images.length > 1 ? { last_image: images[1] } : {}),
+            aspect_ratio: aspectRatio
+          }
 
         case 'reference-to-video':
-          requestData.video = videos[0]
-          requestData.aspect_ratio = aspectRatio
-          requestData.keep_original_sound = keepAudio
-          if (images.length > 0) {
-            requestData.images = images.slice(0, 7)
+          return {
+            prompt,
+            duration,
+            video,
+            aspect_ratio: aspectRatio,
+            keep_original_sound: keepAudio,
+            ...(images.length > 0 ? { images: images.slice(0, 7) } : {})
           }
-          break
 
         case 'video-edit':
-          requestData.video = videos[0]
-          requestData.fast_mode = fastMode
-          requestData.keep_original_sound = keepAudio
-          if (images.length > 0) {
-            requestData.images = images.slice(0, 4)
+          return {
+            prompt,
+            video,
+            fast_mode: fastMode,
+            keep_original_sound: keepAudio,
+            ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+            ...(images.length > 0 ? { images: images.slice(0, 4) } : {})
           }
-          if (aspectRatio) {
-            requestData.aspect_ratio = aspectRatio
-          }
-          break
       }
 
-      return requestData
+      return { prompt, duration, aspect_ratio: aspectRatio }
     }
   },
   pricing: {

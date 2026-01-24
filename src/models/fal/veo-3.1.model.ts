@@ -13,24 +13,157 @@ export const veo31Model = defineModel({
     description: 'Veo 3.1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
-  params: [],
+  params: [
+    {
+      id: 'falVeo31Mode',
+      order: 1,
+      type: 'dropdown',
+      name: { zh: '模式', en: 'Mode' },
+      default: 'text-image-to-video',
+      options: [
+        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
+        { value: 'start-end-frame', label: { zh: '首尾帧', en: 'Start/End Frame' } },
+        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } }
+      ]
+    },
+    {
+      id: 'falVeo31VideoDuration',
+      order: 2,
+      type: 'dropdown',
+      name: { zh: '时长', en: 'Duration' },
+      default: 8,
+      options: [
+        { value: 4, label: '4s' },
+        { value: 6, label: '6s' },
+        { value: 8, label: '8s' }
+      ]
+    },
+    {
+      id: 'falVeo31AspectRatio',
+      order: 3,
+      type: 'dropdown',
+      name: { zh: '比例', en: 'Aspect Ratio' },
+      default: '16:9',
+      options: [
+        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
+        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' },
+        { value: '1:1', label: '1:1' }
+      ]
+    },
+    {
+      id: 'falVeo31Resolution',
+      order: 4,
+      type: 'dropdown',
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '720p',
+      options: [
+        { value: '720p', label: '720p' },
+        { value: '1080p', label: '1080p' }
+      ]
+    },
+    {
+      id: 'falVeo31GenerateAudio',
+      order: 5,
+      type: 'switch',
+      name: { zh: '生成音频', en: 'Generate Audio' },
+      default: false
+    },
+    {
+      id: 'falVeo31AutoFix',
+      order: 6,
+      type: 'switch',
+      name: { zh: 'Auto Fix', en: 'Auto Fix' },
+      default: false
+    },
+    {
+      id: 'falVeo31FastMode',
+      order: 7,
+      type: 'switch',
+      name: { zh: '快速模式', en: 'Fast Mode' },
+      default: false
+    },
+    {
+      id: 'falVeo31EnhancePrompt',
+      order: 8,
+      type: 'switch',
+      name: { zh: '增强提示词', en: 'Enhance Prompt' },
+      default: false
+    }
+  ],
   linkages: [],
   endpoints: {
     selector: async (params) => {
+      const mode = params.falVeo31Mode || 'text-image-to-video'
       const images = params.images || []
-      return images.length > 0
-        ? 'fal-ai/veo/v3.1/image-to-video'
-        : 'fal-ai/veo/v3.1'
+      const fastMode = params.falVeo31FastMode === true
+
+      if (mode === 'start-end-frame') {
+        return fastMode
+          ? 'fal-ai/veo3.1/fast/first-last-frame-to-video'
+          : 'fal-ai/veo3.1/first-last-frame-to-video'
+      }
+
+      if (mode === 'reference-to-video') {
+        return 'fal-ai/veo3.1/reference-to-video'
+      }
+
+      if (images.length > 0) {
+        return fastMode ? 'fal-ai/veo3.1/fast/image-to-video' : 'fal-ai/veo3.1/image-to-video'
+      }
+
+      return fastMode ? 'fal-ai/veo3.1/fast' : 'fal-ai/veo3.1'
     }
   },
   request: {
     builder: (params) => {
       const images = params.images || []
       const prompt = params.prompt || ''
-      const requestData: any = { prompt }
-      if (images.length > 0) {
-        requestData.image_urls = images
+      const mode = params.falVeo31Mode || 'text-image-to-video'
+      const duration = params.falVeo31VideoDuration || 8
+      const aspectRatio = params.falVeo31AspectRatio
+      const resolution = params.falVeo31Resolution || '720p'
+      const enhancePrompt = params.falVeo31EnhancePrompt
+      const generateAudio = params.falVeo31GenerateAudio
+      const autoFix = params.falVeo31AutoFix
+
+      const requestData: any = {
+        prompt,
+        duration: `${duration}s`
       }
+
+      if (aspectRatio && aspectRatio !== 'auto' && aspectRatio !== 'smart' && mode !== 'reference-to-video') {
+        requestData.aspect_ratio = aspectRatio
+      }
+
+      if (resolution) {
+        requestData.resolution = resolution
+      }
+
+      if (enhancePrompt !== undefined) {
+        requestData.enhance_prompt = enhancePrompt
+      }
+
+      if (generateAudio !== undefined) {
+        requestData.generate_audio = generateAudio
+      }
+
+      if (autoFix !== undefined) {
+        requestData.auto_fix = autoFix
+      }
+
+      if (images.length > 0) {
+        if (mode === 'start-end-frame') {
+          requestData.first_frame_url = images[0]
+          requestData.last_frame_url = images[1]
+        } else if (mode === 'reference-to-video') {
+          requestData.image_urls = images
+        } else {
+          requestData.image_url = images[0]
+        }
+      }
+
       return requestData
     }
   },

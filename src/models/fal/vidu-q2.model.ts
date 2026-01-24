@@ -13,24 +13,148 @@ export const viduQ2Model = defineModel({
     description: 'Vidu Q2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
-  params: [],
+  params: [
+    {
+      id: 'viduQ2Mode',
+      order: 1,
+      type: 'dropdown',
+      name: { zh: '模式', en: 'Mode' },
+      default: 'text-to-video',
+      options: [
+        { value: 'text-to-video', label: { zh: '文生视频', en: 'Text to Video' } },
+        { value: 'image-to-video', label: { zh: '图生视频', en: 'Image to Video' } },
+        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } },
+        { value: 'video-extension', label: { zh: '视频延长', en: 'Video Extension' } }
+      ]
+    },
+    {
+      id: 'falViduQ2VideoDuration',
+      order: 2,
+      type: 'dropdown',
+      name: { zh: '时长', en: 'Duration' },
+      default: 4,
+      options: [
+        { value: 4, label: '4s' },
+        { value: 6, label: '6s' },
+        { value: 8, label: '8s' }
+      ]
+    },
+    {
+      id: 'viduQ2AspectRatio',
+      order: 3,
+      type: 'dropdown',
+      name: { zh: '比例', en: 'Aspect Ratio' },
+      default: '16:9',
+      options: [
+        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: '16:9', label: '16:9' },
+        { value: '9:16', label: '9:16' },
+        { value: '1:1', label: '1:1' }
+      ]
+    },
+    {
+      id: 'viduQ2Resolution',
+      order: 4,
+      type: 'dropdown',
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '720p',
+      options: [
+        { value: '720p', label: '720p' },
+        { value: '1080p', label: '1080p' }
+      ]
+    },
+    {
+      id: 'viduQ2MovementAmplitude',
+      order: 5,
+      type: 'dropdown',
+      name: { zh: '运动幅度', en: 'Movement Amplitude' },
+      default: 'auto',
+      options: [
+        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
+        { value: 'low', label: { zh: '低', en: 'Low' } },
+        { value: 'medium', label: { zh: '中', en: 'Medium' } },
+        { value: 'high', label: { zh: '高', en: 'High' } }
+      ]
+    },
+    {
+      id: 'viduQ2Bgm',
+      order: 6,
+      type: 'switch',
+      name: { zh: '背景音乐', en: 'Background Music' },
+      default: false
+    },
+    {
+      id: 'viduQ2FastMode',
+      order: 7,
+      type: 'switch',
+      name: { zh: '快速模式', en: 'Turbo' },
+      default: true
+    }
+  ],
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
-      return images.length > 0
-        ? 'fal-ai/vidu/q2/image-to-video'
-        : 'fal-ai/vidu/q2'
+      const mode = params.viduQ2Mode || 'text-to-video'
+      const fastMode = params.viduQ2FastMode !== false
+
+      if (mode === 'video-extension') {
+        return 'fal-ai/vidu/q2/video-extension/pro'
+      }
+      if (mode === 'reference-to-video') {
+        return 'fal-ai/vidu/q2/reference-to-video'
+      }
+      if (mode === 'image-to-video') {
+        return fastMode
+          ? 'fal-ai/vidu/q2/image-to-video/turbo'
+          : 'fal-ai/vidu/q2/image-to-video/pro'
+      }
+      return 'fal-ai/vidu/q2/text-to-video'
     }
   },
   request: {
     builder: (params) => {
+      const mode = params.viduQ2Mode || 'text-to-video'
       const images = params.images || []
       const prompt = params.prompt || ''
+      const duration = params.falViduQ2VideoDuration || 4
+      const aspectRatio = params.viduQ2AspectRatio
+      const resolution = params.viduQ2Resolution || '720p'
+      const movementAmplitude = params.viduQ2MovementAmplitude || 'auto'
+      const bgm = params.viduQ2Bgm === true
+      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: any) => typeof v === 'string' && v.startsWith('http')) : undefined)
+
       const requestData: any = { prompt }
-      if (images.length > 0) {
-        requestData.image_urls = images
+      requestData.duration = duration
+
+      if (mode === 'text-to-video' || mode === 'reference-to-video') {
+        if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+          requestData.aspect_ratio = aspectRatio
+        }
+        requestData.resolution = resolution
+      } else if (mode === 'image-to-video') {
+        requestData.resolution = resolution
+      } else if (mode === 'video-extension') {
+        requestData.resolution = resolution
       }
+
+      if (mode !== 'video-extension') {
+        requestData.movement_amplitude = movementAmplitude
+      }
+
+      requestData.bgm = bgm
+
+      if (images.length > 0) {
+        if (mode === 'reference-to-video') {
+          requestData.reference_image_urls = images.slice(0, 7)
+        } else if (mode === 'image-to-video') {
+          requestData.image_url = images[0]
+        }
+      }
+
+      if (mode === 'video-extension' && videoInput) {
+        requestData.video_url = videoInput
+      }
+
       return requestData
     }
   },

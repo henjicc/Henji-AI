@@ -73,17 +73,17 @@ export const zImageTurboModel = defineModel({
     builder: (params) => {
       const images = params.images || []
       const prompt = params.prompt || ''
-      const imageSize = parseImageSize(params.image_size)
+      const imageSize = parseImageSize(params.falZImageTurboImageSize)
 
       const requestData: any = {
         prompt,
         image_size: imageSize,
-        num_inference_steps: params.num_inference_steps || 8,
-        num_images: params.num_images || 1,
+        num_inference_steps: params.falZImageTurboNumInferenceSteps || 8,
+        num_images: params.falZImageTurboNumImages || 1,
         enable_safety_checker: false,
         output_format: 'png',
-        enable_prompt_expansion: params.enable_prompt_expansion || false,
-        acceleration: params.acceleration || 'none'
+        enable_prompt_expansion: params.falZImageTurboEnablePromptExpansion || false,
+        acceleration: params.falZImageTurboAcceleration || 'none'
       }
 
       if (images.length > 0) {

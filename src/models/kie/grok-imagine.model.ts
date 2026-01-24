@@ -4,22 +4,25 @@
 
 import { defineModel } from '@/core'
 
+const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
+
 export const kieGrokImagineModel = defineModel({
   meta: {
     id: 'kie-grok-imagine',
     provider: 'kie',
     type: 'image',
-    name: 'Grok Imagine',
-    description: 'Grok Imagine 图片生成模型',
-    tags: ['image', 'text-to-image']
+    name: { zh: 'Grok Imagine', en: 'Grok Imagine' },
+    description: { zh: 'KIE Grok Imagine 文生图模型', en: 'KIE Grok Imagine text-to-image model' },
+    tags: ['text-to-image', 'provider-kie'],
+    aliases: ['grok-imagine-kie']
   },
   params: [
     {
       id: 'kieGrokImagineAspectRatio',
       type: 'dropdown',
       order: 1,
-      label: { zh: '宽高比', en: 'Aspect Ratio' },
-      defaultValue: '1:1',
+      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },
         { value: '2:3', label: '2:3' },
@@ -28,23 +31,22 @@ export const kieGrokImagineModel = defineModel({
     }
   ],
   linkages: [],
-  endpoints: {
-    selector: async () => 'grok-imagine/text-to-image'
-  },
+  endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
-      const requestData: any = {
+      const prompt = params.prompt || ''
+      const aspectRatio = params.kieGrokImagineAspectRatio || params.aspect_ratio
+
+      const input: Record<string, unknown> = { prompt }
+
+      if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+        input.aspect_ratio = aspectRatio
+      }
+
+      return {
         model: 'grok-imagine/text-to-image',
-        input: {
-          prompt: params.prompt || ''
-        }
+        input
       }
-
-      if (params.aspect_ratio && params.aspect_ratio !== 'smart' && params.aspect_ratio !== 'auto') {
-        requestData.input.aspect_ratio = params.aspect_ratio
-      }
-
-      return requestData
     }
   },
   pricing: {
@@ -54,4 +56,4 @@ export const kieGrokImagineModel = defineModel({
   }
 })
 
-export default kieGrokImagineModel;
+export default kieGrokImagineModel

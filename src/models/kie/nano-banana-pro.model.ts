@@ -4,74 +4,93 @@
 
 import { defineModel } from '@/core'
 
+const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
+
 export const kieNanoBananaProModel = defineModel({
   meta: {
     id: 'kie-nano-banana-pro',
     provider: 'kie',
     type: 'image',
-    name: 'Nano Banana Pro',
-    description: 'Nano Banana Pro 图片生成模型',
-    tags: ['image', 'text-to-image', 'image-to-image']
+    name: { zh: 'Nano Banana Pro', en: 'Nano Banana Pro' },
+    description: { zh: 'KIE Nano Banana Pro 图像生成模型', en: 'KIE Nano Banana Pro image generation model' },
+    tags: ['text-to-image', 'image-to-image', 'provider-kie'],
+    aliases: ['nano-banana-pro-kie']
   },
   params: [
     {
-      id: 'kieNanoBananaProAspectRatio',
+      id: 'kieNanoBananaAspectRatio',
       type: 'dropdown',
       order: 1,
-      label: { zh: '宽高比', en: 'Aspect Ratio' },
-      defaultValue: '1:1',
+      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },
+        { value: '4:3', label: '4:3' },
+        { value: '3:4', label: '3:4' },
         { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' }
+        { value: '9:16', label: '9:16' },
+        { value: 'smart', label: { zh: '智能', en: 'Smart' } }
       ]
     },
     {
-      id: 'kieNanoBananaProResolution',
+      id: 'kieNanoBananaResolution',
       type: 'dropdown',
       order: 2,
-      label: { zh: '分辨率', en: 'Resolution' },
-      defaultValue: 'standard',
+      name: { zh: '分辨率', en: 'Resolution' },
+      default: '2K',
       options: [
-        { value: 'standard', label: '标准' },
-        { value: 'high', label: '高清' }
+        { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' },
+        { value: '4K', label: '4K' }
+      ]
+    },
+    {
+      id: 'kieNanoBananaOutputFormat',
+      type: 'dropdown',
+      order: 3,
+      name: { zh: '输出格式', en: 'Output Format' },
+      default: 'png',
+      options: [
+        { value: 'png', label: 'PNG' },
+        { value: 'jpg', label: 'JPG' },
+        { value: 'webp', label: 'WEBP' }
       ]
     }
   ],
   linkages: [],
-  endpoints: {
-    selector: async () => 'nano-banana-pro'
-  },
+  endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
       const images = params.images || []
-      const requestData: any = {
-        model: 'nano-banana-pro',
-        input: {
-          prompt: params.prompt || ''
-        }
+      const prompt = params.prompt || ''
+      const aspectRatio = params.kieNanoBananaAspectRatio || params.aspect_ratio
+      const resolution = params.kieNanoBananaResolution || params.resolution
+
+      const input: Record<string, unknown> = { prompt }
+
+      if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
+        input.aspect_ratio = aspectRatio
       }
 
-      if (params.aspect_ratio && params.aspect_ratio !== 'smart' && params.aspect_ratio !== 'auto') {
-        requestData.input.aspect_ratio = params.aspect_ratio
-      }
-
-      if (params.resolution) {
-        requestData.input.resolution = params.resolution
+      if (resolution) {
+        input.resolution = resolution
       }
 
       if (images.length > 0) {
-        requestData.input.image_input = images
+        input.image_input = images
       }
 
-      return requestData
+      return {
+        model: 'nano-banana-pro',
+        input
+      }
     }
   },
   pricing: {
     currency: '¥',
-    calculator: () => 0.04,
-    description: '基础价格 ¥0.04/张'
+    calculator: () => 0.12,
+    description: '基础价格 ¥0.12/次'
   }
 })
 
-export default kieNanoBananaProModel;
+export default kieNanoBananaProModel

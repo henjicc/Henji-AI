@@ -55,7 +55,7 @@ export const wan25PreviewModel = defineModel({
     },
     // 3. 分辨率（图生视频）
     {
-      id: 'falWan25Resolution',
+      id: 'ppioWan25Resolution',
       type: 'dropdown',
       order: 3,
       name: { zh: '分辨率', en: 'Resolution' },
@@ -107,7 +107,7 @@ export const wan25PreviewModel = defineModel({
     {
       trigger: 'uploadedImages',
       effect: 'hide',
-      targets: ['falWan25Resolution'],
+      targets: ['ppioWan25Resolution'],
       condition: (images) => (images?.length || 0) === 0
     }
   ],
@@ -120,27 +120,24 @@ export const wan25PreviewModel = defineModel({
   request: {
     builder: (params) => {
       const images = params.images || []
-      const duration = params.duration || 5
-      const prompt_extend = params.prompt_extend === undefined ? true : params.prompt_extend
-      const audio = params.audio === undefined ? true : params.audio
+      const duration = params.ppioWan25VideoDuration || params.duration || 5
+      const prompt_extend = params.ppioWan25PromptExtend !== undefined ? params.ppioWan25PromptExtend : (params.prompt_extend === undefined ? true : params.prompt_extend)
+      const audio = params.ppioWan25Audio !== undefined ? params.ppioWan25Audio : (params.audio === undefined ? true : params.audio)
       const prompt = params.prompt || ''
-      const negativePrompt = params.negative_prompt || ''
+      const negativePrompt = params.ppioWan25NegativePrompt || params.negative_prompt || ''
+      const audioUrl = params.audio_url
 
       if (images.length > 0) {
         // Image-to-video
-        const img0 = images[0]
-        const imgUrl = typeof img0 === 'string'
-          ? (img0.startsWith('data:') ? img0 : `data:image/jpeg;base64,${img0}`)
-          : img0
-
         return {
           input: {
             prompt,
             negative_prompt: negativePrompt,
-            img_url: imgUrl
+            img_url: images[0],
+            ...(audioUrl ? { audio_url: audioUrl } : {})
           },
           parameters: {
-            resolution: params.resolution || '1080P',
+            resolution: params.ppioWan25Resolution || params.resolution || '1080P',
             duration,
             prompt_extend,
             watermark: false,
@@ -152,10 +149,11 @@ export const wan25PreviewModel = defineModel({
         return {
           input: {
             prompt,
-            negative_prompt: negativePrompt
+            negative_prompt: negativePrompt,
+            ...(audioUrl ? { audio_url: audioUrl } : {})
           },
           parameters: {
-            size: params.size || '1920*1080',
+            size: params.ppioWan25Size || params.size || '1920*1080',
             duration,
             prompt_extend,
             watermark: false,

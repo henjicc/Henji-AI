@@ -45,6 +45,29 @@ function formatPanelDisplayValue(value: any, panel: string): string {
     if (value.width && value.height) return `${value.width}×${value.height}`
   }
 
+  if (panel === 'modelscope-custom-model') {
+    if (typeof value !== 'string') return '未设置'
+    const trimmed = value.trim()
+    if (!trimmed) return '未设置'
+
+    try {
+      const stored = localStorage.getItem('modelscope_custom_models')
+      if (!stored) return trimmed
+      const parsed = JSON.parse(stored) as unknown
+      if (!Array.isArray(parsed)) return trimmed
+      const match = parsed.find((item) => {
+        if (!item || typeof item !== 'object') return false
+        const record = item as Record<string, unknown>
+        return record.id === trimmed
+      }) as Record<string, unknown> | undefined
+      if (!match) return trimmed
+      const name = typeof match.name === 'string' ? match.name.trim() : ''
+      return name || trimmed
+    } catch {
+      return trimmed
+    }
+  }
+
   // 默认显示
   return JSON.stringify(value)
 }
@@ -113,13 +136,14 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       const PanelComponent = panelRegistry.get(compositeParam.panel as any)
 
       if (PanelComponent) {
+        const panelWidth = compositeParam.panel === 'modelscope-custom-model' ? 520 : 320
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
         const panelContent = (
           <PanelTrigger
             label={getI18nText(param.name, i18n.language) || param.id}
             display={formatPanelDisplayValue(value, compositeParam.panel)}
             className="w-auto min-w-[100px]"
-            panelWidth={320}
+            panelWidth={panelWidth}
             alignment="aboveCenter"
             closeOnPanelClick={false}
             renderPanel={() => (

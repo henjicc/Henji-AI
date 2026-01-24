@@ -30,6 +30,14 @@ function getImageSize(src: string): Promise<{ width: number; height: number }> {
     })
 }
 
+interface ResolutionValue {
+    mode: string
+    aspectRatio: string
+    quality: string
+    width?: number
+    height?: number
+}
+
 export const seedream40Model = defineModel({
     meta: {
         id: 'seedream-4.0',
@@ -54,6 +62,7 @@ export const seedream40Model = defineModel({
             id: 'resolution',
             type: 'composite',
             order: 1,
+            valueType: 'object',
             name: { zh: '分辨率', en: 'Resolution' },
             panel: 'resolution',
             default: {
@@ -102,6 +111,7 @@ export const seedream40Model = defineModel({
             id: 'maxImages',
             type: 'number',
             order: 2,
+            valueType: 'number',
             name: { zh: '数量', en: 'Quantity' },
             tooltip: {
                 zh: '设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。',
@@ -120,11 +130,11 @@ export const seedream40Model = defineModel({
             trigger: 'resolution',
             effect: 'setValue',
             target: 'resolution',
-            condition: (triggerValue: any) => {
+            condition: (triggerValue: ResolutionValue) => {
                 // 只在非智能模式下计算
-                return triggerValue && triggerValue.aspectRatio && triggerValue.aspectRatio !== 'smart'
+                return Boolean(triggerValue && triggerValue.aspectRatio && triggerValue.aspectRatio !== 'smart')
             },
-            value: (triggerValue: any) => {
+            value: (triggerValue: ResolutionValue) => {
                 const { aspectRatio, quality } = triggerValue
 
                 // 解析宽高比

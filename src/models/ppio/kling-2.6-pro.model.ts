@@ -87,7 +87,7 @@ export const kling26ProModel = defineModel({
       type: 'switch',
       order: 5,
       name: { zh: '生成音频', en: 'Generate Audio' },
-      default: false,
+      default: true,
       apiField: 'sound'
     },
 
@@ -158,32 +158,38 @@ export const kling26ProModel = defineModel({
   },
   request: {
     builder: (params) => {
-      const mode = (params.mode || 'text-image-to-video') as string
+      const mode = (params.ppioKling26Mode || params.mode || 'text-image-to-video') as string
       const images = (params.images || []) as string[]
+      const videos = (params.videos || []) as string[]
+      const video = params.video || videos[0]
       const prompt = ((params.prompt || '') as string).slice(0, 2500)
 
-      const requestData: Record<string, any> = { prompt }
-
       if (mode === 'motion-control') {
-        // Motion control mode
-        requestData.video = params.video
+        return {
+          prompt,
+          image: images[0],
+          video,
+          character_orientation: params.ppioKling26CharacterOrientation || params.character_orientation || 'video',
+          keep_original_sound: params.ppioKling26KeepOriginalSound !== undefined
+            ? params.ppioKling26KeepOriginalSound
+            : (params.keep_original_sound !== undefined ? params.keep_original_sound : true)
+        }
+      }
+
+      const requestData: Record<string, any> = {
+        prompt,
+        duration: params.ppioKling26VideoDuration || params.duration || 5,
+        sound: params.ppioKling26Sound !== undefined ? params.ppioKling26Sound : (params.sound || false),
+        aspect_ratio: params.ppioKling26AspectRatio || params.aspect_ratio || '16:9'
+      }
+
+      const cfgScale = params.ppioKling26CfgScale ?? params.cfg_scale
+      if (cfgScale !== undefined) {
+        requestData.cfg_scale = cfgScale
+      }
+
+      if (images.length > 0) {
         requestData.image = images[0]
-        requestData.character_orientation = params.character_orientation || 'video'
-        requestData.keep_original_sound = params.keep_original_sound !== undefined ? params.keep_original_sound : true
-      } else {
-        // Text/image-to-video mode
-        requestData.duration = params.duration || 5
-        requestData.sound = params.sound || false
-
-        if (params.cfg_scale !== undefined) {
-          requestData.cfg_scale = params.cfg_scale
-        }
-
-        if (images.length > 0) {
-          requestData.image = images[0]
-        }
-
-        requestData.aspect_ratio = params.aspect_ratio || '16:9'
       }
 
       return requestData

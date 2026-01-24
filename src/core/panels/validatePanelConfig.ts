@@ -63,6 +63,7 @@ export function isValidPanelType(type: string): type is PanelType {
   const validTypes: PanelType[] = [
     'resolution',
     'model-selector',
+    'modelscope-custom-model',
     'voice-selector',
     'style-gallery',
     'color-picker',
