@@ -38,22 +38,26 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
     return text
   }
 
-  // 优先使用指定语言
+  // 1. 尝试完全匹配 (e.g. 'zh-CN')
   if (text[locale]) {
     return text[locale]
   }
 
-  // 降级到中文
-  if (text.zh) {
-    return text.zh
+  // 2. 尝试语言前缀匹配 (e.g. 'zh-CN' -> 'zh', 'en-US' -> 'en')
+  const langPrefix = locale.split('-')[0]
+  if (text[langPrefix]) {
+    return text[langPrefix]
   }
 
-  // 降级到英文
-  if (text.en) {
+  // 3. 如果请求的是英语但没找到，尝试找 en
+  if (langPrefix === 'en' && text.en) {
     return text.en
   }
 
-  // 返回第一个可用的值
+  // 4. 默认回退（优先 zh，然后 en，最后第一个可用值）
+  if (text.zh) return text.zh
+  if (text.en) return text.en
+
   const firstKey = Object.keys(text)[0]
   return text[firstKey] || ''
 }

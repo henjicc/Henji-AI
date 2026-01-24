@@ -16,7 +16,7 @@ export const klingO1Model = defineModel({
       zh: '派欧云可灵视频生成模型 O1 版本，支持文/图生视频、首尾帧、参考生视频、视频编辑四种模式',
       en: 'PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes'
     },
-    tags: ['text-to-video', 'image-to-video', 'supports-start-end-frame', 'supports-reference-mode', 'supports-video-editing'],
+    tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'supports-video-editing'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

@@ -1,19 +1,31 @@
 {
   "title": "Models",
   "selectModel": "Select Model",
-  "customModel": "Custom Model",
-  "builtInModel": "Built-in Model",
-
+  "customModel": "Custom Models",
+  "builtInModel": "Built-in Models",
+  "all": "All",
+  "favorites": "Favorites",
   "types": {
     "image": "Image",
     "video": "Video",
     "audio": "Audio"
   },
-
   "providers": {
     "ppio": "PPIO",
-    "fal": "Fal",
+    "fal": "fal",
     "modelscope": "ModelScope",
     "kie": "KIE"
+  },
+  "tags": {
+    "text-to-image": "Image Generation",
+    "image-to-image": "Image Editing",
+    "text-to-video": "Text to Video",
+    "image-to-video": "Image to Video",
+    "start-end-frame": "Start/End Frame",
+    "reference-mode": "Reference to Video",
+    "motion-control": "Motion Control",
+    "video-to-video": "Video Editing",
+    "video-extension": "Video Extension",
+    "text-to-audio": "Audio Synthesis"
   }
 }

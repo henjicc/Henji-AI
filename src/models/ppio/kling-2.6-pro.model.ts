@@ -16,7 +16,7 @@ export const kling26ProModel = defineModel({
       zh: '派欧云可灵视频生成模型 2.6 Pro 版本，支持文/图生视频和动作控制两种模式',
       en: 'PPIO Kling video generation model v2.6 Pro, supports text/image-to-video and motion-control modes'
     },
-    tags: ['text-to-video', 'image-to-video', 'supports-motion-control'],
+    tags: ['text-to-video', 'image-to-video', 'motion-control'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

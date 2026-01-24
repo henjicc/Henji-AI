@@ -31,10 +31,10 @@ export type ModelTag =
   // ========== 高级功能标签 ==========
   | 'supports-image-editing'     // 支持图片编辑（上传图片进行编辑）
   | 'supports-multi-image'       // 支持多图上传
-  | 'supports-start-end-frame'   // 支持首尾帧模式
-  | 'supports-reference-mode'    // 支持参考模式
-  | 'supports-motion-control'    // 支持动作控制
-  | 'supports-video-extension'   // 支持视频延长
+  | 'start-end-frame'            // 支持首尾帧模式
+  | 'reference-mode'             // 支持参考模式
+  | 'motion-control'             // 支持动作控制
+  | 'video-extension'            // 支持视频延长
   | 'supports-video-editing'     // 支持视频编辑
   | 'supports-audio-generation'  // 支持音频生成
   | 'supports-prompt-expansion'  // 支持提示词扩展
@@ -112,8 +112,22 @@ export const TAG_CATEGORIES = {
   PROVIDER: 'Provider'
 } as const
 
+export const FILTERABLE_TAGS: ModelTag[] = [
+  'text-to-image',             // 图片生成
+  'image-to-image',            // 图片编辑
+  'text-to-video',             // 文生视频
+  'image-to-video',            // 图生视频
+  'start-end-frame',           // 首尾帧
+  'reference-mode',            // 参考生视频
+  'motion-control',            // 动作控制
+  'video-to-video',            // 视频编辑
+  'video-extension',           // 视频延长
+  'text-to-audio'              // 语音合成
+]
+
 /**
  * 标签描述
+ * @deprecated 请使用 i18n 替代：t('models.tags.tag-id')
  */
 export const TAG_DESCRIPTIONS: Record<ModelTag, string> = {
   // 基础能力
@@ -127,10 +141,10 @@ export const TAG_DESCRIPTIONS: Record<ModelTag, string> = {
   // 高级功能
   'supports-image-editing': '支持图片编辑功能',
   'supports-multi-image': '支持上传多张图片',
-  'supports-start-end-frame': '支持首尾帧模式',
-  'supports-reference-mode': '支持参考模式',
-  'supports-motion-control': '支持动作控制',
-  'supports-video-extension': '支持视频延长',
+  'start-end-frame': '支持首尾帧模式',
+  'reference-mode': '支持参考模式',
+  'motion-control': '支持动作控制',
+  'video-extension': '支持视频延长',
   'supports-video-editing': '支持视频编辑',
   'supports-audio-generation': '支持音频生成',
   'supports-prompt-expansion': '支持提示词扩展',

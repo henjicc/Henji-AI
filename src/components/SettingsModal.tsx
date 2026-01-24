@@ -12,6 +12,7 @@ import { logError } from '../utils/errorLogger'
 import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency, clearIgnoredVersions, getFrequencyLabel } from '../utils/updateConfig'
 import type { UpdateConfig } from '../utils/updateConfig'
 import { checkForUpdates, getCurrentVersion } from '../services/updateChecker'
+import { getCurrentLanguage, changeLanguage } from '../utils/language'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -557,6 +558,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <div className="flex-1 overflow-y-auto p-5">
             {activeTab === 'general' && (
               <div className="space-y-5 animate-fade-in">
+                <div>
+                  <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">语言 / Language</h4>
+                  <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
+                    <Dropdown
+                      label="界面语言"
+                      value={getCurrentLanguage()}
+                      options={[
+                        { value: 'auto', label: '自动 / Auto' },
+                        { value: 'zh-CN', label: '简体中文' },
+                        { value: 'en-US', label: 'English' }
+                      ]}
+                      display={[
+                        { value: 'auto', label: '自动 / Auto' },
+                        { value: 'zh-CN', label: '简体中文' },
+                        { value: 'en-US', label: 'English' }
+                      ].find(o => o.value === getCurrentLanguage())?.label}
+                      onSelect={(value) => {
+                        changeLanguage(value as any)
+                        setForceUpdate(n => n + 1)
+                      }}
+                      className="w-full"
+                    />
+                    <p className="mt-2 text-xs text-zinc-500">选择界面显示语言 / Select Interface Language</p>
+                  </div>
+                </div>
+
                 <div>
                   <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">历史记录</h4>
                   <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">

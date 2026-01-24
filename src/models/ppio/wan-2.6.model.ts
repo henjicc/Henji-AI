@@ -16,7 +16,7 @@ export const wan26Model = defineModel({
       zh: '派欧云万象视频生成模型 2.6 版本，支持文/图生视频和参考生视频两种模式',
       en: 'PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes'
     },
-    tags: ['text-to-video', 'image-to-video', 'supports-reference-mode'],
+    tags: ['text-to-video', 'image-to-video', 'reference-mode'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

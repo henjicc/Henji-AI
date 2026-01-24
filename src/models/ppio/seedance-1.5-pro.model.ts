@@ -16,7 +16,7 @@ export const seedance15ProModel = defineModel({
       zh: '派欧云即舞视频生成模型 1.5 Pro 版本，支持文生视频、图生视频、首尾帧三种模式',
       en: 'PPIO Seedance video generation model v1.5 Pro, supports text-to-video, image-to-video, and start-end-frame modes'
     },
-    tags: ['text-to-video', 'image-to-video', 'supports-start-end-frame'],
+    tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

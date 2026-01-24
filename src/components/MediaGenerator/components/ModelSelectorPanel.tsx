@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import PinyinMatch from 'pinyin-match'
@@ -71,6 +73,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   onFilterFunctionChange,
   onToggleFavorite
 }) => {
+  const { t } = useTranslation('models')
   // 直接从 localStorage 读取，每次渲染时都获取最新数据
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
@@ -277,7 +280,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="输入模型名称、拼音或首字母..."
+              placeholder={t('selectModel')}
               className="w-full px-3 py-2 text-sm bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out"
             />
             {searchQuery && (
@@ -298,23 +301,23 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         <div className="mb-3">
           <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => onFilterProviderChange('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>全部</button>
+            <button onClick={() => onFilterProviderChange('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t('all')}</button>
             {allProviders.map(p => (
-              <button key={p.id} onClick={() => onFilterProviderChange(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{p.name}</button>
+              <button key={p.id} onClick={() => onFilterProviderChange(p.id)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === p.id ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t(`providers.${p.id}`, p.name)}</button>
             ))}
             <div className="w-px bg-zinc-600/50 mx-1"></div>
             {[
-              { label: '全部', value: 'all' },
-              { label: '收藏', value: 'favorite' },
-              { label: '图片', value: 'image' },
-              { label: '视频', value: 'video' },
-              { label: '音频', value: 'audio' }
+              { label: t('all'), value: 'all' },
+              { label: t('favorites'), value: 'favorite' },
+              { label: t('types.image'), value: 'image' },
+              { label: t('types.video'), value: 'video' },
+              { label: t('types.audio'), value: 'audio' }
             ].map(t => {
               const isTypeHidden = t.value !== 'all' && t.value !== 'favorite' && hiddenTypes.has(t.value)
               return (
                 <button
                   key={t.value}
-                  onClick={() => onFilterTypeChange(t.value as any)}
+                  onClick={() => onFilterTypeChange(t.value as 'all' | 'favorite' | 'image' | 'video' | 'audio')}
                   className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterType === t.value
                     ? 'bg-[#007eff] text-white'
                     : isTypeHidden
@@ -334,17 +337,11 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
           <div className="text-xs text-zinc-400 mb-2">功能</div>
           <div className="flex flex-wrap gap-2">
             {[
-              { label: '全部', value: 'all' },
-              { label: '图片生成', value: '图片生成' },
-              { label: '图片编辑', value: '图片编辑' },
-              { label: '文生视频', value: '文生视频' },
-              { label: '图生视频', value: '图生视频' },
-              { label: '首尾帧', value: '首尾帧' },
-              { label: '参考生视频', value: '参考生视频' },
-              { label: '动作控制', value: '动作控制' },
-              { label: '视频编辑', value: '视频编辑' },
-              { label: '视频延长', value: '视频延长' },
-              { label: '语音合成', value: '语音合成' }
+              { label: t('all'), value: 'all' },
+              ...FILTERABLE_TAGS.map(tag => ({
+                label: t(`tags.${tag}`),
+                value: tag
+              }))
             ].map(f => (
               <button key={f.value} onClick={() => onFilterFunctionChange(f.value)} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterFunction === f.value ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{f.label}</button>
             ))}
@@ -398,8 +395,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
 
                 {/* 底部信息行 */}
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-500">{p.name}</span>
-                  <span className="text-zinc-400">{m.type === 'image' ? '图片' : m.type === 'video' ? '视频' : '音频'}</span>
+                  <span className="text-zinc-500">{t(`providers.${p.id}`, p.name)}</span>
+                  <span className="text-zinc-400">{m.type === 'image' ? t('types.image') : m.type === 'video' ? t('types.video') : t('types.audio')}</span>
                 </div>
               </div>
             )

@@ -116,7 +116,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
         const panelContent = (
           <PanelTrigger
-            label={param.name?.zh || param.name?.en || param.id}
+            label={getI18nText(param.name, i18n.language) || param.id}
             display={formatPanelDisplayValue(value, compositeParam.panel)}
             className="w-auto min-w-[100px]"
             panelWidth={320}

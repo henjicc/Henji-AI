@@ -3,17 +3,29 @@
   "selectModel": "选择模型",
   "customModel": "自定义模型",
   "builtInModel": "内置模型",
-
+  "all": "全部",
+  "favorites": "收藏",
   "types": {
     "image": "图像",
     "video": "视频",
     "audio": "音频"
   },
-
   "providers": {
-    "ppio": "PPIO",
-    "fal": "Fal",
+    "ppio": "派欧云",
+    "fal": "fal",
     "modelscope": "ModelScope",
     "kie": "KIE"
+  },
+  "tags": {
+    "text-to-image": "图片生成",
+    "image-to-image": "图片编辑",
+    "text-to-video": "文生视频",
+    "image-to-video": "图生视频",
+    "start-end-frame": "首尾帧",
+    "reference-mode": "参考生视频",
+    "motion-control": "动作控制",
+    "video-to-video": "视频编辑",
+    "video-extension": "视频延长",
+    "text-to-audio": "语音合成"
   }
 }
