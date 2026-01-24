@@ -88,7 +88,11 @@ export type {
   ModelDefinitionMap,
   ModelMeta,
   ModelType,
-  ProviderId
+  ProviderId,
+  ProgressConfig,
+  ProgressTimeConfig,
+  ProgressPollingConfig,
+  ProgressCurveConfig
 } from './ModelDefinition'
 
 // 面板类型

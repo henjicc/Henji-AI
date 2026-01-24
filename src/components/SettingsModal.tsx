@@ -3,7 +3,6 @@ import NumberInput from './ui/NumberInput'
 import Toggle from './ui/Toggle'
 import Dropdown from './ui/Dropdown'
 import ModelSettingsPanel from './ModelSettingsPanel'
-import { apiService } from '../services/api'
 import { open } from '@tauri-apps/plugin-shell'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { getDataRoot, getDefaultDataRoot, setCustomDataRoot, resetToDefaultDataRoot, validateDirectory, hasExistingData, migrateData } from '../utils/dataPath'
@@ -184,14 +183,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const handleApiKeyChange = (value: string) => {
     setApiKey(value)
     localStorage.setItem('ppio_api_key', value)
-    apiService.setApiKey(value)
-    // 尝试初始化适配器（如果key不为空）
-    if (value.trim()) {
-      apiService.initializeAdapter({
-        type: 'ppio',
-        modelName: 'seedream-4.0'
-      })
-    }
   }
 
   // 实时保存 fal API Key

@@ -19,6 +19,119 @@ import type { Linkage } from './Linkage'
 export type ModelType = 'image' | 'video' | 'audio'
 
 /**
+ * Progress curve settings
+ */
+export interface ProgressCurveConfig {
+  /**
+   * Percent where slowdown starts.
+   *
+   * @default 80
+   */
+  slowStart?: number
+
+  /**
+   * Percent where slowdown ends.
+   *
+   * @default 95
+   */
+  slowEnd?: number
+
+  /**
+   * Max percent before completion.
+   *
+   * @default 99
+   */
+  cap?: number
+
+  /**
+   * Tail approach speed factor (larger = slower).
+   *
+   * @default 1.2
+   */
+  tailFactor?: number
+}
+
+/**
+ * Progress config for sync models
+ */
+export interface ProgressTimeConfig {
+  /** Mode: time-based estimate */
+  mode: 'time'
+
+  /** Base expected duration (ms) */
+  baseDurationMs: number
+
+  /** Extra duration per unit (ms) */
+  perUnitMs?: number
+
+  /** Param ID used for scaling */
+  scaleWith?: string
+
+  /** Min duration clamp (ms) */
+  minDurationMs?: number
+
+  /** Max duration clamp (ms) */
+  maxDurationMs?: number
+
+  /** Optional curve override */
+  curve?: ProgressCurveConfig
+
+  /**
+   * Progress update interval (ms)
+   *
+   * @default 300
+   */
+  tickMs?: number
+}
+
+/**
+ * Progress config for async models
+ */
+export interface ProgressPollingConfig {
+  /** Mode: polling-based estimate */
+  mode: 'polling'
+
+  /** Base expected attempts */
+  baseAttempts: number
+
+  /** Extra attempts per unit */
+  perUnitAttempts?: number
+
+  /** Param ID used for scaling */
+  scaleWith?: string
+
+  /** Min attempts clamp */
+  minAttempts?: number
+
+  /** Max attempts clamp */
+  maxAttempts?: number
+
+  /** Override polling interval (ms) */
+  intervalMs?: number
+
+  /** Min duration clamp (ms) */
+  minDurationMs?: number
+
+  /** Max duration clamp (ms) */
+  maxDurationMs?: number
+
+  /** Optional curve override */
+  curve?: ProgressCurveConfig
+
+  /**
+   * Progress update interval (ms)
+   *
+   * @default 300
+   */
+  tickMs?: number
+}
+
+/**
+ * Progress config union
+ */
+export type ProgressConfig = ProgressTimeConfig | ProgressPollingConfig
+
+/**
  * Provider ID
  */
 export type ProviderId = 'ppio' | 'fal' | 'kie' | 'modelscope' | string
@@ -105,6 +218,11 @@ export interface ModelMeta {
      */
     expectedAttempts?: number
   }
+
+  /**
+   * Progress estimate config (optional)
+   */
+  progress?: ProgressConfig
 
   /**
    * 模型别名（可选）

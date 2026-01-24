@@ -103,6 +103,92 @@ function validateMeta(model: ModelDefinition): void {
       throw new ModelValidationError('Model meta.polling.maxAttempts must be a positive number')
     }
   }
+
+  // Validate progress config (optional)
+  if (meta.progress) {
+    const progress = meta.progress
+
+    if (progress.mode !== 'time' && progress.mode !== 'polling') {
+      throw new ModelValidationError('Model meta.progress.mode must be time or polling')
+    }
+
+    if (progress.mode === 'time') {
+      if (typeof progress.baseDurationMs !== 'number' || progress.baseDurationMs <= 0) {
+        throw new ModelValidationError('Model meta.progress.baseDurationMs must be a positive number')
+      }
+      if (progress.perUnitMs !== undefined && (typeof progress.perUnitMs !== 'number' || progress.perUnitMs < 0)) {
+        throw new ModelValidationError('Model meta.progress.perUnitMs must be a non-negative number')
+      }
+      if (progress.tickMs !== undefined && (typeof progress.tickMs !== 'number' || progress.tickMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.tickMs must be a positive number')
+      }
+      if (progress.scaleWith !== undefined && typeof progress.scaleWith !== 'string') {
+        throw new ModelValidationError('Model meta.progress.scaleWith must be a string')
+      }
+      if (progress.minDurationMs !== undefined && (typeof progress.minDurationMs !== 'number' || progress.minDurationMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.minDurationMs must be a positive number')
+      }
+      if (progress.maxDurationMs !== undefined && (typeof progress.maxDurationMs !== 'number' || progress.maxDurationMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.maxDurationMs must be a positive number')
+      }
+    }
+
+    if (progress.mode === 'polling') {
+      if (typeof progress.baseAttempts !== 'number' || progress.baseAttempts <= 0) {
+        throw new ModelValidationError('Model meta.progress.baseAttempts must be a positive number')
+      }
+      if (progress.perUnitAttempts !== undefined && (typeof progress.perUnitAttempts !== 'number' || progress.perUnitAttempts < 0)) {
+        throw new ModelValidationError('Model meta.progress.perUnitAttempts must be a non-negative number')
+      }
+      if (progress.intervalMs !== undefined && (typeof progress.intervalMs !== 'number' || progress.intervalMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.intervalMs must be a positive number')
+      }
+      if (progress.tickMs !== undefined && (typeof progress.tickMs !== 'number' || progress.tickMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.tickMs must be a positive number')
+      }
+      if (progress.scaleWith !== undefined && typeof progress.scaleWith !== 'string') {
+        throw new ModelValidationError('Model meta.progress.scaleWith must be a string')
+      }
+      if (progress.minAttempts !== undefined && (typeof progress.minAttempts !== 'number' || progress.minAttempts <= 0)) {
+        throw new ModelValidationError('Model meta.progress.minAttempts must be a positive number')
+      }
+      if (progress.maxAttempts !== undefined && (typeof progress.maxAttempts !== 'number' || progress.maxAttempts <= 0)) {
+        throw new ModelValidationError('Model meta.progress.maxAttempts must be a positive number')
+      }
+      if (progress.minDurationMs !== undefined && (typeof progress.minDurationMs !== 'number' || progress.minDurationMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.minDurationMs must be a positive number')
+      }
+      if (progress.maxDurationMs !== undefined && (typeof progress.maxDurationMs !== 'number' || progress.maxDurationMs <= 0)) {
+        throw new ModelValidationError('Model meta.progress.maxDurationMs must be a positive number')
+      }
+    }
+
+    if (progress.minDurationMs !== undefined && progress.maxDurationMs !== undefined && progress.minDurationMs > progress.maxDurationMs) {
+      throw new ModelValidationError('Model meta.progress.minDurationMs must be <= maxDurationMs')
+    }
+
+    const curve = progress.curve
+    if (curve) {
+      if (curve.slowStart !== undefined && (typeof curve.slowStart !== 'number' || curve.slowStart <= 0 || curve.slowStart >= 100)) {
+        throw new ModelValidationError('Model meta.progress.curve.slowStart must be between 0 and 100')
+      }
+      if (curve.slowEnd !== undefined && (typeof curve.slowEnd !== 'number' || curve.slowEnd <= 0 || curve.slowEnd >= 100)) {
+        throw new ModelValidationError('Model meta.progress.curve.slowEnd must be between 0 and 100')
+      }
+      if (curve.cap !== undefined && (typeof curve.cap !== 'number' || curve.cap <= 0 || curve.cap >= 100)) {
+        throw new ModelValidationError('Model meta.progress.curve.cap must be between 0 and 100')
+      }
+      if (curve.tailFactor !== undefined && (typeof curve.tailFactor !== 'number' || curve.tailFactor <= 0)) {
+        throw new ModelValidationError('Model meta.progress.curve.tailFactor must be a positive number')
+      }
+      if (curve.slowStart !== undefined && curve.slowEnd !== undefined && curve.slowStart >= curve.slowEnd) {
+        throw new ModelValidationError('Model meta.progress.curve.slowStart must be < slowEnd')
+      }
+      if (curve.slowEnd !== undefined && curve.cap !== undefined && curve.slowEnd >= curve.cap) {
+        throw new ModelValidationError('Model meta.progress.curve.slowEnd must be < cap')
+      }
+    }
+  }
 }
 
 /**

@@ -11,6 +11,7 @@
  */
 
 import { registry } from '@/core/ModelRegistry'
+import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
 import {
   ProviderHandler,
   GenerateResult,
@@ -70,6 +71,8 @@ export class GenerationService {
   ): Promise<GenerateResult> {
     this.log('Starting generation', { modelId, params })
 
+    let progressTracker: ReturnType<typeof createProgressTracker> | null = null
+
     try {
       // 1. 从 ModelRegistry 获取模型定义
       const model = registry.getModel(modelId)
@@ -88,13 +91,25 @@ export class GenerationService {
 
       this.log('Provider obtained', { provider: model.meta.provider })
 
-      // 3. 调用 Provider 的 generate 方法
+      // 3. 启动进度跟踪（如提供回调）
+      const progressSpec = onProgress ? resolveProgressSpec(model, params as Record<string, unknown>) : null
+      progressTracker = onProgress && progressSpec
+        ? createProgressTracker(progressSpec, onProgress)
+        : null
+
+      progressTracker?.start()
+
+      // 4. 调用 Provider 的 generate 方法
       const result = await provider.generate(model, params)
+
+      progressTracker?.complete()
 
       this.log('Generation completed', { modelId, result })
 
       return result
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Generation failed'
+      progressTracker?.fail(message)
       this.handleError(error, modelId)
     }
   }
@@ -108,9 +123,10 @@ export class GenerationService {
    */
   async generateImage(
     modelId: string,
-    params: Record<string, any>
+    params: Record<string, any>,
+    onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
-    return this.generate(modelId, params)
+    return this.generate(modelId, params, onProgress)
   }
 
   /**
@@ -122,9 +138,10 @@ export class GenerationService {
    */
   async generateVideo(
     modelId: string,
-    params: Record<string, any>
+    params: Record<string, any>,
+    onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
-    return this.generate(modelId, params)
+    return this.generate(modelId, params, onProgress)
   }
 
   /**
@@ -136,9 +153,10 @@ export class GenerationService {
    */
   async generateAudio(
     modelId: string,
-    params: Record<string, any>
+    params: Record<string, any>,
+    onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
-    return this.generate(modelId, params)
+    return this.generate(modelId, params, onProgress)
   }
 
   /**

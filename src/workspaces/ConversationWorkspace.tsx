@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { apiService } from '../services/api'
 import { GenerationService } from '@/core/services/GenerationService'
 import { ProviderError } from '@/core/providers/base'
+import type { ProgressStatus } from '@/core/providers/base'
 import MediaGenerator from '../components/MediaGenerator'
 import SettingsModal from '../components/SettingsModal'
 import ContextMenu from '../components/ContextMenu'
@@ -15,9 +15,8 @@ import AudioPlayer from '../components/AudioPlayer'
 import { remove } from '@tauri-apps/plugin-fs'
 import { useDragDrop } from '../contexts/DragDropContext'
 import { useContextMenu, MenuItem } from '../hooks/useContextMenu'
-import { getModelDisplayName, getProviderDisplayName } from '../utils/modelHelpers'
+import { getModelDisplayName } from '../utils/modelHelpers'
 import { ProgressBar } from '../components/ui/ProgressBar'
-import { calculateProgress } from '../utils/progress'
 import { loadPresets } from '../utils/preset'
 import { canDeleteFile } from '../utils/fileRefCount'
 import { getMediaDimensions, getMediaDurationFormatted } from '../utils/mediaDimensions'
@@ -26,7 +25,7 @@ import TestModeIndicator from '../components/TestModeIndicator'
 import TestModePanel from '../components/TestModePanel'
 import TestModeParamsDisplay from '../components/TestModeParamsDisplay'
 import { shouldSkipRequest, logRequestParams } from '../utils/testMode'
-import { logError, logWarning, logInfo } from '../utils/errorLogger'
+import { logError, logInfo } from '../utils/errorLogger'
 import { shouldCheckForUpdates, updateLastCheckTime, isVersionIgnored } from '../utils/updateConfig'
 import { checkForUpdates, getCurrentVersion } from '../services/updateChecker'
 import UpdateDialog from '../components/UpdateDialog'
@@ -75,7 +74,6 @@ const ConversationWorkspace: React.FC = () => {
   const [tasks, setTasks] = useState<GenerationTask[]>([])
   // 独立的进度状态 - 不触发任务列表重新渲染
   const [taskProgress, setTaskProgress] = useState<Record<string, number>>({})
-  const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false) // 是否有任务正在生成
   const [error, setError] = useState<string | null>(null)
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
@@ -1709,7 +1707,8 @@ const ConversationWorkspace: React.FC = () => {
   const generateWithNewService = useCallback(async (
     modelId: string,
     input: string,
-    options: any
+    options: any,
+    onProgress?: (status: ProgressStatus) => void
   ) => {
     const generationService = GenerationService.getInstance()
 
@@ -1724,7 +1723,7 @@ const ConversationWorkspace: React.FC = () => {
 
     try {
       // 调用新系统
-      const result = await generationService.generate(modelId, params)
+      const result = await generationService.generate(modelId, params, onProgress)
 
       logInfo('[App] ✅ 新系统生成成功:', result)
 
@@ -1774,106 +1773,21 @@ const ConversationWorkspace: React.FC = () => {
         options.images = taskToExecute.images
       }
 
-      // 动态初始化适配器（使用新架构的 ModelRegistry）
-      const modelInfo = registry.getModelInfo(model)
-      if (modelInfo) {
-        const providerType = modelInfo.provider as 'ppio' | 'fal' | 'modelscope' | 'kie'
-
-        // 获取对应的 API Key
-        let apiKey = ''
-        if (providerType === 'fal') {
-          apiKey = localStorage.getItem('fal_api_key') || ''
-        } else if (providerType === 'modelscope') {
-          apiKey = localStorage.getItem('modelscope_api_key') || ''
-        } else if (providerType === 'kie') {
-          apiKey = localStorage.getItem('kie_api_key') || ''
-        } else {
-          apiKey = localStorage.getItem('ppio_api_key') || ''
-        }
-
-        if (!apiKey) {
-          const providerDisplayName = getProviderDisplayName(modelInfo.provider)
-          throw new Error(`请先在设置中配置 ${providerDisplayName} 的 API Key`)
-        }
-
-        // 初始化对应的适配器
-        apiService.setApiKey(apiKey)
-        apiService.initializeAdapter({
-          type: providerType,
-          modelName: model
-        })
-
-        logInfo('[App] 已切换适配器:', { provider: providerType, model })
-      }
-
       // 更新任务状态为生成中
       updateTask(taskId, { status: 'generating' })
+
+      let lastProgress = 0
+      const handleProgress = (status: ProgressStatus) => {
+        if (status.progress === undefined) return
+        const next = Math.max(lastProgress, status.progress)
+        lastProgress = next
+        updateProgress(taskId, next)
+      }
 
       let result: any
       switch (type) {
         case 'image':
-          // 为即梦4.0、bytedance-seedream-v4 添加基于时间的进度跟踪
-          // 魔搭模型使用轮询进度，不需要基于时间的进度
-          let progressTimer: number | null = null
-          let lastUpdateTime = 0
-
-          // 检查是否是魔搭模型
-          const isModelscopeModel = modelInfo.provider === 'modelscope'
-
-          if ((model === 'seedream-4.0' || model === 'bytedance-seedream-v4') && !isModelscopeModel) {
-            const startTime = Date.now()
-            // 根据模型和图片数量动态计算预期时间
-            let expectedDuration: number
-
-            if (model === 'bytedance-seedream-v4') {
-              // bytedance-seedream-v4: 基础时间 20 秒，每张图片增加 20 秒
-              const numImages = options.numImages || 1
-              const baseTime = 20000
-              expectedDuration = baseTime * numImages
-            } else {
-              // seedream-4.0: 默认 20 秒
-              expectedDuration = 20000
-            }
-
-            const updateProgressLoop = () => {
-              const now = Date.now()
-              const elapsed = now - startTime
-              const progress = calculateProgress(elapsed, expectedDuration)
-
-              // 使用独立的进度状态，不触发任务列表重新渲染
-              updateProgress(taskId, progress)
-
-              lastUpdateTime = now
-              if (elapsed < expectedDuration) {
-                progressTimer = requestAnimationFrame(updateProgressLoop)
-              }
-            }
-
-            progressTimer = requestAnimationFrame(updateProgressLoop)
-          }
-
-          try {
-            // 使用新系统 GenerationService（替代旧的 apiService）
-            result = await generateWithNewService(model, input, options)
-          } finally {
-            // 清除定时器
-            if (progressTimer) {
-              cancelAnimationFrame(progressTimer)
-            }
-          }
-
-          // 检查是否为 fal 队列超时状态
-          if (result?.status === 'timeout') {
-            logInfo('[App] 检测到队列超时:', result)
-            updateTask(taskId, {
-              status: 'timeout',
-              provider: modelInfo.provider,
-              requestId: result.requestId,
-              modelId: result.modelId,
-              message: result.message || '等待超时，任务依然在处理中'
-            })
-            return  // 提前返回，不继续处理
-          }
+          result = await generateWithNewService(model, input, options, handleProgress)
 
           // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
           logInfo('[App] 尝试本地保存，ua=', typeof navigator !== 'undefined' ? navigator.userAgent : '')
@@ -1906,11 +1820,10 @@ const ConversationWorkspace: React.FC = () => {
           }
           break
         case 'video':
-          let videoLastUpdateTime = 0
           logInfo('[App] 🎬 开始视频生成任务:', { taskId, model })
 
-          // 使用新系统 GenerationService（替代旧的 apiService）
-          result = await generateWithNewService(model, input, options)
+          // 使用新系统 GenerationService
+          result = await generateWithNewService(model, input, options, handleProgress)
 
           logInfo('[App] 📦 视频生成 API 返回结果:', {
             hasResult: !!result,
@@ -1920,40 +1833,11 @@ const ConversationWorkspace: React.FC = () => {
             modelId: result?.modelId,
             hasUrl: !!result?.url
           })
-
-          // 【新增】检查是否为超时状态
-          if (result?.status === 'timeout') {
-            logInfo('[App] ⏱️ 检测到轮询超时，保存任务ID以便后续恢复:', {
-              taskId: result.taskId,
-              requestId: result.requestId,
-              modelId: result.modelId
-            })
-            updateTask(taskId, {
-              status: 'timeout',
-              serverTaskId: result.taskId,  // 保存 taskId 用于后续重试
-              requestId: result.requestId,  // 保存 requestId（Fal 使用）
-              modelId: result.modelId,      // 保存 modelId（Fal 使用）
-              message: result.message || '轮询超时，任务可能仍在处理中'
-            })
-            logInfo('[App] ✅ 超时任务已更新，serverTaskId:', result.taskId)
-            return  // 提前返回，不继续处理
-          }
-
-          // 如果返回了 taskId 而非最终结果，说明需要 App 层轮询（向后兼容）
-          if (result.taskId) {
-            logInfo('[App] 💾 保存 serverTaskId 到任务对象:', result.taskId)
-            updateTask(taskId, {
-              serverTaskId: result.taskId,
-              requestId: result.requestId,
-              modelId: result.modelId
-            })
-            result = await pollTaskStatus(result.taskId, taskId, model)
-          }
           break
         case 'audio':
           logInfo('[App] generateAudio 调用参数:', { input, model, options })
           // 使用新系统 GenerationService（替代旧的 apiService）
-          result = await generateWithNewService(model, input, options)
+          result = await generateWithNewService(model, input, options, handleProgress)
           // 检查适配器是否已经处理了本地保存（通过 filePath 字段判断）
           if (result && result.url && isDesktop() && !(result as any).filePath) {
             try {
@@ -1988,6 +1872,9 @@ const ConversationWorkspace: React.FC = () => {
         } catch (error) {
           logError('[App] 获取媒体信息失败:', error)
         }
+
+        updateProgress(taskId, 100)
+        await new Promise((resolve) => setTimeout(resolve, 250))
 
         updateTask(taskId, {
           status: 'success',
@@ -2222,106 +2109,7 @@ const ConversationWorkspace: React.FC = () => {
     }
   }
 
-  const pollTaskStatus = async (serverTaskId: string, uiTaskId: string, _model?: string): Promise<any> => {
-    logInfo('[App] 开始轮询任务状态:', serverTaskId)
-    return new Promise((resolve, reject) => {
-      let pollCount = 0
-      const maxPolls = 120
 
-      const interval = setInterval(async () => {
-        try {
-          pollCount++
-          logInfo(`[App] 第${pollCount}次轮询任务状态:`, serverTaskId)
-
-          const status = await apiService.checkTaskStatus(serverTaskId)
-
-          // 注意：API返回的是 TASK_STATUS_SUCCEED，不是 TASK_STATUS_SUCCEEDED
-          if ((status.status === 'TASK_STATUS_SUCCEEDED' || status.status === 'TASK_STATUS_SUCCEED') && status.result) {
-            logInfo('[App] 任务完成:', status.result)
-            clearInterval(interval)
-            updateTask(uiTaskId, { progress: 100, timedOut: false })
-            resolve(status.result)
-          } else if (status.status === 'TASK_STATUS_FAILED') {
-            logError('', '[App] 任务失败')
-            clearInterval(interval)
-            reject(new Error('任务执行失败'))
-          } else if (pollCount >= maxPolls) {
-            if (status.status === 'TASK_STATUS_PROCESSING' || status.status === 'TASK_STATUS_QUEUED') {
-              logWarning('', '[App] 轮询超时，仍在处理中，提供重试')
-              clearInterval(interval)
-              updateTask(uiTaskId, { timedOut: true })
-              resolve(null)
-            } else {
-              logError('', '[App] 轮询超时')
-              clearInterval(interval)
-              reject(new Error('任务超时'))
-            }
-          } else {
-            logInfo('[App] 任务进行中...', {
-              status: status.status,
-              progress: status.progress
-            })
-            // 计算进度（vidu-q1 和其他模型使用相同逻辑）
-            const t = pollCount / maxPolls
-            const stepProgress = Math.round(95 * (1 - Math.pow(1 - t, 3)))
-
-            // 使用独立的进度状态
-            const currentProgress = taskProgress[uiTaskId] ?? 0
-            const inc = Math.max(1, stepProgress)
-            const next = Math.min(95, Math.max(currentProgress + 1, inc))
-            updateProgress(uiTaskId, next)
-          }
-        } catch (err) {
-          logError('[App] 轮询错误:', err)
-          clearInterval(interval)
-          reject(err)
-        }
-      }, 3000)
-    })
-  }
-
-  const retryPolling = async (task: GenerationTask) => {
-    if (!task.serverTaskId) {
-      logError('', '[App] 无 serverTaskId，无法重试轮询')
-      return
-    }
-    updateTask(task.id, { timedOut: false, status: 'generating' })
-    try {
-      const result = await pollTaskStatus(task.serverTaskId, task.id, task.model)
-      if (result && result.url) {
-        // 获取实际媒体尺寸和时长
-        let dimensions: string | null = null
-        let duration: string | null = null
-        try {
-          const urlToCheck = (result as any).filePath || result.url
-          // 如果包含多个 URL（用 ||| 分隔），只取第一个
-          const firstUrl = urlToCheck.includes('|||') ? urlToCheck.split('|||')[0] : urlToCheck
-          dimensions = await getMediaDimensions(firstUrl, task.type)
-          duration = await getMediaDurationFormatted(firstUrl, task.type)
-          logInfo('[App] 获取媒体信息:', { dimensions, duration })
-        } catch (error) {
-          logError('[App] 获取媒体信息失败:', error)
-        }
-
-        updateTask(task.id, {
-          status: 'success',
-          progress: 100,
-          dimensions: dimensions || undefined,
-          duration: duration || undefined,
-          result: {
-            id: task.id,
-            type: 'video',
-            url: result.url,
-            filePath: (result as any).filePath,
-            prompt: task.prompt,
-            createdAt: new Date()
-          }
-        })
-      }
-    } catch (e) {
-      logError('[App] 重试轮询失败', e)
-    }
-  }
 
   const openSettings = () => {
     setIsSettingsOpen(true)
@@ -2715,22 +2503,6 @@ const ConversationWorkspace: React.FC = () => {
     return () => clearTimeout(timer)
   }, [tasks, isTasksLoaded])
 
-  // 检查是否有保存的API密钥
-  useEffect(() => {
-    const savedApiKey = localStorage.getItem('ppio_api_key')
-    if (savedApiKey) {
-      apiService.setApiKey(savedApiKey)
-      // 默认初始化派欧云适配器
-      try {
-        apiService.initializeAdapter({
-          type: 'ppio',
-          modelName: 'seedream-4.0'
-        })
-      } catch (err) {
-        logError('Failed to initialize adapter:', err)
-      }
-    }
-  }, [])
 
 
   const handleRegenerate = async (task: GenerationTask) => {
@@ -2960,174 +2732,6 @@ const ConversationWorkspace: React.FC = () => {
     }))
   }
 
-  const handleContinuePolling = async (task: GenerationTask) => {
-    // 根据任务模型确定供应商类型（使用新架构的 ModelRegistry）
-    const modelInfo = registry.getModelInfo(task.model)
-    if (!modelInfo) {
-      throw new Error(`未找到模型 ${task.model} 对应的供应商`)
-    }
-    const providerType = modelInfo.provider as 'ppio' | 'fal' | 'modelscope' | 'kie'
-
-    // 【修复】根据供应商类型判断使用哪个方法
-    // PPIO 视频任务使用 retryPolling（因为它有特殊的轮询逻辑）
-    // 其他任务使用 continuePolling
-    if (providerType === 'ppio' && task.type === 'video' && task.serverTaskId) {
-      logInfo('[App] 继续查询 PPIO 视频任务:', task.serverTaskId)
-      await retryPolling(task)
-      return
-    }
-
-    logInfo(`[App] 继续查询 ${providerType} 队列:`, {
-      requestId: task.requestId,
-      modelId: task.modelId,
-      serverTaskId: task.serverTaskId
-    })
-
-    try {
-      // 更新任务状态为生成中
-      setTasks(prev => prev.map(t =>
-        t.id === task.id ? { ...t, status: 'generating' } : t
-      ))
-      setIsLoading(true)
-
-      // 获取对应的 API Key
-      let apiKey = ''
-      if (providerType === 'fal') {
-        apiKey = localStorage.getItem('fal_api_key') || ''
-      } else if (providerType === 'modelscope') {
-        apiKey = localStorage.getItem('modelscope_api_key') || ''
-      } else if (providerType === 'kie') {
-        apiKey = localStorage.getItem('kie_api_key') || ''
-      } else {
-        apiKey = localStorage.getItem('ppio_api_key') || ''
-      }
-
-      if (!apiKey) {
-        const providerDisplayName = getProviderDisplayName(modelInfo.provider)
-        throw new Error(`请先在设置中配置 ${providerDisplayName} 的 API Key`)
-      }
-
-      apiService.setApiKey(apiKey)
-      apiService.initializeAdapter({
-        type: providerType,
-        modelName: task.model
-      })
-
-      // 调用 continuePolling 方法
-      const adapter = apiService.getAdapter() as any
-      if (!adapter.continuePolling) {
-        throw new Error('当前适配器不支持继续查询')
-      }
-
-      // 根据供应商类型传递不同的参数
-      // Fal: continuePolling(modelId, requestId, onProgress)
-      // PPIO/KIE/ModelScope: continuePolling(modelId, taskId, onProgress)
-      const taskIdOrRequestId = providerType === 'fal' ? task.requestId : task.serverTaskId
-      const modelIdParam = providerType === 'fal' ? task.modelId : task.model
-
-      const result = await adapter.continuePolling(
-        modelIdParam,
-        taskIdOrRequestId,
-        (status: any) => {
-          logInfo('[App] 继续查询进度:', status.message)
-          setTasks(prev => prev.map(t =>
-            t.id === task.id ? {
-              ...t,
-              progress: status.progress || 0,
-              message: status.message
-            } : t
-          ))
-        }
-      )
-
-      // 再次检查是否超时
-      if (result?.status === 'timeout') {
-        logInfo('', '[App] 再次超时')
-        setTasks(prev => prev.map(t =>
-          t.id === task.id ? {
-            ...t,
-            status: 'timeout',
-            message: result.message || '等待超时，任务依然在处理中'
-          } : t
-        ))
-        setIsLoading(false)
-        return
-      }
-
-      // 成功获取结果，保存图片
-      if (result?.url && isDesktop()) {
-        try {
-          if (result.url.includes('|||')) {
-            const urls = result.url.split('|||')
-            const display = [] as string[]
-            const paths = [] as string[]
-            for (const u of urls) {
-              const { fullPath } = await saveImageFromUrl(u)
-              const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
-              display.push(blobSrc)
-              paths.push(fullPath)
-            }
-            result.url = display.join('|||')
-              ; (result as any).filePath = paths.join('|||')
-          } else {
-            const { fullPath } = await saveImageFromUrl(result.url)
-            const blobSrc = await fileToBlobSrc(fullPath, 'image/png')
-            result.url = blobSrc
-              ; (result as any).filePath = fullPath
-          }
-          logInfo('', '[App] 本地保存成功')
-        } catch (e) {
-          logError('[App] 本地保存失败', e)
-        }
-      }
-
-      // 获取实际媒体尺寸和时长
-      let dimensions: string | null = null
-      let duration: string | null = null
-      try {
-        const urlToCheck = (result as any).filePath || result.url
-        // 如果包含多个 URL（用 ||| 分隔），只取第一个
-        const firstUrl = urlToCheck.includes('|||') ? urlToCheck.split('|||')[0] : urlToCheck
-        dimensions = await getMediaDimensions(firstUrl, task.type)
-        duration = await getMediaDurationFormatted(firstUrl, task.type)
-        logInfo('[App] 获取媒体信息:', { dimensions, duration })
-      } catch (error) {
-        logError('[App] 获取媒体信息失败:', error)
-      }
-
-      // 更新任务为成功状态
-      setTasks(prev => prev.map(t =>
-        t.id === task.id ? {
-          ...t,
-          status: 'success',
-          dimensions: dimensions || undefined,
-          duration: duration || undefined,
-          result: {
-            id: task.id,
-            type: task.type,
-            url: result.url,
-            filePath: (result as any).filePath,
-            prompt: task.prompt,
-            createdAt: new Date()
-          },
-          requestId: undefined,
-          modelId: undefined,
-          message: undefined
-        } : t
-      ))
-    } catch (err) {
-      logError('[App] 继续查询失败:', err)
-      setTasks(prev => prev.map(t =>
-        t.id === task.id ? {
-          ...t,
-          status: 'error',
-          error: err instanceof Error ? err.message : '继续查询失败'
-        } : t
-      ))
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   // 清除所有历史记录
   const clearAllHistory = async () => {
@@ -3690,27 +3294,17 @@ const ConversationWorkspace: React.FC = () => {
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
                               <p className="text-zinc-400 mb-3">生成中...</p>
-                              {/* 进度条：视频任务、Fal图片任务、魔搭图片任务、KIE图片任务、有进度的派欧云图片任务 */}
-                              {(task.type === 'video' ||
-                                (task.type === 'image' && task.provider === 'fal') ||
-                                (task.type === 'image' && task.provider === 'modelscope') ||
-                                (task.type === 'image' && task.provider === 'kie') ||
-                                (task.type === 'image' && task.provider === 'ppio' && (task.model === 'seedream-4.0' || (taskProgress[task.id] || 0) > 0))
-                              ) && (
+                              {(() => {
+                                const progressValue = taskProgress[task.id] ?? task.progress
+                                if (progressValue === undefined) return null
+                                return (
                                   <ProgressBar
-                                    progress={taskProgress[task.id] || task.progress || 0}
+                                    progress={progressValue}
                                     className="mt-3"
+                                    duration={progressValue >= 99 ? 450 : 2800}
                                   />
-                                )}
-                              {task.timedOut && (
-                                <div className="mt-3 text-sm text-zinc-300">
-                                  <span className="mr-2">轮询超时，任务仍在处理中。</span>
-                                  <button
-                                    onClick={() => retryPolling(task)}
-                                    className="inline-flex items-center px-3 py-1 rounded bg-[#007eff] hover:brightness-110 text-white text-sm transition-colors"
-                                  >再次轮询 120 次</button>
-                                </div>
-                              )}
+                                )
+                              })()}
                             </div>
                           </div>
                         )}
@@ -3724,17 +3318,7 @@ const ConversationWorkspace: React.FC = () => {
                                 </svg>
                               </div>
                               <p className="text-yellow-400 mb-2 font-medium">{task.message || '等待超时，任务依然在处理中'}</p>
-                              <p className="text-zinc-400 text-sm mb-4">任务可能还在处理中，您可以继续查询状态</p>
-                              <button
-                                onClick={() => handleContinuePolling(task)}
-                                disabled={isLoading}
-                                className="inline-flex items-center px-4 py-2 rounded-lg bg-[#007eff] hover:brightness-110 text-white text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                                继续查询
-                              </button>
+                              <p className="text-zinc-400 text-sm">任务可能仍在处理中，建议稍后重新生成或刷新任务状态</p>
                             </div>
                           </div>
                         )}
@@ -4012,7 +3596,7 @@ const ConversationWorkspace: React.FC = () => {
             >
               <MediaGenerator
                 onGenerate={handleGenerate}
-                isLoading={isLoading}
+                isLoading={isGenerating}
                 isGenerating={isGenerating}
                 onOpenSettings={openSettings}
                 onOpenClearHistory={() => setIsConfirmClearOpen(true)}

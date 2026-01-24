@@ -6,7 +6,7 @@
 
 import type { I18nText } from './I18nText'
 import type { InputPort, OutputPort } from './NodePort'
-import type { ProgressStatus } from '../../adapters/base/BaseAdapter'
+import type { ProgressStatus } from '@/core/providers/base'
 
 /**
  * 节点输出
