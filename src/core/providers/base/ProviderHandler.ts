@@ -123,20 +123,16 @@ export abstract class ProviderHandler {
         debug: this.debug,
       })
 
-      this.log('Request built', { url: request.url, body: request.body })
-
       // 步骤2: 供应商特定的预处理（文件上传、格式转换等）
       const preprocessedParams = await this.preprocessRequest(model, {
         ...params,
         ...request.body,
       })
 
-      this.log('Parameters preprocessed', { preprocessedParams })
-
       // 步骤3: 执行 API 调用
-      // 输出最终发送的请求数据（图片显示摘要而非完整 base64）
-      this.log('🚀 Final API request', {
-        url: request.url,
+      // 🚀 输出最终发送的请求数据（始终显示，不受 debug 影响）
+      console.log(`🚀 [${this.providerName}] Final API Request:`, {
+        endpoint: request.url,
         body: this.summarizeRequestBody(preprocessedParams)
       })
 
@@ -450,10 +446,29 @@ export abstract class ProviderHandler {
   protected summarizeRequestBody(body: Record<string, any>): Record<string, any> {
     const summarized: Record<string, any> = {}
 
+    // 定义不需要在 API 请求日志中显示的内部字段
+    const internalFields = [
+      'editStateFile',
+      'uploadedFilePaths',
+      'uploadedVideoFilePaths',
+      'sourceFile',
+      'maskFile',
+    ]
+
     for (const [key, value] of Object.entries(body)) {
+      // 1. 过滤 undefined 值（这些通常不会被 JSON.stringify 发送）
+      if (value === undefined) {
+        continue
+      }
+
+      // 2. 过滤已知的内部字段
+      if (internalFields.includes(key)) {
+        continue
+      }
+
       if (Array.isArray(value)) {
         // 处理数组（可能是图片数组）
-        summarized[key] = value.map((item, index) => {
+        summarized[key] = value.map((item) => {
           if (typeof item === 'string' && item.startsWith('data:')) {
             // base64 数据，显示摘要
             const mimeMatch = item.match(/^data:([^;]+);/)

@@ -257,17 +257,7 @@ export class RequestBuilder {
       body
     }
 
-    // 🚀 通用请求参数打印（所有模型都会打印）
-    console.group(`🚀 API Request: ${model.meta.id}`)
-    console.log('📍 Endpoint:', endpoint.path)
-    console.log('🔧 Method:', endpoint.method || 'POST')
-    console.log('📥 Input Params:', this.truncateBase64InObject(params))
-    console.log('📦 Request Body:', this.truncateBase64InObject(body))
-    console.groupEnd()
-
-    if (debug) {
-      console.log('[RequestBuilder] Final request:', result)
-    }
+    // 日志由 ProviderHandler 统一输出，这里不再重复
 
     return result
   }
