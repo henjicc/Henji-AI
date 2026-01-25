@@ -1,24 +1,28 @@
 import React from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 interface ApiKeyInputProps {
-  provider: string
   label: string
   value: string
   visible: boolean
   onChange: (value: string) => void
   onToggleVisibility: () => void
-  placeholder?: string
+  placeholder: string
+  showLabel: string
+  hideLabel: string
 }
 
 const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
-  provider,
   label,
   value,
   visible,
   onChange,
   onToggleVisibility,
-  placeholder = '请输入 API Key'
+  placeholder,
+  showLabel,
+  hideLabel
 }) => {
+  const toggleLabel = visible ? hideLabel : showLabel
   return (
     <div className="mb-4">
       <label className="block text-sm font-medium text-zinc-300 mb-2">{label}</label>
@@ -33,9 +37,10 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
         <button
           onClick={onToggleVisibility}
           className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded text-white transition-colors"
-          title={visible ? '隐藏' : '显示'}
+          title={toggleLabel}
+          aria-label={toggleLabel}
         >
-          {visible ? '👁️' : '👁️‍🗨️'}
+          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
     </div>

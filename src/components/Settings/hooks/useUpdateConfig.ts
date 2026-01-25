@@ -1,35 +1,73 @@
-import { useState, useEffect } from 'react'
-import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency, clearIgnoredVersions } from '../../../utils/updateConfig'
+import { useEffect, useState } from 'react'
+import {
+  clearIgnoredVersions,
+  getUpdateConfig,
+  setUpdateEnabled,
+  setUpdateFrequency,
+  updateLastCheckTime
+} from '../../../utils/updateConfig'
 import type { UpdateConfig } from '../../../utils/updateConfig'
+import { checkForUpdates, getCurrentVersion } from '../../../services/updateChecker'
+import type { UpdateCheckResult } from '../../../services/updateChecker'
 
-export function useUpdateConfig() {
+export interface UseUpdateConfigResult {
+  config: UpdateConfig
+  currentVersion: string
+  isChecking: boolean
+  updateEnabled: (enabled: boolean) => void
+  updateFrequency: (frequency: UpdateConfig['frequency']) => void
+  clearIgnored: () => void
+  checkNow: () => Promise<UpdateCheckResult>
+}
+
+export function useUpdateConfig(): UseUpdateConfigResult {
   const [config, setConfig] = useState<UpdateConfig>({
     enabled: true,
-    frequency: 'daily'
+    frequency: 'daily',
+    lastCheckTime: 0,
+    ignoredVersions: []
   })
+  const [isChecking, setIsChecking] = useState(false)
+  const currentVersion = getCurrentVersion()
 
-  // 加载更新配置
   useEffect(() => {
     const loadedConfig = getUpdateConfig()
     setConfig(loadedConfig)
   }, [])
 
-  // 更新启用状态
   const updateEnabled = (enabled: boolean) => {
     setConfig(prev => ({ ...prev, enabled }))
     setUpdateEnabled(enabled)
   }
 
-  // 更新检查频率
-  const updateFrequency = (frequency: 'always' | 'daily' | 'weekly' | 'never') => {
+  const updateFrequency = (frequency: UpdateConfig['frequency']) => {
     setConfig(prev => ({ ...prev, frequency }))
     setUpdateFrequency(frequency)
   }
 
-  // 清除忽略的版本
   const clearIgnored = () => {
     clearIgnoredVersions()
+    setConfig(prev => ({ ...prev, ignoredVersions: [] }))
   }
 
-  return { config, updateEnabled, updateFrequency, clearIgnored }
+  const checkNow = async () => {
+    setIsChecking(true)
+    try {
+      const result = await checkForUpdates()
+      updateLastCheckTime()
+      return result
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
+  return {
+    config,
+    currentVersion,
+    isChecking,
+    updateEnabled,
+    updateFrequency,
+    clearIgnored,
+    checkNow
+  }
 }

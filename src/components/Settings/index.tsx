@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
 import InterfaceTab from './tabs/InterfaceTab'
@@ -15,11 +15,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { t } = useI18n('settings')
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [closing, setClosing] = useState(false)
-  const modalRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
 
   const handleClose = () => {
     setClosing(true)
-    setTimeout(onClose, 180)
+    setTimeout(onClose, 300)
   }
 
   const tabs = [
@@ -31,45 +31,73 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   const ActiveTabComponent = tabs.find(t => t.id === activeTab)?.component
 
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (contentRef.current) {
+        contentRef.current.scrollTop = 0
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [activeTab])
+
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 ${closing ? 'animate-fadeOut' : 'animate-fadeIn'}`}
+      className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
       onClick={handleClose}
     >
       <div
-        ref={modalRef}
-        className={`bg-zinc-900 rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden ${closing ? 'animate-scaleOut' : 'animate-scaleIn'}`}
+        className={`bg-[#131313]/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-4xl shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        style={{ height: '70vh', minHeight: '450px', maxHeight: '900px' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
-          <h2 className="text-xl font-semibold text-white">{t('title')}</h2>
-          <button
-            onClick={handleClose}
-            className="text-zinc-400 hover:text-white transition-colors text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="flex">
-          <div className="w-48 border-r border-zinc-800 bg-zinc-900/50">
+        <div className="w-56 bg-zinc-900/50 border-r border-zinc-700/50 flex flex-col">
+          <div className="p-4 border-b border-zinc-700/50">
+            <h2 className="text-lg font-bold text-[#007eff]">{t('title')}</h2>
+          </div>
+          <div className="flex-1 py-3 space-y-1">
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                className={`w-full text-left px-6 py-3 transition-colors ${
+                className={`w-full px-4 py-2.5 flex items-center space-x-3 transition-colors duration-200 ${
                   activeTab === tab.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    ? 'bg-[#007eff]/10 text-[#007eff] border-r-2 border-[#007eff]'
+                    : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                 }`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                {tab.label}
+                <span className="font-medium text-sm">{tab.label}</span>
               </button>
             ))}
           </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto max-h-[calc(80vh-80px)]">
+        <div className="flex-1 flex flex-col h-full">
+          <div className="p-4 border-b border-zinc-700/50 flex justify-between items-center bg-zinc-900/20">
+            <h3 className="text-base font-medium text-white">
+              {tabs.find(tab => tab.id === activeTab)?.label}
+            </h3>
+            <button
+              onClick={handleClose}
+              aria-label={t('actions.close')}
+              className="text-zinc-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-zinc-800/50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div ref={contentRef} className="flex-1 overflow-y-auto settings-scroll-body">
             {ActiveTabComponent && <ActiveTabComponent />}
+          </div>
+
+          <div className="p-4 border-t border-zinc-700/50 bg-zinc-900/20 flex justify-end">
+            <button
+              onClick={handleClose}
+              className="px-6 py-2 bg-[#007eff] hover:bg-[#006add] text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 rounded-lg transition-all duration-300 font-medium text-sm"
+            >
+              {t('actions.close')}
+            </button>
           </div>
         </div>
       </div>

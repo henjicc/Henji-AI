@@ -161,6 +161,12 @@
   animation: fadeInUp 0.5s ease-out forwards;
 }
 
+/* 固定滚动条占位，避免 Tab 切换时内容宽度跳动 */
+.settings-scroll-body {
+  padding: 20px;
+  scrollbar-gutter: stable both-edges;
+}
+
 /* 脉动缩放动画 - 用于强调按钮 */
 @keyframes pulseScale {
 

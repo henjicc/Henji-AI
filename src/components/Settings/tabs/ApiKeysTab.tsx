@@ -2,39 +2,65 @@ import React from 'react'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
+import SectionCard from '../components/SectionCard'
+import UploadSection from '../sections/UploadSection'
+import { API_KEY_PROVIDERS } from '@/core/config/providers'
+import { useExternalLink } from '../hooks/useExternalLink'
+import { ExternalLink } from 'lucide-react'
 
 const ApiKeysTab: React.FC = () => {
   const { t } = useI18n('settings')
+  const { openExternal } = useExternalLink()
   const { keys, visibility, updateKey, toggleVisibility } = useApiKeys()
-  const apiKeyConfigs = [
-    { provider: 'ppio', label: t('apiKeys.providers.ppio.label'), placeholder: t('apiKeys.providers.ppio.placeholder') },
-    { provider: 'fal', label: t('apiKeys.providers.fal.label'), placeholder: t('apiKeys.providers.fal.placeholder') },
-    { provider: 'modelscope', label: t('apiKeys.providers.modelscope.label'), placeholder: t('apiKeys.providers.modelscope.placeholder') },
-    { provider: 'kie', label: t('apiKeys.providers.kie.label'), placeholder: t('apiKeys.providers.kie.placeholder') },
-    { provider: 'bizyair', label: t('apiKeys.providers.bizyair.label'), placeholder: t('apiKeys.providers.bizyair.placeholder') }
-  ]
 
   return (
-    <div className="p-6">
-      <h3 className="text-lg font-semibold text-white mb-2">{t('apiKeys.title')}</h3>
-      <p className="text-sm text-zinc-400 mb-6">
-        {t('apiKeys.description')}
-      </p>
-
-      <div className="space-y-4">
-        {apiKeyConfigs.map(config => (
-          <ApiKeyInput
-            key={config.provider}
-            provider={config.provider}
-            label={config.label}
-            value={keys[config.provider as keyof typeof keys]}
-            visible={visibility[config.provider] || false}
-            onChange={(value) => updateKey(config.provider as any, value)}
-            onToggleVisibility={() => toggleVisibility(config.provider)}
-            placeholder={config.placeholder}
-          />
-        ))}
+    <div className="p-6 space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-white mb-2">{t('apiKeys.title')}</h3>
+        <p className="text-sm text-zinc-400">{t('apiKeys.description')}</p>
       </div>
+
+      {API_KEY_PROVIDERS.map(provider => {
+        const label = t(`apiKeys.providers.${provider.id}.label`)
+        const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
+        const title = t(`apiKeys.providers.${provider.id}.title`)
+        const help = t(`apiKeys.providers.${provider.id}.help`)
+        const links = provider.links.map(link => ({
+          label: t(`apiKeys.providers.${provider.id}.links.${link.id}`),
+          url: link.url,
+          highlight: link.highlight
+        }))
+        return (
+          <SectionCard key={provider.id} title={title} description={help}>
+            <ApiKeyInput
+              label={label}
+              value={keys[provider.id]}
+              visible={visibility[provider.id]}
+              onChange={(value) => updateKey(provider.id, value)}
+              onToggleVisibility={() => toggleVisibility(provider.id)}
+              placeholder={placeholder}
+              showLabel={t('apiKeys.visibility.show')}
+              hideLabel={t('apiKeys.visibility.hide')}
+            />
+            {links.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {links.map(link => (
+                  <button
+                    key={link.url}
+                    onClick={() => openExternal(link.url)}
+                    className="px-3 py-1.5 rounded-md text-xs transition-colors border text-[#66b3ff] bg-[#007eff]/10 border-[#007eff]/40 hover:bg-[#007eff]/20 inline-flex items-center gap-1"
+                  >
+                    {link.label}
+                    <ExternalLink size={12} />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </SectionCard>
+        )
+      })}
+
+      <UploadSection />
     </div>
   )
 }

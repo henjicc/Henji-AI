@@ -5,26 +5,61 @@
   "apiKeys": {
     "title": "API Key Settings",
     "description": "Configure API keys for each provider. Keys are stored locally.",
+    "visibility": {
+      "show": "Show",
+      "hide": "Hide"
+    },
     "providers": {
       "ppio": {
+        "title": "PPIO",
         "label": "PPIO API Key",
-        "placeholder": "Enter PPIO API Key"
+        "placeholder": "Enter PPIO API Key",
+        "help": "Register on the site and get your API key from the key management page.",
+        "links": {
+          "register": "PPIO Website",
+          "keys": "Key Management"
+        }
       },
       "fal": {
+        "title": "Fal.ai",
         "label": "Fal.ai API Key",
-        "placeholder": "Enter Fal.ai API Key"
+        "placeholder": "Enter Fal.ai API Key",
+        "help": "Get Key ID:Key Secret from the console.",
+        "links": {
+          "home": "Fal.ai Website",
+          "console": "Fal.ai Console"
+        }
       },
       "modelscope": {
+        "title": "ModelScope",
         "label": "ModelScope API Key",
-        "placeholder": "Enter ModelScope API Key"
+        "placeholder": "Enter ModelScope API Key",
+        "help": "Review the docs and get the access token from the token page.",
+        "links": {
+          "home": "ModelScope Website",
+          "docs": "Docs",
+          "token": "Access Token"
+        }
       },
       "kie": {
+        "title": "KIE",
         "label": "KIE API Key",
-        "placeholder": "Enter KIE API Key"
+        "placeholder": "Enter KIE API Key",
+        "help": "Get your API key from the KIE console.",
+        "links": {
+          "home": "KIE Website",
+          "keys": "API Key"
+        }
       },
       "bizyair": {
+        "title": "BizyAir",
         "label": "BizyAir API Key",
-        "placeholder": "Enter BizyAir API Key"
+        "placeholder": "Enter BizyAir API Key",
+        "help": "Register and get your API key from the key management page.",
+        "links": {
+          "home": "BizyAir Website",
+          "keys": "Key Management"
+        }
       }
     }
   },
@@ -33,6 +68,26 @@
   "save": "Save Settings",
   "reset": "Reset Settings",
   "confirmReset": "Are you sure you want to reset all settings?",
+  "actions": {
+    "close": "Close",
+    "select": "Select",
+    "resetDefault": "Reset to Default",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "merge": "Merge Data",
+    "overwrite": "Overwrite Data",
+    "checkUpdate": "Check for Updates",
+    "checking": "Checking...",
+    "clearIgnored": "Clear Ignored Versions",
+    "openRelease": "Open Release Page",
+    "toggleOn": "On",
+    "toggleOff": "Off"
+  },
+  "alerts": {
+    "migrationSuccess": "Data migration completed",
+    "migrationFailed": "Data migration failed: {{message}}",
+    "unknownError": "Unknown error"
+  },
   "tabs": {
     "general": {
       "label": "General",
@@ -67,6 +122,112 @@
       "label": "Models",
       "title": "Model Settings",
       "description": "Manage model visibility and display settings."
+    }
+  },
+  "sections": {
+    "language": {
+      "title": "Language",
+      "label": "Interface Language",
+      "description": "Select the interface language",
+      "options": {
+        "auto": "Auto",
+        "zhCN": "简体中文",
+        "enUS": "English"
+      }
+    },
+    "history": {
+      "title": "History",
+      "limitLabel": "History limit",
+      "limitHint": "Keep 1-500 items. Older records will be removed automatically."
+    },
+    "dataPath": {
+      "title": "Data Directory",
+      "pathLabel": "Data location",
+      "pathHint": "Existing data will be migrated to the new directory."
+    },
+    "concurrency": {
+      "title": "Concurrency",
+      "label": "Max concurrent tasks",
+      "hint": "Maximum number of tasks running at the same time (default 2, max 10).",
+      "queueHint": "Extra tasks will be queued and start when earlier tasks finish."
+    },
+    "display": {
+      "title": "Display",
+      "priceLabel": "Show price estimate",
+      "priceHint": "Show estimated cost in the generation panel",
+      "autoFocusLabel": "Auto-focus model search",
+      "autoFocusHint": "Focus the search box when opening the model selector"
+    },
+    "download": {
+      "title": "Download",
+      "enableLabel": "Enable quick download",
+      "enableHint": "Save downloads directly to a chosen folder",
+      "buttonOnlyLabel": "Only use quick download for the button",
+      "buttonOnlyHint": "Right-click downloads will still prompt for a folder",
+      "pathLabel": "Quick download path",
+      "pathPlaceholder": "Select a folder",
+      "pathHint": "All quick downloads will be saved here"
+    },
+    "updates": {
+      "title": "Updates",
+      "enableLabel": "Enable update checks",
+      "enableHint": "Automatically check for updates",
+      "frequencyLabel": "Check frequency",
+      "frequencyHint": "Choose how often to check for updates",
+      "frequency": {
+        "startup": "On startup",
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "never": "Never"
+      },
+      "currentVersionLabel": "Current version",
+      "clearIgnoredHint": "Clearing will prompt all ignored versions again",
+      "upToDate": "You are up to date ({{version}})",
+      "hasUpdate": "New version {{version}} is available",
+      "checkFailed": "Update check failed: {{message}}"
+    },
+    "interface": {
+      "bottomPanelTitle": "Bottom Panel",
+      "autoCollapseLabel": "Smart collapse",
+      "autoCollapseHint": "Auto-collapse the bottom panel while browsing history",
+      "collapseDelayLabel": "Collapse delay (ms)",
+      "collapseDelayHint": "Delay before collapsing after mouse leaves",
+      "collapseOnScrollLabel": "Collapse only on scroll",
+      "collapseOnScrollHint": "Only collapse while scrolling history"
+    },
+    "upload": {
+      "title": "Generic Upload Service",
+      "description": "Provide file hosting for models without native uploads (e.g., ModelScope, PPIO).",
+      "providerLabel": "Default upload provider",
+      "fallbackLabel": "Enable fallback",
+      "fallbackHint": "Try other configured providers when the primary fails.",
+      "providers": {
+        "bizyair": "BizyAir",
+        "kie": "KIE",
+        "fal": "Fal.ai"
+      }
+    }
+  },
+  "dialogs": {
+    "alert": {
+      "title": {
+        "success": "Success",
+        "error": "Error",
+        "warning": "Notice"
+      },
+      "confirm": "OK"
+    },
+    "resetDataPath": {
+      "title": "Reset Data Directory",
+      "message": "Reset to the default data directory? Existing data will be migrated back."
+    },
+    "conflict": {
+      "title": "Target directory already has data",
+      "message": "Target: {{path}}. Choose how to proceed: merge keeps existing files, overwrite clears the target directory."
+    },
+    "migration": {
+      "title": "Migrating data...",
+      "hint": "Please do not close the app"
     }
   },
   "modelSettings": {

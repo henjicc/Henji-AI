@@ -5,26 +5,61 @@
   "apiKeys": {
     "title": "API 密钥设置",
     "description": "配置各个服务提供商的 API 密钥。密钥将安全地存储在本地。",
+    "visibility": {
+      "show": "显示",
+      "hide": "隐藏"
+    },
     "providers": {
       "ppio": {
-        "label": "PPIO API Key",
-        "placeholder": "请输入 PPIO API Key"
+        "title": "派欧云",
+        "label": "派欧云 API 密钥",
+        "placeholder": "请输入派欧云 API 密钥",
+        "help": "前往官网注册并在密钥管理页面获取 API 密钥。",
+        "links": {
+          "register": "派欧云官网",
+          "keys": "密钥管理"
+        }
       },
       "fal": {
-        "label": "Fal.ai API Key",
-        "placeholder": "请输入 Fal.ai API Key"
+        "title": "Fal.ai",
+        "label": "Fal.ai API 密钥",
+        "placeholder": "请输入 Fal.ai API 密钥",
+        "help": "在控制台获取 API 密钥。",
+        "links": {
+          "home": "Fal.ai 官网",
+          "console": "Fal.ai 控制台"
+        }
       },
       "modelscope": {
-        "label": "ModelScope API Key",
-        "placeholder": "请输入 ModelScope API Key"
+        "title": "魔搭",
+        "label": "魔搭 API 密钥",
+        "placeholder": "请输入魔搭 API 密钥",
+        "help": "注册并查看说明后在访问令牌页面获取。",
+        "links": {
+          "home": "魔搭官网",
+          "docs": "相关说明",
+          "token": "访问令牌"
+        }
       },
       "kie": {
-        "label": "KIE API Key",
-        "placeholder": "请输入 KIE API Key"
+        "title": "KIE",
+        "label": "KIE API 密钥",
+        "placeholder": "请输入 KIE API 密钥",
+        "help": "前往 KIE 控制台获取 API 密钥。",
+        "links": {
+          "home": "KIE 官网",
+          "keys": "API 密钥"
+        }
       },
       "bizyair": {
-        "label": "BizyAir API Key",
-        "placeholder": "请输入 BizyAir API Key"
+        "title": "BizyAir",
+        "label": "BizyAir API 密钥",
+        "placeholder": "请输入 BizyAir API 密钥",
+        "help": "注册并在密钥管理页面获取 API 密钥。",
+        "links": {
+          "home": "BizyAir 官网",
+          "keys": "密钥管理"
+        }
       }
     }
   },
@@ -33,6 +68,26 @@
   "save": "保存设置",
   "reset": "重置设置",
   "confirmReset": "确定要重置所有设置吗？",
+  "actions": {
+    "close": "确定",
+    "select": "选择",
+    "resetDefault": "恢复默认",
+    "cancel": "取消",
+    "confirm": "确定",
+    "merge": "合并数据",
+    "overwrite": "覆盖数据",
+    "checkUpdate": "检查更新",
+    "checking": "检查中...",
+    "clearIgnored": "清除忽略的版本",
+    "openRelease": "查看发布页",
+    "toggleOn": "开启",
+    "toggleOff": "关闭"
+  },
+  "alerts": {
+    "migrationSuccess": "数据迁移成功",
+    "migrationFailed": "数据迁移失败：{{message}}",
+    "unknownError": "未知错误"
+  },
   "tabs": {
     "general": {
       "label": "通用",
@@ -52,7 +107,7 @@
       }
     },
     "api": {
-      "label": "API 密钥"
+      "label": "密钥"
     },
     "interface": {
       "label": "界面",
@@ -67,6 +122,112 @@
       "label": "模型",
       "title": "模型设置",
       "description": "管理模型的可见性和显示设置。"
+    }
+  },
+  "sections": {
+    "language": {
+      "title": "语言",
+      "label": "界面语言",
+      "description": "选择界面显示语言",
+      "options": {
+        "auto": "自动 / Auto",
+        "zhCN": "简体中文",
+        "enUS": "English"
+      }
+    },
+    "history": {
+      "title": "历史记录",
+      "limitLabel": "保存数量限制",
+      "limitHint": "最多保存 1-500 条历史记录，超出后将自动删除最旧的记录"
+    },
+    "dataPath": {
+      "title": "数据目录",
+      "pathLabel": "数据保存目录",
+      "pathHint": "更改后将自动迁移现有数据到新目录"
+    },
+    "concurrency": {
+      "title": "并发设置",
+      "label": "最大并发任务数",
+      "hint": "同时进行生成的最大任务数量（默认为 2，最大 10）",
+      "queueHint": "超出限制的任务将进入排队状态，等待前面的任务完成后自动开始"
+    },
+    "display": {
+      "title": "显示设置",
+      "priceLabel": "显示价格估算",
+      "priceHint": "在生成面板显示预估费用",
+      "autoFocusLabel": "模型面板自动聚焦搜索框",
+      "autoFocusHint": "打开模型选择面板时自动聚焦到搜索输入框"
+    },
+    "download": {
+      "title": "下载设置",
+      "enableLabel": "启用快速下载",
+      "enableHint": "开启后下载文件将直接保存到指定目录，无需手动选择",
+      "buttonOnlyLabel": "仅按钮使用快速下载",
+      "buttonOnlyHint": "开启后，只有点击下载按钮时才使用快速下载，右键菜单下载依然手动选择目录",
+      "pathLabel": "快速下载保存路径",
+      "pathPlaceholder": "选择保存目录",
+      "pathHint": "所有快速下载的文件将保存到此目录"
+    },
+    "updates": {
+      "title": "更新检测",
+      "enableLabel": "启用更新检测",
+      "enableHint": "自动检查应用是否有新版本可用",
+      "frequencyLabel": "检测频率",
+      "frequencyHint": "选择自动检查更新的频率",
+      "frequency": {
+        "startup": "每次启动时",
+        "daily": "每天",
+        "weekly": "每周",
+        "never": "从不"
+      },
+      "currentVersionLabel": "当前版本",
+      "clearIgnoredHint": "清除后将重新提示所有被忽略的版本更新",
+      "upToDate": "当前已是最新版本 {{version}}",
+      "hasUpdate": "发现新版本 {{version}}，请前往下载",
+      "checkFailed": "检查更新失败：{{message}}"
+    },
+    "interface": {
+      "bottomPanelTitle": "底部面板",
+      "autoCollapseLabel": "智能折叠",
+      "autoCollapseHint": "浏览历史记录时自动折叠底部面板，节省显示空间",
+      "collapseDelayLabel": "折叠延迟 (ms)",
+      "collapseDelayHint": "鼠标离开面板后等待多久自动折叠",
+      "collapseOnScrollLabel": "仅滚动时折叠",
+      "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠"
+    },
+    "upload": {
+      "title": "通用文件上传服务",
+      "description": "为 ModelScope、PPIO 等不具备原生文件上传功能的模型提供文件托管服务。",
+      "providerLabel": "默认上传提供商",
+      "fallbackLabel": "启用自动回退",
+      "fallbackHint": "当首选提供商不可用或上传失败时，尝试使用其他已配置的提供商。",
+      "providers": {
+        "bizyair": "BizyAir",
+        "kie": "KIE",
+        "fal": "Fal.ai"
+      }
+    }
+  },
+  "dialogs": {
+    "alert": {
+      "title": {
+        "success": "操作成功",
+        "error": "操作失败",
+        "warning": "提示"
+      },
+      "confirm": "确定"
+    },
+    "resetDataPath": {
+      "title": "恢复默认数据目录",
+      "message": "确定要恢复到默认数据目录吗？现有数据将被迁移回默认位置。"
+    },
+    "conflict": {
+      "title": "检测到目标目录已有数据",
+      "message": "目标目录：{{path}}。请选择处理方式：合并将保留现有文件，覆盖将清空目标目录。"
+    },
+    "migration": {
+      "title": "正在迁移数据...",
+      "hint": "请勿关闭应用"
     }
   },
   "modelSettings": {

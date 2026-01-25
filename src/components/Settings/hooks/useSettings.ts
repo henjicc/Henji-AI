@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Settings {
   maxHistoryCount: number
@@ -26,7 +26,20 @@ const DEFAULT_SETTINGS: Settings = {
   maxConcurrentTasks: 2
 }
 
-export function useSettings() {
+type SettingsKey = keyof Settings
+
+export interface UseSettingsResult {
+  settings: Settings
+  updateSetting: <K extends SettingsKey>(key: K, value: Settings[K]) => void
+}
+
+const COLLAPSE_SETTING_KEYS: SettingsKey[] = [
+  'enableAutoCollapse',
+  'collapseDelay',
+  'collapseOnScrollOnly'
+]
+
+export function useSettings(): UseSettingsResult {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   // 加载设置
@@ -50,12 +63,15 @@ export function useSettings() {
   }, [])
 
   // 更新单个设置
-  const updateSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
+  const updateSetting = <K extends SettingsKey>(key: K, value: Settings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }))
     localStorage.setItem(
       key.replace(/([A-Z])/g, '_$1').toLowerCase(),
       String(value)
     )
+    if (COLLAPSE_SETTING_KEYS.includes(key)) {
+      window.dispatchEvent(new Event('collapseSettingChanged'))
+    }
   }
 
   return { settings, updateSetting }
