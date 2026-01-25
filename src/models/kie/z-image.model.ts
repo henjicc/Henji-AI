@@ -11,8 +11,9 @@ export const kieZImageModel = defineModel({
     id: 'kie-z-image',
     provider: 'kie',
     type: 'image',
-    name: { zh: 'Z-Image', en: 'Z-Image' },
-    description: { zh: 'KIE Z-Image 文生图模型', en: 'KIE Z-Image text-to-image model' },
+        i18nScope: 'models.defs.kie-z-image',
+    name: { key: 'meta.name', fallback: 'Z-Image' },
+    description: { key: 'meta.description', fallback: 'KIE Z-Image text-to-image model' },
     tags: ['text-to-image', 'provider-kie'],
     aliases: ['z-image-kie']
   },
@@ -21,7 +22,7 @@ export const kieZImageModel = defineModel({
       id: 'kieZImageAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },

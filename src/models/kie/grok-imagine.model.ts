@@ -11,8 +11,9 @@ export const kieGrokImagineModel = defineModel({
     id: 'kie-grok-imagine',
     provider: 'kie',
     type: 'image',
-    name: { zh: 'Grok Imagine', en: 'Grok Imagine' },
-    description: { zh: 'KIE Grok Imagine 文生图模型', en: 'KIE Grok Imagine text-to-image model' },
+        i18nScope: 'models.defs.kie-grok-imagine',
+    name: { key: 'meta.name', fallback: 'Grok Imagine' },
+    description: { key: 'meta.description', fallback: 'KIE Grok Imagine text-to-image model' },
     tags: ['text-to-image', 'provider-kie'],
     aliases: ['grok-imagine-kie']
   },
@@ -25,7 +26,7 @@ export const kieGrokImagineModel = defineModel({
       id: 'kieGrokImagineAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },

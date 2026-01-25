@@ -9,6 +9,7 @@ export const viduQ2Model = defineModel({
     id: 'fal-ai-vidu-q2',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-vidu-q2',
     name: 'Vidu Q2',
     description: 'Vidu Q2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -49,20 +50,20 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2Mode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-to-video',
       options: [
-        { value: 'text-to-video', label: { zh: '文生视频', en: 'Text to Video' } },
-        { value: 'image-to-video', label: { zh: '图生视频', en: 'Image to Video' } },
-        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } },
-        { value: 'video-extension', label: { zh: '视频延长', en: 'Video Extension' } }
+        { value: 'text-to-video', label: { key: 'auto.2', fallback: 'Text to Video' } },
+        { value: 'image-to-video', label: { key: 'auto.3', fallback: 'Image to Video' } },
+        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } },
+        { value: 'video-extension', label: { key: 'auto.5', fallback: 'Video Extension' } }
       ]
     },
     {
       id: 'falViduQ2VideoDuration',
       order: 2,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.6', fallback: 'Duration' },
       default: 4,
       options: [
         { value: 4, label: '4s' },
@@ -74,10 +75,10 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.7', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'smart', label: { key: 'auto.8', fallback: 'Smart' } },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
@@ -87,7 +88,7 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2Resolution',
       order: 4,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.9', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '720p', label: '720p' },
@@ -98,27 +99,27 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2MovementAmplitude',
       order: 5,
       type: 'dropdown',
-      name: { zh: '运动幅度', en: 'Movement Amplitude' },
+      name: { key: 'auto.10', fallback: 'Movement Amplitude' },
       default: 'auto',
       options: [
-        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
-        { value: 'low', label: { zh: '低', en: 'Low' } },
-        { value: 'medium', label: { zh: '中', en: 'Medium' } },
-        { value: 'high', label: { zh: '高', en: 'High' } }
+        { value: 'auto', label: { key: 'auto.11', fallback: 'Auto' } },
+        { value: 'low', label: { key: 'auto.12', fallback: 'Low' } },
+        { value: 'medium', label: { key: 'auto.13', fallback: 'Medium' } },
+        { value: 'high', label: { key: 'auto.14', fallback: 'High' } }
       ]
     },
     {
       id: 'viduQ2Bgm',
       order: 6,
       type: 'switch',
-      name: { zh: '背景音乐', en: 'Background Music' },
+      name: { key: 'auto.15', fallback: 'Background Music' },
       default: false
     },
     {
       id: 'viduQ2FastMode',
       order: 7,
       type: 'switch',
-      name: { zh: '快速模式', en: 'Turbo' },
+      name: { key: 'auto.16', fallback: 'Turbo' },
       default: true
     }
   ],

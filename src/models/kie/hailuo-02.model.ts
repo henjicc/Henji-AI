@@ -11,8 +11,9 @@ export const kieHailuo02Model = defineModel({
     id: 'kie-hailuo-02',
     provider: 'kie',
     type: 'video',
-    name: { zh: '海螺 02', en: 'Hailuo 02' },
-    description: { zh: 'KIE Hailuo 02 视频生成模型', en: 'KIE Hailuo 02 video generation model' },
+        i18nScope: 'models.defs.kie-hailuo-02',
+    name: { key: 'meta.name', fallback: 'Hailuo 02' },
+    description: { key: 'meta.description', fallback: 'KIE Hailuo 02 video generation model' },
     tags: ['text-to-video', 'image-to-video', 'provider-kie'],
     aliases: ['hailuo-02-kie'],
     polling: {
@@ -30,7 +31,7 @@ export const kieHailuo02Model = defineModel({
       id: 'kieHailuo02Duration',
       type: 'dropdown',
       order: 1,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.1', fallback: 'Duration' },
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -41,7 +42,7 @@ export const kieHailuo02Model = defineModel({
       id: 'kieHailuo02Resolution',
       type: 'dropdown',
       order: 2,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.2', fallback: 'Resolution' },
       default: '768P',
       options: [
         { value: '512P', label: '512P' },
@@ -53,7 +54,7 @@ export const kieHailuo02Model = defineModel({
       id: 'kieHailuo02PromptOptimizer',
       type: 'switch',
       order: 3,
-      name: { zh: '提示词优化', en: 'Prompt Optimizer' },
+      name: { key: 'auto.3', fallback: 'Prompt Optimizer' },
       default: true
     }
   ],

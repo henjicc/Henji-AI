@@ -9,6 +9,7 @@ export const klingVideoV26ProModel = defineModel({
     id: 'fal-ai-kling-video-v2.6-pro',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-kling-video-v2.6-pro',
     name: 'Kling Video V2.6 Pro',
     description: 'Kling Video V2.6 Pro 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -56,18 +57,18 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProMode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
-        { value: 'motion-control', label: { zh: '动作控制', en: 'Motion Control' } }
+        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
+        { value: 'motion-control', label: { key: 'auto.3', fallback: 'Motion Control' } }
       ]
     },
     {
       id: 'falKlingV26ProResolution',
       order: 2,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.4', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '720p', label: '720p' },
@@ -78,25 +79,25 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProCharacterOrientation',
       order: 3,
       type: 'dropdown',
-      name: { zh: '人物朝向', en: 'Character Orientation' },
+      name: { key: 'auto.5', fallback: 'Character Orientation' },
       default: 'video',
       options: [
-        { value: 'video', label: { zh: '与视频一致', en: 'Match Video' } },
-        { value: 'image', label: { zh: '与图片一致', en: 'Match Image' } }
+        { value: 'video', label: { key: 'auto.6', fallback: 'Match Video' } },
+        { value: 'image', label: { key: 'auto.7', fallback: 'Match Image' } }
       ]
     },
     {
       id: 'falKlingV26ProKeepOriginalSound',
       order: 4,
       type: 'switch',
-      name: { zh: '保留原声', en: 'Keep Original Sound' },
+      name: { key: 'auto.8', fallback: 'Keep Original Sound' },
       default: true
     },
     {
       id: 'falKlingV26ProVideoDuration',
       order: 5,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.9', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -107,7 +108,7 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProAspectRatio',
       order: 6,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.10', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -119,7 +120,7 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProCfgScale',
       order: 7,
       type: 'number',
-      name: { zh: 'CFG Scale', en: 'CFG Scale' },
+      name: { key: 'auto.11', fallback: 'CFG Scale' },
       default: 0.5,
       min: 0,
       max: 1,
@@ -129,7 +130,7 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProGenerateAudio',
       order: 8,
       type: 'switch',
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.12', fallback: 'Generate Audio' },
       default: false
     }
   ],

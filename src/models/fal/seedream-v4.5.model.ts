@@ -9,6 +9,7 @@ export const seedreamV45Model = defineModel({
     id: 'fal-ai-bytedance-seedream-v4.5',
     provider: 'fal',
     type: 'image',
+        i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4.5',
     name: 'Seedream V4.5',
     description: 'Bytedance Seedream V4.5 图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image']
@@ -18,7 +19,7 @@ export const seedreamV45Model = defineModel({
       id: 'falSeedream45NumImages',
       order: 1,
       type: 'number',
-      name: { zh: '生成数量', en: 'Number of Images' },
+      name: { key: 'auto.1', fallback: 'Number of Images' },
       default: 1,
       min: 1,
       max: 6
@@ -27,7 +28,7 @@ export const seedreamV45Model = defineModel({
       id: 'imageSize',
       order: 2,
       type: 'text',
-      name: { zh: '尺寸', en: 'Image Size' },
+      name: { key: 'auto.2', fallback: 'Image Size' },
       default: '2048*2048'
     }
   ],

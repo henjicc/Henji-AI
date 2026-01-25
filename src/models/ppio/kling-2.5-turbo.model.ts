@@ -8,9 +8,10 @@ import { defineModel } from '@/core'
 
 export const kling25TurboModel = defineModel({
   meta: {
-    id: 'kling-2.5-turbo',
+    id: 'ppio-kling-2.5-turbo',
     provider: 'ppio',
     type: 'video',
+        i18nScope: 'models.defs.ppio-kling-2.5-turbo',
     name: 'Kling 2.5 Turbo',
     description: '可灵 2.5 Turbo 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -25,7 +26,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboDuration',
       type: 'dropdown',
       order: 1,
-      name: { zh: '视频时长', en: 'Duration' },
+      name: { key: 'auto.1', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5秒' },
@@ -38,7 +39,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboAspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9 横屏' },
@@ -52,7 +53,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboCfgScale',
       type: 'slider',
       order: 3,
-      name: { zh: 'CFG Scale', en: 'CFG Scale' },
+      name: { key: 'auto.3', fallback: 'CFG Scale' },
       default: 0.5,
       min: 0,
       max: 1,
@@ -64,7 +65,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboMode',
       type: 'dropdown',
       order: 4,
-      name: { zh: '生成模式', en: 'Generation Mode' },
+      name: { key: 'auto.4', fallback: 'Generation Mode' },
       default: 'pro',
       options: [
         { value: 'pro', label: 'Pro 模式' }
@@ -76,7 +77,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboNegativePrompt',
       type: 'textarea',
       order: 5,
-      name: { zh: '负面提示词', en: 'Negative Prompt' },
+      name: { key: 'auto.5', fallback: 'Negative Prompt' },
       default: '',
       apiField: 'negative_prompt'
     }

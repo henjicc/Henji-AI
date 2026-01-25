@@ -9,6 +9,7 @@ export const nanoBananaModel = defineModel({
     id: 'fal-ai-nano-banana',
     provider: 'fal',
     type: 'image',
+        i18nScope: 'models.defs.fal-ai-nano-banana',
     name: 'Nano Banana',
     description: 'Nano Banana 快速图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image']
@@ -19,7 +20,7 @@ export const nanoBananaModel = defineModel({
       id: 'falNanoBananaNumImages',
       order: 1,
       type: 'number',
-      name: { zh: '生成数量', en: 'Number of Images' },
+      name: { key: 'auto.1', fallback: 'Number of Images' },
       default: 1,
       min: 1,
       max: 4
@@ -29,10 +30,10 @@ export const nanoBananaModel = defineModel({
       id: 'falNanoBananaAspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'smart', label: { key: 'auto.3', fallback: 'Smart' } },
         { value: '1:1', label: '1:1' },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },

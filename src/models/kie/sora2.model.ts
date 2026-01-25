@@ -18,8 +18,9 @@ export const kieSora2Model = defineModel({
     id: 'kie-sora-2',
     provider: 'kie',
     type: 'video',
-    name: { zh: 'Sora 2', en: 'Sora 2' },
-    description: { zh: 'KIE Sora 2 视频生成模型', en: 'KIE Sora 2 video generation model' },
+        i18nScope: 'models.defs.kie-sora-2',
+    name: { key: 'meta.name', fallback: 'Sora 2' },
+    description: { key: 'meta.description', fallback: 'KIE Sora 2 video generation model' },
     tags: ['text-to-video', 'image-to-video', 'provider-kie'],
     aliases: ['sora-2-kie'],
     polling: {
@@ -37,21 +38,21 @@ export const kieSora2Model = defineModel({
       id: 'kieSora2Mode',
       type: 'dropdown',
       order: 1,
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'standard',
       options: [
-        { value: 'standard', label: { zh: '标准', en: 'Standard' } },
-        { value: 'professional', label: { zh: '专业', en: 'Professional' } }
+        { value: 'standard', label: { key: 'auto.2', fallback: 'Standard' } },
+        { value: 'professional', label: { key: 'auto.3', fallback: 'Professional' } }
       ]
     },
     {
       id: 'kieSora2AspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.4', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'smart', label: { key: 'auto.5', fallback: 'Smart' } },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' }
       ]
@@ -60,7 +61,7 @@ export const kieSora2Model = defineModel({
       id: 'kieSora2Duration',
       type: 'dropdown',
       order: 3,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.6', fallback: 'Duration' },
       default: '10',
       options: [
         { value: '10', label: '10s' },
@@ -71,11 +72,11 @@ export const kieSora2Model = defineModel({
       id: 'kieSora2Quality',
       type: 'dropdown',
       order: 4,
-      name: { zh: '画质', en: 'Quality' },
+      name: { key: 'auto.7', fallback: 'Quality' },
       default: 'standard',
       options: [
-        { value: 'standard', label: { zh: '标准', en: 'Standard' } },
-        { value: 'high', label: { zh: '高', en: 'High' } }
+        { value: 'standard', label: { key: 'auto.8', fallback: 'Standard' } },
+        { value: 'high', label: { key: 'auto.9', fallback: 'High' } }
       ]
     }
   ],

@@ -9,6 +9,7 @@ export const seedanceModel = defineModel({
     id: 'fal-ai-bytedance-seedance-v1',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-bytedance-seedance-v1',
     name: 'Seedance',
     description: 'Bytedance Seedance 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
@@ -59,19 +60,19 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1Mode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-to-video',
       options: [
-        { value: 'text-to-video', label: { zh: '文生视频', en: 'Text to Video' } },
-        { value: 'image-to-video', label: { zh: '图生视频', en: 'Image to Video' } },
-        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } }
+        { value: 'text-to-video', label: { key: 'auto.2', fallback: 'Text to Video' } },
+        { value: 'image-to-video', label: { key: 'auto.3', fallback: 'Image to Video' } },
+        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } }
       ]
     },
     {
       id: 'falSeedanceV1Version',
       order: 2,
       type: 'dropdown',
-      name: { zh: '版本', en: 'Version' },
+      name: { key: 'auto.5', fallback: 'Version' },
       default: 'lite',
       options: [
         { value: 'lite', label: 'Lite' },
@@ -82,11 +83,11 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.6', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
-        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
+        { value: 'smart', label: { key: 'auto.7', fallback: 'Smart' } },
+        { value: 'auto', label: { key: 'auto.8', fallback: 'Auto' } },
         { value: '21:9', label: '21:9' },
         { value: '16:9', label: '16:9' },
         { value: '4:3', label: '4:3' },
@@ -100,7 +101,7 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1Resolution',
       order: 4,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.9', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '480p', label: '480p' },
@@ -112,7 +113,7 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1VideoDuration',
       order: 5,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.10', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 2, label: '2s' },
@@ -132,14 +133,14 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1CameraFixed',
       order: 6,
       type: 'switch',
-      name: { zh: '固定相机', en: 'Camera Fixed' },
+      name: { key: 'auto.11', fallback: 'Camera Fixed' },
       default: false
     },
     {
       id: 'falSeedanceV1FastMode',
       order: 7,
       type: 'switch',
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.12', fallback: 'Fast Mode' },
       default: true
     }
   ],

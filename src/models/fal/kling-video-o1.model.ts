@@ -9,6 +9,7 @@ export const klingVideoO1Model = defineModel({
     id: 'fal-ai-kling-video-o1',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-kling-video-o1',
     name: 'Kling Video O1',
     description: 'Kling Video O1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -45,20 +46,20 @@ export const klingVideoO1Model = defineModel({
       id: 'falKlingVideoO1Mode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'image-to-video',
       options: [
-        { value: 'image-to-video', label: { zh: '图生视频', en: 'Image to Video' } },
-        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } },
-        { value: 'video-to-video-edit', label: { zh: '视频编辑', en: 'Video Edit' } },
-        { value: 'video-to-video-reference', label: { zh: '视频参考', en: 'Video Reference' } }
+        { value: 'image-to-video', label: { key: 'auto.2', fallback: 'Image to Video' } },
+        { value: 'reference-to-video', label: { key: 'auto.3', fallback: 'Reference to Video' } },
+        { value: 'video-to-video-edit', label: { key: 'auto.4', fallback: 'Video Edit' } },
+        { value: 'video-to-video-reference', label: { key: 'auto.5', fallback: 'Video Reference' } }
       ]
     },
     {
       id: 'falKlingVideoO1VideoDuration',
       order: 2,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.6', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -69,10 +70,10 @@ export const klingVideoO1Model = defineModel({
       id: 'falKlingVideoO1AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.7', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
+        { value: 'auto', label: { key: 'auto.8', fallback: 'Auto' } },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
@@ -82,7 +83,7 @@ export const klingVideoO1Model = defineModel({
       id: 'falKlingVideoO1KeepAudio',
       order: 4,
       type: 'switch',
-      name: { zh: '保留音频', en: 'Keep Audio' },
+      name: { key: 'auto.9', fallback: 'Keep Audio' },
       default: false
     }
   ],

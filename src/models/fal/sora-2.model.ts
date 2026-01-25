@@ -9,6 +9,7 @@ export const sora2Model = defineModel({
     id: 'fal-ai-sora-2',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-sora-2',
     name: 'Sora 2',
     description: 'Sora 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -22,18 +23,18 @@ export const sora2Model = defineModel({
       id: 'falSora2Mode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '版本', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'standard',
       options: [
-        { value: 'standard', label: { zh: '标准', en: 'Standard' } },
-        { value: 'pro', label: { zh: '专业', en: 'Pro' } }
+        { value: 'standard', label: { key: 'auto.2', fallback: 'Standard' } },
+        { value: 'pro', label: { key: 'auto.3', fallback: 'Pro' } }
       ]
     },
     {
       id: 'falSora2Duration',
       order: 2,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.4', fallback: 'Duration' },
       default: 4,
       options: [
         { value: 4, label: '4s' },
@@ -45,11 +46,11 @@ export const sora2Model = defineModel({
       id: 'falSora2AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.5', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
-        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
+        { value: 'smart', label: { key: 'auto.6', fallback: 'Smart' } },
+        { value: 'auto', label: { key: 'auto.7', fallback: 'Auto' } },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' }
       ]
@@ -58,7 +59,7 @@ export const sora2Model = defineModel({
       id: 'falSora2Resolution',
       order: 4,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.8', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '720p', label: '720p' },

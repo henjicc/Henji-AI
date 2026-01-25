@@ -9,6 +9,7 @@ export const ltx2Model = defineModel({
     id: 'fal-ai-ltx-2',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-ltx-2',
     name: 'LTX 2',
     description: 'LTX 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -45,19 +46,19 @@ export const ltx2Model = defineModel({
       id: 'falLtx2Mode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-to-video',
       options: [
-        { value: 'text-to-video', label: { zh: '文生视频', en: 'Text to Video' } },
-        { value: 'image-to-video', label: { zh: '图生视频', en: 'Image to Video' } },
-        { value: 'retake-video', label: { zh: '视频编辑', en: 'Retake Video' } }
+        { value: 'text-to-video', label: { key: 'auto.2', fallback: 'Text to Video' } },
+        { value: 'image-to-video', label: { key: 'auto.3', fallback: 'Image to Video' } },
+        { value: 'retake-video', label: { key: 'auto.4', fallback: 'Retake Video' } }
       ]
     },
     {
       id: 'falLtx2Resolution',
       order: 2,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.5', fallback: 'Resolution' },
       default: '1080p',
       options: [
         { value: '1080p', label: '1080p' },
@@ -69,7 +70,7 @@ export const ltx2Model = defineModel({
       id: 'falLtx2VideoDuration',
       order: 3,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.6', fallback: 'Duration' },
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -81,7 +82,7 @@ export const ltx2Model = defineModel({
       id: 'falLtx2RetakeDuration',
       order: 4,
       type: 'number',
-      name: { zh: '编辑时长', en: 'Retake Duration' },
+      name: { key: 'auto.7', fallback: 'Retake Duration' },
       default: 5,
       min: 2,
       max: 20,
@@ -91,7 +92,7 @@ export const ltx2Model = defineModel({
       id: 'falLtx2Fps',
       order: 5,
       type: 'dropdown',
-      name: { zh: '帧率', en: 'FPS' },
+      name: { key: 'auto.8', fallback: 'FPS' },
       default: 25,
       options: [
         { value: 25, label: '25 FPS' },
@@ -102,21 +103,21 @@ export const ltx2Model = defineModel({
       id: 'falLtx2GenerateAudio',
       order: 6,
       type: 'switch',
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.9', fallback: 'Generate Audio' },
       default: true
     },
     {
       id: 'falLtx2FastMode',
       order: 7,
       type: 'switch',
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.10', fallback: 'Fast Mode' },
       default: true
     },
     {
       id: 'falLtx2RetakeStartTime',
       order: 8,
       type: 'number',
-      name: { zh: '开始时间', en: 'Start Time' },
+      name: { key: 'auto.11', fallback: 'Start Time' },
       default: 0,
       min: 0,
       max: 20,
@@ -126,12 +127,12 @@ export const ltx2Model = defineModel({
       id: 'falLtx2RetakeMode',
       order: 9,
       type: 'dropdown',
-      name: { zh: '编辑模式', en: 'Retake Mode' },
+      name: { key: 'auto.12', fallback: 'Retake Mode' },
       default: 'replace_audio_and_video',
       options: [
-        { value: 'replace_audio', label: { zh: '替换音频', en: 'Replace Audio' } },
-        { value: 'replace_video', label: { zh: '替换视频', en: 'Replace Video' } },
-        { value: 'replace_audio_and_video', label: { zh: '替换音频和视频', en: 'Replace Audio & Video' } }
+        { value: 'replace_audio', label: { key: 'auto.13', fallback: 'Replace Audio' } },
+        { value: 'replace_video', label: { key: 'auto.14', fallback: 'Replace Video' } },
+        { value: 'replace_audio_and_video', label: { key: 'auto.15', fallback: 'Replace Audio & Video' } }
       ]
     }
   ],

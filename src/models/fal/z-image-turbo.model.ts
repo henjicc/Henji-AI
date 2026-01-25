@@ -10,6 +10,7 @@ export const zImageTurboModel = defineModel({
     id: 'fal-ai-z-image-turbo',
     provider: 'fal',
     type: 'image',
+        i18nScope: 'models.defs.fal-ai-z-image-turbo',
     name: 'Z-Image Turbo',
     description: 'Z-Image Turbo 快速图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image', 'fast']
@@ -24,7 +25,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboImageSize',
       order: 1,
       type: 'text',
-      name: { zh: '图片尺寸', en: 'Image Size' },
+      name: { key: 'auto.1', fallback: 'Image Size' },
       default: 'landscape_4_3'
     },
     // 2. 生成数量
@@ -32,7 +33,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboNumImages',
       order: 2,
       type: 'number',
-      name: { zh: '生成数量', en: 'Number of Images' },
+      name: { key: 'auto.2', fallback: 'Number of Images' },
       default: 1,
       min: 1,
       max: 4
@@ -42,7 +43,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboNumInferenceSteps',
       order: 3,
       type: 'number',
-      name: { zh: '推理步数', en: 'Inference Steps' },
+      name: { key: 'auto.3', fallback: 'Inference Steps' },
       default: 8,
       min: 1,
       max: 50
@@ -52,7 +53,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboEnablePromptExpansion',
       order: 4,
       type: 'switch',
-      name: { zh: '提示词扩展', en: 'Prompt Expansion' },
+      name: { key: 'auto.4', fallback: 'Prompt Expansion' },
       default: false
     },
     // 5. 加速模式
@@ -60,7 +61,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboAcceleration',
       order: 5,
       type: 'dropdown',
-      name: { zh: '加速模式', en: 'Acceleration' },
+      name: { key: 'auto.5', fallback: 'Acceleration' },
       default: 'none',
       options: [
         { value: 'none', label: '无' },

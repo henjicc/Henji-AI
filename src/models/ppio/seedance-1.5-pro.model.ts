@@ -8,14 +8,12 @@ import { defineModel } from '@/core'
 
 export const seedance15ProModel = defineModel({
   meta: {
-    id: 'seedance-v1.5-pro',
+    id: 'ppio-seedance-v1.5-pro',
     provider: 'ppio',
     type: 'video',
-    name: { zh: '即舞视频 1.5 Pro', en: 'Seedance 1.5 Pro' },
-    description: {
-      zh: '派欧云即舞视频生成模型 1.5 Pro 版本，支持文生视频、图生视频、首尾帧三种模式',
-      en: 'PPIO Seedance video generation model v1.5 Pro, supports text-to-video, image-to-video, and start-end-frame modes'
-    },
+        i18nScope: 'models.defs.ppio-seedance-v1.5-pro',
+    name: { key: 'meta.name', fallback: 'Seedance 1.5 Pro' },
+    description: { key: 'meta.description', fallback: 'PPIO Seedance video generation model v1.5 Pro, supports text-to-video, image-to-video, and start-end-frame modes' },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
     polling: {
       interval: 3000,
@@ -30,7 +28,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.1', fallback: 'Resolution' },
       default: 'adaptive',
       options: [
         { value: '16:9', label: '16:9' },
@@ -39,7 +37,7 @@ export const seedance15ProModel = defineModel({
         { value: '3:4', label: '3:4' },
         { value: '9:16', label: '9:16' },
         { value: '21:9', label: '21:9' },
-        { value: 'adaptive', label: { zh: '智能', en: 'Adaptive' } }
+        { value: 'adaptive', label: { key: 'auto.2', fallback: 'Adaptive' } }
       ],
       apiField: 'aspect_ratio'
     },
@@ -49,7 +47,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProResolution',
       type: 'dropdown',
       order: 2,
-      name: { zh: '质量', en: 'Quality' },
+      name: { key: 'auto.3', fallback: 'Quality' },
       default: '720p',
       options: [
         { value: '480p', label: '480P' },
@@ -63,7 +61,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProDuration',
       type: 'dropdown',
       order: 3,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.4', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 4, label: '4s' },
@@ -84,7 +82,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProGenerateAudio',
       type: 'switch',
       order: 4,
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.5', fallback: 'Generate Audio' },
       default: true,
       apiField: 'generate_audio'
     },
@@ -94,7 +92,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProCameraFixed',
       type: 'switch',
       order: 5,
-      name: { zh: '固定相机', en: 'Fixed Camera' },
+      name: { key: 'auto.6', fallback: 'Fixed Camera' },
       default: false,
       apiField: 'camera_fixed'
     },
@@ -104,15 +102,12 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProServiceTier',
       type: 'dropdown',
       order: 6,
-      name: { zh: '服务层级', en: 'Service Tier' },
-      tooltip: {
-        zh: '在线推理模式，RPM 和并发配额较低，适用于时效性要求高的场景。离线推理模式，TPD 配额更高，价格为在线模式的 50%，适用于对延迟不敏感的场景。',
-        en: 'Online mode has lower RPM and concurrency quotas, suitable for time-sensitive scenarios. Offline mode has higher TPD quotas at 50% price, suitable for delay-insensitive scenarios.'
-      },
+      name: { key: 'auto.7', fallback: 'Service Tier' },
+      tooltip: { key: 'auto.8', fallback: 'Online mode has lower RPM and concurrency quotas, suitable for time-sensitive scenarios. Offline mode has higher TPD quotas at 50% price, suitable for delay-insensitive scenarios.' },
       default: 'default',
       options: [
-        { value: 'default', label: { zh: '在线模式', en: 'Online Mode' } },
-        { value: 'flex', label: { zh: '离线模式', en: 'Offline Mode' } }
+        { value: 'default', label: { key: 'auto.9', fallback: 'Online Mode' } },
+        { value: 'flex', label: { key: 'auto.10', fallback: 'Offline Mode' } }
       ],
       apiField: 'service_tier'
     }
@@ -155,7 +150,7 @@ export const seedance15ProModel = defineModel({
         if (imageCount > 0) {
           // Add smart option at the beginning
           return [
-            { value: 'adaptive', label: { zh: '智能', en: 'Adaptive' } },
+            { value: 'adaptive', label: { key: 'auto.11', fallback: 'Adaptive' } },
             ...options
           ]
         }

@@ -11,8 +11,9 @@ export const kieGrokImagineVideoModel = defineModel({
     id: 'kie-grok-imagine-video',
     provider: 'kie',
     type: 'video',
-    name: { zh: 'Grok Imagine 视频', en: 'Grok Imagine Video' },
-    description: { zh: 'KIE Grok Imagine 视频生成模型', en: 'KIE Grok Imagine video generation model' },
+        i18nScope: 'models.defs.kie-grok-imagine-video',
+    name: { key: 'meta.name', fallback: 'Grok Imagine Video' },
+    description: { key: 'meta.description', fallback: 'KIE Grok Imagine video generation model' },
     tags: ['text-to-video', 'image-to-video', 'english-prompt-only', 'provider-kie'],
     aliases: ['grok-imagine-video-kie'],
     polling: {
@@ -30,7 +31,7 @@ export const kieGrokImagineVideoModel = defineModel({
       id: 'kieGrokImagineVideoAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '2:3',
       options: [
         { value: '2:3', label: '2:3' },
@@ -44,11 +45,11 @@ export const kieGrokImagineVideoModel = defineModel({
       id: 'kieGrokImagineVideoMode',
       type: 'dropdown',
       order: 2,
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.2', fallback: 'Mode' },
       default: 'normal',
       options: [
-        { value: 'normal', label: { zh: '标准', en: 'Normal' } },
-        { value: 'spicy', label: { zh: '强烈', en: 'Spicy' } }
+        { value: 'normal', label: { key: 'auto.3', fallback: 'Normal' } },
+        { value: 'spicy', label: { key: 'auto.4', fallback: 'Spicy' } }
       ]
     }
   ],

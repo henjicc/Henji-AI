@@ -11,11 +11,9 @@ export const kieKlingV26Model = defineModel({
     id: 'kie-kling-v2-6',
     provider: 'kie',
     type: 'video',
-    name: { zh: 'Kling V2.6', en: 'Kling V2.6' },
-    description: {
-      zh: 'KIE Kling V2.6 视频生成模型，支持文/图生视频与动作控制',
-      en: 'KIE Kling V2.6 video model with text/image and motion-control modes'
-    },
+        i18nScope: 'models.defs.kie-kling-v2-6',
+    name: { key: 'meta.name', fallback: 'Kling V2.6' },
+    description: { key: 'meta.description', fallback: 'KIE Kling V2.6 video model with text/image and motion-control modes' },
     tags: ['text-to-video', 'image-to-video', 'motion-control', 'provider-kie'],
     aliases: ['kling-v2-6-kie'],
     polling: {
@@ -67,18 +65,18 @@ export const kieKlingV26Model = defineModel({
       id: 'kieKlingV26Mode',
       type: 'dropdown',
       order: 1,
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
-        { value: 'motion-control', label: { zh: '动作控制', en: 'Motion Control' } }
+        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
+        { value: 'motion-control', label: { key: 'auto.3', fallback: 'Motion Control' } }
       ]
     },
     {
       id: 'kieKlingV26Duration',
       type: 'dropdown',
       order: 2,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.4', fallback: 'Duration' },
       default: '5',
       options: [
         { value: '5', label: '5s' },
@@ -89,20 +87,20 @@ export const kieKlingV26Model = defineModel({
       id: 'kieKlingV26AspectRatio',
       type: 'dropdown',
       order: 3,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.5', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' },
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } }
+        { value: 'smart', label: { key: 'auto.6', fallback: 'Smart' } }
       ]
     },
     {
       id: 'kieKlingV26Resolution',
       type: 'dropdown',
       order: 4,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.7', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '720p', label: '720p' },
@@ -113,18 +111,18 @@ export const kieKlingV26Model = defineModel({
       id: 'kieKlingV26EnableAudio',
       type: 'switch',
       order: 5,
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.8', fallback: 'Generate Audio' },
       default: false
     },
     {
       id: 'kieKlingV26CharacterOrientation',
       type: 'dropdown',
       order: 6,
-      name: { zh: '角色朝向', en: 'Character Orientation' },
+      name: { key: 'auto.9', fallback: 'Character Orientation' },
       default: 'video',
       options: [
-        { value: 'video', label: { zh: '与视频一致', en: 'Consistent with Video' } },
-        { value: 'image', label: { zh: '与图片一致', en: 'Consistent with Image' } }
+        { value: 'video', label: { key: 'auto.10', fallback: 'Consistent with Video' } },
+        { value: 'image', label: { key: 'auto.11', fallback: 'Consistent with Image' } }
       ]
     }
   ],

@@ -18,8 +18,9 @@ export const kieSeedream45Model = defineModel({
     id: 'kie-seedream-4.5',
     provider: 'kie',
     type: 'image',
-    name: { zh: '即梦图片 4.5', en: 'Seedream 4.5' },
-    description: { zh: 'KIE Seedream 4.5 图像生成模型', en: 'KIE Seedream 4.5 image generation model' },
+        i18nScope: 'models.defs.kie-seedream-4.5',
+    name: { key: 'meta.name', fallback: 'Seedream 4.5' },
+    description: { key: 'meta.description', fallback: 'KIE Seedream 4.5 image generation model' },
     tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-kie'],
     aliases: ['seedream-4.5-kie']
   },
@@ -28,10 +29,10 @@ export const kieSeedream45Model = defineModel({
       id: 'kieSeedreamAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
         { value: '1:1', label: '1:1' },
         { value: '4:3', label: '4:3' },
         { value: '3:4', label: '3:4' },
@@ -43,7 +44,7 @@ export const kieSeedream45Model = defineModel({
       id: 'kieSeedreamQuality',
       type: 'dropdown',
       order: 2,
-      name: { zh: '质量', en: 'Quality' },
+      name: { key: 'auto.3', fallback: 'Quality' },
       default: '2K',
       options: [
         { value: '2K', label: '2K' },

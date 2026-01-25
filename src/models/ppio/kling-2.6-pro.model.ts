@@ -8,14 +8,12 @@ import { defineModel } from '@/core'
 
 export const kling26ProModel = defineModel({
   meta: {
-    id: 'kling-2.6-pro',
+    id: 'ppio-kling-2.6-pro',
     provider: 'ppio',
     type: 'video',
-    name: { zh: '可灵视频 2.6 Pro', en: 'Kling 2.6 Pro' },
-    description: {
-      zh: '派欧云可灵视频生成模型 2.6 Pro 版本，支持文/图生视频和动作控制两种模式',
-      en: 'PPIO Kling video generation model v2.6 Pro, supports text/image-to-video and motion-control modes'
-    },
+        i18nScope: 'models.defs.ppio-kling-2.6-pro',
+    name: { key: 'meta.name', fallback: 'Kling 2.6 Pro' },
+    description: { key: 'meta.description', fallback: 'PPIO Kling video generation model v2.6 Pro, supports text/image-to-video and motion-control modes' },
     tags: ['text-to-video', 'image-to-video', 'motion-control'],
     polling: {
       interval: 3000,
@@ -68,11 +66,11 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26Mode',
       type: 'dropdown',
       order: 1,
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
-        { value: 'motion-control', label: { zh: '动作控制', en: 'Motion Control' } }
+        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
+        { value: 'motion-control', label: { key: 'auto.3', fallback: 'Motion Control' } }
       ],
       apiField: 'mode'
     },
@@ -82,7 +80,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26VideoDuration',
       type: 'dropdown',
       order: 2,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.4', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -96,7 +94,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26AspectRatio',
       type: 'dropdown',
       order: 3,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.5', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -111,7 +109,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26CfgScale',
       type: 'number',
       order: 4,
-      name: { zh: 'CFG Scale', en: 'CFG Scale' },
+      name: { key: 'auto.6', fallback: 'CFG Scale' },
       default: 0.5,
       min: 0,
       max: 1,
@@ -124,7 +122,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26Sound',
       type: 'switch',
       order: 5,
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.7', fallback: 'Generate Audio' },
       default: true,
       apiField: 'sound'
     },
@@ -134,15 +132,12 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26CharacterOrientation',
       type: 'dropdown',
       order: 6,
-      name: { zh: '人物朝向', en: 'Character Orientation' },
-      tooltip: {
-        zh: '默认为人物朝向与视频一致，此时角色动作/表情/运镜/朝向都会按照动作视频生成。可以通过提示词控制其他信息。最长支持30s生成时长。\n\n选择人物朝向与图片一致，此时角色动作/表情都会按照动作视频生成，朝向与图片中人物朝向一致，运镜及其他信息可以通过提示词自定义。最长支持5s生成时长。',
-        en: 'Default is character orientation consistent with video. You can control other information through prompts. Maximum 30s generation duration.\n\nIf you choose character orientation consistent with image, the character actions/expressions will be generated according to the motion video, and the orientation will be consistent with the character orientation in the image. Maximum 5s generation duration.'
-      },
+      name: { key: 'auto.8', fallback: 'Character Orientation' },
+      tooltip: { key: 'auto.9', fallback: 'Default is character orientation consistent with video. You can control other information through prompts. Maximum 30s generation duration.\n\nIf you choose character orientation consistent with image, the character actions/expressions will be generated according to the motion video, and the orientation will be consistent with the character orientation in the image. Maximum 5s generation duration.' },
       default: 'video',
       options: [
-        { value: 'video', label: { zh: '与视频一致', en: 'Consistent with Video' } },
-        { value: 'image', label: { zh: '与图片一致', en: 'Consistent with Image' } }
+        { value: 'video', label: { key: 'auto.10', fallback: 'Consistent with Video' } },
+        { value: 'image', label: { key: 'auto.11', fallback: 'Consistent with Image' } }
       ],
       apiField: 'character_orientation'
     },
@@ -152,7 +147,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26KeepOriginalSound',
       type: 'switch',
       order: 7,
-      name: { zh: '保留音频', en: 'Keep Original Sound' },
+      name: { key: 'auto.12', fallback: 'Keep Original Sound' },
       default: true,
       apiField: 'keep_original_sound'
     }

@@ -1,0 +1,193 @@
+{
+  "defs": {
+    "ppio-seedream-4.0": {
+      "meta": {
+        "name": "Seedream 4.0",
+        "description": "PPIO Seedream image generation model v4.0, supports 2K/4K resolution"
+      },
+      "params": {
+        "resolution": {
+          "name": "Resolution",
+          "options": {
+            "aspectRatios": {
+              "smart": "Smart"
+            },
+            "qualityTiers": {
+              "2K": "HD 2K",
+              "4K": "UHD 4K"
+            }
+          }
+        },
+        "maxImages": {
+          "name": "Quantity",
+          "tooltip": "Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15."
+        }
+      }
+    },
+    "ppio-kling-2.5-turbo": {
+      "auto": {
+        "1": "Duration",
+        "2": "Aspect Ratio",
+        "3": "CFG Scale",
+        "4": "Generation Mode",
+        "5": "Negative Prompt"
+      }
+    },
+    "ppio-kling-2.6-pro": {
+      "meta": {
+        "name": "Kling 2.6 Pro",
+        "description": "PPIO Kling video generation model v2.6 Pro, supports text/image-to-video and motion-control modes"
+      },
+      "auto": {
+        "1": "Mode",
+        "2": "Text/Image to Video",
+        "3": "Motion Control",
+        "4": "Duration",
+        "5": "Aspect Ratio",
+        "6": "CFG Scale",
+        "7": "Generate Audio",
+        "8": "Character Orientation",
+        "9": "Default is character orientation consistent with video. You can control other information through prompts. Maximum 30s generation duration.\\n\\nIf you choose character orientation consistent with image, the character actions/expressions will be generated according to the motion video, and the orientation will be consistent with the character orientation in the image. Maximum 5s generation duration.",
+        "10": "Consistent with Video",
+        "11": "Consistent with Image",
+        "12": "Keep Original Sound"
+      }
+    },
+    "ppio-kling-o1": {
+      "meta": {
+        "name": "Kling O1",
+        "description": "PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes"
+      },
+      "auto": {
+        "1": "Mode",
+        "2": "Text/Image to Video",
+        "3": "Start-End Frame",
+        "4": "Reference to Video",
+        "5": "Video Edit",
+        "6": "Duration",
+        "7": "Aspect Ratio",
+        "8": "Keep Audio",
+        "9": "Fast Mode"
+      }
+    },
+    "ppio-minimax-hailuo-02": {
+      "auto": {
+        "1": "Duration",
+        "2": "Resolution",
+        "3": "Prompt Optimizer"
+      }
+    },
+    "ppio-minimax-hailuo-2.3": {
+      "auto": {
+        "1": "Duration",
+        "2": "Resolution",
+        "3": "Fast Mode",
+        "4": "Prompt Extension"
+      }
+    },
+    "ppio-minimax-speech-2.6": {
+      "auto": {
+        "1": "Audio Spec",
+        "2": "Voice ID",
+        "3": "Speed",
+        "4": "Volume",
+        "5": "Pitch",
+        "6": "Emotion",
+        "7": "Sample Rate",
+        "8": "Bitrate",
+        "9": "Audio Format",
+        "10": "Channel"
+      }
+    },
+    "ppio-pixverse-v4.5": {
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Resolution",
+        "3": "Fast Mode",
+        "4": "Negative Prompt"
+      }
+    },
+    "ppio-seedance-v1.5-pro": {
+      "meta": {
+        "name": "Seedance 1.5 Pro",
+        "description": "PPIO Seedance video generation model v1.5 Pro, supports text-to-video, image-to-video, and start-end-frame modes"
+      },
+      "auto": {
+        "1": "Resolution",
+        "2": "Adaptive",
+        "3": "Quality",
+        "4": "Duration",
+        "5": "Generate Audio",
+        "6": "Fixed Camera",
+        "7": "Service Tier",
+        "8": "Online mode has lower RPM and concurrency quotas, suitable for time-sensitive scenarios. Offline mode has higher TPD quotas at 50% price, suitable for delay-insensitive scenarios.",
+        "9": "Online Mode",
+        "10": "Offline Mode",
+        "11": "Adaptive"
+      }
+    },
+    "ppio-seedance-v1": {
+      "auto": {
+        "1": "Variant",
+        "2": "Duration",
+        "3": "Aspect Ratio",
+        "4": "Resolution",
+        "5": "Camera Fixed"
+      }
+    },
+    "ppio-seedream-4.5": {
+      "meta": {
+        "name": "Seedream 4.5",
+        "description": "PPIO Seedream image generation model v4.5, supports 2K/4K resolution"
+      },
+      "auto": {
+        "1": "Resolution",
+        "2": "Smart",
+        "3": "HD 2K",
+        "4": "UHD 4K",
+        "5": "Quantity",
+        "6": "Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.",
+        "7": "Prompt Optimization",
+        "8": "When enabled, the model will automatically optimize prompts for better generation results. Currently only supports standard mode."
+      }
+    },
+    "ppio-vidu-q1": {
+      "auto": {
+        "1": "Mode",
+        "2": "Aspect Ratio",
+        "3": "Style",
+        "4": "Movement Amplitude",
+        "5": "Generate Audio"
+      }
+    },
+    "ppio-wan-2.5-preview": {
+      "auto": {
+        "1": "Duration",
+        "2": "Size",
+        "3": "Resolution",
+        "4": "Prompt Extend",
+        "5": "Generate Audio",
+        "6": "Negative Prompt"
+      }
+    },
+    "ppio-wan-2.6": {
+      "meta": {
+        "name": "Wan 2.6",
+        "description": "PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes"
+      },
+      "auto": {
+        "1": "Mode",
+        "2": "Text/Image to Video",
+        "3": "Reference to Video",
+        "4": "Resolution",
+        "5": "Quality",
+        "6": "Duration",
+        "7": "Shot Type",
+        "8": "Multi-shot",
+        "9": "Single-shot",
+        "10": "Generate Audio",
+        "11": "Prompt Extend"
+      }
+    }
+  }
+}

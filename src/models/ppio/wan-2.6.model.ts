@@ -8,14 +8,12 @@ import { defineModel } from '@/core'
 
 export const wan26Model = defineModel({
   meta: {
-    id: 'wan-2.6',
+    id: 'ppio-wan-2.6',
     provider: 'ppio',
     type: 'video',
-    name: { zh: '万象视频 2.6', en: 'Wan 2.6' },
-    description: {
-      zh: '派欧云万象视频生成模型 2.6 版本，支持文/图生视频和参考生视频两种模式',
-      en: 'PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes'
-    },
+        i18nScope: 'models.defs.ppio-wan-2.6',
+    name: { key: 'meta.name', fallback: 'Wan 2.6' },
+    description: { key: 'meta.description', fallback: 'PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes' },
     tags: ['text-to-video', 'image-to-video', 'reference-mode'],
     polling: {
       interval: 3000,
@@ -53,11 +51,11 @@ export const wan26Model = defineModel({
       id: 'ppioWan26Mode',
       type: 'dropdown',
       order: 1,
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
-        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } }
+        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
+        { value: 'reference-to-video', label: { key: 'auto.3', fallback: 'Reference to Video' } }
       ],
       apiField: 'mode'
     },
@@ -67,7 +65,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26AspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.4', fallback: 'Resolution' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -84,7 +82,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26Quality',
       type: 'dropdown',
       order: 3,
-      name: { zh: '质量', en: 'Quality' },
+      name: { key: 'auto.5', fallback: 'Quality' },
       default: '720P',
       options: [
         { value: '720P', label: '720P' },
@@ -98,7 +96,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26VideoDuration',
       type: 'dropdown',
       order: 4,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.6', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -113,11 +111,11 @@ export const wan26Model = defineModel({
       id: 'ppioWan26ShotType',
       type: 'dropdown',
       order: 5,
-      name: { zh: '镜头类型', en: 'Shot Type' },
+      name: { key: 'auto.7', fallback: 'Shot Type' },
       default: 'multi',
       options: [
-        { value: 'multi', label: { zh: '多镜头', en: 'Multi-shot' } },
-        { value: 'single', label: { zh: '单镜头', en: 'Single-shot' } }
+        { value: 'multi', label: { key: 'auto.8', fallback: 'Multi-shot' } },
+        { value: 'single', label: { key: 'auto.9', fallback: 'Single-shot' } }
       ],
       apiField: 'shot_type'
     },
@@ -127,7 +125,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26Audio',
       type: 'switch',
       order: 6,
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.10', fallback: 'Generate Audio' },
       default: true,
       apiField: 'audio'
     },
@@ -137,7 +135,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26PromptExtend',
       type: 'switch',
       order: 7,
-      name: { zh: '提示词扩展', en: 'Prompt Extend' },
+      name: { key: 'auto.11', fallback: 'Prompt Extend' },
       default: true,
       apiField: 'prompt_extend'
     }

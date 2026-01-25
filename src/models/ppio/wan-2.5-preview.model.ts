@@ -8,9 +8,10 @@ import { defineModel } from '@/core'
 
 export const wan25PreviewModel = defineModel({
   meta: {
-    id: 'wan-2.5-preview',
+    id: 'ppio-wan-2.5-preview',
     provider: 'ppio',
     type: 'video',
+        i18nScope: 'models.defs.ppio-wan-2.5-preview',
     name: 'Wan 2.5 Preview',
     description: '万象 2.5 预览版视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video'],
@@ -33,7 +34,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25VideoDuration',
       type: 'dropdown',
       order: 1,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.1', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -46,7 +47,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25Size',
       type: 'dropdown',
       order: 2,
-      name: { zh: '尺寸', en: 'Size' },
+      name: { key: 'auto.2', fallback: 'Size' },
       default: '1280*720',
       options: [
         { value: '832*480', label: '832×480' },
@@ -70,7 +71,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25Resolution',
       type: 'dropdown',
       order: 3,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.3', fallback: 'Resolution' },
       default: '720P',
       options: [
         { value: '480P', label: '480P' },
@@ -84,7 +85,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25PromptExtend',
       type: 'switch',
       order: 4,
-      name: { zh: '智能改写', en: 'Prompt Extend' },
+      name: { key: 'auto.4', fallback: 'Prompt Extend' },
       default: true,
       apiField: 'prompt_extend'
     },
@@ -93,7 +94,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25Audio',
       type: 'switch',
       order: 5,
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.5', fallback: 'Generate Audio' },
       default: true,
       apiField: 'audio'
     },
@@ -102,7 +103,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25NegativePrompt',
       type: 'textarea',
       order: 6,
-      name: { zh: '负面提示词', en: 'Negative Prompt' },
+      name: { key: 'auto.6', fallback: 'Negative Prompt' },
       default: '',
       apiField: 'negative_prompt'
     }

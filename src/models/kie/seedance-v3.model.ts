@@ -11,8 +11,9 @@ export const kieSeedanceV3Model = defineModel({
     id: 'kie-seedance-v3',
     provider: 'kie',
     type: 'video',
-    name: { zh: 'Seedance V3', en: 'Seedance V3' },
-    description: { zh: 'KIE Seedance V3 视频生成模型', en: 'KIE Seedance V3 video generation model' },
+        i18nScope: 'models.defs.kie-seedance-v3',
+    name: { key: 'meta.name', fallback: 'Seedance V3' },
+    description: { key: 'meta.description', fallback: 'KIE Seedance V3 video generation model' },
     tags: ['text-to-video', 'image-to-video', 'provider-kie'],
     aliases: ['seedance-v3-kie'],
     polling: {
@@ -30,7 +31,7 @@ export const kieSeedanceV3Model = defineModel({
       id: 'kieSeedanceV3Version',
       type: 'dropdown',
       order: 1,
-      name: { zh: '版本', en: 'Version' },
+      name: { key: 'auto.1', fallback: 'Version' },
       default: 'lite',
       options: [
         { value: 'lite', label: 'Lite' },
@@ -41,7 +42,7 @@ export const kieSeedanceV3Model = defineModel({
       id: 'kieSeedanceV3AspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -51,14 +52,14 @@ export const kieSeedanceV3Model = defineModel({
         { value: '9:16', label: '9:16' },
         { value: '21:9', label: '21:9' },
         { value: '9:21', label: '9:21' },
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } }
+        { value: 'smart', label: { key: 'auto.3', fallback: 'Smart' } }
       ]
     },
     {
       id: 'kieSeedanceV3Resolution',
       type: 'dropdown',
       order: 3,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.4', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '480p', label: '480p' },
@@ -70,7 +71,7 @@ export const kieSeedanceV3Model = defineModel({
       id: 'kieSeedanceV3Duration',
       type: 'dropdown',
       order: 4,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.5', fallback: 'Duration' },
       default: '5',
       options: [
         { value: '5', label: '5s' },
@@ -81,14 +82,14 @@ export const kieSeedanceV3Model = defineModel({
       id: 'kieSeedanceV3CameraFixed',
       type: 'switch',
       order: 5,
-      name: { zh: '固定相机', en: 'Camera Fixed' },
+      name: { key: 'auto.6', fallback: 'Camera Fixed' },
       default: false
     },
     {
       id: 'kieSeedanceV3FastMode',
       type: 'switch',
       order: 6,
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.7', fallback: 'Fast Mode' },
       default: true
     }
   ],

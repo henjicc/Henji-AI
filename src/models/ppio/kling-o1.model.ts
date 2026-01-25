@@ -8,14 +8,12 @@ import { defineModel } from '@/core'
 
 export const klingO1Model = defineModel({
   meta: {
-    id: 'kling-o1',
+    id: 'ppio-kling-o1',
     provider: 'ppio',
     type: 'video',
-    name: { zh: '可灵视频 O1', en: 'Kling O1' },
-    description: {
-      zh: '派欧云可灵视频生成模型 O1 版本，支持文/图生视频、首尾帧、参考生视频、视频编辑四种模式',
-      en: 'PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes'
-    },
+        i18nScope: 'models.defs.ppio-kling-o1',
+    name: { key: 'meta.name', fallback: 'Kling O1' },
+    description: { key: 'meta.description', fallback: 'PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes' },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'supports-video-editing'],
     polling: {
       interval: 3000,
@@ -83,13 +81,13 @@ export const klingO1Model = defineModel({
       type: 'dropdown',
       order: 1,
       valueType: 'string',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
-        { value: 'start-end-frame', label: { zh: '首尾帧', en: 'Start-End Frame' } },
-        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } },
-        { value: 'video-edit', label: { zh: '视频编辑', en: 'Video Edit' } }
+        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
+        { value: 'start-end-frame', label: { key: 'auto.3', fallback: 'Start-End Frame' } },
+        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } },
+        { value: 'video-edit', label: { key: 'auto.5', fallback: 'Video Edit' } }
       ]
     },
 
@@ -99,7 +97,7 @@ export const klingO1Model = defineModel({
       type: 'dropdown',
       order: 2,
       valueType: 'number',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.6', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -113,7 +111,7 @@ export const klingO1Model = defineModel({
       type: 'dropdown',
       order: 3,
       valueType: 'string',
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.7', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -128,7 +126,7 @@ export const klingO1Model = defineModel({
       type: 'switch',
       order: 4,
       valueType: 'boolean',
-      name: { zh: '保留音频', en: 'Keep Audio' },
+      name: { key: 'auto.8', fallback: 'Keep Audio' },
       default: true
     },
 
@@ -138,7 +136,7 @@ export const klingO1Model = defineModel({
       type: 'switch',
       order: 5,
       valueType: 'boolean',
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.9', fallback: 'Fast Mode' },
       default: false
     }
   ],

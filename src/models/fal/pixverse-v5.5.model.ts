@@ -9,6 +9,7 @@ export const pixverseV55Model = defineModel({
     id: 'fal-ai-pixverse-v5.5',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-pixverse-v5.5',
     name: 'PixVerse V5.5',
     description: 'PixVerse V5.5 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -22,10 +23,10 @@ export const pixverseV55Model = defineModel({
       id: 'pixverseAspectRatio',
       order: 1,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
         { value: '16:9', label: '16:9' },
         { value: '4:3', label: '4:3' },
         { value: '1:1', label: '1:1' },
@@ -37,7 +38,7 @@ export const pixverseV55Model = defineModel({
       id: 'pixverseResolution',
       order: 2,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.3', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '720p', label: '720p' },
@@ -48,7 +49,7 @@ export const pixverseV55Model = defineModel({
       id: 'falPixverse55VideoDuration',
       order: 3,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.4', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -59,37 +60,37 @@ export const pixverseV55Model = defineModel({
       id: 'pixverseStyle',
       order: 4,
       type: 'dropdown',
-      name: { zh: '风格', en: 'Style' },
+      name: { key: 'auto.5', fallback: 'Style' },
       default: 'none',
       options: [
-        { value: 'none', label: { zh: '默认', en: 'Default' } },
-        { value: 'realistic', label: { zh: '写实', en: 'Realistic' } },
-        { value: 'anime', label: { zh: '动漫', en: 'Anime' } }
+        { value: 'none', label: { key: 'auto.6', fallback: 'Default' } },
+        { value: 'realistic', label: { key: 'auto.7', fallback: 'Realistic' } },
+        { value: 'anime', label: { key: 'auto.8', fallback: 'Anime' } }
       ]
     },
     {
       id: 'pixverseThinkingType',
       order: 5,
       type: 'dropdown',
-      name: { zh: '思考模式', en: 'Thinking Type' },
+      name: { key: 'auto.9', fallback: 'Thinking Type' },
       default: 'normal',
       options: [
-        { value: 'normal', label: { zh: 'Normal', en: 'Normal' } },
-        { value: 'enhanced', label: { zh: 'Enhanced', en: 'Enhanced' } }
+        { value: 'normal', label: { key: 'auto.10', fallback: 'Normal' } },
+        { value: 'enhanced', label: { key: 'auto.11', fallback: 'Enhanced' } }
       ]
     },
     {
       id: 'pixverseGenerateAudio',
       order: 6,
       type: 'switch',
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.12', fallback: 'Generate Audio' },
       default: false
     },
     {
       id: 'pixverseMultiClip',
       order: 7,
       type: 'switch',
-      name: { zh: '多镜头', en: 'Multi Clip' },
+      name: { key: 'auto.13', fallback: 'Multi Clip' },
       default: false
     }
   ],

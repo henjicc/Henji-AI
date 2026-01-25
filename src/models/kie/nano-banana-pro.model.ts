@@ -11,8 +11,9 @@ export const kieNanoBananaProModel = defineModel({
     id: 'kie-nano-banana-pro',
     provider: 'kie',
     type: 'image',
-    name: { zh: 'Nano Banana Pro', en: 'Nano Banana Pro' },
-    description: { zh: 'KIE Nano Banana Pro 图像生成模型', en: 'KIE Nano Banana Pro image generation model' },
+        i18nScope: 'models.defs.kie-nano-banana-pro',
+    name: { key: 'meta.name', fallback: 'Nano Banana Pro' },
+    description: { key: 'meta.description', fallback: 'KIE Nano Banana Pro image generation model' },
     tags: ['text-to-image', 'image-to-image', 'provider-kie'],
     aliases: ['nano-banana-pro-kie']
   },
@@ -21,7 +22,7 @@ export const kieNanoBananaProModel = defineModel({
       id: 'kieNanoBananaAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },
@@ -29,14 +30,14 @@ export const kieNanoBananaProModel = defineModel({
         { value: '3:4', label: '3:4' },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } }
+        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } }
       ]
     },
     {
       id: 'kieNanoBananaResolution',
       type: 'dropdown',
       order: 2,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.3', fallback: 'Resolution' },
       default: '2K',
       options: [
         { value: '1K', label: '1K' },
@@ -48,7 +49,7 @@ export const kieNanoBananaProModel = defineModel({
       id: 'kieNanoBananaOutputFormat',
       type: 'dropdown',
       order: 3,
-      name: { zh: '输出格式', en: 'Output Format' },
+      name: { key: 'auto.4', fallback: 'Output Format' },
       default: 'png',
       options: [
         { value: 'png', label: 'PNG' },

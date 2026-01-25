@@ -9,6 +9,7 @@ export const hailuo23Model = defineModel({
     id: 'fal-ai-minimax-hailuo-2.3',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-minimax-hailuo-2.3',
     name: 'MiniMax Hailuo 2.3',
     description: 'MiniMax Hailuo 2.3 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
@@ -23,7 +24,7 @@ export const hailuo23Model = defineModel({
       id: 'falHailuo23Version',
       order: 1,
       type: 'dropdown',
-      name: { zh: '版本', en: 'Version' },
+      name: { key: 'auto.1', fallback: 'Version' },
       default: 'standard',
       options: [
         { value: 'standard', label: 'Standard' },
@@ -34,7 +35,7 @@ export const hailuo23Model = defineModel({
       id: 'falHailuo23Duration',
       order: 2,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.2', fallback: 'Duration' },
       default: '6',
       options: [
         { value: '6', label: '6s' },
@@ -45,14 +46,14 @@ export const hailuo23Model = defineModel({
       id: 'falHailuo23FastMode',
       order: 3,
       type: 'switch',
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.3', fallback: 'Fast Mode' },
       default: true
     },
     {
       id: 'falHailuo23PromptOptimizer',
       order: 4,
       type: 'switch',
-      name: { zh: '提示词优化', en: 'Prompt Optimizer' },
+      name: { key: 'auto.4', fallback: 'Prompt Optimizer' },
       default: true
     }
   ],

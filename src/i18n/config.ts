@@ -9,6 +9,10 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 // 导入翻译资源
 import zhCN_common from './locales/zh-CN/common.json'
 import zhCN_models from './locales/zh-CN/models.json'
+import zhCN_models_modelscope from './locales/zh-CN/models-modelscope.json'
+import zhCN_models_kie from './locales/zh-CN/models-kie.json'
+import zhCN_models_fal from './locales/zh-CN/models-fal.json'
+import zhCN_models_ppio from './locales/zh-CN/models-ppio.json'
 import zhCN_params from './locales/zh-CN/params.json'
 import zhCN_errors from './locales/zh-CN/errors.json'
 import zhCN_ui from './locales/zh-CN/ui.json'
@@ -17,16 +21,33 @@ import zhCN_settings from './locales/zh-CN/settings.json'
 
 import enUS_common from './locales/en-US/common.json'
 import enUS_models from './locales/en-US/models.json'
+import enUS_models_modelscope from './locales/en-US/models-modelscope.json'
+import enUS_models_kie from './locales/en-US/models-kie.json'
+import enUS_models_fal from './locales/en-US/models-fal.json'
+import enUS_models_ppio from './locales/en-US/models-ppio.json'
 import enUS_params from './locales/en-US/params.json'
 import enUS_errors from './locales/en-US/errors.json'
 import enUS_ui from './locales/en-US/ui.json'
 import enUS_history from './locales/en-US/history.json'
 import enUS_settings from './locales/en-US/settings.json'
 
+
+type ModelLocale = Record<string, unknown> & { defs?: Record<string, unknown> }
+
+function mergeModelDefs(base: ModelLocale, ...sources: ModelLocale[]): ModelLocale {
+  const mergedDefs: Record<string, unknown> = { ...(base.defs || {}) }
+  sources.forEach((src) => {
+    if (src && typeof src === 'object' && src.defs && typeof src.defs === 'object') {
+      Object.assign(mergedDefs, src.defs as Record<string, unknown>)
+    }
+  })
+  return { ...base, defs: mergedDefs }
+}
+
 const resources = {
   'zh-CN': {
     common: zhCN_common,
-    models: zhCN_models,
+    models: mergeModelDefs(zhCN_models, zhCN_models_ppio, zhCN_models_fal, zhCN_models_kie, zhCN_models_modelscope),
     params: zhCN_params,
     errors: zhCN_errors,
     ui: zhCN_ui,
@@ -35,7 +56,7 @@ const resources = {
   },
   'en-US': {
     common: enUS_common,
-    models: enUS_models,
+    models: mergeModelDefs(enUS_models, enUS_models_ppio, enUS_models_fal, enUS_models_kie, enUS_models_modelscope),
     params: enUS_params,
     errors: enUS_errors,
     ui: enUS_ui,

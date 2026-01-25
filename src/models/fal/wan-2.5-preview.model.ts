@@ -9,6 +9,7 @@ export const wan25PreviewModel = defineModel({
     id: 'fal-ai-wan-25-preview',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-wan-25-preview',
     name: 'Wan 2.5 Preview',
     description: 'Wan 2.5 Preview 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
@@ -23,7 +24,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25VideoDuration',
       order: 1,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.1', fallback: 'Duration' },
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -34,7 +35,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25AspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -46,7 +47,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25Resolution',
       order: 3,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.3', fallback: 'Resolution' },
       default: '1080p',
       options: [
         { value: '480p', label: '480p' },
@@ -58,7 +59,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25PromptExpansion',
       order: 4,
       type: 'switch',
-      name: { zh: '提示词扩展', en: 'Prompt Expansion' },
+      name: { key: 'auto.4', fallback: 'Prompt Expansion' },
       default: true
     }
   ],

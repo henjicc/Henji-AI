@@ -1,0 +1,144 @@
+{
+  "defs": {
+    "kie-grok-imagine-video": {
+      "meta": {
+        "name": "Grok Imagine 视频",
+        "description": "KIE Grok Imagine 视频生成模型"
+      },
+      "auto": {
+        "1": "宽高比",
+        "2": "模式",
+        "3": "标准",
+        "4": "强烈"
+      }
+    },
+    "kie-grok-imagine": {
+      "meta": {
+        "name": "Grok Imagine",
+        "description": "KIE Grok Imagine 文生图模型"
+      },
+      "auto": {
+        "1": "宽高比"
+      }
+    },
+    "kie-hailuo-02": {
+      "meta": {
+        "name": "海螺 02",
+        "description": "KIE Hailuo 02 视频生成模型"
+      },
+      "auto": {
+        "1": "时长",
+        "2": "分辨率",
+        "3": "提示词优化"
+      }
+    },
+    "kie-hailuo-2-3": {
+      "meta": {
+        "name": "海螺 2.3",
+        "description": "KIE Hailuo 2.3 图生视频模型"
+      },
+      "auto": {
+        "1": "模式",
+        "2": "标准",
+        "3": "专业",
+        "4": "时长",
+        "5": "分辨率"
+      }
+    },
+    "kie-kling-v2-6": {
+      "meta": {
+        "name": "Kling V2.6",
+        "description": "KIE Kling V2.6 视频生成模型，支持文/图生视频与动作控制"
+      },
+      "auto": {
+        "1": "模式",
+        "2": "文/图生视频",
+        "3": "动作控制",
+        "4": "时长",
+        "5": "宽高比",
+        "6": "智能",
+        "7": "分辨率",
+        "8": "生成音频",
+        "9": "角色朝向",
+        "10": "与视频一致",
+        "11": "与图片一致"
+      }
+    },
+    "kie-nano-banana-pro": {
+      "meta": {
+        "name": "Nano Banana Pro",
+        "description": "KIE Nano Banana Pro 图像生成模型"
+      },
+      "auto": {
+        "1": "宽高比",
+        "2": "智能",
+        "3": "分辨率",
+        "4": "输出格式"
+      }
+    },
+    "kie-seedance-v3": {
+      "meta": {
+        "name": "Seedance V3",
+        "description": "KIE Seedance V3 视频生成模型"
+      },
+      "auto": {
+        "1": "版本",
+        "2": "宽高比",
+        "3": "智能",
+        "4": "分辨率",
+        "5": "时长",
+        "6": "固定相机",
+        "7": "快速模式"
+      }
+    },
+    "kie-seedream-4.0": {
+      "meta": {
+        "name": "即梦图片 4.0",
+        "description": "KIE Seedream 4.0 图像生成模型"
+      },
+      "auto": {
+        "1": "宽高比",
+        "2": "智能",
+        "3": "分辨率",
+        "4": "数量"
+      }
+    },
+    "kie-seedream-4.5": {
+      "meta": {
+        "name": "即梦图片 4.5",
+        "description": "KIE Seedream 4.5 图像生成模型"
+      },
+      "auto": {
+        "1": "宽高比",
+        "2": "智能",
+        "3": "质量"
+      }
+    },
+    "kie-sora-2": {
+      "meta": {
+        "name": "Sora 2",
+        "description": "KIE Sora 2 视频生成模型"
+      },
+      "auto": {
+        "1": "模式",
+        "2": "标准",
+        "3": "专业",
+        "4": "宽高比",
+        "5": "智能",
+        "6": "时长",
+        "7": "画质",
+        "8": "标准",
+        "9": "高"
+      }
+    },
+    "kie-z-image": {
+      "meta": {
+        "name": "Z-Image",
+        "description": "KIE Z-Image 文生图模型"
+      },
+      "auto": {
+        "1": "宽高比"
+      }
+    }
+  }
+}

@@ -10,8 +10,9 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
     id: 'Qwen/Qwen-Image-Edit-2509',
     provider: 'modelscope',
     type: 'image',
-    name: { zh: 'Qwen-Image-Edit-2509', en: 'Qwen-Image-Edit-2509' },
-    description: { zh: '魔搭 Qwen 图像编辑模型（需上传图片）', en: 'ModelScope Qwen image editing model (image required)' },
+        i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2509',
+    name: { key: 'meta.name', fallback: 'Qwen-Image-Edit-2509' },
+    description: { key: 'meta.description', fallback: 'ModelScope Qwen image editing model (image required)' },
     tags: ['image-to-image', 'supports-image-editing', 'provider-modelscope'],
     polling: {
       interval: 3000,
@@ -48,10 +49,10 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
       id: 'modelscopeImageSize',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: 'smart',
       options: [
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
         ...MODELSCOPE_ASPECT_RATIO_OPTIONS
       ]
     },
@@ -59,7 +60,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
       id: 'modelscopeSteps',
       type: 'number',
       order: 2,
-      name: { zh: '采样步数', en: 'Steps' },
+      name: { key: 'auto.3', fallback: 'Steps' },
       default: 30,
       min: 1,
       max: 100,

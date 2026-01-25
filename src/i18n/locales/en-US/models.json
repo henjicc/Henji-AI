@@ -39,31 +39,5 @@
     "video-to-video": "Video Editing",
     "video-extension": "Video Extension",
     "text-to-audio": "Audio Synthesis"
-  },
-  "defs": {
-    "ppio-seedream-4.0": {
-      "meta": {
-        "name": "Seedream 4.0",
-        "description": "PPIO Seedream image generation model v4.0, supports 2K/4K resolution"
-      },
-      "params": {
-        "resolution": {
-          "name": "Resolution",
-          "options": {
-            "aspectRatios": {
-              "smart": "Smart"
-            },
-            "qualityTiers": {
-              "2K": "HD 2K",
-              "4K": "UHD 4K"
-            }
-          }
-        },
-        "maxImages": {
-          "name": "Quantity",
-          "tooltip": "Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15."
-        }
-      }
-    }
   }
 }

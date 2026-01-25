@@ -10,8 +10,9 @@ export const modelscopeZImageTurboModel = defineModel({
     id: 'Tongyi-MAI/Z-Image-Turbo',
     provider: 'modelscope',
     type: 'image',
-    name: { zh: 'Z-Image-Turbo', en: 'Z-Image-Turbo' },
-    description: { zh: '魔搭 Z-Image-Turbo 文生图模型', en: 'ModelScope Z-Image-Turbo text-to-image model' },
+        i18nScope: 'models.defs.Tongyi-MAI/Z-Image-Turbo',
+    name: { key: 'meta.name', fallback: 'Z-Image-Turbo' },
+    description: { key: 'meta.description', fallback: 'ModelScope Z-Image-Turbo text-to-image model' },
     tags: ['text-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,
@@ -28,7 +29,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'modelscopeImageSize',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: MODELSCOPE_ASPECT_RATIO_OPTIONS
     },
@@ -36,7 +37,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'resolutionBaseSize',
       type: 'number',
       order: 2,
-      name: { zh: '基数', en: 'Base Size' },
+      name: { key: 'auto.2', fallback: 'Base Size' },
       default: 1440,
       min: 512,
       max: 2048,
@@ -46,7 +47,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'modelscopeSteps',
       type: 'number',
       order: 3,
-      name: { zh: '采样步数', en: 'Steps' },
+      name: { key: 'auto.3', fallback: 'Steps' },
       default: 10,
       min: 1,
       max: 100,
@@ -56,7 +57,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'modelscopeNegativePrompt',
       type: 'text',
       order: 4,
-      name: { zh: '负面提示词', en: 'Negative Prompt' },
+      name: { key: 'auto.4', fallback: 'Negative Prompt' },
       default: ''
     }
   ],

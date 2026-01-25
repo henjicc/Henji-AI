@@ -9,6 +9,7 @@ export const klingImageO1Model = defineModel({
     id: 'fal-ai-kling-image-o1',
     provider: 'fal',
     type: 'image',
+        i18nScope: 'models.defs.fal-ai-kling-image-o1',
     name: 'Kling Image O1',
     description: 'Kling Image O1 高质量图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image']
@@ -19,7 +20,7 @@ export const klingImageO1Model = defineModel({
       id: 'falKlingImageO1NumImages',
       order: 1,
       type: 'number',
-      name: { zh: '生成数量', en: 'Number of Images' },
+      name: { key: 'auto.1', fallback: 'Number of Images' },
       default: 1,
       min: 1,
       max: 9
@@ -29,10 +30,10 @@ export const klingImageO1Model = defineModel({
       id: 'falKlingImageO1AspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
       default: '1:1',
       options: [
-        { value: 'auto', label: { zh: '智能', en: 'Auto' } },
+        { value: 'auto', label: { key: 'auto.3', fallback: 'Auto' } },
         { value: '1:1', label: '1:1' },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
@@ -48,7 +49,7 @@ export const klingImageO1Model = defineModel({
       id: 'falKlingImageO1Resolution',
       order: 3,
       type: 'text',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.4', fallback: 'Resolution' },
       default: '2K'
     }
   ],

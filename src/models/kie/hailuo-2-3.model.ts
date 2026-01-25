@@ -11,8 +11,9 @@ export const kieHailuo23Model = defineModel({
     id: 'kie-hailuo-2-3',
     provider: 'kie',
     type: 'video',
-    name: { zh: '海螺 2.3', en: 'Hailuo 2.3' },
-    description: { zh: 'KIE Hailuo 2.3 图生视频模型', en: 'KIE Hailuo 2.3 image-to-video model' },
+        i18nScope: 'models.defs.kie-hailuo-2-3',
+    name: { key: 'meta.name', fallback: 'Hailuo 2.3' },
+    description: { key: 'meta.description', fallback: 'KIE Hailuo 2.3 image-to-video model' },
     tags: ['image-to-video', 'provider-kie'],
     aliases: ['hailuo-2-3-kie'],
     polling: {
@@ -50,18 +51,18 @@ export const kieHailuo23Model = defineModel({
       id: 'kieHailuo23Mode',
       type: 'dropdown',
       order: 1,
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'standard',
       options: [
-        { value: 'standard', label: { zh: '标准', en: 'Standard' } },
-        { value: 'pro', label: { zh: '专业', en: 'Pro' } }
+        { value: 'standard', label: { key: 'auto.2', fallback: 'Standard' } },
+        { value: 'pro', label: { key: 'auto.3', fallback: 'Pro' } }
       ]
     },
     {
       id: 'kieHailuo23Duration',
       type: 'dropdown',
       order: 2,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.4', fallback: 'Duration' },
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -72,7 +73,7 @@ export const kieHailuo23Model = defineModel({
       id: 'kieHailuo23Resolution',
       type: 'dropdown',
       order: 3,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.5', fallback: 'Resolution' },
       default: '768P',
       options: [
         { value: '768P', label: '768P' },

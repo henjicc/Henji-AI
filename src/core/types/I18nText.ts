@@ -2,6 +2,33 @@ import i18n from '@/i18n'
 
 const KNOWN_NAMESPACES = ['common', 'models', 'params', 'errors', 'ui', 'history', 'settings'] as const
 
+
+const MODEL_KEY_PREFIX = 'models.defs.'
+const MODEL_KEY_MARKERS = ['.meta.', '.params.', '.requirements.', '.auto.', '.inputLimits.', '.linkages.', '.endpoints.', '.request.', '.pricing.']
+
+function normalizeModelsKey(key: string): string {
+  if (!key.startsWith(MODEL_KEY_PREFIX) || key.includes('\\.')) {
+    return key
+  }
+
+  let markerIndex = -1
+  for (const marker of MODEL_KEY_MARKERS) {
+    const idx = key.indexOf(marker, MODEL_KEY_PREFIX.length)
+    if (idx !== -1) {
+      markerIndex = idx
+      break
+    }
+  }
+
+  if (markerIndex === -1) {
+    return key
+  }
+
+  const modelId = key.slice(MODEL_KEY_PREFIX.length, markerIndex)
+  const escapedId = modelId.replace(/\./g, '\\.')
+  return `${MODEL_KEY_PREFIX}${escapedId}${key.slice(markerIndex)}`
+}
+
 /**
  * 国际化文本类型
  *
@@ -51,12 +78,21 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
     const key = text.key
     try {
       if (key.includes(':')) {
+        if (key.startsWith('models:')) {
+          const raw = key.slice('models:'.length)
+          const normalized = normalizeModelsKey(`models.${raw}`)
+          return i18n.t(`models:${normalized.slice('models.'.length)}`, { defaultValue: fallback })
+        }
         return i18n.t(key, { defaultValue: fallback })
       }
 
       for (const ns of KNOWN_NAMESPACES) {
         const prefix = `${ns}.`
         if (key.startsWith(prefix)) {
+          if (ns === 'models') {
+            const normalized = normalizeModelsKey(key)
+            return i18n.t(normalized.slice(prefix.length), { ns, defaultValue: fallback })
+          }
           return i18n.t(key.slice(prefix.length), { ns, defaultValue: fallback })
         }
       }

@@ -9,6 +9,7 @@ export const hailuo02Model = defineModel({
     id: 'fal-ai-minimax-hailuo-02',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-minimax-hailuo-02',
     name: 'MiniMax Hailuo 02',
     description: 'MiniMax Hailuo 02 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
@@ -29,7 +30,7 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02Version',
       order: 1,
       type: 'dropdown',
-      name: { zh: '版本', en: 'Version' },
+      name: { key: 'auto.1', fallback: 'Version' },
       default: 'standard',
       options: [
         { value: 'standard', label: 'Standard' },
@@ -40,7 +41,7 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02Duration',
       order: 2,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.2', fallback: 'Duration' },
       default: '6',
       options: [
         { value: '6', label: '6s' },
@@ -51,7 +52,7 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02Resolution',
       order: 3,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.3', fallback: 'Resolution' },
       default: '768P',
       options: [
         { value: '512P', label: '512P' },
@@ -63,14 +64,14 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02FastMode',
       order: 4,
       type: 'switch',
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.4', fallback: 'Fast Mode' },
       default: false
     },
     {
       id: 'falHailuo02PromptOptimizer',
       order: 5,
       type: 'switch',
-      name: { zh: '提示词优化', en: 'Prompt Optimizer' },
+      name: { key: 'auto.5', fallback: 'Prompt Optimizer' },
       default: true
     }
   ],

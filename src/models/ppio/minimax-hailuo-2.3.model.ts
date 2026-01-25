@@ -8,9 +8,10 @@ import { defineModel } from '@/core'
 
 export const minimaxHailuo23Model = defineModel({
   meta: {
-    id: 'minimax-hailuo-2.3',
+    id: 'ppio-minimax-hailuo-2.3',
     provider: 'ppio',
     type: 'video',
+        i18nScope: 'models.defs.ppio-minimax-hailuo-2.3',
     name: 'Minimax Hailuo 2.3',
     description: 'Minimax 海螺 2.3 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -25,7 +26,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23VideoDuration',
       type: 'dropdown',
       order: 1,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.1', fallback: 'Duration' },
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -38,7 +39,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23VideoResolution',
       type: 'dropdown',
       order: 2,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.2', fallback: 'Resolution' },
       default: '768P',
       options: [
         { value: '768P', label: '768P' },
@@ -51,7 +52,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23FastMode',
       type: 'switch',
       order: 3,
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.3', fallback: 'Fast Mode' },
       default: false,
       apiField: 'fast_mode'
     },
@@ -60,7 +61,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23PromptExtend',
       type: 'switch',
       order: 4,
-      name: { zh: '提示词扩展', en: 'Prompt Extension' },
+      name: { key: 'auto.4', fallback: 'Prompt Extension' },
       default: true,
       apiField: 'enable_prompt_expansion'
     }

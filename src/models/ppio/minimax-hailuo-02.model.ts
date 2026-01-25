@@ -6,9 +6,10 @@ import { defineModel } from '@/core'
 
 export const minimaxHailuo02Model = defineModel({
   meta: {
-    id: 'minimax-hailuo-02',
+    id: 'ppio-minimax-hailuo-02',
     provider: 'ppio',
     type: 'video',
+        i18nScope: 'models.defs.ppio-minimax-hailuo-02',
     name: 'Minimax Hailuo 02',
     description: 'Minimax 海螺 02 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -23,7 +24,7 @@ export const minimaxHailuo02Model = defineModel({
       id: 'ppioHailuo02Duration',
       type: 'dropdown',
       order: 1,
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.1', fallback: 'Duration' },
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -36,7 +37,7 @@ export const minimaxHailuo02Model = defineModel({
       id: 'ppioHailuo02Resolution',
       type: 'dropdown',
       order: 2,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.2', fallback: 'Resolution' },
       default: '768P',
       options: [
         { value: '768P', label: '768P' },
@@ -49,7 +50,7 @@ export const minimaxHailuo02Model = defineModel({
       id: 'ppioHailuo02PromptExtend',
       type: 'switch',
       order: 3,
-      name: { zh: '提示词优化', en: 'Prompt Optimizer' },
+      name: { key: 'auto.3', fallback: 'Prompt Optimizer' },
       default: true,
       apiField: 'enable_prompt_expansion'
     }

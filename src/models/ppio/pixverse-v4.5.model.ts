@@ -8,9 +8,10 @@ import { defineModel } from '@/core'
 
 export const pixverseV45Model = defineModel({
   meta: {
-    id: 'pixverse-v4.5',
+    id: 'ppio-pixverse-v4.5',
     provider: 'ppio',
     type: 'video',
+        i18nScope: 'models.defs.ppio-pixverse-v4.5',
     name: 'PixVerse V4.5',
     description: 'PixVerse V4.5 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -25,7 +26,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45VideoAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -41,7 +42,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45VideoResolution',
       type: 'dropdown',
       order: 2,
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.2', fallback: 'Resolution' },
       default: '540p',
       options: [
         { value: '360p', label: '360P' },
@@ -56,7 +57,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45FastMode',
       type: 'switch',
       order: 3,
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.3', fallback: 'Fast Mode' },
       default: false,
       apiField: 'fast_mode'
     },
@@ -65,7 +66,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45NegativePrompt',
       type: 'textarea',
       order: 4,
-      name: { zh: '负面提示词', en: 'Negative Prompt' },
+      name: { key: 'auto.4', fallback: 'Negative Prompt' },
       default: '',
       apiField: 'negative_prompt'
     }

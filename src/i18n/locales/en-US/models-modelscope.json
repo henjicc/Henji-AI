@@ -1,0 +1,91 @@
+{
+  "defs": {
+    "black-forest-labs/FLUX.1-Krea-dev": {
+      "meta": {
+        "name": "FLUX.1-Krea-dev",
+        "description": "ModelScope FLUX.1-Krea-dev text-to-image model"
+      },
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Base Size",
+        "3": "Steps",
+        "4": "Guidance",
+        "5": "Negative Prompt"
+      }
+    },
+    "MusePublic/majicMIX_realistic": {
+      "meta": {
+        "name": "majicMIX Realistic",
+        "description": "ModelScope majicMIX realistic model"
+      },
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Base Size",
+        "3": "Steps",
+        "4": "Guidance",
+        "5": "Negative Prompt"
+      }
+    },
+    "modelscope-custom": {
+      "auto": {
+        "1": "ModelScope Custom",
+        "2": "ModelScope custom model by ID",
+        "3": "Model",
+        "4": "Aspect Ratio",
+        "5": "Smart",
+        "6": "Base Size",
+        "7": "Steps",
+        "8": "Guidance"
+      }
+    },
+    "Qwen/Qwen-Image-Edit-2509": {
+      "meta": {
+        "name": "Qwen-Image-Edit-2509",
+        "description": "ModelScope Qwen image editing model (image required)"
+      },
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Smart",
+        "3": "Steps"
+      }
+    },
+    "Qwen/Qwen-Image": {
+      "meta": {
+        "name": "Qwen-Image",
+        "description": "ModelScope Qwen-Image text-to-image model"
+      },
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Base Size",
+        "3": "Steps",
+        "4": "Guidance",
+        "5": "Negative Prompt"
+      }
+    },
+    "MusePublic/14_ckpt_SD_XL": {
+      "meta": {
+        "name": "SD XL 1.4",
+        "description": "ModelScope SD XL text-to-image model"
+      },
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Base Size",
+        "3": "Steps",
+        "4": "Guidance",
+        "5": "Negative Prompt"
+      }
+    },
+    "Tongyi-MAI/Z-Image-Turbo": {
+      "meta": {
+        "name": "Z-Image-Turbo",
+        "description": "ModelScope Z-Image-Turbo text-to-image model"
+      },
+      "auto": {
+        "1": "Aspect Ratio",
+        "2": "Base Size",
+        "3": "Steps",
+        "4": "Negative Prompt"
+      }
+    }
+  }
+}

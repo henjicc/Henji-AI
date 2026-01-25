@@ -41,12 +41,11 @@ interface ResolutionValue {
 export const seedream40Model = defineModel({
     meta: {
         id: 'ppio-seedream-4.0',
-        aliases: ['seedream-4.0'],
         provider: 'ppio',
         type: 'image',
+        i18nScope: 'models.defs.ppio-seedream-4.0',
         name: { key: 'meta.name', fallback: 'Seedream 4.0' },
         description: { key: 'meta.description', fallback: 'PPIO Seedream image generation model v4.0, supports 2K/4K resolution' },
-        i18nScope: 'models.defs.ppio-seedream-4.0',
         tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-ppio'],
         polling: {
             interval: 3000,

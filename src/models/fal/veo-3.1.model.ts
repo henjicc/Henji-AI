@@ -9,6 +9,7 @@ export const veo31Model = defineModel({
     id: 'fal-ai-veo-3.1',
     provider: 'fal',
     type: 'video',
+        i18nScope: 'models.defs.fal-ai-veo-3.1',
     name: 'Veo 3.1',
     description: 'Veo 3.1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
@@ -44,19 +45,19 @@ export const veo31Model = defineModel({
       id: 'falVeo31Mode',
       order: 1,
       type: 'dropdown',
-      name: { zh: '模式', en: 'Mode' },
+      name: { key: 'auto.1', fallback: 'Mode' },
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { zh: '文/图生视频', en: 'Text/Image to Video' } },
-        { value: 'start-end-frame', label: { zh: '首尾帧', en: 'Start/End Frame' } },
-        { value: 'reference-to-video', label: { zh: '参考生视频', en: 'Reference to Video' } }
+        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
+        { value: 'start-end-frame', label: { key: 'auto.3', fallback: 'Start/End Frame' } },
+        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } }
       ]
     },
     {
       id: 'falVeo31VideoDuration',
       order: 2,
       type: 'dropdown',
-      name: { zh: '时长', en: 'Duration' },
+      name: { key: 'auto.5', fallback: 'Duration' },
       default: 8,
       options: [
         { value: 4, label: '4s' },
@@ -68,11 +69,11 @@ export const veo31Model = defineModel({
       id: 'falVeo31AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { zh: '比例', en: 'Aspect Ratio' },
+      name: { key: 'auto.6', fallback: 'Aspect Ratio' },
       default: '16:9',
       options: [
-        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
-        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+        { value: 'auto', label: { key: 'auto.7', fallback: 'Auto' } },
+        { value: 'smart', label: { key: 'auto.8', fallback: 'Smart' } },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
@@ -82,7 +83,7 @@ export const veo31Model = defineModel({
       id: 'falVeo31Resolution',
       order: 4,
       type: 'dropdown',
-      name: { zh: '分辨率', en: 'Resolution' },
+      name: { key: 'auto.9', fallback: 'Resolution' },
       default: '720p',
       options: [
         { value: '720p', label: '720p' },
@@ -93,28 +94,28 @@ export const veo31Model = defineModel({
       id: 'falVeo31GenerateAudio',
       order: 5,
       type: 'switch',
-      name: { zh: '生成音频', en: 'Generate Audio' },
+      name: { key: 'auto.10', fallback: 'Generate Audio' },
       default: false
     },
     {
       id: 'falVeo31AutoFix',
       order: 6,
       type: 'switch',
-      name: { zh: 'Auto Fix', en: 'Auto Fix' },
+      name: { key: 'auto.11', fallback: 'Auto Fix' },
       default: false
     },
     {
       id: 'falVeo31FastMode',
       order: 7,
       type: 'switch',
-      name: { zh: '快速模式', en: 'Fast Mode' },
+      name: { key: 'auto.12', fallback: 'Fast Mode' },
       default: false
     },
     {
       id: 'falVeo31EnhancePrompt',
       order: 8,
       type: 'switch',
-      name: { zh: '增强提示词', en: 'Enhance Prompt' },
+      name: { key: 'auto.13', fallback: 'Enhance Prompt' },
       default: false
     }
   ],
