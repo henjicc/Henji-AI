@@ -5,6 +5,18 @@
   "builtInModel": "内置模型",
   "all": "全部",
   "favorites": "收藏",
+  "favorite": {
+    "add": "收藏模型",
+    "remove": "取消收藏"
+  },
+  "search": {
+    "label": "搜索",
+    "clear": "清除搜索"
+  },
+  "filters": {
+    "providerType": "供应商 / 类型",
+    "function": "功能"
+  },
   "types": {
     "image": "图像",
     "video": "视频",
@@ -27,5 +39,31 @@
     "video-to-video": "视频编辑",
     "video-extension": "视频延长",
     "text-to-audio": "语音合成"
+  },
+  "defs": {
+    "ppio-seedream-4.0": {
+      "meta": {
+        "name": "即梦图片 4.0",
+        "description": "派欧云即梦图片生成模型 4.0 版本，支持 2K/4K 分辨率"
+      },
+      "params": {
+        "resolution": {
+          "name": "分辨率",
+          "options": {
+            "aspectRatios": {
+              "smart": "智能"
+            },
+            "qualityTiers": {
+              "2K": "高清 2K",
+              "4K": "超清 4K"
+            }
+          }
+        },
+        "maxImages": {
+          "name": "数量",
+          "tooltip": "设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。"
+        }
+      }
+    }
   }
 }

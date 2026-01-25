@@ -177,6 +177,16 @@ export interface ModelMeta {
    */
   description?: I18nText
 
+
+  /**
+   * i18n 作用域（可选）
+   *
+   * 用于模型内短 key 的自动前缀拼接
+   *
+   * @example "models.defs.ppio-seedream-4.0"
+   */
+  i18nScope?: string
+
   /**
    * 模型标签
    *

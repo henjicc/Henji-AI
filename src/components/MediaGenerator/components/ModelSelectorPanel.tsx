@@ -271,7 +271,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       <div className="flex-shrink-0 p-4 pb-0">
         {/* 搜索框 */}
         <div className="mb-3">
-          <div className="text-xs text-zinc-400 mb-2">搜索</div>
+          <div className="text-xs text-zinc-400 mb-2">{t('search.label')}</div>
           <div className="relative">
             <input
               ref={searchInputRef}
@@ -285,7 +285,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-zinc-600/50 transition-colors"
-                title="清除搜索"
+                title={t('search.clear')}
               >
                 <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -297,7 +297,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
 
         {/* 供应商 / 类型筛选 */}
         <div className="mb-3">
-          <div className="text-xs text-zinc-400 mb-2">供应商 / 类型</div>
+          <div className="text-xs text-zinc-400 mb-2">{t('filters.providerType')}</div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => onFilterProviderChange('all')} className={`px-3 py-2 text-xs rounded transition-all duration-300 ${modelFilterProvider === 'all' ? 'bg-[#007eff] text-white' : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'}`}>{t('all')}</button>
             {allProviders.map(p => (
@@ -332,7 +332,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
 
         {/* 功能筛选 */}
         <div className="mb-3">
-          <div className="text-xs text-zinc-400 mb-2">功能</div>
+          <div className="text-xs text-zinc-400 mb-2">{t('filters.function')}</div>
           <div className="flex flex-wrap gap-2">
             {[
               { label: t('all'), value: 'all' },
@@ -373,7 +373,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                     onToggleFavorite(e, p.id, m.id)
                   }}
                   className="absolute top-1 right-1 p-1 rounded hover:bg-zinc-600/50 transition-colors z-10"
-                  title={favoriteModels.has(`${p.id}-${m.id}`) ? '取消收藏' : '收藏模型'}
+                  title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                 >
                   <svg
                     className={`w-3.5 h-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`)
@@ -406,4 +406,3 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
 }
 
 export default ModelSelectorPanel
-

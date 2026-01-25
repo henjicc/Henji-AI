@@ -68,7 +68,11 @@ function validateMeta(model: ModelDefinition): void {
   }
 
   if (typeof meta.name === 'object') {
-    if (!meta.name.zh && !meta.name.en) {
+    if ('key' in meta.name) {
+      if (!meta.name.key || typeof meta.name.key !== 'string') {
+        throw new ModelValidationError('Model meta.name.key must be a string')
+      }
+    } else if (!meta.name.zh && !meta.name.en) {
       throw new ModelValidationError('Model meta.name I18nText must have at least zh or en')
     }
   }

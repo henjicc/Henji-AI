@@ -1,7 +1,11 @@
+import i18n from '@/i18n'
+
+const KNOWN_NAMESPACES = ['common', 'models', 'params', 'errors', 'ui', 'history', 'settings'] as const
+
 /**
  * 国际化文本类型
  *
- * 支持纯字符串或多语言对象
+ * 支持纯字符串、多语言对象或 i18n key
  *
  * @example
  * ```typescript
@@ -19,6 +23,10 @@ export type I18nText = string | {
   zh: string
   en: string
   [lang: string]: string  // 支持未来扩展其他语言
+} | {
+  key: string
+  fallback?: string
+  absolute?: boolean
 }
 
 /**
@@ -36,6 +44,27 @@ export type TranslateI18nText = (text: I18nText) => string
 export function getI18nText(text: I18nText, locale: string = 'zh'): string {
   if (typeof text === 'string') {
     return text
+  }
+
+  if ('key' in text && typeof text.key === 'string') {
+    const fallback = typeof text.fallback === 'string' ? text.fallback : text.key
+    const key = text.key
+    try {
+      if (key.includes(':')) {
+        return i18n.t(key, { defaultValue: fallback })
+      }
+
+      for (const ns of KNOWN_NAMESPACES) {
+        const prefix = `${ns}.`
+        if (key.startsWith(prefix)) {
+          return i18n.t(key.slice(prefix.length), { ns, defaultValue: fallback })
+        }
+      }
+
+      return i18n.t(key, { defaultValue: fallback })
+    } catch {
+      return fallback
+    }
   }
 
   // 1. 尝试完全匹配 (e.g. 'zh-CN')

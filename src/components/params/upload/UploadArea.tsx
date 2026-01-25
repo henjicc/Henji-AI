@@ -5,6 +5,7 @@
  */
 
 import React, { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface UploadAreaProps {
   accept: string[]
@@ -22,6 +23,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const { t } = useTranslation('ui')
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
@@ -49,13 +51,13 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   const processFile = async (file: File) => {
     // 验证文件类型
     if (!accept.includes(file.type)) {
-      alert(`不支持的文件类型: ${file.type}`)
+      alert(t('uploadArea.unsupportedType', { type: file.type }))
       return
     }
 
     // 验证文件大小
     if (maxSize && file.size > maxSize * 1024 * 1024) {
-      alert(`文件大小超过 ${maxSize}MB`)
+      alert(t('uploadArea.tooLarge', { maxSize }))
       return
     }
 
@@ -64,7 +66,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
       await onUpload(file)
     } catch (error) {
       console.error('Upload failed:', error)
-      alert('上传失败，请重试')
+      alert(t('uploadArea.uploadFailed'))
     } finally {
       setUploading(false)
     }
@@ -94,16 +96,19 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
       {uploading ? (
         <div className="upload-progress">
           <div className="upload-spinner"></div>
-          <span>上传中...</span>
+          <span>{t('uploadArea.uploading')}</span>
         </div>
       ) : (
         <div className="upload-hint">
           <svg className="upload-icon" viewBox="0 0 24 24" width="48" height="48">
             <path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
           </svg>
-          <span className="upload-text">拖拽文件到此处或点击上传</span>
+          <span className="upload-text">{t('uploadArea.hint')}</span>
           <span className="upload-limit">
-            支持 {accept.map(t => t.split('/')[1].toUpperCase()).join(', ')} 格式，最大 {maxSize}MB
+            {t('uploadArea.limit', {
+              types: accept.map(t => t.split('/')[1].toUpperCase()).join(', '),
+              maxSize
+            })}
           </span>
         </div>
       )}

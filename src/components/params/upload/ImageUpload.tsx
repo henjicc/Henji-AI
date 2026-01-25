@@ -34,7 +34,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   onSmartMatch,
   disabled = false
 }) => {
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation('ui')
   // const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   // 获取显示名称
@@ -44,7 +44,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   const handleUpload = async (file: File) => {
     const maxCount = param.maxCount || 1
     if (value.length >= maxCount) {
-      alert(`最多上传 ${maxCount} 张图片`)
+      alert(t('uploadArea.maxImages', { max: maxCount }))
       return
     }
 

@@ -7,6 +7,89 @@
   "delete": "删除",
   "upload": "上传",
   "retry": "重试",
+  "actions": {
+    "clearHistory": "清除历史",
+    "settings": "设置"
+  },
+  "alerts": {
+    "missingInput": {
+      "title": "缺少输入",
+      "message": "请输入提示词或上传素材后再生成"
+    }
+  },
+  "inputArea": {
+    "unit": {
+      "images": "张图片",
+      "videos": "个视频"
+    },
+    "limit": {
+      "exact": "{{count}}{{unit}}",
+      "range": "{{min}}-{{max}}{{unit}}",
+      "max": "最多{{max}}{{unit}}"
+    },
+    "upload": {
+      "images": "上传图片（{{range}}）",
+      "videos": "上传视频（{{range}}）",
+      "mixed": "上传视频和图片（{{videoRange}} + {{imageRange}}）",
+      "mixedFixed": "上传{{videoRange}} + {{imageRange}}（不能多也不能少）"
+    },
+    "placeholder": {
+      "audio": "输入要合成的文本",
+      "default": "描述想要生成的内容",
+      "englishOnly": "描述想要生成的内容（仅支持英文提示词）"
+    },
+    "button": {
+      "queue": "加入队列",
+      "generate": "开始生成"
+    },
+    "alerts": {
+      "videoSize": {
+        "title": "视频大小限制",
+        "message": "文件大小不能超过 {{maxSizeMB}}MB"
+      },
+      "videoDuration": {
+        "title": "视频时长限制",
+        "min": "视频时长需 ≥ {{minDuration}} 秒（当前{{duration}}秒）",
+        "max": "视频时长需 ≤ {{maxDuration}} 秒（当前{{duration}}秒）"
+      },
+      "videoMetadataFailed": {
+        "title": "视频验证失败",
+        "message": "无法读取视频文件信息，请检查文件是否损坏"
+      },
+      "videoCount": {
+        "title": "视频数量限制",
+        "message": "最多只能上传{{max}}个视频，请先删除现有视频"
+      },
+      "imageCount": {
+        "title": "图片数量限制",
+        "message": "最多只能上传{{max}}张图片"
+      }
+    }
+  },
+  "uploadArea": {
+    "unsupportedType": "不支持的文件类型: {{type}}",
+    "tooLarge": "文件大小超过 {{maxSize}}MB",
+    "uploadFailed": "上传失败，请重试",
+    "uploading": "上传中...",
+    "hint": "拖拽文件到此处或点击上传",
+    "limit": "支持 {{types}} 格式，最大 {{maxSize}}MB",
+    "maxImages": "最多上传 {{max}} 张图片",
+    "maxVideos": "最多上传 {{max}} 个视频",
+    "maxDuration": "视频时长超过 {{maxDuration}} 秒"
+  },
+  "presets": {
+    "label": "预设",
+    "manage": "管理预设"
+  },
+  "resolutionPanel": {
+    "label": "分辨率",
+    "smart": "智能",
+    "aspectRatioLabel": "选择比例",
+    "qualityLabel": "选择分辨率",
+    "quality2k": "高清 2K",
+    "quality4k": "超清 4K",
+    "sizeLabel": "尺寸"
+  },
 
   "input": {
     "label": "提示词",

@@ -1,13 +1,18 @@
 import { registry } from '@/core/ModelRegistry'
+import i18n from '@/i18n/config'
+import type { I18nText } from '@/core/types/I18nText'
+import { getI18nText } from '@/core/types/I18nText'
 
 /**
  * 供应商 ID 到显示名称的映射
  */
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  'ppio': '派欧云',
-  'fal': 'fal',
-  'modelscope': '魔搭',
-  'kie': 'KIE'
+const getCurrentLocale = (): string => {
+  return i18n.language || i18n.resolvedLanguage || 'zh-CN'
+}
+
+const getLocalizedText = (text?: I18nText, locale?: string): string => {
+  if (!text) return ''
+  return getI18nText(text, locale || getCurrentLocale())
 }
 
 /**
@@ -15,8 +20,10 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
  * @param providerId 供应商 ID
  * @returns 供应商显示名称
  */
-export function getProviderDisplayName(providerId: string): string {
-  return PROVIDER_DISPLAY_NAMES[providerId] || providerId
+export function getProviderDisplayName(providerId: string, locale?: string): string {
+  const key = `models:providers.${providerId}`
+  const translated = i18n.t(key, { lng: locale || getCurrentLocale(), defaultValue: providerId })
+  return translated || providerId
 }
 
 /**
@@ -24,14 +31,11 @@ export function getProviderDisplayName(providerId: string): string {
  * @param modelId 模型 ID
  * @returns 格式化的显示名称，如 "ppio：可灵视频 2.6 Pro"
  */
-export function getModelDisplayName(modelId: string): string {
+export function getModelDisplayName(modelId: string, locale?: string): string {
   const modelInfo = registry.getModelInfo(modelId)
   if (modelInfo) {
-    const providerName = getProviderDisplayName(modelInfo.provider)
-    // 处理 name 字段：可能是字符串或 I18nText 对象
-    const modelName = typeof modelInfo.name === 'string'
-      ? modelInfo.name
-      : (modelInfo.name?.zh || modelInfo.name?.en || modelId)
+    const providerName = getProviderDisplayName(modelInfo.provider, locale || getCurrentLocale())
+    const modelName = getLocalizedText(modelInfo.name, locale || getCurrentLocale()) || modelId
     return `${providerName}：${modelName}`
   }
   return modelId
@@ -42,6 +46,7 @@ export function getModelDisplayName(modelId: string): string {
  * @returns Provider 列表，格式兼容旧的 providers 结构
  */
 export function getAvailableProviders() {
+  const locale = getCurrentLocale()
   const allModels = registry.listAllModels()
   const providerMap = new Map<string, {
     id: string
@@ -62,7 +67,7 @@ export function getAvailableProviders() {
     if (!providerMap.has(providerId)) {
       providerMap.set(providerId, {
         id: providerId,
-        name: getProviderDisplayName(providerId),
+        name: getProviderDisplayName(providerId, locale),
         type: 'api',
         models: []
       })
@@ -70,9 +75,9 @@ export function getAvailableProviders() {
 
     providerMap.get(providerId)!.models.push({
       id: model.meta.id,
-      name: typeof model.meta.name === 'string' ? model.meta.name : (model.meta.name.zh || model.meta.name.en),
+      name: getLocalizedText(model.meta.name, locale),
       type: model.meta.type,
-      description: model.meta.description ? (typeof model.meta.description === 'string' ? model.meta.description : (model.meta.description.zh || model.meta.description.en || '')) : '',
+      description: model.meta.description ? getLocalizedText(model.meta.description, locale) : '',
       functions: model.meta.tags || [],
       tags: model.meta.tags
     })
@@ -87,18 +92,12 @@ export function getAvailableProviders() {
  * @returns 模型信息，格式兼容旧的 model 结构
  */
 export function getModelInfo(modelId: string) {
+  const locale = getCurrentLocale()
   const modelInfo = registry.getModelInfo(modelId)
   if (!modelInfo) return null
 
-  // 处理 name 字段：可能是字符串或 I18nText 对象
-  const name = typeof modelInfo.name === 'string'
-    ? modelInfo.name
-    : (modelInfo.name?.zh || modelInfo.name?.en || '')
-
-  // 处理 description 字段：可能是字符串或 I18nText 对象
-  const description = typeof modelInfo.description === 'string'
-    ? modelInfo.description
-    : (modelInfo.description?.zh || modelInfo.description?.en || '')
+  const name = getLocalizedText(modelInfo.name, locale)
+  const description = modelInfo.description ? getLocalizedText(modelInfo.description, locale) : ''
 
   return {
     id: modelInfo.id,

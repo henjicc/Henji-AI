@@ -40,14 +40,13 @@ interface ResolutionValue {
 
 export const seedream40Model = defineModel({
     meta: {
-        id: 'seedream-4.0',
+        id: 'ppio-seedream-4.0',
+        aliases: ['seedream-4.0'],
         provider: 'ppio',
         type: 'image',
-        name: { zh: '即梦图片 4.0', en: 'Seedream 4.0' },
-        description: {
-            zh: '派欧云即梦图片生成模型 4.0 版本，支持 2K/4K 分辨率',
-            en: 'PPIO Seedream image generation model v4.0, supports 2K/4K resolution'
-        },
+        name: { key: 'meta.name', fallback: 'Seedream 4.0' },
+        description: { key: 'meta.description', fallback: 'PPIO Seedream image generation model v4.0, supports 2K/4K resolution' },
+        i18nScope: 'models.defs.ppio-seedream-4.0',
         tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-ppio'],
         polling: {
             interval: 3000,
@@ -70,7 +69,7 @@ export const seedream40Model = defineModel({
             type: 'composite',
             order: 1,
             valueType: 'object',
-            name: { zh: '分辨率', en: 'Resolution' },
+            name: { key: 'params.resolution.name', fallback: 'Resolution' },
             panel: 'resolution',
             default: {
                 mode: 'aspect-quality',
@@ -81,7 +80,7 @@ export const seedream40Model = defineModel({
                 mode: 'aspect-quality',
                 aspectRatios: {
                     options: [
-                        { value: 'smart', label: { zh: '智能', en: 'Smart' } },
+                        { value: 'smart', label: { key: 'params.resolution.options.aspectRatios.smart', fallback: 'Smart' } },
                         { value: '21:9', label: '21:9' },
                         { value: '16:9', label: '16:9' },
                         { value: '3:2', label: '3:2' },
@@ -96,8 +95,8 @@ export const seedream40Model = defineModel({
                 },
                 qualityTiers: {
                     options: [
-                        { value: '2K', label: { zh: '高清 2K', en: 'HD 2K' } },
-                        { value: '4K', label: { zh: '超清 4K', en: 'UHD 4K' } }
+                        { value: '2K', label: { key: 'params.resolution.options.qualityTiers.2K', fallback: 'HD 2K' } },
+                        { value: '4K', label: { key: 'params.resolution.options.qualityTiers.4K', fallback: 'UHD 4K' } }
                     ],
                     default: '2K'
                 },
@@ -119,11 +118,8 @@ export const seedream40Model = defineModel({
             type: 'number',
             order: 2,
             valueType: 'number',
-            name: { zh: '数量', en: 'Quantity' },
-            tooltip: {
-                zh: '设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。',
-                en: 'Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.'
-            },
+            name: { key: 'params.maxImages.name', fallback: 'Quantity' },
+            tooltip: { key: 'params.maxImages.tooltip', fallback: 'Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.' },
             default: 1,
             min: 1,
             max: 15,

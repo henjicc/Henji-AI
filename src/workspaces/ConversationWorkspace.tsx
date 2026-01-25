@@ -3566,7 +3566,7 @@ const ConversationWorkspace: React.FC = () => {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded whitespace-nowrap">
-                    {formatModelDisplayName(currentModelName || 'seedream-4.0')}
+                    {formatModelDisplayName(currentModelName || 'ppio-seedream-4.0')}
                   </span>
                   <span className="text-sm text-zinc-300 truncate flex-1">
                     {currentPrompt || '鼠标移动到此处来展开面板......'}

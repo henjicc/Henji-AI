@@ -7,6 +7,89 @@
   "delete": "Delete",
   "upload": "Upload",
   "retry": "Retry",
+  "actions": {
+    "clearHistory": "Clear History",
+    "settings": "Settings"
+  },
+  "alerts": {
+    "missingInput": {
+      "title": "Missing Input",
+      "message": "Enter a prompt or upload media before generating"
+    }
+  },
+  "inputArea": {
+    "unit": {
+      "images": "images",
+      "videos": "videos"
+    },
+    "limit": {
+      "exact": "{{count}} {{unit}}",
+      "range": "{{min}}-{{max}} {{unit}}",
+      "max": "max {{max}} {{unit}}"
+    },
+    "upload": {
+      "images": "Upload images ({{range}})",
+      "videos": "Upload video ({{range}})",
+      "mixed": "Upload video and images ({{videoRange}} + {{imageRange}})",
+      "mixedFixed": "Upload {{videoRange}} + {{imageRange}} (exact required)"
+    },
+    "placeholder": {
+      "audio": "Enter text to synthesize",
+      "default": "Describe what you want to generate",
+      "englishOnly": "Describe what you want to generate (English only)"
+    },
+    "button": {
+      "queue": "Add to queue",
+      "generate": "Generate"
+    },
+    "alerts": {
+      "videoSize": {
+        "title": "Video Size Limit",
+        "message": "File size must be ≤ {{maxSizeMB}}MB"
+      },
+      "videoDuration": {
+        "title": "Video Duration Limit",
+        "min": "Duration must be ≥ {{minDuration}}s (current {{duration}}s)",
+        "max": "Duration must be ≤ {{maxDuration}}s (current {{duration}}s)"
+      },
+      "videoMetadataFailed": {
+        "title": "Video Validation Failed",
+        "message": "Unable to read video metadata. Please check the file."
+      },
+      "videoCount": {
+        "title": "Video Limit",
+        "message": "You can upload up to {{max}} video(s). Remove existing ones first."
+      },
+      "imageCount": {
+        "title": "Image Limit",
+        "message": "You can upload up to {{max}} image(s)."
+      }
+    }
+  },
+  "uploadArea": {
+    "unsupportedType": "Unsupported file type: {{type}}",
+    "tooLarge": "File size exceeds {{maxSize}}MB",
+    "uploadFailed": "Upload failed. Please try again.",
+    "uploading": "Uploading...",
+    "hint": "Drag a file here or click to upload",
+    "limit": "Supports {{types}}. Max {{maxSize}}MB",
+    "maxImages": "You can upload up to {{max}} images",
+    "maxVideos": "You can upload up to {{max}} videos",
+    "maxDuration": "Video duration exceeds {{maxDuration}} seconds"
+  },
+  "presets": {
+    "label": "Presets",
+    "manage": "Manage presets"
+  },
+  "resolutionPanel": {
+    "label": "Resolution",
+    "smart": "Smart",
+    "aspectRatioLabel": "Aspect Ratio",
+    "qualityLabel": "Resolution",
+    "quality2k": "HD 2K",
+    "quality4k": "UHD 4K",
+    "sizeLabel": "Size"
+  },
 
   "input": {
     "label": "Prompt",

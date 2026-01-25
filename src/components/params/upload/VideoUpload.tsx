@@ -31,7 +31,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
   onChange,
   disabled = false
 }) => {
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation('ui')
 
   // 获取显示名称
   const displayName = getI18nText(param.name, i18n.language)
@@ -40,7 +40,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
   const handleUpload = async (file: File) => {
     const maxCount = param.maxCount || 1
     if (value.length >= maxCount) {
-      alert(`最多上传 ${maxCount} 个视频`)
+      alert(t('uploadArea.maxVideos', { max: maxCount }))
       return
     }
 
@@ -49,7 +49,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
 
     // 验证时长限制
     if (param.maxDuration && metadata.duration > param.maxDuration) {
-      alert(`视频时长超过 ${param.maxDuration} 秒`)
+      alert(t('uploadArea.maxDuration', { maxDuration: param.maxDuration }))
       return
     }
 

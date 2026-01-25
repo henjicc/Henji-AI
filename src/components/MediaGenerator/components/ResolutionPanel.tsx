@@ -1,4 +1,5 @@
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 
 interface ResolutionPanelProps {
@@ -26,10 +27,11 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
   onWidthChange,
   onHeightChange
 }) => {
+  const { t } = useTranslation('ui')
   return (
     <PanelTrigger
-      label="分辨率"
-      display={selectedResolution === 'smart' ? '智能' : selectedResolution}
+      label={t('resolutionPanel.label')}
+      display={selectedResolution === 'smart' ? t('resolutionPanel.smart') : selectedResolution}
       className="w-auto"
       panelWidth={320}
       alignment="aboveCenter"
@@ -38,10 +40,10 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
         <div className="p-4">
           {/* 选择比例 */}
           <div className="mb-3">
-            <label className="block text-xs text-zinc-400 mb-2">选择比例</label>
+            <label className="block text-xs text-zinc-400 mb-2">{t('resolutionPanel.aspectRatioLabel')}</label>
             <div className="grid grid-cols-4 gap-2">
               {[
-                { label: '智能', value: 'smart' },
+                { label: t('resolutionPanel.smart'), value: 'smart' },
                 { label: '21:9', value: '21:9', ratio: '21:9' },
                 { label: '16:9', value: '16:9', ratio: '16:9' },
                 { label: '3:2', value: '3:2', ratio: '3:2' },
@@ -85,11 +87,11 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
 
           {/* 选择分辨率 (2K/4K) */}
           <div className="mb-3">
-            <label className="block text-xs text-zinc-400 mb-2">选择分辨率</label>
+            <label className="block text-xs text-zinc-400 mb-2">{t('resolutionPanel.qualityLabel')}</label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: '高清 2K', value: '2K' },
-                { label: '超清 4K', value: '4K' }
+                { label: t('resolutionPanel.quality2k'), value: '2K' },
+                { label: t('resolutionPanel.quality4k'), value: '4K' }
               ].map(res => (
                 <button
                   key={res.value}
@@ -108,7 +110,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
 
           {/* 自定义尺寸 */}
           <div>
-            <label className="block text-xs text-zinc-400 mb-2">尺寸</label>
+            <label className="block text-xs text-zinc-400 mb-2">{t('resolutionPanel.sizeLabel')}</label>
             <div className="flex gap-2 items-center">
               <div className="flex-1">
                 <input

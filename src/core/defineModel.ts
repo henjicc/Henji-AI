@@ -8,13 +8,49 @@ import { ModelDefinition } from './types/ModelDefinition'
 import { registry } from './ModelRegistry'
 import { validateModel } from './validators/modelValidator'
 
+function applyI18nScope(model: ModelDefinition): ModelDefinition {
+  const scope = model.meta.i18nScope
+  if (!scope || typeof scope !== 'string') {
+    return model
+  }
+
+  const visit = (value: unknown): void => {
+    if (!value) return
+    if (typeof value === 'function') return
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+    if (typeof value !== 'object') return
+
+    const obj = value as Record<string, unknown>
+    const keyValue = obj.key
+    if (typeof keyValue === 'string') {
+      const absolute = obj.absolute === true
+      if (absolute) return
+      if (!keyValue.startsWith(`${scope}.`)) {
+        obj.key = `${scope}.${keyValue.replace(/^\./, '')}`
+      }
+      return
+    }
+
+    Object.keys(obj).forEach((k) => {
+      visit(obj[k])
+    })
+  }
+
+  visit(model)
+  return model
+}
+
 /**
  * 定义并注册模型
  *
  * 这个函数会：
- * 1. 验证模型定义的完整性和正确性
- * 2. 自动注册到 ModelRegistry
- * 3. 返回验证后的模型定义
+ * 1. 预处理 i18n key（应用 i18nScope）
+ * 2. 验证模型定义的完整性和正确性
+ * 3. 自动注册到 ModelRegistry
+ * 4. 返回验证后的模型定义
  *
  * @param model - 模型定义
  * @returns 验证后的模型定义
@@ -38,12 +74,15 @@ import { validateModel } from './validators/modelValidator'
  * ```
  */
 export function defineModel(model: ModelDefinition): ModelDefinition {
-  // 1. 验证模型定义
+  // 1. 预处理 i18n key
+  applyI18nScope(model)
+
+  // 2. 验证模型定义
   validateModel(model)
 
-  // 2. 注册到 ModelRegistry
+  // 3. 注册到 ModelRegistry
   registry.register(model)
 
-  // 3. 返回验证后的模型定义
+  // 4. 返回验证后的模型定义
   return model
 }

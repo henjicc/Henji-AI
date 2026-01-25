@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import FileUploader from '@/components/ui/FileUploader'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -80,6 +81,7 @@ const InputArea: React.FC<InputAreaProps> = ({
 }) => {
   // 本地文件顺序状态（如果父组件没有提供）
   const [localFileOrder, setLocalFileOrder] = useState<FileOrderItem[]>([])
+  const { t } = useTranslation('ui')
 
   // 使用父组件提供的 fileOrder 或本地状态
   const currentFileOrder = fileOrder || localFileOrder
@@ -121,26 +123,30 @@ const InputArea: React.FC<InputAreaProps> = ({
 
   const formatLimitText = (min: number, max: number, unit: string) => {
     if (max <= 0) return ''
-    if (min === max) return `${max}${unit}`
-    if (min > 0) return `${min}-${max}${unit}`
-    return `最多${max}${unit}`
+    if (min === max) return t('inputArea.limit.exact', { count: max, unit })
+    if (min > 0) return t('inputArea.limit.range', { min, max, unit })
+    return t('inputArea.limit.max', { max, unit })
   }
 
   const uploadHint = (() => {
     if (!needsVideoUpload) {
-      return `上传图片（${formatLimitText(minImageCount, maxImageCount, '张图片')}）`
+      return t('inputArea.upload.images', {
+        range: formatLimitText(minImageCount, maxImageCount, t('inputArea.unit.images'))
+      })
     }
 
     if (needsVideoOnly) {
-      return `上传视频（${formatLimitText(minVideoCount, maxVideoCount, '个视频')}）`
+      return t('inputArea.upload.videos', {
+        range: formatLimitText(minVideoCount, maxVideoCount, t('inputArea.unit.videos'))
+      })
     }
 
-    const videoText = formatLimitText(minVideoCount, maxVideoCount, '个视频')
-    const imageText = formatLimitText(minImageCount, maxImageCount, '张图片')
+    const videoText = formatLimitText(minVideoCount, maxVideoCount, t('inputArea.unit.videos'))
+    const imageText = formatLimitText(minImageCount, maxImageCount, t('inputArea.unit.images'))
     const fixedCounts = minVideoCount === maxVideoCount && minImageCount === maxImageCount
     return fixedCounts
-      ? `上传${videoText} + ${imageText}（不能多也不能少）`
-      : `上传视频和图片（${videoText} + ${imageText}）`
+      ? t('inputArea.upload.mixedFixed', { videoRange: videoText, imageRange: imageText })
+      : t('inputArea.upload.mixed', { videoRange: videoText, imageRange: imageText })
   })()
 
   const isSameOrder = (a: FileOrderItem[], b: FileOrderItem[]) => {
@@ -244,7 +250,11 @@ const InputArea: React.FC<InputAreaProps> = ({
         if (videoConstraints.maxSizeMB) {
           const maxSizeBytes = videoConstraints.maxSizeMB * 1024 * 1024
           if (file.size > maxSizeBytes) {
-            showAlert('视频大小限制', `文件大小不能超过 ${videoConstraints.maxSizeMB}MB`, 'warning')
+            showAlert(
+              t('inputArea.alerts.videoSize.title'),
+              t('inputArea.alerts.videoSize.message', { maxSizeMB: videoConstraints.maxSizeMB }),
+              'warning'
+            )
             return
           }
         }
@@ -254,22 +264,32 @@ const InputArea: React.FC<InputAreaProps> = ({
             const duration = await getVideoDuration(file)
             if (videoConstraints.minDurationSec && duration < videoConstraints.minDurationSec) {
               showAlert(
-                '视频时长限制',
-                `视频时长需 ≥ ${videoConstraints.minDurationSec} 秒（当前${duration.toFixed(1)}秒）`,
+                t('inputArea.alerts.videoDuration.title'),
+                t('inputArea.alerts.videoDuration.min', {
+                  minDuration: videoConstraints.minDurationSec,
+                  duration: duration.toFixed(1)
+                }),
                 'warning'
               )
               return
             }
             if (videoConstraints.maxDurationSec && duration > videoConstraints.maxDurationSec) {
               showAlert(
-                '视频时长限制',
-                `视频时长需 ≤ ${videoConstraints.maxDurationSec} 秒（当前${duration.toFixed(1)}秒）`,
+                t('inputArea.alerts.videoDuration.title'),
+                t('inputArea.alerts.videoDuration.max', {
+                  maxDuration: videoConstraints.maxDurationSec,
+                  duration: duration.toFixed(1)
+                }),
                 'warning'
               )
               return
             }
           } catch (e) {
-            showAlert('视频验证失败', '无法读取视频文件信息，请检查文件是否损坏', 'error')
+            showAlert(
+              t('inputArea.alerts.videoMetadataFailed.title'),
+              t('inputArea.alerts.videoMetadataFailed.message'),
+              'error'
+            )
             return
           }
         }
@@ -277,7 +297,11 @@ const InputArea: React.FC<InputAreaProps> = ({
 
       onVideoUpload([file])
     } else if (videoFiles.length > 0 && currentVideoCount >= maxVideoCount) {
-      showAlert('视频数量限制', `最多只能上传${maxVideoCount}个视频，请先删除现有视频`, 'warning')
+      showAlert(
+        t('inputArea.alerts.videoCount.title'),
+        t('inputArea.alerts.videoCount.message', { max: maxVideoCount }),
+        'warning'
+      )
     }
 
     // 处理图片：检查是否还有空位
@@ -286,7 +310,11 @@ const InputArea: React.FC<InputAreaProps> = ({
       if (availableImageSlots > 0) {
         onImageUpload(imageFiles)
       } else {
-        showAlert('图片数量限制', `最多只能上传${maxImageCount}张图片`, 'warning')
+        showAlert(
+          t('inputArea.alerts.imageCount.title'),
+          t('inputArea.alerts.imageCount.message', { max: maxImageCount }),
+          'warning'
+        )
       }
     }
   }
@@ -472,10 +500,10 @@ const InputArea: React.FC<InputAreaProps> = ({
           }}
           placeholder={
             currentModel?.type === 'audio'
-              ? '输入要合成的文本'
+              ? t('inputArea.placeholder.audio')
               : isEnglishPromptOnly
-                ? '描述想要生成的内容（仅支持英文提示词）'
-                : '描述想要生成的内容'
+                ? t('inputArea.placeholder.englishOnly')
+                : t('inputArea.placeholder.default')
           }
           className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${
             // 音频模型或没有图片上传组件的模型：使用较大高度
@@ -490,7 +518,7 @@ const InputArea: React.FC<InputAreaProps> = ({
         <button
           onClick={onGenerate}
           disabled={isGenerateDisabled()}
-          title={isGenerating ? '加入队列' : '开始生成'}
+          title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
           className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isGenerateDisabled()
             ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
             : isGenerating
