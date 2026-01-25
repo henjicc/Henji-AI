@@ -7,6 +7,7 @@
 import React, { useState } from 'react'
 import { exportService } from '@/core/export/ExportService'
 import type { ExportType, CleanOptions } from '@/core/export/types'
+import { useI18n } from '@/hooks/useI18n'
 
 interface ExportPanelProps {
   modelId: string
@@ -15,6 +16,7 @@ interface ExportPanelProps {
 }
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, context = {} }) => {
+  const { t } = useI18n('ui')
   const [exportType, setExportType] = useState<ExportType>('current-params')
   const [cleanOptions, setCleanOptions] = useState<CleanOptions>({
     removeDefaults: true,
@@ -51,7 +53,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
       case 'api-request':
         return exportService.exportAPIRequest(modelId, params, context, options)
       case 'preset':
-        return exportService.exportAsPreset(modelId, params, 'Custom Preset', options)
+        return exportService.exportAsPreset(modelId, params, t('debug.export.presetName'), options)
       default:
         return exportService.exportCurrentParams(modelId, params, options)
     }
@@ -79,14 +81,14 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
     <div className="space-y-4">
       {/* 导出类型选择 */}
       <div>
-        <h4 className="text-white text-sm font-medium mb-2">导出类型</h4>
+        <h4 className="text-white text-sm font-medium mb-2">{t('debug.export.title')}</h4>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { value: 'current-params', label: '当前参数' },
-            { value: 'model-config', label: '模型配置' },
-            { value: 'model-schema', label: '参数Schema' },
-            { value: 'api-request', label: 'API请求' },
-            { value: 'preset', label: '预设格式' }
+            { value: 'current-params', label: t('debug.export.type.currentParams') },
+            { value: 'model-config', label: t('debug.export.type.modelConfig') },
+            { value: 'model-schema', label: t('debug.export.type.modelSchema') },
+            { value: 'api-request', label: t('debug.export.type.apiRequest') },
+            { value: 'preset', label: t('debug.export.type.preset') }
           ].map((option) => (
             <button
               key={option.value}
@@ -105,13 +107,13 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
 
       {/* 清理选项 */}
       <div>
-        <h4 className="text-white text-sm font-medium mb-2">清理选项</h4>
+        <h4 className="text-white text-sm font-medium mb-2">{t('debug.export.clean.title')}</h4>
         <div className="space-y-2">
           {[
-            { key: 'removeDefaults', label: '移除默认值' },
-            { key: 'removeEmpty', label: '移除空值' },
-            { key: 'removeSensitive', label: '移除敏感信息' },
-            { key: 'removeBase64', label: '移除Base64数据' }
+            { key: 'removeDefaults', label: t('debug.export.clean.removeDefaults') },
+            { key: 'removeEmpty', label: t('debug.export.clean.removeEmpty') },
+            { key: 'removeSensitive', label: t('debug.export.clean.removeSensitive') },
+            { key: 'removeBase64', label: t('debug.export.clean.removeBase64') }
           ].map((option) => (
             <label
               key={option.key}
@@ -135,13 +137,13 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
           onClick={handleDownload}
           className="flex-1 px-4 py-2 bg-yellow-500 text-black rounded font-medium hover:bg-yellow-400 transition-colors"
         >
-          下载 JSON
+          {t('debug.export.actions.downloadJson')}
         </button>
         <button
           onClick={handleCopy}
           className="flex-1 px-4 py-2 bg-zinc-700 text-white rounded font-medium hover:bg-zinc-600 transition-colors"
         >
-          {copySuccess ? '已复制!' : '复制到剪贴板'}
+          {copySuccess ? t('debug.export.actions.copied') : t('debug.export.actions.copy')}
         </button>
       </div>
     </div>

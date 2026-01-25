@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface ErrorStateProps {
   error: Error | string
@@ -18,18 +19,19 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   onDismiss,
   showDetails = false
 }) => {
+  const { t } = useI18n()
   const errorMessage = typeof error === 'string' ? error : error.message
   const errorStack = typeof error === 'string' ? undefined : error.stack
 
   return (
-    <div className="error-state">
+      <div className="error-state">
       <div className="error-icon">❌</div>
-      <div className="error-title">出错了</div>
+      <div className="error-title">{t('ui:errorState.title')}</div>
       <div className="error-message">{errorMessage}</div>
 
       {showDetails && errorStack && (
         <details className="error-details">
-          <summary>查看详情</summary>
+          <summary>{t('ui:errorState.details')}</summary>
           <pre className="error-stack">{errorStack}</pre>
         </details>
       )}
@@ -37,12 +39,12 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
       <div className="error-actions">
         {onRetry && (
           <button className="error-btn retry" onClick={onRetry}>
-            重试
+            {t('common:actions.retry')}
           </button>
         )}
         {onDismiss && (
           <button className="error-btn dismiss" onClick={onDismiss}>
-            关闭
+            {t('common:close')}
           </button>
         )}
       </div>

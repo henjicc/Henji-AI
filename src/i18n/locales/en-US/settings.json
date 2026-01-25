@@ -2,10 +2,92 @@
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",
-  "apiKeys": "API Keys",
+  "apiKeys": {
+    "title": "API Key Settings",
+    "description": "Configure API keys for each provider. Keys are stored locally.",
+    "providers": {
+      "ppio": {
+        "label": "PPIO API Key",
+        "placeholder": "Enter PPIO API Key"
+      },
+      "fal": {
+        "label": "Fal.ai API Key",
+        "placeholder": "Enter Fal.ai API Key"
+      },
+      "modelscope": {
+        "label": "ModelScope API Key",
+        "placeholder": "Enter ModelScope API Key"
+      },
+      "kie": {
+        "label": "KIE API Key",
+        "placeholder": "Enter KIE API Key"
+      },
+      "bizyair": {
+        "label": "BizyAir API Key",
+        "placeholder": "Enter BizyAir API Key"
+      }
+    }
+  },
   "about": "About",
   "version": "Version",
   "save": "Save Settings",
   "reset": "Reset Settings",
-  "confirmReset": "Are you sure you want to reset all settings?"
+  "confirmReset": "Are you sure you want to reset all settings?",
+  "tabs": {
+    "general": {
+      "label": "General",
+      "title": "General Settings",
+      "description": "Configure the app's basic settings and behavior.",
+      "maxHistoryCount": {
+        "label": "History limit",
+        "description": "Maximum number of history records to keep"
+      },
+      "showPriceEstimate": {
+        "label": "Show price estimate",
+        "description": "Show estimated price before generation"
+      },
+      "maxConcurrentTasks": {
+        "label": "Max concurrent tasks",
+        "description": "Maximum number of tasks running at the same time"
+      }
+    },
+    "api": {
+      "label": "API Keys"
+    },
+    "interface": {
+      "label": "Interface",
+      "title": "Interface Settings",
+      "description": "Customize the app's appearance and interaction.",
+      "theme": {
+        "label": "Theme",
+        "placeholder": "Theme settings coming soon..."
+      }
+    },
+    "models": {
+      "label": "Models",
+      "title": "Model Settings",
+      "description": "Manage model visibility and display settings."
+    }
+  },
+  "modelSettings": {
+    "quickActionsTitle": "Quick Actions",
+    "actions": {
+      "showAll": "Show all",
+      "hideAll": "Hide all",
+      "resetDefault": "Reset to default"
+    },
+    "byProvider": "By provider:",
+    "byType": "By type:",
+    "listTitle": "Model list",
+    "visibleCount": "({{visible}}/{{total}} visible)",
+    "status": {
+      "hidden": "Hidden",
+      "visible": "Visible"
+    },
+    "types": {
+      "image": "Image",
+      "video": "Video",
+      "audio": "Audio"
+    }
+  }
 }

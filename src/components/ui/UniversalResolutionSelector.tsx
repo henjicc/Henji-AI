@@ -3,6 +3,7 @@ import PanelTrigger from './PanelTrigger'
 import { ResolutionConfig } from '@/types/schema'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
 import { logWarning, logInfo } from '../../utils/errorLogger'
+import { useI18n } from '@/hooks/useI18n'
 
 interface UniversalResolutionSelectorProps {
   label?: string
@@ -42,6 +43,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   onQualityChange,
   onBaseSizeChange
 }) => {
+  const { t } = useI18n('ui')
   // 获取基数配置（使用默认值）
   const baseSize = baseSizeValue || config.baseSize || 1440
   const baseSizeEditable = config.baseSizeEditable === true // 默认不允许编辑，只有明确设置为 true 时才显示
@@ -190,16 +192,16 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
   // 自动判断标签：如果只有宽高比（没有质量选项和自定义输入），显示"比例"，否则显示"分辨率"
   const getDefaultLabel = () => {
     if (config.type === 'aspect_ratio' && !config.qualityOptions && !config.customInput) {
-      return '比例'
+      return t('resolutionPanel.aspectRatioShort')
     }
-    return '分辨率'
+    return t('resolutionPanel.label')
   }
 
   const displayLabel = label || getDefaultLabel()
 
   // 获取显示文本
   const getDisplayText = () => {
-    if (value === 'auto' || value === '智能') return '智能'
+    if (value === 'auto' || value === '智能') return t('resolutionPanel.smart')
 
     // 如果隐藏了宽高比选择器（图生视频模式），显示质量值
     if (config.hideAspectRatio && config.qualityOptions && qualityValue) {
@@ -270,7 +272,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           {baseSizeEditable && onBaseSizeChange && (
             <div className="mb-3">
               <label className="block text-xs text-zinc-400 mb-2">
-                基数（正方形边长）
+                {t('resolutionPanel.baseSizeLabel')}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -292,7 +294,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                 <span className="text-xs text-zinc-400 whitespace-nowrap">PX</span>
               </div>
               <div className="text-[11px] text-zinc-500 mt-1">
-                推荐范围：{baseSizeMin}-{baseSizeMax} PX
+                {t('resolutionPanel.baseSizeHint', { min: baseSizeMin, max: baseSizeMax })}
               </div>
             </div>
           )}
@@ -302,9 +304,9 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           {!config.hideAspectRatio && options.length > 0 && (
             <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
               <label className="block text-xs text-zinc-400 mb-2">
-                {config.type === 'aspect_ratio' ? '选择比例' :
-                 config.type === 'size' ? '选择尺寸' :
-                 '选择分辨率'}
+                {config.type === 'aspect_ratio' ? t('resolutionPanel.aspectRatioLabel') :
+                 config.type === 'size' ? t('resolutionPanel.sizeSelectLabel') :
+                 t('resolutionPanel.qualityLabel')}
               </label>
               <div className={`grid gap-2 ${
                 config.type === 'resolution' ? 'grid-cols-3' : 'grid-cols-4'
@@ -342,7 +344,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
               <div className={config.customInput ? 'mb-3' : ''}>
                 {/* 只有当同时有比例选项且比例选项可见时才显示"选择质量"标签 */}
                 {!config.hideAspectRatio && options.length > 0 && (
-                  <label className="block text-xs text-zinc-400 mb-2">选择质量</label>
+                  <label className="block text-xs text-zinc-400 mb-2">{t('resolutionPanel.qualitySelectLabel')}</label>
                 )}
                 <div className={`grid gap-2 ${
                   qualityOpts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'
@@ -374,7 +376,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           {/* 自定义尺寸输入 */}
           {config.customInput && onWidthChange && onHeightChange && (
             <div>
-              <label className="block text-xs text-zinc-400 mb-2">自定义尺寸</label>
+              <label className="block text-xs text-zinc-400 mb-2">{t('resolutionPanel.customSizeLabel')}</label>
               <div className="flex gap-2 items-center">
                 <div className="flex-1">
                   <input

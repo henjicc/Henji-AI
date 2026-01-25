@@ -79,7 +79,63 @@
   },
   "presets": {
     "label": "Presets",
-    "manage": "Manage presets"
+    "manage": "Manage presets",
+    "quickSave": "Quick save",
+    "inputNameToSave": "Enter a name to save",
+    "defaultName": "Preset_{{month}}-{{day}}_{{hour}}:{{minute}}",
+    "placeholders": {
+      "name": "Enter preset name"
+    },
+    "saveMode": {
+      "prompt": {
+        "title": "Save prompt and model only",
+        "label": "Prompt only"
+      },
+      "promptImage": {
+        "title": "Save prompt, images, and model",
+        "label": "Prompt + Images"
+      },
+      "full": {
+        "title": "Save full configuration",
+        "label": "Full config"
+      }
+    },
+    "myPresets": "My presets ({{count}})",
+    "empty": "No presets yet. Save one quickly!",
+    "deleteTitle": "Delete preset",
+    "confirmDelete": "Delete this preset?",
+    "alerts": {
+      "saveFailed": "Failed to save preset",
+      "deleteFailed": "Failed to delete preset"
+    },
+    "create": {
+      "title": "Create preset",
+      "nameLabel": "Preset name",
+      "descriptionLabel": "Description (optional)",
+      "globalLabel": "Global preset (all models)",
+      "globalHint": "Only saves common params (e.g., prompt), not model-specific params",
+      "modelHint": "Only for current model ({{modelId}})",
+      "saving": "Saving...",
+      "placeholders": {
+        "name": "Enter preset name",
+        "description": "Describe the preset usage"
+      }
+    },
+    "labels": {
+      "global": "Global",
+      "incompatible": "Incompatible",
+      "allModels": "All models",
+      "usageCount": "Used {{count}} times"
+    },
+    "actions": {
+      "favorite": "Favorite",
+      "unfavorite": "Unfavorite"
+    },
+    "manager": {
+      "title": "Preset Manager",
+      "create": "New preset",
+      "empty": "No presets yet. Click \"New preset\" to create your first one."
+    }
   },
   "resolutionPanel": {
     "label": "Resolution",
@@ -88,15 +144,19 @@
     "qualityLabel": "Resolution",
     "quality2k": "HD 2K",
     "quality4k": "UHD 4K",
-    "sizeLabel": "Size"
+    "sizeLabel": "Size",
+    "aspectRatioShort": "Ratio",
+    "baseSizeLabel": "Base size (square side)",
+    "baseSizeHint": "Recommended range: {{min}}-{{max}} px",
+    "sizeSelectLabel": "Select size",
+    "qualitySelectLabel": "Select quality",
+    "customSizeLabel": "Custom size"
   },
-
   "input": {
     "label": "Prompt",
     "placeholder": "Enter prompt...",
     "required": "Prompt is required"
   },
-
   "customModels": {
     "title": "Custom Model Manager",
     "add": "Add Model",
@@ -111,6 +171,273 @@
     "confirmDelete": "Are you sure you want to delete this custom model?",
     "empty": "No custom models added yet",
     "loading": "Loading...",
-    "addFailed": "Failed to add"
+    "addFailed": "Failed to add",
+    "descriptionOptional": "Description (optional)",
+    "placeholders": {
+      "name": "e.g., My custom model",
+      "url": "e.g., damo/text-to-image-synthesis",
+      "description": "Short description of the model"
+    },
+    "validation": {
+      "missingNameOrUrl": "Please enter a model name and URL"
+    }
+  },
+  "audioPlayer": {
+    "volume": "Volume",
+    "playPause": "Play/Pause"
+  },
+  "placeholders": {
+    "developing": "In development…"
+  },
+  "debug": {
+    "paramFlow": {
+      "title": "Param Flow Tracking",
+      "modelLabel": "Model",
+      "exportJson": "Export JSON",
+      "stage": {
+        "uiInput": "1. UI Input",
+        "linkage": "2. Linkage",
+        "transform": "3. Value Transform",
+        "apiBuild": "4. API Request"
+      },
+      "table": {
+        "param": "Parameter",
+        "value": "Value",
+        "source": "Source/Reason"
+      }
+    },
+    "export": {
+      "title": "Export Type",
+      "presetName": "Custom Preset",
+      "type": {
+        "currentParams": "Current Params",
+        "modelConfig": "Model Config",
+        "modelSchema": "Param Schema",
+        "apiRequest": "API Request",
+        "preset": "Preset Format"
+      },
+      "clean": {
+        "title": "Cleanup Options",
+        "removeDefaults": "Remove Defaults",
+        "removeEmpty": "Remove Empty",
+        "removeSensitive": "Remove Sensitive Info",
+        "removeBase64": "Remove Base64 Data"
+      },
+      "actions": {
+        "downloadJson": "Download JSON",
+        "copy": "Copy to Clipboard",
+        "copied": "Copied!"
+      }
+    }
+  },
+  "tabs": {
+    "conversation": "Conversation",
+    "canvas": "Canvas",
+    "tools": "Toolbox"
+  },
+  "windowControls": {
+    "appName": "Henji AI",
+    "close": "Close",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "toggleMaximize": "Maximize/Restore"
+  },
+  "updateDialog": {
+    "title": "New Version Available",
+    "noNotes": "No release notes available",
+    "versionFallback": "Version {{version}}",
+    "currentVersionLabel": "Current:",
+    "latestVersionLabel": "Latest:",
+    "notesTitle": "What's New",
+    "actions": {
+      "skip": "Skip this version",
+      "remindLater": "Remind me later",
+      "updateNow": "Update now"
+    }
+  },
+  "viewer": {
+    "imageAlt": "Image"
+  },
+  "errorState": {
+    "title": "Something went wrong",
+    "details": "View details"
+  },
+  "workspace": {
+    "inputImageAlt": "Input image {{index}}",
+    "actions": {
+      "regenerate": "Regenerate",
+      "reedit": "Re-edit"
+    },
+    "status": {
+      "queued": "Queued...",
+      "waiting": "Waiting for previous task",
+      "preparing": "Preparing...",
+      "generating": "Generating...",
+      "timeout": "Timed out, task still processing",
+      "timeoutHint": "Task may still be processing. Try again later or refresh status.",
+      "buffering": "Buffering..."
+    },
+    "clearDialog": {
+      "title": "Clear history",
+      "subtitle": "Choose what to clear",
+      "failedOnly": "Delete failed records only",
+      "confirmDelete": "Click again to confirm deletion",
+      "deleteAll": "Clear all history"
+    }
+  },
+  "workspaceToolbar": {
+    "filter": {
+      "all": "All types",
+      "image": "Images",
+      "video": "Videos",
+      "audio": "Audio"
+    },
+    "sort": {
+      "date": "By date",
+      "name": "By name",
+      "type": "By type"
+    },
+    "view": {
+      "grid": "Grid view",
+      "list": "List view"
+    }
+  },
+  "testMode": {
+    "indicatorTitle": "Click to open Test Panel (Ctrl+Alt+Shift+T)",
+    "indicatorLabel": "Test Mode",
+    "title": "Test Mode",
+    "shortcutLabel": "Shortcut:",
+    "enable": {
+      "title": "Enable Test Mode",
+      "description": "Enables testing features without affecting normal use."
+    },
+    "tabs": {
+      "options": "Test Options",
+      "export": "Export Config"
+    },
+    "options": {
+      "title": "Test Options",
+      "skipRequest": {
+        "title": "Skip actual request",
+        "description": "Generating will not call the API; parameters only."
+      },
+      "logParams": {
+        "title": "Log params to console",
+        "description": "Show full request params in browser console."
+      },
+      "enableDevTools": {
+        "title": "Allow F12 to open DevTools",
+        "description": "In builds, press F12 to open DevTools (restart if it doesn't work)."
+      },
+      "flowTracking": {
+        "title": "Enable param flow tracking",
+        "description": "Track full flow from UI input to API request."
+      }
+    },
+    "flowTracking": {
+      "title": "Param flow tracking"
+    },
+    "lastParams": {
+      "title": "Latest request params",
+      "labels": {
+        "model": "Model:",
+        "type": "Type:",
+        "prompt": "Prompt:",
+        "fullParams": "Full params:"
+      }
+    },
+    "emptyHint": "After generating, request parameters will appear here."
+  },
+  "imageEditor": {
+    "actions": {
+      "undo": "Undo",
+      "redo": "Redo"
+    },
+    "textPlaceholder": "Enter text...",
+    "toolSettings": {
+      "color": "Color",
+      "strokeWidth": "Stroke",
+      "fontSize": "Font size"
+    },
+    "propertyPanel": {
+      "title": "Properties",
+      "brightness": "Brightness",
+      "contrast": "Contrast",
+      "saturation": "Saturation",
+      "scale": "Scale",
+      "rotation": "Rotation"
+    },
+    "layerPanel": {
+      "title": "Layers",
+      "addLayer": "Add layer",
+      "empty": "No layers",
+      "actions": {
+        "show": "Show",
+        "hide": "Hide",
+        "lock": "Lock",
+        "unlock": "Unlock"
+      }
+    },
+    "historyPanel": {
+      "title": "History",
+      "empty": "No history yet"
+    },
+    "filterPanel": {
+      "title": "Filters",
+      "intensity": "Intensity",
+      "apply": "Apply filter"
+    }
+  },
+  "modelscopeCustomModel": {
+    "tip": {
+      "prefix": "Supports image generation and editing. You can find supported models in",
+      "library": "Model Library",
+      "suffix": "."
+    },
+    "addNew": "Add new model",
+    "form": {
+      "modelId": "Model ID",
+      "displayName": "Display name",
+      "modelType": "Model type",
+      "placeholders": {
+        "modelId": "e.g., black-forest-labs/FLUX.1-dev",
+        "displayName": "e.g., FLUX.1 Dev"
+      }
+    },
+    "types": {
+      "imageGeneration": "Image generation",
+      "imageEditing": "Image editing"
+    },
+    "actions": {
+      "confirmAdd": "Confirm add",
+      "deleteTitle": "Delete model"
+    },
+    "empty": "No custom models yet",
+    "confirmDelete": "Are you sure you want to delete this model?",
+    "alerts": {
+      "incomplete": {
+        "title": "Incomplete input",
+        "message": "Please enter model ID and name"
+      },
+      "duplicate": {
+        "title": "Model already exists",
+        "message": "This model ID already exists"
+      },
+      "nameEmpty": {
+        "title": "Incomplete input",
+        "message": "Name cannot be empty"
+      }
+    }
+  },
+  "modelscopeCustomModelPanel": {
+    "label": "Select custom model",
+    "empty": "Add models first",
+    "select": "Select a model",
+    "modelIdLabel": "Model ID:",
+    "type": {
+      "imageGeneration": "Image Gen",
+      "imageEditing": "Image Edit",
+      "unknown": "Unlabeled"
+    }
   }
 }

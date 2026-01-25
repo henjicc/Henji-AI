@@ -3,6 +3,7 @@
  */
 import React from 'react'
 import type { EditorTool, ToolSettingsProps } from './types'
+import { useI18n } from '@/hooks/useI18n'
 
 const COLORS = [
     '#ff0000',  // 红
@@ -81,6 +82,7 @@ export const ToolSettingsPanel: React.FC<ToolSettingsProps> = ({
     maxStrokeWidth = 20,
     maxFontSize = 72,
 }) => {
+    const { t } = useI18n('ui')
     const visibleSettings = getSettingsForTool(currentTool)
 
     // 如果没有需要显示的设置，不渲染面板
@@ -92,7 +94,7 @@ export const ToolSettingsPanel: React.FC<ToolSettingsProps> = ({
         <div className="tool-settings-panel">
             {visibleSettings.includes('color') && (
                 <div className="settings-group">
-                    <span className="settings-label">颜色</span>
+                    <span className="settings-label">{t('imageEditor.toolSettings.color')}</span>
                     <ColorPicker
                         value={settings.strokeColor}
                         onChange={(color) => onSettingsChange({ strokeColor: color })}
@@ -102,7 +104,7 @@ export const ToolSettingsPanel: React.FC<ToolSettingsProps> = ({
 
             {visibleSettings.includes('strokeWidth') && (
                 <div className="settings-group">
-                    <span className="settings-label">粗细</span>
+                    <span className="settings-label">{t('imageEditor.toolSettings.strokeWidth')}</span>
                     <Slider
                         value={settings.strokeWidth}
                         min={1}
@@ -115,7 +117,7 @@ export const ToolSettingsPanel: React.FC<ToolSettingsProps> = ({
 
             {visibleSettings.includes('fontSize') && (
                 <div className="settings-group">
-                    <span className="settings-label">字号</span>
+                    <span className="settings-label">{t('imageEditor.toolSettings.fontSize')}</span>
                     <Slider
                         value={settings.fontSize}
                         min={12}

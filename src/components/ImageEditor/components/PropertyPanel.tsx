@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface PropertyPanelProps {
   brightness: number
@@ -32,18 +33,19 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   onRotationChange,
   onReset
 }) => {
+  const { t } = useI18n('ui')
   return (
     <div className="property-panel">
       <div className="panel-header">
-        <h3>属性</h3>
+        <h3>{t('imageEditor.propertyPanel.title')}</h3>
         <button className="reset-btn" onClick={onReset}>
-          重置
+          {t('common:actions.reset')}
         </button>
       </div>
 
       <div className="panel-content">
         <div className="property-group">
-          <label>亮度</label>
+          <label>{t('imageEditor.propertyPanel.brightness')}</label>
           <input
             type="range"
             min="0"
@@ -55,7 +57,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         </div>
 
         <div className="property-group">
-          <label>对比度</label>
+          <label>{t('imageEditor.propertyPanel.contrast')}</label>
           <input
             type="range"
             min="0"
@@ -67,7 +69,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         </div>
 
         <div className="property-group">
-          <label>饱和度</label>
+          <label>{t('imageEditor.propertyPanel.saturation')}</label>
           <input
             type="range"
             min="0"
@@ -79,7 +81,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         </div>
 
         <div className="property-group">
-          <label>缩放</label>
+          <label>{t('imageEditor.propertyPanel.scale')}</label>
           <input
             type="range"
             min="10"
@@ -91,7 +93,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         </div>
 
         <div className="property-group">
-          <label>旋转</label>
+          <label>{t('imageEditor.propertyPanel.rotation')}</label>
           <input
             type="range"
             min="0"

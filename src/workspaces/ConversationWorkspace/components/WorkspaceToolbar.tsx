@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface ToolbarAction {
   id: string
@@ -33,6 +34,7 @@ export const WorkspaceToolbar: React.FC<ToolbarProps> = ({
   filterType,
   onFilterChange
 }) => {
+  const { t } = useI18n('ui')
   return (
     <div className="workspace-toolbar">
       <div className="toolbar-section actions">
@@ -59,10 +61,10 @@ export const WorkspaceToolbar: React.FC<ToolbarProps> = ({
           value={filterType}
           onChange={(e) => onFilterChange(e.target.value as any)}
         >
-          <option value="all">全部类型</option>
-          <option value="image">图片</option>
-          <option value="video">视频</option>
-          <option value="audio">音频</option>
+          <option value="all">{t('workspaceToolbar.filter.all')}</option>
+          <option value="image">{t('workspaceToolbar.filter.image')}</option>
+          <option value="video">{t('workspaceToolbar.filter.video')}</option>
+          <option value="audio">{t('workspaceToolbar.filter.audio')}</option>
         </select>
 
         <select
@@ -70,9 +72,9 @@ export const WorkspaceToolbar: React.FC<ToolbarProps> = ({
           value={sortBy}
           onChange={(e) => onSortChange(e.target.value as any)}
         >
-          <option value="date">按日期</option>
-          <option value="name">按名称</option>
-          <option value="type">按类型</option>
+          <option value="date">{t('workspaceToolbar.sort.date')}</option>
+          <option value="name">{t('workspaceToolbar.sort.name')}</option>
+          <option value="type">{t('workspaceToolbar.sort.type')}</option>
         </select>
       </div>
 
@@ -80,14 +82,14 @@ export const WorkspaceToolbar: React.FC<ToolbarProps> = ({
         <button
           className={`view-mode-btn ${viewMode === 'grid' ? 'active' : ''}`}
           onClick={() => onViewModeChange('grid')}
-          title="网格视图"
+          title={t('workspaceToolbar.view.grid')}
         >
           ⊞
         </button>
         <button
           className={`view-mode-btn ${viewMode === 'list' ? 'active' : ''}`}
           onClick={() => onViewModeChange('list')}
-          title="列表视图"
+          title={t('workspaceToolbar.view.list')}
         >
           ☰
         </button>

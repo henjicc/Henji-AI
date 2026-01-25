@@ -1,27 +1,28 @@
 import React from 'react'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
-
-const API_KEY_CONFIGS = [
-  { provider: 'ppio', label: 'PPIO API Key', placeholder: '请输入 PPIO API Key' },
-  { provider: 'fal', label: 'Fal.ai API Key', placeholder: '请输入 Fal.ai API Key' },
-  { provider: 'modelscope', label: 'ModelScope API Key', placeholder: '请输入 ModelScope API Key' },
-  { provider: 'kie', label: 'KIE API Key', placeholder: '请输入 KIE API Key' },
-  { provider: 'bizyair', label: 'BizyAir API Key', placeholder: '请输入 BizyAir API Key' }
-]
+import { useI18n } from '@/hooks/useI18n'
 
 const ApiKeysTab: React.FC = () => {
+  const { t } = useI18n('settings')
   const { keys, visibility, updateKey, toggleVisibility } = useApiKeys()
+  const apiKeyConfigs = [
+    { provider: 'ppio', label: t('apiKeys.providers.ppio.label'), placeholder: t('apiKeys.providers.ppio.placeholder') },
+    { provider: 'fal', label: t('apiKeys.providers.fal.label'), placeholder: t('apiKeys.providers.fal.placeholder') },
+    { provider: 'modelscope', label: t('apiKeys.providers.modelscope.label'), placeholder: t('apiKeys.providers.modelscope.placeholder') },
+    { provider: 'kie', label: t('apiKeys.providers.kie.label'), placeholder: t('apiKeys.providers.kie.placeholder') },
+    { provider: 'bizyair', label: t('apiKeys.providers.bizyair.label'), placeholder: t('apiKeys.providers.bizyair.placeholder') }
+  ]
 
   return (
     <div className="p-6">
-      <h3 className="text-lg font-semibold text-white mb-2">API 密钥设置</h3>
+      <h3 className="text-lg font-semibold text-white mb-2">{t('apiKeys.title')}</h3>
       <p className="text-sm text-zinc-400 mb-6">
-        配置各个服务提供商的 API 密钥。密钥将安全地存储在本地。
+        {t('apiKeys.description')}
       </p>
 
       <div className="space-y-4">
-        {API_KEY_CONFIGS.map(config => (
+        {apiKeyConfigs.map(config => (
           <ApiKeyInput
             key={config.provider}
             provider={config.provider}

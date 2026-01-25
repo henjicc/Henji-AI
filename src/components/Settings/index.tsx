@@ -3,6 +3,7 @@ import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
 import InterfaceTab from './tabs/InterfaceTab'
 import ModelsTab from './tabs/ModelsTab'
+import { useI18n } from '@/hooks/useI18n'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -11,6 +12,7 @@ interface SettingsModalProps {
 type SettingsTab = 'general' | 'api' | 'interface' | 'models'
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+  const { t } = useI18n('settings')
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [closing, setClosing] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -21,10 +23,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   }
 
   const tabs = [
-    { id: 'general' as const, label: '通用', component: GeneralTab },
-    { id: 'api' as const, label: 'API 密钥', component: ApiKeysTab },
-    { id: 'interface' as const, label: '界面', component: InterfaceTab },
-    { id: 'models' as const, label: '模型', component: ModelsTab }
+    { id: 'general' as const, label: t('tabs.general.label'), component: GeneralTab },
+    { id: 'api' as const, label: t('tabs.api.label'), component: ApiKeysTab },
+    { id: 'interface' as const, label: t('tabs.interface.label'), component: InterfaceTab },
+    { id: 'models' as const, label: t('tabs.models.label'), component: ModelsTab }
   ]
 
   const ActiveTabComponent = tabs.find(t => t.id === activeTab)?.component
@@ -40,7 +42,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
-          <h2 className="text-xl font-semibold text-white">设置</h2>
+          <h2 className="text-xl font-semibold text-white">{t('title')}</h2>
           <button
             onClick={handleClose}
             className="text-zinc-400 hover:text-white transition-colors text-2xl leading-none"

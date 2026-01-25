@@ -5,6 +5,8 @@ const KNOWN_NAMESPACES = ['common', 'models', 'params', 'errors', 'ui', 'history
 
 const MODEL_KEY_PREFIX = 'models.defs.'
 const MODEL_KEY_MARKERS = ['.meta.', '.params.', '.requirements.', '.auto.', '.inputLimits.', '.linkages.', '.endpoints.', '.request.', '.pricing.']
+const MODEL_DEFS_PREFIX = 'defs.'
+const MODEL_NAMESPACE = 'models'
 
 function normalizeModelsKey(key: string): string {
   if (!key.startsWith(MODEL_KEY_PREFIX) || key.includes('\\.')) {
@@ -27,6 +29,83 @@ function normalizeModelsKey(key: string): string {
   const modelId = key.slice(MODEL_KEY_PREFIX.length, markerIndex)
   const escapedId = modelId.replace(/\./g, '\\.')
   return `${MODEL_KEY_PREFIX}${escapedId}${key.slice(markerIndex)}`
+}
+
+function isModelKey(key: string): boolean {
+  return key.startsWith('models:') || key.startsWith('models.') || key.startsWith(MODEL_DEFS_PREFIX)
+}
+
+function getNestedValue(obj: unknown, path: string[]): unknown {
+  let current: unknown = obj
+  for (const segment of path) {
+    if (!current || typeof current !== 'object') return undefined
+    const record = current as Record<string, unknown>
+    if (!(segment in record)) return undefined
+    current = record[segment]
+  }
+  return current
+}
+
+function getModelResourceBundle(locale: string): Record<string, unknown> | null {
+  try {
+    const bundle = i18n.getResourceBundle(locale, MODEL_NAMESPACE)
+    if (bundle && typeof bundle === 'object') {
+      return bundle as Record<string, unknown>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function parseModelKey(rawKey: string): { modelId: string; path: string[] } | null {
+  const normalized = rawKey.startsWith('models:') ? `models.${rawKey.slice('models:'.length)}` : rawKey
+  const key = normalized.startsWith('models.') ? normalized.slice('models.'.length) : normalized
+  if (!key.startsWith(MODEL_DEFS_PREFIX)) return null
+
+  let markerIndex = -1
+  for (const marker of MODEL_KEY_MARKERS) {
+    const idx = key.indexOf(marker, MODEL_DEFS_PREFIX.length)
+    if (idx !== -1) {
+      markerIndex = idx
+      break
+    }
+  }
+  if (markerIndex === -1) return null
+
+  const modelIdRaw = key.slice(MODEL_DEFS_PREFIX.length, markerIndex)
+  if (!modelIdRaw) return null
+  const modelId = modelIdRaw.replace(/\\\./g, '.')
+  const tail = key.slice(markerIndex + 1)
+  const path = tail.split('.').filter(Boolean)
+  if (path.length === 0) return null
+  return { modelId, path }
+}
+
+function getModelTranslation(rawKey: string, locale: string): string | undefined {
+  const parsed = parseModelKey(rawKey)
+  if (!parsed) return undefined
+
+  const { modelId, path } = parsed
+  const localeCandidates = [
+    locale,
+    locale.split('-')[0],
+    'zh',
+    'en'
+  ]
+
+  for (const candidate of localeCandidates) {
+    if (!candidate) continue
+    const bundle = getModelResourceBundle(candidate)
+    if (!bundle) continue
+    const defs = bundle.defs
+    if (!defs || typeof defs !== 'object') continue
+    const model = (defs as Record<string, unknown>)[modelId]
+    const value = getNestedValue(model, path)
+    if (typeof value === 'string') return value
+  }
+
+  return undefined
 }
 
 /**
@@ -76,6 +155,13 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
   if ('key' in text && typeof text.key === 'string') {
     const fallback = typeof text.fallback === 'string' ? text.fallback : text.key
     const key = text.key
+    if (isModelKey(key)) {
+      const modelTranslation = getModelTranslation(key, locale)
+      if (typeof modelTranslation === 'string') {
+        return modelTranslation
+      }
+      return fallback
+    }
     try {
       if (key.includes(':')) {
         if (key.startsWith('models:')) {

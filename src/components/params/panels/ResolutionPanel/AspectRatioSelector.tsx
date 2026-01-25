@@ -22,7 +22,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
   visualize = true,
   smartMatchEnabled = false
 }) => {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('ui')
 
   // 计算图标尺寸
   const getIconSize = (ratio: string): { width: number; height: number } => {
@@ -37,7 +37,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
 
   return (
     <div className="aspect-ratio-selector">
-      <label className="param-label">选择比例</label>
+      <label className="param-label">{t('resolutionPanel.aspectRatioLabel')}</label>
       <div className="aspect-ratio-grid">
         {smartMatchEnabled && (
           <button
@@ -49,7 +49,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="aspect-ratio-label">智能</span>
+            <span className="aspect-ratio-label">{t('resolutionPanel.smart')}</span>
           </button>
         )}
 

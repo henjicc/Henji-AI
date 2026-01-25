@@ -24,6 +24,7 @@ import type {
     BrushAnnotation,
     Annotation,
 } from './types'
+import { useI18n } from '@/hooks/useI18n'
 
 import './ImageEditor.css'
 
@@ -50,6 +51,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     onSave,
     onNavigate,
 }) => {
+    const { t } = useI18n('ui')
     // ==================== 状态 ====================
     const [currentTool, setCurrentTool] = useState<EditorTool>('rect')
     const [toolSettings, setToolSettings] = useState<ToolSettings>(defaultToolSettings)
@@ -1022,7 +1024,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         return (
             <div className="image-editor-container">
                 <div className="editor-canvas-area">
-                    <div className="editor-info-badge">加载中...</div>
+                    <div className="editor-info-badge">{t('common:loading')}</div>
                 </div>
             </div>
         )
@@ -1204,7 +1206,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                                     handleTextConfirm()
                                 }
                             }}
-                            placeholder="输入文字..."
+                            placeholder={t('ui:imageEditor.textPlaceholder')}
                         />
                     )}
 

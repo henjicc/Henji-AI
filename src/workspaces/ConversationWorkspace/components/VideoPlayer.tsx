@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useEffect } from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface VideoPlayerProps {
   videoUrl: string
@@ -36,6 +37,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onClose,
   onDownload
 }) => {
+  const { t } = useI18n()
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -77,7 +79,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <div className="video-player-container" onClick={(e) => e.stopPropagation()}>
         <div className="video-player-header">
           {onDownload && (
-            <button className="player-btn" onClick={onDownload} title="下载">
+            <button className="player-btn" onClick={onDownload} title={t('common:actions.download')}>
               ⬇️
             </button>
           )}

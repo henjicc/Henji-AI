@@ -20,17 +20,17 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
   return (
     <div className="border border-gray-700 rounded-lg p-4 mt-4 bg-gray-900">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-white">参数流转追踪</h3>
+        <h3 className="text-lg font-semibold text-white">{t('debug.paramFlow.title')}</h3>
         <div className="flex gap-2 items-center">
           <span className="text-xs text-gray-400">
-            模型: {record.modelId}
+            {t('debug.paramFlow.modelLabel')}: {record.modelId}
           </span>
           {onExport && (
             <button
               onClick={onExport}
               className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
             >
-              导出 JSON
+              {t('debug.paramFlow.exportJson')}
             </button>
           )}
         </div>
@@ -50,16 +50,17 @@ interface StageViewProps {
 }
 
 function StageView({ stage }: StageViewProps) {
+  const { t } = useI18n('ui')
   const getStageTitle = () => {
     switch (stage.stage) {
       case 'ui-input':
-        return '1. UI 输入'
+        return t('debug.paramFlow.stage.uiInput')
       case 'linkage':
-        return '2. 参数联动'
+        return t('debug.paramFlow.stage.linkage')
       case 'transform':
-        return '3. 值转换'
+        return t('debug.paramFlow.stage.transform')
       case 'api-build':
-        return '4. API 请求'
+        return t('debug.paramFlow.stage.apiBuild')
     }
   }
 
@@ -92,9 +93,9 @@ function StageView({ stage }: StageViewProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-700">
-              <th className="text-left py-2 px-3 text-gray-400 font-medium">参数</th>
-              <th className="text-left py-2 px-3 text-gray-400 font-medium">值</th>
-              <th className="text-left py-2 px-3 text-gray-400 font-medium">来源/原因</th>
+              <th className="text-left py-2 px-3 text-gray-400 font-medium">{t('debug.paramFlow.table.param')}</th>
+              <th className="text-left py-2 px-3 text-gray-400 font-medium">{t('debug.paramFlow.table.value')}</th>
+              <th className="text-left py-2 px-3 text-gray-400 font-medium">{t('debug.paramFlow.table.source')}</th>
             </tr>
           </thead>
           <tbody>

@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface Tool {
   id: string
@@ -36,6 +37,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onSave,
   onCancel
 }) => {
+  const { t } = useI18n()
   return (
     <div className="editor-toolbar">
       <div className="toolbar-section tools">
@@ -61,7 +63,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className="history-btn"
           onClick={onUndo}
           disabled={!canUndo}
-          title="撤销"
+          title={t('ui:imageEditor.actions.undo')}
         >
           ↶
         </button>
@@ -69,7 +71,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className="history-btn"
           onClick={onRedo}
           disabled={!canRedo}
-          title="重做"
+          title={t('ui:imageEditor.actions.redo')}
         >
           ↷
         </button>
@@ -80,13 +82,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className="action-btn cancel"
           onClick={onCancel}
         >
-          取消
+          {t('common:cancel')}
         </button>
         <button
           className="action-btn save primary"
           onClick={onSave}
         >
-          保存
+          {t('common:save')}
         </button>
       </div>
     </div>

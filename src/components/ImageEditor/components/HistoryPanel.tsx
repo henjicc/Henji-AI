@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface HistoryEntry {
   id: string
@@ -24,9 +25,10 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
   onJumpTo,
   onClear
 }) => {
+  const { t, i18n } = useI18n('ui')
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp)
-    return date.toLocaleTimeString('zh-CN', {
+    return date.toLocaleTimeString(i18n.language || 'zh-CN', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -36,20 +38,20 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
   return (
     <div className="history-panel">
       <div className="panel-header">
-        <h3>历史记录</h3>
+        <h3>{t('imageEditor.historyPanel.title')}</h3>
         <button
           className="clear-btn"
           onClick={onClear}
           disabled={history.length === 0}
         >
-          清空
+          {t('common:actions.clear')}
         </button>
       </div>
 
       <div className="panel-content">
         {history.length === 0 ? (
           <div className="history-empty">
-            暂无历史记录
+            {t('imageEditor.historyPanel.empty')}
           </div>
         ) : (
           <div className="history-list">

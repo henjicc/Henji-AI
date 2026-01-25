@@ -22,7 +22,7 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
   availableFor,
   availableForMap
 }) => {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('ui')
 
   // 过滤可用的质量选项
   const filteredOptions = useMemo(() => {
@@ -40,7 +40,7 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
 
   return (
     <div className="quality-tier-selector">
-      <label className="param-label">选择分辨率</label>
+      <label className="param-label">{t('resolutionPanel.qualityLabel')}</label>
       <div className="quality-tier-grid">
         {filteredOptions.map((option) => {
           const label = getI18nText(option.label, i18n.language)

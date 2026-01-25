@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { getAvailableProviders } from '../utils/modelHelpers'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
+import { useI18n } from '@/hooks/useI18n'
 
 const ModelSettingsPanel: React.FC = () => {
+  const { t } = useI18n('settings')
   // 获取所有可用的 providers
   const providers = getAvailableProviders()
 
@@ -125,9 +127,9 @@ const ModelSettingsPanel: React.FC = () => {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'image': return '图片'
-      case 'video': return '视频'
-      case 'audio': return '音频'
+      case 'image': return t('modelSettings.types.image')
+      case 'video': return t('modelSettings.types.video')
+      case 'audio': return t('modelSettings.types.audio')
       default: return type
     }
   }
@@ -164,7 +166,7 @@ const ModelSettingsPanel: React.FC = () => {
     <div className="space-y-5 animate-fade-in">
       {/* 快速操作区域 */}
       <div>
-        <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">快速操作</h4>
+        <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">{t('modelSettings.quickActionsTitle')}</h4>
         <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30 space-y-3">
           {/* 全局操作 */}
           <div className="flex gap-2 flex-wrap">
@@ -172,25 +174,25 @@ const ModelSettingsPanel: React.FC = () => {
               onClick={showAll}
               className="px-3 py-1.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg text-xs transition-all duration-200"
             >
-              全部显示
+              {t('modelSettings.actions.showAll')}
             </button>
             <button
               onClick={hideAll}
               className="px-3 py-1.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg text-xs transition-all duration-200"
             >
-              全部隐藏
+              {t('modelSettings.actions.hideAll')}
             </button>
             <button
               onClick={resetToDefault}
               className="px-3 py-1.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg text-xs transition-all duration-200"
             >
-              重置默认
+              {t('modelSettings.actions.resetDefault')}
             </button>
           </div>
 
           {/* 按供应商操作 */}
           <div className="pt-3 border-t border-zinc-700/30">
-            <p className="text-xs text-zinc-500 mb-2">按供应商：</p>
+            <p className="text-xs text-zinc-500 mb-2">{t('modelSettings.byProvider')}</p>
             <div className="flex gap-2 flex-wrap">
               {providers.map(provider => {
                 const isVisible = isProviderVisible(provider.id)
@@ -213,7 +215,7 @@ const ModelSettingsPanel: React.FC = () => {
 
           {/* 按类型操作 */}
           <div className="pt-3 border-t border-zinc-700/30">
-            <p className="text-xs text-zinc-500 mb-2">按类型：</p>
+            <p className="text-xs text-zinc-500 mb-2">{t('modelSettings.byType')}</p>
             <div className="flex gap-2 flex-wrap">
               {(['image', 'video', 'audio'] as const).map(type => {
                 const isVisible = isTypeVisible(type)
@@ -238,7 +240,7 @@ const ModelSettingsPanel: React.FC = () => {
 
       {/* 模型列表 */}
       <div>
-        <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">模型列表</h4>
+        <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">{t('modelSettings.listTitle')}</h4>
         <div className="space-y-3">
           {providers.map(provider => {
             const stats = getProviderStats(provider)
@@ -249,7 +251,7 @@ const ModelSettingsPanel: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <h5 className="text-sm font-medium text-white">{provider.name}</h5>
                     <span className="text-xs text-zinc-500">
-                      ({stats.visible}/{stats.total} 可见)
+                      {t('modelSettings.visibleCount', { visible: stats.visible, total: stats.total })}
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -257,14 +259,14 @@ const ModelSettingsPanel: React.FC = () => {
                       onClick={() => showAllModelsForProvider(provider.id)}
                       className="text-xs text-[#007eff] hover:text-[#006add] transition-colors"
                     >
-                      全部显示
+                      {t('modelSettings.actions.showAll')}
                     </button>
                     <span className="text-zinc-600">|</span>
                     <button
                       onClick={() => hideAllModelsForProvider(provider.id)}
                       className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
                     >
-                      全部隐藏
+                      {t('modelSettings.actions.hideAll')}
                     </button>
                   </div>
                 </div>
@@ -288,7 +290,7 @@ const ModelSettingsPanel: React.FC = () => {
                           </span>
                         </div>
                         <div className="text-xs text-zinc-500">
-                          {isHidden ? '已隐藏' : '显示中'}
+                          {isHidden ? t('modelSettings.status.hidden') : t('modelSettings.status.visible')}
                         </div>
                       </button>
                     )

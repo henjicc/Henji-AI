@@ -7,6 +7,7 @@ import { readJsonFromAppData } from '../utils/save'
 import { remove } from '@tauri-apps/plugin-fs'
 import PanelTrigger from './ui/PanelTrigger'
 import { logError, logInfo } from '../utils/errorLogger'
+import { useI18n } from '@/hooks/useI18n'
 
 interface PresetPanelProps {
     // 获取当前所有状态（用于保存）
@@ -24,6 +25,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     onLoadPreset,
     disabled
 }) => {
+    const { t } = useI18n()
     const [presets, setPresets] = useState<Preset[]>([])
     const [isSaving, setIsSaving] = useState(false)
     const [saveMode, setSaveMode] = useState<PresetSaveMode | null>(null)
@@ -47,14 +49,19 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     const handleQuickSave = async (mode: PresetSaveMode) => {
         const state = getCurrentState()
         if (!state.input?.trim()) {
-            alert('提示词不能为空')
+            alert(t('ui:input.required'))
             return
         }
 
         setSaveMode(mode)
         // 生成默认名称
         const now = new Date()
-        const defaultName = `预设_${now.getMonth() + 1}-${now.getDate()}_${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
+        const defaultName = t('ui:presets.defaultName', {
+            month: now.getMonth() + 1,
+            day: now.getDate(),
+            hour: now.getHours(),
+            minute: String(now.getMinutes()).padStart(2, '0')
+        })
         setPresetName(defaultName)
         setIsSaving(true)
     }
@@ -87,7 +94,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             // 不再弹窗提示，体验更流畅
         } catch (error) {
             logError('保存预设失败:', error)
-            alert('保存预设失败')
+            alert(t('ui:presets.alerts.saveFailed'))
         }
     }
 
@@ -150,7 +157,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             }
         } catch (error) {
             logError('删除预设失败:', error)
-            alert('删除预设失败')
+            alert(t('ui:presets.alerts.deleteFailed'))
         } finally {
             setDeletingClosing(true)
             setTimeout(() => {
@@ -188,7 +195,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
 
     return (
         <PanelTrigger
-            display="预设"
+            display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
             buttonClassName="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-zinc-700/50 flex items-center text-sm"
@@ -209,7 +216,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                     {/* 顶部区域：快速保存或输入名称 */}
                     <div className="mb-4 space-y-2">
                         <div className="text-xs text-zinc-400 mb-2">
-                            {isSaving ? '输入名称以保存' : '快速保存'}
+                            {isSaving ? t('ui:presets.inputNameToSave') : t('ui:presets.quickSave')}
                         </div>
 
                         <div className="h-[60px] relative">
@@ -222,7 +229,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     type="text"
                                     value={presetName}
                                     onChange={(e) => setPresetName(e.target.value)}
-                                    placeholder="输入预设名称"
+                                    placeholder={t('ui:presets.placeholders.name')}
                                     className="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 text-sm"
                                     // 只有在显示时才自动聚焦，避免未显示时抢焦点
                                     ref={(input) => {
@@ -244,13 +251,13 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                     disabled={!presetName.trim()}
                                     className="px-3 py-2 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-xs whitespace-nowrap"
                                 >
-                                    确定
+                                    {t('common:confirm')}
                                 </button>
                                 <button
                                     onClick={handleCancelSave}
                                     className="px-3 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg transition-all duration-300 text-xs whitespace-nowrap"
                                 >
-                                    取消
+                                    {t('common:cancel')}
                                 </button>
                             </div>
 
@@ -262,26 +269,26 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                 <button
                                     onClick={() => handleQuickSave('prompt')}
                                     className="px-3 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300 text-xs flex flex-col items-center gap-1 justify-center"
-                                    title="仅保存提示词和模型"
+                                    title={t('ui:presets.saveMode.prompt.title')}
                                 >
                                     <span className="text-base">💾</span>
-                                    <span>仅提示词</span>
+                                    <span>{t('ui:presets.saveMode.prompt.label')}</span>
                                 </button>
                                 <button
                                     onClick={() => handleQuickSave('prompt-image')}
                                     className="px-3 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300 text-xs flex flex-col items-center gap-1 justify-center"
-                                    title="保存提示词、图片和模型"
+                                    title={t('ui:presets.saveMode.promptImage.title')}
                                 >
                                     <span className="text-base">📦</span>
-                                    <span>提示+图片</span>
+                                    <span>{t('ui:presets.saveMode.promptImage.label')}</span>
                                 </button>
                                 <button
                                     onClick={() => handleQuickSave('full')}
                                     className="px-3 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300 text-xs flex flex-col items-center gap-1 justify-center"
-                                    title="保存完整配置"
+                                    title={t('ui:presets.saveMode.full.title')}
                                 >
                                     <span className="text-base">🔧</span>
-                                    <span>完整配置</span>
+                                    <span>{t('ui:presets.saveMode.full.label')}</span>
                                 </button>
                             </div>
                         </div>
@@ -293,12 +300,12 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                     {/* 预设列表 */}
                     <div className="flex-1 overflow-y-auto">
                         <div className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
-                            <span>我的预设 ({presets.length})</span>
+                            <span>{t('ui:presets.myPresets', { count: presets.length })}</span>
                         </div>
 
                         {presets.length === 0 ? (
                             <div className="text-center text-zinc-500 text-sm py-8">
-                                暂无预设，快速保存一个吧！
+                                {t('ui:presets.empty')}
                             </div>
                         ) : (
                             <div className="space-y-2">
@@ -334,7 +341,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                     onClick={(e) => handleDeleteClick(preset.id, e)}
                                                     onMouseDown={(e) => e.stopPropagation()}
                                                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all duration-200"
-                                                    title="删除预设"
+                                                    title={t('ui:presets.deleteTitle')}
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -361,7 +368,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                             >
                                                 <div className="delete-confirm-dialog bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl p-3 w-[200px]">
                                                     <div className="text-sm text-white mb-3">
-                                                        确定删除预设？
+                                                        {t('ui:presets.confirmDelete')}
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <button
@@ -372,7 +379,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                             onMouseDown={(e) => e.stopPropagation()}
                                                             className="flex-1 px-3 py-1.5 bg-red-600/80 hover:bg-red-600 rounded text-xs text-white transition-colors duration-200"
                                                         >
-                                                            删除
+                                                            {t('common:delete')}
                                                         </button>
                                                         <button
                                                             onClick={(e) => {
@@ -386,7 +393,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                             onMouseDown={(e) => e.stopPropagation()}
                                                             className="flex-1 px-3 py-1.5 bg-zinc-700/80 hover:bg-zinc-600 rounded text-xs text-white transition-colors duration-200"
                                                         >
-                                                            取消
+                                                            {t('common:cancel')}
                                                         </button>
                                                     </div>
                                                 </div>

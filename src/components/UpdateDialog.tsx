@@ -8,6 +8,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { ReleaseInfo, formatReleaseDate } from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
 import { logError } from '../utils/errorLogger'
+import { useI18n } from '@/hooks/useI18n'
 
 interface UpdateDialogProps {
   releaseInfo: ReleaseInfo
@@ -16,6 +17,7 @@ interface UpdateDialogProps {
 }
 
 const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion, onClose }) => {
+  const { t } = useI18n('ui')
   const [dialogOpacity, setDialogOpacity] = useState(0)
 
   useEffect(() => {
@@ -48,7 +50,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
   // 解析更新说明（Markdown 格式）
   const renderReleaseNotes = () => {
     if (!releaseInfo.body) {
-      return <p className="text-zinc-400 text-sm">暂无更新说明</p>
+      return <p className="text-zinc-400 text-sm">{t('updateDialog.noNotes')}</p>
     }
 
     // 简单的 Markdown 解析（支持标题、列表、粗体）
@@ -139,20 +141,20 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
                   />
                 </svg>
                 <div>
-                  <h2 className="text-xl font-bold text-white">发现新版本</h2>
+                  <h2 className="text-xl font-bold text-white">{t('updateDialog.title')}</h2>
                   <p className="text-sm text-zinc-400 mt-1">
-                    {releaseInfo.name || `版本 ${releaseInfo.version}`}
+                    {releaseInfo.name || t('updateDialog.versionFallback', { version: releaseInfo.version })}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-xs text-zinc-500 mt-3">
                 <span className="flex items-center gap-1">
-                  <span className="text-zinc-400">当前版本:</span>
+                  <span className="text-zinc-400">{t('updateDialog.currentVersionLabel')}</span>
                   <span className="font-mono text-zinc-300">{currentVersion}</span>
                 </span>
                 <span className="text-zinc-600">→</span>
                 <span className="flex items-center gap-1">
-                  <span className="text-zinc-400">最新版本:</span>
+                  <span className="text-zinc-400">{t('updateDialog.latestVersionLabel')}</span>
                   <span className="font-mono text-[#007eff]">{releaseInfo.version}</span>
                 </span>
                 <span className="text-zinc-600">•</span>
@@ -184,7 +186,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
         {/* 更新说明 */}
         <div className="p-6 max-h-[400px] overflow-y-auto custom-scrollbar">
           <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-            更新内容
+            {t('updateDialog.notesTitle')}
           </h3>
           {renderReleaseNotes()}
         </div>
@@ -195,19 +197,19 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             onClick={handleIgnore}
             className="px-5 py-2.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg transition-all duration-300 text-sm font-medium"
           >
-            跳过此版本
+            {t('updateDialog.actions.skip')}
           </button>
           <button
             onClick={handleClose}
             className="px-5 py-2.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg transition-all duration-300 text-sm font-medium"
           >
-            稍后提醒
+            {t('updateDialog.actions.remindLater')}
           </button>
           <button
             onClick={handleUpdate}
             className="px-5 py-2.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 text-sm font-medium shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
           >
-            立即更新
+            {t('updateDialog.actions.updateNow')}
           </button>
         </div>
       </div>

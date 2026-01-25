@@ -1,19 +1,21 @@
 import React from 'react'
 import { useSettings } from '../hooks/useSettings'
 import SettingItem from '../components/SettingItem'
+import { useI18n } from '@/hooks/useI18n'
 
 const GeneralTab: React.FC = () => {
+  const { t } = useI18n('settings')
   const { settings, updateSetting } = useSettings()
 
   return (
     <div className="p-6">
-      <h3 className="text-lg font-semibold text-white mb-2">通用设置</h3>
+      <h3 className="text-lg font-semibold text-white mb-2">{t('tabs.general.title')}</h3>
       <p className="text-sm text-zinc-400 mb-6">
-        配置应用的基本设置和行为。
+        {t('tabs.general.description')}
       </p>
 
       <div className="space-y-4">
-        <SettingItem label="历史记录数量" description="保留的最大历史记录数">
+        <SettingItem label={t('tabs.general.maxHistoryCount.label')} description={t('tabs.general.maxHistoryCount.description')}>
           <input
             type="number"
             value={settings.maxHistoryCount}
@@ -24,7 +26,7 @@ const GeneralTab: React.FC = () => {
           />
         </SettingItem>
 
-        <SettingItem label="显示价格估算">
+        <SettingItem label={t('tabs.general.showPriceEstimate.label')}>
           <label className="flex items-center cursor-pointer">
             <input
               type="checkbox"
@@ -32,11 +34,11 @@ const GeneralTab: React.FC = () => {
               onChange={(e) => updateSetting('showPriceEstimate', e.target.checked)}
               className="mr-2"
             />
-            <span className="text-sm text-zinc-300">在生成前显示预估价格</span>
+            <span className="text-sm text-zinc-300">{t('tabs.general.showPriceEstimate.description')}</span>
           </label>
         </SettingItem>
 
-        <SettingItem label="最大并发任务数" description="同时运行的最大任务数">
+        <SettingItem label={t('tabs.general.maxConcurrentTasks.label')} description={t('tabs.general.maxConcurrentTasks.description')}>
           <input
             type="number"
             value={settings.maxConcurrentTasks}

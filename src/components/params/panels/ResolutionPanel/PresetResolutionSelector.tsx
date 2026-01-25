@@ -18,11 +18,11 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
   onChange,
   options
 }) => {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('ui')
 
   return (
     <div className="preset-resolution-selector">
-      <label className="param-label">选择分辨率</label>
+      <label className="param-label">{t('resolutionPanel.qualityLabel')}</label>
       <div className="preset-resolution-grid">
         {options.map((option) => {
           const label = getI18nText(option.label, i18n.language)

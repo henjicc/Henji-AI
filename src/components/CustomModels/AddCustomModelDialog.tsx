@@ -3,6 +3,7 @@
  */
 
 import React, { useState } from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface AddCustomModelDialogProps {
   onAdd: (name: string, modelUrl: string, description?: string) => void
@@ -10,6 +11,7 @@ interface AddCustomModelDialogProps {
 }
 
 export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogProps) {
+  const { t } = useI18n('ui')
   const [name, setName] = useState('')
   const [modelUrl, setModelUrl] = useState('')
   const [description, setDescription] = useState('')
@@ -18,7 +20,7 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
     e.preventDefault()
 
     if (!name.trim() || !modelUrl.trim()) {
-      alert('请填写模型名称和 URL')
+      alert(t('customModels.validation.missingNameOrUrl'))
       return
     }
 
@@ -28,47 +30,47 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h3 className="text-lg font-bold mb-4">添加自定义模型</h3>
+        <h3 className="text-lg font-bold mb-4">{t('customModels.addModel')}</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">
-              模型名称 *
+              {t('customModels.name')} *
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border rounded"
-              placeholder="例如：我的自定义模型"
+              placeholder={t('customModels.placeholders.name')}
               required
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              ModelScope URL *
+              {t('customModels.url')} *
             </label>
             <input
               type="text"
               value={modelUrl}
               onChange={(e) => setModelUrl(e.target.value)}
               className="w-full px-3 py-2 border rounded"
-              placeholder="例如：damo/text-to-image-synthesis"
+              placeholder={t('customModels.placeholders.url')}
               required
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              描述（可选）
+              {t('customModels.descriptionOptional')}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 border rounded"
               rows={3}
-              placeholder="模型的简短描述"
+              placeholder={t('customModels.placeholders.description')}
             />
           </div>
 
@@ -78,13 +80,13 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
               onClick={onClose}
               className="px-4 py-2 border rounded hover:bg-gray-100"
             >
-              取消
+              {t('common:cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
-              添加
+              {t('customModels.add')}
             </button>
           </div>
         </form>

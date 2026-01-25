@@ -3,6 +3,7 @@ import TextInput from '@/components/ui/TextInput'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { open } from '@tauri-apps/plugin-shell'
 import { logError } from '../../../utils/errorLogger'
+import { useI18n } from '@/hooks/useI18n'
 
 interface CustomModel {
   id: string
@@ -18,6 +19,7 @@ interface ModelscopeCustomModelManagerProps {
 }
 
 const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> = ({ onModelsChange }) => {
+  const { t } = useI18n('ui')
   const [models, setModels] = useState<CustomModel[]>([])
   const [newModelId, setNewModelId] = useState('')
   const [newModelName, setNewModelName] = useState('')
@@ -92,13 +94,13 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
 
   const handleAdd = () => {
     if (!newModelId.trim() || !newModelName.trim()) {
-      showAlert('输入不完整', '请输入模型ID和名称', 'warning')
+      showAlert(t('modelscopeCustomModel.alerts.incomplete.title'), t('modelscopeCustomModel.alerts.incomplete.message'), 'warning')
       return
     }
 
     // 检查是否已存在
     if (models.some(m => m.id === newModelId.trim())) {
-      showAlert('模型已存在', '该模型ID已存在', 'warning')
+      showAlert(t('modelscopeCustomModel.alerts.duplicate.title'), t('modelscopeCustomModel.alerts.duplicate.message'), 'warning')
       return
     }
 
@@ -126,7 +128,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   }
 
   const handleDelete = (id: string) => {
-    if (confirm('确定要删除这个模型吗？')) {
+    if (confirm(t('modelscopeCustomModel.confirmDelete'))) {
       const newModels = models.filter(m => m.id !== id)
       saveModels(newModels)
     }
@@ -140,7 +142,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
 
   const handleSaveEdit = (id: string) => {
     if (!editName.trim()) {
-      showAlert('输入不完整', '名称不能为空', 'warning')
+      showAlert(t('modelscopeCustomModel.alerts.nameEmpty.title'), t('modelscopeCustomModel.alerts.nameEmpty.message'), 'warning')
       return
     }
 
@@ -171,14 +173,14 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       {/* 提示信息 */}
       <div className="mb-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
         <div className="text-xs text-blue-700 dark:text-blue-300">
-          支持图片生成和图片编辑，可在
+          {t('modelscopeCustomModel.tip.prefix')}
           <button
             onClick={handleOpenModelLibrary}
             className="mx-1 text-[#007eff] hover:underline font-medium"
           >
-            模型库
+            {t('modelscopeCustomModel.tip.library')}
           </button>
-          找到所有支持的模型
+          {t('modelscopeCustomModel.tip.suffix')}
         </div>
       </div>
 
@@ -191,12 +193,12 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          添加新模型
+          {t('modelscopeCustomModel.addNew')}
         </button>
       ) : (
         <div className="mb-3 p-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">添加新模型</div>
+            <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('modelscopeCustomModel.addNew')}</div>
             <button
               onClick={() => {
                 setIsAddingNew(false)
@@ -204,6 +206,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 setNewModelName('')
               }}
               className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              aria-label={t('common:close')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -212,23 +215,23 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           </div>
           <div className="flex flex-col gap-2">
             <TextInput
-              label="模型ID"
+              label={t('modelscopeCustomModel.form.modelId')}
               value={newModelId}
               onChange={setNewModelId}
-              placeholder="例如：black-forest-labs/FLUX.1-dev"
+              placeholder={t('modelscopeCustomModel.form.placeholders.modelId')}
               className="w-full"
               inputClassName="w-full text-sm"
             />
             <TextInput
-              label="显示名称"
+              label={t('modelscopeCustomModel.form.displayName')}
               value={newModelName}
               onChange={setNewModelName}
-              placeholder="例如：FLUX.1 Dev"
+              placeholder={t('modelscopeCustomModel.form.placeholders.displayName')}
               className="w-full"
               inputClassName="w-full text-sm"
             />
             <div className="flex flex-col gap-2">
-              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型</div>
+              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('modelscopeCustomModel.form.modelType')}</div>
               <div className="flex gap-2">
                 <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                   <div className="relative flex items-center justify-center">
@@ -241,7 +244,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                     />
                     <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                   </div>
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片生成</span>
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">{t('modelscopeCustomModel.types.imageGeneration')}</span>
                 </label>
                 <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                   <div className="relative flex items-center justify-center">
@@ -254,7 +257,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                     />
                     <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                   </div>
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片编辑</span>
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">{t('modelscopeCustomModel.types.imageEditing')}</span>
                 </label>
               </div>
             </div>
@@ -263,7 +266,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 onClick={handleAdd}
                 className="flex-1 px-4 py-2 bg-[#007eff] text-white text-sm rounded hover:bg-[#0066cc] transition-colors"
               >
-                确认添加
+                {t('modelscopeCustomModel.actions.confirmAdd')}
               </button>
               <button
                 onClick={() => {
@@ -274,7 +277,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 }}
                 className="px-4 py-2 bg-zinc-300 dark:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-sm rounded hover:bg-zinc-400 dark:hover:bg-zinc-500 transition-colors"
               >
-                取消
+                {t('common:cancel')}
               </button>
             </div>
           </div>
@@ -285,7 +288,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       <div className="flex-1 overflow-y-auto">
         {models.length === 0 ? (
           <div className="text-center text-sm text-zinc-400 py-8">
-            暂无自定义模型
+            {t('modelscopeCustomModel.empty')}
           </div>
         ) : (
           <div className="space-y-2">
@@ -297,18 +300,18 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 {editingId === model.id ? (
                   // 编辑模式
                   <div className="flex flex-col gap-2">
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
-                      模型ID: {model.id}
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
+                      {t('modelscopeCustomModel.form.modelId')}: {model.id}
                     </div>
                     <TextInput
-                      label="显示名称"
+                      label={t('modelscopeCustomModel.form.displayName')}
                       value={editName}
                       onChange={setEditName}
                       className="w-full"
                       inputClassName="w-full text-sm"
                     />
                     <div className="flex flex-col gap-2">
-                      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">模型类型</div>
+                      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('modelscopeCustomModel.form.modelType')}</div>
                       <div className="flex gap-2">
                         <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                           <div className="relative flex items-center justify-center">
@@ -321,7 +324,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                             />
                             <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                           </div>
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片生成</span>
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">{t('modelscopeCustomModel.types.imageGeneration')}</span>
                         </label>
                         <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 cursor-pointer transition-all hover:border-[#007eff]/50 dark:hover:border-[#007eff]/50 has-[:checked]:border-[#007eff] has-[:checked]:bg-[#007eff]/5 dark:has-[:checked]:bg-[#007eff]/10">
                           <div className="relative flex items-center justify-center">
@@ -334,7 +337,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                             />
                             <div className="absolute w-2 h-2 rounded-full bg-white pointer-events-none hidden peer-checked:block"></div>
                           </div>
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">图片编辑</span>
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300 select-none">{t('modelscopeCustomModel.types.imageEditing')}</span>
                         </label>
                       </div>
                     </div>
@@ -343,13 +346,13 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         onClick={() => handleSaveEdit(model.id)}
                         className="flex-1 px-3 py-1.5 bg-[#007eff] text-white text-xs rounded hover:bg-[#0066cc] transition-colors"
                       >
-                        保存
+                        {t('common:save')}
                       </button>
                       <button
                         onClick={handleCancelEdit}
                         className="flex-1 px-3 py-1.5 bg-zinc-300 dark:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-xs rounded hover:bg-zinc-400 dark:hover:bg-zinc-500 transition-colors"
                       >
-                        取消
+                        {t('common:cancel')}
                       </button>
                     </div>
                   </div>
@@ -366,12 +369,12 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       <div className="flex gap-2 mt-1.5">
                         {model.modelType.imageGeneration && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                            图片生成
+                            {t('modelscopeCustomModel.types.imageGeneration')}
                           </span>
                         )}
                         {model.modelType.imageEditing && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-                            图片编辑
+                            {t('modelscopeCustomModel.types.imageEditing')}
                           </span>
                         )}
                       </div>
@@ -380,16 +383,16 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       <button
                         onClick={() => handleStartEdit(model)}
                         className="px-2.5 py-1 text-xs text-[#007eff] hover:bg-[#007eff]/10 rounded transition-colors"
-                        title="编辑"
+                        title={t('common:edit')}
                       >
-                        编辑
+                        {t('common:edit')}
                       </button>
                       <button
                         onClick={() => handleDelete(model.id)}
                         className="px-2.5 py-1 text-xs text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                        title="删除模型"
+                        title={t('modelscopeCustomModel.actions.deleteTitle')}
                       >
-                        删除
+                        {t('common:delete')}
                       </button>
                     </div>
                   </div>

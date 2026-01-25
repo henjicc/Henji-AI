@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useEffect } from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface AudioPlayerProps {
   audioUrl: string
@@ -38,6 +39,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   onDownload,
   title
 }) => {
+  const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -87,12 +89,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <span className="audio-title">{title}</span>
           <div className="audio-actions">
             {onDownload && (
-              <button className="audio-btn" onClick={onDownload} title="下载">
+              <button className="audio-btn" onClick={onDownload} title={t('common:actions.download')}>
                 ⬇️
               </button>
             )}
             {onClose && (
-              <button className="audio-btn" onClick={onClose} title="关闭">
+              <button className="audio-btn" onClick={onClose} title={t('common:close')}>
                 ×
               </button>
             )}

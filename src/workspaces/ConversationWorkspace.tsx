@@ -32,6 +32,7 @@ import { ImageEditor, ImageEditState } from '../components/ImageEditor'
 import { saveEditState, loadEditState, deleteEditState } from '../utils/editStatePersistence'
 import { registry } from '@/core/ModelRegistry'
 import { databaseService } from '../services/database/DatabaseService'
+import { useI18n } from '@/hooks/useI18n'
 
 /**
  * 格式化模型显示名称
@@ -67,6 +68,7 @@ interface GenerationTask {
 }
 
 const ConversationWorkspace: React.FC = () => {
+  const { t } = useI18n()
   const { startDrag } = useDragDrop()
   const isDraggingRef = useRef(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -3066,13 +3068,13 @@ const ConversationWorkspace: React.FC = () => {
             {tasks.length > 0 ? (
               <>
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-bold">生成历史</h2>
+                  <h2 className="text-xl font-bold">{t('history:title')}</h2>
                   {false && (
                     <button
                       onClick={() => setIsConfirmClearOpen(true)}
                       className="h-8 px-3 inline-flex items-center justify-center bg-red-600/60 hover:bg-red-600/80 rounded-md text-sm leading-none transition-colors"
                     >
-                      清除历史
+                      {t('history:clear')}
                     </button>
                   )}
                 </div>
@@ -3099,7 +3101,7 @@ const ConversationWorkspace: React.FC = () => {
                                 >
                                   <img
                                     src={image}
-                                    alt={`Input ${index + 1}`}
+                                    alt={t('ui:workspace.inputImageAlt', { index: index + 1 })}
                                     className="w-full h-full object-cover rounded select-none"
                                     onMouseDown={(e) => {
                                       e.stopPropagation()
@@ -3226,7 +3228,7 @@ const ConversationWorkspace: React.FC = () => {
                                   }
                                 }}
                                 className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
-                                title="下载"
+                                title={t('common:actions.download')}
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -3236,7 +3238,7 @@ const ConversationWorkspace: React.FC = () => {
                             <button
                               onClick={() => handleRegenerate(task)}
                               className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
-                              title="重新生成"
+                              title={t('ui:workspace.actions.regenerate')}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -3245,7 +3247,7 @@ const ConversationWorkspace: React.FC = () => {
                             <button
                               onClick={() => handleReedit(task)}
                               className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
-                              title="重新编辑"
+                              title={t('ui:workspace.actions.reedit')}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -3254,7 +3256,7 @@ const ConversationWorkspace: React.FC = () => {
                             <button
                               onClick={() => deleteTask(task.id)}
                               className="p-2 bg-red-700/50 hover:bg-red-600/50 rounded-lg transition-all duration-300"
-                              title="删除"
+                              title={t('common:delete')}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -3274,8 +3276,8 @@ const ConversationWorkspace: React.FC = () => {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               </div>
-                              <p className="text-blue-400 font-medium">排队中...</p>
-                              <p className="text-zinc-400 text-sm mt-2">等待上一个任务完成</p>
+                              <p className="text-blue-400 font-medium">{t('ui:workspace.status.queued')}</p>
+                              <p className="text-zinc-400 text-sm mt-2">{t('ui:workspace.status.waiting')}</p>
                             </div>
                           </div>
                         )}
@@ -3284,7 +3286,7 @@ const ConversationWorkspace: React.FC = () => {
                           <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-2"></div>
-                              <p className="text-zinc-400">准备生成...</p>
+                              <p className="text-zinc-400">{t('ui:workspace.status.preparing')}</p>
                             </div>
                           </div>
                         )}
@@ -3293,7 +3295,7 @@ const ConversationWorkspace: React.FC = () => {
                           <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
                             <div className="text-center w-full px-6">
                               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3"></div>
-                              <p className="text-zinc-400 mb-3">生成中...</p>
+                              <p className="text-zinc-400 mb-3">{t('ui:workspace.status.generating')}</p>
                               {(() => {
                                 const progressValue = taskProgress[task.id] ?? task.progress
                                 if (progressValue === undefined) return null
@@ -3317,8 +3319,8 @@ const ConversationWorkspace: React.FC = () => {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               </div>
-                              <p className="text-yellow-400 mb-2 font-medium">{task.message || '等待超时，任务依然在处理中'}</p>
-                              <p className="text-zinc-400 text-sm">任务可能仍在处理中，建议稍后重新生成或刷新任务状态</p>
+                              <p className="text-yellow-400 mb-2 font-medium">{task.message || t('ui:workspace.status.timeout')}</p>
+                              <p className="text-zinc-400 text-sm">{t('ui:workspace.status.timeoutHint')}</p>
                             </div>
                           </div>
                         )}
@@ -3620,8 +3622,8 @@ const ConversationWorkspace: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" style={{ opacity: confirmOpacity, transition: 'opacity 180ms ease' }} onClick={() => { setConfirmOpacity(0); setNeedsClearAllConfirm(false); setTimeout(() => setIsConfirmClearOpen(false), 180) }} />
           <div className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl" style={{ opacity: confirmOpacity, transform: `scale(${0.97 + 0.03 * confirmOpacity})`, transition: 'opacity 180ms ease, transform 180ms ease' }}>
-            <div className="text-white text-base">清除历史记录</div>
-            <div className="text-zinc-300 text-sm mt-2">请选择要执行的操作</div>
+            <div className="text-white text-base">{t('ui:workspace.clearDialog.title')}</div>
+            <div className="text-zinc-300 text-sm mt-2">{t('ui:workspace.clearDialog.subtitle')}</div>
             <div className="mt-4 flex flex-col gap-2">
               <button
                 onClick={async () => { await clearFailedHistory(); setConfirmOpacity(0); setNeedsClearAllConfirm(false); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
@@ -3630,7 +3632,7 @@ const ConversationWorkspace: React.FC = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                仅删除失败的记录
+                {t('ui:workspace.clearDialog.failedOnly')}
               </button>
               <button
                 onClick={async () => {
@@ -3653,13 +3655,13 @@ const ConversationWorkspace: React.FC = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                {needsClearAllConfirm ? '再次点击确认删除' : '清除所有历史记录'}
+                {needsClearAllConfirm ? t('ui:workspace.clearDialog.confirmDelete') : t('ui:workspace.clearDialog.deleteAll')}
               </button>
               <button
                 onClick={() => { setConfirmOpacity(0); setNeedsClearAllConfirm(false); setTimeout(() => setIsConfirmClearOpen(false), 180) }}
                 className="h-9 px-3 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-zinc-600/60 text-sm transition-colors"
               >
-                取消
+                {t('common:cancel')}
               </button>
             </div>
           </div>
@@ -4069,7 +4071,7 @@ const ConversationWorkspace: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                {isBuffering && (<div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-300">缓冲中...</div>)}
+                {isBuffering && (<div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-300">{t('ui:workspace.status.buffering')}</div>)}
               </div>
             </div>
           </div>

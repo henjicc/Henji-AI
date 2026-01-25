@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useCallback } from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 export interface CustomSizeInputProps {
   value: { width: number; height: number }
@@ -27,6 +28,7 @@ export const CustomSizeInput: React.FC<CustomSizeInputProps> = ({
   lockRatio = false,
   disabled = false
 }) => {
+  const { t } = useI18n('ui')
   const [isRatioLocked, setIsRatioLocked] = useState(lockRatio)
   const [ratio, setRatio] = useState(value.width / value.height)
 
@@ -58,7 +60,7 @@ export const CustomSizeInput: React.FC<CustomSizeInputProps> = ({
 
   return (
     <div className="custom-size-input">
-      <label className="param-label">尺寸</label>
+      <label className="param-label">{t('resolutionPanel.sizeLabel')}</label>
       <div className="custom-size-controls">
         <input
           type="number"

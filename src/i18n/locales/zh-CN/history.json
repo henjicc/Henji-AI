@@ -6,5 +6,34 @@
   "delete": "删除",
   "confirmDelete": "确定要删除这条记录吗？",
   "loadMore": "加载更多",
-  "noMore": "没有更多了"
+  "noMore": "没有更多了",
+  "migration": {
+    "title": "数据库迁移",
+    "notice": "检测到旧版本的历史记录文件，需要迁移到新的数据库格式。",
+    "willDo": "此操作将：",
+    "steps": {
+      "backup": "备份现有数据",
+      "cleanupBase64": "清理 Base64 数据以减小存储",
+      "migrateSqlite": "迁移到 SQLite 数据库",
+      "fasterQuery": "支持更快的查询和筛选"
+    },
+    "actions": {
+      "start": "开始迁移",
+      "migrating": "迁移中...",
+      "later": "稍后",
+      "done": "完成"
+    },
+    "result": {
+      "success": "✓ 迁移成功！",
+      "failed": "✗ 迁移失败"
+    },
+    "stats": {
+      "total": "总记录数: {{count}}",
+      "migrated": "成功迁移: {{count}}",
+      "skipped": "跳过记录: {{count}}",
+      "fileSize": "文件大小: {{original}} MB → {{current}} KB",
+      "saved": "节省空间: {{percent}}%",
+      "viewErrors": "查看错误 ({{count}})"
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import React, { Suspense, lazy } from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 // 懒加载工作区组件
 const ConversationWorkspace = lazy(() => import('../workspaces/ConversationWorkspace'))
@@ -10,11 +11,14 @@ interface TabContainerProps {
 }
 
 // Loading 占位组件
-const LoadingPlaceholder: React.FC = () => (
-    <div className="flex-1 flex items-center justify-center">
-        <div className="text-gray-400">加载中...</div>
-    </div>
-)
+const LoadingPlaceholder: React.FC = () => {
+    const { t } = useI18n()
+    return (
+        <div className="flex-1 flex items-center justify-center">
+            <div className="text-gray-400">{t('common:loading')}</div>
+        </div>
+    )
+}
 
 /**
  * Tab 工作区容器

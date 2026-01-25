@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import ModelscopeCustomModelManager from '@/components/MediaGenerator/components/ModelscopeCustomModelManager'
+import { useI18n } from '@/hooks/useI18n'
 
 interface CustomModelType {
   imageGeneration: boolean
@@ -69,6 +70,7 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
   value,
   onChange
 }) => {
+  const { t } = useI18n('ui')
   const [models, setModels] = useState<CustomModel[]>([])
 
   const refreshModels = useCallback(() => {
@@ -103,33 +105,35 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
 
   const options = useMemo(() => {
     if (models.length === 0) {
-      return [{ value: '', label: 'Add models first', disabled: true }]
+      return [{ value: '', label: t('modelscopeCustomModelPanel.empty'), disabled: true }]
     }
     return models.map(model => {
       const typeLabel = model.modelType.imageEditing
-        ? 'Image Edit'
-        : (model.modelType.imageGeneration ? 'Image Gen' : 'Unlabeled')
+        ? t('modelscopeCustomModelPanel.type.imageEditing')
+        : (model.modelType.imageGeneration ? t('modelscopeCustomModelPanel.type.imageGeneration') : t('modelscopeCustomModelPanel.type.unknown'))
       return {
         value: model.id,
         label: `${model.name} (${typeLabel})`
       }
     })
-  }, [models])
+  }, [models, t])
 
   const display = useMemo(() => {
     if (!value) {
-      return models.length === 0 ? 'Add models first' : 'Select a model'
+      return models.length === 0
+        ? t('modelscopeCustomModelPanel.empty')
+        : t('modelscopeCustomModelPanel.select')
     }
     if (selectedModel) {
       return selectedModel.name
     }
     return value
-  }, [models.length, selectedModel, value])
+  }, [models.length, selectedModel, t, value])
 
   return (
     <div className="flex flex-col h-full max-h-full overflow-hidden">
       <div className="px-4 pt-3 pb-2">
-        <div className="text-xs text-zinc-400 mb-2">Select custom model</div>
+        <div className="text-xs text-zinc-400 mb-2">{t('modelscopeCustomModelPanel.label')}</div>
         <Dropdown
           value={value || ''}
           display={display}
@@ -139,7 +143,7 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
         />
         {selectedModel && (
           <div className="mt-2 text-xs text-zinc-500">
-            <span className="text-zinc-400">Model ID:</span>
+            <span className="text-zinc-400">{t('modelscopeCustomModelPanel.modelIdLabel')}</span>
             <span className="break-all">{selectedModel.id}</span>
           </div>
         )}

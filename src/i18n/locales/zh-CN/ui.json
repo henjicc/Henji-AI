@@ -79,7 +79,63 @@
   },
   "presets": {
     "label": "预设",
-    "manage": "管理预设"
+    "manage": "管理预设",
+    "quickSave": "快速保存",
+    "inputNameToSave": "输入名称以保存",
+    "defaultName": "预设_{{month}}-{{day}}_{{hour}}:{{minute}}",
+    "placeholders": {
+      "name": "输入预设名称"
+    },
+    "saveMode": {
+      "prompt": {
+        "title": "仅保存提示词和模型",
+        "label": "仅提示词"
+      },
+      "promptImage": {
+        "title": "保存提示词、图片和模型",
+        "label": "提示+图片"
+      },
+      "full": {
+        "title": "保存完整配置",
+        "label": "完整配置"
+      }
+    },
+    "myPresets": "我的预设 ({{count}})",
+    "empty": "暂无预设，快速保存一个吧！",
+    "deleteTitle": "删除预设",
+    "confirmDelete": "确定删除预设？",
+    "alerts": {
+      "saveFailed": "保存预设失败",
+      "deleteFailed": "删除预设失败"
+    },
+    "create": {
+      "title": "创建预设",
+      "nameLabel": "预设名称",
+      "descriptionLabel": "描述（可选）",
+      "globalLabel": "全局预设（适用于所有模型）",
+      "globalHint": "只会保存通用参数（如提示词），不保存模型特定参数",
+      "modelHint": "只适用于当前模型（{{modelId}}）",
+      "saving": "保存中...",
+      "placeholders": {
+        "name": "输入预设名称",
+        "description": "描述预设用途"
+      }
+    },
+    "labels": {
+      "global": "全局",
+      "incompatible": "不兼容",
+      "allModels": "适用于所有模型",
+      "usageCount": "使用 {{count}} 次"
+    },
+    "actions": {
+      "favorite": "收藏",
+      "unfavorite": "取消收藏"
+    },
+    "manager": {
+      "title": "预设管理",
+      "create": "新建预设",
+      "empty": "暂无预设，点击\"新建预设\"创建第一个预设"
+    }
   },
   "resolutionPanel": {
     "label": "分辨率",
@@ -88,15 +144,19 @@
     "qualityLabel": "选择分辨率",
     "quality2k": "高清 2K",
     "quality4k": "超清 4K",
-    "sizeLabel": "尺寸"
+    "sizeLabel": "尺寸",
+    "aspectRatioShort": "比例",
+    "baseSizeLabel": "基数（正方形边长）",
+    "baseSizeHint": "推荐范围：{{min}}-{{max}} PX",
+    "sizeSelectLabel": "选择尺寸",
+    "qualitySelectLabel": "选择质量",
+    "customSizeLabel": "自定义尺寸"
   },
-
   "input": {
     "label": "提示词",
     "placeholder": "输入提示词...",
     "required": "提示词为必填项"
   },
-
   "customModels": {
     "title": "自定义模型管理",
     "add": "添加模型",
@@ -111,6 +171,273 @@
     "confirmDelete": "确定要删除此自定义模型吗？",
     "empty": "还没有添加自定义模型",
     "loading": "加载中...",
-    "addFailed": "添加失败"
+    "addFailed": "添加失败",
+    "descriptionOptional": "描述（可选）",
+    "placeholders": {
+      "name": "例如：我的自定义模型",
+      "url": "例如：damo/text-to-image-synthesis",
+      "description": "模型的简短描述"
+    },
+    "validation": {
+      "missingNameOrUrl": "请填写模型名称和 URL"
+    }
+  },
+  "audioPlayer": {
+    "volume": "音量",
+    "playPause": "播放/暂停"
+  },
+  "placeholders": {
+    "developing": "开发中……"
+  },
+  "debug": {
+    "paramFlow": {
+      "title": "参数流转追踪",
+      "modelLabel": "模型",
+      "exportJson": "导出 JSON",
+      "stage": {
+        "uiInput": "1. UI 输入",
+        "linkage": "2. 参数联动",
+        "transform": "3. 值转换",
+        "apiBuild": "4. API 请求"
+      },
+      "table": {
+        "param": "参数",
+        "value": "值",
+        "source": "来源/原因"
+      }
+    },
+    "export": {
+      "title": "导出类型",
+      "presetName": "自定义预设",
+      "type": {
+        "currentParams": "当前参数",
+        "modelConfig": "模型配置",
+        "modelSchema": "参数 Schema",
+        "apiRequest": "API 请求",
+        "preset": "预设格式"
+      },
+      "clean": {
+        "title": "清理选项",
+        "removeDefaults": "移除默认值",
+        "removeEmpty": "移除空值",
+        "removeSensitive": "移除敏感信息",
+        "removeBase64": "移除 Base64 数据"
+      },
+      "actions": {
+        "downloadJson": "下载 JSON",
+        "copy": "复制到剪贴板",
+        "copied": "已复制!"
+      }
+    }
+  },
+  "tabs": {
+    "conversation": "对话",
+    "canvas": "画布",
+    "tools": "工具箱"
+  },
+  "windowControls": {
+    "appName": "痕迹AI",
+    "close": "关闭",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "toggleMaximize": "最大化/还原"
+  },
+  "updateDialog": {
+    "title": "发现新版本",
+    "noNotes": "暂无更新说明",
+    "versionFallback": "版本 {{version}}",
+    "currentVersionLabel": "当前版本:",
+    "latestVersionLabel": "最新版本:",
+    "notesTitle": "更新内容",
+    "actions": {
+      "skip": "跳过此版本",
+      "remindLater": "稍后提醒",
+      "updateNow": "立即更新"
+    }
+  },
+  "viewer": {
+    "imageAlt": "图片"
+  },
+  "errorState": {
+    "title": "出错了",
+    "details": "查看详情"
+  },
+  "workspace": {
+    "inputImageAlt": "输入图像 {{index}}",
+    "actions": {
+      "regenerate": "重新生成",
+      "reedit": "重新编辑"
+    },
+    "status": {
+      "queued": "排队中...",
+      "waiting": "等待上一个任务完成",
+      "preparing": "准备生成...",
+      "generating": "生成中...",
+      "timeout": "等待超时，任务依然在处理中",
+      "timeoutHint": "任务可能仍在处理中，建议稍后重新生成或刷新任务状态",
+      "buffering": "缓冲中..."
+    },
+    "clearDialog": {
+      "title": "清除历史记录",
+      "subtitle": "请选择要执行的操作",
+      "failedOnly": "仅删除失败的记录",
+      "confirmDelete": "再次点击确认删除",
+      "deleteAll": "清除所有历史记录"
+    }
+  },
+  "workspaceToolbar": {
+    "filter": {
+      "all": "全部类型",
+      "image": "图片",
+      "video": "视频",
+      "audio": "音频"
+    },
+    "sort": {
+      "date": "按日期",
+      "name": "按名称",
+      "type": "按类型"
+    },
+    "view": {
+      "grid": "网格视图",
+      "list": "列表视图"
+    }
+  },
+  "testMode": {
+    "indicatorTitle": "点击打开测试面板 (Ctrl+Alt+Shift+T)",
+    "indicatorLabel": "测试模式",
+    "title": "测试模式",
+    "shortcutLabel": "快捷键:",
+    "enable": {
+      "title": "启用测试模式",
+      "description": "开启后可以使用测试功能，不影响正常使用"
+    },
+    "tabs": {
+      "options": "测试选项",
+      "export": "配置导出"
+    },
+    "options": {
+      "title": "测试选项",
+      "skipRequest": {
+        "title": "不发送实际请求",
+        "description": "点击生成时不会调用 API，仅输出参数"
+      },
+      "logParams": {
+        "title": "在控制台输出参数",
+        "description": "在浏览器控制台显示完整的请求参数"
+      },
+      "enableDevTools": {
+        "title": "允许 F12 打开控制台",
+        "description": "在构建版中按 F12 可以打开开发者工具（如果无效请尝试重启应用）"
+      },
+      "flowTracking": {
+        "title": "启用参数流转追踪",
+        "description": "追踪参数从 UI 输入到 API 请求的完整流程"
+      }
+    },
+    "flowTracking": {
+      "title": "参数流转追踪"
+    },
+    "lastParams": {
+      "title": "最后的请求参数",
+      "labels": {
+        "model": "模型:",
+        "type": "类型:",
+        "prompt": "提示词:",
+        "fullParams": "完整参数:"
+      }
+    },
+    "emptyHint": "点击生成按钮后，请求参数将显示在这里"
+  },
+  "imageEditor": {
+    "actions": {
+      "undo": "撤销",
+      "redo": "重做"
+    },
+    "textPlaceholder": "输入文字...",
+    "toolSettings": {
+      "color": "颜色",
+      "strokeWidth": "粗细",
+      "fontSize": "字号"
+    },
+    "propertyPanel": {
+      "title": "属性",
+      "brightness": "亮度",
+      "contrast": "对比度",
+      "saturation": "饱和度",
+      "scale": "缩放",
+      "rotation": "旋转"
+    },
+    "layerPanel": {
+      "title": "图层",
+      "addLayer": "添加图层",
+      "empty": "暂无图层",
+      "actions": {
+        "show": "显示",
+        "hide": "隐藏",
+        "lock": "锁定",
+        "unlock": "解锁"
+      }
+    },
+    "historyPanel": {
+      "title": "历史记录",
+      "empty": "暂无历史记录"
+    },
+    "filterPanel": {
+      "title": "滤镜",
+      "intensity": "强度",
+      "apply": "应用滤镜"
+    }
+  },
+  "modelscopeCustomModel": {
+    "tip": {
+      "prefix": "支持图片生成和图片编辑，可在",
+      "library": "模型库",
+      "suffix": "找到所有支持的模型"
+    },
+    "addNew": "添加新模型",
+    "form": {
+      "modelId": "模型ID",
+      "displayName": "显示名称",
+      "modelType": "模型类型",
+      "placeholders": {
+        "modelId": "例如：black-forest-labs/FLUX.1-dev",
+        "displayName": "例如：FLUX.1 Dev"
+      }
+    },
+    "types": {
+      "imageGeneration": "图片生成",
+      "imageEditing": "图片编辑"
+    },
+    "actions": {
+      "confirmAdd": "确认添加",
+      "deleteTitle": "删除模型"
+    },
+    "empty": "暂无自定义模型",
+    "confirmDelete": "确定要删除这个模型吗？",
+    "alerts": {
+      "incomplete": {
+        "title": "输入不完整",
+        "message": "请输入模型ID和名称"
+      },
+      "duplicate": {
+        "title": "模型已存在",
+        "message": "该模型ID已存在"
+      },
+      "nameEmpty": {
+        "title": "输入不完整",
+        "message": "名称不能为空"
+      }
+    }
+  },
+  "modelscopeCustomModelPanel": {
+    "label": "选择自定义模型",
+    "empty": "请先添加模型",
+    "select": "选择模型",
+    "modelIdLabel": "模型ID:",
+    "type": {
+      "imageGeneration": "图片生成",
+      "imageEditing": "图片编辑",
+      "unknown": "未标注"
+    }
   }
 }

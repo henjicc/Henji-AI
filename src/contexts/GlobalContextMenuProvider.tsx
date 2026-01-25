@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import ReactDOM from 'react-dom'
+import { useI18n } from '@/hooks/useI18n'
 
 interface MenuPosition {
   x: number
@@ -15,6 +16,7 @@ export const PASTE_IMAGE_EVENT = 'global-paste-image'
  * 对于提示词输入框（textarea），还支持粘贴图片
  */
 const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useI18n('common')
   const [menuVisible, setMenuVisible] = useState(false)
   const [menuPosition, setMenuPosition] = useState<MenuPosition>({ x: 0, y: 0 })
   const [targetElement, setTargetElement] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -249,7 +251,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
-            <span>粘贴</span>
+            <span>{t('actions.paste')}</span>
           </div>
         </div>,
         document.body

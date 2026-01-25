@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface ImageViewerProps {
   imageUrl: string
@@ -19,7 +20,7 @@ interface ImageViewerProps {
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({
   imageUrl,
-  alt = 'Image',
+  alt,
   onClose,
   onPrevious,
   onNext,
@@ -28,18 +29,20 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   onDownload,
   onEdit
 }) => {
+  const { t } = useI18n()
+  const altText = alt || t('ui:viewer.imageAlt')
   return (
     <div className="image-viewer-overlay" onClick={onClose}>
       <div className="image-viewer-container" onClick={(e) => e.stopPropagation()}>
         <div className="image-viewer-header">
           <div className="viewer-actions">
             {onDownload && (
-              <button className="viewer-btn" onClick={onDownload} title="下载">
+              <button className="viewer-btn" onClick={onDownload} title={t('common:actions.download')}>
                 ⬇️
               </button>
             )}
             {onEdit && (
-              <button className="viewer-btn" onClick={onEdit} title="编辑">
+              <button className="viewer-btn" onClick={onEdit} title={t('common:edit')}>
                 ✏️
               </button>
             )}
@@ -58,7 +61,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
 
           <img
             src={imageUrl}
-            alt={alt}
+            alt={altText}
             className="viewer-image"
           />
 

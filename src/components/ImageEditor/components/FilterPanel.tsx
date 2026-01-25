@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface Filter {
   id: string
@@ -31,16 +32,17 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   filterIntensity,
   onFilterIntensityChange
 }) => {
+  const { t } = useI18n('ui')
   return (
     <div className="filter-panel">
       <div className="panel-header">
-        <h3>滤镜</h3>
+        <h3>{t('imageEditor.filterPanel.title')}</h3>
         <button
           className="reset-btn"
           onClick={onFilterReset}
           disabled={!activeFilter}
         >
-          重置
+          {t('common:actions.reset')}
         </button>
       </div>
 
@@ -71,7 +73,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         {activeFilter && (
           <div className="filter-controls">
             <div className="control-group">
-              <label>强度</label>
+              <label>{t('imageEditor.filterPanel.intensity')}</label>
               <input
                 type="range"
                 min="0"
@@ -86,7 +88,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
               className="apply-btn primary"
               onClick={onFilterApply}
             >
-              应用滤镜
+              {t('imageEditor.filterPanel.apply')}
             </button>
           </div>
         )}

@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { useI18n } from '@/hooks/useI18n'
 
 interface Layer {
   id: string
@@ -39,11 +40,12 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
   onLayerDuplicate,
   onLayerReorder
 }) => {
+  const { t } = useI18n('ui')
   return (
     <div className="layer-panel">
       <div className="panel-header">
-        <h3>图层</h3>
-        <button className="add-layer-btn" onClick={onLayerAdd} title="添加图层">
+        <h3>{t('imageEditor.layerPanel.title')}</h3>
+        <button className="add-layer-btn" onClick={onLayerAdd} title={t('imageEditor.layerPanel.addLayer')}>
           +
         </button>
       </div>
@@ -51,7 +53,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
       <div className="panel-content">
         {layers.length === 0 ? (
           <div className="layers-empty">
-            暂无图层
+            {t('imageEditor.layerPanel.empty')}
           </div>
         ) : (
           <div className="layers-list">
@@ -78,7 +80,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                         e.stopPropagation()
                         onLayerVisibilityToggle(layer.id)
                       }}
-                      title={layer.visible ? '隐藏' : '显示'}
+                      title={layer.visible ? t('imageEditor.layerPanel.actions.hide') : t('imageEditor.layerPanel.actions.show')}
                     >
                       {layer.visible ? '👁' : '👁‍🗨'}
                     </button>
@@ -89,7 +91,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                         e.stopPropagation()
                         onLayerLockToggle(layer.id)
                       }}
-                      title={layer.locked ? '解锁' : '锁定'}
+                      title={layer.locked ? t('imageEditor.layerPanel.actions.unlock') : t('imageEditor.layerPanel.actions.lock')}
                     >
                       {layer.locked ? '🔒' : '🔓'}
                     </button>
@@ -103,7 +105,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                       e.stopPropagation()
                       onLayerDuplicate(layer.id)
                     }}
-                    title="复制"
+                    title={t('common:actions.copy')}
                   >
                     📋
                   </button>
@@ -113,7 +115,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                       e.stopPropagation()
                       onLayerRemove(layer.id)
                     }}
-                    title="删除"
+                    title={t('common:delete')}
                     disabled={layers.length === 1}
                   >
                     🗑️
