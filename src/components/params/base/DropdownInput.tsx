@@ -14,8 +14,8 @@ import Dropdown from '@/components/ui/Dropdown'
 
 interface DropdownInputProps {
   param: DropdownParamDef
-  value: string
-  onChange: (value: string) => void
+  value: string | number
+  onChange: (value: string | number) => void
   disabled?: boolean
 }
 

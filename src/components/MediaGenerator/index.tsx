@@ -32,6 +32,7 @@ interface MediaGeneratorProps {
   isGenerating?: boolean
   onSetUploadedImagesRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
+  onStateChange?: (state: { modelId: string; prompt: string }) => void
 }
 
 interface ReEditEventDetail {
@@ -58,7 +59,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   onImageClick,
   isGenerating,
   onSetUploadedImagesRef,
-  onSetUploadedFilePathsRef
+  onSetUploadedFilePathsRef,
+  onStateChange
 }) => {
   // 1. UI 状态管理
   const uiState = useUIState()
@@ -171,6 +173,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       onSetUploadedFilePathsRef(uiState.setUploadedFilePaths)
     }
   }, [onSetUploadedFilePathsRef, uiState.setUploadedFilePaths])
+
+  useEffect(() => {
+    if (!onStateChange) return
+    onStateChange({ modelId: uiState.selectedModel, prompt: uiState.input })
+  }, [onStateChange, uiState.selectedModel, uiState.input])
 
   // 7. 监听全局右键菜单的图片粘贴事件
   useEffect(() => {
@@ -288,7 +295,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         }
       } else if (videos && Array.isArray(videos) && videos.length > 0) {
         // 旧逻辑回退：如果没有 uploadedVideoFilePaths，尝试使用 videos (可能是 base64 缩略图或者 URL)
-        logInfo('[MediaGenerator] Restoring videos from legacy videos array')
+        logInfo('[MediaGenerator] Restoring videos from legacy videos array', {})
         uiState.setUploadedVideos(videos)
         // 清空其他相关状态以保持一致性
         uiState.setUploadedVideoFilePaths([])

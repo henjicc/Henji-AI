@@ -6,7 +6,8 @@
 interface Filterable {
   type?: string
   status?: string
-  [key: string]: any
+  createdAt?: number
+  [key: string]: unknown
 }
 
 /**
@@ -38,7 +39,7 @@ export function filterByStatus<T extends Filterable>(
 /**
  * 按关键词搜索
  */
-export function searchItems<T extends Record<string, any>>(
+export function searchItems<T extends Record<string, unknown>>(
   items: T[],
   keyword: string,
   searchFields: (keyof T)[]

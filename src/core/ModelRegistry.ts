@@ -385,7 +385,7 @@ export class ModelRegistry {
    * // 返回: '/fal-ai/image-to-image' 或 '/fal-ai/text-to-image'
    * ```
    */
-  selectEndpoint(modelId: string, params: Record<string, any>): string | undefined {
+  async selectEndpoint(modelId: string, params: Record<string, any>): Promise<string | undefined> {
     const model = this.models.get(modelId)
     if (!model) {
       console.warn(`Model not found: ${modelId}`)
@@ -404,7 +404,8 @@ export class ModelRegistry {
       if (typeof endpoints === 'object') {
         // 2.1 使用 selector 函数
         if (endpoints.selector) {
-          const selectorResult = endpoints.selector(params)
+          const selectorResultRaw = endpoints.selector(params)
+          const selectorResult = selectorResultRaw instanceof Promise ? await selectorResultRaw : selectorResultRaw
 
           console.log(`[ModelRegistry.selectEndpoint] Model: ${modelId}, selector returned: "${selectorResult}"`)
 

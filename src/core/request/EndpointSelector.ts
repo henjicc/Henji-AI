@@ -79,15 +79,10 @@ export class EndpointSelector {
    * // { endpoint: 'reference-to-video', route: { path: '/v2v', method: 'POST' } }
    * ```
    */
-  select(params: Record<string, any>, context: SelectContext): SelectResult {
-    const endpointKey = this.selectEndpoint(params, context)
-    const route = this.getRoute(endpointKey)
-
-    if (!route) {
-      throw new Error(`[EndpointSelector] Endpoint route not found: ${endpointKey}`)
-    }
-
-    return { endpoint: endpointKey, route }
+  async select(params: Record<string, any>, context: SelectContext): Promise<SelectResult> {
+    const endpoint = await this.selectEndpoint(params, context)
+    const route = this.getRoute(endpoint)
+    return { endpoint, route }
   }
 
   /**
@@ -97,73 +92,43 @@ export class EndpointSelector {
    * @param context - 选择上下文
    * @returns 端点键
    */
-  private selectEndpoint(params: Record<string, any>, context: SelectContext): string {
-    // 1. 单端点简化配置
-    if (typeof this.config === 'object' && 'default' in this.config && typeof this.config.default === 'string') {
-      return 'default'
+  private async selectEndpoint(params: Record<string, any>, context: SelectContext): Promise<string> {
+    // 1) Fixed endpoint
+    if (typeof this.config === 'string') {
+      return this.config
     }
 
-    // 2. 函数选择器
-    if (typeof this.config === 'object' && 'select' in this.config && typeof this.config.select === 'function') {
-      const result = this.config.select(params, context)
+    // 2) Function selector
+    if (typeof this.config === 'object' && this.config.selector) {
+      const resultRaw = this.config.selector(params)
+      const result = resultRaw instanceof Promise ? await resultRaw : resultRaw
       if (!result) {
-        throw new Error('[EndpointSelector] Function selector returned null/undefined')
+        throw new Error('[EndpointSelector] selector returned null/undefined')
       }
       return result
     }
 
-    // 3. 规则选择器
-    if (typeof this.config === 'object' && 'select' in this.config && this.config.select && typeof this.config.select === 'object' && 'rules' in this.config.select) {
-      const rules = (this.config.select as any).rules
-      for (const rule of rules) {
-        // 无条件规则（默认端点）
-        if (!rule.condition) {
-          return rule.endpoint
-        }
-
-        // 有条件规则
-        if (this.evaluateCondition(rule.condition, params, context)) {
-          return rule.endpoint
-        }
+    // 3) Rule selection
+    if (typeof this.config === 'object' && this.config.rules) {
+      for (const rule of this.config.rules) {
+        if (!rule.when) return rule.endpoint
+        if (this.matchesWhen(rule.when, params, context)) return rule.endpoint
       }
+    }
+
+    // 4) Default endpoint
+    if (typeof this.config === 'object' && typeof this.config.default === 'string') {
+      return this.config.default
     }
 
     throw new Error('[EndpointSelector] No endpoint matched')
   }
 
-  /**
-   * 求值条件表达式
-   *
-   * @param condition - 条件表达式字符串
-   * @param params - 参数对象
-   * @param context - 选择上下文
-   * @returns 条件是否满足
-   */
-  private evaluateCondition(
-    condition: string,
-    params: Record<string, any>,
-    context: SelectContext
-  ): boolean {
-    try {
-      // 创建安全的求值环境
-      // 使用 with 语句允许直接访问 params 和 context 中的属性
-      const fn = new Function(
-        'params',
-        'context',
-        `
-        with (params) {
-          with (context) {
-            return ${condition}
-          }
-        }
-      `
-      )
-      return Boolean(fn(params, context))
-    } catch (error) {
-      console.error('[EndpointSelector] Condition evaluation error:', error)
-      console.error('[EndpointSelector] Condition:', condition)
-      return false
-    }
+  private matchesWhen(when: Record<string, any>, params: Record<string, any>, context: SelectContext): boolean {
+    return Object.entries(when).every(([key, expected]) => {
+      const value = key in params ? params[key] : context[key]
+      return value === expected
+    })
   }
 
   /**
@@ -172,17 +137,7 @@ export class EndpointSelector {
    * @param endpointKey - 端点键
    * @returns 路由定义
    */
-  private getRoute(endpointKey: string): { path: string; method?: string } | undefined {
-    // 单端点简化配置
-    if (typeof this.config === 'object' && 'default' in this.config && typeof this.config.default === 'string') {
-      return { path: this.config.default, method: 'POST' }
-    }
-
-    // 多端点配置
-    if (typeof this.config === 'object' && 'routes' in this.config && this.config.routes) {
-      return (this.config.routes as any)[endpointKey]
-    }
-
-    return undefined
+  private getRoute(endpoint: string): { path: string; method?: string } {
+    return { path: endpoint, method: 'POST' }
   }
 }

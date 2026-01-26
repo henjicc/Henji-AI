@@ -5,6 +5,7 @@
  */
 
 import { registry } from '../ModelRegistry'
+import { getI18nText } from '../types/I18nText'
 import type { ModelDefinition } from '../types'
 
 /**
@@ -121,17 +122,17 @@ export function listLoadedModels(): void {
   const models = registry.listAllModels()
 
   console.log(`[ModelLoader] 📋 Total Models: ${models.length}`)
-  console.table(
-    models.map((m) => ({
-      ID: m.meta.id,
-      Provider: m.meta.provider,
-      Type: m.meta.type,
-      Name: typeof m.meta.name === 'string' ? m.meta.name : m.meta.name.zh || m.meta.name.en,
-      Params: m.params.length,
-      Linkages: m.linkages?.length || 0,
-      Tags: m.meta.tags?.join(', ') || '-'
-    }))
-  )
+    console.table(
+      models.map((m) => ({
+        ID: m.meta.id,
+        Provider: m.meta.provider,
+        Type: m.meta.type,
+        Name: getI18nText(m.meta.name, 'zh'),
+        Params: m.params.length,
+        Linkages: m.linkages?.length || 0,
+        Tags: m.meta.tags?.join(', ') || '-'
+      }))
+    )
 }
 
 /**

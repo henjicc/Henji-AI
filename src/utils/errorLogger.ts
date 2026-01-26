@@ -150,9 +150,9 @@ export function logError(prefix: string, error: any): void {
  * 安全地输出警告到控制台
  * 开发环境始终输出，生产环境仅在测试模式启用时输出
  */
-export function logWarning(prefix: string, data: any): void {
+export function logWarning(prefix: string, data?: unknown): void {
   if (!shouldLog()) return
-  const sanitized = sanitizeObject(data)
+  const sanitized = sanitizeObject(data ?? {})
   console.warn(prefix, sanitized)
 }
 
@@ -160,8 +160,8 @@ export function logWarning(prefix: string, data: any): void {
  * 安全地输出日志到控制台
  * 开发环境始终输出，生产环境仅在测试模式启用时输出
  */
-export function logInfo(prefix: string, data: any): void {
+export function logInfo(prefix: string, data?: unknown): void {
   if (!shouldLog()) return
-  const sanitized = sanitizeObject(data)
+  const sanitized = sanitizeObject(data ?? {})
   console.log(prefix, sanitized)
 }

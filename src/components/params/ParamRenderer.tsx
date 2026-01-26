@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
 import { panelRegistry } from '@/core/panels/PanelRegistry'
 import { getI18nText } from '@/core/types/I18nText'
+import type { CompositePanelConfig } from '@/core/types/CompositePanel'
 
 // 导入真实的新系统组件
 import { TextInput } from './base/TextInput'
@@ -72,9 +73,16 @@ function formatPanelDisplayValue(value: any, panel: string): string {
   return JSON.stringify(value)
 }
 
+function isCompositePanelConfig(value: unknown): value is CompositePanelConfig {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return Array.isArray(record.components)
+}
+
 // 组件映射表
-const COMPONENT_MAP = {
+const COMPONENT_MAP: Partial<Record<string, React.ComponentType<any>>> = {
   text: TextInput,
+  textarea: TextInput,
   number: NumberInput,
   slider: SliderInput,
   dropdown: DropdownInput,
@@ -83,17 +91,13 @@ const COMPONENT_MAP = {
   'image-upload': ImageUpload,
   'video-upload': VideoUpload,
   composite: CompositePanel,
-  // 其他特殊组件将在需要时添加
-  resolution: null,
-  'aspect-ratio': null,
-  panel: null,
-} as const
+}
 
 interface ParamRendererProps {
   param: ParamDef
-  value: any
-  onChange: (value: any) => void
-  allValues: Record<string, any>
+  value: unknown
+  onChange: (value: unknown) => void
+  allValues: Record<string, unknown>
   uploadedImages?: string[]
   uploadedVideos?: string[]
   disabled?: boolean
@@ -175,11 +179,22 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
     }
 
     // 如果没有指定 panel 或找不到，使用默认的 CompositePanel
+    if (!isCompositePanelConfig(compositeParam.config)) {
+      return (
+        <div className="param-renderer-error" data-param-id={param.id}>
+          <span>Invalid composite panel config: {param.id}</span>
+        </div>
+      )
+    }
+
+    const compositeValue =
+      value && typeof value === 'object' ? (value as Record<string, any>) : {}
+
     return (
       <CompositePanel
         config={compositeParam.config}
-        value={value || {}}
-        onChange={onChange}
+        value={compositeValue}
+        onChange={(nextValue) => onChange(nextValue)}
       />
     )
   }
@@ -198,7 +213,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   // 渲染普通组件（传递 param 对象）
   const renderedComponent = (
     <Component
-      param={param as any}
+      param={param}
       value={value}
       onChange={onChange}
       disabled={externalDisabled}

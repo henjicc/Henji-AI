@@ -5,7 +5,6 @@
  */
 
 import React, { forwardRef, useImperativeHandle, useMemo, useEffect } from 'react'
-import { registry } from '@/core/ModelRegistry'
 import { useModelParams } from '@/hooks/useModelParams'
 import { ParamRenderer } from './ParamRenderer'
 import './ParamsPanel.css'
@@ -73,11 +72,10 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
         {sortedSchema.map(paramDef => (
           <ParamRenderer
             key={paramDef.id}
-            paramDef={paramDef}
+            param={paramDef}
             value={params[paramDef.id]}
             onChange={(value) => setParam(paramDef.id, value)}
-            allParams={params}
-            getFilteredOptions={getFilteredOptions}
+            allValues={params}
           />
         ))}
       </div>

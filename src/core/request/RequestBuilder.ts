@@ -140,7 +140,7 @@ export class RequestBuilder {
     tracker?: ParamFlowTracker
   ): Promise<BuildResult> {
     // 1. 选择端点
-    const endpointKey = registry.selectEndpoint(model.meta.id, params)
+    const endpointKey = await registry.selectEndpoint(model.meta.id, params)
 
     if (!endpointKey) {
       throw new Error(`[RequestBuilder] No endpoint found for model: ${model.meta.id}`)
@@ -360,7 +360,7 @@ export class RequestBuilder {
    * @param type - 目标类型
    * @returns 转换后的值
    */
-  private convertType(value: any, type: string): any {
+  private convertType(value: any, type: string | undefined): any {
     switch (type) {
       case 'number':
         return Number(value)
@@ -404,6 +404,11 @@ export class RequestBuilder {
     const routes = (endpoints as any).routes
     if (routes && routes[endpointKey]) {
       return routes[endpointKey]
+    }
+
+    // selector 直接返回路径（无 routes 或未命中）
+    if (endpointKey.startsWith('/')) {
+      return { path: endpointKey, method: 'POST' }
     }
 
     const routeKeys = routes ? Object.keys(routes).join(', ') : 'none'

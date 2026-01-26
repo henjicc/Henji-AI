@@ -525,8 +525,7 @@ export class PPIOProvider extends ProviderHandler {
     images: string[],
     existingPaths: string[]
   ): Promise<string[]> {
-    const { dataURItoBlob } = await import('@/utils/save')
-    const { saveUploadImage } = await import('@/utils/save')
+    const { dataUrlToBlob, saveUploadImage } = await import('@/utils/save')
 
     const paths: string[] = []
 
@@ -541,7 +540,7 @@ export class PPIOProvider extends ProviderHandler {
       // 如果是 base64，保存到本地
       if (images[i].startsWith('data:')) {
         try {
-          const blob = dataURItoBlob(images[i])
+          const blob = await dataUrlToBlob(images[i])
           const saved = await saveUploadImage(blob, 'persist', {
             maxDimension: 6000,
           })

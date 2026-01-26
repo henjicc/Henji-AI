@@ -4,7 +4,7 @@ import { registry } from '@/core/ModelRegistry'
 interface PriceEstimateProps {
     providerId: string
     modelId: string
-    params: any
+    params: Record<string, unknown>
 }
 
 const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
@@ -55,9 +55,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
     // 生成价格显示文本
     const currency = model.pricing.currency || '¥'
 
-    const priceDisplay = typeof price === 'number'
-        ? `${currency}${formatPrice(price)}`
-        : `${currency}${formatPrice(price.min)}-${formatPrice(price.max)}`
+    const priceDisplay = `${currency}${formatPrice(price)}`
 
     return (
         <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-700/50 backdrop-blur-sm">

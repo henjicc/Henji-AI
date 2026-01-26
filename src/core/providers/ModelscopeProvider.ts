@@ -94,7 +94,7 @@ export class ModelscopeProvider extends ProviderHandler {
       maxAttempts: 120
     }
 
-    const result = await this.pollTaskStatus(taskId, polling, (id) =>
+    const result = await this.pollTaskStatus<ModelscopeTaskStatus>(taskId, polling, (id) =>
       this.checkModelscopeStatus(id)
     )
 

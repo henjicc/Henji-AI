@@ -5,6 +5,7 @@
  */
 
 import type { ParamDef } from '@/core/types'
+import { getI18nText } from '@/core/types/I18nText'
 
 /**
  * 从参数 Schema 提取默认值
@@ -91,9 +92,5 @@ export function getParamDisplayName(
   paramDef: ParamDef,
   locale: 'zh' | 'en' = 'zh'
 ): string {
-  if (typeof paramDef.name === 'string') {
-    return paramDef.name
-  }
-
-  return paramDef.name[locale] || paramDef.name.zh || paramDef.name.en || paramDef.id
+  return getI18nText(paramDef.name, locale) || paramDef.id
 }

@@ -135,6 +135,27 @@ export type I18nText = string | {
   absolute?: boolean
 }
 
+type I18nKeyText = {
+  key: string
+  fallback?: string
+  absolute?: boolean
+}
+
+function isI18nKeyText(text: Exclude<I18nText, string>): text is I18nKeyText {
+  const record = text as Record<string, unknown>
+  if (typeof record.key !== 'string') return false
+
+  // Avoid treating language maps as key objects just because they contain a "key" field.
+  const hasFallback = 'fallback' in record
+  const hasAbsolute = 'absolute' in record
+  if (!hasFallback && !hasAbsolute) return false
+
+  if (hasFallback && record.fallback !== undefined && typeof record.fallback !== 'string') return false
+  if (hasAbsolute && record.absolute !== undefined && typeof record.absolute !== 'boolean') return false
+
+  return true
+}
+
 /**
  * 翻译 I18nText 的函数类型
  */
@@ -152,7 +173,7 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
     return text
   }
 
-  if ('key' in text && typeof text.key === 'string') {
+  if (isI18nKeyText(text)) {
     const fallback = typeof text.fallback === 'string' ? text.fallback : text.key
     const key = text.key
     if (isModelKey(key)) {
@@ -189,28 +210,29 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
     }
   }
 
-  // 1. 尝试完全匹配 (e.g. 'zh-CN')
-  if (text[locale]) {
-    return text[locale]
-  }
+  const dict = text as Record<string, unknown>
+
+  // 1. Exact locale match (e.g. 'zh-CN')
+  const exact = dict[locale]
+  if (typeof exact === 'string' && exact) return exact
 
   // 2. 尝试语言前缀匹配 (e.g. 'zh-CN' -> 'zh', 'en-US' -> 'en')
   const langPrefix = locale.split('-')[0]
-  if (text[langPrefix]) {
-    return text[langPrefix]
-  }
+  const prefixed = dict[langPrefix]
+  if (typeof prefixed === 'string' && prefixed) return prefixed
 
   // 3. 如果请求的是英语但没找到，尝试找 en
-  if (langPrefix === 'en' && text.en) {
-    return text.en
-  }
+  const enValue = dict.en
+  if (langPrefix === 'en' && typeof enValue === 'string' && enValue) return enValue
 
   // 4. 默认回退（优先 zh，然后 en，最后第一个可用值）
-  if (text.zh) return text.zh
-  if (text.en) return text.en
+  const zhValue = dict.zh
+  if (typeof zhValue === 'string' && zhValue) return zhValue
+  if (typeof enValue === 'string' && enValue) return enValue
 
-  const firstKey = Object.keys(text)[0]
-  return text[firstKey] || ''
+  const firstKey = Object.keys(dict)[0]
+  const firstValue = firstKey ? dict[firstKey] : undefined
+  return typeof firstValue === 'string' ? firstValue : ''
 }
 
 /**

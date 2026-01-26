@@ -6,6 +6,17 @@
 
 // ==================== 历史记录类型 ====================
 
+export type HistoryStatus =
+  | 'queued'
+  | 'pending'
+  | 'generating'
+  | 'success'
+  | 'error'
+  | 'timeout'
+  // 兼容旧版本数据库字段值
+  | 'completed'
+  | 'failed'
+
 export interface HistoryRecord {
   id: string
   providerId: string
@@ -15,7 +26,7 @@ export interface HistoryRecord {
   params: Record<string, any>
   filePath: string | null
   taskId: string | null
-  status: 'completed' | 'failed' | 'timeout'
+  status: HistoryStatus
   errorMessage: string | null
   cost: number | null
   duration: number | null
@@ -66,7 +77,7 @@ export interface HistoryQueryOptions {
   providerId?: string
   modelId?: string
   type?: 'image' | 'video' | 'audio'
-  status?: 'completed' | 'failed' | 'timeout'
+  status?: HistoryStatus
   limit?: number
   offset?: number
   searchPrompt?: string

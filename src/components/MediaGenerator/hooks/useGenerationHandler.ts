@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { registry } from '@/core/ModelRegistry'
+import type { ModelType } from '@/core/types'
 import type { ModelState } from '../state/useModelState'
 
 /**
@@ -16,7 +17,7 @@ export const useGenerationHandler = (
   uploadedVideoFiles: File[],
   uploadedFilePaths: string[],
   uploadedVideoFilePaths: string[],
-  onGenerate: (input: string, model: string, type: string, options: any) => void
+  onGenerate: (input: string, model: string, type: ModelType, options?: unknown) => void
 ) => {
   const handleGenerate = useCallback(async () => {
     // 获取模型信息
@@ -27,7 +28,8 @@ export const useGenerationHandler = (
       return
     }
 
-    const modelType = modelInfo.type || 'image'
+    const rawType: unknown = modelInfo.type
+    const modelType: ModelType = rawType === 'image' || rawType === 'video' || rawType === 'audio' ? rawType : 'image'
 
     // 准备生成选项
     // 直接传递原始参数，让 GenerationService 统一构建请求

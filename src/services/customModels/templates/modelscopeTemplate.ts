@@ -19,7 +19,7 @@ export function createModelscopeCustomModelConfig(
   const baseParams: ParamDef[] = [
     {
       id: 'prompt',
-      component: 'text',
+      type: 'text',
       order: 1,
       name: { zh: '提示词', en: 'Prompt' },
       valueType: 'string',
@@ -29,7 +29,7 @@ export function createModelscopeCustomModelConfig(
     },
     {
       id: 'negativePrompt',
-      component: 'text',
+      type: 'text',
       order: 2,
       name: { zh: '负面提示词', en: 'Negative Prompt' },
       valueType: 'string',
@@ -44,7 +44,7 @@ export function createModelscopeCustomModelConfig(
     baseParams.push(
       {
         id: 'width',
-        component: 'number',
+        type: 'number',
         order: 3,
         name: { zh: '宽度', en: 'Width' },
         valueType: 'number',
@@ -56,7 +56,7 @@ export function createModelscopeCustomModelConfig(
       },
       {
         id: 'height',
-        component: 'number',
+        type: 'number',
         order: 4,
         name: { zh: '高度', en: 'Height' },
         valueType: 'number',
@@ -68,7 +68,7 @@ export function createModelscopeCustomModelConfig(
       },
       {
         id: 'numInferenceSteps',
-        component: 'number',
+        type: 'number',
         order: 5,
         name: { zh: '推理步数', en: 'Inference Steps' },
         valueType: 'number',

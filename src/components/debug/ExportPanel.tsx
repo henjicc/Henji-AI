@@ -6,13 +6,13 @@
 
 import React, { useState } from 'react'
 import { exportService } from '@/core/export/ExportService'
-import type { ExportType, CleanOptions } from '@/core/export/types'
+import type { ExportData, ExportType, CleanOptions } from '@/core/export/types'
 import { useI18n } from '@/hooks/useI18n'
 
 interface ExportPanelProps {
   modelId: string
-  params: Record<string, any>
-  context?: Record<string, any>
+  params: Record<string, unknown>
+  context?: Record<string, unknown>
 }
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, context = {} }) => {
@@ -40,7 +40,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
   }
 
   // 获取导出数据
-  const getExportData = () => {
+  const getExportData = async (): Promise<ExportData> => {
     const options = { clean: cleanOptions, includeMetadata: true }
 
     switch (exportType) {
@@ -51,7 +51,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
       case 'model-schema':
         return exportService.exportModelSchema(modelId, options)
       case 'api-request':
-        return exportService.exportAPIRequest(modelId, params, context, options)
+        return await exportService.exportAPIRequest(modelId, params, context, options)
       case 'preset':
         return exportService.exportAsPreset(modelId, params, t('debug.export.presetName'), options)
       default:
@@ -60,15 +60,15 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
   }
 
   // 处理下载
-  const handleDownload = () => {
-    const data = getExportData()
+  const handleDownload = async (): Promise<void> => {
+    const data = await getExportData()
     exportService.downloadAsJSON(data)
   }
 
   // 处理复制
   const handleCopy = async () => {
     try {
-      const data = getExportData()
+      const data = await getExportData()
       await exportService.copyToClipboard(data)
       setCopySuccess(true)
       setTimeout(() => setCopySuccess(false), 2000)

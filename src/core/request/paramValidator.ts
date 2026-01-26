@@ -5,6 +5,7 @@
  */
 
 import type { ParamDef } from '../types'
+import { getI18nText } from '../types/I18nText'
 
 /**
  * 验证错误接口
@@ -291,8 +292,5 @@ function isValidArrayLength(paramDef: ParamDef, value: any): boolean {
  * 获取参数显示名称
  */
 function getParamName(paramDef: ParamDef): string {
-  if (typeof paramDef.name === 'string') {
-    return paramDef.name
-  }
-  return paramDef.name.zh || paramDef.name.en || paramDef.id
+  return getI18nText(paramDef.name, 'zh') || paramDef.id
 }

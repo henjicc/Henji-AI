@@ -19,7 +19,7 @@
  * - 描述模型的能力或特性，而非具体实现
  * - 保持标签粒度适中，避免过于细化
  */
-export type ModelTag =
+export type KnownModelTag =
   // ========== 基础能力标签 ==========
   | 'text-to-image'              // 文生图
   | 'text-to-video'              // 文生视频
@@ -82,6 +82,13 @@ export type ModelTag =
   | 'provider-fal'               // Fal 提供商
   | 'provider-kie'               // KIE 提供商
   | 'provider-modelscope'        // 魔搭提供商
+
+/**
+ * 模型标签类型
+ *
+ * 迁移期允许扩展字符串标签，避免阻塞模型定义；优先使用 KnownModelTag 中的标准标签。
+ */
+export type ModelTag = KnownModelTag | (string & {})
 
 /**
  * 模型标签配置

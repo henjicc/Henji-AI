@@ -20,6 +20,13 @@ export type LinkageEffect =
   | 'custom'          // 自定义处理
 
 /**
+ * Value used by linkage actions when providing a fixed value.
+ *
+ * Intentionally avoids `any` so function expressions get contextual typing under `strict`.
+ */
+export type LinkageValue = string | number | boolean | null | undefined | object
+
+/**
  * 基础联动接口
  *
  * 所有联动类型的共同字段
@@ -223,7 +230,7 @@ export interface SetValueLinkage extends BaseLinkage {
   /**
    * 新值（固定值或计算函数）
    */
-  value: any | ((triggerValue: any, allParams: Record<string, any>) => any)
+  value: LinkageValue | ((triggerValue: any, allParams: Record<string, any>) => LinkageValue)
 
   /**
    * 设置条件（可选）
@@ -271,7 +278,7 @@ export interface AutoSwitchLinkage extends BaseLinkage {
   /**
    * 切换后的值（固定值或计算函数）
    */
-  value: any | ((triggerValue: any, allParams: Record<string, any>) => any)
+  value: LinkageValue | ((triggerValue: any, allParams: Record<string, any>) => LinkageValue)
 
   /**
    * 不恢复原值（默认 false）

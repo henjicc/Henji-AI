@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry'
+import type { ModelDefinition } from '@/core/types'
 
 /**
  * 预设管理器（配置驱动）
@@ -6,6 +7,15 @@ import { registry } from '@/core/ModelRegistry'
  * 文件大小: < 200 行
  */
 export class PresetManager {
+  private static getModelOrWarn(modelId: string): ModelDefinition | null {
+    const model = registry.getModel(modelId)
+    if (!model) {
+      console.warn(`[PresetManager] Model not found: ${modelId}`)
+      return null
+    }
+    return model
+  }
+
   /**
    * 从预设加载参数
    *
@@ -22,27 +32,20 @@ export class PresetManager {
    * // { duration: 10, aspectRatio: '16:9' }
    * ```
    */
-  static loadPreset(presetData: any, modelId: string): Record<string, any> {
-    const modelInfo = registry.getModelInfo(modelId)
+  static loadPreset(presetData: Record<string, unknown>, modelId: string): Record<string, unknown> {
+    const model = this.getModelOrWarn(modelId)
+    if (!model) return {}
 
-    if (!modelInfo) {
-      console.warn(`[PresetManager] Model not found: ${modelId}`)
-      return {}
+    const params: Record<string, unknown> = {}
+
+    for (const paramDef of model.params) {
+      const presetValue = presetData[paramDef.id]
+      if (presetValue !== undefined) {
+        params[paramDef.id] = presetValue
+      }
     }
 
-    const params: Record<string, any> = {}
-
-    // 从预设数据中提取参数
-    modelInfo.params.forEach(param => {
-      const presetValue = presetData[param.id]
-
-      if (presetValue !== undefined) {
-        params[param.id] = presetValue
-      }
-    })
-
     console.log(`[PresetManager] Loaded ${Object.keys(params).length} params for ${modelId}`)
-
     return params
   }
 
@@ -63,30 +66,20 @@ export class PresetManager {
    * // (uploadedImages 被过滤掉)
    * ```
    */
-  static savePreset(params: Record<string, any>, modelId: string): any {
-    const modelInfo = registry.getModelInfo(modelId)
+  static savePreset(params: Record<string, unknown>, modelId: string): Record<string, unknown> {
+    const model = this.getModelOrWarn(modelId)
+    if (!model) return {}
 
-    if (!modelInfo) {
-      console.warn(`[PresetManager] Model not found: ${modelId}`)
-      return {}
+    const presetData: Record<string, unknown> = {}
+
+    for (const paramDef of model.params) {
+      const value = params[paramDef.id]
+      if (value !== undefined && this.shouldSaveParam(paramDef.id)) {
+        presetData[paramDef.id] = value
+      }
     }
 
-    const presetData: any = {}
-
-    // 只保存模型相关的参数
-    modelInfo.params.forEach(param => {
-      const value = params[param.id]
-
-      if (value !== undefined) {
-        // 过滤掉不应该保存的参数（如上传的文件）
-        if (this.shouldSaveParam(param.id)) {
-          presetData[param.id] = value
-        }
-      }
-    })
-
     console.log(`[PresetManager] Saved ${Object.keys(presetData).length} params for ${modelId}`)
-
     return presetData
   }
 
@@ -127,9 +120,9 @@ export class PresetManager {
    * ```
    */
   static applyPreset(
-    presetData: any,
+    presetData: Record<string, unknown>,
     modelId: string,
-    setParam: (key: string, value: any) => void
+    setParam: (key: string, value: unknown) => void
   ): void {
     const params = this.loadPreset(presetData, modelId)
 
@@ -147,15 +140,11 @@ export class PresetManager {
    * @param modelId - 模型 ID
    * @returns 是否兼容
    */
-  static isCompatible(presetData: any, modelId: string): boolean {
-    const modelInfo = registry.getModelInfo(modelId)
+  static isCompatible(presetData: Record<string, unknown>, modelId: string): boolean {
+    const model = this.getModelOrWarn(modelId)
+    if (!model) return false
 
-    if (!modelInfo) {
-      return false
-    }
-
-    // 检查预设中的所有参数是否都在模型中定义
-    const modelParamIds = new Set(modelInfo.params.map(p => p.id))
+    const modelParamIds = new Set(model.params.map((p) => p.id))
     const presetParamIds = Object.keys(presetData)
 
     // 计算兼容度
@@ -175,10 +164,10 @@ export class PresetManager {
    * @returns 合并后的参数对象
    */
   static merge(
-    presetData: any,
-    currentParams: Record<string, any>,
+    presetData: Record<string, unknown>,
+    currentParams: Record<string, unknown>,
     modelId: string
-  ): Record<string, any> {
+  ): Record<string, unknown> {
     const presetParams = this.loadPreset(presetData, modelId)
 
     return {

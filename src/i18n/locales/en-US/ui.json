@@ -256,7 +256,11 @@
     }
   },
   "viewer": {
-    "imageAlt": "Image"
+    "imageAlt": "Image",
+    "speed": "Playback speed",
+    "loop": "Loop",
+    "mute": "Mute",
+    "unmute": "Unmute"
   },
   "errorState": {
     "title": "Something went wrong",
@@ -264,6 +268,7 @@
   },
   "workspace": {
     "inputImageAlt": "Input image {{index}}",
+    "panelHint": "Move here to expand the panel...",
     "actions": {
       "regenerate": "Regenerate",
       "reedit": "Re-edit"
@@ -283,6 +288,16 @@
       "failedOnly": "Delete failed records only",
       "confirmDelete": "Click again to confirm deletion",
       "deleteAll": "Clear all history"
+    },
+    "toast": {
+      "downloadSuccess": "Downloaded successfully",
+      "invalidFilePath": "Invalid file path",
+      "downloadFailed": "Download failed: {{reason}}",
+      "copySuccess": "Copied to clipboard",
+      "copyMissingPath": "No image path to copy",
+      "copyFailed": "Copy failed: {{reason}}",
+      "testModeIntercepted": "Test mode: request intercepted (not sent)",
+      "generateFailed": "Generation failed, please try again"
     }
   },
   "workspaceToolbar": {

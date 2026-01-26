@@ -27,6 +27,7 @@
 export type ComponentType =
   // 基础组件
   | 'text'
+  | 'textarea'
   | 'number'
   | 'slider'
   | 'dropdown'

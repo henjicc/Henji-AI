@@ -1,0 +1,279 @@
+import React, { useEffect, useRef, useState } from 'react'
+import { useI18n } from '@/hooks/useI18n'
+import { ImageEditor } from '@/components/ImageEditor'
+import type { ImageEditState } from '@/components/ImageEditor'
+import { useImageViewerTransform } from '../hooks/useImageViewerTransform'
+
+export interface ImageViewerModalProps {
+  open: boolean
+  imageUrl: string
+  imageList: string[]
+  filePaths: string[]
+  currentIndex: number
+  fromUpload: boolean
+  isEditorMode: boolean
+  initialEditState?: ImageEditState
+  onClose: () => void
+  onNavigate: (direction: 'prev' | 'next') => void
+  onEnterEditor: () => void
+  onExitEditor: () => void
+  onSaveEdit: (dataUrl: string, editState: ImageEditState) => void
+  onDownload?: (filePath: string) => void
+  onContextMenu?: (e: React.MouseEvent, filePath?: string) => void
+}
+
+export function ImageViewerModal({
+  open,
+  imageUrl,
+  imageList,
+  filePaths,
+  currentIndex,
+  fromUpload,
+  isEditorMode,
+  initialEditState,
+  onClose,
+  onNavigate,
+  onEnterEditor,
+  onExitEditor,
+  onSaveEdit,
+  onDownload,
+  onContextMenu,
+}: ImageViewerModalProps): JSX.Element | null {
+  const { t } = useI18n()
+  const [isVisible, setIsVisible] = useState(open)
+  const [overlayOpacity, setOverlayOpacity] = useState(0)
+  const closeTimerRef = useRef<number | null>(null)
+  const {
+    containerRef,
+    imageRef,
+    scaleDisplayRef,
+    viewerOpacity,
+    resetView,
+    handleImageMouseDown,
+    handleContainerMouseMove,
+    handleContainerMouseUp,
+    handleImageMouseMove,
+    handleImageLoad,
+    isPointOnImageContent,
+  } = useImageViewerTransform(open)
+
+  useEffect(() => {
+    if (!isVisible) return
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isVisible])
+
+  useEffect(() => {
+    if (open) {
+      setIsVisible(true)
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+      setOverlayOpacity(0)
+      requestAnimationFrame(() => {
+        setOverlayOpacity(1)
+      })
+      return
+    }
+    if (!isVisible) return
+    setOverlayOpacity(0)
+    closeTimerRef.current = window.setTimeout(() => {
+      setIsVisible(false)
+    }, 400)
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+    }
+  }, [open, isVisible])
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    resetView()
+  }, [open, imageUrl, resetView])
+
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        onNavigate('prev')
+      } else if (e.key === 'ArrowRight') {
+        onNavigate('next')
+      } else if (e.key === 'Escape') {
+        onClose()
+      } else if (e.key === ' ') {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onNavigate, onClose])
+
+  if (!isVisible) return null
+
+  const currentFilePath = filePaths[currentIndex]
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg"
+      style={{
+        opacity: overlayOpacity,
+        transition: 'opacity 400ms ease',
+        pointerEvents: open ? 'auto' : 'none',
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+        {onDownload && currentFilePath && (
+          <button
+            className="px-3 py-2 rounded-lg bg-zinc-800/70 hover:bg-zinc-700/70 transition-colors text-sm"
+            onClick={() => onDownload(currentFilePath)}
+            title={t('common:actions.download')}
+          >
+            {t('common:actions.download')}
+          </button>
+        )}
+        {fromUpload && !isEditorMode && (
+          <button
+            className="px-3 py-2 rounded-lg bg-zinc-800/70 hover:bg-zinc-700/70 transition-colors text-sm"
+            onClick={onEnterEditor}
+            title={t('ui:workspace.actions.reedit')}
+          >
+            {t('common:edit')}
+          </button>
+        )}
+        <button
+          className="px-3 py-2 rounded-lg bg-zinc-800/70 hover:bg-zinc-700/70 transition-colors text-sm"
+          onClick={onClose}
+          title={t('common:close')}
+        >
+          {t('common:close')}
+        </button>
+      </div>
+
+      {isEditorMode && fromUpload ? (
+        <div className="w-full h-full">
+          <ImageEditor
+            imageUrl={imageUrl}
+            imageId={imageUrl}
+            imageList={imageList}
+            currentIndex={currentIndex}
+            initialEditState={initialEditState}
+            onClose={onExitEditor}
+            onSave={(dataUrl, editState) => {
+              onSaveEdit(dataUrl, editState)
+              onExitEditor()
+            }}
+            onNavigate={onNavigate}
+          />
+        </div>
+      ) : (
+        <div
+          ref={containerRef}
+          className="absolute inset-0 flex items-center justify-center p-4"
+          style={{ overscrollBehavior: 'contain' }}
+          onMouseMove={handleContainerMouseMove}
+          onMouseUp={handleContainerMouseUp}
+          onMouseLeave={handleContainerMouseUp}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose()
+          }}
+        >
+          <div className="relative">
+            <img
+              ref={imageRef}
+              src={imageUrl}
+              alt={t('ui:viewer.imageAlt')}
+              className="select-none image-transition"
+              style={{
+                opacity: viewerOpacity * overlayOpacity,
+                transition: 'opacity 400ms ease',
+                transformOrigin: 'center',
+                width: '95vw',
+                height: '95vh',
+                objectFit: 'contain',
+              }}
+              onLoad={handleImageLoad}
+              onMouseDown={handleImageMouseDown}
+              onMouseMove={handleImageMouseMove}
+              onClick={(e) => {
+                if (isPointOnImageContent(e.clientX, e.clientY)) {
+                  e.stopPropagation()
+                } else {
+                  onClose()
+                }
+              }}
+              onContextMenu={(e) => onContextMenu?.(e, currentFilePath)}
+              draggable={false}
+            />
+          </div>
+
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+            {imageList.length > 1 && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onNavigate('prev')}
+                  className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => onNavigate('next')}
+                  className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center gap-4">
+              {imageList.length > 1 && (
+                <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                  {currentIndex + 1} / {imageList.length}
+                </div>
+              )}
+              <div
+                ref={scaleDisplayRef}
+                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50"
+              >
+                100%
+              </div>
+              <button
+                onClick={resetView}
+                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+              >
+                {t('common:actions.reset')}
+              </button>
+              <button
+                onClick={onClose}
+                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+              >
+                {t('common:close')}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  )
+}

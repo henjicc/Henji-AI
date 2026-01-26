@@ -82,7 +82,13 @@ export type EndpointConfig =
        * @param params - 请求参数
        * @returns 选择的端点
        */
-      selector?: (params: Record<string, any>) => string
+      selector?: (params: Record<string, any>) => string | Promise<string>
+
+      /**
+       * Optional route map for multi-endpoint models.
+       * When provided, selector/rules/default may return a key into this map.
+       */
+      routes?: Record<string, { path: string; method?: string }>
     }
 
 /**

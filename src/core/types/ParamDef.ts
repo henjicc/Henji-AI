@@ -6,15 +6,15 @@
 
 import { I18nText } from './I18nText'
 import { ComponentType, ValueType } from './ComponentTypes'
-import { ApiConfig } from './ApiMapping'
+import type { ApiConfig, ApiTransform } from './ApiMapping'
 import { VisibleCondition, DisabledCondition, SmartMatchConfig } from './ConditionTypes'
 import type {
   PanelType,
   ResolutionPanelConfig,
   VoiceSelectorConfig,
-  CompositePanelConfig,
   CustomPanelConfig
 } from './PanelTypes'
+import type { CompositePanelConfig as CompositeLayoutConfig } from './CompositePanel'
 
 /**
  * 基础参数定义
@@ -70,7 +70,7 @@ export interface BaseParamDef {
   /**
    * 值类型
    */
-  valueType: ValueType
+  valueType?: ValueType
 
   /**
    * 默认值
@@ -83,6 +83,15 @@ export interface BaseParamDef {
    * 如果不提供，则不映射到 API
    */
   api?: ApiConfig
+
+  /** Legacy shorthand for API field mapping (equivalent to api: 'field') */
+  apiField?: string
+
+  /** Legacy shorthand for API transform */
+  apiTransform?: ApiTransform
+
+  /** Legacy endpoint-specific mapping */
+  apiMapping?: Record<string, { transform: ApiTransform }>
 
   /**
    * 显示条件（可选）
@@ -121,8 +130,8 @@ export interface BaseParamDef {
  * ```
  */
 export interface TextParamDef extends BaseParamDef {
-  type: 'text'
-  valueType: 'string'
+  type: 'text' | 'textarea'
+  valueType?: 'string'
 
   /**
    * 占位符文本（可选）
@@ -171,7 +180,7 @@ export interface TextParamDef extends BaseParamDef {
  */
 export interface NumberParamDef extends BaseParamDef {
   type: 'number'
-  valueType: 'number'
+  valueType?: 'number'
 
   /**
    * 最小值（可选）
@@ -221,7 +230,7 @@ export interface NumberParamDef extends BaseParamDef {
  */
 export interface SliderParamDef extends BaseParamDef {
   type: 'slider'
-  valueType: 'number'
+  valueType?: 'number'
 
   /**
    * 最小值
@@ -279,7 +288,7 @@ export interface SliderParamDef extends BaseParamDef {
  */
 export interface DropdownParamDef extends BaseParamDef {
   type: 'dropdown'
-  valueType: 'string' | 'number'
+  valueType?: 'string' | 'number'
 
   /**
    * 选项列表
@@ -336,7 +345,7 @@ export interface DropdownParamDef extends BaseParamDef {
  */
 export interface SwitchParamDef extends BaseParamDef {
   type: 'switch'
-  valueType: 'boolean'
+  valueType?: 'boolean'
 
   /**
    * 开启时的标签（可选）
@@ -372,7 +381,7 @@ export interface SwitchParamDef extends BaseParamDef {
  */
 export interface RadioParamDef extends BaseParamDef {
   type: 'radio'
-  valueType: 'string' | 'number'
+  valueType?: 'string' | 'number'
 
   /**
    * 选项列表
@@ -414,7 +423,7 @@ export interface RadioParamDef extends BaseParamDef {
  */
 export interface PanelParamDef extends BaseParamDef {
   type: 'panel'
-  valueType: 'object'
+  valueType?: 'object'
 
   /**
    * 子参数列表
@@ -439,7 +448,7 @@ export interface PanelParamDef extends BaseParamDef {
  */
 export interface CompositePanelDef extends BaseParamDef {
   type: 'composite'
-  valueType: ValueType
+  valueType?: ValueType
 
   /**
    * 绑定的面板类型（可选）
@@ -449,7 +458,7 @@ export interface CompositePanelDef extends BaseParamDef {
   /**
    * 面板配置（可选）
    */
-  config?: ResolutionPanelConfig | VoiceSelectorConfig | CompositePanelConfig | CustomPanelConfig
+  config?: ResolutionPanelConfig | VoiceSelectorConfig | CompositeLayoutConfig | CustomPanelConfig
 }
 
 /**
@@ -482,7 +491,7 @@ export interface CompositePanelDef extends BaseParamDef {
  */
 export interface ImageUploadParamDef extends BaseParamDef {
   type: 'image-upload'
-  valueType: 'array'
+  valueType?: 'array'
 
   /**
    * 最大上传数量（默认 1）
@@ -547,7 +556,7 @@ export interface ImageUploadParamDef extends BaseParamDef {
  */
 export interface VideoUploadParamDef extends BaseParamDef {
   type: 'video-upload'
-  valueType: 'array'
+  valueType?: 'array'
 
   /**
    * 最大上传数量（默认 1）
@@ -611,7 +620,7 @@ export interface VideoUploadParamDef extends BaseParamDef {
  */
 export interface ResolutionParamDef extends BaseParamDef {
   type: 'resolution'
-  valueType: 'string'
+  valueType?: 'string'
 
   /**
    * 预设分辨率列表
@@ -650,7 +659,7 @@ export interface ResolutionParamDef extends BaseParamDef {
  */
 export interface AspectRatioParamDef extends BaseParamDef {
   type: 'aspect-ratio'
-  valueType: 'string'
+  valueType?: 'string'
 
   /**
    * 宽高比选项
