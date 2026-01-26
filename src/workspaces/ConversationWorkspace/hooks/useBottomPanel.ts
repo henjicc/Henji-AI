@@ -109,7 +109,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
     const update = () => {
       const h = inputEl.offsetHeight || 0
       const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
-      const newPadding = actualHeight + 24
+      const newPadding = actualHeight + 48
       setInputPadding(newPadding)
 
       const oldPadding = parseInt(listEl.style.paddingBottom || '0', 10) || 0

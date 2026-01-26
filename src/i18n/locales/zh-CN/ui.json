@@ -1,4 +1,4 @@
-{
+﻿{
   "generate": "生成",
   "generating": "生成中...",
   "cancel": "取消",
@@ -271,7 +271,8 @@
     "panelHint": "鼠标移动到此处来展开面板......",
     "actions": {
       "regenerate": "重新生成",
-      "reedit": "重新编辑"
+      "reedit": "重新编辑",
+      "usePrompt": "使用提示词"
     },
     "status": {
       "queued": "排队中...",

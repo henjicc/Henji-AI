@@ -1,4 +1,4 @@
-{
+﻿{
   "generate": "Generate",
   "generating": "Generating...",
   "cancel": "Cancel",
@@ -271,7 +271,8 @@
     "panelHint": "Move here to expand the panel...",
     "actions": {
       "regenerate": "Regenerate",
-      "reedit": "Re-edit"
+      "reedit": "Re-edit",
+      "usePrompt": "Use Prompt"
     },
     "status": {
       "queued": "Queued...",

@@ -39,6 +39,17 @@ async function toDisplayUrlString(
   return joinMulti(urls)
 }
 
+function parseHistoryTimestamp(value?: string | null): Date {
+  if (!value) return new Date()
+  if (/[zZ]$/.test(value) || /[+-]\d{2}:?\d{2}$/.test(value)) {
+    return new Date(value)
+  }
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+    return new Date(`${value.replace(' ', 'T')}Z`)
+  }
+  return new Date(value)
+}
+
 async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): Promise<GenerationTask> {
   const rawParams: unknown = record.params
   const safeParams: Record<string, unknown> = isRecord(rawParams) ? rawParams : {}
@@ -85,7 +96,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
         url: await toDisplayUrlString(absoluteResultFilePath, record.type),
         filePath: absoluteResultFilePath,
         prompt: record.prompt ?? '',
-        createdAt: record.createdAt ? new Date(record.createdAt) : new Date(),
+        createdAt: parseHistoryTimestamp(record.createdAt),
       }
     : undefined
 

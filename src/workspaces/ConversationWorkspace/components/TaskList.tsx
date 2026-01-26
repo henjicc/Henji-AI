@@ -8,6 +8,8 @@ import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { useHistoryDrag } from '../hooks/useHistoryDrag'
 import { TaskInputPreview } from './TaskInputPreview'
+import { TaskPrompt } from './TaskPrompt'
+import { CopyIcon, DownloadIcon, UsePromptIcon } from './TaskActionIcons'
 
 export interface TaskListProps {
   tasks: GenerationTask[]
@@ -18,34 +20,9 @@ export interface TaskListProps {
   onRegenerate: (task: GenerationTask) => Promise<void>
   onReedit: (task: GenerationTask) => void
   onDelete: (taskId: string) => Promise<void>
+  onUsePrompt: (prompt: string) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string) => void
-}
-
-function iconCopy(): React.ReactNode {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-      />
-    </svg>
-  )
-}
-
-function iconDownload(): React.ReactNode {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-      />
-    </svg>
-  )
 }
 
 export function TaskList({
@@ -57,6 +34,7 @@ export function TaskList({
   onRegenerate,
   onReedit,
   onDelete,
+  onUsePrompt,
   onOpenImageViewer,
   onOpenVideoViewer,
 }: TaskListProps): JSX.Element {
@@ -96,7 +74,7 @@ export function TaskList({
   }
 
   return (
-    <div className="max-w-6xl mx-auto w-[90%] space-y-6">
+    <div className="max-w-6xl mx-auto w-[90%] space-y-4">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">{t('history:title')}</h2>
       </div>
@@ -194,14 +172,14 @@ export function TaskList({
                             {
                               id: 'copy-image',
                               label: t('common:actions.copy'),
-                              icon: iconCopy(),
+                              icon: <CopyIcon className="w-4 h-4" />,
                               onClick: async () => onCopyImage(filePath),
                               disabled: !filePath,
                             },
                             {
                               id: 'download-image',
                               label: t('common:actions.download'),
-                              icon: iconDownload(),
+                              icon: <DownloadIcon className="w-4 h-4" />,
                               onClick: async () => {
                                 if (filePath) await onDownload(filePath, false)
                               },
@@ -242,7 +220,7 @@ export function TaskList({
                     {
                       id: 'download-video',
                       label: t('common:actions.download'),
-                      icon: iconDownload(),
+                      icon: <DownloadIcon className="w-4 h-4" />,
                       onClick: async () => {
                         if (filePath) await onDownload(filePath, false)
                       },
@@ -281,7 +259,7 @@ export function TaskList({
                     {
                       id: 'download-audio',
                       label: t('common:actions.download'),
-                      icon: iconDownload(),
+                      icon: <DownloadIcon className="w-4 h-4" />,
                       onClick: async () => {
                         if (filePath) await onDownload(filePath, false)
                       },
@@ -297,95 +275,107 @@ export function TaskList({
         }
 
         return (
-          <div key={task.id} className="bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <TaskInputPreview
-                  taskId={task.id}
-                  inputImages={inputImages}
-                  inputVideos={inputVideos}
-                  uploadedFilePaths={task.uploadedFilePaths}
-                  uploadedVideoFilePaths={task.uploadedVideoFilePaths}
-                  onOpenImage={handleImageClick}
-                  onOpenVideo={handleVideoClick}
-                />
-                <div className="text-sm text-zinc-300 whitespace-pre-wrap break-words">{task.prompt}</div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                    {typeLabel}
-                  </span>
-                  <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded">
-                    {modelName}
-                  </span>
-                  {task.dimensions && (
-                    <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                      {task.dimensions}
-                    </span>
-                  )}
-                  {task.type === 'video' && task.duration && (
-                    <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                      {task.duration}
-                    </span>
-                  )}
-                  {task.type === 'audio' && task.duration && (
-                    <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                      {task.duration}
-                    </span>
-                  )}
-                  {createdAtLabel && (
-                    <span className="text-xs bg-zinc-700/50 px-2 py-1 rounded">
-                      {createdAtLabel}
-                    </span>
-                  )}
+          <div key={task.id} className="bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-3">
+            <div className="flex items-start gap-3">
+              <TaskInputPreview
+                taskId={task.id}
+                inputImages={inputImages}
+                inputVideos={inputVideos}
+                uploadedFilePaths={task.uploadedFilePaths}
+                uploadedVideoFilePaths={task.uploadedVideoFilePaths}
+                onOpenImage={handleImageClick}
+                onOpenVideo={handleVideoClick}
+                onStartImageDrag={startImageDrag}
+                onStartVideoDrag={startVideoDrag}
+                shouldIgnoreClick={shouldIgnoreClick}
+              />
+              <div className="min-w-0 flex-1 relative">
+                <div className="pr-48">
+                  <TaskPrompt prompt={task.prompt} />
+                  <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
+                        {typeLabel}
+                      </span>
+                      <span className="bg-[#007eff]/10 border border-[#2c77d6]/40 text-[#7ab5ff] px-2 py-0.5 rounded">
+                        {modelName}
+                      </span>
+                      {task.dimensions && (
+                        <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
+                          {task.dimensions}
+                        </span>
+                      )}
+                      {task.type === 'video' && task.duration && (
+                        <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
+                          {task.duration}
+                        </span>
+                      )}
+                      {task.type === 'audio' && task.duration && (
+                        <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
+                          {task.duration}
+                        </span>
+                      )}
+                      {createdAtLabel && (
+                        <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded text-zinc-400">
+                          {createdAtLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex gap-2 flex-shrink-0">
-                {task.result?.filePath && (
+                <div className="absolute top-0 right-0 flex gap-2">
                   <button
-                    onClick={async () => {
-                      for (const fp of splitMulti(task.result!.filePath!)) {
-                        await onDownload(fp, true)
-                      }
-                    }}
-                    className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
-                    title={t('common:actions.download')}
+                    onClick={() => onUsePrompt(task.prompt)}
+                    className="p-2 bg-zinc-700/40 hover:bg-zinc-600/50 rounded-lg transition-all duration-200"
+                    title={t('ui:workspace.actions.usePrompt')}
+                  >
+                    <UsePromptIcon className="h-4 w-4" />
+                  </button>
+                  {task.result?.filePath && (
+                    <button
+                      onClick={async () => {
+                        for (const fp of splitMulti(task.result!.filePath!)) {
+                          await onDownload(fp, true)
+                        }
+                      }}
+                      className="p-2 bg-zinc-700/40 hover:bg-zinc-600/50 rounded-lg transition-all duration-200"
+                      title={t('common:actions.download')}
+                    >
+                      <DownloadIcon className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => onRegenerate(task)}
+                    className="p-2 bg-zinc-700/40 hover:bg-zinc-600/50 rounded-lg transition-all duration-200"
+                    title={t('ui:workspace.actions.regenerate')}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                   </button>
-                )}
 
-                <button
-                  onClick={() => onRegenerate(task)}
-                  className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
-                  title={t('ui:workspace.actions.regenerate')}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
+                  <button
+                    onClick={() => onReedit(task)}
+                    className="p-2 bg-zinc-700/40 hover:bg-zinc-600/50 rounded-lg transition-all duration-200"
+                    title={t('ui:workspace.actions.reedit')}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
 
-                <button
-                  onClick={() => onReedit(task)}
-                  className="p-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-all duration-300"
-                  title={t('ui:workspace.actions.reedit')}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-
-                <button
-                  onClick={() => onDelete(task.id)}
-                  className="p-2 bg-red-700/50 hover:bg-red-600/50 rounded-lg transition-all duration-300"
-                  title={t('common:delete')}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                  <button
+                    onClick={() => onDelete(task.id)}
+                    className="p-2 bg-red-700/40 hover:bg-red-600/50 rounded-lg transition-all duration-200"
+                    title={t('common:delete')}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
