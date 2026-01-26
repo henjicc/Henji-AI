@@ -172,7 +172,12 @@ const ConversationWorkspace: React.FC = () => {
     setIsEditorMode(false)
   }
   const handleSaveImageEdit = (dataUrl: string, editState: ImageEditState) => {
-    imageEditStatesRef.current.set(dataUrl, editState)
+    const nextState: ImageEditState = {
+      ...editState,
+      imageId: dataUrl,
+      originalSrc: editState.originalSrc,
+    }
+    imageEditStatesRef.current.set(dataUrl, nextState)
     setCurrentImageList((prev) => {
       const next = [...prev]
       next[currentImageIndex] = dataUrl

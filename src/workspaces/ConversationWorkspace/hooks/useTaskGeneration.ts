@@ -17,6 +17,7 @@ import {
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
 import type { ImageEditState } from '@/components/ImageEditor'
+import { saveEditState } from '@/utils/editStatePersistence'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
@@ -275,6 +276,31 @@ export function useTaskGeneration({
       : uploadedVideos
 
     const taskId = createTaskId()
+
+    const imagesForState = isStringArray(options.images) ? options.images : []
+    const imageEditStates = imagesForState.reduce<Record<string, ImageEditState>>((acc, url, index) => {
+      const state = imageEditStatesRef.current.get(url)
+      if (state) {
+        acc[String(index)] = state
+      }
+      return acc
+    }, {})
+
+    if (Object.keys(imageEditStates).length > 0) {
+      if (isDesktop()) {
+        try {
+          const editStateFile = await saveEditState(taskId, imageEditStates)
+          options.editStateFile = editStateFile
+          delete options.imageEditStates
+          logInfo('[Workspace] 已保存编辑状态到文件', { file: editStateFile })
+        } catch (error) {
+          logError('[Workspace] 保存编辑状态文件失败', error)
+          options.imageEditStates = imageEditStates
+        }
+      } else {
+        options.imageEditStates = imageEditStates
+      }
+    }
     const newTask: GenerationTask = {
       id: taskId,
       type,

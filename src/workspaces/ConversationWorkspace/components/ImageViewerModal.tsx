@@ -55,7 +55,7 @@ export function ImageViewerModal({
     handleImageMouseMove,
     handleImageLoad,
     isPointOnImageContent,
-  } = useImageViewerTransform(open)
+  } = useImageViewerTransform(open && isVisible)
 
   useEffect(() => {
     if (!isVisible) return
@@ -138,33 +138,17 @@ export function ImageViewerModal({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-        {onDownload && currentFilePath && (
+      {fromUpload && !isEditorMode && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10">
           <button
-            className="px-3 py-2 rounded-lg bg-zinc-800/70 hover:bg-zinc-700/70 transition-colors text-sm"
-            onClick={() => onDownload(currentFilePath)}
-            title={t('common:actions.download')}
-          >
-            {t('common:actions.download')}
-          </button>
-        )}
-        {fromUpload && !isEditorMode && (
-          <button
-            className="px-3 py-2 rounded-lg bg-zinc-800/70 hover:bg-zinc-700/70 transition-colors text-sm"
+            className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
             onClick={onEnterEditor}
             title={t('ui:workspace.actions.reedit')}
           >
             {t('common:edit')}
           </button>
-        )}
-        <button
-          className="px-3 py-2 rounded-lg bg-zinc-800/70 hover:bg-zinc-700/70 transition-colors text-sm"
-          onClick={onClose}
-          title={t('common:close')}
-        >
-          {t('common:close')}
-        </button>
-      </div>
+        </div>
+      )}
 
       {isEditorMode && fromUpload ? (
         <div className="w-full h-full">
@@ -223,7 +207,7 @@ export function ImageViewerModal({
             />
           </div>
 
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
             {imageList.length > 1 && (
               <div className="flex items-center gap-3">
                 <button
