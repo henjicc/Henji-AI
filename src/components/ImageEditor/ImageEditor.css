@@ -405,6 +405,10 @@
   opacity: 1;
 }
 
+.text-input-overlay::placeholder {
+  color: transparent;
+}
+
 /* ==================== 统一工具栏样式 ==================== */
 
 /* 工具栏分隔符 */
