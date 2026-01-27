@@ -19,10 +19,8 @@ import {
   ProviderError,
   ProviderErrorCode,
 } from '@/core/providers/base'
-import { PPIOProvider } from '@/core/providers/PPIOProvider'
-import { FalProvider } from '@/core/providers/FalProvider'
-import { KIEProvider } from '@/core/providers/KIEProvider'
-import { ModelscopeProvider } from '@/core/providers/ModelscopeProvider'
+import type { ProviderId } from '@/core/types'
+import { providerFactoryRegistry, type ProviderFactory } from '@/core/providers/ProviderFactoryRegistry'
 
 /**
  * GenerationService 单例类
@@ -202,23 +200,7 @@ export class GenerationService {
       )
     }
 
-    // 根据 provider 名称创建对应的实例
-    switch (providerName) {
-      case 'ppio':
-        return new PPIOProvider(apiKey)
-
-      case 'fal':
-        return new FalProvider(apiKey)
-
-      case 'kie':
-        return new KIEProvider(apiKey)
-
-      case 'modelscope':
-        return new ModelscopeProvider(apiKey)
-
-      default:
-        throw new Error(`Unsupported provider: ${providerName}`)
-    }
+    return providerFactoryRegistry.create(providerName as ProviderId, apiKey)
   }
 
   /**
@@ -269,8 +251,28 @@ export class GenerationService {
    * @returns Provider 名称数组
    */
   getConfiguredProviders(): string[] {
-    const providers = ['ppio', 'fal', 'kie', 'modelscope']
-    return providers.filter((p) => this.validateApiKey(p))
+    return providerFactoryRegistry.listProviderIds().filter((p) => this.validateApiKey(String(p))).map(String)
+  }
+
+  /**
+   * 注册 Provider 工厂（用于扩展新的 Provider，无需修改 GenerationService）
+   *
+   * @param providerId - Provider ID
+   * @param factory - Provider 工厂函数
+   * @param options - 注册选项
+   */
+  registerProviderFactory(
+    providerId: ProviderId,
+    factory: ProviderFactory,
+    options?: { overwrite?: boolean }
+  ): void {
+    providerFactoryRegistry.register(providerId, factory, options)
+
+    // If a provider instance is already cached, drop it so the new factory takes effect.
+    const key = String(providerId)
+    if (this.providers.has(key)) {
+      this.providers.delete(key)
+    }
   }
 
   /**

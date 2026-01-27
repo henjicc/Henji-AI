@@ -134,7 +134,7 @@ export function useAnnotationEditor({
         }
     }, [selectedId, editCanvas.annotations, setToolSettings])
 
-    const textPreview = useMemo(() => {
+    const textPreview = useMemo<TextAnnotation | null>(() => {
         if (!isEditingText) return null
 
         const existing = textEditingId

@@ -17,6 +17,11 @@ import {
 } from './base/errors'
 import { GenerateResult, PollingConfig, ProgressStatus } from './base/types'
 import { isDataURI, isLocalPath, isRemoteURL } from './base/utils'
+import {
+  DEFAULT_INTERNAL_PROVIDER_FIELDS,
+  stripInternalFields,
+  transformMediaFields,
+} from './base/paramTransforms'
 import { saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
 
 type MediaValue = string | File
@@ -70,15 +75,15 @@ export class KIEProvider extends ProviderHandler {
   ): Promise<Record<string, unknown>> {
     const processedParams = { ...params }
 
-    await this.transformMediaFields(processedParams, IMAGE_KEYS, (value) =>
+    await transformMediaFields(processedParams, IMAGE_KEYS, (value) =>
       this.uploadToKIE(value, 'image')
     )
 
-    await this.transformMediaFields(processedParams, VIDEO_KEYS, (value) =>
+    await transformMediaFields(processedParams, VIDEO_KEYS, (value) =>
       this.uploadToKIE(value, 'video')
     )
 
-    this.stripInternalFields(processedParams)
+    stripInternalFields(processedParams, DEFAULT_INTERNAL_PROVIDER_FIELDS)
     return processedParams
   }
 
@@ -276,58 +281,4 @@ export class KIEProvider extends ProviderHandler {
 
     return fileUrl
   }
-
-  private async transformMediaFields(
-    target: Record<string, unknown>,
-    keys: Set<string>,
-    transformer: (value: MediaValue) => Promise<string>
-  ): Promise<void> {
-    const entries = Object.entries(target)
-    for (const [key, rawValue] of entries) {
-      if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) && !(rawValue instanceof File)) {
-        await this.transformMediaFields(rawValue as Record<string, unknown>, keys, transformer)
-        continue
-      }
-
-      if (!keys.has(key)) {
-        continue
-      }
-
-      if (Array.isArray(rawValue)) {
-        const converted: string[] = []
-        for (const item of rawValue) {
-          if (typeof item === 'string' || item instanceof File) {
-            converted.push(await transformer(item))
-          }
-        }
-        target[key] = converted
-        continue
-      }
-
-      if (typeof rawValue === 'string' || rawValue instanceof File) {
-        target[key] = await transformer(rawValue)
-      }
-    }
-  }
-
-  private stripInternalFields(params: Record<string, unknown>): void {
-    const internalFields = [
-      'images',
-      'videos',
-      'uploadedImages',
-      'uploadedVideos',
-      'uploadedFilePaths',
-      'uploadedVideoFilePaths',
-      'editStateFile',
-      'imageEditStates',
-      'video',
-    ]
-
-    for (const key of internalFields) {
-      if (key in params) {
-        delete params[key]
-      }
-    }
-  }
 }
-

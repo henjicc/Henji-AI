@@ -127,6 +127,10 @@ export class EndpointSelector {
   private matchesWhen(when: Record<string, any>, params: Record<string, any>, context: SelectContext): boolean {
     return Object.entries(when).every(([key, expected]) => {
       const value = key in params ? params[key] : context[key]
+      // Match behavior with older ModelRegistry implementation for booleans.
+      if (typeof expected === 'boolean') {
+        return Boolean(value) === expected
+      }
       return value === expected
     })
   }
@@ -138,6 +142,28 @@ export class EndpointSelector {
    * @returns 路由定义
    */
   private getRoute(endpoint: string): { path: string; method?: string } {
+    // Fixed endpoint (no route map possible)
+    if (typeof this.config === 'string') {
+      return { path: endpoint, method: 'POST' }
+    }
+
+    // Selector/rules may return either:
+    // - a concrete path (starts with '/'), or
+    // - a route key into `routes`.
+    const routes = this.config.routes
+    if (routes && routes[endpoint]) {
+      return routes[endpoint]
+    }
+
+    if (endpoint.startsWith('/')) {
+      return { path: endpoint, method: 'POST' }
+    }
+
+    if (routes) {
+      const keys = Object.keys(routes).join(', ')
+      throw new Error(`[EndpointSelector] route not found for key "${endpoint}". (Available: ${keys || 'none'})`)
+    }
+
     return { path: endpoint, method: 'POST' }
   }
 }

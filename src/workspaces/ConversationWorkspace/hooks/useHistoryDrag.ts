@@ -1,4 +1,5 @@
-import { useCallback, useRef, type MouseEvent } from 'react'
+import { useCallback, useRef } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDragDrop } from '@/contexts/DragDropContext'
 
 const DRAG_DISTANCE_THRESHOLD = 40
@@ -15,8 +16,8 @@ interface DragPayload {
 }
 
 interface UseHistoryDragResult {
-  startImageDrag: (e: MouseEvent, imageUrl: string, filePath?: string) => void
-  startVideoDrag: (e: MouseEvent, videoUrl: string, filePath?: string) => void
+  startImageDrag: (e: ReactMouseEvent, imageUrl: string, filePath?: string) => void
+  startVideoDrag: (e: ReactMouseEvent, videoUrl: string, filePath?: string) => void
   shouldIgnoreClick: () => boolean
   markContextMenu: () => void
 }
@@ -35,7 +36,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
   }, [])
 
   const runDragWithThumbnail = useCallback((
-    e: MouseEvent,
+    e: ReactMouseEvent,
     payload: DragPayload,
     previewUrl: string,
     getThumbnail: (filePath: string, url: string) => Promise<{ filePath: string; dataUrl: string } | null>
@@ -51,9 +52,11 @@ export function useHistoryDrag(): UseHistoryDragResult {
     let thumbnailPath: string | undefined
     let previewDataUrl = previewUrl
 
-    if (payload.filePath) {
+    const payloadFilePath = payload.filePath
+
+    if (payloadFilePath) {
       void (async () => {
-        const thumbnail = await getThumbnail(payload.filePath, previewUrl)
+        const thumbnail = await getThumbnail(payloadFilePath, previewUrl)
         if (thumbnail) {
           thumbnailPath = thumbnail.filePath
           previewDataUrl = thumbnail.dataUrl
@@ -61,7 +64,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
       })()
     }
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
       const deltaX = Math.abs(moveEvent.clientX - initialX)
       const deltaY = Math.abs(moveEvent.clientY - initialY)
       const timeSinceMouseDown = Date.now() - mouseDownTime
@@ -109,7 +112,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
     }
   }, [])
 
-  const startImageDrag = useCallback((e: MouseEvent, imageUrl: string, filePath?: string): void => {
+  const startImageDrag = useCallback((e: ReactMouseEvent, imageUrl: string, filePath?: string): void => {
     runDragWithThumbnail(
       e,
       { type: 'image', imageUrl, filePath, sourceType: 'history' },
@@ -118,7 +121,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
     )
   }, [loadImageThumbnail, runDragWithThumbnail])
 
-  const startVideoDrag = useCallback((e: MouseEvent, videoUrl: string, filePath?: string): void => {
+  const startVideoDrag = useCallback((e: ReactMouseEvent, videoUrl: string, filePath?: string): void => {
     runDragWithThumbnail(
       e,
       { type: 'video', imageUrl: videoUrl, filePath, sourceType: 'history' },

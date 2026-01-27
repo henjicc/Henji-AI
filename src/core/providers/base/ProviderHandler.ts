@@ -9,18 +9,18 @@ import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { ModelDefinition } from '@/core/types'
 import { RequestBuilder } from '@/core/request/RequestBuilder'
 import { saveImageFromUrl, saveVideoFromUrl, saveAudioFromUrl } from '@/utils/save'
+import { pollTaskStatus as pollTaskStatusImpl } from './polling'
+import { summarizeRequestBody as summarizeRequestBodyImpl } from './requestBodySummary'
 import {
   GenerateResult,
   ProviderConfig,
   PollingConfig,
   ProgressStatus,
-  SaveMediaOptions,
 } from './types'
 import {
   ProviderError,
   ProviderErrorCode,
   createApiKeyMissingError,
-  createPollingTimeoutError,
   createInvalidResponseError,
 } from './errors'
 import {
@@ -28,9 +28,6 @@ import {
   blobToBase64,
   dataURItoBlob,
   getFalApiKey,
-  sleep,
-  isLocalPath,
-  isDataURI,
 } from './utils'
 
 /**
@@ -264,53 +261,10 @@ export abstract class ProviderHandler {
     config: PollingConfig,
     checkStatus: (taskId: string) => Promise<ProgressStatus>
   ): Promise<T> {
-    const { interval, maxAttempts, expectedAttempts } = config
-    let attempts = 0
-
-    this.log('Starting polling', { taskId, config })
-
-    while (attempts < maxAttempts) {
-      attempts++
-
-      try {
-        const status = await checkStatus(taskId)
-
-        this.log('Polling status', {
-          taskId,
-          attempt: attempts,
-          status: status.status,
-          progress: status.progress,
-        })
-
-        // 任务完成
-        if (status.status === 'COMPLETED') {
-          this.log('Task completed', { taskId, attempts })
-          return status.result as T
-        }
-
-        // 任务失败
-        if (status.status === 'FAILED') {
-          throw new ProviderError(
-            status.error || 'Task failed',
-            this.providerName,
-            ProviderErrorCode.TASK_FAILED,
-            { taskId, status }
-          )
-        }
-
-        // 等待下一次轮询
-        await sleep(interval)
-      } catch (error) {
-        if (error instanceof ProviderError) {
-          throw error
-        }
-        // 非致命错误，继续轮询
-        this.log('Polling error, retrying', { error })
-      }
-    }
-
-    // 超时
-    throw createPollingTimeoutError(this.providerName, attempts, maxAttempts)
+    return pollTaskStatusImpl<T>(taskId, config, checkStatus, {
+      providerName: this.providerName,
+      log: this.log.bind(this),
+    })
   }
 
   /**
@@ -444,54 +398,8 @@ export abstract class ProviderHandler {
    * @returns 摘要化后的请求体
    */
   protected summarizeRequestBody(body: Record<string, any>): Record<string, any> {
-    const summarized: Record<string, any> = {}
-
-    // 定义不需要在 API 请求日志中显示的内部字段
-    const internalFields = [
-      'editStateFile',
-      'uploadedFilePaths',
-      'uploadedVideoFilePaths',
-      'sourceFile',
-      'maskFile',
-    ]
-
-    for (const [key, value] of Object.entries(body)) {
-      // 1. 过滤 undefined 值（这些通常不会被 JSON.stringify 发送）
-      if (value === undefined) {
-        continue
-      }
-
-      // 2. 过滤已知的内部字段
-      if (internalFields.includes(key)) {
-        continue
-      }
-
-      if (Array.isArray(value)) {
-        // 处理数组（可能是图片数组）
-        summarized[key] = value.map((item) => {
-          if (typeof item === 'string' && item.startsWith('data:')) {
-            // base64 数据，显示摘要
-            const mimeMatch = item.match(/^data:([^;]+);/)
-            const mimeType = mimeMatch ? mimeMatch[1] : 'unknown'
-            const base64Part = item.split(',')[1] || ''
-            const sizeKB = Math.round((base64Part.length * 3) / 4 / 1024)
-            return `[BASE64 ${mimeType} ~${sizeKB}KB]`
-          }
-          return item
-        })
-      } else if (typeof value === 'string' && value.startsWith('data:')) {
-        // 单个 base64 数据
-        const mimeMatch = value.match(/^data:([^;]+);/)
-        const mimeType = mimeMatch ? mimeMatch[1] : 'unknown'
-        const base64Part = value.split(',')[1] || ''
-        const sizeKB = Math.round((base64Part.length * 3) / 4 / 1024)
-        summarized[key] = `[BASE64 ${mimeType} ~${sizeKB}KB]`
-      } else {
-        summarized[key] = value
-      }
-    }
-
-    return summarized
+    // Keep the method for subclasses; delegate implementation to a helper module.
+    return summarizeRequestBodyImpl(body as unknown as Record<string, unknown>) as Record<string, any>
   }
 
   /**

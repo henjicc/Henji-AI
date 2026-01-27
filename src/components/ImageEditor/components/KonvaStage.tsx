@@ -17,7 +17,7 @@ interface KonvaStageProps {
     selectedId: string | null
     drawingAnnotation: Annotation | null
     textPreview?: TextAnnotation | null
-    textCaret?: { x: number; y: number; height: number; color: string } | null
+    textCaret?: { x: number; y: number; height: number; color: string; visible: boolean } | null
     hiddenAnnotationId?: string | null
     onSelectAnnotation: (id: string | null) => void
     onStageMouseDown: (e: Konva.KonvaEventObject<MouseEvent>) => void

@@ -13,6 +13,7 @@ import {
   ModelTag
 } from './types'
 import { validateModel, ModelValidationError } from './validators/modelValidator'
+import { EndpointSelector } from './request/EndpointSelector'
 
 /**
  * 模型注册中心类
@@ -393,87 +394,13 @@ export class ModelRegistry {
     }
 
     try {
-      const { endpoints } = model
-
-      // 1. 字符串端点（固定端点）
-      if (typeof endpoints === 'string') {
-        return endpoints
-      }
-
-      // 2. 对象端点配置
-      if (typeof endpoints === 'object') {
-        // 2.1 使用 selector 函数
-        if (endpoints.selector) {
-          const selectorResultRaw = endpoints.selector(params)
-          const selectorResult = selectorResultRaw instanceof Promise ? await selectorResultRaw : selectorResultRaw
-
-          console.log(`[ModelRegistry.selectEndpoint] Model: ${modelId}, selector returned: "${selectorResult}"`)
-
-          // 如果有 routes 配置，selector 返回的是键，需要从 routes 中查找实际路径
-          if ((endpoints as any).routes) {
-            const routes = (endpoints as any).routes
-            console.log(`[ModelRegistry.selectEndpoint] Routes available:`, Object.keys(routes))
-            if (routes[selectorResult]) {
-              // 返回键，让 RequestBuilder.getEndpoint 从 routes 中查找
-              console.log(`[ModelRegistry.selectEndpoint] Found route for key "${selectorResult}":`, routes[selectorResult])
-              return selectorResult
-            }
-            // 如果 routes 中没有找到，可能 selector 直接返回的是路径
-            console.log(`[ModelRegistry.selectEndpoint] Key "${selectorResult}" not found in routes, returning as-is`)
-            return selectorResult
-          }
-
-          // 没有 routes，selector 直接返回路径
-          return selectorResult
-        }
-
-        // 2.2 使用 rules 规则选择
-        if (endpoints.rules) {
-          for (const rule of endpoints.rules) {
-            // 如果没有 when 条件，或者条件满足
-            if (!rule.when || this.evaluateCondition(rule.when, params)) {
-              return rule.endpoint
-            }
-          }
-        }
-
-        // 2.3 使用 default 默认端点
-        if (endpoints.default) {
-          return endpoints.default
-        }
-      }
-
-      return undefined
+      const selector = new EndpointSelector(model.endpoints)
+      const result = await selector.select(params, {})
+      return result.endpoint
     } catch (error) {
       console.error(`Endpoint selection failed for ${modelId}:`, error)
       return undefined
     }
-  }
-
-  /**
-   * 评估条件表达式
-   *
-   * @param condition - 条件对象
-   * @param params - 参数值对象
-   * @returns 是否满足条件
-   */
-  private evaluateCondition(condition: Record<string, any>, params: Record<string, any>): boolean {
-    return Object.entries(condition).every(([key, expectedValue]) => {
-      const actualValue = params[key]
-
-      // 简单相等比较
-      if (typeof expectedValue !== 'object') {
-        return actualValue === expectedValue
-      }
-
-      // 支持布尔值判断（如 { hasImage: true }）
-      if (typeof expectedValue === 'boolean') {
-        return Boolean(actualValue) === expectedValue
-      }
-
-      // 其他复杂条件可以在这里扩展
-      return actualValue === expectedValue
-    })
   }
 
   /**

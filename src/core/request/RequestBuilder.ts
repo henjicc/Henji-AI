@@ -7,6 +7,7 @@
 import { registry } from '../ModelRegistry'
 import type { ModelDefinition, ParamDef } from '../types'
 import type { ParamFlowTracker } from '../debug/ParamFlowTracker'
+import { EndpointSelector, type SelectContext } from './EndpointSelector'
 
 /**
  * 构建结果接口
@@ -135,26 +136,18 @@ export class RequestBuilder {
   private async buildWithNewConfig(
     model: ModelDefinition,
     params: Record<string, any>,
-    _context: Record<string, any>,
+    context: Record<string, any>,
     debug: boolean,
     tracker?: ParamFlowTracker
   ): Promise<BuildResult> {
-    // 1. 选择端点
-    const endpointKey = await registry.selectEndpoint(model.meta.id, params)
-
-    if (!endpointKey) {
-      throw new Error(`[RequestBuilder] No endpoint found for model: ${model.meta.id}`)
-    }
+    // 1. 选择端点（统一走 EndpointSelector，支持 routes/key 解析）
+    const selector = new EndpointSelector(model.endpoints)
+    const selectContext = this.buildEndpointSelectContext(params, context)
+    const { endpoint: endpointKey, route } = await selector.select(params, selectContext)
 
     if (debug) {
       console.log('[RequestBuilder] Selected endpoint:', endpointKey)
-    }
-
-    // 2. 获取端点配置
-    const endpoint = this.getEndpoint(model, endpointKey)
-
-    if (debug) {
-      console.log('[RequestBuilder] Endpoint config:', endpoint)
+      console.log('[RequestBuilder] Resolved route:', route)
     }
 
     // 3. 构建请求体
@@ -252,8 +245,8 @@ export class RequestBuilder {
     }
 
     const result: BuildResult = {
-      url: endpoint.path,
-      method: endpoint.method || 'POST',
+      url: route.path,
+      method: route.method || 'POST',
       body
     }
 
@@ -262,44 +255,28 @@ export class RequestBuilder {
     return result
   }
 
-  /**
-   * 截断对象中的 base64 字符串（用于日志输出）
-   *
-   * @param obj - 要处理的对象
-   * @returns 处理后的对象（JSON 字符串）
-   */
-  private truncateBase64InObject(obj: any): string {
-    const truncateString = (str: string, maxLength: number = 100): string => {
-      if (str.length <= maxLength) return str
-      return str.substring(0, maxLength) + `... (${str.length} chars total)`
+  private buildEndpointSelectContext(
+    params: Record<string, any>,
+    context: Record<string, any>
+  ): SelectContext {
+    const next: SelectContext = { ...(context || {}) }
+
+    if (next.hasImage === undefined) {
+      const images = params?.images
+      const image = params?.image
+      next.hasImage =
+        (Array.isArray(images) && images.length > 0) ||
+        (Array.isArray(image) && image.length > 0)
     }
 
-    const processValue = (value: any): any => {
-      if (typeof value === 'string') {
-        // 检测 base64 data URI
-        if (value.startsWith('data:')) {
-          const parts = value.split(',')
-          if (parts.length === 2) {
-            return `${parts[0]},${truncateString(parts[1], 50)}`
-          }
-        }
-        // 检测长字符串（可能是 base64）
-        if (value.length > 200) {
-          return truncateString(value, 100)
-        }
-      } else if (Array.isArray(value)) {
-        return value.map(processValue)
-      } else if (value && typeof value === 'object') {
-        const result: any = {}
-        for (const key in value) {
-          result[key] = processValue(value[key])
-        }
-        return result
-      }
-      return value
+    if (next.hasVideo === undefined) {
+      const video = params?.video
+      const videos = params?.videos
+      next.hasVideo =
+        Boolean(video) || (Array.isArray(videos) && videos.length > 0)
     }
 
-    return JSON.stringify(processValue(obj), null, 2)
+    return next
   }
 
   /**
@@ -371,48 +348,6 @@ export class RequestBuilder {
       default:
         return value
     }
-  }
-
-  /**
-   * 获取端点配置
-   *
-   * @param model - 模型定义
-   * @param endpointKey - 端点键
-   * @returns 端点配置
-   */
-  private getEndpoint(
-    model: ModelDefinition,
-    endpointKey: string
-  ): { path: string; method?: string } {
-    const endpoints = model.endpoints
-
-    if (!endpoints) {
-      throw new Error(`[RequestBuilder] No endpoints defined for model: ${model.meta.id}`)
-    }
-
-    // 字符串简化配置（直接指定路径）
-    if (typeof endpoints === 'string') {
-      return { path: endpoints, method: 'POST' }
-    }
-
-    // 单端点简化配置
-    if (typeof endpoints === 'object' && 'default' in endpoints && typeof endpoints.default === 'string') {
-      return { path: endpoints.default, method: 'POST' }
-    }
-
-    // 多端点配置
-    const routes = (endpoints as any).routes
-    if (routes && routes[endpointKey]) {
-      return routes[endpointKey]
-    }
-
-    // selector 直接返回路径（无 routes 或未命中）
-    if (endpointKey.startsWith('/')) {
-      return { path: endpointKey, method: 'POST' }
-    }
-
-    const routeKeys = routes ? Object.keys(routes).join(', ') : 'none'
-    throw new Error(`[RequestBuilder] Endpoint not found: ${endpointKey} for model: ${model.meta.id}. (Available: ${routeKeys})`)
   }
 
   /**
