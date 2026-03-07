@@ -1,0 +1,106 @@
+:root {
+  --bg-rgb: 15 15 15;
+  --surface-rgb: 26 26 26;
+  --border-rgb: 42 42 42;
+  --text-rgb: 255 255 255;
+  --text-muted-rgb: 136 136 136;
+  --accent-rgb: 59 130 246;
+  --ui-surface-panel: rgb(26, 26, 26);
+  --ui-surface-field: rgba(10, 10, 12, 0.92);
+  --ui-border-soft: rgba(255, 255, 255, 0.14);
+  --ui-border-strong: rgba(255, 255, 255, 0.24);
+  --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
+  --ui-radius-lg: 12px;
+  --ui-radius-xl: 16px;
+  --ui-radius-2xl: 20px;
+  --node-radius: 12px;
+}
+
+:root[data-ui-radius='compact'] {
+  --ui-radius-lg: 10px;
+  --ui-radius-xl: 12px;
+  --ui-radius-2xl: 16px;
+  --node-radius: 10px;
+}
+
+:root[data-ui-radius='large'] {
+  --ui-radius-lg: 14px;
+  --ui-radius-xl: 20px;
+  --ui-radius-2xl: 26px;
+  --node-radius: 16px;
+}
+
+:root[data-theme-tone='warm'] {
+  --bg-rgb: 20 15 12;
+  --surface-rgb: 32 24 20;
+  --border-rgb: 64 50 42;
+  --text-rgb: 246 237 228;
+  --text-muted-rgb: 173 149 130;
+}
+
+:root[data-theme-tone='cool'] {
+  --bg-rgb: 10 16 24;
+  --surface-rgb: 17 27 39;
+  --border-rgb: 42 58 78;
+  --text-rgb: 235 244 255;
+  --text-muted-rgb: 140 163 194;
+}
+
+.ui-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.56) transparent;
+}
+
+.ui-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.ui-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ui-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.ui-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.72);
+}
+
+.ui-panel {
+  background: var(--ui-surface-panel);
+  border-color: var(--ui-border-soft);
+  border-radius: var(--ui-radius-xl);
+  box-shadow: var(--ui-shadow-panel);
+}
+
+.ui-field {
+  background: var(--ui-surface-field);
+  border-color: var(--ui-border-soft);
+  border-radius: var(--ui-radius-lg);
+}
+
+.canvas-minimap {
+  border-radius: 12px;
+  overflow: hidden;
+  pointer-events: auto !important;
+}
+
+.canvas-minimap .react-flow__minimap-svg,
+.canvas-minimap .react-flow__minimap-mask,
+.canvas-minimap .react-flow__minimap-node {
+  pointer-events: all;
+}
+
+.canvas-minimap .react-flow__minimap-mask {
+  cursor: grab;
+  stroke: rgba(160, 160, 160, 0.92);
+  stroke-width: 1.4px;
+  fill: rgba(90, 90, 90, 0.2);
+}
+
+.canvas-minimap .react-flow__minimap-mask:active {
+  cursor: grabbing;
+}

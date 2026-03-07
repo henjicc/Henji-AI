@@ -29,6 +29,7 @@
     "@tauri-apps/plugin-shell": "^2.3.3",
     "@tauri-apps/plugin-sql": "^2.0.0",
     "@types/react-window": "^1.8.8",
+    "@xyflow/react": "^12.10.1",
     "ali-oss": "^6.23.0",
     "axios": "^1.6.0",
     "i18next": "^23.7.0",
@@ -40,9 +41,14 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^14.0.0",
+    "react-image-crop": "^11.0.10",
     "react-konva": "^18.2.14",
+    "react-markdown": "^10.1.0",
     "react-virtuoso": "^4.15.0",
-    "react-window": "^2.2.3"
+    "react-window": "^2.2.3",
+    "remark-gfm": "^4.0.1",
+    "uuid": "^13.0.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

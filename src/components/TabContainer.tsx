@@ -3,7 +3,7 @@ import { useI18n } from '@/hooks/useI18n'
 
 // 懒加载工作区组件
 const ConversationWorkspace = lazy(() => import('../workspaces/ConversationWorkspace'))
-const CanvasPlaceholder = lazy(() => import('../workspaces/CanvasPlaceholder'))
+const CanvasWorkspace = lazy(() => import('../workspaces/CanvasWorkspace'))
 const ToolboxPlaceholder = lazy(() => import('../workspaces/ToolboxPlaceholder'))
 
 interface TabContainerProps {
@@ -26,10 +26,10 @@ const LoadingPlaceholder: React.FC = () => {
  */
 const TabContainer: React.FC<TabContainerProps> = ({ activeTab }) => {
     return (
-        <div className="flex-1 overflow-hidden" style={{ marginTop: '40px' }}>
+        <div className="flex-1 min-h-0 overflow-hidden pt-10">
             <Suspense fallback={<LoadingPlaceholder />}>
                 {activeTab === 'conversation' && <ConversationWorkspace />}
-                {activeTab === 'nodes' && <CanvasPlaceholder />}
+                {activeTab === 'nodes' && <CanvasWorkspace />}
                 {activeTab === 'tools' && <ToolboxPlaceholder />}
             </Suspense>
         </div>

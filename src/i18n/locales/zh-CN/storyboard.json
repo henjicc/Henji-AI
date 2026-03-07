@@ -1,0 +1,208 @@
+{
+  "app": {
+    "title": "分镜助手",
+    "subtitle": "Storyboard Copilot"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功"
+  },
+  "theme": {
+    "dark": "深色",
+    "light": "浅色"
+  },
+  "titleBar": {
+    "back": "返回",
+    "switchToEnglish": "English",
+    "switchToChinese": "中文",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "close": "关闭"
+  },
+  "canvas": {
+    "addImage": "添加图片",
+    "splitStoryboard": "切割",
+    "generate": "生成",
+    "emptyHintTitle": "双击鼠标添加节点",
+    "emptyHintSubtitle": "Double-click to add a node",
+    "toolbar": {
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "fitView": "适应视图",
+      "lock": "锁定画布",
+      "unlock": "解锁画布"
+    }
+  },
+  "tool": {
+    "crop": "裁剪",
+    "annotate": "标注",
+    "split": "切割"
+  },
+  "toolDialog": {
+    "suffix": "工具",
+    "noProcessableImage": "当前节点没有可处理的图片",
+    "processFailed": "处理失败",
+    "processing": "处理中...",
+    "apply": "应用",
+    "cropResultTitle": "裁剪结果",
+    "annotateResultTitle": "标注结果"
+  },
+  "nodeToolbar": {
+    "reupload": "重新上传",
+    "copy": "复制",
+    "copyText": "复制文本",
+    "download": "下载",
+    "ungroup": "解散",
+    "saveAs": "另存为...",
+    "noDownloadPresetPathsHint": "暂无预设路径，请在设置 - 通用中添加",
+    "storyboardLine": "分镜 {{index}}：{{content}}"
+  },
+  "modelParams": {
+    "autoAspectRatio": "自动",
+    "quality": "画质",
+    "aspectRatio": "比例"
+  },
+  "node": {
+    "menu": {
+      "uploadImage": "上传图片",
+      "aiImageGeneration": "AI 图片",
+      "storyboard": "分镜节点",
+      "storyboardGen": "分镜生成",
+      "textAnnotation": "文本注释"
+    },
+    "imageNode": {
+      "title": "图片节点",
+      "prompt": "提示词",
+      "model": "模型",
+      "size": "尺寸",
+      "aspectRatio": "宽高比",
+      "referenceImages": "参考图",
+      "noImage": "暂无图片",
+      "dragImage": "拖拽或点击上传图片",
+      "resultAlt": "结果图",
+      "generatedAlt": "生成图",
+      "waitingResult": "等待输出结果图片",
+      "selectToEdit": "选中后在下方输入提示词生成或编辑图片"
+    },
+    "imageEdit": {
+      "promptRequired": "请输入提示词",
+      "apiKeyRequired": "请在设置中填写 API Key",
+      "resultTitle": "结果图片",
+      "promptPlaceholder": "描述任何你想要生成或编辑的内容"
+    },
+    "upload": {
+      "uploadedAlt": "已上传图片",
+      "hint": "点击或拖拽上传图片"
+    },
+    "storyboardNode": {
+      "title": "分镜节点",
+      "frames": "分镜格",
+      "rows": "行数",
+      "cols": "列数",
+      "frameIndex": "第 {{index}} 格"
+    },
+    "textAnnotation": {
+      "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
+      "empty": "空注释"
+    }
+  },
+  "viewer": {
+    "imageAlt": "图片",
+    "prev": "上一张",
+    "next": "下一张",
+    "reset": "重置视图"
+  },
+  "split": {
+    "title": "切割",
+    "rows": "行数",
+    "cols": "列数",
+    "preview": "预览",
+    "split": "切割"
+  },
+  "ai": {
+    "provider": "AI 提供商",
+    "model": "模型",
+    "prompt": "提示词",
+    "generating": "生成中...",
+    "success": "生成成功",
+    "error": "生成失败"
+  },
+  "project": {
+    "title": "项目管理",
+    "newProject": "新建项目",
+    "newProjectTitle": "新建项目",
+    "open": "打开项目",
+    "save": "保存项目",
+    "name": "项目名称",
+    "namePlaceholder": "请输入项目名称",
+    "rename": "重命名",
+    "renameTitle": "重命名项目",
+    "delete": "删除项目",
+    "created": "创建时间",
+    "modified": "修改时间",
+    "updatedAt": "更新时间",
+    "nodes": "节点数",
+    "noProjects": "暂无项目",
+    "empty": "暂无项目",
+    "emptyHint": "点击上方按钮创建新项目"
+  },
+  "settings": {
+    "title": "设置",
+    "providers": "密钥",
+    "providersDesc": "配置 AI 服务商的 API 密钥",
+    "appearance": "外观",
+    "appearanceDesc": "自定义应用外观",
+    "about": "关于",
+    "aboutDesc": "应用信息",
+    "general": "通用",
+    "generalDesc": "通用设置",
+    "apiKey": "API Key",
+    "model": "模型",
+    "enterApiKey": "输入 API Key",
+    "addProvider": "添加供应商",
+    "providerPpioName": "派欧云",
+    "comingSoon": "即将推出...",
+    "radiusPreset": "圆角大小",
+    "radiusPresetDesc": "控制面板、输入框与节点的全局圆角风格。",
+    "radiusCompact": "紧凑",
+    "radiusDefault": "默认",
+    "radiusLarge": "圆润",
+    "themeTone": "明暗色调",
+    "themeToneDesc": "为深浅主题选择中性、暖色或冷色倾向。",
+    "toneNeutral": "中性",
+    "toneWarm": "暖色",
+    "toneCool": "冷色",
+    "accentColor": "强调色",
+    "accentColorDesc": "用于按钮、选中边框和交互高亮。",
+    "resetAccentColor": "恢复默认",
+    "downloadPresetPaths": "下载预设路径",
+    "downloadPresetPathsDesc": "用于节点工具条下载菜单中的快速保存目录（最多 8 个）",
+    "storyboardGenKeepStyleConsistent": "分镜图风格与参考图保持一致",
+    "storyboardGenKeepStyleConsistentDesc": "启用后，分镜生成提示词会追加“图片风格与参考图保持一致”。",
+    "storyboardGenDisableTextInImage": "分镜图禁止生成描述文本",
+    "storyboardGenDisableTextInImageDesc": "启用后，分镜生成提示词会追加“禁止添加描述文本”。",
+    "ignoreAtTagWhenCopyingAndGenerating": "复制/保存文本时忽略 @ 标签",
+    "ignoreAtTagWhenCopyingAndGeneratingDesc": "启用后，复制文本和写入图片分镜元数据时会忽略类似“@图1”的标签；发送生成请求时仅移除“@”并保留“图1”。",
+    "useUploadFilenameAsNodeTitle": "上传节点自动使用文件名作为标题",
+    "useUploadFilenameAsNodeTitleDesc": "启用后，新上传图片会默认使用文件名作为节点标题（仍可双击手动重命名）。",
+    "downloadPathPlaceholder": "输入目录路径，例如 /Users/name/Pictures/Storyboard 或 D:\\\\Images\\\\Storyboard",
+    "addPath": "添加路径",
+    "chooseFolder": "选择文件夹",
+    "noDownloadPresetPaths": "暂无预设路径",
+    "getApiKeyLink": "点击这里获取密钥",
+    "aboutAppName": "分镜助手",
+    "aboutIntro": "基于节点画布的 AI 分镜工作台，一站式完成图片生成、编辑与分镜流程。",
+    "aboutVersionLabel": "版本",
+    "aboutVersionUnknown": "未知",
+    "aboutAuthorLabel": "作者",
+    "aboutAuthor": "痕继痕迹",
+    "aboutRepositoryLabel": "项目仓库"
+  }
+}

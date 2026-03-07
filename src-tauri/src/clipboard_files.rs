@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
-use std::fs;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 #[cfg(target_os = "windows")]
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use std::fs;
 
 /// 读取剪贴板中的文件路径（Windows 专用）
 /// 当用户在文件管理器中复制文件时，文件路径会以 CF_HDROP 格式存储在剪贴板中
@@ -25,7 +25,12 @@ pub fn read_clipboard_files() -> Result<Vec<ClipboardFile>, String> {
 
     #[link(name = "shell32")]
     extern "system" {
-        fn DragQueryFileW(hdrop: *mut std::ffi::c_void, index: u32, file: *mut u16, size: u32) -> u32;
+        fn DragQueryFileW(
+            hdrop: *mut std::ffi::c_void,
+            index: u32,
+            file: *mut u16,
+            size: u32,
+        ) -> u32;
     }
 
     unsafe {
@@ -117,7 +122,7 @@ pub fn read_clipboard_files() -> Result<Vec<ClipboardFile>, String> {
 #[derive(serde::Serialize)]
 pub struct ClipboardFile {
     pub path: String,
-    pub data: String,      // base64 编码的数据 URL
+    pub data: String, // base64 编码的数据 URL
     pub mime_type: String,
 }
 

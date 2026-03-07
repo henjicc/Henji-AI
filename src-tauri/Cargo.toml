@@ -21,7 +21,12 @@ serde_json = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 
 base64 = "0.21"
-image = { version = "0.24", features = ["jpeg", "png"] }
+image = { version = "0.25", features = ["jpeg", "png"] }
+ab_glyph = "0.2"
+imageproc = "0.25"
+md5 = "0.7"
+png = "0.17"
+urlencoding = "2"
 tauri-plugin-drag = "2.1.0"
 
 [build-dependencies]

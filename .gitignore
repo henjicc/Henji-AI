@@ -5,6 +5,7 @@
 .codex/
 old-Henji-AI/
 docs/GITHUB_ACTIONS_GUIDE.md
+docs/Storyboard-Copilot
 # Dependencies
 node_modules/
 npm-debug.log*

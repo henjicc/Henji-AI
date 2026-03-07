@@ -1,0 +1,208 @@
+{
+  "app": {
+    "title": "Storyboard Copilot",
+    "subtitle": "AI Storyboard Tool"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light"
+  },
+  "titleBar": {
+    "back": "Back",
+    "switchToEnglish": "English",
+    "switchToChinese": "中文",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "close": "Close"
+  },
+  "canvas": {
+    "addImage": "Add Image",
+    "splitStoryboard": "Split Storyboard",
+    "generate": "Generate",
+    "emptyHintTitle": "Double-click to add a node",
+    "emptyHintSubtitle": "Double-click to add a node",
+    "toolbar": {
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "fitView": "Fit View",
+      "lock": "Lock Canvas",
+      "unlock": "Unlock Canvas"
+    }
+  },
+  "tool": {
+    "crop": "Crop",
+    "annotate": "Annotate",
+    "split": "Split"
+  },
+  "toolDialog": {
+    "suffix": " Tool",
+    "noProcessableImage": "No processable image for current node",
+    "processFailed": "Processing failed",
+    "processing": "Processing...",
+    "apply": "Apply",
+    "cropResultTitle": "Crop Result",
+    "annotateResultTitle": "Annotation Result"
+  },
+  "nodeToolbar": {
+    "reupload": "Reupload",
+    "copy": "Copy",
+    "copyText": "Copy Text",
+    "download": "Download",
+    "ungroup": "Ungroup",
+    "saveAs": "Save as...",
+    "noDownloadPresetPathsHint": "No preset path. Add one in Settings > General.",
+    "storyboardLine": "Storyboard {{index}}: {{content}}"
+  },
+  "modelParams": {
+    "autoAspectRatio": "Auto",
+    "quality": "Quality",
+    "aspectRatio": "Aspect Ratio"
+  },
+  "node": {
+    "menu": {
+      "uploadImage": "Upload Image",
+      "aiImageGeneration": "AI Image",
+      "storyboard": "Storyboard Node",
+      "storyboardGen": "Storyboard Generation",
+      "textAnnotation": "Text Annotation"
+    },
+    "imageNode": {
+      "title": "Image Node",
+      "prompt": "Prompt",
+      "model": "Model",
+      "size": "Size",
+      "aspectRatio": "Aspect Ratio",
+      "referenceImages": "Reference Images",
+      "noImage": "No Image",
+      "dragImage": "Drag or click to upload image",
+      "resultAlt": "Result image",
+      "generatedAlt": "Generated image",
+      "waitingResult": "Waiting for output image",
+      "selectToEdit": "Select this node and enter a prompt below to generate or edit image"
+    },
+    "imageEdit": {
+      "promptRequired": "Please enter a prompt",
+      "apiKeyRequired": "Please set API key in Settings",
+      "resultTitle": "Result Image",
+      "promptPlaceholder": "Describe anything you want to generate or edit"
+    },
+    "upload": {
+      "uploadedAlt": "Uploaded image",
+      "hint": "Click or drag to upload image"
+    },
+    "storyboardNode": {
+      "title": "Storyboard Node",
+      "frames": "Frames",
+      "rows": "Rows",
+      "cols": "Columns",
+      "frameIndex": "Frame {{index}}"
+    },
+    "textAnnotation": {
+      "placeholder": "Write Markdown text. It will render when unselected.",
+      "empty": "Empty note"
+    }
+  },
+  "viewer": {
+    "imageAlt": "Image",
+    "prev": "Previous",
+    "next": "Next",
+    "reset": "Reset View"
+  },
+  "split": {
+    "title": "Split Storyboard",
+    "rows": "Rows",
+    "cols": "Columns",
+    "preview": "Preview",
+    "split": "Split"
+  },
+  "ai": {
+    "provider": "AI Provider",
+    "model": "Model",
+    "prompt": "Prompt",
+    "generating": "Generating...",
+    "success": "Generated successfully",
+    "error": "Generation failed"
+  },
+  "project": {
+    "title": "Projects",
+    "newProject": "New Project",
+    "newProjectTitle": "New Project",
+    "open": "Open Project",
+    "save": "Save Project",
+    "name": "Project Name",
+    "namePlaceholder": "Enter project name",
+    "rename": "Rename",
+    "renameTitle": "Rename Project",
+    "delete": "Delete Project",
+    "created": "Created",
+    "modified": "Modified",
+    "updatedAt": "Updated",
+    "nodes": "Nodes",
+    "noProjects": "No Projects",
+    "empty": "No Projects",
+    "emptyHint": "Click the button above to create a new project"
+  },
+  "settings": {
+    "title": "Settings",
+    "providers": "API Key",
+    "providersDesc": "Configure AI provider API keys",
+    "appearance": "Appearance",
+    "appearanceDesc": "Customize app appearance",
+    "about": "About",
+    "aboutDesc": "Application information",
+    "general": "General",
+    "generalDesc": "General settings",
+    "apiKey": "API Key",
+    "model": "Model",
+    "enterApiKey": "Enter API Key",
+    "addProvider": "Add Provider",
+    "providerPpioName": "PPIO",
+    "comingSoon": "Coming soon...",
+    "radiusPreset": "Corner Radius",
+    "radiusPresetDesc": "Control global corner style for panels, inputs, and nodes.",
+    "radiusCompact": "Compact",
+    "radiusDefault": "Default",
+    "radiusLarge": "Rounded",
+    "themeTone": "Theme Tone",
+    "themeToneDesc": "Choose neutral, warm, or cool tint for both light and dark themes.",
+    "toneNeutral": "Neutral",
+    "toneWarm": "Warm",
+    "toneCool": "Cool",
+    "accentColor": "Accent Color",
+    "accentColorDesc": "Used by buttons, selected borders, and interaction highlights.",
+    "resetAccentColor": "Reset",
+    "downloadPresetPaths": "Download Preset Paths",
+    "downloadPresetPathsDesc": "Used by node toolbar download menu for quick-save directories (up to 8).",
+    "storyboardGenKeepStyleConsistent": "Keep storyboard style aligned with references",
+    "storyboardGenKeepStyleConsistentDesc": "When enabled, storyboard generation prompt appends \"图片风格与参考图保持一致\".",
+    "storyboardGenDisableTextInImage": "Disallow descriptive text in storyboard image",
+    "storyboardGenDisableTextInImageDesc": "When enabled, storyboard generation prompt appends \"禁止添加描述文本\".",
+    "ignoreAtTagWhenCopyingAndGenerating": "Ignore @ tags when copying/saving text",
+    "ignoreAtTagWhenCopyingAndGeneratingDesc": "When enabled, copied text and embedded storyboard metadata remove tags like \"@图1\"; generation requests only remove \"@\" and keep \"图1\".",
+    "useUploadFilenameAsNodeTitle": "Use uploaded filename as node title",
+    "useUploadFilenameAsNodeTitleDesc": "When enabled, newly uploaded images use the file name as the node title by default (still editable via double-click).",
+    "downloadPathPlaceholder": "Input folder path, e.g. /Users/name/Pictures/Storyboard or D:\\\\Images\\\\Storyboard",
+    "addPath": "Add Path",
+    "chooseFolder": "Choose Folder",
+    "noDownloadPresetPaths": "No preset path yet",
+    "getApiKeyLink": "Click here to get API key",
+    "aboutAppName": "Storyboard Copilot",
+    "aboutIntro": "An AI storyboard workstation based on a node canvas for generation, editing, and storyboard workflows.",
+    "aboutVersionLabel": "Version",
+    "aboutVersionUnknown": "Unknown",
+    "aboutAuthorLabel": "Author",
+    "aboutAuthor": "痕继痕迹",
+    "aboutRepositoryLabel": "Repository"
+  }
+}

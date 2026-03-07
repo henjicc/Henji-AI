@@ -4,6 +4,7 @@ import TabContainer from './components/TabContainer'
 import { DragDropProvider } from './contexts/DragDropContext'
 import GlobalContextMenuProvider from './contexts/GlobalContextMenuProvider'
 import { databaseService } from './services/database/DatabaseService'
+import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
 import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from './core/panels'
@@ -36,6 +37,9 @@ const App: React.FC = () => {
       // 2. 初始化数据库
       await databaseService.init()
 
+      // 2.1 初始化画布项目存储
+      await canvasProjectService.init()
+
       // 3. 加载启用的自定义模型
       try {
         const customModelService = getCustomModelService(databaseService)
@@ -60,7 +64,7 @@ const App: React.FC = () => {
     <DragDropProvider>
       <GlobalContextMenuProvider>
         <div
-          className="min-h-screen bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden"
+          className="h-screen min-h-screen bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden"
           style={{
             opacity: isReady ? 1 : 0,
             transition: 'opacity 0.3s ease-in-out'

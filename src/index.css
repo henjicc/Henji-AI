@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 /* 禁用浏览器默认的聚焦样式（白色 ring） */
 /* 这解决了 Tauri WebView 中输入框等元素点击时出现白色边框的问题 */
 *:focus,

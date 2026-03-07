@@ -58,7 +58,10 @@ pub async fn modelscope_submit_task(
         .map_err(|e| format!("请求失败: {}", e))?;
 
     let status = response.status();
-    let response_text = response.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
         // 尝试解析错误信息
@@ -81,7 +84,10 @@ pub async fn modelscope_check_status(
     let client = reqwest::Client::new();
 
     let response = client
-        .get(format!("https://api-inference.modelscope.cn/v1/tasks/{}", task_id))
+        .get(format!(
+            "https://api-inference.modelscope.cn/v1/tasks/{}",
+            task_id
+        ))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .header("X-ModelScope-Task-Type", "image_generation")
@@ -90,7 +96,10 @@ pub async fn modelscope_check_status(
         .map_err(|e| format!("请求失败: {}", e))?;
 
     let status = response.status();
-    let response_text = response.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| format!("读取响应失败: {}", e))?;
 
     if !status.is_success() {
         if let Ok(error) = serde_json::from_str::<ModelscopeError>(&response_text) {

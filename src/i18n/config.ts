@@ -18,6 +18,7 @@ import zhCN_errors from './locales/zh-CN/errors.json'
 import zhCN_ui from './locales/zh-CN/ui.json'
 import zhCN_history from './locales/zh-CN/history.json'
 import zhCN_settings from './locales/zh-CN/settings.json'
+import zhCN_storyboard from './locales/zh-CN/storyboard.json'
 
 import enUS_common from './locales/en-US/common.json'
 import enUS_models from './locales/en-US/models.json'
@@ -30,6 +31,7 @@ import enUS_errors from './locales/en-US/errors.json'
 import enUS_ui from './locales/en-US/ui.json'
 import enUS_history from './locales/en-US/history.json'
 import enUS_settings from './locales/en-US/settings.json'
+import enUS_storyboard from './locales/en-US/storyboard.json'
 
 
 type ModelLocale = Record<string, unknown> & { defs?: Record<string, unknown> }
@@ -44,9 +46,29 @@ function mergeModelDefs(base: ModelLocale, ...sources: ModelLocale[]): ModelLoca
   return { ...base, defs: mergedDefs }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function deepMergeLocale(
+  base: Record<string, unknown>,
+  extension: Record<string, unknown>
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...base }
+  Object.entries(extension).forEach(([key, value]) => {
+    const baseValue = next[key]
+    if (isPlainRecord(baseValue) && isPlainRecord(value)) {
+      next[key] = deepMergeLocale(baseValue, value)
+      return
+    }
+    next[key] = value
+  })
+  return next
+}
+
 const resources = {
   'zh-CN': {
-    common: zhCN_common,
+    common: deepMergeLocale(zhCN_common as Record<string, unknown>, zhCN_storyboard as Record<string, unknown>),
     models: mergeModelDefs(zhCN_models, zhCN_models_ppio, zhCN_models_fal, zhCN_models_kie, zhCN_models_modelscope),
     params: zhCN_params,
     errors: zhCN_errors,
@@ -55,7 +77,7 @@ const resources = {
     settings: zhCN_settings,
   },
   'en-US': {
-    common: enUS_common,
+    common: deepMergeLocale(enUS_common as Record<string, unknown>, enUS_storyboard as Record<string, unknown>),
     models: mergeModelDefs(enUS_models, enUS_models_ppio, enUS_models_fal, enUS_models_kie, enUS_models_modelscope),
     params: enUS_params,
     errors: enUS_errors,
