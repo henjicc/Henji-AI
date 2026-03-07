@@ -13,6 +13,17 @@ const FILE_URL_PREFIX = 'file://';
 const LOCAL_PATH_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 const storyboardMetadataStore = new Map<string, StoryboardImageMetadata>();
 const IMAGE_CMD_LOG_PREFIX = '[ImageCmd]';
+const IMAGE_CMD_LOG_ENABLED = false;
+
+function imageCmdInfo(message: string, payload: unknown): void {
+  if (!IMAGE_CMD_LOG_ENABLED) return;
+  console.info(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
+}
+
+function imageCmdWarn(message: string, payload: unknown): void {
+  if (!IMAGE_CMD_LOG_ENABLED) return;
+  console.warn(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
+}
 
 function sourceKindForLog(source: string): 'data-url' | 'http' | 'blob' | 'local-path' | 'other' {
   if (isDataUrl(source)) return 'data-url';
@@ -361,7 +372,7 @@ export async function splitImage(
 ): Promise<string[]> {
   const startedAt = performance.now();
   const runtime = isTauri() ? 'tauri' : 'web';
-  console.info(`${IMAGE_CMD_LOG_PREFIX} splitImage start`, {
+  imageCmdInfo('splitImage start', {
     runtime,
     rows,
     cols,
@@ -370,7 +381,7 @@ export async function splitImage(
 
   if (!isTauri()) {
     const fallback = await localSplitImage(imageBase64, rows, cols, lineThickness);
-    console.info(`${IMAGE_CMD_LOG_PREFIX} splitImage fallback(web)`, {
+    imageCmdInfo('splitImage fallback(web)', {
       frames: fallback.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
@@ -384,18 +395,18 @@ export async function splitImage(
       cols,
       lineThickness,
     });
-    console.info(`${IMAGE_CMD_LOG_PREFIX} splitImage rust`, {
+    imageCmdInfo('splitImage rust', {
       frames: rustResult.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
     return rustResult;
   } catch (error) {
-    console.warn(`${IMAGE_CMD_LOG_PREFIX} splitImage rust-failed -> fallback`, {
+    imageCmdWarn('splitImage rust-failed -> fallback', {
       totalMs: Math.round(performance.now() - startedAt),
       error: error instanceof Error ? error.message : String(error),
     });
     const fallback = await localSplitImage(imageBase64, rows, cols, lineThickness);
-    console.info(`${IMAGE_CMD_LOG_PREFIX} splitImage fallback`, {
+    imageCmdInfo('splitImage fallback', {
       frames: fallback.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
@@ -411,7 +422,7 @@ export async function splitImageSource(
 ): Promise<string[]> {
   const startedAt = performance.now();
   const runtime = isTauri() ? 'tauri' : 'web';
-  console.info(`${IMAGE_CMD_LOG_PREFIX} splitImageSource start`, {
+  imageCmdInfo('splitImageSource start', {
     runtime,
     sourceKind: sourceKindForLog(source),
     rows,
@@ -421,7 +432,7 @@ export async function splitImageSource(
 
   if (!isTauri()) {
     const fallback = await localSplitImage(source, rows, cols, lineThickness);
-    console.info(`${IMAGE_CMD_LOG_PREFIX} splitImageSource fallback(web)`, {
+    imageCmdInfo('splitImageSource fallback(web)', {
       frames: fallback.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
@@ -435,18 +446,18 @@ export async function splitImageSource(
       cols,
       lineThickness,
     });
-    console.info(`${IMAGE_CMD_LOG_PREFIX} splitImageSource rust`, {
+    imageCmdInfo('splitImageSource rust', {
       frames: rustResult.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
     return rustResult;
   } catch (error) {
-    console.warn(`${IMAGE_CMD_LOG_PREFIX} splitImageSource rust-failed -> fallback`, {
+    imageCmdWarn('splitImageSource rust-failed -> fallback', {
       totalMs: Math.round(performance.now() - startedAt),
       error: error instanceof Error ? error.message : String(error),
     });
     const fallback = await localSplitImage(source, rows, cols, lineThickness);
-    console.info(`${IMAGE_CMD_LOG_PREFIX} splitImageSource fallback`, {
+    imageCmdInfo('splitImageSource fallback', {
       frames: fallback.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
