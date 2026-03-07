@@ -139,15 +139,18 @@ npm run tauri:build:mac
 
 ## 架构说明
 
-### 适配器模式
+### Provider 架构（新系统）
 
-项目采用适配器模式统一不同 AI 供应商的 API：
+项目采用 Provider + 配置驱动架构统一不同 AI 供应商的 API：
 
 ```
-MediaGenerator → AdapterFactory → 具体适配器 (PPIOAdapter / FalAdapter / ModelscopeAdapter)
+MediaGenerator/ConversationWorkspace
+  → GenerationService
+  → ProviderFactoryRegistry
+  → Provider (PPIO / Fal / KIE / Modelscope)
 ```
 
-每个适配器实现统一的接口，支持图片、视频、音频生成。
+模型定义集中在 `src/models/**/*.model.ts`，由 `loadAllModels()` 自动扫描注册到 `ModelRegistry`。请求构建由 `RequestBuilder` + `EndpointSelector` 完成。
 
 ### 数据存储
 
@@ -164,11 +167,11 @@ MediaGenerator → AdapterFactory → 具体适配器 (PPIOAdapter / FalAdapter 
 
 ## 扩展开发
 
-想要添加新的 AI 模型或供应商？请参考 **[模型与供应商适配指南](docs/model-adaptation-guide.md)**，了解如何：
+想要添加新的 AI 模型或供应商？请参考 **[模型与供应商适配指南（新架构）](docs/model-adaptation-guide-new.md)**，了解如何：
 
 - 定义新模型的参数 Schema
-- 实现后端适配器
-- 注册模型到系统中
+- 实现 Provider 逻辑
+- 自动注册模型到系统中
 
 ## 许可证
 
