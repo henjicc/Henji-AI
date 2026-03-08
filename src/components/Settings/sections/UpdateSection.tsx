@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Toggle from '@/components/ui/Toggle'
+import { UiButton, UiChipButton } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import SettingsDialog from '../components/SettingsDialog'
 import { useUpdateConfig } from '../hooks/useUpdateConfig'
@@ -96,17 +97,15 @@ const UpdateSection: React.FC = () => {
             </label>
             <div className="grid grid-cols-2 gap-2">
               {frequencies.map((freq) => (
-                <button
+                <UiChipButton
                   key={freq}
                   onClick={() => updateFrequency(freq)}
                   disabled={!config.enabled}
-                  className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 ${config.frequency === freq
-                    ? 'bg-[#007eff] text-white'
-                    : 'bg-zinc-700/30 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  active={config.frequency === freq}
+                  className={`justify-center px-4 py-2.5 text-sm font-medium ${config.frequency === freq ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
                 >
                   {t(`sections.updates.frequency.${freq}`)}
-                </button>
+                </UiChipButton>
               ))}
             </div>
             <p className="mt-2 text-xs text-zinc-500">{t('sections.updates.frequencyHint')}</p>
@@ -118,20 +117,24 @@ const UpdateSection: React.FC = () => {
                 <p className="text-sm text-zinc-300 font-medium">{t('sections.updates.currentVersionLabel')}</p>
                 <p className="text-xs text-zinc-500 mt-1 font-mono">{currentVersion}</p>
               </div>
-              <button
+              <UiButton
                 onClick={handleCheck}
                 disabled={isChecking}
-                className="px-4 py-2 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                variant="primary"
+                size="sm"
+                className="gap-2 px-4"
               >
                 {isChecking ? t('actions.checking') : t('actions.checkUpdate')}
-              </button>
+              </UiButton>
             </div>
-            <button
+            <UiButton
               onClick={clearIgnored}
-              className="w-full px-4 py-2 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-300 rounded-lg transition-all duration-300 text-sm"
+              variant="muted"
+              size="sm"
+              className="w-full px-4 text-zinc-300"
             >
               {t('actions.clearIgnored')}
-            </button>
+            </UiButton>
             <p className="text-xs text-zinc-500">{t('sections.updates.clearIgnoredHint')}</p>
           </div>
         </div>

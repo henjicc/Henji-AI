@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiRangeInput } from '@/components/ui'
 
 interface Filter {
   id: string
@@ -37,13 +38,16 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     <div className="filter-panel">
       <div className="panel-header">
         <h3>{t('imageEditor.filterPanel.title')}</h3>
-        <button
+        <UiButton
+          type="button"
+          size="sm"
+          variant="ghost"
           className="reset-btn"
           onClick={onFilterReset}
           disabled={!activeFilter}
         >
           {t('common:actions.reset')}
-        </button>
+        </UiButton>
       </div>
 
       <div className="panel-content">
@@ -74,8 +78,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           <div className="filter-controls">
             <div className="control-group">
               <label>{t('imageEditor.filterPanel.intensity')}</label>
-              <input
-                type="range"
+              <UiRangeInput
                 min="0"
                 max="100"
                 value={filterIntensity}
@@ -84,12 +87,15 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
               <span className="value">{filterIntensity}%</span>
             </div>
 
-            <button
+            <UiButton
+              type="button"
+              variant="primary"
+              size="sm"
               className="apply-btn primary"
               onClick={onFilterApply}
             >
               {t('imageEditor.filterPanel.apply')}
-            </button>
+            </UiButton>
           </div>
         )}
       </div>

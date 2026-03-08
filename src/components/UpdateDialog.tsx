@@ -9,6 +9,7 @@ import { ReleaseInfo, formatReleaseDate } from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
 import { logError } from '../utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiIconButton, UiPanel } from '@/components/ui'
 
 interface UpdateDialogProps {
   releaseInfo: ReleaseInfo
@@ -113,8 +114,8 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
       />
 
       {/* 对话框内容 */}
-      <div
-        className="relative bg-[#131313]/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden"
+      <UiPanel
+        className="relative w-full max-w-2xl overflow-hidden rounded-2xl"
         style={{
           opacity: dialogOpacity,
           transform: `scale(${0.97 + 0.03 * dialogOpacity})`,
@@ -161,9 +162,9 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
                 <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
               </div>
             </div>
-            <button
+            <UiIconButton
               onClick={handleClose}
-              className="text-zinc-400 hover:text-white transition-colors p-1 rounded-full hover:bg-zinc-800/50"
+              className="rounded-full text-zinc-400 hover:text-white"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -179,7 +180,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
                   d="M6 18L18 6M6 6l12 12"
                 />
               </svg>
-            </button>
+            </UiIconButton>
           </div>
         </div>
 
@@ -193,26 +194,32 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
 
         {/* 底部按钮 */}
         <div className="p-6 border-t border-zinc-700/50 bg-zinc-900/20 flex items-center justify-end gap-3">
-          <button
+          <UiButton
             onClick={handleIgnore}
-            className="px-5 py-2.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg transition-all duration-300 text-sm font-medium"
+            variant="muted"
+            size="sm"
+            className="px-5"
           >
             {t('updateDialog.actions.skip')}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             onClick={handleClose}
-            className="px-5 py-2.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg transition-all duration-300 text-sm font-medium"
+            variant="muted"
+            size="sm"
+            className="px-5"
           >
             {t('updateDialog.actions.remindLater')}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             onClick={handleUpdate}
-            className="px-5 py-2.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 text-sm font-medium shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
+            variant="primary"
+            size="sm"
+            className="px-5 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
           >
             {t('updateDialog.actions.updateNow')}
-          </button>
+          </UiButton>
         </div>
-      </div>
+      </UiPanel>
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

@@ -5,6 +5,7 @@
 
 import React, { useRef, useEffect } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton, UiRangeInput } from '@/components/ui'
 
 interface AudioPlayerProps {
   audioUrl: string
@@ -89,31 +90,30 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <span className="audio-title">{title}</span>
           <div className="audio-actions">
             {onDownload && (
-              <button className="audio-btn" onClick={onDownload} title={t('common:actions.download')}>
+              <UiIconButton className="audio-btn" onClick={onDownload} title={t('common:actions.download')}>
                 ⬇️
-              </button>
+              </UiIconButton>
             )}
             {onClose && (
-              <button className="audio-btn" onClick={onClose} title={t('common:close')}>
+              <UiIconButton className="audio-btn" onClick={onClose} title={t('common:close')}>
                 ×
-              </button>
+              </UiIconButton>
             )}
           </div>
         </div>
       )}
 
       <div className="audio-player-controls">
-        <button
+        <UiIconButton
           className="control-btn play-pause"
           onClick={isPlaying ? onPause : onPlay}
         >
           {isPlaying ? '⏸' : '▶'}
-        </button>
+        </UiIconButton>
 
         <div className="progress-container">
           <span className="time-display">{formatTime(currentTime)}</span>
-          <input
-            type="range"
+          <UiRangeInput
             min="0"
             max={duration}
             value={currentTime}
@@ -123,15 +123,14 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <span className="time-display">{formatTime(duration)}</span>
         </div>
 
-        <button
+        <UiIconButton
           className="control-btn mute"
           onClick={onMuteToggle}
         >
           {isMuted ? '🔇' : '🔊'}
-        </button>
+        </UiIconButton>
 
-        <input
-          type="range"
+        <UiRangeInput
           min="0"
           max="1"
           step="0.1"

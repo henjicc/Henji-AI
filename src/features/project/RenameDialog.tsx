@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { UiButton, UiInput, UiPanel } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
 import { useDialogTransition } from '@/components/ui/useDialogTransition';
 
@@ -51,37 +52,34 @@ export function RenameDialog({
         className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
-      <div
-        className={`relative w-80 rounded-lg border border-border-dark bg-surface-dark p-6 shadow-xl transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-      >
+      <UiPanel className={`relative w-80 p-6 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
         <h2 className="text-lg font-semibold text-text-dark mb-4">{title}</h2>
-        <input
-          type="text"
+        <UiInput
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t('project.namePlaceholder')}
-          className="w-full px-3 py-2 bg-bg-dark border border-border-dark rounded text-text-dark placeholder-text-muted focus:outline-none focus:border-primary"
+          className="h-10"
           autoFocus
         />
         <div className="flex justify-end gap-2 mt-4">
-          <button
-            type="button"
+          <UiButton
             onClick={onClose}
-            className="px-4 py-2 text-text-muted hover:text-text-dark transition-colors"
+            variant="ghost"
+            size="sm"
           >
             {t('common.cancel')}
-          </button>
-          <button
-            type="button"
+          </UiButton>
+          <UiButton
             onClick={handleConfirm}
             disabled={!name.trim()}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="primary"
+            size="sm"
           >
             {t('common.confirm')}
-          </button>
+          </UiButton>
         </div>
-      </div>
+      </UiPanel>
     </div>
   );
 }

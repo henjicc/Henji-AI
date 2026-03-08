@@ -13,7 +13,7 @@ import {
 } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
-import { UiTextAreaField } from '@/components/ui';
+import { UiButton, UiTextAreaField } from '@/components/ui';
 import type { AnnotationItem, AnnotationToolType } from '@/features/canvas/tools/annotation';
 import { canSelectByTool, canTransformAnnotation, type TextEditorState, updateAnnotationPosition, updateAnnotationTransform } from './shared';
 
@@ -369,20 +369,12 @@ export function AnnotateCanvas({
               className="w-full rounded border border-[rgba(255,255,255,0.18)] bg-bg-dark/90 px-2 py-1.5 text-sm text-text-dark outline-none focus:border-accent"
             />
             <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="rounded border border-[rgba(255,255,255,0.22)] px-2 py-1 text-xs text-text-muted hover:bg-bg-dark"
-                onClick={onCancelTextEditor}
-              >
+              <UiButton type="button" variant="ghost" size="sm" onClick={onCancelTextEditor}>
                 取消
-              </button>
-              <button
-                type="button"
-                className="rounded border border-accent/45 bg-accent/20 px-2 py-1 text-xs text-text-dark hover:bg-accent/30"
-                onClick={onCommitTextEditor}
-              >
+              </UiButton>
+              <UiButton type="button" variant="primary" size="sm" onClick={onCommitTextEditor}>
                 确认
-              </button>
+              </UiButton>
             </div>
           </div>
         )}

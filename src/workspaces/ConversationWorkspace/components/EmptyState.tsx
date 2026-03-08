@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiButton } from '@/components/ui'
 
 interface EmptyStateProps {
   icon?: string
@@ -29,12 +30,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         <div className="empty-description">{description}</div>
       )}
       {action && (
-        <button
+        <UiButton
+          variant="primary"
+          size="sm"
           className="empty-action"
           onClick={action.onClick}
         >
           {action.label}
-        </button>
+        </UiButton>
       )}
     </div>
   )

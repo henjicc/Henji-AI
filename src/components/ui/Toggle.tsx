@@ -1,4 +1,5 @@
 
+import { UiButton } from './primitives'
 
 type ToggleProps = {
   label?: string
@@ -15,8 +16,9 @@ export default function Toggle(props: ToggleProps) {
   return (
     <div className={className}>
       {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
-      <button
+      <UiButton
         type="button"
+        variant={disabled ? 'ghost' : checked ? 'primary' : 'muted'}
         onClick={() => !disabled && onChange(!checked)}
         disabled={disabled}
         className={`px-3 py-2 h-[38px] rounded-lg border ${disabled
@@ -27,7 +29,7 @@ export default function Toggle(props: ToggleProps) {
           }`}
       >
         {checked ? onText : offText}
-      </button>
+      </UiButton>
     </div>
   )
 }

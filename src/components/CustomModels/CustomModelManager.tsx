@@ -8,6 +8,7 @@ import { getCustomModelService } from '@/services/customModels/CustomModelServic
 import { databaseService } from '@/services/database/DatabaseService'
 import { AddCustomModelDialog } from './AddCustomModelDialog'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiChipButton, UiPanel } from '@/components/ui'
 
 export function CustomModelManager() {
   const [models, setModels] = useState<CustomModel[]>([])
@@ -88,12 +89,13 @@ export function CustomModelManager() {
     <div className="p-4">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">{t('customModels.title')}</h2>
-        <button
+        <UiButton
+          variant="primary"
+          size="sm"
           onClick={() => setShowAddDialog(true)}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
           {t('customModels.add')}
-        </button>
+        </UiButton>
       </div>
 
       {models.length === 0 ? (
@@ -103,9 +105,9 @@ export function CustomModelManager() {
       ) : (
         <div className="space-y-2">
           {models.map(model => (
-            <div
+            <UiPanel
               key={model.id}
-              className="p-4 border rounded flex justify-between items-center"
+              className="flex items-center justify-between p-4"
             >
               <div className="flex-1">
                 <div className="font-medium">{model.name}</div>
@@ -118,7 +120,8 @@ export function CustomModelManager() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
+                <UiChipButton
+                  active={model.isEnabled}
                   onClick={() => handleToggleEnabled(model.id, model.isEnabled)}
                   className={`px-3 py-1 rounded text-sm ${
                     model.isEnabled
@@ -127,16 +130,18 @@ export function CustomModelManager() {
                   }`}
                 >
                   {model.isEnabled ? t('customModels.enabled') : t('customModels.disabled')}
-                </button>
+                </UiChipButton>
 
-                <button
+                <UiButton
+                  variant="primary"
+                  size="sm"
                   onClick={() => handleDelete(model.id)}
-                  className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                  className="bg-red-500 text-white hover:bg-red-600"
                 >
                   {t('delete')}
-                </button>
+                </UiButton>
               </div>
-            </div>
+            </UiPanel>
           ))}
         </div>
       )}

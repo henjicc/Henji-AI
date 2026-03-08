@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiCheckbox } from '@/components/ui'
 
 interface MediaItem {
   id: string
@@ -65,12 +66,10 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
             onClick={() => onItemClick(item.id)}
           >
             {showCheckbox && onItemSelect && (
-              <input
-                type="checkbox"
+              <UiCheckbox
                 className="media-checkbox"
                 checked={isSelected(item.id)}
-                onChange={(e) => {
-                  e.stopPropagation()
+                onCheckedChange={() => {
                   onItemSelect(item.id)
                 }}
                 onClick={(e) => e.stopPropagation()}

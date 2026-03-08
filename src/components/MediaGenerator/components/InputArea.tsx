@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import FileUploader from '@/components/ui/FileUploader'
 import AlertDialog from '@/components/ui/AlertDialog'
-import { ReferenceTextarea } from '@/components/ui'
+import { ReferenceTextarea, UiIconButton } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { hasTag } from '@/core/tags'
@@ -11,7 +11,6 @@ export interface FileOrderItem {
   type: 'video' | 'image'
   index: number
 }
-
 interface InputAreaProps {
   input: string
   setInput: (value: string) => void
@@ -21,8 +20,6 @@ interface InputAreaProps {
   uploadedImages: string[]
   isLoading: boolean
   isGenerating?: boolean
-
-  // 图片处理回调
   onImageUpload: (files: File[]) => void
   onImageRemove: (index: number) => void
   onImageReplace: (index: number, file: File) => void
@@ -31,22 +28,15 @@ interface InputAreaProps {
   onPaste: (e: React.ClipboardEvent) => void
   onImageDrop: (files: File[]) => void
   onDragStateChange: (isDragging: boolean) => void
-
-  // 视频处理回调
   uploadedVideos?: string[]
   onVideoUpload?: (files: File[]) => void
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
   onVideoClick?: (videoUrl: string) => void
-
-  // 混合文件顺序（用于支持视频+图片混合排序）
   fileOrder?: FileOrderItem[]
   onFileOrderChange?: (order: FileOrderItem[]) => void
-
-  // 生成回调
   onGenerate: () => void
 }
-
 /**
  * 输入区域组件
  * 包含图片上传和文本输入
@@ -78,8 +68,6 @@ const InputArea: React.FC<InputAreaProps> = ({
   onGenerate
 }) => {
   const { t } = useTranslation('ui')
-
-  // 提示弹窗状态
   const [alertDialog, setAlertDialog] = useState<{
     isOpen: boolean
     title: string
@@ -91,12 +79,9 @@ const InputArea: React.FC<InputAreaProps> = ({
     message: '',
     type: 'warning'
   })
-
-  // 显示提示弹窗
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
     setAlertDialog({ isOpen: true, title, message, type })
   }
-
   const inputLimits = resolveInputLimits(
     selectedModel,
     modelParams,
@@ -112,27 +97,23 @@ const InputArea: React.FC<InputAreaProps> = ({
   const isMultiple = maxImageCount > 1
   const shouldShowUpload = currentModel?.type !== 'audio' && (maxImageCount > 0 || needsVideoUpload)
   const isEnglishPromptOnly = hasTag(selectedModel, 'english-prompt-only')
-
   const formatLimitText = (min: number, max: number, unit: string) => {
     if (max <= 0) return ''
     if (min === max) return t('inputArea.limit.exact', { count: max, unit })
     if (min > 0) return t('inputArea.limit.range', { min, max, unit })
     return t('inputArea.limit.max', { max, unit })
   }
-
   const uploadHint = (() => {
     if (!needsVideoUpload) {
       return t('inputArea.upload.images', {
         range: formatLimitText(minImageCount, maxImageCount, t('inputArea.unit.images'))
       })
     }
-
     if (needsVideoOnly) {
       return t('inputArea.upload.videos', {
         range: formatLimitText(minVideoCount, maxVideoCount, t('inputArea.unit.videos'))
       })
     }
-
     const videoText = formatLimitText(minVideoCount, maxVideoCount, t('inputArea.unit.videos'))
     const imageText = formatLimitText(minImageCount, maxImageCount, t('inputArea.unit.images'))
     const fixedCounts = minVideoCount === maxVideoCount && minImageCount === maxImageCount
@@ -140,7 +121,6 @@ const InputArea: React.FC<InputAreaProps> = ({
       ? t('inputArea.upload.mixedFixed', { videoRange: videoText, imageRange: imageText })
       : t('inputArea.upload.mixed', { videoRange: videoText, imageRange: imageText })
   })()
-
   const {
     currentFileOrder,
     mixedFiles,
@@ -167,7 +147,6 @@ const InputArea: React.FC<InputAreaProps> = ({
     onVideoReplace,
     onVideoClick
   })
-
   const requirementCheck = validateGenerationRequirements(
     selectedModel,
     modelParams,
@@ -177,7 +156,6 @@ const InputArea: React.FC<InputAreaProps> = ({
       videosCount: uploadedVideos.length
     }
   )
-
   const isGenerateDisabled = () => {
     if (isLoading) return true
     if (currentModel?.type === 'audio' && !input.trim()) return true
@@ -186,8 +164,6 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
     return !requirementCheck.ok
   }
-
-  // 辅助函数：获取视频时长
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file)
@@ -204,20 +180,13 @@ const InputArea: React.FC<InputAreaProps> = ({
       video.src = url
     })
   }
-
-  // 处理混合文件上传（视频+图片）
   const handleMixedFileUpload = async (files: File[]) => {
     const videoFiles = files.filter(f => f.type.startsWith('video/'))
     const imageFiles = files.filter(f => f.type.startsWith('image/'))
-
-    // 检查当前已上传的文件数量
     const currentVideoCount = uploadedVideos.length
     const currentImageCount = uploadedImages.length
-
-    // 处理视频：只有在没有视频时才能上传
     if (videoFiles.length > 0 && onVideoUpload && currentVideoCount < maxVideoCount) {
       const file = videoFiles[0]
-
       if (videoConstraints) {
         if (videoConstraints.maxSizeMB) {
           const maxSizeBytes = videoConstraints.maxSizeMB * 1024 * 1024
@@ -230,7 +199,6 @@ const InputArea: React.FC<InputAreaProps> = ({
             return
           }
         }
-
         if (videoConstraints.minDurationSec || videoConstraints.maxDurationSec) {
           try {
             const duration = await getVideoDuration(file)
@@ -266,7 +234,6 @@ const InputArea: React.FC<InputAreaProps> = ({
           }
         }
       }
-
       onVideoUpload([file])
     } else if (videoFiles.length > 0 && currentVideoCount >= maxVideoCount) {
       showAlert(
@@ -275,8 +242,6 @@ const InputArea: React.FC<InputAreaProps> = ({
         'warning'
       )
     }
-
-    // 处理图片：检查是否还有空位
     if (imageFiles.length > 0 && !needsVideoOnly) {
       const availableImageSlots = maxImageCount - currentImageCount
       if (availableImageSlots > 0) {
@@ -290,18 +255,15 @@ const InputArea: React.FC<InputAreaProps> = ({
       }
     }
   }
-
   const promptMinHeightClass =
     currentModel?.type === 'audio' || !shouldShowUpload
       ? 'min-h-[176px]'
       : 'min-h-[100px]'
-
   const promptReferences = uploadedImages.map((imageUrl, index) => ({
     id: `image-ref-${index}`,
     label: `图${index + 1}`,
     thumbnailSrc: imageUrl
   }))
-
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 统一的文件上传区域（支持视频+图片混合上传） */}
@@ -326,11 +288,10 @@ const InputArea: React.FC<InputAreaProps> = ({
               fileTypes={needsVideoUpload && currentFileOrder.length > 0
                 ? currentFileOrder.map(item => item.type)
                 : undefined}
-              {...{ onDragStateChange } as any}
+              onDragStateChange={onDragStateChange}
             />
           </div>
         )}
-
       {/* 文本输入框 */}
       <div className="relative">
         <ReferenceTextarea
@@ -384,17 +345,15 @@ const InputArea: React.FC<InputAreaProps> = ({
           )}
           disabled={isLoading}
         />
-
         {/* 生成按钮 */}
-        <button
+        <UiIconButton
+          type="button"
           onClick={onGenerate}
           disabled={isGenerateDisabled()}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-          className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isGenerateDisabled()
-            ? 'bg-zinc-700/50 text-zinc-500 cursor-not-allowed'
-            : isGenerating
-              ? 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
-              : 'bg-[#007eff] hover:brightness-110 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+          className={`absolute bottom-3 right-3 h-10 w-10 rounded-full transition-all duration-300 ${isGenerateDisabled()
+            ? 'border-zinc-700/30 bg-zinc-700/50 text-zinc-500'
+            : 'border-transparent bg-[#007eff] text-white shadow-lg hover:scale-105 hover:brightness-110 hover:shadow-xl'
             }`}
         >
           {isLoading ? (
@@ -411,9 +370,8 @@ const InputArea: React.FC<InputAreaProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
           )}
-        </button>
+        </UiIconButton>
       </div>
-
       {/* Alert Dialog */}
       <AlertDialog
         isOpen={alertDialog.isOpen}
@@ -425,5 +383,4 @@ const InputArea: React.FC<InputAreaProps> = ({
     </div>
   )
 }
-
 export default InputArea

@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect } from 'react'
 import { getTestModeState, type TestModeState } from '@/utils/testMode'
+import { UiIconButton, UiPanel } from '@/components/ui'
+import { ChevronDown } from 'lucide-react'
 
 const TestModeParamsDisplay: React.FC = () => {
   const [state, setState] = useState<TestModeState>(getTestModeState())
@@ -46,7 +48,7 @@ const TestModeParamsDisplay: React.FC = () => {
       /^num_images$/,    // 通用参数
     ]
 
-    const apiParams: Record<string, any> = {}
+    const apiParams: Record<string, unknown> = {}
 
     for (const [key, value] of Object.entries(options)) {
       // 检查是否应该排除
@@ -63,8 +65,8 @@ const TestModeParamsDisplay: React.FC = () => {
   const apiParams = getApiParams()
 
   return (
-    <div
-      className="fixed top-16 right-4 z-40 bg-[#1a1a1a]/95 backdrop-blur-lg border border-yellow-500/30 rounded-lg shadow-2xl"
+    <UiPanel
+      className="fixed top-16 right-4 z-40 border-yellow-500/30 shadow-2xl"
       style={{ maxWidth: '600px', minWidth: '400px' }}
     >
       {/* 标题栏 */}
@@ -78,17 +80,12 @@ const TestModeParamsDisplay: React.FC = () => {
             {model} - API 参数
           </span>
         </div>
-        <button className="text-yellow-500/60 hover:text-yellow-500 transition-colors">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className={`h-4 w-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        <UiIconButton
+          type="button"
+          className="h-6 w-6 border-0 bg-transparent text-yellow-500/60 hover:text-yellow-500"
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? 'rotate-180' : ''}`} />
+        </UiIconButton>
       </div>
 
       {/* 内容区域 */}
@@ -104,7 +101,7 @@ const TestModeParamsDisplay: React.FC = () => {
           )}
         </div>
       )}
-    </div>
+    </UiPanel>
   )
 }
 

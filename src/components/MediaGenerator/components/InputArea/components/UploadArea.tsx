@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiIconButton, UiInput } from '@/components/ui'
 
 interface UploadAreaProps {
   onFilesSelected: (files: File[]) => void
@@ -46,7 +47,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
-        <input
+        <UiInput
           type="file"
           id="file-input"
           accept={accept}
@@ -74,12 +75,12 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
                 {(file.size / 1024 / 1024).toFixed(2)} MB
               </span>
               {onFileRemove && (
-                <button
+                <UiIconButton
                   className="file-remove"
                   onClick={() => onFileRemove(index)}
                 >
                   ×
-                </button>
+                </UiIconButton>
               )}
             </div>
           ))}

@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { migrateHistoryToDatabase } from '@/scripts/migration/migrateHistory'
 import type { MigrationResult } from '@/scripts/migration/migrateHistory'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiPanel } from '@/components/ui'
 
 export function HistoryMigrationDialog() {
   const { t } = useI18n('history')
@@ -31,7 +32,7 @@ export function HistoryMigrationDialog() {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+      <UiPanel className="max-w-md w-full p-6">
         <h2 className="text-xl font-bold mb-4">{t('migration.title')}</h2>
 
         {!result && (
@@ -48,20 +49,23 @@ export function HistoryMigrationDialog() {
             </p>
 
             <div className="flex gap-3">
-              <button
+              <UiButton
+                variant="primary"
+                size="sm"
                 onClick={handleMigrate}
                 disabled={isMigrating}
-                className="flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+                className="flex-1"
               >
                 {isMigrating ? t('migration.actions.migrating') : t('migration.actions.start')}
-              </button>
-              <button
+              </UiButton>
+              <UiButton
+                variant="muted"
+                size="sm"
                 onClick={() => setIsOpen(false)}
                 disabled={isMigrating}
-                className="px-4 py-2 border rounded hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 {t('migration.actions.later')}
-              </button>
+              </UiButton>
             </div>
           </>
         )}
@@ -104,15 +108,17 @@ export function HistoryMigrationDialog() {
               )}
             </div>
 
-            <button
+            <UiButton
+              variant="primary"
+              size="sm"
               onClick={() => setIsOpen(false)}
-              className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              className="w-full"
             >
               {t('migration.actions.done')}
-            </button>
+            </UiButton>
           </>
         )}
-      </div>
+      </UiPanel>
     </div>
   )
 }

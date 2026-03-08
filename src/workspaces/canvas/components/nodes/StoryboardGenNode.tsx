@@ -4,6 +4,7 @@ import { getI18nText } from '@/core/types/I18nText'
 import { registry } from '@/core/ModelRegistry'
 import { NodeFrame } from './NodeFrame'
 import type { CanvasFlowNode, StoryboardGenNodeData } from '@/workspaces/canvas/types'
+import { UiButton, UiInput, UiSelect, UiTextAreaField } from '@/components/ui'
 
 function normalizeCount(value: number): number {
   return Math.max(1, Math.min(8, Math.floor(value || 1)))
@@ -29,51 +30,51 @@ export function StoryboardGenNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.
         <div className="grid grid-cols-2 gap-2">
           <label className="text-[11px] text-zinc-400">
             行
-            <input
+            <UiInput
               type="number"
               min={1}
               max={8}
               value={node.gridRows}
               onChange={(event) => node.onChangeRows?.(id, Number(event.target.value))}
-              className="mt-1 w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+              className="mt-1 h-8 text-xs"
             />
           </label>
           <label className="text-[11px] text-zinc-400">
             列
-            <input
+            <UiInput
               type="number"
               min={1}
               max={8}
               value={node.gridCols}
               onChange={(event) => node.onChangeCols?.(id, Number(event.target.value))}
-              className="mt-1 w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+              className="mt-1 h-8 text-xs"
             />
           </label>
         </div>
 
         <div className="space-y-1">
           <label className="text-[11px] text-zinc-400">模型</label>
-          <select
+          <UiSelect
             value={node.model}
             onChange={(event) => node.onChangeModel?.(id, event.target.value)}
-            className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+            className="h-8 text-xs"
           >
             {imageModels.map((model) => (
               <option key={model.meta.id} value={model.meta.id}>
                 {getI18nText(model.meta.name, 'zh') || model.meta.id}
               </option>
             ))}
-          </select>
+          </UiSelect>
         </div>
 
         <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-zinc-700 bg-zinc-900/80 p-2">
           {frames.map((frame, index) => (
             <div key={frame.id} className="space-y-1">
               <div className="text-[11px] text-zinc-400">分镜 {String(index + 1).padStart(2, '0')}</div>
-              <textarea
+              <UiTextAreaField
                 value={frame.description}
                 onChange={(event) => node.onChangeFrameDesc?.(id, frame.id, event.target.value)}
-                className="min-h-[52px] w-full resize-y rounded border border-zinc-600 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none"
+                className="min-h-[52px] resize-y px-2 py-1 text-xs"
                 placeholder="该分镜的画面描述..."
               />
             </div>
@@ -98,13 +99,16 @@ export function StoryboardGenNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.
           </div>
         )}
 
-        <button
-          className="w-full rounded-md bg-sky-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-zinc-700"
+        <UiButton
+          type="button"
+          variant="primary"
+          size="sm"
+          className="w-full bg-sky-600 text-xs font-semibold hover:bg-sky-500 disabled:bg-zinc-700"
           disabled={node.isGenerating}
           onClick={() => node.onGenerate?.(id)}
         >
           {node.isGenerating ? '生成分镜中...' : '生成分镜'}
-        </button>
+        </UiButton>
       </NodeFrame>
     </>
   )

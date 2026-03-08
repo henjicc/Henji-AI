@@ -1,4 +1,5 @@
 import React from 'react'
+import { UiButton, UiPanel } from '@/components/ui'
 
 type DialogActionVariant = 'primary' | 'secondary' | 'danger'
 
@@ -16,14 +17,14 @@ export interface SettingsDialogProps {
   onClose?: () => void
 }
 
-const getActionClass = (variant: DialogActionVariant | undefined) => {
+const getActionClass = (variant: DialogActionVariant | undefined): string => {
   if (variant === 'danger') {
-    return 'bg-red-600/70 hover:bg-red-600'
+    return 'bg-red-600/70 text-white hover:bg-red-600'
   }
   if (variant === 'secondary') {
-    return 'bg-zinc-700/50 hover:bg-zinc-600/50'
+    return ''
   }
-  return 'bg-[#007eff]/70 hover:bg-[#007eff]'
+  return ''
 }
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, description, actions, onClose }) => {
@@ -38,25 +39,26 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
       }}
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div
-        className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+      <UiPanel
+        className="relative w-[400px] p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-white text-base">{title}</div>
         {description ? <div className="text-zinc-300 text-sm mt-2">{description}</div> : null}
         <div className="mt-4 flex gap-2 justify-end">
           {actions.map(action => (
-            <button
+            <UiButton
               key={action.label}
-              type="button"
+              size="sm"
+              variant={action.variant === 'primary' || action.variant === 'danger' ? 'primary' : 'muted'}
               onClick={(e) => { e.stopPropagation(); action.onClick() }}
-              className={`h-9 px-3 inline-flex items-center justify-center rounded-md text-white text-sm transition-colors ${getActionClass(action.variant)}`}
+              className={`h-9 px-3 ${getActionClass(action.variant)}`}
             >
               {action.label}
-            </button>
+            </UiButton>
           ))}
         </div>
-      </div>
+      </UiPanel>
     </div>
   )
 }

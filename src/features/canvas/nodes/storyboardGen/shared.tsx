@@ -2,6 +2,7 @@ import { Minus, Plus } from 'lucide-react'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
 import { AUTO_REQUEST_ASPECT_RATIO } from '@/features/canvas/domain/canvasNodes'
 import { parseAspectRatio } from '@/features/canvas/application/imageData'
+import { UiButton } from '@/components/ui'
 
 export interface AspectRatioChoice {
   value: string
@@ -58,27 +59,31 @@ export function GridStepperControl({
   return (
     <div className={GRID_CONTROL_CONTAINER_CLASS}>
       <span className={GRID_CONTROL_LABEL_CLASS}>{label}</span>
-      <button
+      <UiButton
         type="button"
-        className={GRID_CONTROL_BUTTON_CLASS}
+        variant="ghost"
+        size="sm"
+        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !rounded !px-0`}
         onClick={(event) => {
           event.stopPropagation()
           onDecrease()
         }}
       >
         <Minus className={GRID_CONTROL_ICON_CLASS} />
-      </button>
+      </UiButton>
       <span className={GRID_CONTROL_VALUE_CLASS}>{value}</span>
-      <button
+      <UiButton
         type="button"
-        className={GRID_CONTROL_BUTTON_CLASS}
+        variant="ghost"
+        size="sm"
+        className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !rounded !px-0`}
         onClick={(event) => {
           event.stopPropagation()
           onIncrease()
         }}
       >
         <Plus className={GRID_CONTROL_ICON_CLASS} />
-      </button>
+      </UiButton>
     </div>
   )
 }

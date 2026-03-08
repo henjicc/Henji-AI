@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiChipButton } from '@/components/ui'
 
 interface ModelTag {
   id: string
@@ -31,7 +32,8 @@ export const ModelTags: React.FC<ModelTagsProps> = ({
   return (
     <div className="model-tags">
       {tags.map(tag => (
-        <button
+        <UiChipButton
+          active={isSelected(tag.id)}
           key={tag.id}
           className={`tag ${isSelected(tag.id) ? 'selected' : ''}`}
           style={{ backgroundColor: tag.color }}
@@ -46,11 +48,11 @@ export const ModelTags: React.FC<ModelTagsProps> = ({
                 e.stopPropagation()
                 onTagRemove(tag.id)
               }}
-            >
-              ×
-            </span>
-          )}
-        </button>
+              >
+                ×
+              </span>
+            )}
+        </UiChipButton>
       ))}
     </div>
   )

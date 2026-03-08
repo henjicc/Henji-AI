@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
+import { UiButton } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { ProjectManager } from '@/features/project/ProjectManager';
 import { useProjectStore } from '@/stores/projectStore';
@@ -24,13 +25,14 @@ const CanvasWorkspace = (): JSX.Element => {
 
         {isHydrated && currentProjectId && (
           <div className="relative h-full w-full">
-            <button
-              type="button"
+            <UiButton
               onClick={closeProject}
-              className="absolute left-3 top-3 z-[80] rounded-lg border border-border-dark bg-surface-dark/95 px-3 py-1.5 text-xs text-text-dark hover:bg-bg-dark"
+              variant="muted"
+              size="sm"
+              className="absolute left-3 top-3 z-[80] px-3"
             >
               返回项目
-            </button>
+            </UiButton>
             <Canvas />
           </div>
         )}

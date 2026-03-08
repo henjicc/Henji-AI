@@ -6,6 +6,7 @@ import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { QualityOption } from './types'
 import { getI18nText } from '@/core/types'
+import { UiOptionButton } from '@/components/ui'
 
 export interface QualityTierSelectorProps {
   value: string
@@ -49,7 +50,8 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
             : option.resolution
 
           return (
-            <button
+            <UiOptionButton
+              active={value === option.value}
               key={option.value}
               onClick={() => onChange(option.value)}
               className={`quality-tier-option ${value === option.value ? 'selected' : ''}`}
@@ -58,7 +60,7 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
               {description && (
                 <span className="quality-tier-description">{description}</span>
               )}
-            </button>
+            </UiOptionButton>
           )
         })}
       </div>

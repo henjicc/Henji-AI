@@ -1,5 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
+import { UiButton } from './primitives'
 
 type PanelTriggerProps = {
   label?: string
@@ -197,9 +199,10 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
-      <button
+      <UiButton
         type="button"
         disabled={disabled}
+        variant="muted"
         onClick={() => {
           if (disabled) return
           if (open) {
@@ -236,15 +239,15 @@ export default function PanelTrigger(props: PanelTriggerProps) {
           }
         }}
         data-panel-trigger-button
-        className={`bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] !outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 shadow-none focus:shadow-none transition-all duration-300 flex items-center justify-between whitespace-nowrap ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
+        className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
       >
         <span className="text-sm truncate">{display ?? ''}</span>
         <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-      </button>
+      </UiButton>
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}
-          className={`bg-zinc-800/95 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-2xl text-white flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={`${UI_TRIGGER_PANEL_CLASS} flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
           style={{
             position: 'fixed',
             top: pos.top,

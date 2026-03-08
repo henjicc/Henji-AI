@@ -20,6 +20,7 @@ import {
     X,
 } from 'lucide-react'
 import type { EditorTool, EditorToolbarProps, CropRatio } from './types'
+import { UiButton, UiChipButton, UiIconButton, UiRangeInput } from '@/components/ui'
 
 // ==================== 常量 ====================
 
@@ -81,14 +82,15 @@ const ToolButton: React.FC<ToolButtonProps> = ({
             : ''
 
     return (
-        <button
+        <UiIconButton
+            type="button"
             className={`toolbar-button ${active ? 'active' : ''} ${variantClass}`}
             onClick={onClick}
             disabled={disabled}
             title={label}
         >
             {icon}
-        </button>
+        </UiIconButton>
     )
 }
 
@@ -102,8 +104,9 @@ const InlineColorPicker: React.FC<InlineColorPickerProps> = ({ value, onChange }
     return (
         <div className="inline-color-picker">
             {COLORS.map((color) => (
-                <button
+                <UiIconButton
                     key={color}
+                    type="button"
                     className={`inline-color-swatch ${value === color ? 'active' : ''}`}
                     style={{ backgroundColor: color }}
                     onClick={() => onChange(color)}
@@ -127,8 +130,7 @@ const InlineSlider: React.FC<InlineSliderProps> = ({ label, value, min, max, onC
     return (
         <div className="inline-slider">
             <span className="inline-slider-label">{label}</span>
-            <input
-                type="range"
+            <UiRangeInput
                 className="inline-slider-input"
                 value={value}
                 min={min}
@@ -250,21 +252,34 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                         <>
                             <div className="crop-ratio-buttons">
                                 {RATIO_OPTIONS.map((opt) => (
-                                    <button
+                                    <UiChipButton
                                         key={opt.value}
+                                        type="button"
                                         className={`crop-ratio-btn ${cropRatio === opt.value ? 'active' : ''}`}
                                         onClick={() => onCropRatioChange?.(opt.value)}
                                     >
                                         {opt.label}
-                                    </button>
+                                    </UiChipButton>
                                 ))}
                             </div>
-                            <button className="crop-action-btn crop-action-confirm" onClick={() => onCropConfirm?.()}>
+                            <UiButton
+                                type="button"
+                                size="sm"
+                                variant="primary"
+                                className="crop-action-btn crop-action-confirm"
+                                onClick={() => onCropConfirm?.()}
+                            >
                                 应用
-                            </button>
-                            <button className="crop-action-btn crop-action-cancel" onClick={() => onCropCancel?.()}>
+                            </UiButton>
+                            <UiButton
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="crop-action-btn crop-action-cancel"
+                                onClick={() => onCropCancel?.()}
+                            >
                                 取消
-                            </button>
+                            </UiButton>
                         </>
                     ) : isDrawingTool ? (
                         // 绘图模式：颜色 + 粗细

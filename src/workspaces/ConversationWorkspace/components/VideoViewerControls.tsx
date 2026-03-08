@@ -1,4 +1,5 @@
 import React from 'react'
+import { UiIconButton } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import {
   DownloadIcon,
@@ -107,9 +108,9 @@ export function VideoViewerControls({
         </div>
 
         <div className="controls-main">
-          <button onClick={togglePlay} className="btn btn-play" title={t('ui:audioPlayer.playPause')}>
+          <UiIconButton onClick={togglePlay} className="btn btn-play !h-auto !w-auto !border-0 !bg-transparent" title={t('ui:audioPlayer.playPause')}>
             {isVideoPlaying ? <PauseIcon /> : <PlayIcon />}
-          </button>
+          </UiIconButton>
           <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
           <div className="controls-right">
             <div
@@ -171,21 +172,21 @@ export function VideoViewerControls({
               </div>
             </div>
 
-            <button
-              className={`btn btn-small ${loop ? 'loop-active' : ''}`}
+            <UiIconButton
+              className={`btn btn-small !h-auto !w-auto !border-0 !bg-transparent ${loop ? 'loop-active' : ''}`}
               onClick={() => setLoop((value) => !value)}
               title={t('ui:viewer.loop')}
             >
               <LoopIcon />
-            </button>
+            </UiIconButton>
             {onDownload && filePath && (
-              <button
-                className="btn btn-small"
+              <UiIconButton
+                className="btn btn-small !h-auto !w-auto !border-0 !bg-transparent"
                 onClick={() => onDownload(filePath)}
                 title={t('common:actions.download')}
               >
                 <DownloadIcon />
-              </button>
+              </UiIconButton>
             )}
           </div>
         </div>

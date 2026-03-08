@@ -4,6 +4,7 @@
 import React from 'react'
 import type { EditorTool, ToolSettingsProps } from './types'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton, UiRangeInput } from '@/components/ui'
 
 const COLORS = [
     '#ff0000',  // 红
@@ -26,8 +27,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
     return (
         <div className="color-picker">
             {COLORS.map((color) => (
-                <button
+                <UiIconButton
                     key={color}
+                    type="button"
                     className={`color-swatch ${value === color ? 'active' : ''}`}
                     style={{ backgroundColor: color }}
                     onClick={() => onChange(color)}
@@ -46,8 +48,7 @@ interface SliderProps {
 
 const Slider: React.FC<SliderProps> = ({ value, min, max, onChange }) => {
     return (
-        <input
-            type="range"
+        <UiRangeInput
             className="settings-slider"
             value={value}
             min={min}

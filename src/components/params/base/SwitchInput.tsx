@@ -10,6 +10,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SwitchParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
+import { UiButton } from '@/components/ui'
 
 interface SwitchInputProps {
   param: SwitchParamDef
@@ -48,20 +49,21 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
           {param.required && <span className="text-red-500 ml-1">*</span>}
         </label>
       )}
-      <button
-        type="button"
+      <UiButton
         onClick={handleClick}
         disabled={disabled}
-        className={`px-3 h-[38px] rounded-lg border transition-colors inline-flex items-center justify-center ${
+        variant="muted"
+        size="sm"
+        className={`px-3 h-[38px] ${
           disabled
-            ? 'bg-zinc-800/30 text-zinc-500 border-zinc-700/30 cursor-not-allowed opacity-50'
+            ? 'bg-zinc-800/30 text-zinc-500 border-zinc-700/30'
             : value
               ? 'bg-[#007eff] text-white border-[#007eff]'
-              : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
+              : 'text-zinc-300'
         }`}
       >
         {value ? onText : offText}
-      </button>
+      </UiButton>
     </div>
   )
 }

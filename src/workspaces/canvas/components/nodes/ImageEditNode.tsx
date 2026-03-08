@@ -5,6 +5,7 @@ import { registry } from '@/core/ModelRegistry'
 import { ParamRenderer } from '@/components/params/ParamRenderer'
 import { NodeFrame } from './NodeFrame'
 import type { CanvasFlowNode, ImageEditNodeData } from '@/workspaces/canvas/types'
+import { UiButton, UiSelect, UiTextAreaField } from '@/components/ui'
 
 function statusLabel(node: ImageEditNodeData): string {
   if (node.isGenerating) return '生成中'
@@ -31,45 +32,50 @@ export function ImageEditNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.Elem
       <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-2 !border-white !bg-sky-500" />
       <NodeFrame title={node.displayName} badge={statusLabel(node)}>
         {node.imageUrl && (
-          <button
-            className="block w-full overflow-hidden rounded-md border border-zinc-700"
+          <UiButton
+            type="button"
+            variant="ghost"
+            className="h-auto w-full overflow-hidden rounded-md border border-zinc-700 p-0"
             onClick={() => node.onOpenImage?.(node.imageUrl!, node.filePath)}
           >
             <img src={node.imageUrl} alt="generated" className="h-36 w-full object-cover" />
-          </button>
+          </UiButton>
         )}
 
         <div className="space-y-1">
           <label className="text-[11px] text-zinc-400">模型</label>
-          <select
+          <UiSelect
             value={node.model}
             onChange={(event) => node.onChangeModel?.(id, event.target.value)}
-            className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+            className="h-8 text-xs"
           >
             {models.map((model) => (
               <option key={model.meta.id} value={model.meta.id}>
                 {getI18nText(model.meta.name, 'zh') || model.meta.id}
               </option>
             ))}
-          </select>
+          </UiSelect>
         </div>
 
         <div className="space-y-1">
           <label className="text-[11px] text-zinc-400">提示词</label>
-          <textarea
+          <UiTextAreaField
             value={node.prompt}
             onChange={(event) => node.onChangePrompt?.(id, event.target.value)}
-            className="min-h-[86px] w-full resize-y rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+            className="min-h-[86px] resize-y px-2 py-1 text-xs"
             placeholder="输入提示词，可连接上游图片作为参考..."
           />
         </div>
 
-        <button
-          className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+        <UiButton
+          type="button"
+          size="sm"
+          variant="muted"
+          className="h-8 w-full text-xs"
           onClick={() => setShowParams((prev) => !prev)}
         >
           {showParams ? '收起参数' : '展开参数'}
-        </button>
+        </UiButton>
 
         {showParams && (
           <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-zinc-700 bg-zinc-900/80 p-2">
@@ -103,13 +109,16 @@ export function ImageEditNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.Elem
           </div>
         )}
 
-        <button
-          className="w-full rounded-md bg-sky-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-zinc-700"
+        <UiButton
+          type="button"
+          variant="primary"
+          size="sm"
+          className="w-full bg-sky-600 text-xs font-semibold hover:bg-sky-500 disabled:bg-zinc-700"
           disabled={node.isGenerating}
           onClick={() => node.onGenerate?.(id)}
         >
           {node.isGenerating ? '生成中...' : '执行生成'}
-        </button>
+        </UiButton>
       </NodeFrame>
     </>
   )

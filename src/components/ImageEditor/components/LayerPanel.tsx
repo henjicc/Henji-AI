@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiIconButton, UiRangeInput } from '@/components/ui'
 
 interface Layer {
   id: string
@@ -45,9 +46,16 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
     <div className="layer-panel">
       <div className="panel-header">
         <h3>{t('imageEditor.layerPanel.title')}</h3>
-        <button className="add-layer-btn" onClick={onLayerAdd} title={t('imageEditor.layerPanel.addLayer')}>
+        <UiButton
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="add-layer-btn"
+          onClick={onLayerAdd}
+          title={t('imageEditor.layerPanel.addLayer')}
+        >
           +
-        </button>
+        </UiButton>
       </div>
 
       <div className="panel-content">
@@ -74,7 +82,8 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                 <div className="layer-info">
                   <div className="layer-name">{layer.name}</div>
                   <div className="layer-controls">
-                    <button
+                    <UiIconButton
+                      type="button"
                       className={`layer-btn ${layer.visible ? 'active' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -83,9 +92,10 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                       title={layer.visible ? t('imageEditor.layerPanel.actions.hide') : t('imageEditor.layerPanel.actions.show')}
                     >
                       {layer.visible ? '👁' : '👁‍🗨'}
-                    </button>
+                    </UiIconButton>
 
-                    <button
+                    <UiIconButton
+                      type="button"
                       className={`layer-btn ${layer.locked ? 'active' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -94,12 +104,13 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                       title={layer.locked ? t('imageEditor.layerPanel.actions.unlock') : t('imageEditor.layerPanel.actions.lock')}
                     >
                       {layer.locked ? '🔒' : '🔓'}
-                    </button>
+                    </UiIconButton>
                   </div>
                 </div>
 
                 <div className="layer-actions">
-                  <button
+                  <UiIconButton
+                    type="button"
                     className="layer-action-btn"
                     onClick={(e) => {
                       e.stopPropagation()
@@ -108,8 +119,9 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                     title={t('common:actions.copy')}
                   >
                     📋
-                  </button>
-                  <button
+                  </UiIconButton>
+                  <UiIconButton
+                    type="button"
                     className="layer-action-btn"
                     onClick={(e) => {
                       e.stopPropagation()
@@ -119,12 +131,11 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                     disabled={layers.length === 1}
                   >
                     🗑️
-                  </button>
+                  </UiIconButton>
                 </div>
 
                 <div className="layer-opacity">
-                  <input
-                    type="range"
+                  <UiRangeInput
                     min="0"
                     max="100"
                     value={layer.opacity}

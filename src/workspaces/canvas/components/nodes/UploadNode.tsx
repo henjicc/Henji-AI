@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { NodeFrame } from './NodeFrame'
 import type { CanvasFlowNode, UploadImageNodeData } from '@/workspaces/canvas/types'
+import { UiButton, UiInput } from '@/components/ui'
 
 export function UploadNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.Element {
   const node = data as UploadImageNodeData
@@ -17,13 +18,16 @@ export function UploadNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.Element
       <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-2 !border-white !bg-sky-500" />
       <NodeFrame title={node.displayName}>
         <div className="space-y-2">
-          <button
-            className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-100 hover:bg-zinc-700"
+          <UiButton
+            type="button"
+            size="sm"
+            variant="muted"
+            className="h-8 w-full text-xs"
             onClick={() => fileInputRef.current?.click()}
           >
             选择图片
-          </button>
-          <input
+          </UiButton>
+          <UiInput
             ref={fileInputRef}
             type="file"
             accept="image/*"
@@ -38,27 +42,32 @@ export function UploadNode({ id, data }: NodeProps<CanvasFlowNode>): JSX.Element
 
           <div className="space-y-1">
             <div className="text-[11px] text-zinc-400">图片链接</div>
-            <input
+            <UiInput
               value={urlInput}
               onChange={(event) => setUrlInput(event.target.value)}
-              className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+              className="h-8 text-xs"
               placeholder="https://..."
             />
-            <button
-              className="w-full rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+            <UiButton
+              type="button"
+              size="sm"
+              variant="muted"
+              className="h-8 w-full text-xs"
               onClick={() => node.onApplyUrl?.(id, urlInput.trim())}
             >
               应用链接
-            </button>
+            </UiButton>
           </div>
 
           {node.imageUrl && (
-            <button
-              className="block w-full overflow-hidden rounded-md border border-zinc-700"
+            <UiButton
+              type="button"
+              variant="ghost"
+              className="h-auto w-full overflow-hidden rounded-md border border-zinc-700 p-0"
               onClick={() => node.onOpenImage?.(node.imageUrl!, node.filePath)}
             >
               <img src={node.imageUrl} alt="upload" className="h-40 w-full object-cover" />
-            </button>
+            </UiButton>
           )}
         </div>
       </NodeFrame>

@@ -8,6 +8,7 @@ import React, { useState } from 'react'
 import { exportService } from '@/core/export/ExportService'
 import type { ExportData, ExportType, CleanOptions } from '@/core/export/types'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiCheckbox, UiOptionButton } from '@/components/ui'
 
 interface ExportPanelProps {
   modelId: string
@@ -90,7 +91,8 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
             { value: 'api-request', label: t('debug.export.type.apiRequest') },
             { value: 'preset', label: t('debug.export.type.preset') }
           ].map((option) => (
-            <button
+            <UiOptionButton
+              active={exportType === option.value}
               key={option.value}
               onClick={() => handleExportTypeChange(option.value as ExportType)}
               className={`px-3 py-2 rounded text-sm transition-colors ${
@@ -100,7 +102,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
               }`}
             >
               {option.label}
-            </button>
+            </UiOptionButton>
           ))}
         </div>
       </div>
@@ -119,11 +121,10 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
               key={option.key}
               className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"
             >
-              <input
-                type="checkbox"
-                checked={cleanOptions[option.key as keyof CleanOptions]}
-                onChange={() => handleCleanOptionChange(option.key as keyof CleanOptions)}
-                className="w-4 h-4 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+              <UiCheckbox
+                checked={Boolean(cleanOptions[option.key as keyof CleanOptions])}
+                onCheckedChange={() => handleCleanOptionChange(option.key as keyof CleanOptions)}
+                className="h-4 w-4"
               />
               {option.label}
             </label>
@@ -133,18 +134,22 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
 
       {/* 操作按钮 */}
       <div className="flex gap-2">
-        <button
+        <UiButton
+          variant="primary"
+          size="sm"
           onClick={handleDownload}
-          className="flex-1 px-4 py-2 bg-yellow-500 text-black rounded font-medium hover:bg-yellow-400 transition-colors"
+          className="flex-1 bg-yellow-500 text-black hover:bg-yellow-400"
         >
           {t('debug.export.actions.downloadJson')}
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          variant="muted"
+          size="sm"
           onClick={handleCopy}
-          className="flex-1 px-4 py-2 bg-zinc-700 text-white rounded font-medium hover:bg-zinc-600 transition-colors"
+          className="flex-1"
         >
           {copySuccess ? t('debug.export.actions.copied') : t('debug.export.actions.copy')}
-        </button>
+        </UiButton>
       </div>
     </div>
   )

@@ -6,6 +6,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PresetOption } from './types'
 import { getI18nText } from '@/core/types'
+import { UiOptionButton } from '@/components/ui'
 
 export interface PresetResolutionSelectorProps {
   value: string
@@ -28,7 +29,8 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
           const label = getI18nText(option.label, i18n.language)
 
           return (
-            <button
+            <UiOptionButton
+              active={value === option.value}
               key={option.value}
               onClick={() => onChange(option.value)}
               className={`preset-resolution-option ${value === option.value ? 'selected' : ''}`}
@@ -37,7 +39,7 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
               {option.aspectRatio && (
                 <span className="preset-resolution-ratio">({option.aspectRatio})</span>
               )}
-            </button>
+            </UiOptionButton>
           )
         })}
       </div>

@@ -181,16 +181,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     if (Object.keys(patch).length > 0) {
       updateNodeData(id, patch)
     }
-  }, [
-    id,
-    nodeData.model,
-    nodeData.requestAspectRatio,
-    nodeData.size,
-    selectedAspectRatio.value,
-    selectedModel.id,
-    selectedResolution.value,
-    updateNodeData,
-  ])
+  }, [id, nodeData.model, nodeData.requestAspectRatio, nodeData.size, selectedAspectRatio.value, selectedModel.id, selectedResolution.value, updateNodeData])
 
   useEffect(() => {
     if (nodeData.frames.length === totalFrames) {
@@ -285,30 +276,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       setError(generationError instanceof Error ? generationError.message : '生成失败')
       updateNodeData(newNodeId, { isGenerating: false, generationStartedAt: null })
     }
-  }, [
-    addEdge,
-    addNode,
-    buildPrompt,
-    findNodePosition,
-    frameAspectRatioValue,
-    id,
-    ignoreAtTagWhenCopyingAndGenerating,
-    incomingImages,
-    nodeData.extraParams,
-    nodeData.frames,
-    nodeData.gridCols,
-    nodeData.gridRows,
-    providerApiKey,
-    requestResolution.requestModel,
-    selectedAspectRatio.value,
-    selectedModel.expectedDurationMs,
-    selectedModel.id,
-    selectedModel.providerId,
-    selectedResolution.value,
-    setSelectedNode,
-    supportedAspectRatioValues,
-    updateNodeData,
-  ])
+  }, [addEdge, addNode, buildPrompt, findNodePosition, frameAspectRatioValue, id, ignoreAtTagWhenCopyingAndGenerating, incomingImages, nodeData.extraParams, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerApiKey, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedModel.id, selectedModel.providerId, selectedResolution.value, setSelectedNode, supportedAspectRatioValues, updateNodeData])
 
   const handleRowChange = useCallback((delta: number): void => {
     const nextRows = Math.max(1, Math.min(9, nodeData.gridRows + delta))

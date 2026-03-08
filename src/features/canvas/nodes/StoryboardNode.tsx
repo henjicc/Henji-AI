@@ -20,24 +20,8 @@ import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboar
 import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
-import {
-  buildFrameViewerImageList,
-  buildIncomingImageItems,
-  collectIncomingImageRefs,
-} from '@/features/canvas/nodes/storyboardSplit/data';
-import {
-  type PanelAnchor,
-  resolveExportOptions,
-  resolvePanelAnchor,
-  SplitResultIcon,
-  STORYBOARD_GRID_GAP_PX,
-  STORYBOARD_NODE_MIN_HEIGHT_PX,
-  STORYBOARD_NODE_WIDTH_PX,
-  STORYBOARD_SPLIT_HEADER_ADJUST,
-  STORYBOARD_SPLIT_ICON_ADJUST,
-  STORYBOARD_SPLIT_TITLE_ADJUST,
-  toCssAspectRatio,
-} from '@/features/canvas/nodes/storyboardSplit/shared';
+import { buildFrameViewerImageList, buildIncomingImageItems, collectIncomingImageRefs } from '@/features/canvas/nodes/storyboardSplit/data';
+import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX, STORYBOARD_NODE_MIN_HEIGHT_PX, STORYBOARD_NODE_WIDTH_PX, STORYBOARD_SPLIT_HEADER_ADJUST, STORYBOARD_SPLIT_ICON_ADJUST, STORYBOARD_SPLIT_TITLE_ADJUST, toCssAspectRatio } from '@/features/canvas/nodes/storyboardSplit/shared';
 
 type StoryboardNodeProps = NodeProps & {
   id: string;
@@ -84,10 +68,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     onSortStart: () => setPickerState(null),
   });
 
-  const orderedFrames = useMemo(
-    () => [...data.frames].sort((a, b) => a.order - b.order),
-    [data.frames]
-  );
+  const orderedFrames = useMemo(() => [...data.frames].sort((a, b) => a.order - b.order), [data.frames]);
   const frameAspectRatio = useMemo(
     () => data.frameAspectRatio ?? orderedFrames.find((frame) => typeof frame.aspectRatio === 'string')?.aspectRatio ?? '1:1',
     [data.frameAspectRatio, orderedFrames]
@@ -108,14 +89,8 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   );
   const exportOptions = useMemo(() => resolveExportOptions(data.exportOptions), [data.exportOptions]);
 
-  const incomingImageRefs = useMemo(
-    () => collectIncomingImageRefs(id, nodes, edges),
-    [edges, id, nodes]
-  );
-  const incomingImageItems = useMemo(
-    () => buildIncomingImageItems(incomingImageRefs),
-    [incomingImageRefs]
-  );
+  const incomingImageRefs = useMemo(() => collectIncomingImageRefs(id, nodes, edges), [edges, id, nodes]);
+  const incomingImageItems = useMemo(() => buildIncomingImageItems(incomingImageRefs), [incomingImageRefs]);
   const incomingReferenceItems = useMemo(
     () =>
       incomingImageItems.map((item, index) => ({
@@ -125,14 +100,8 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       })),
     [incomingImageItems]
   );
-  const frameViewerImageList = useMemo(
-    () => buildFrameViewerImageList(orderedFrames),
-    [orderedFrames]
-  );
-  const incomingImageViewerList = useMemo(
-    () => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)),
-    [incomingImageItems]
-  );
+  const frameViewerImageList = useMemo(() => buildFrameViewerImageList(orderedFrames), [orderedFrames]);
+  const incomingImageViewerList = useMemo(() => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)), [incomingImageItems]);
 
   useEffect(() => {
     const handleOutsidePointerDown = (event: PointerEvent) => {
@@ -257,16 +226,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     } finally {
       setIsExporting(false);
     }
-  }, [
-    createExportNode,
-    exportOptions,
-    gridCols,
-    gridRows,
-    id,
-    isExporting,
-    linkExportNode,
-    orderedFrames,
-  ]);
+  }, [createExportNode, exportOptions, gridCols, gridRows, id, isExporting, linkExportNode, orderedFrames]);
 
   const handleTogglePicker = useCallback((frameId: string, x: number, y: number) => {
     setPickerState((previous) => {

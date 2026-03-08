@@ -24,6 +24,7 @@ import type {
 } from './types'
 import { DEFAULT_TOOL_SETTINGS, createInitialEditState } from './types'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton } from '@/components/ui'
 
 import './ImageEditor.css'
 
@@ -338,15 +339,23 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <div className="editor-bottom-bar">
                     {imageList.length > 1 && onNavigate && (
                         <>
-                            <button className="editor-nav-button" onClick={() => onNavigate('prev')}>
+                            <UiIconButton
+                                type="button"
+                                className="editor-nav-button"
+                                onClick={() => onNavigate('prev')}
+                            >
                                 <ChevronLeft size={20} />
-                            </button>
+                            </UiIconButton>
                             <div className="editor-info-badge">
                                 {currentIndex + 1} / {imageList.length}
                             </div>
-                            <button className="editor-nav-button" onClick={() => onNavigate('next')}>
+                            <UiIconButton
+                                type="button"
+                                className="editor-nav-button"
+                                onClick={() => onNavigate('next')}
+                            >
                                 <ChevronRight size={20} />
-                            </button>
+                            </UiIconButton>
                         </>
                     )}
                 </div>

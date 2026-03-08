@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton } from '@/components/ui'
 
 interface ImageViewerProps {
   imageUrl: string
@@ -37,26 +38,26 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
         <div className="image-viewer-header">
           <div className="viewer-actions">
             {onDownload && (
-              <button className="viewer-btn" onClick={onDownload} title={t('common:actions.download')}>
+              <UiIconButton className="viewer-btn" onClick={onDownload} title={t('common:actions.download')}>
                 ⬇️
-              </button>
+              </UiIconButton>
             )}
             {onEdit && (
-              <button className="viewer-btn" onClick={onEdit} title={t('common:edit')}>
+              <UiIconButton className="viewer-btn" onClick={onEdit} title={t('common:edit')}>
                 ✏️
-              </button>
+              </UiIconButton>
             )}
           </div>
-          <button className="viewer-close" onClick={onClose}>
+          <UiIconButton className="viewer-close" onClick={onClose}>
             ×
-          </button>
+          </UiIconButton>
         </div>
 
         <div className="image-viewer-content">
           {onPrevious && hasPrevious && (
-            <button className="viewer-nav prev" onClick={onPrevious}>
+            <UiIconButton className="viewer-nav prev" onClick={onPrevious}>
               ‹
-            </button>
+            </UiIconButton>
           )}
 
           <img
@@ -66,9 +67,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           />
 
           {onNext && hasNext && (
-            <button className="viewer-nav next" onClick={onNext}>
+            <UiIconButton className="viewer-nav next" onClick={onNext}>
               ›
-            </button>
+            </UiIconButton>
           )}
         </div>
       </div>

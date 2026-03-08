@@ -1,5 +1,5 @@
- 
 import { useState } from 'react'
+import { UiIconButton, UiInput } from './primitives'
 
 type NumberInputProps = {
   label?: string
@@ -59,7 +59,7 @@ export default function NumberInput(props: NumberInputProps) {
     <div className={className}>
       {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
       <div className="relative inline-block">
-        <input
+        <UiInput
           type="number"
           value={inputValue}
           onChange={e => setInputValue(e.target.value)}
@@ -71,33 +71,33 @@ export default function NumberInput(props: NumberInputProps) {
               e.currentTarget.blur()
             }
           }}
-          className={`${widthClassName} bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`${widthClassName} h-[38px] appearance-none pr-8`}
           min={min}
           max={max}
           step={step}
           disabled={disabled}
         />
         <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
-          <button
+          <UiIconButton
             type="button"
             onClick={() => {
               const next = clamp(safeValue + step)
               onChange(next)
               setInputValue(next.toString())
             }}
-            className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
+            className="h-4 w-6 border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
             disabled={disabled}
-          >▲</button>
-          <button
+          >▲</UiIconButton>
+          <UiIconButton
             type="button"
             onClick={() => {
               const next = clamp(safeValue - step)
               onChange(next)
               setInputValue(next.toString())
             }}
-            className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer"
+            className="h-4 w-6 border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
             disabled={disabled}
-          >▼</button>
+          >▼</UiIconButton>
         </div>
       </div>
     </div>

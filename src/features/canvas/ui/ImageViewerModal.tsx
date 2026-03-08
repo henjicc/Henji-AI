@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
+import { UiButton, UiIconButton } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { useImageViewerTransform } from '../hooks/useImageViewerTransform';
 
@@ -22,8 +23,8 @@ export function ImageViewerModal({
   onNavigate,
 }: ImageViewerModalProps): JSX.Element | null {
   const { t } = useTranslation();
-  const viewerControlClass =
-    'inline-flex h-10 items-center justify-center rounded-full border border-white/20 bg-black/60 px-4 text-sm text-white backdrop-blur-xl';
+  const viewerControlClass = 'inline-flex h-10 items-center justify-center rounded-full border border-white/20 bg-black/60 px-4 text-sm text-white backdrop-blur-xl';
+  const viewerIconButtonClass = '!h-10 !w-10 !rounded-full !border-white/20 !bg-black/60 !text-white hover:!bg-black/70';
   const [isVisible, setIsVisible] = useState(false);
   const [overlayOpacity, setOverlayOpacity] = useState(0);
   const closeTimerRef = useRef<number | null>(null);
@@ -157,22 +158,22 @@ export function ImageViewerModal({
         <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-3">
           {imageList.length > 1 && (
             <div className="flex items-center gap-3">
-              <button
+              <UiIconButton
                 onClick={() => onNavigate('prev')}
                 disabled={currentIndex <= 0}
-                className="rounded-full bg-zinc-800/80 p-2 text-white backdrop-blur-sm transition-all duration-200 hover:bg-zinc-700/80 disabled:cursor-not-allowed disabled:opacity-50"
+                className={viewerIconButtonClass}
                 title={t('viewer.prev', '上一张')}
               >
                 <ChevronLeft className="h-5 w-5" />
-              </button>
-              <button
+              </UiIconButton>
+              <UiIconButton
                 onClick={() => onNavigate('next')}
                 disabled={currentIndex >= imageList.length - 1}
-                className="rounded-full bg-zinc-800/80 p-2 text-white backdrop-blur-sm transition-all duration-200 hover:bg-zinc-700/80 disabled:cursor-not-allowed disabled:opacity-50"
+                className={viewerIconButtonClass}
                 title={t('viewer.next', '下一张')}
               >
                 <ChevronRight className="h-5 w-5" />
-              </button>
+              </UiIconButton>
             </div>
           )}
 
@@ -188,20 +189,24 @@ export function ImageViewerModal({
             >
               100%
             </div>
-            <button
+            <UiButton
               onClick={resetView}
-              className={`${viewerControlClass} transition-colors hover:bg-white/10`}
+              variant="ghost"
+              size="sm"
+              className={`${viewerControlClass} !px-3 transition-colors hover:bg-white/10`}
               title={t('viewer.reset', '重置视图')}
             >
               <RotateCcw className="h-4 w-4" />
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               onClick={onClose}
-              className={`${viewerControlClass} transition-colors hover:bg-white/10`}
+              variant="ghost"
+              size="sm"
+              className={`${viewerControlClass} !px-3 transition-colors hover:bg-white/10`}
               title={t('common.close', '关闭')}
             >
               <X className="h-4 w-4" />
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>

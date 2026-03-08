@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiButton } from '@/components/ui'
 
 interface ActionButtonsProps {
   onGenerate: () => void
@@ -24,30 +25,36 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 }) => {
   return (
     <div className="action-buttons">
-      <button
+      <UiButton
+        variant="primary"
+        size="sm"
         className="btn-generate primary"
         onClick={onGenerate}
         disabled={!canGenerate || isGenerating}
       >
         {isGenerating ? '生成中...' : '生成'}
-      </button>
+      </UiButton>
 
-      <button
+      <UiButton
+        variant="muted"
+        size="sm"
         className="btn-clear secondary"
         onClick={onClear}
         disabled={isGenerating}
       >
         清空
-      </button>
+      </UiButton>
 
       {showPresetButton && onSavePreset && (
-        <button
+        <UiButton
+          variant="muted"
+          size="sm"
           className="btn-preset secondary"
           onClick={onSavePreset}
           disabled={isGenerating}
         >
           保存预设
-        </button>
+        </UiButton>
       )}
     </div>
   )

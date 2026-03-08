@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { NodeFrame } from './NodeFrame'
 import type { CanvasFlowNode, StoryboardSplitNodeData } from '@/workspaces/canvas/types'
+import { UiButton, UiInput, UiTextAreaField } from '@/components/ui'
 
 function normalizeCount(value: number): number {
   return Math.max(1, Math.min(8, Math.floor(value || 1)))
@@ -33,42 +34,48 @@ export function StoryboardSplitNode({ id, data }: NodeProps<CanvasFlowNode>): JS
         <div className="grid grid-cols-2 gap-2">
           <label className="text-[11px] text-zinc-400">
             行
-            <input
+            <UiInput
               type="number"
               min={1}
               max={8}
               value={rows}
               onChange={(event) => node.onChangeRows?.(id, Number(event.target.value))}
-              className="mt-1 w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+              className="mt-1 h-8 text-xs"
             />
           </label>
           <label className="text-[11px] text-zinc-400">
             列
-            <input
+            <UiInput
               type="number"
               min={1}
               max={8}
               value={cols}
               onChange={(event) => node.onChangeCols?.(id, Number(event.target.value))}
-              className="mt-1 w-full rounded-md border border-zinc-600 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+              className="mt-1 h-8 text-xs"
             />
           </label>
         </div>
 
         <div className="flex gap-2">
-          <button
-            className="flex-1 rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-800/50 disabled:text-zinc-500"
+          <UiButton
+            type="button"
+            size="sm"
+            variant="muted"
+            className="h-8 flex-1 text-xs disabled:bg-zinc-800/50 disabled:text-zinc-500"
             disabled={node.isSplitting}
             onClick={() => node.onSplitInput?.(id)}
           >
             {node.isSplitting ? '切割中...' : '切割输入'}
-          </button>
-          <button
-            className="flex-1 rounded-md border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
+          </UiButton>
+          <UiButton
+            type="button"
+            size="sm"
+            variant="muted"
+            className="h-8 flex-1 text-xs"
             onClick={() => node.onExport?.(id)}
           >
             导出拼图
-          </button>
+          </UiButton>
         </div>
 
         {orderedFrames.length === 0 ? (
@@ -81,17 +88,19 @@ export function StoryboardSplitNode({ id, data }: NodeProps<CanvasFlowNode>): JS
               <div key={frame.id} className="space-y-1 rounded-md border border-zinc-700 bg-zinc-950/70 p-2">
                 <div className="text-[11px] text-zinc-400">分镜 {String(index + 1).padStart(2, '0')}</div>
                 {frame.imageUrl && (
-                  <button
-                    className="block w-full overflow-hidden rounded border border-zinc-700"
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    className="h-auto w-full overflow-hidden rounded border border-zinc-700 p-0"
                     onClick={() => node.onOpenImage?.(frame.imageUrl!, frame.filePath)}
                   >
                     <img src={frame.imageUrl} alt={`frame-${index + 1}`} className="h-28 w-full object-cover" />
-                  </button>
+                  </UiButton>
                 )}
-                <textarea
+                <UiTextAreaField
                   value={frame.note}
                   onChange={(event) => node.onChangeFrameNote?.(id, frame.id, event.target.value)}
-                  className="min-h-[52px] w-full resize-y rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 outline-none"
+                  className="min-h-[52px] resize-y px-2 py-1 text-xs"
                   placeholder="该分镜说明..."
                 />
               </div>

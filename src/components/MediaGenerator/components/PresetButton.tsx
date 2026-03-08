@@ -7,6 +7,7 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PresetManager } from '@/components/Presets/PresetManager'
+import { UiButton } from '@/components/ui'
 
 
 interface PresetButtonProps {
@@ -22,15 +23,16 @@ export function PresetButton({ currentModelId, disabled }: PresetButtonProps) {
     <>
       <div className="relative inline-block">
         <label className="block text-sm font-medium mb-1 text-zinc-300">{t('presets.label')}</label>
-        <button
-          type="button"
+        <UiButton
+          variant="muted"
+          size="sm"
           disabled={disabled}
           onClick={() => setIsOpen(true)}
-          className={`bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] !outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 focus-visible:!ring-0 shadow-none focus:shadow-none transition-all duration-300 flex items-center justify-between whitespace-nowrap w-full ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-700/70 hover:border-zinc-600/50'}`}
+          className={`h-[38px] w-full justify-between px-3 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <span className="text-sm truncate">{t('presets.manage')}</span>
           <svg className="w-4 h-4 text-zinc-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-        </button>
+        </UiButton>
       </div>
 
       {isOpen && (

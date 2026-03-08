@@ -10,6 +10,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
+import { UiIconButton, UiInput } from '@/components/ui'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -74,7 +75,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
       <div className="relative inline-block">
-        <input
+        <UiInput
           type="number"
           value={value ?? ''}
           onChange={handleChange}
@@ -82,25 +83,23 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           min={param.min}
           max={param.max}
           step={param.step || 1}
-          className="w-20 bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 pr-8 py-2 h-[38px] text-sm outline-none focus:outline-none appearance-none focus:ring-inset focus:ring-2 focus:ring-[#007eff]/60 focus:ring-offset-0 focus:ring-offset-transparent focus:border-[#007eff] transition-shadow duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-[38px] w-20 pr-8"
         />
         <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
-          <button
-            type="button"
+          <UiIconButton
             onClick={handleIncrement}
             disabled={disabled || (param.max !== undefined && value >= param.max)}
-            className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer flex items-center justify-center"
+            className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
           >
             ▲
-          </button>
-          <button
-            type="button"
+          </UiIconButton>
+          <UiIconButton
             onClick={handleDecrement}
             disabled={disabled || (param.min !== undefined && value <= param.min)}
-            className="w-6 h-4 bg-transparent text-zinc-300 text-[10px] leading-none hover:text-zinc-200 outline-none focus:outline-none ring-0 focus:ring-0 cursor-pointer flex items-center justify-center"
+            className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
           >
             ▼
-          </button>
+          </UiIconButton>
         </div>
       </div>
     </div>

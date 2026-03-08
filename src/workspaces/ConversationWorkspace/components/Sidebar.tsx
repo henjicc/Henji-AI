@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiButton } from '@/components/ui'
 
 interface SidebarProps {
   isOpen: boolean
@@ -30,7 +31,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className={`sidebar ${isOpen ? 'open' : 'closed'}`}>
       <div className="sidebar-tabs">
         {panels.map(panel => (
-          <button
+          <UiButton
+            variant="ghost"
+            size="sm"
             key={panel.id}
             className={`sidebar-tab ${activePanel === panel.id ? 'active' : ''}`}
             onClick={() => onPanelChange(activePanel === panel.id ? null : panel.id)}
@@ -38,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <span className="tab-icon">{panel.icon}</span>
             {isOpen && <span className="tab-name">{panel.name}</span>}
-          </button>
+          </UiButton>
         ))}
       </div>
 
@@ -46,13 +49,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isOpen && children}
       </div>
 
-      <button
+      <UiButton
+        variant="ghost"
+        size="sm"
         className="sidebar-toggle"
         onClick={onToggle}
         title={isOpen ? '收起侧边栏' : '展开侧边栏'}
       >
         {isOpen ? '◀' : '▶'}
-      </button>
+      </UiButton>
     </div>
   )
 }

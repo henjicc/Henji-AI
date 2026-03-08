@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UiButton, UiInput } from '@/components/ui';
 
 type HeaderAdjust = {
   x?: number;
@@ -146,7 +147,7 @@ export function NodeHeader({
 
     if (isEditingTitle) {
       return (
-        <input
+        <UiInput
           ref={inputRef}
           value={draftTitle}
           onChange={(event) => setDraftTitle(event.target.value)}
@@ -166,7 +167,7 @@ export function NodeHeader({
             }
           }}
           className={joinClasses(
-            'nodrag nowheel h-6 min-w-[70px] rounded border border-[rgba(255,255,255,0.24)] bg-black/30 px-2 text-[13px] font-normal text-text-dark outline-none focus:border-accent/70',
+            `nodrag nowheel h-6 min-w-[70px] rounded border px-2 text-[13px] font-normal ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`,
             titleClassName
           )}
         />
@@ -174,10 +175,13 @@ export function NodeHeader({
     }
 
     return (
-      <button
+      <UiButton
         type="button"
+        variant="ghost"
+        size="sm"
         className={joinClasses(
-          'inline-flex cursor-grab select-none items-center rounded px-0 text-left active:cursor-grabbing',
+          '!h-auto !min-h-0 !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
+          'inline-flex cursor-grab select-none items-center text-left active:cursor-grabbing',
           NODE_HEADER_TITLE_CLASS,
           tone,
           titleClassName
@@ -190,7 +194,7 @@ export function NodeHeader({
         }}
       >
         {titleText}
-      </button>
+      </UiButton>
     );
   }, [
     canEditTitle,

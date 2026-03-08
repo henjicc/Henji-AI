@@ -4,20 +4,21 @@ import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import PresetPanel from '@/components/PresetPanel'
 
-// 导入新的模块化组件
-import { logInfo, logError } from '@/utils/errorLogger'
 import { useUIState } from './state/useUIState'
 import { useModelState } from './state/useModelState'
 import { useModelVisibility } from './hooks/useModelVisibility'
 import { useGenerationHandler } from './hooks/useGenerationHandler'
 import { useImageUpload } from './hooks/useImageUpload'
 import { useVideoUpload } from './hooks/useVideoUpload'
+import { useGlobalPasteImage } from './hooks/useGlobalPasteImage'
+import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
 import AlertDialog from '../ui/AlertDialog'
 import PanelTrigger from '../ui/PanelTrigger'
+import { UiButton } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 
@@ -33,17 +34,6 @@ interface MediaGeneratorProps {
   onSetUploadedImagesRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onStateChange?: (state: { modelId: string; prompt: string }) => void
-}
-
-interface ReEditEventDetail {
-  prompt?: string
-  images?: string[]
-  uploadedFilePaths?: string[]
-  videos?: string[]
-  uploadedVideoFilePaths?: string[]
-  model?: string
-  provider?: string
-  options?: any
 }
 
 /**
@@ -179,152 +169,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     onStateChange({ modelId: uiState.selectedModel, prompt: uiState.input })
   }, [onStateChange, uiState.selectedModel, uiState.input])
 
-  // 7. 监听全局右键菜单的图片粘贴事件
-  useEffect(() => {
-    const dataUrlToFile = (dataUrl: string, fileName: string): File | null => {
-      try {
-        const arr = dataUrl.split(',')
-        const mimeMatch = arr[0].match(/:(.*?);/)
-        if (!mimeMatch) return null
-        const mime = mimeMatch[1]
-        const bstr = atob(arr[1])
-        let n = bstr.length
-        const u8arr = new Uint8Array(n)
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n)
-        }
-        return new File([u8arr], fileName, { type: mime })
-      } catch {
-        return null
-      }
-    }
+  useGlobalPasteImage({
+    selectedModel: uiState.selectedModel,
+    modelParams: modelState.params,
+    uploadedImagesCount: uiState.uploadedImages.length,
+    uploadedVideosCount: uiState.uploadedVideos.length,
+    handleImageFileUpload: imageUpload.handleImageFileUpload
+  })
 
-    const getMaxCount = () => resolveInputLimits(
-      uiState.selectedModel,
-      modelState.params,
-      { imagesCount: uiState.uploadedImages.length, videosCount: uiState.uploadedVideos.length }
-    ).images.max
-
-    const handleGlobalPasteImage = async (e: Event) => {
-      const customEvent = e as CustomEvent<{
-        files?: File[]
-        clipboardFiles?: Array<{ data: string; mimeType: string; name: string }>
-        imageBlob?: Blob
-        imageType?: string
-      }>
-      const detail = customEvent.detail
-
-      if (detail?.clipboardFiles && detail.clipboardFiles.length > 0) {
-        const files: File[] = []
-        for (const clipFile of detail.clipboardFiles) {
-          const file = dataUrlToFile(clipFile.data, clipFile.name)
-          if (file) files.push(file)
-        }
-        if (files.length > 0) {
-          await imageUpload.handleImageFileUpload(files, getMaxCount())
-        }
-      } else if (detail?.files && detail.files.length > 0) {
-        await imageUpload.handleImageFileUpload(detail.files, getMaxCount())
-      } else if (detail?.imageBlob) {
-        const file = new File([detail.imageBlob], 'pasted-image.png', {
-          type: detail.imageType || 'image/png'
-        })
-        await imageUpload.handleImageFileUpload([file], getMaxCount())
-      }
-    }
-
-    window.addEventListener('globalPasteImage', handleGlobalPasteImage)
-    return () => window.removeEventListener('globalPasteImage', handleGlobalPasteImage)
-  }, [uiState.selectedModel, modelState.params, imageUpload])
-
-  // 8. 监听重新编辑事件
-  useEffect(() => {
-    const handleReedit = async (e: Event) => {
-      const customEvent = e as CustomEvent<ReEditEventDetail>
-      const { prompt, images, uploadedFilePaths, videos, uploadedVideoFilePaths, model, provider, options } = customEvent.detail
-
-      logInfo('[MediaGenerator] Handle re-edit:', { model, provider })
-
-      // 1. 设置 UI 状态
-      if (prompt !== undefined) uiState.setInput(prompt)
-      if (provider) uiState.setSelectedProvider(provider)
-      if (model) uiState.setSelectedModel(model)
-
-      // 恢复图片
-      if (images) uiState.setUploadedImages(images)
-      if (uploadedFilePaths) uiState.setUploadedFilePaths(uploadedFilePaths)
-
-      // 恢复视频 (包含缩略图重新生成逻辑)
-      if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths) && uploadedVideoFilePaths.length > 0) {
-        logInfo('[MediaGenerator] Restoring videos from paths:', uploadedVideoFilePaths)
-
-        try {
-          // 异步处理：读取本地视频文件，生成缩略图和 File 对象
-          const { readFile } = await import('@tauri-apps/plugin-fs')
-          const { generateVideoThumbnail } = await import('@/utils/videoProcessing')
-
-          const restorePromises = uploadedVideoFilePaths.map(async (filePath: string, index: number) => {
-            try {
-              // 读取文件内容
-              const bytes = await readFile(filePath)
-              const blob = new Blob([bytes], { type: 'video/mp4' })
-              const file = new File([blob], `video-restored-${index}.mp4`, { type: 'video/mp4' })
-
-              // 生成缩略图 (传入 timeOffset = 1.0 明确参数)
-              const thumbnail = await generateVideoThumbnail(file, 1.0)
-
-              logInfo('[MediaGenerator] 视频恢复成功:', { path: filePath, thumbnailLength: thumbnail.length })
-              return { file, thumbnail, path: filePath }
-            } catch (e) {
-              logError('[MediaGenerator] 视频恢复失败:', { path: filePath, error: e })
-              return null
-            }
-          })
-
-          const results = await Promise.all(restorePromises)
-          const validResults = results.filter(r => r !== null) as { file: File, thumbnail: string, path: string }[]
-
-          if (validResults.length > 0) {
-            // 一次性设置所有状态，避免 UI 闪烁
-            uiState.setUploadedVideos(validResults.map(r => r.thumbnail))
-            uiState.setUploadedVideoFiles(validResults.map(r => r.file))
-            uiState.setUploadedVideoFilePaths(validResults.map(r => r.path))
-          }
-        } catch (err) {
-          logError('[MediaGenerator] 批量恢复视频失败:', err)
-        }
-      } else if (videos && Array.isArray(videos) && videos.length > 0) {
-        // 旧逻辑回退：如果没有 uploadedVideoFilePaths，尝试使用 videos (可能是 base64 缩略图或者 URL)
-        logInfo('[MediaGenerator] Restoring videos from legacy videos array', {})
-        uiState.setUploadedVideos(videos)
-        // 清空其他相关状态以保持一致性
-        uiState.setUploadedVideoFilePaths([])
-        uiState.setUploadedVideoFiles([])
-      }
-
-      // 2. 恢复参数 (延迟执行以等待模型切换的副作用完成)
-      setTimeout(() => {
-        if (options) {
-          // 清理不需要的字段 (防止污染参数)
-          const paramsToSet = { ...options }
-          delete paramsToSet.images
-          delete paramsToSet.uploadedFilePaths
-          delete paramsToSet.videos
-          delete paramsToSet.uploadedVideoFilePaths
-          delete paramsToSet.uploadedImages
-          delete paramsToSet.uploadedVideos
-          delete paramsToSet.editStateFile // 内部字段不作为参数显示
-          delete paramsToSet.imageEditStates // 内部字段
-
-          logInfo('[MediaGenerator] Restore params:', paramsToSet)
-          modelState.setParams(paramsToSet)
-        }
-      }, 100)
-    }
-
-    window.addEventListener('reedit-content', handleReedit)
-    return () => window.removeEventListener('reedit-content', handleReedit)
-  }, [uiState, modelState]) // 依赖项包含 state setter，确保闭包中拿到的是最新的 setter
+  useReeditContent(uiState, modelState)
 
   // 9. 生成按钮处理（带验证）
   const handleGenerate = async () => {
@@ -487,27 +340,31 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       <div className="flex items-center justify-between mt-4">
         <div className="flex items-center gap-2">
           {/* 清除历史按钮 */}
-          <button
+          <UiButton
+            type="button"
+            variant="primary"
             onClick={onOpenClearHistory}
-            className="h-9 px-4 inline-flex items-center justify-center rounded-lg bg-red-600/70 hover:bg-red-600 text-white text-sm transition-colors"
+            className="h-9 bg-red-600/70 hover:bg-red-600"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
             {t('ui:actions.clearHistory')}
-          </button>
+          </UiButton>
 
           {/* 设置按钮 */}
-          <button
+          <UiButton
+            type="button"
+            variant="muted"
             onClick={onOpenSettings}
-            className="h-9 px-4 inline-flex items-center justify-center rounded-lg bg-zinc-700/60 hover:bg-zinc-600/60 text-white text-sm transition-colors"
+            className="h-9"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             {t('ui:actions.settings')}
-          </button>
+          </UiButton>
 
           {/* 预设面板 */}
           <PresetPanel

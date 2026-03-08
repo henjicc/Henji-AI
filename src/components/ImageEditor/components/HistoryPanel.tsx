@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton } from '@/components/ui'
 
 interface HistoryEntry {
   id: string
@@ -39,13 +40,16 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
     <div className="history-panel">
       <div className="panel-header">
         <h3>{t('imageEditor.historyPanel.title')}</h3>
-        <button
+        <UiButton
+          type="button"
+          size="sm"
+          variant="ghost"
           className="clear-btn"
           onClick={onClear}
           disabled={history.length === 0}
         >
           {t('common:actions.clear')}
-        </button>
+        </UiButton>
       </div>
 
       <div className="panel-content">

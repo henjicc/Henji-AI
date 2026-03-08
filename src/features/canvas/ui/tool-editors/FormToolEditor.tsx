@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import type { ToolFieldSchema, ToolOptions } from '@/features/canvas/tools';
-import { UiInput, UiSelect } from '@/components/ui';
+import { UiColorInput, UiInput, UiSelect } from '@/components/ui';
 import type { FormToolEditorProps } from './types';
 
 function readTextOption(options: ToolOptions, key: string): string {
@@ -53,11 +53,10 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
 
       if (field.type === 'color') {
         return (
-          <input
-            type="color"
+          <UiColorInput
             value={readTextOption(options, field.key)}
             onChange={(event) => updateOption(field.key, event.target.value)}
-            className="h-10 w-full rounded-lg border border-[rgba(255,255,255,0.12)] bg-bg-dark/90 p-1"
+            className="h-10 w-full"
           />
         );
       }
@@ -66,7 +65,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
         <UiSelect
           value={readTextOption(options, field.key)}
           onChange={(event) => updateOption(field.key, event.target.value)}
-          className="h-10 border-[rgba(255,255,255,0.12)] bg-bg-dark/90 text-sm"
+          className="h-10 text-sm"
         >
           {field.options.map((option) => (
             <option key={option.value} value={option.value}>

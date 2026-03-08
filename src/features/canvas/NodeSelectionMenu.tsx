@@ -2,6 +2,10 @@ import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Upload, Sparkles, LayoutGrid, Type } from 'lucide-react';
 import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
+import {
+  UiOptionButton,
+  UiPanel,
+} from '@/components/ui';
 
 import type { CanvasNodeType } from '@/features/canvas/domain/canvasNodes';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
@@ -85,10 +89,10 @@ export function NodeSelectionMenu({
   }, [handleClose]);
 
   return (
-    <div
+    <UiPanel
       ref={menuRef}
       className={`
-        absolute z-50 min-w-[220px] overflow-hidden rounded-lg border border-border-dark bg-surface-dark shadow-xl
+        absolute z-50 min-w-[220px] overflow-hidden p-1
         transition-opacity duration-150
         ${isVisible ? 'opacity-100' : 'opacity-0'}
       `}
@@ -97,9 +101,9 @@ export function NodeSelectionMenu({
       {menuItems.map((item, index) => {
         const Icon = iconMap[item.menuIcon] ?? Image;
         return (
-          <button
+          <UiOptionButton
             key={item.type}
-            className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-dark"
+            className="w-full gap-3 px-4 py-3"
             style={{ transitionDelay: isVisible ? `${index * 30}ms` : '0ms' }}
             onClick={() => {
               handleClose();
@@ -110,9 +114,9 @@ export function NodeSelectionMenu({
               <Icon className="h-4 w-4 text-accent" />
             </div>
             <span className="text-sm text-text-dark">{t(item.menuLabelKey)}</span>
-          </button>
+          </UiOptionButton>
         );
       })}
-    </div>
+    </UiPanel>
   );
 }

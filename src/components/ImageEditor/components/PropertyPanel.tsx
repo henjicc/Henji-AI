@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiRangeInput } from '@/components/ui'
 
 interface PropertyPanelProps {
   brightness: number
@@ -38,16 +39,15 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
     <div className="property-panel">
       <div className="panel-header">
         <h3>{t('imageEditor.propertyPanel.title')}</h3>
-        <button className="reset-btn" onClick={onReset}>
+        <UiButton type="button" size="sm" variant="ghost" className="reset-btn" onClick={onReset}>
           {t('common:actions.reset')}
-        </button>
+        </UiButton>
       </div>
 
       <div className="panel-content">
         <div className="property-group">
           <label>{t('imageEditor.propertyPanel.brightness')}</label>
-          <input
-            type="range"
+          <UiRangeInput
             min="0"
             max="200"
             value={brightness}
@@ -58,8 +58,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
         <div className="property-group">
           <label>{t('imageEditor.propertyPanel.contrast')}</label>
-          <input
-            type="range"
+          <UiRangeInput
             min="0"
             max="200"
             value={contrast}
@@ -70,8 +69,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
         <div className="property-group">
           <label>{t('imageEditor.propertyPanel.saturation')}</label>
-          <input
-            type="range"
+          <UiRangeInput
             min="0"
             max="200"
             value={saturation}
@@ -82,8 +80,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
         <div className="property-group">
           <label>{t('imageEditor.propertyPanel.scale')}</label>
-          <input
-            type="range"
+          <UiRangeInput
             min="10"
             max="300"
             value={scale * 100}
@@ -94,8 +91,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
         <div className="property-group">
           <label>{t('imageEditor.propertyPanel.rotation')}</label>
-          <input
-            type="range"
+          <UiRangeInput
             min="0"
             max="360"
             value={rotation}

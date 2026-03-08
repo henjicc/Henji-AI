@@ -10,6 +10,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TextParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
+import { UiInput, UiTextAreaField } from '@/components/ui'
 
 interface TextInputProps {
   param: TextParamDef
@@ -43,13 +44,13 @@ export const TextInput: React.FC<TextInputProps> = ({
           {displayName}
           {param.required && <span className="text-red-500 ml-1">*</span>}
         </label>
-        <textarea
+        <UiTextAreaField
           value={value || ''}
           onChange={handleChange}
           disabled={disabled}
           placeholder={placeholder}
           rows={param.rows || 4}
-          className="w-full min-h-[80px] px-3 py-2 bg-zinc-800/70 border border-zinc-700/50 rounded text-zinc-100 placeholder-zinc-500 resize-y transition-colors hover:border-[#007eff]/50 focus:border-[#007eff] focus:ring-1 focus:ring-[#007eff]/20 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          className="min-h-[80px] resize-y"
         />
       </div>
     )
@@ -62,13 +63,13 @@ export const TextInput: React.FC<TextInputProps> = ({
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      <input
+      <UiInput
         type="text"
         value={value || ''}
         onChange={handleChange}
         disabled={disabled}
         placeholder={placeholder}
-        className="w-full h-[38px] px-3 bg-zinc-800/70 border border-zinc-700/50 rounded text-zinc-100 placeholder-zinc-500 transition-colors hover:border-[#007eff]/50 focus:border-[#007eff] focus:ring-1 focus:ring-[#007eff]/20 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+        className="h-[38px]"
       />
     </div>
   )

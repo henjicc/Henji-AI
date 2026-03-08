@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, FolderOpen, Pencil, Trash2 } from 'lucide-react';
+import { UiButton, UiIconButton, UiPanel } from '@/components/ui';
 import { useProjectStore } from '@/stores/projectStore';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { RenameDialog } from './RenameDialog';
@@ -49,14 +50,15 @@ export function ProjectManager() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-text-dark">{t('project.title')}</h1>
-          <button
-            type="button"
+          <UiButton
             onClick={handleCreateProject}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+            variant="primary"
+            size="sm"
+            className="gap-2 px-4"
           >
             <Plus className="w-5 h-5" />
             {t('project.newProject')}
-          </button>
+          </UiButton>
         </div>
 
         {projects.length === 0 ? (
@@ -68,32 +70,30 @@ export function ProjectManager() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((project) => (
-              <div
+              <UiPanel
                 key={project.id}
                 onClick={() => openProject(project.id)}
-                className="bg-surface-dark border border-border-dark rounded-lg p-4 cursor-pointer hover:border-primary/50 hover:shadow-lg transition-all group"
+                className="cursor-pointer border border-border-dark p-4 transition-all hover:border-primary/50 hover:shadow-lg group"
               >
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="font-semibold text-text-dark truncate flex-1">
                     {project.name}
                   </h3>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
+                    <UiIconButton
                       onClick={(e) => handleRenameClick(project.id, project.name, e)}
-                      className="p-1 hover:bg-bg-dark rounded"
+                      className="!h-7 !w-7"
                       title={t('project.rename')}
                     >
                       <Pencil className="w-4 h-4 text-text-muted hover:text-text-dark" />
-                    </button>
-                    <button
-                      type="button"
+                    </UiIconButton>
+                    <UiIconButton
                       onClick={(e) => handleDeleteClick(project.id, e)}
-                      className="p-1 hover:bg-bg-dark rounded"
+                      className="!h-7 !w-7"
                       title={t('project.delete')}
                     >
                       <Trash2 className="w-4 h-4 text-text-muted hover:text-red-500" />
-                    </button>
+                    </UiIconButton>
                   </div>
                 </div>
                 <div className="text-xs text-text-muted">
@@ -104,7 +104,7 @@ export function ProjectManager() {
                     {t('project.updatedAt')}: {formatDate(project.updatedAt)}
                   </p>
                 </div>
-              </div>
+              </UiPanel>
             ))}
           </div>
         )}

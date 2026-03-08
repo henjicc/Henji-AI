@@ -9,6 +9,16 @@ import {
 } from 'react';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motion';
+import {
+  UI_BUTTON_RESET_CLASS,
+  UI_FIELD_DISABLED_CLASS,
+  UI_FIELD_FOCUS_CLASS,
+  UI_FIELD_SURFACE_CLASS,
+  UI_OPTION_ITEM_ACTIVE_CLASS,
+  UI_OPTION_ITEM_CLASS,
+  UI_OPTION_ITEM_HOVER_CLASS,
+  UI_PANEL_SURFACE_CLASS,
+} from './styleTokens';
 import { useDialogTransition } from './useDialogTransition';
 
 type ButtonVariant = 'primary' | 'muted' | 'ghost';
@@ -35,6 +45,10 @@ interface UiCheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
 
 interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
 
+interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  active?: boolean;
+}
+
 interface UiModalProps {
   isOpen: boolean;
   title: string;
@@ -46,38 +60,36 @@ interface UiModalProps {
 
 function resolveButtonVariant(variant: ButtonVariant): string {
   if (variant === 'primary') {
-    return 'bg-accent text-white hover:bg-accent/85';
+    return 'border border-transparent bg-[#007eff] text-white hover:brightness-110';
   }
 
   if (variant === 'ghost') {
-    return 'bg-transparent text-text-dark hover:bg-bg-dark/70';
+    return 'border border-zinc-700/50 bg-transparent text-text-dark hover:bg-zinc-800/45';
   }
 
-  return 'bg-bg-dark/80 text-text-dark hover:bg-bg-dark';
+  return `${UI_FIELD_SURFACE_CLASS} border border-zinc-700/50 text-text-dark hover:bg-zinc-700/45`;
 }
 
 function resolveButtonSize(size: ButtonSize): string {
   return size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-3.5 text-sm';
 }
 
-export function UiButton({
-  className = '',
-  variant = 'muted',
-  size = 'md',
-  ...props
-}: UiButtonProps) {
-  return (
+export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
+  ({ className = '', variant = 'muted', size = 'md', ...props }, ref) => (
     <button
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${resolveButtonVariant(variant)} ${resolveButtonSize(size)} ${className}`}
+      ref={ref}
+      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${resolveButtonVariant(variant)} ${resolveButtonSize(size)} ${className}`}
       {...props}
     />
-  );
-}
+  )
+);
+
+UiButton.displayName = 'UiButton';
 
 export function UiIconButton({ className = '', active = false, ...props }: UiIconButtonProps) {
   return (
     <button
-      className={`inline-flex h-10 w-10 items-center justify-center border ui-field transition-colors ${active ? 'border-accent/45 bg-accent/18 text-text-dark' : 'text-text-muted hover:bg-bg-dark'} ${className}`}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-[#007eff]/55 bg-[#007eff]/20 text-text-dark' : 'text-text-muted hover:bg-zinc-700/45'} ${className}`}
       {...props}
     />
   );
@@ -87,7 +99,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
   ({ className = '', active = false, ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex h-10 items-center gap-2 border ui-field px-3 text-sm transition-colors ${active ? 'border-accent/45 bg-accent/15 text-text-dark' : 'text-text-dark hover:bg-bg-dark'} ${className}`}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-[#007eff]/55 bg-[#007eff]/18 text-text-dark' : 'text-text-dark hover:bg-zinc-700/45'} ${className}`}
       {...props}
     />
   )
@@ -95,19 +107,40 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 
 UiChipButton.displayName = 'UiChipButton';
 
-export function UiPanel({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
+export const UiPanel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  ({ className = '', ...props }, ref) => (
     <div
-      className={`border ui-panel ${className}`}
+      ref={ref}
+      className={`rounded-xl ${UI_PANEL_SURFACE_CLASS} ${className}`}
       {...props}
     />
-  );
-}
+  )
+);
+
+UiPanel.displayName = 'UiPanel';
+
+export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
+  ({ className = '', active = false, ...props }, ref) => {
+    const stateClass = active
+      ? `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_ACTIVE_CLASS}`
+      : `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_HOVER_CLASS}`;
+
+    return (
+      <button
+        ref={ref}
+        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
+        {...props}
+      />
+    );
+  }
+);
+
+UiOptionButton.displayName = 'UiOptionButton';
 
 export function UiTextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`w-full resize-none border ui-field px-3 py-2.5 text-sm text-text-dark outline-none transition-colors placeholder:text-text-muted/70 focus:border-accent ${className}`}
+      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400/85 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   );
@@ -117,7 +150,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, TextareaHTMLAttri
   ({ className = '', ...props }, ref) => (
     <textarea
       ref={ref}
-      className={`w-full resize-none border ui-field px-3 py-2.5 text-sm text-text-dark outline-none transition-colors placeholder:text-text-muted/70 focus:border-accent ${className}`}
+      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400/85 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   )
@@ -129,13 +162,39 @@ export const UiInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInpu
   ({ className = '', ...props }, ref) => (
     <input
       ref={ref}
-      className={`w-full border ui-field px-3 py-2 text-sm text-text-dark outline-none transition-colors placeholder:text-text-muted/70 focus:border-accent ${className}`}
+      className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-zinc-400/85 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   )
 );
 
 UiInput.displayName = 'UiInput';
+
+export const UiRangeInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>>(
+  ({ className = '', ...props }, ref) => (
+    <input
+      ref={ref}
+      type="range"
+      className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-[#007eff] ${className}`}
+      {...props}
+    />
+  )
+);
+
+UiRangeInput.displayName = 'UiRangeInput';
+
+export const UiColorInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>>(
+  ({ className = '', ...props }, ref) => (
+    <input
+      ref={ref}
+      type="color"
+      className={`h-9 w-10 cursor-pointer rounded-md border bg-transparent p-1 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      {...props}
+    />
+  )
+);
+
+UiColorInput.displayName = 'UiColorInput';
 
 export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
   ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => (
@@ -168,12 +227,12 @@ export function UiSelect({ className = '', children, ...props }: UiSelectProps) 
   return (
     <div className="relative">
       <select
-        className={`h-8 w-full appearance-none rounded-lg border border-[rgba(255,255,255,0.14)] bg-bg-dark/70 px-2 pr-7 text-xs text-text-dark outline-none transition-colors focus:border-accent ${className}`}
+        className={`h-[38px] w-full appearance-none rounded-lg border px-3 pr-8 text-sm ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
       >
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
     </div>
   );
 }

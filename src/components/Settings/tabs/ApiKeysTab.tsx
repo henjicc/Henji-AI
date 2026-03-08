@@ -1,4 +1,5 @@
 import React from 'react'
+import { UiButton } from '@/components/ui'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
@@ -45,14 +46,16 @@ const ApiKeysTab: React.FC = () => {
             {links.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {links.map(link => (
-                  <button
+                  <UiButton
                     key={link.url}
                     onClick={() => openExternal(link.url)}
-                    className="px-3 py-1.5 rounded-md text-xs transition-colors border text-[#66b3ff] bg-[#007eff]/10 border-[#007eff]/40 hover:bg-[#007eff]/20 inline-flex items-center gap-1"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 border-[#007eff]/40 bg-[#007eff]/10 px-3 text-xs text-[#66b3ff] hover:bg-[#007eff]/20"
                   >
                     {link.label}
                     <ExternalLink size={12} />
-                  </button>
+                  </UiButton>
                 ))}
               </div>
             ) : null}

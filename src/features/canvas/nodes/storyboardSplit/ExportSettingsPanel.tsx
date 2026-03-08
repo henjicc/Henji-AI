@@ -1,6 +1,12 @@
 import { createPortal } from 'react-dom';
 import type { StoryboardExportOptions } from '@/features/canvas/domain/canvasNodes';
-import { UiCheckbox, UiInput, UiPanel, UiSelect } from '@/components/ui';
+import {
+  UiColorInput,
+  UiCheckbox,
+  UiInput,
+  UiPanel,
+  UiSelect,
+} from '@/components/ui';
 import type { PanelAnchor } from './shared';
 
 interface StoryboardExportSettingsPanelProps {
@@ -60,6 +66,7 @@ export function StoryboardExportSettingsPanel({
             <div>
               <div className="mb-1">图片填充</div>
               <UiSelect
+                className="h-8 text-xs"
                 value={exportOptions.imageFit}
                 onChange={(event) =>
                   onPatch({
@@ -83,6 +90,7 @@ export function StoryboardExportSettingsPanel({
             <div>
               <div className="mb-1">描述位置</div>
               <UiSelect
+                className="h-8 text-xs"
                 value={exportOptions.notePlacement}
                 onChange={(event) =>
                   onPatch({
@@ -124,20 +132,18 @@ export function StoryboardExportSettingsPanel({
           <div className="grid grid-cols-2 gap-2">
             <label className="flex items-center gap-2">
               <span>背景</span>
-              <input
-                type="color"
+              <UiColorInput
                 value={exportOptions.backgroundColor}
                 onChange={(event) => onPatch({ backgroundColor: event.target.value })}
-                className="h-7 w-full rounded border border-[rgba(255,255,255,0.14)] bg-transparent"
+                className="h-7 w-full"
               />
             </label>
             <label className="flex items-center gap-2">
               <span>文字</span>
-              <input
-                type="color"
+              <UiColorInput
                 value={exportOptions.textColor}
                 onChange={(event) => onPatch({ textColor: event.target.value })}
-                className="h-7 w-full rounded border border-[rgba(255,255,255,0.14)] bg-transparent"
+                className="h-7 w-full"
               />
             </label>
           </div>

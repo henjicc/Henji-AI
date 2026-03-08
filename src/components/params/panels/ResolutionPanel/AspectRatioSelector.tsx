@@ -6,6 +6,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AspectRatioOption } from './types'
 import { getI18nText } from '@/core/types'
+import { UiOptionButton } from '@/components/ui'
 
 export interface AspectRatioSelectorProps {
   value: string
@@ -40,7 +41,8 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
       <label className="param-label">{t('resolutionPanel.aspectRatioLabel')}</label>
       <div className="aspect-ratio-grid">
         {smartMatchEnabled && (
-          <button
+          <UiOptionButton
+            active={value === 'smart'}
             onClick={() => onChange('smart')}
             className={`aspect-ratio-option ${value === 'smart' ? 'selected' : ''}`}
           >
@@ -50,7 +52,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
               </svg>
             </div>
             <span className="aspect-ratio-label">{t('resolutionPanel.smart')}</span>
-          </button>
+          </UiOptionButton>
         )}
 
         {options
@@ -60,7 +62,8 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
             const label = getI18nText(option.label, i18n.language)
 
             return (
-              <button
+              <UiOptionButton
+                active={value === option.value}
                 key={option.value}
                 onClick={() => onChange(option.value)}
                 className={`aspect-ratio-option ${value === option.value ? 'selected' : ''}`}
@@ -77,7 +80,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
                   </div>
                 )}
                 <span className="aspect-ratio-label">{label}</span>
-              </button>
+              </UiOptionButton>
             )
           })}
       </div>

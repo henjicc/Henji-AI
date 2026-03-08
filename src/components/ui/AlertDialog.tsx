@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { UiButton, UiPanel } from './primitives'
 
 interface AlertDialogProps {
   isOpen: boolean
@@ -80,8 +81,8 @@ export default function AlertDialog({
       />
 
       {/* 弹窗内容 */}
-      <div
-        className="relative bg-[#131313]/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl"
+      <UiPanel
+        className="relative p-4 w-[400px] shadow-2xl"
         style={{
           opacity,
           transform: `scale(${0.97 + 0.03 * opacity})`,
@@ -99,14 +100,17 @@ export default function AlertDialog({
 
         {/* 确定按钮 */}
         <div className="mt-4 flex justify-end">
-          <button
+          <UiButton
+            type="button"
+            size="sm"
+            variant="muted"
             onClick={handleClose}
-            className="h-9 px-4 inline-flex items-center justify-center rounded-md bg-zinc-700/70 hover:bg-zinc-700 text-white text-sm transition-colors"
+            className="h-9 px-4"
           >
             确定
-          </button>
+          </UiButton>
         </div>
-      </div>
+      </UiPanel>
     </div>
   )
 }

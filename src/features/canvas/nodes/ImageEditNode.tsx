@@ -1,48 +1,17 @@
-import {
-  memo,
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-} from 'react';
+import { memo, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import {
-  AUTO_REQUEST_ASPECT_RATIO,
-  CANVAS_NODE_TYPES,
-  EXPORT_RESULT_NODE_DEFAULT_WIDTH,
-  EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
-  type ImageEditNodeData,
-  type ImageSize,
-} from '@/features/canvas/domain/canvasNodes';
+import { AUTO_REQUEST_ASPECT_RATIO, CANVAS_NODE_TYPES, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT, type ImageEditNodeData, type ImageSize } from '@/features/canvas/domain/canvasNodes';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import {
-  canvasAiGateway,
-  graphImageResolver,
-} from '@/features/canvas/application/canvasServices';
-import {
-  detectAspectRatio,
-  parseAspectRatio,
-  prepareNodeImage,
-} from '@/features/canvas/application/imageData';
+import { canvasAiGateway, graphImageResolver } from '@/features/canvas/application/canvasServices';
+import { detectAspectRatio, parseAspectRatio, prepareNodeImage } from '@/features/canvas/application/imageData';
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
-import {
-  getImageModel,
-  getDefaultImageModelId,
-  listImageModels,
-} from '@/features/canvas/models';
-import {
-  NODE_CONTROL_CHIP_CLASS,
-  NODE_CONTROL_ICON_CLASS,
-  NODE_CONTROL_MODEL_CHIP_CLASS,
-  NODE_CONTROL_PARAMS_CHIP_CLASS,
-  NODE_CONTROL_PRIMARY_BUTTON_CLASS,
-} from '@/features/canvas/ui/nodeControlStyles';
+import { getImageModel, getDefaultImageModelId, listImageModels } from '@/features/canvas/models';
+import { NODE_CONTROL_CHIP_CLASS, NODE_CONTROL_ICON_CLASS, NODE_CONTROL_MODEL_CHIP_CLASS, NODE_CONTROL_PARAMS_CHIP_CLASS, NODE_CONTROL_PRIMARY_BUTTON_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { ModelParamsControls } from '@/features/canvas/ui/ModelParamsControls';
 import { ReferenceTextarea, UiButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -204,16 +173,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     if (data.requestAspectRatio !== selectedAspectRatio.value) {
       updateNodeData(id, { requestAspectRatio: selectedAspectRatio.value });
     }
-  }, [
-    data.model,
-    data.requestAspectRatio,
-    data.size,
-    id,
-    selectedAspectRatio.value,
-    selectedModel.id,
-    selectedResolution.value,
-    updateNodeData,
-  ]);
+  }, [data.model, data.requestAspectRatio, data.size, id, selectedAspectRatio.value, selectedModel.id, selectedResolution.value, updateNodeData]);
 
   const handleGenerate = useCallback(async () => {
     const prompt = stripReferenceAtPrefix(promptDraft).trim();
@@ -295,24 +255,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
         generationStartedAt: null,
       });
     }
-  }, [
-    addNode,
-    addEdge,
-    providerApiKey,
-    findNodePosition,
-    promptDraft,
-    data.extraParams,
-    id,
-    incomingImages,
-    requestResolution.requestModel,
-    selectedAspectRatio.value,
-    selectedModel.expectedDurationMs,
-    selectedModel.providerId,
-    selectedResolution.value,
-    supportedAspectRatioValues,
-    t,
-    updateNodeData,
-  ]);
+  }, [addNode, addEdge, providerApiKey, findNodePosition, promptDraft, data.extraParams, id, incomingImages, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedModel.providerId, selectedResolution.value, supportedAspectRatioValues, t, updateNodeData]);
 
   return (
     <div
@@ -366,16 +309,8 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
           onModelChange={(modelId) => {
             updateNodeData(id, { model: modelId });
           }}
-          onResolutionChange={(resolution) =>
-            {
-              updateNodeData(id, { size: resolution as ImageSize });
-            }
-          }
-          onAspectRatioChange={(aspectRatio) =>
-            {
-              updateNodeData(id, { requestAspectRatio: aspectRatio });
-            }
-          }
+          onResolutionChange={(resolution) => { updateNodeData(id, { size: resolution as ImageSize }); }}
+          onAspectRatioChange={(aspectRatio) => { updateNodeData(id, { requestAspectRatio: aspectRatio }); }}
           triggerSize="sm"
           chipClassName={NODE_CONTROL_CHIP_CLASS}
           modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}

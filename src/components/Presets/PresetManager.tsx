@@ -10,6 +10,7 @@ import { usePresetLoader } from '@/hooks/usePresetLoader'
 import type { Preset } from '@/core/types/Preset'
 import { CreatePresetDialog } from './CreatePresetDialog'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiPanel } from '@/components/ui'
 
 interface PresetItemProps {
   preset: Preset
@@ -25,7 +26,7 @@ function PresetItem({ preset, currentModelId, onApply, onToggleFavorite, onDelet
   const isCompatible = isGlobal || preset.modelId === currentModelId
 
   return (
-    <div className="preset-item border rounded-lg p-4 mb-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+    <UiPanel className="preset-item mb-3 border p-4 hover:bg-zinc-700/35">
       <div className="flex justify-between items-start">
         <div className="preset-info flex-1">
           <div className="flex items-center gap-2 mb-1">
@@ -53,28 +54,34 @@ function PresetItem({ preset, currentModelId, onApply, onToggleFavorite, onDelet
         </div>
 
         <div className="preset-actions flex gap-2 ml-4">
-          <button
+          <UiButton
             onClick={onToggleFavorite}
-            className="px-3 py-1 border rounded hover:bg-gray-100 dark:hover:bg-gray-600"
+            size="sm"
+            variant="muted"
+            className="h-8 px-3"
             title={preset.isFavorite ? t('ui:presets.actions.unfavorite') : t('ui:presets.actions.favorite')}
           >
             {preset.isFavorite ? '★' : '☆'}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             onClick={onApply}
-            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+            size="sm"
+            variant="primary"
+            className="h-8 px-3"
           >
             {t('common:actions.apply')}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             onClick={onDelete}
-            className="px-3 py-1 border border-red-500 text-red-500 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+            size="sm"
+            variant="ghost"
+            className="h-8 px-3 border-red-500/70 text-red-400 hover:bg-red-500/10"
           >
             {t('common:delete')}
-          </button>
+          </UiButton>
         </div>
       </div>
-    </div>
+    </UiPanel>
   )
 }
 
@@ -108,22 +115,26 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
 
   return (
     <div className="preset-manager fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+      <UiPanel className="p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
         <div className="preset-header flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{t('ui:presets.manager.title')}</h2>
           <div className="flex gap-2">
-            <button
+            <UiButton
               onClick={() => setShowCreateDialog(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              variant="primary"
+              size="sm"
+              className="h-9 px-4"
             >
               {t('ui:presets.manager.create')}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               onClick={onClose}
-              className="px-4 py-2 border rounded hover:bg-gray-50 dark:hover:bg-gray-700"
+              variant="ghost"
+              size="sm"
+              className="h-9 px-4"
             >
               {t('common:close')}
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -157,7 +168,7 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
             onClose={() => setShowCreateDialog(false)}
           />
         )}
-      </div>
+      </UiPanel>
     </div>
   )
 }

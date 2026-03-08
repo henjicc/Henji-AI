@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { UiButton, UiIconButton } from '@/components/ui'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
 import InterfaceTab from './tabs/InterfaceTab'
@@ -56,9 +57,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
           <div className="flex-1 py-3 space-y-1">
             {tabs.map(tab => (
-              <button
+              <UiButton
                 key={tab.id}
-                className={`w-full px-4 py-2.5 flex items-center space-x-3 transition-colors duration-200 ${
+                variant="ghost"
+                size="sm"
+                className={`w-full justify-start px-4 ${
                   activeTab === tab.id
                     ? 'bg-[#007eff]/10 text-[#007eff] border-r-2 border-[#007eff]'
                     : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
@@ -66,7 +69,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 onClick={() => setActiveTab(tab.id)}
               >
                 <span className="font-medium text-sm">{tab.label}</span>
-              </button>
+              </UiButton>
             ))}
           </div>
         </div>
@@ -76,15 +79,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <h3 className="text-base font-medium text-white">
               {tabs.find(tab => tab.id === activeTab)?.label}
             </h3>
-            <button
+            <UiIconButton
               onClick={handleClose}
               aria-label={t('actions.close')}
-              className="text-zinc-400 hover:text-white transition-colors duration-200 p-1 rounded-full hover:bg-zinc-800/50"
+              className="!h-8 !w-8 rounded-full text-zinc-400 hover:text-white"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
-            </button>
+            </UiIconButton>
           </div>
 
           <div ref={contentRef} className="flex-1 overflow-y-auto settings-scroll-body">
@@ -92,12 +95,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
 
           <div className="p-4 border-t border-zinc-700/50 bg-zinc-900/20 flex justify-end">
-            <button
+            <UiButton
               onClick={handleClose}
-              className="px-6 py-2 bg-[#007eff] hover:bg-[#006add] text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 rounded-lg transition-all duration-300 font-medium text-sm"
+              variant="primary"
+              size="sm"
+              className="px-6 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
             >
               {t('actions.close')}
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>

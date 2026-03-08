@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton } from '@/components/ui'
 
 interface Tool {
   id: string
@@ -42,8 +43,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <div className="editor-toolbar">
       <div className="toolbar-section tools">
         {tools.map(tool => (
-          <button
+          <UiButton
             key={tool.id}
+            type="button"
+            size="sm"
+            variant={activeTool === tool.id ? 'primary' : 'ghost'}
             className={`tool-btn ${activeTool === tool.id ? 'active' : ''}`}
             onClick={() => {
               onToolSelect(tool.id)
@@ -54,42 +58,54 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           >
             <span className="tool-icon">{tool.icon}</span>
             <span className="tool-name">{tool.name}</span>
-          </button>
+          </UiButton>
         ))}
       </div>
 
       <div className="toolbar-section history">
-        <button
+        <UiButton
+          type="button"
+          size="sm"
+          variant="ghost"
           className="history-btn"
           onClick={onUndo}
           disabled={!canUndo}
           title={t('ui:imageEditor.actions.undo')}
         >
           ↶
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          type="button"
+          size="sm"
+          variant="ghost"
           className="history-btn"
           onClick={onRedo}
           disabled={!canRedo}
           title={t('ui:imageEditor.actions.redo')}
         >
           ↷
-        </button>
+        </UiButton>
       </div>
 
       <div className="toolbar-section actions">
-        <button
+        <UiButton
+          type="button"
+          size="sm"
+          variant="ghost"
           className="action-btn cancel"
           onClick={onCancel}
         >
           {t('common:cancel')}
-        </button>
-        <button
+        </UiButton>
+        <UiButton
+          type="button"
+          size="sm"
+          variant="primary"
           className="action-btn save primary"
           onClick={onSave}
         >
           {t('common:save')}
-        </button>
+        </UiButton>
       </div>
     </div>
   )

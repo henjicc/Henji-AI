@@ -7,6 +7,7 @@ import { canvasNodeTypes } from './nodes/nodeTypes'
 import { useCanvasFlowEditor } from '@/workspaces/canvas/hooks/useCanvasFlowEditor'
 import type { ActiveCanvasProject } from '@/workspaces/canvas/hooks/useCanvasProjects'
 import { CANVAS_NODE_TYPES, type CanvasFlowEdge, type CanvasFlowNode, type CanvasFlowSnapshot } from '@/workspaces/canvas/types'
+import { UiButton } from '@/components/ui'
 import '@xyflow/react/dist/style.css'
 
 interface CanvasEditorViewProps {
@@ -48,42 +49,57 @@ export function CanvasEditorView({
     <div className="h-full bg-[#0b0c10] text-zinc-100">
       <div className="flex h-[52px] items-center justify-between border-b border-zinc-800 px-4">
         <div className="flex items-center gap-2">
-          <button className="rounded border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800" onClick={onBack}>
+          <UiButton type="button" variant="muted" size="sm" className="h-7 px-2 text-xs" onClick={onBack}>
             返回项目列表
-          </button>
+          </UiButton>
           <div className="text-sm font-medium">{project.name}</div>
           <span className="text-xs text-zinc-500">{saving ? '保存中...' : '已保存'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className="rounded border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800"
+          <UiButton
+            type="button"
+            variant="muted"
+            size="sm"
+            className="h-7 px-2 text-xs"
             onClick={() => addNodeByType(CANVAS_NODE_TYPES.upload)}
           >
             + 上传节点
-          </button>
-          <button
-            className="rounded border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800"
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="muted"
+            size="sm"
+            className="h-7 px-2 text-xs"
             onClick={() => addNodeByType(CANVAS_NODE_TYPES.imageEdit)}
           >
             + AI 图片节点
-          </button>
-          <button
-            className="rounded border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800"
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="muted"
+            size="sm"
+            className="h-7 px-2 text-xs"
             onClick={() => addNodeByType(CANVAS_NODE_TYPES.storyboardGen)}
           >
             + 分镜生成节点
-          </button>
-          <button
-            className="rounded border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800"
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="muted"
+            size="sm"
+            className="h-7 px-2 text-xs"
             onClick={(event) => {
               const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect()
               setMenuPosition({ x: rect.left, y: rect.bottom + 8 })
             }}
           >
             + 更多节点
-          </button>
-          <button
-            className="rounded border border-zinc-600 px-2 py-1 text-xs hover:bg-zinc-800"
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="muted"
+            size="sm"
+            className="h-7 px-2 text-xs"
             onClick={async () => {
               const nextName = window.prompt('输入新项目名', project.name)
               if (!nextName) return
@@ -91,16 +107,19 @@ export function CanvasEditorView({
             }}
           >
             重命名
-          </button>
-          <button
-            className="rounded border border-red-700/70 px-2 py-1 text-xs text-red-300 hover:bg-red-950/30"
+          </UiButton>
+          <UiButton
+            type="button"
+            variant="primary"
+            size="sm"
+            className="h-7 border-red-700/70 bg-red-900/30 px-2 text-xs text-red-200 hover:bg-red-900/45"
             onClick={async () => {
               if (!window.confirm('确认删除该项目？')) return
               await onDeleteProject(project.id)
             }}
           >
             删除项目
-          </button>
+          </UiButton>
         </div>
       </div>
 

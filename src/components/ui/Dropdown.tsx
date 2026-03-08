@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import {
+  UI_OPTION_ITEM_ACTIVE_CLASS,
+  UI_TRIGGER_BUTTON_CLASS,
+  UI_TRIGGER_PANEL_CLASS,
+} from './styleTokens'
+import { UiButton, UiOptionButton } from './primitives'
 
 type Option<T extends string | number | boolean> = {
   label: string
@@ -95,9 +101,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
-      <button
+      <UiButton
         type="button"
         disabled={disabled}
+        variant="muted"
         onClick={() => {
           if (disabled) return
           if (open) {
@@ -109,7 +116,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         }}
         data-dropdown-button
         className={
-          `bg-zinc-800/70 backdrop-blur-lg border border-zinc-700/50 rounded-lg px-3 py-2 h-[38px] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 transition-all duration-300 flex items-center justify-between whitespace-nowrap ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           } ${buttonClassName || 'w-full'}`
         }
         style={{
@@ -120,11 +127,11 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       >
         <span className="text-sm truncate">{display ?? String(value ?? '')}</span>
         <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-      </button>
+      </UiButton>
       {(open || closing) && (
         portal && fixedPos ? (
           createPortal(
-            <div className={`bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg text-white ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            <div className={`${UI_TRIGGER_PANEL_CLASS} ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
               style={{ position: 'fixed', top: fixedPos.top, left: fixedPos.left, width: fixedPos.width, zIndex }}
               data-dropdown-portal="true"
             >
@@ -133,23 +140,24 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
               ) : (
                 <div className="max-h-60 overflow-y-auto">
                   {(options || []).map(opt => (
-                    <div
-                      key={String(opt.value)}
-                      className={`px-3 py-2 transition-colors duration-200 ${(opt as any).disabled
-                        ? 'opacity-50 cursor-not-allowed'
-                        : value === opt.value
-                          ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-pointer'
-                          : 'hover:bg-zinc-700/50 cursor-pointer'
+                    <UiOptionButton
+                    key={String(opt.value)}
+                    active={value === opt.value}
+                    className={`w-full rounded-none border-x-0 border-b-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
+                      ? 'opacity-50 cursor-not-allowed'
+                      : value === opt.value
+                        ? `${UI_OPTION_ITEM_ACTIVE_CLASS} cursor-pointer`
+                        : 'cursor-pointer'
                         }`}
-                      onClick={() => {
-                        if ((opt as any).disabled) return
+                    onClick={() => {
+                      if (opt.disabled) return
                         onSelect && onSelect(opt.value)
                         setClosing(true)
                         setTimeout(() => { setOpen(false); setClosing(false) }, 200)
                       }}
                     >
                       <span className="text-sm">{opt.label}</span>
-                    </div>
+                    </UiOptionButton>
                   ))}
                 </div>
               )}
@@ -158,7 +166,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           )
         ) : (
           <div
-            className={`absolute left-0 z-50 mt-1 w-full bg-zinc-800/90 backdrop-blur-xl border border-zinc-700/50 rounded-lg shadow-lg text-white ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            className={`absolute left-0 z-50 mt-1 w-full ${UI_TRIGGER_PANEL_CLASS} ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             data-dropdown-portal="true"
           >
             {renderPanel ? (
@@ -166,23 +174,24 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             ) : (
               <div className="max-h-60 overflow-y-auto">
                 {(options || []).map(opt => (
-                  <div
-                    key={String(opt.value)}
-                    className={`px-3 py-2 transition-colors duration-200 ${(opt as any).disabled
+                  <UiOptionButton
+                  key={String(opt.value)}
+                  active={value === opt.value}
+                  className={`w-full rounded-none border-x-0 border-b-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
                       ? 'opacity-50 cursor-not-allowed'
                       : value === opt.value
-                        ? 'bg-[#007eff]/20 text-[#66b3ff] cursor-pointer'
-                        : 'hover:bg-zinc-700/50 cursor-pointer'
+                        ? `${UI_OPTION_ITEM_ACTIVE_CLASS} cursor-pointer`
+                        : 'cursor-pointer'
                       }`}
-                    onClick={() => {
-                      if ((opt as any).disabled) return
+                  onClick={() => {
+                    if (opt.disabled) return
                       onSelect && onSelect(opt.value)
                       setClosing(true)
                       setTimeout(() => { setOpen(false); setClosing(false) }, 200)
                     }}
                   >
                     <span className="text-sm">{opt.label}</span>
-                  </div>
+                  </UiOptionButton>
                 ))}
               </div>
             )}

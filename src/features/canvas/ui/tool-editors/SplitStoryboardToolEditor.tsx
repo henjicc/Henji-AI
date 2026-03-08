@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { UiInput } from '@/components/ui';
+import { UiInput, UiRangeInput } from '@/components/ui';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import type { VisualToolEditorProps } from './types';
 import { NumberStepper } from './splitStoryboard/NumberStepper';
@@ -241,14 +241,12 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
               {naturalSize ? ` (${lineThicknessPx}px)` : ''}
             </span>
           </div>
-          <input
-            type="range"
+          <UiRangeInput
             min={0}
             max={Math.max(0, maxLineThicknessPercent)}
             step={0.1}
             value={lineThicknessPercent}
             onChange={(event) => updateOptions({ lineThicknessPercent: Number(event.target.value) })}
-            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15"
           />
           <UiInput
             type="number"

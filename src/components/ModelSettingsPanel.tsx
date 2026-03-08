@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { getAvailableProviders } from '../utils/modelHelpers'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiChipButton, UiOptionButton, UiPanel } from '@/components/ui'
 
 const ModelSettingsPanel: React.FC = () => {
   const { t } = useI18n('settings')
@@ -167,27 +168,33 @@ const ModelSettingsPanel: React.FC = () => {
       {/* 快速操作区域 */}
       <div>
         <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">{t('modelSettings.quickActionsTitle')}</h4>
-        <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30 space-y-3">
+        <UiPanel className="space-y-3 border-zinc-700/40 bg-zinc-800/30 p-4">
           {/* 全局操作 */}
           <div className="flex gap-2 flex-wrap">
-            <button
+            <UiButton
+              type="button"
+              size="sm"
+              variant="primary"
               onClick={showAll}
-              className="px-3 py-1.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg text-xs transition-all duration-200"
             >
               {t('modelSettings.actions.showAll')}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
+              type="button"
+              size="sm"
+              variant="muted"
               onClick={hideAll}
-              className="px-3 py-1.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg text-xs transition-all duration-200"
             >
               {t('modelSettings.actions.hideAll')}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
+              type="button"
+              size="sm"
+              variant="muted"
               onClick={resetToDefault}
-              className="px-3 py-1.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg text-xs transition-all duration-200"
             >
               {t('modelSettings.actions.resetDefault')}
-            </button>
+            </UiButton>
           </div>
 
           {/* 按供应商操作 */}
@@ -197,17 +204,15 @@ const ModelSettingsPanel: React.FC = () => {
               {providers.map(provider => {
                 const isVisible = isProviderVisible(provider.id)
                 return (
-                  <button
+                  <UiChipButton
                     key={provider.id}
+                    type="button"
+                    active={isVisible}
                     onClick={() => toggleProviderVisibility(provider.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs transition-all duration-200 ${
-                      isVisible
-                        ? 'bg-[#007eff] hover:bg-[#006add] text-white'
-                        : 'opacity-40 bg-zinc-700/30 hover:bg-zinc-600/30 text-zinc-400'
-                    }`}
+                    className={`h-8 px-3 text-xs ${!isVisible ? 'opacity-40' : ''}`}
                   >
                     {provider.name}
-                  </button>
+                  </UiChipButton>
                 )
               })}
             </div>
@@ -220,22 +225,20 @@ const ModelSettingsPanel: React.FC = () => {
               {(['image', 'video', 'audio'] as const).map(type => {
                 const isVisible = isTypeVisible(type)
                 return (
-                  <button
+                  <UiChipButton
                     key={type}
+                    type="button"
+                    active={isVisible}
                     onClick={() => toggleTypeVisibility(type)}
-                    className={`px-3 py-1.5 rounded-lg text-xs transition-all duration-200 ${
-                      isVisible
-                        ? 'bg-[#007eff] hover:bg-[#006add] text-white'
-                        : 'opacity-40 bg-zinc-700/30 hover:bg-zinc-600/30 text-zinc-400'
-                    }`}
+                    className={`h-8 px-3 text-xs ${!isVisible ? 'opacity-40' : ''}`}
                   >
                     {getTypeLabel(type)}
-                  </button>
+                  </UiChipButton>
                 )
               })}
             </div>
           </div>
-        </div>
+        </UiPanel>
       </div>
 
       {/* 模型列表 */}
@@ -245,7 +248,7 @@ const ModelSettingsPanel: React.FC = () => {
           {providers.map(provider => {
             const stats = getProviderStats(provider)
             return (
-              <div key={provider.id} className="bg-zinc-800/30 rounded-xl border border-zinc-700/30 overflow-hidden">
+              <UiPanel key={provider.id} className="overflow-hidden border-zinc-700/40 bg-zinc-800/30">
                 {/* 供应商标题 */}
                 <div className="px-4 py-3 bg-zinc-900/50 border-b border-zinc-700/30 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -255,19 +258,25 @@ const ModelSettingsPanel: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex gap-2">
-                    <button
+                    <UiButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
                       onClick={() => showAllModelsForProvider(provider.id)}
-                      className="text-xs text-[#007eff] hover:text-[#006add] transition-colors"
+                      className="h-7 px-2.5 text-xs text-[#66b3ff]"
                     >
                       {t('modelSettings.actions.showAll')}
-                    </button>
+                    </UiButton>
                     <span className="text-zinc-600">|</span>
-                    <button
+                    <UiButton
+                      type="button"
+                      size="sm"
+                      variant="ghost"
                       onClick={() => hideAllModelsForProvider(provider.id)}
-                      className="text-xs text-zinc-400 hover:text-zinc-300 transition-colors"
+                      className="h-7 px-2.5 text-xs text-zinc-400"
                     >
                       {t('modelSettings.actions.hideAll')}
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
 
@@ -276,12 +285,12 @@ const ModelSettingsPanel: React.FC = () => {
                   {provider.models.map(model => {
                     const isHidden = isModelHidden(provider.id, model.id, model.type)
                     return (
-                      <button
+                      <UiOptionButton
                         key={model.id}
+                        type="button"
+                        active={!isHidden}
                         onClick={() => toggleModelVisibility(provider.id, model.id)}
-                        className={`w-full px-3 py-2.5 rounded-lg flex items-center justify-between hover:bg-zinc-700/30 transition-all duration-200 ${
-                          isHidden ? 'opacity-40' : 'opacity-100'
-                        }`}
+                        className={`mb-1 w-full justify-between px-3 py-2.5 ${isHidden ? 'opacity-40' : 'opacity-100'}`}
                       >
                         <div className="flex items-center gap-3">
                           <span className="text-sm text-white">{model.name}</span>
@@ -292,11 +301,11 @@ const ModelSettingsPanel: React.FC = () => {
                         <div className="text-xs text-zinc-500">
                           {isHidden ? t('modelSettings.status.hidden') : t('modelSettings.status.visible')}
                         </div>
-                      </button>
+                      </UiOptionButton>
                     )
                   })}
                 </div>
-              </div>
+              </UiPanel>
             )
           })}
         </div>

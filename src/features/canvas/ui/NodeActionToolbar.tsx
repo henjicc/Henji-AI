@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Copy, Crop, Download, FolderOpen, PenLine, RefreshCw, Scissors, Trash2, Unlink2 } from 'lucide-react';
+import { Copy, Crop, Download, PenLine, RefreshCw, Scissors, Trash2, Unlink2 } from 'lucide-react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 
@@ -34,6 +34,7 @@ import {
   NODE_TOOLBAR_OFFSET,
   NODE_TOOLBAR_POSITION,
 } from './nodeToolbarConfig';
+import { NodeDownloadMenu } from './NodeDownloadMenu';
 
 interface NodeActionToolbarProps {
   node: CanvasNode;
@@ -376,46 +377,21 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         </UiChipButton>
       </UiPanel>
 
-      {!isImageEdit && downloadMenu && (
-        <div
-          ref={downloadMenuRef}
-          className={`fixed z-[120] min-w-[280px] rounded-xl border border-[rgba(255,255,255,0.18)] bg-surface-dark/95 p-2 shadow-2xl backdrop-blur-sm transition-opacity duration-150 ${isDownloadMenuVisible ? 'opacity-100' : 'opacity-0'}`}
-          style={{ left: `${downloadMenu.x}px`, top: `${downloadMenu.y}px` }}
-        >
-          <button
-            type="button"
-            className="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-text-dark transition-colors hover:bg-bg-dark"
-            onClick={() => {
-              void handleDownloadSaveAs();
-            }}
-          >
-            <Download className="h-4 w-4" />
-            {t('nodeToolbar.saveAs')}
-          </button>
-
-          {downloadPresetPaths.length > 0 ? (
-            <div className="mt-1 space-y-1 border-t border-[rgba(255,255,255,0.1)] pt-2">
-              {downloadPresetPaths.map((path) => (
-                <button
-                  key={path}
-                  type="button"
-                  className="flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs text-text-dark transition-colors hover:bg-bg-dark"
-                  onClick={() => {
-                    void handleDownloadToPreset(path);
-                  }}
-                  title={path}
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-                  <span className="truncate">{path}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-1 border-t border-[rgba(255,255,255,0.1)] px-2.5 pt-2 text-xs text-text-muted">
-              {t('nodeToolbar.noDownloadPresetPathsHint')}
-            </div>
-          )}
-        </div>
+      {!isImageEdit && (
+        <NodeDownloadMenu
+          menu={downloadMenu}
+          isVisible={isDownloadMenuVisible}
+          menuRef={downloadMenuRef}
+          downloadPresetPaths={downloadPresetPaths}
+          saveAsLabel={t('nodeToolbar.saveAs')}
+          noPresetHintLabel={t('nodeToolbar.noDownloadPresetPathsHint')}
+          onSaveAs={() => {
+            void handleDownloadSaveAs();
+          }}
+          onSaveToPreset={(path) => {
+            void handleDownloadToPreset(path);
+          }}
+        />
       )}
     </ReactFlowNodeToolbar>
   );

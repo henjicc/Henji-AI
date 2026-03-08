@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton } from '@/components/ui'
 import {
   CloseIcon,
   VolumeMutedIcon,
@@ -342,14 +343,14 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             }}
             controls={false}
           />
-          <button
+          <UiIconButton
             onClick={onClose}
-            className="absolute top-2 right-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white p-2 rounded-full transition-all duration-200 z-10"
+            className="absolute top-2 right-2 z-10 rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80"
             style={{ pointerEvents: 'auto' }}
             title={t('common:close')}
           >
             <CloseIcon />
-          </button>
+          </UiIconButton>
         </div>
 
         <VideoViewerControls

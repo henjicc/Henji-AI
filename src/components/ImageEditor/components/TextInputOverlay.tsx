@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 
 import type { Annotation, TextAnnotation, ToolSettings } from '../types'
 import { TEXT_LINE_HEIGHT } from '../utils/textMetrics'
+import { UiTextAreaField } from '@/components/ui'
 
 interface TextInputOverlayProps {
     isEditing: boolean
@@ -48,7 +49,7 @@ export const TextInputOverlay: React.FC<TextInputOverlayProps> = ({
     const fontFamily = activeText ? activeText.fontFamily : toolSettings.fontFamily
 
     return (
-        <textarea
+        <UiTextAreaField
             ref={textInputRef}
             className="text-input-overlay"
             style={{

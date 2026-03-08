@@ -1,4 +1,5 @@
 import { Trash2, Undo2 } from 'lucide-react';
+import { UiChipButton, UiColorInput, UiInput, UiRangeInput } from '@/components/ui';
 import type { AnnotationToolType } from '@/features/canvas/tools/annotation';
 import {
   MAX_LINE_WIDTH_PERCENT,
@@ -52,24 +53,21 @@ export function AnnotateToolbar({
           const Icon = button.icon;
           const active = tool === button.type;
           return (
-            <button
+            <UiChipButton
               key={button.type}
               type="button"
+              active={active}
               onClick={() => {
                 setTool(button.type);
                 if (button.type !== 'text') {
                   setTextEditorState(false);
                 }
               }}
-              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-                active
-                  ? 'border-accent/45 bg-accent/15 text-text-dark'
-                  : 'border-[rgba(255,255,255,0.14)] text-text-muted hover:bg-bg-dark'
-              }`}
+              className="!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs"
             >
               <Icon className="h-3.5 w-3.5" />
               {button.label}
-            </button>
+            </UiChipButton>
           );
         })}
       </div>
@@ -77,16 +75,13 @@ export function AnnotateToolbar({
       <div className="flex flex-wrap items-center gap-2">
         {activeStyleKind && (
           <>
-            <input
-              type="color"
+            <UiColorInput
               value={color}
               onChange={(event) => onStylePatch({ color: event.target.value })}
-              className="h-9 w-10 cursor-pointer rounded-md border border-[rgba(255,255,255,0.18)] bg-transparent p-1"
             />
             {activeStyleKind === 'shape' && (
               <>
-                <input
-                  type="range"
+                <UiRangeInput
                   min={MIN_LINE_WIDTH_PERCENT}
                   max={MAX_LINE_WIDTH_PERCENT}
                   step={0.1}
@@ -98,7 +93,7 @@ export function AnnotateToolbar({
             )}
             {activeStyleKind === 'text' && (
               <div className="flex items-center gap-1">
-                <input
+                <UiInput
                   type="number"
                   min={MIN_TEXT_SIZE_PERCENT}
                   max={MAX_TEXT_SIZE_PERCENT}
@@ -109,25 +104,25 @@ export function AnnotateToolbar({
                       fontSizePercent: Number(event.target.value),
                     })
                   }
-                  className="h-9 w-24 rounded-lg border border-[rgba(255,255,255,0.14)] bg-bg-dark/80 px-2 text-sm text-text-dark outline-none"
+                  className="h-9 w-24 px-2"
                 />
                 <span className="text-xs text-text-muted">%</span>
               </div>
             )}
           </>
         )}
-        <button
+        <UiChipButton
           type="button"
-          className="inline-flex items-center gap-1 rounded-lg border border-[rgba(255,255,255,0.14)] px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-bg-dark"
+          className="!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs"
           onClick={onUndo}
           disabled={!canUndo}
         >
           <Undo2 className="h-3.5 w-3.5" />
           撤销
-        </button>
-        <button
+        </UiChipButton>
+        <UiChipButton
           type="button"
-          className="inline-flex items-center gap-1 rounded-lg border border-[rgba(255,255,255,0.14)] px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-bg-dark"
+          className="!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs"
           onClick={onRedo}
           disabled={!canRedo}
         >
@@ -136,25 +131,25 @@ export function AnnotateToolbar({
             <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
           </svg>
           重做
-        </button>
-        <button
+        </UiChipButton>
+        <UiChipButton
           type="button"
-          className="inline-flex items-center gap-1 rounded-lg border border-[rgba(255,255,255,0.14)] px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-bg-dark"
+          className="!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs"
           onClick={onDeleteSelected}
           disabled={!canDeleteSelected}
         >
           <Trash2 className="h-3.5 w-3.5" />
           删除选中
-        </button>
-        <button
+        </UiChipButton>
+        <UiChipButton
           type="button"
-          className="inline-flex items-center gap-1 rounded-lg border border-[rgba(255,255,255,0.14)] px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-bg-dark"
+          className="!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs"
           onClick={onClear}
           disabled={!canClear}
         >
           <Trash2 className="h-3.5 w-3.5" />
           清空
-        </button>
+        </UiChipButton>
       </div>
     </>
   );

@@ -5,6 +5,8 @@ import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
 import { logError, logInfo } from '../../utils/errorLogger'
+import { useReorderDrag } from './fileUploader/useReorderDrag'
+import { UiButton, UiIconButton, UiInput } from './primitives'
 
 export interface FileUploaderProps {
     files: string[]
@@ -45,27 +47,6 @@ export default function FileUploader({
     const [isHTML5Dragging, setIsHTML5Dragging] = useState(false)
     const dragCounter = useRef(0)
     const lastDropTime = useRef(0)
-    const [dragState, setDragState] = useState<{
-        isDragging: boolean
-        isDropping: boolean
-        fromIndex: number | null
-        toIndex: number | null
-        startX: number
-        startY: number
-        currentX: number
-        currentY: number
-    }>({
-        isDragging: false,
-        isDropping: false,
-        fromIndex: null,
-        toIndex: null,
-        startX: 0,
-        startY: 0,
-        currentX: 0,
-        currentY: 0
-    })
-    const dragStateRef = useRef(dragState)
-    dragStateRef.current = dragState
 
     // Custom drag and drop context
     const { isDragging: isCustomDragging, dragData, endDrag } = useDragDrop()
@@ -76,6 +57,18 @@ export default function FileUploader({
     }, disabled)
 
     const isDragging = isHTML5Dragging || isTauriDragging || isCustomDragging
+    const {
+        dragState,
+        itemRefs,
+        handleMouseDown
+    } = useReorderDrag({
+        disabled,
+        isCustomDragging,
+        files,
+        onReorder,
+        onDragStateChange,
+        onImageClick
+    })
 
     const handleFiles = (newFiles: File[]) => {
         const now = Date.now()
@@ -219,194 +212,6 @@ export default function FileUploader({
         return 'video/mp4'
     }
 
-    const itemRefs = useRef<(HTMLDivElement | null)[]>([])
-
-    const handleMouseDown = (index: number, e: React.MouseEvent) => {
-        // 防止在删除按钮上触发拖拽
-        const target = e.target as HTMLElement;
-        // 检查点击的元素或其父元素是否为删除按钮
-        if (target.tagName === 'BUTTON' || target.closest('button')) {
-            e.preventDefault(); // 防止默认行为
-            return;
-        }
-
-        if (disabled || isCustomDragging || e.button !== 0) return
-        e.preventDefault()
-        setDragState({
-            isDragging: false, // 初始状态不拖拽，等待鼠标移动确认
-            isDropping: false,
-            fromIndex: index,
-            toIndex: index,
-            startX: e.clientX,
-            startY: e.clientY,
-            currentX: e.clientX,
-            currentY: e.clientY
-        })
-    }
-
-    React.useEffect(() => {
-        if (!dragState.isDragging) return
-
-        const handleMouseMove = (e: MouseEvent) => {
-            const from = dragStateRef.current.fromIndex!
-            const oldTo = dragStateRef.current.toIndex!
-
-            let newToIndex = from
-            let minDist = Infinity
-
-            // 获取当前拖拽元素的位置
-            const draggingEl = itemRefs.current[from]
-            if (!draggingEl) return
-
-            const draggingRect = draggingEl.getBoundingClientRect()
-            const draggingCenterX = draggingRect.left + draggingRect.width / 2
-
-            // 找到最近的目标位置
-            for (let i = 0; i < itemRefs.current.length; i++) {
-                if (i === from) continue
-
-                const el = itemRefs.current[i]
-                if (!el) continue
-                const rect = el.getBoundingClientRect()
-                const targetCenterX = rect.left + rect.width / 2
-
-                const dist = Math.abs(draggingCenterX - targetCenterX)
-                if (dist < minDist) {
-                    minDist = dist
-                    newToIndex = i
-                }
-            }
-
-            // 更灵敏的阈值
-            const threshold = 28
-
-            if (minDist < threshold && newToIndex !== oldTo) {
-                setDragState({
-                    ...dragStateRef.current,
-                    currentX: e.clientX,
-                    currentY: e.clientY,
-                    toIndex: newToIndex
-                })
-            } else {
-                setDragState({
-                    ...dragStateRef.current,
-                    currentX: e.clientX,
-                    currentY: e.clientY
-                })
-            }
-        }
-
-        const handleMouseUp = () => {
-            const { fromIndex, toIndex } = dragStateRef.current
-
-            // 如果发生了位置变化，进入 dropping 状态
-            if (fromIndex !== null && toIndex !== null && fromIndex !== toIndex) {
-                // 设置 dropping 状态，触发归位动画
-                setDragState(prev => ({
-                    ...prev,
-                    isDragging: false,
-                    isDropping: true
-                }))
-
-                // 动画结束后执行实际的 reorder 和状态重置
-                setTimeout(() => {
-                    if (onReorder) {
-                        onReorder(fromIndex, toIndex)
-                    }
-                    setDragState({
-                        isDragging: false,
-                        isDropping: false,
-                        fromIndex: null,
-                        toIndex: null,
-                        startX: 0,
-                        startY: 0,
-                        currentX: 0,
-                        currentY: 0
-                    })
-                }, 150) // 动画时长，与 CSS transition 匹配
-            } else {
-                // 如果没有位置变化，直接重置
-                setDragState({
-                    isDragging: false,
-                    isDropping: false,
-                    fromIndex: null,
-                    toIndex: null,
-                    startX: 0,
-                    startY: 0,
-                    currentX: 0,
-                    currentY: 0
-                })
-            }
-        }
-
-        window.addEventListener('mousemove', handleMouseMove)
-        window.addEventListener('mouseup', handleMouseUp)
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove)
-            window.removeEventListener('mouseup', handleMouseUp)
-        }
-    }, [dragState.isDragging, onReorder])
-
-    // 通知父组件拖动状态变化 (包括 dropping 状态)
-    React.useEffect(() => {
-        const isActive = dragState.isDragging || dragState.isDropping
-        onDragStateChange?.(isActive)
-    }, [dragState.isDragging, dragState.isDropping, onDragStateChange])
-
-    // 添加拖拽确认逻辑
-    React.useEffect(() => {
-        if (dragState.fromIndex === null || dragState.isDragging || dragState.isDropping) return
-
-        let moved = false
-        const startX = dragState.startX
-        const startY = dragState.startY
-
-        const handleMouseMove = (e: MouseEvent) => {
-            const deltaX = Math.abs(e.clientX - startX)
-            const deltaY = Math.abs(e.clientY - startY)
-
-            // Higher threshold (25px) helps avoid accidental drag on macOS touchpad
-            if (deltaX > 25 || deltaY > 25) {
-                setDragState(prev => ({
-                    ...prev,
-                    isDragging: true
-                }))
-                moved = true
-            }
-        }
-
-        const handleMouseUp = () => {
-            if (!moved) {
-                // 如果没有移动，触发点击查看
-                const clickedIndex = dragState.fromIndex
-                if (clickedIndex !== null && onImageClick) {
-                    // 支持图片、视频和混合模式的点击
-                    onImageClick(files[clickedIndex], files)
-                }
-                setDragState({
-                    isDragging: false,
-                    isDropping: false,
-                    fromIndex: null,
-                    toIndex: null,
-                    startX: 0,
-                    startY: 0,
-                    currentX: 0,
-                    currentY: 0
-                })
-            }
-            window.removeEventListener('mousemove', handleMouseMove)
-            window.removeEventListener('mouseup', handleMouseUp)
-        }
-
-        window.addEventListener('mousemove', handleMouseMove)
-        window.addEventListener('mouseup', handleMouseUp)
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove)
-            window.removeEventListener('mouseup', handleMouseUp)
-        }
-    }, [dragState.fromIndex, dragState.isDragging, dragState.isDropping, dragState.startX, dragState.startY])
-
     const canUploadMore = !maxCount || files.length < maxCount
 
     return (
@@ -539,19 +344,19 @@ export default function FileUploader({
                                 }
                             })()}
 
-                            <button
+                            <UiIconButton
                                 onClick={(e) => {
                                     e.stopPropagation()  // 阻止事件冒泡
                                     e.preventDefault()    // 防止默认行为
                                     onRemove(index)
                                 }}
-                                className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg z-20 pointer-events-auto"
+                                className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-lg transition-opacity duration-200 hover:bg-red-600 group-hover:opacity-100 z-20 pointer-events-auto"
                                 type="button"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
-                            </button>
+                            </UiIconButton>
                         </div>
                     </div>
                 )
@@ -560,17 +365,20 @@ export default function FileUploader({
 
             {/* Upload Button */}
             {canUploadMore && !hideUploadButton && (
-                <div
-                    className={`w-12 h-16 bg-zinc-700/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-dashed ${isDragging ? 'border-[#007eff] bg-zinc-700/90' : 'border-zinc-700/50 hover:border-zinc-700/50'} flex items-center justify-center transition-all duration-200 cursor-pointer flex-shrink-0`}
+                <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-lg ${isDragging ? 'border-[#007eff] bg-zinc-700/90' : 'border-zinc-700/50 bg-zinc-700/80 backdrop-blur-sm hover:border-zinc-700/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-[#007eff]' : 'text-zinc-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                </div>
+                </UiButton>
             )}
 
-            <input
+            <UiInput
                 type="file"
                 ref={inputRef}
                 onChange={handleFileChange}

@@ -14,6 +14,8 @@ import { ParamFlowViewer } from './debug/ParamFlowViewer'
 import { ExportPanel } from './debug/ExportPanel'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiPanel } from '@/components/ui'
+import { X } from 'lucide-react'
 
 interface TestModePanelProps {
   isOpen: boolean
@@ -21,8 +23,8 @@ interface TestModePanelProps {
   flowRecords?: ParamFlowRecord[]
   onExportFlowRecord?: (record: ParamFlowRecord) => void
   modelId?: string
-  params?: Record<string, any>
-  context?: Record<string, any>
+  params?: Record<string, unknown>
+  context?: Record<string, unknown>
 }
 
 const TestModePanel: React.FC<TestModePanelProps> = ({
@@ -87,8 +89,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
       />
 
       {/* 面板内容 */}
-      <div
-        className="relative bg-[#1a1a1a] border border-yellow-500/50 rounded-xl p-6 w-[600px] max-h-[80vh] overflow-y-auto shadow-2xl"
+      <UiPanel
+        className="relative border-yellow-500/50 p-6 w-[600px] max-h-[80vh] overflow-y-auto shadow-2xl"
         style={{
           opacity,
           transform: `scale(${0.97 + 0.03 * opacity})`,
@@ -101,25 +103,13 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" />
             <h2 className="text-xl font-bold text-yellow-500">{t('testMode.title')}</h2>
           </div>
-          <button
+          <UiIconButton
+            type="button"
             onClick={handleClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="h-8 w-8 border-0 bg-transparent text-gray-400 hover:text-white hover:bg-white/10"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+            <X className="h-5 w-5" />
+          </UiIconButton>
         </div>
 
         {/* 快捷键提示 */}
@@ -141,8 +131,10 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 {t('testMode.enable.description')}
               </div>
             </div>
-            <button
+            <UiButton
+              type="button"
               onClick={handleToggleTestMode}
+              variant="ghost"
               className={`relative w-14 h-7 rounded-full transition-colors ${
                 state.enabled ? 'bg-yellow-500' : 'bg-zinc-600'
               }`}
@@ -152,7 +144,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                   state.enabled ? 'translate-x-8' : 'translate-x-1'
                 }`}
               />
-            </button>
+            </UiButton>
           </div>
         </div>
 
@@ -160,26 +152,28 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {state.enabled && (
           <div className="mb-6">
             <div className="flex gap-2 border-b border-zinc-700/50">
-              <button
+              <UiChipButton
+                type="button"
                 onClick={() => setActiveTab('options')}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'options'
-                    ? 'text-yellow-500 border-b-2 border-yellow-500'
-                    : 'text-gray-400 hover:text-gray-300'
+                    ? 'text-yellow-500 border-yellow-500 bg-yellow-500/10'
+                    : 'text-gray-400 hover:text-gray-300 border-transparent bg-transparent'
                 }`}
               >
                 {t('testMode.tabs.options')}
-              </button>
-              <button
+              </UiChipButton>
+              <UiChipButton
+                type="button"
                 onClick={() => setActiveTab('export')}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'export'
-                    ? 'text-yellow-500 border-b-2 border-yellow-500'
-                    : 'text-gray-400 hover:text-gray-300'
+                    ? 'text-yellow-500 border-yellow-500 bg-yellow-500/10'
+                    : 'text-gray-400 hover:text-gray-300 border-transparent bg-transparent'
                 }`}
               >
                 {t('testMode.tabs.export')}
-              </button>
+              </UiChipButton>
             </div>
           </div>
         )}
@@ -190,68 +184,76 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <h3 className="text-white font-medium mb-3">{t('testMode.options.title')}</h3>
             <div className="space-y-3">
               {/* 跳过请求 */}
-              <label className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors">
+              <div
+                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                onClick={() => handleToggleOption('skipRequest')}
+              >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.skipRequest.title')}</div>
                   <div className="text-xs text-gray-400 mt-1">
                     {t('testMode.options.skipRequest.description')}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
+                <UiCheckbox
                   checked={state.options.skipRequest}
-                  onChange={() => handleToggleOption('skipRequest')}
-                  className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+                  onCheckedChange={() => handleToggleOption('skipRequest')}
+                  onClick={(event) => event.stopPropagation()}
                 />
-              </label>
+              </div>
 
               {/* 输出参数 */}
-              <label className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors">
+              <div
+                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                onClick={() => handleToggleOption('logParams')}
+              >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.logParams.title')}</div>
                   <div className="text-xs text-gray-400 mt-1">
                     {t('testMode.options.logParams.description')}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
+                <UiCheckbox
                   checked={state.options.logParams}
-                  onChange={() => handleToggleOption('logParams')}
-                  className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+                  onCheckedChange={() => handleToggleOption('logParams')}
+                  onClick={(event) => event.stopPropagation()}
                 />
-              </label>
+              </div>
 
               {/* 开发者工具 */}
-              <label className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors">
+              <div
+                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                onClick={() => handleToggleOption('enableDevTools')}
+              >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.enableDevTools.title')}</div>
                   <div className="text-xs text-gray-400 mt-1">
                     {t('testMode.options.enableDevTools.description')}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
+                <UiCheckbox
                   checked={state.options.enableDevTools}
-                  onChange={() => handleToggleOption('enableDevTools')}
-                  className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+                  onCheckedChange={() => handleToggleOption('enableDevTools')}
+                  onClick={(event) => event.stopPropagation()}
                 />
-              </label>
+              </div>
 
               {/* 参数流转追踪 */}
-              <label className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors">
+              <div
+                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setShowFlowTracking(prev => !prev)}
+              >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.flowTracking.title')}</div>
                   <div className="text-xs text-gray-400 mt-1">
                     {t('testMode.options.flowTracking.description')}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
+                <UiCheckbox
                   checked={showFlowTracking}
-                  onChange={(e) => setShowFlowTracking(e.target.checked)}
-                  className="w-5 h-5 rounded border-gray-600 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-0"
+                  onCheckedChange={setShowFlowTracking}
+                  onClick={(event) => event.stopPropagation()}
                 />
-              </label>
+              </div>
             </div>
           </div>
         )}
@@ -312,7 +314,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             {t('testMode.emptyHint')}
           </div>
         )}
-      </div>
+      </UiPanel>
     </div>
   )
 }

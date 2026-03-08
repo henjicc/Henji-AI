@@ -1,6 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
+import { UiInput, UiOptionButton } from '@/components/ui'
 
 interface ResolutionPanelProps {
   selectedResolution: string
@@ -53,7 +54,8 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                 { label: '2:3', value: '2:3', ratio: '2:3' },
                 { label: '9:16', value: '9:16', ratio: '9:16' }
               ].map(resolution => (
-                <button
+                <UiOptionButton
+                  active={selectedResolution === resolution.value}
                   key={resolution.value}
                   onClick={() => onResolutionSelect(resolution.value)}
                   className={`px-2 py-3 text-xs rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
@@ -80,7 +82,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                     </div>
                   )}
                   <span className="font-medium">{resolution.label}</span>
-                </button>
+                </UiOptionButton>
               ))}
             </div>
           </div>
@@ -93,7 +95,8 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                 { label: t('resolutionPanel.quality2k'), value: '2K' },
                 { label: t('resolutionPanel.quality4k'), value: '4K' }
               ].map(res => (
-                <button
+                <UiOptionButton
+                  active={resolutionQuality === res.value}
                   key={res.value}
                   onClick={() => onQualitySelect(res.value as '2K' | '4K')}
                   className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
@@ -103,7 +106,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                   }`}
                 >
                   {res.label}
-                </button>
+                </UiOptionButton>
               ))}
             </div>
           </div>
@@ -113,7 +116,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
             <label className="block text-xs text-zinc-400 mb-2">{t('resolutionPanel.sizeLabel')}</label>
             <div className="flex gap-2 items-center">
               <div className="flex-1">
-                <input
+                <UiInput
                   type="number"
                   value={customWidth}
                   onChange={(e) => onWidthChange(e.target.value)}
@@ -130,7 +133,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
               </svg>
               <div className="flex-1">
-                <input
+                <UiInput
                   type="number"
                   value={customHeight}
                   onChange={(e) => onHeightChange(e.target.value)}

@@ -4,7 +4,7 @@ import { ImagePlus, SquareArrowOutUpRight } from 'lucide-react';
 import type { StoryboardExportOptions, StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes';
 import { resolveImageDisplayUrl, shouldUseOriginalImageByZoom } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
-import { ReferenceTextarea, type ReferenceItem } from '@/components/ui';
+import { ReferenceTextarea, type ReferenceItem, UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 interface FrameCardProps {
@@ -102,9 +102,9 @@ export const FrameCard = memo(({
           </div>
         )}
 
-        <button
+        <UiIconButton
           type="button"
-          className="absolute right-1 top-1 rounded bg-black/60 p-1 text-white opacity-0 transition-all duration-150 hover:bg-black/75 group-hover/frame:opacity-100"
+          className="absolute right-1 top-1 !h-6 !w-6 rounded bg-black/60 p-1 text-white opacity-0 transition-all duration-150 hover:bg-black/75 group-hover/frame:opacity-100"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -113,11 +113,11 @@ export const FrameCard = memo(({
           title="单独编辑此格"
         >
           <SquareArrowOutUpRight className="h-3 w-3" />
-        </button>
+        </UiIconButton>
 
-        <button
+        <UiIconButton
           type="button"
-          className="absolute bottom-1 right-1 rounded bg-black/60 p-1 text-white opacity-0 transition-all duration-150 hover:bg-black/75 group-hover/frame:opacity-100"
+          className="absolute bottom-1 right-1 !h-6 !w-6 rounded bg-black/60 p-1 text-white opacity-0 transition-all duration-150 hover:bg-black/75 group-hover/frame:opacity-100"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -126,7 +126,7 @@ export const FrameCard = memo(({
           title="从输入图片替换"
         >
           <ImagePlus className="h-3 w-3" />
-        </button>
+        </UiIconButton>
       </div>
 
       <ReferenceTextarea

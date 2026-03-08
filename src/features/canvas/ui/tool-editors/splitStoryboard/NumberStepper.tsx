@@ -1,4 +1,4 @@
-import { UiInput } from '@/components/ui';
+import { UiButton, UiInput } from '@/components/ui';
 
 interface NumberStepperProps {
   label: string;
@@ -16,14 +16,15 @@ export function NumberStepper({ label, value, min, max, onChange }: NumberSteppe
     <div className="space-y-1.5">
       <div className="text-xs text-text-muted">{label}</div>
       <div className="flex items-center gap-2">
-        <button
+        <UiButton
           type="button"
-          className="h-9 w-9 rounded-lg border border-[rgba(255,255,255,0.14)] bg-bg-dark/60 text-sm text-text-dark transition-colors hover:bg-bg-dark disabled:cursor-not-allowed disabled:opacity-45"
+          size="sm"
+          className="h-9 w-9 px-0 text-sm"
           onClick={() => onChange(value - 1)}
           disabled={decreaseDisabled}
         >
           -
-        </button>
+        </UiButton>
         <UiInput
           type="number"
           value={value}
@@ -33,14 +34,15 @@ export function NumberStepper({ label, value, min, max, onChange }: NumberSteppe
           onChange={(event) => onChange(Number(event.target.value))}
           className="h-9 text-center"
         />
-        <button
+        <UiButton
           type="button"
-          className="h-9 w-9 rounded-lg border border-[rgba(255,255,255,0.14)] bg-bg-dark/60 text-sm text-text-dark transition-colors hover:bg-bg-dark disabled:cursor-not-allowed disabled:opacity-45"
+          size="sm"
+          className="h-9 w-9 px-0 text-sm"
           onClick={() => onChange(value + 1)}
           disabled={increaseDisabled}
         >
           +
-        </button>
+        </UiButton>
       </div>
     </div>
   );

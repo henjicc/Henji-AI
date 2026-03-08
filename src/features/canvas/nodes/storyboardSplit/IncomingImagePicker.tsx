@@ -1,6 +1,10 @@
 import { createPortal } from 'react-dom';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import {
+  UiOptionButton,
+  UiPanel,
+} from '@/components/ui';
 import type { IncomingImageItem } from './shared';
 
 interface PickerState {
@@ -31,44 +35,46 @@ export function IncomingImagePicker({
   return createPortal(
     <div
       ref={pickerMenuRef}
-      className="nowheel fixed z-[140] w-[120px] overflow-hidden rounded-xl border border-[rgba(255,255,255,0.16)] bg-surface-dark shadow-xl"
+      className="nowheel fixed z-[140] w-[120px] overflow-hidden"
       style={{ left: `${pickerState.x}px`, top: `${pickerState.y}px` }}
       onMouseDown={(event) => event.stopPropagation()}
       onWheelCapture={(event) => event.stopPropagation()}
     >
-      {incomingImageItems.length > 0 ? (
-        <div
-          className="ui-scrollbar nowheel max-h-[180px] overflow-y-auto"
-          onWheelCapture={(event) => event.stopPropagation()}
-        >
-          {incomingImageItems.map((item) => (
-            <button
-              key={`${pickerState.frameId}-${item.imageUrl}`}
-              type="button"
-              className="flex w-full items-center gap-2 border border-transparent bg-bg-dark/70 px-2 py-2 text-left text-sm text-text-dark transition-colors hover:border-[rgba(255,255,255,0.18)]"
-              onClick={(event) => {
-                event.stopPropagation();
-                onReplaceFromInput(pickerState.frameId, item.imageUrl);
-              }}
-              title={item.label}
-            >
-              <CanvasNodeImage
-                src={item.displayUrl}
-                alt={item.label}
-                viewerSourceUrl={resolveImageDisplayUrl(item.imageUrl)}
-                viewerImageList={incomingImageViewerList}
-                className="h-8 w-8 rounded object-cover"
-                draggable={false}
-              />
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="px-2 py-2 text-sm text-text-muted">
-          暂无输入图片
-        </div>
-      )}
+      <UiPanel>
+        {incomingImageItems.length > 0 ? (
+          <div
+            className="ui-scrollbar nowheel max-h-[180px] overflow-y-auto"
+            onWheelCapture={(event) => event.stopPropagation()}
+          >
+            {incomingImageItems.map((item) => (
+              <UiOptionButton
+                key={`${pickerState.frameId}-${item.imageUrl}`}
+                type="button"
+                className="w-full gap-2 px-2 py-2 text-sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onReplaceFromInput(pickerState.frameId, item.imageUrl);
+                }}
+                title={item.label}
+              >
+                <CanvasNodeImage
+                  src={item.displayUrl}
+                  alt={item.label}
+                  viewerSourceUrl={resolveImageDisplayUrl(item.imageUrl)}
+                  viewerImageList={incomingImageViewerList}
+                  className="h-8 w-8 rounded object-cover"
+                  draggable={false}
+                />
+                <span className="truncate">{item.label}</span>
+              </UiOptionButton>
+            ))}
+          </div>
+        ) : (
+          <div className="px-2 py-2 text-sm text-text-muted">
+            暂无输入图片
+          </div>
+        )}
+      </UiPanel>
     </div>,
     document.body
   );

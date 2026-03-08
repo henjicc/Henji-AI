@@ -5,7 +5,7 @@
 
 ## 项目概述
 
-Henji-AI（痕迹AI）是基于 Tauri 的桌面应用，聚合多个 AI 提供商（PPIO、Fal、ModelScope、KIE）生成图像、视频和音频。采用适配器模式抽象 API，配置驱动架构定义模型。
+Henji-AI（痕迹AI）是基于 Tauri 的桌面应用，聚合多个 AI 提供商（PPIO、Fal、ModelScope、KIE）生成图像、视频和音频。采用 Provider 架构 + 配置驱动模型定义。
 
 ## 常用命令
 
@@ -43,7 +43,7 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
 - Provider 处理所有提供商特定细节（认证、请求格式、响应解析、轮询）
 - 通过 `GenerationService` 统一调用各提供商
 
-**注意**：旧的 `src/adapters/` 正在被淘汰，不要在新代码中使用
+**注意**：`src/adapters/` 已移除，旧代码仅保存在 `old-Henji-AI/`
 
 ### 3. 严格解耦
 
@@ -57,23 +57,38 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
   - 模型不能导入 `services/` 或 `components/`
   - 使用 `core/` 作为层间桥梁
 
+### 4. UI Primitive 单点落地（新增）
+
+- **统一入口**：业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
+- **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
+- **禁止回退**：禁止在业务组件重新引入原生控件并单独写一套样式
+- **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
+- **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
+
+### 5. 画布模块拆分约定（新增）
+
+- `src/features/canvas/Canvas.tsx` 只保留编排与接线，不承载复杂业务实现
+- 画布行为优先放入 hooks：
+  - `src/features/canvas/hooks/useCanvasDuplication.ts`
+  - `src/features/canvas/hooks/useCanvasNodeMenu.ts`
+  - `src/features/canvas/hooks/useCanvasShortcuts.ts`
+- 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`（例如 `CanvasOverlays.tsx`、`CanvasEmptyHint.tsx`）
+- 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
+
 ## 目录结构
 
 ```
 src/
-├── adapters/          # 旧系统：Adapter 类（正在被淘汰）
-│   ├── base/          # BaseAdapter 抽象基类
-│   ├── fal/           # Fal.ai 适配器
-│   ├── kie/           # KIE 适配器
-│   ├── modelscope/    # ModelScope 适配器
-│   └── ppio/          # PPIO 适配器
 ├── components/        # React UI 组件（纯展示）
 ├── core/              # 系统核心（新架构）
 │   ├── ModelRegistry.ts      # 模型注册中心
 │   ├── defineModel.ts        # 模型定义辅助函数
-│   ├── providers/            # 新系统：Provider 类（正在建立）
+│   ├── providers/            # 新系统：Provider 类
 │   │   ├── base/             # ProviderHandler 基类
-│   │   └── PPIOProvider.ts   # PPIO 提供商实现
+│   │   ├── PPIOProvider.ts   # PPIO 提供商实现
+│   │   ├── FalProvider.ts    # Fal 提供商实现
+│   │   ├── KIEProvider.ts    # KIE 提供商实现
+│   │   └── ModelscopeProvider.ts # ModelScope 提供商实现
 │   ├── services/             # 新系统：GenerationService
 │   │   └── GenerationService.ts  # 统一生成服务
 │   ├── linkage/              # 参数联动引擎
@@ -82,24 +97,26 @@ src/
 ├── models/            # 模型定义（新架构）
 │   ├── fal/           # Fal 提供商模型（*.model.ts）
 │   ├── kie/           # KIE 提供商模型（*.model.ts）
+│   ├── modelscope/    # ModelScope 提供商模型（*.model.ts）
 │   └── ppio/          # PPIO 提供商模型（*.model.ts）
-├── services/          # 旧系统：服务层（部分保留）
+├── services/          # 领域服务（数据库/上传/预设等）
 ├── hooks/             # 可复用 React 逻辑
 ├── utils/             # 纯工具函数
 └── workspaces/        # 主工作区组件
 ```
+old-Henji-AI/           # 旧项目代码备份（仅供对照）
 
 **架构迁移状态（重要）：**
 
 项目正在进行重大架构迁移，从 Adapter 系统迁移到 Provider 系统：
 
-- **旧系统**（正在淘汰）：
-  - `src/adapters/` - Adapter 类（BaseAdapter + 各提供商 Adapter）
-  - `src/services/api.ts` - 旧的 API 服务
+- **旧系统**（已移除，保存在 `old-Henji-AI/`）：
+  - `src/adapters/` - Adapter 类（历史代码）
+  - `src/services/api.ts` - 旧的 API 服务（历史代码）
   - 旧模型文件：`src/models/*.ts`（已删除）
   - 手动配置：`src/components/MediaGenerator/builders/`（已删除）
 
-- **新系统**（正在建立）：
+- **新系统**（已完成主体搭建）：
   - `src/core/providers/` - Provider 类（ProviderHandler + 各提供商 Provider）
   - `src/core/services/GenerationService.ts` - 统一生成服务
   - 模型定义：`src/models/{provider}/*.model.ts` + `defineModel()`
@@ -109,13 +126,14 @@ src/
   - ✅ 任务01：Provider 基础架构已完成
   - ✅ 任务02：GenerationService 已完成
   - ✅ 任务03-1：PPIOProvider 已完成
-  - 🔄 任务03-2：PPIO 模型映射进行中
-  - ⏳ 任务04-07：测试、迁移其他提供商、清理旧代码
+  - ✅ 任务03-2：PPIO 模型映射已完成（14/14）
+  - 🔄 任务04：PPIO 其他模型测试进行中（已完成 Kling 2.6 Pro）
+  - ⏳ 任务05-07：其他供应商测试与清理收尾
 
 **开发指南：**
 - **新模型开发**：使用新系统（`defineModel` + Provider）
 - **修改现有模型**：优先在新系统中修改
-- **不要依赖 adapters**：该目录将被删除
+- **不要依赖 adapters**：仅保留在 `old-Henji-AI/`
 - **参考迁移计划**：`迁移计划_新系统完全替代adapters/清单.md`
 
 ## 关键约束（不可违反）
@@ -158,6 +176,20 @@ src/
    - 使用模型定义，而非 if-else 语句处理模型特定行为
    - 扩展 schema，不要添加特殊情况
    - 如果你在添加基于模型 ID 的 switch 语句，说明做错了
+
+8. **UI 一致性约束（新增）**
+   - 对话模式、画布模式、工具模式必须复用同一套 `Ui*` primitives
+   - 禁止“同功能组件多份实现”（例如分别维护两套按钮/输入框样式）
+
+9. **ReferenceTextarea 规范（新增）**
+   - @引用标记插入/删除/空格归一化统一走 `src/core/inputs/referenceTokens.ts`
+   - 高亮渲染统一走 `src/components/ui/referenceTextareaUtils.tsx`
+   - 禁止在业务组件重复实现 @引用解析、删除范围、文本高亮逻辑
+
+10. **文件上传控件规范（新增）**
+   - 上传能力统一复用 `FileUploader` / `UiInput(type=file)` 方案
+   - 拖拽排序逻辑统一复用 `src/components/ui/fileUploader/useReorderDrag.ts`
+   - 禁止在业务组件重复实现上传/排序基础交互
 
 ## 添加新模型
 
@@ -203,14 +235,7 @@ export const myModel = defineModel({
 })
 ```
 
-### 步骤 2: 导出模型
-
-在 `src/models/{provider}/index.ts` 中：
-```typescript
-export * from './my-model.model'
-```
-
-### 步骤 3: 验证
+### 步骤 2: 验证
 
 ```bash
 npm run build  # 验证 TypeScript 编译
@@ -254,6 +279,28 @@ window.__getModelStats()       // 显示注册表统计
 window.__reloadModels()        // 重新加载所有模型
 ```
 
+## 重构后回归检查（新增）
+
+每次涉及 UI/画布重构后，至少执行：
+
+```bash
+npm run build
+rg -n "<button|<input|<select|<textarea" src --glob "*.tsx"
+```
+
+期望结果：
+- `npm run build` 通过
+- 原生控件命中仅存在于 `src/components/ui/primitives.tsx`
+
+文件长度硬约束检查：
+
+```bash
+powershell -Command "Get-ChildItem -Path src -Recurse -Include *.tsx | ForEach-Object { $count=(Get-Content $_.FullName).Count; if($count -gt 400){ \"$($_.FullName)`t$count\" } }"
+```
+
+期望结果：
+- 无 `> 400` 行的 `tsx` 文件
+
 ## 常见问题
 
 **模型未显示：**
@@ -285,5 +332,14 @@ window.__reloadModels()        // 重新加载所有模型
 - `src/core/providers/base/` - Provider 基类（新系统）
 - `src/core/services/GenerationService.ts` - 统一生成服务（新系统）
 - `src/App.tsx` - 应用入口
-- `docs/开发规范与架构指南.md` - 详细架构指南（中文）
+- `docs/model-adaptation-guide-new.md` - 模型适配指南（新架构）
 - `迁移计划_新系统完全替代adapters/清单.md` - 架构迁移计划
+- `src/components/ui/primitives.tsx` - UI primitives 唯一原生标签落点
+- `src/components/ui/styleTokens.ts` - UI 视觉 token
+- `src/components/ui/ReferenceTextarea.tsx` - 引用输入与高亮核心组件
+- `src/components/ui/referenceTextareaUtils.tsx` - 引用高亮渲染工具
+- `src/features/canvas/canvasUtils.ts` - 画布通用计算与连接预览
+- `src/features/canvas/hooks/useCanvasDuplication.ts` - 画布复制/拖拽行为
+- `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互
+- `src/features/canvas/hooks/useCanvasShortcuts.ts` - 画布快捷键行为
+- `src/features/canvas/ui/CanvasOverlays.tsx` - 画布叠层 UI（空态/菜单/预览）

@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton } from '@/components/ui'
 
 interface ErrorStateProps {
   error: Error | string
@@ -38,14 +39,14 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
 
       <div className="error-actions">
         {onRetry && (
-          <button className="error-btn retry" onClick={onRetry}>
+          <UiButton variant="primary" size="sm" className="error-btn retry" onClick={onRetry}>
             {t('common:actions.retry')}
-          </button>
+          </UiButton>
         )}
         {onDismiss && (
-          <button className="error-btn dismiss" onClick={onDismiss}>
+          <UiButton variant="muted" size="sm" className="error-btn dismiss" onClick={onDismiss}>
             {t('common:close')}
-          </button>
+          </UiButton>
         )}
       </div>
     </div>

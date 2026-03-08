@@ -38,6 +38,7 @@ import {
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { UiInput } from '@/components/ui';
 
 type UploadNodeProps = NodeProps & {
   id: string;
@@ -317,7 +318,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
           </div>
         </label>
       )}
-      <input
+      <UiInput
         ref={inputRef}
         type="file"
         accept="image/*"

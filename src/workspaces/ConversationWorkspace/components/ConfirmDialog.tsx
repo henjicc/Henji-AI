@@ -4,6 +4,7 @@
  */
 
 import React from 'react'
+import { UiButton, UiPanel } from '@/components/ui'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -40,7 +41,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   return (
     <div className="confirm-dialog-overlay" onClick={onCancel}>
-      <div
+      <UiPanel
         className={`confirm-dialog confirm-${type}`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -54,13 +55,17 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         </div>
 
         <div className="dialog-actions">
-          <button
+          <UiButton
+            variant="muted"
+            size="sm"
             className="dialog-btn cancel"
             onClick={onCancel}
           >
             {cancelText}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
+            variant={type === 'danger' ? 'primary' : 'muted'}
+            size="sm"
             className={`dialog-btn confirm ${type}`}
             onClick={() => {
               onConfirm()
@@ -68,9 +73,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             }}
           >
             {confirmText}
-          </button>
+          </UiButton>
         </div>
-      </div>
+      </UiPanel>
     </div>
   )
 }

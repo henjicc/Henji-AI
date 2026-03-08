@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isDesktop, isDesktopAsync } from '../utils/save'
 import { logError } from '../utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
+import { UiChipButton, UiIconButton } from '@/components/ui'
 
 // CSS properties that are not in the default type definitions
 type WebkitAppRegion = 'drag' | 'no-drag'
@@ -96,21 +97,22 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
       style={{ WebkitAppRegion: 'no-drag' }}
     >
       {tabs.map((tab) => (
-        <button
+        <UiChipButton
           key={tab.id}
+          type="button"
           onClick={() => onTabChange?.(tab.id)}
           className={`
-            flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium
+            !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
             transition-all duration-200 ease-out
             ${activeTab === tab.id
-              ? 'bg-[#00a0ea]/30 text-[#00a0ea]'
-              : 'text-gray-400 hover:text-gray-200 hover:bg-white/10'
+              ? 'bg-[#00a0ea]/30 !text-[#00a0ea]'
+              : 'text-gray-400 hover:text-gray-200 hover:bg-white/10 bg-transparent'
             }
           `}
         >
           {tab.icon}
           <span>{tab.label}</span>
-        </button>
+        </UiChipButton>
       ))}
     </div>
   )
@@ -129,33 +131,36 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             data-tauri-ignore-drag-region
             style={{ WebkitAppRegion: 'no-drag' }}
           >
-            <button
+            <UiIconButton
+              type="button"
               onClick={handleClose}
-              className="w-3 h-3 rounded-full bg-[#FF5F56] hover:bg-[#FF5F56]/80 flex items-center justify-center group"
+              className="!w-3 !h-3 !rounded-full !border-0 !bg-[#FF5F56] hover:!bg-[#FF5F56]/80 !p-0 group"
               title={t('windowControls.close')}
             >
               <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
-            </button>
-            <button
+            </UiIconButton>
+            <UiIconButton
+              type="button"
               onClick={handleMinimize}
-              className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 flex items-center justify-center group"
+              className="!w-3 !h-3 !rounded-full !border-0 !bg-[#FFBD2E] hover:!bg-[#FFBD2E]/80 !p-0 group"
               title={t('windowControls.minimize')}
             >
               <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h16" />
               </svg>
-            </button>
-            <button
+            </UiIconButton>
+            <UiIconButton
+              type="button"
               onClick={handleToggleMaximize}
-              className="w-3 h-3 rounded-full bg-[#27C93F] hover:bg-[#27C93F]/80 flex items-center justify-center group"
+              className="!w-3 !h-3 !rounded-full !border-0 !bg-[#27C93F] hover:!bg-[#27C93F]/80 !p-0 group"
               title={t('windowControls.maximize')}
             >
               <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 8h8v8H8z" />
               </svg>
-            </button>
+            </UiIconButton>
           </div>
 
           {/* macOS: 中间 Tab 栏 */}
@@ -178,33 +183,36 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             data-tauri-ignore-drag-region
             style={{ WebkitAppRegion: 'no-drag' }}
           >
-            <button
+            <UiIconButton
+              type="button"
               onClick={handleMinimize}
-              className="w-8 h-8 rounded hover:bg-zinc-800/80 flex items-center justify-center"
+              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-zinc-800/80"
               title={t('windowControls.minimize')}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 12h14" />
               </svg>
-            </button>
-            <button
+            </UiIconButton>
+            <UiIconButton
+              type="button"
               onClick={handleToggleMaximize}
-              className="w-8 h-8 rounded hover:bg-zinc-800/80 flex items-center justify-center"
+              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-zinc-800/80"
               title={t('windowControls.toggleMaximize')}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="6" y="6" width="12" height="12" />
               </svg>
-            </button>
-            <button
+            </UiIconButton>
+            <UiIconButton
+              type="button"
               onClick={handleClose}
-              className="w-8 h-8 rounded hover:bg-red-700/70 flex items-center justify-center"
+              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-red-700/70"
               title={t('windowControls.close')}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </button>
+            </UiIconButton>
           </div>
         </>
       )}

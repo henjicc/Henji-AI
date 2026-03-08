@@ -5,6 +5,7 @@
 import React, { useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { supportedLanguages } from '@/i18n'
+import { UiButton, UiOptionButton, UiPanel } from '@/components/ui'
 
 export function LanguageSwitcher() {
   const { currentLanguage, changeLanguage } = useI18n()
@@ -19,12 +20,14 @@ export function LanguageSwitcher() {
 
   return (
     <div className="relative">
-      <button
+      <UiButton
+        variant="muted"
+        size="sm"
         onClick={() => setIsOpen(!isOpen)}
-        className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded transition-colors"
+        className="px-3"
       >
         {currentLang?.name || '中文'}
-      </button>
+      </UiButton>
 
       {isOpen && (
         <>
@@ -32,20 +35,18 @@ export function LanguageSwitcher() {
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-32 bg-gray-800 rounded shadow-lg z-20">
+          <UiPanel className="absolute right-0 z-20 mt-2 w-32 p-1">
             {supportedLanguages.map(lang => (
-              <button
+              <UiOptionButton
+                active={lang.code === currentLanguage}
                 key={lang.code}
                 onClick={() => handleLanguageChange(lang.code)}
-                className={`
-                  w-full px-4 py-2 text-left text-sm hover:bg-gray-700 transition-colors
-                  ${lang.code === currentLanguage ? 'bg-gray-700' : ''}
-                `}
+                className="w-full px-4 py-2 text-left text-sm"
               >
                 {lang.name}
-              </button>
+              </UiOptionButton>
             ))}
-          </div>
+          </UiPanel>
         </>
       )}
     </div>

@@ -6,6 +6,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 
+import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgeProps) {
@@ -44,9 +45,9 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
       />
       {selected && (
         <EdgeLabelRenderer>
-          <button
+          <UiIconButton
             type="button"
-            className="nodrag nopan absolute flex h-6 w-6 items-center justify-center text-text-muted transition-colors hover:text-text-dark"
+            className="nodrag nopan absolute !h-6 !w-6 rounded-full !p-0 text-text-muted hover:text-text-dark"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'all',
@@ -65,7 +66,7 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
                 clipRule="evenodd"
               />
             </svg>
-          </button>
+          </UiIconButton>
         </EdgeLabelRenderer>
       )}
     </>

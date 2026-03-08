@@ -6,6 +6,7 @@
 
 import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { UiInput } from '@/components/ui'
 
 interface UploadAreaProps {
   accept: string[]
@@ -85,7 +86,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
       onDrop={handleDrop}
       onClick={() => !disabled && !uploading && inputRef.current?.click()}
     >
-      <input
+      <UiInput
         ref={inputRef}
         type="file"
         accept={accept.join(',')}

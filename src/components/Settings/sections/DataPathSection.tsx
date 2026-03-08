@@ -1,4 +1,5 @@
 import React from 'react'
+import { UiButton, UiInput } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import SettingsDialog from '../components/SettingsDialog'
 import SettingsProgressDialog from '../components/SettingsProgressDialog'
@@ -37,26 +38,29 @@ const DataPathSection: React.FC = () => {
           {t('sections.dataPath.pathLabel')}
         </label>
         <div className="flex gap-2">
-          <input
-            type="text"
+          <UiInput
             value={currentPath}
             readOnly
-            className="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 text-white text-sm font-mono"
+            className="h-10 flex-1 font-mono"
           />
-          <button
+          <UiButton
             onClick={selectDirectory}
             disabled={isMigrating}
-            className="px-4 py-2.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transition-all duration-300"
+            variant="primary"
+            size="sm"
+            className="h-10 whitespace-nowrap px-4"
           >
             {t('actions.select')}
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             onClick={openResetConfirm}
             disabled={isMigrating}
-            className="px-4 py-2.5 bg-zinc-700/50 hover:bg-zinc-600/50 text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transition-all duration-300"
+            variant="muted"
+            size="sm"
+            className="h-10 whitespace-nowrap px-4"
           >
             {t('actions.resetDefault')}
-          </button>
+          </UiButton>
         </div>
         <p className="mt-2 text-xs text-zinc-500">{t('sections.dataPath.pathHint')}</p>
       </SectionCard>

@@ -5,6 +5,7 @@
 
 import React, { useRef, useEffect } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton, UiRangeInput } from '@/components/ui'
 
 interface VideoPlayerProps {
   videoUrl: string
@@ -79,13 +80,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       <div className="video-player-container" onClick={(e) => e.stopPropagation()}>
         <div className="video-player-header">
           {onDownload && (
-            <button className="player-btn" onClick={onDownload} title={t('common:actions.download')}>
+            <UiIconButton className="player-btn" onClick={onDownload} title={t('common:actions.download')}>
               ⬇️
-            </button>
+            </UiIconButton>
           )}
-          <button className="player-close" onClick={onClose}>
+          <UiIconButton className="player-close" onClick={onClose}>
             ×
-          </button>
+          </UiIconButton>
         </div>
 
         <div className="video-player-content">
@@ -97,16 +98,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
 
         <div className="video-player-controls">
-          <button
+          <UiIconButton
             className="control-btn play-pause"
             onClick={isPlaying ? onPause : onPlay}
           >
             {isPlaying ? '⏸' : '▶'}
-          </button>
+          </UiIconButton>
 
           <div className="progress-container">
-            <input
-              type="range"
+            <UiRangeInput
               min="0"
               max={duration}
               value={currentTime}
@@ -118,15 +118,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
           </div>
 
-          <button
+          <UiIconButton
             className="control-btn mute"
             onClick={onMuteToggle}
           >
             {isMuted ? '🔇' : '🔊'}
-          </button>
+          </UiIconButton>
 
-          <input
-            type="range"
+          <UiRangeInput
             min="0"
             max="1"
             step="0.1"

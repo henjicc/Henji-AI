@@ -4,6 +4,7 @@
 
 import React, { useState, useCallback } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiIconButton, UiInput } from '@/components/ui'
 
 export interface CustomSizeInputProps {
   value: { width: number; height: number }
@@ -62,7 +63,7 @@ export const CustomSizeInput: React.FC<CustomSizeInputProps> = ({
     <div className="custom-size-input">
       <label className="param-label">{t('resolutionPanel.sizeLabel')}</label>
       <div className="custom-size-controls">
-        <input
+        <UiInput
           type="number"
           value={value.width}
           onChange={(e) => handleWidthChange(Number(e.target.value))}
@@ -73,8 +74,8 @@ export const CustomSizeInput: React.FC<CustomSizeInputProps> = ({
           className="custom-size-field"
         />
 
-        <button
-          type="button"
+        <UiIconButton
+          active={isRatioLocked}
           onClick={() => setIsRatioLocked(!isRatioLocked)}
           className={`ratio-lock-button ${isRatioLocked ? 'locked' : ''}`}
           disabled={disabled}
@@ -86,9 +87,9 @@ export const CustomSizeInput: React.FC<CustomSizeInputProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
             )}
           </svg>
-        </button>
+        </UiIconButton>
 
-        <input
+        <UiInput
           type="number"
           value={value.height}
           onChange={(e) => handleHeightChange(Number(e.target.value))}

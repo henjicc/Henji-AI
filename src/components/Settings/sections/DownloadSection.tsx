@@ -1,6 +1,7 @@
 import React from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import Toggle from '@/components/ui/Toggle'
+import { UiButton, UiInput } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -69,21 +70,22 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             {t('sections.download.pathLabel')}
           </label>
           <div className="flex gap-2">
-            <input
-              type="text"
+            <UiInput
               value={quickDownloadPath}
               onChange={(e) => onChangePath(e.target.value)}
               placeholder={t('sections.download.pathPlaceholder')}
               disabled={!enableQuickDownload}
-              className="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-[#007eff]/60 focus:border-[#007eff] transition-all duration-300 text-white placeholder-zinc-500 text-sm disabled:opacity-50"
+              className="h-10 flex-1"
             />
-            <button
+            <UiButton
               onClick={handleSelectPath}
               disabled={!enableQuickDownload}
-              className="px-4 py-2.5 bg-[#007eff] hover:bg-[#006add] text-white rounded-lg transition-all duration-300 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              variant="primary"
+              size="sm"
+              className="h-10 whitespace-nowrap px-4"
             >
               {t('actions.select')}
-            </button>
+            </UiButton>
           </div>
           <p className="mt-2 text-xs text-zinc-500">{t('sections.download.pathHint')}</p>
         </div>

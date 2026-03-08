@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiIconButton } from '@/components/ui'
 import { ImageEditor } from '@/components/ImageEditor'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { useImageViewerTransform } from '../hooks/useImageViewerTransform'
@@ -140,13 +141,15 @@ export function ImageViewerModal({
     >
       {fromUpload && !isEditorMode && (
         <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10">
-          <button
-            className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+          <UiButton
+            variant="muted"
+            size="sm"
+            className="rounded-full px-4 backdrop-blur-xl"
             onClick={onEnterEditor}
             title={t('ui:workspace.actions.reedit')}
           >
             {t('common:edit')}
-          </button>
+          </UiButton>
         </div>
       )}
 
@@ -210,22 +213,22 @@ export function ImageViewerModal({
           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
             {imageList.length > 1 && (
               <div className="flex items-center gap-3">
-                <button
+                <UiIconButton
                   onClick={() => onNavigate('prev')}
-                  className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                  className="rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                </button>
-                <button
+                </UiIconButton>
+                <UiIconButton
                   onClick={() => onNavigate('next')}
-                  className="bg-zinc-800/80 hover:bg-zinc-700/80 backdrop-blur-sm text-white p-2 rounded-full transition-all duration-200"
+                  className="rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                </button>
+                </UiIconButton>
               </div>
             )}
 
@@ -241,18 +244,22 @@ export function ImageViewerModal({
               >
                 100%
               </div>
-              <button
+              <UiButton
                 onClick={resetView}
-                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                variant="muted"
+                size="sm"
+                className="rounded-full px-4 backdrop-blur-xl"
               >
                 {t('common:actions.reset')}
-              </button>
-              <button
+              </UiButton>
+              <UiButton
                 onClick={onClose}
-                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50 hover:bg-zinc-800/90 transition-colors"
+                variant="muted"
+                size="sm"
+                className="rounded-full px-4 backdrop-blur-xl"
               >
                 {t('common:close')}
-              </button>
+              </UiButton>
             </div>
           </div>
 

@@ -8,6 +8,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RadioParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
+import { UiOptionButton } from '@/components/ui'
 
 interface RadioInputProps {
   param: RadioParamDef
@@ -53,24 +54,17 @@ export const RadioInput: React.FC<RadioInputProps> = ({
           const isDisabled = disabled || option.disabled
 
           return (
-            <label
+            <UiOptionButton
               key={String(option.value)}
-              className={`flex items-start gap-2 p-3 border rounded cursor-pointer transition-colors ${
-                isSelected
-                  ? 'border-[#007eff] bg-[#007eff]/10'
-                  : 'border-zinc-700/50 bg-zinc-800/70 hover:border-[#007eff]/50 hover:bg-zinc-800'
-              } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              active={isSelected}
+              className={`w-full items-start gap-2 p-3 ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => {
+                if (!isDisabled) {
+                  onChange(option.value)
+                }
+              }}
             >
               <div className="relative w-[18px] h-[18px] min-w-[18px] mt-0.5">
-                <input
-                  type="radio"
-                  name={param.id}
-                  value={String(option.value)}
-                  checked={isSelected}
-                  onChange={() => !isDisabled && onChange(option.value)}
-                  disabled={isDisabled}
-                  className="sr-only"
-                />
                 <div
                   className={`w-[18px] h-[18px] rounded-full border-2 transition-colors ${
                     isSelected ? 'border-[#007eff]' : 'border-zinc-700/50'
@@ -87,7 +81,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
                   <div className="text-xs text-zinc-500 mt-1">{getOptionDescription(option)}</div>
                 )}
               </div>
-            </label>
+            </UiOptionButton>
           )
         })}
       </div>

@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect } from 'react'
+import { UiIconButton } from '@/components/ui'
 
 interface Notification {
   id: string
@@ -70,12 +71,12 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     <div className={`notification notification-${notification.type}`}>
       <span className="notification-icon">{icon}</span>
       <span className="notification-message">{notification.message}</span>
-      <button
+      <UiIconButton
         className="notification-close"
         onClick={() => onRemove(notification.id)}
       >
         ×
-      </button>
+      </UiIconButton>
     </div>
   )
 }

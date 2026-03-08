@@ -4,6 +4,7 @@
 
 import React, { useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton, UiInput, UiPanel, UiTextAreaField } from '@/components/ui'
 
 interface AddCustomModelDialogProps {
   onAdd: (name: string, modelUrl: string, description?: string) => void
@@ -29,7 +30,7 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+      <UiPanel className="w-full max-w-md p-6">
         <h3 className="text-lg font-bold mb-4">{t('customModels.addModel')}</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -37,11 +38,11 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
             <label className="block text-sm font-medium mb-1">
               {t('customModels.name')} *
             </label>
-            <input
+            <UiInput
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border rounded"
+              className="h-10"
               placeholder={t('customModels.placeholders.name')}
               required
             />
@@ -51,11 +52,11 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
             <label className="block text-sm font-medium mb-1">
               {t('customModels.url')} *
             </label>
-            <input
+            <UiInput
               type="text"
               value={modelUrl}
               onChange={(e) => setModelUrl(e.target.value)}
-              className="w-full px-3 py-2 border rounded"
+              className="h-10"
               placeholder={t('customModels.placeholders.url')}
               required
             />
@@ -65,32 +66,34 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
             <label className="block text-sm font-medium mb-1">
               {t('customModels.descriptionOptional')}
             </label>
-            <textarea
+            <UiTextAreaField
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border rounded"
+              className="min-h-[88px]"
               rows={3}
               placeholder={t('customModels.placeholders.description')}
             />
           </div>
 
           <div className="flex justify-end gap-2">
-            <button
+            <UiButton
               type="button"
+              variant="muted"
+              size="sm"
               onClick={onClose}
-              className="px-4 py-2 border rounded hover:bg-gray-100"
             >
               {t('common:cancel')}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               type="submit"
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              variant="primary"
+              size="sm"
             >
               {t('customModels.add')}
-            </button>
+            </UiButton>
           </div>
         </form>
-      </div>
+      </UiPanel>
     </div>
   )
 }

@@ -8,6 +8,7 @@ import type { ParamFlowRecord, FlowStage } from '@/core/debug/types'
 import { ValueDisplay } from './ValueDisplay'
 import { SourceBadge } from './SourceBadge'
 import { useI18n } from '@/hooks/useI18n'
+import { UiButton } from '@/components/ui'
 
 interface ParamFlowViewerProps {
   record: ParamFlowRecord
@@ -26,12 +27,14 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
             {t('debug.paramFlow.modelLabel')}: {record.modelId}
           </span>
           {onExport && (
-            <button
+            <UiButton
+              variant="primary"
+              size="sm"
               onClick={onExport}
-              className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+              className="px-3 py-1 text-xs"
             >
               {t('debug.paramFlow.exportJson')}
-            </button>
+            </UiButton>
           )}
         </div>
       </div>

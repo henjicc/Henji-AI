@@ -57,6 +57,24 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
   - 模型不能导入 `services/` 或 `components/`
   - 使用 `core/` 作为层间桥梁
 
+### 4. UI Primitive 单点落地（新增）
+
+- **统一入口**：业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
+- **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
+- **禁止回退**：禁止在业务组件重新引入原生控件并单独写一套样式
+- **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
+- **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
+
+### 5. 画布模块拆分约定（新增）
+
+- `src/features/canvas/Canvas.tsx` 只保留编排与接线，不承载复杂业务实现
+- 画布行为优先放入 hooks：
+  - `src/features/canvas/hooks/useCanvasDuplication.ts`
+  - `src/features/canvas/hooks/useCanvasNodeMenu.ts`
+  - `src/features/canvas/hooks/useCanvasShortcuts.ts`
+- 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`（例如 `CanvasOverlays.tsx`、`CanvasEmptyHint.tsx`）
+- 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
+
 ## 目录结构
 
 ```
@@ -159,6 +177,20 @@ old-Henji-AI/           # 旧项目代码备份（仅供对照）
    - 扩展 schema，不要添加特殊情况
    - 如果你在添加基于模型 ID 的 switch 语句，说明做错了
 
+8. **UI 一致性约束（新增）**
+   - 对话模式、画布模式、工具模式必须复用同一套 `Ui*` primitives
+   - 禁止“同功能组件多份实现”（例如分别维护两套按钮/输入框样式）
+
+9. **ReferenceTextarea 规范（新增）**
+   - @引用标记插入/删除/空格归一化统一走 `src/core/inputs/referenceTokens.ts`
+   - 高亮渲染统一走 `src/components/ui/referenceTextareaUtils.tsx`
+   - 禁止在业务组件重复实现 @引用解析、删除范围、文本高亮逻辑
+
+10. **文件上传控件规范（新增）**
+   - 上传能力统一复用 `FileUploader` / `UiInput(type=file)` 方案
+   - 拖拽排序逻辑统一复用 `src/components/ui/fileUploader/useReorderDrag.ts`
+   - 禁止在业务组件重复实现上传/排序基础交互
+
 ## 添加新模型
 
 ### 步骤 1: 创建模型文件
@@ -247,6 +279,28 @@ window.__getModelStats()       // 显示注册表统计
 window.__reloadModels()        // 重新加载所有模型
 ```
 
+## 重构后回归检查（新增）
+
+每次涉及 UI/画布重构后，至少执行：
+
+```bash
+npm run build
+rg -n "<button|<input|<select|<textarea" src --glob "*.tsx"
+```
+
+期望结果：
+- `npm run build` 通过
+- 原生控件命中仅存在于 `src/components/ui/primitives.tsx`
+
+文件长度硬约束检查：
+
+```bash
+powershell -Command "Get-ChildItem -Path src -Recurse -Include *.tsx | ForEach-Object { $count=(Get-Content $_.FullName).Count; if($count -gt 400){ \"$($_.FullName)`t$count\" } }"
+```
+
+期望结果：
+- 无 `> 400` 行的 `tsx` 文件
+
 ## 常见问题
 
 **模型未显示：**
@@ -280,3 +334,12 @@ window.__reloadModels()        // 重新加载所有模型
 - `src/App.tsx` - 应用入口
 - `docs/model-adaptation-guide-new.md` - 模型适配指南（新架构）
 - `迁移计划_新系统完全替代adapters/清单.md` - 架构迁移计划
+- `src/components/ui/primitives.tsx` - UI primitives 唯一原生标签落点
+- `src/components/ui/styleTokens.ts` - UI 视觉 token
+- `src/components/ui/ReferenceTextarea.tsx` - 引用输入与高亮核心组件
+- `src/components/ui/referenceTextareaUtils.tsx` - 引用高亮渲染工具
+- `src/features/canvas/canvasUtils.ts` - 画布通用计算与连接预览
+- `src/features/canvas/hooks/useCanvasDuplication.ts` - 画布复制/拖拽行为
+- `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互
+- `src/features/canvas/hooks/useCanvasShortcuts.ts` - 画布快捷键行为
+- `src/features/canvas/ui/CanvasOverlays.tsx` - 画布叠层 UI（空态/菜单/预览）
