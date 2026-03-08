@@ -64,7 +64,7 @@ const App: React.FC = () => {
     <DragDropProvider>
       <GlobalContextMenuProvider>
         <div
-          className="h-screen min-h-screen bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden"
+          className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
           style={{
             opacity: isReady ? 1 : 0,
             transition: 'opacity 0.3s ease-in-out'
@@ -85,3 +85,4 @@ const App: React.FC = () => {
 }
 
 export default App
+

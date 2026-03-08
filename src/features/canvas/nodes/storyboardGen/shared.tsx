@@ -3,6 +3,7 @@ import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes
 import { AUTO_REQUEST_ASPECT_RATIO } from '@/features/canvas/domain/canvasNodes'
 import { parseAspectRatio } from '@/features/canvas/application/imageData'
 import { UiButton } from '@/components/ui'
+import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 
 export interface AspectRatioChoice {
   value: string
@@ -207,9 +208,9 @@ export function generateGridImageDataUrl(
     throw new Error('Failed to create canvas context')
   }
 
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = WHITE_HEX
   ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-  ctx.strokeStyle = '#000000'
+  ctx.strokeStyle = BLACK_HEX
   ctx.lineWidth = thickness
 
   for (let i = 1; i < cols; i++) {

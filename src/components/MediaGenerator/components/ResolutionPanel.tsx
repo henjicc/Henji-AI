@@ -60,7 +60,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                   onClick={() => onResolutionSelect(resolution.value)}
                   className={`px-2 py-3 text-xs rounded flex flex-col items-center justify-center gap-2 transition-all duration-300 ${
                     selectedResolution === resolution.value
-                      ? 'bg-[#007eff] text-white'
+                      ? 'bg-accent text-white'
                       : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                   }`}
                 >
@@ -101,7 +101,7 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
                   onClick={() => onQualitySelect(res.value as '2K' | '4K')}
                   className={`px-3 py-2 text-sm rounded transition-all duration-300 ${
                     resolutionQuality === res.value
-                      ? 'bg-[#007eff] text-white'
+                      ? 'bg-accent text-white'
                       : 'bg-zinc-700/50 text-zinc-300 hover:bg-zinc-600/50'
                   }`}
                 >
@@ -156,3 +156,4 @@ const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
 }
 
 export default ResolutionPanel
+

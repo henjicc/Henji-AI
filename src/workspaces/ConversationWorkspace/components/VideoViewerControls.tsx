@@ -88,7 +88,7 @@ export function VideoViewerControls({
         pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none',
       }}
     >
-      <div className="bg-[#131313]/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
+      <div className="bg-panel/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
         <div
           ref={progressBarRef}
           className="progress-container"
@@ -199,3 +199,4 @@ export function VideoViewerControls({
     </div>
   )
 }
+

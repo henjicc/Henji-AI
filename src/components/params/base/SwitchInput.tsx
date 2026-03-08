@@ -58,7 +58,7 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
           disabled
             ? 'bg-zinc-800/30 text-zinc-500 border-zinc-700/30'
             : value
-              ? 'bg-[#007eff] text-white border-[#007eff]'
+              ? 'bg-accent text-white border-accent'
               : 'text-zinc-300'
         }`}
       >
@@ -67,3 +67,4 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
     </div>
   )
 }
+

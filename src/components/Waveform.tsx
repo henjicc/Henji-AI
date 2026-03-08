@@ -1,4 +1,5 @@
 import React from 'react'
+import { UI_ACCENT_HEX, UI_TEXT_LIGHT_HEX } from '@/components/ui'
 
 interface WaveformProps {
   samples: number[]
@@ -88,7 +89,7 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
           <g key={i}>
             <rect x={xStart} y={y} width={baseW} height={bh} rx={r} ry={r} fill={'rgba(120,120,120,0.35)'} />
             {fillW > 0 && (
-              <rect x={xStart} y={y} width={fillW} height={bh} rx={r} ry={r} fill={'#007eff'} />
+              <rect x={xStart} y={y} width={fillW} height={bh} rx={r} ry={r} fill={UI_ACCENT_HEX} />
             )}
           </g>
         )
@@ -106,7 +107,7 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
           return (
             <g>
               <rect x={tx - 2} y={ty - 10} width={36} height={16} rx={6} ry={6} fill="rgba(20,20,20,0.8)" />
-              <text x={tx + 16} y={ty} textAnchor="middle" fontSize="10" fill="#e5e7eb">{`${mm}:${ss}`}</text>
+              <text x={tx + 16} y={ty} textAnchor="middle" fontSize="10" fill={UI_TEXT_LIGHT_HEX}>{`${mm}:${ss}`}</text>
             </g>
           )
         })()

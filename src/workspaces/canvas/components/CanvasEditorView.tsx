@@ -8,6 +8,7 @@ import { useCanvasFlowEditor } from '@/workspaces/canvas/hooks/useCanvasFlowEdit
 import type { ActiveCanvasProject } from '@/workspaces/canvas/hooks/useCanvasProjects'
 import { CANVAS_NODE_TYPES, type CanvasFlowEdge, type CanvasFlowNode, type CanvasFlowSnapshot } from '@/workspaces/canvas/types'
 import { UiButton } from '@/components/ui'
+import { CANVAS_GRID_HEX } from '@/core/theme/colorTokens'
 import '@xyflow/react/dist/style.css'
 
 interface CanvasEditorViewProps {
@@ -46,7 +47,7 @@ export function CanvasEditorView({
   } = useCanvasFlowEditor({ project, onSnapshotChange })
 
   return (
-    <div className="h-full bg-[#0b0c10] text-zinc-100">
+    <div className="h-full bg-canvas text-zinc-100">
       <div className="flex h-[52px] items-center justify-between border-b border-zinc-800 px-4">
         <div className="flex items-center gap-2">
           <UiButton type="button" variant="muted" size="sm" className="h-7 px-2 text-xs" onClick={onBack}>
@@ -134,9 +135,9 @@ export function CanvasEditorView({
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onMoveEnd={(_event, nextViewport) => setViewport(nextViewport)}
-          className="bg-[#0a0b10]"
+          className="bg-canvas"
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1f2937" />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_HEX} />
           <MiniMap zoomable pannable className="!bg-zinc-900/90" />
           <Controls />
         </ReactFlow>
@@ -173,3 +174,4 @@ export function CanvasEditorView({
     </div>
   )
 }
+

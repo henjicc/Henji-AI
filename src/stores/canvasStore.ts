@@ -40,6 +40,7 @@ import {
   resolveMinEdgeFittedSize,
   resolveSizeInsideTargetBox,
 } from '@/features/canvas/application/imageNodeSizing';
+import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 
 export type {
   ActiveToolDialog,
@@ -531,8 +532,8 @@ function createDefaultStoryboardExportOptions(): StoryboardExportOptions {
     cellGap: 8,
     outerPadding: 0,
     fontSize: 4,
-    backgroundColor: '#0f1115',
-    textColor: '#f8fafc',
+    backgroundColor: CANVAS_BG_HEX,
+    textColor: CANVAS_TEXT_HEX,
   };
 }
 

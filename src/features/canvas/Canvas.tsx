@@ -34,6 +34,7 @@ import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
+import { CANVAS_GRID_ALT_HEX } from '@/core/theme/colorTokens';
 import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialog } from './ui/NodeToolDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
@@ -368,7 +369,7 @@ export function Canvas() {
         proOptions={{ hideAttribution: true }}
         className="bg-bg-dark"
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#2a2a2a" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
         <MiniMap
           className="canvas-minimap nopan nowheel !border-border-dark !bg-surface-dark"
           style={{ pointerEvents: 'all', zIndex: 10000 }}

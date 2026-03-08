@@ -16,6 +16,7 @@ import type Konva from 'konva';
 import { UiButton, UiTextAreaField } from '@/components/ui';
 import type { AnnotationItem, AnnotationToolType } from '@/features/canvas/tools/annotation';
 import { canSelectByTool, canTransformAnnotation, type TextEditorState, updateAnnotationPosition, updateAnnotationTransform } from './shared';
+import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
 
 interface AnnotateCanvasProps {
   image: HTMLImageElement | null;
@@ -327,9 +328,9 @@ export function AnnotateCanvas({
                   return newBox;
                 }}
                 rotateEnabled={false}
-                borderStroke="#3b82f6"
-                anchorStroke="#3b82f6"
-                anchorFill="#ffffff"
+                borderStroke={ANNOTATION_TRANSFORMER_HEX}
+                anchorStroke={ANNOTATION_TRANSFORMER_HEX}
+                anchorFill={WHITE_HEX}
                 anchorSize={8}
                 ignoreStroke
                 keepRatio={transformerKeepRatio}

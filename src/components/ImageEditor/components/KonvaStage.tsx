@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Arrow, Text, Line, Group, Transformer } from 'react-konva'
 import Konva from 'konva'
+import { UI_ACCENT_HEX, UI_WHITE_HEX } from '@/components/ui'
 
 import type { Annotation, CanvasState, EditorTool, RectAnnotation, CircleAnnotation, ArrowAnnotation, TextAnnotation, BrushAnnotation } from '../types'
 import { TEXT_LINE_HEIGHT } from '../utils/textMetrics'
@@ -357,9 +358,9 @@ export const KonvaStage: React.FC<KonvaStageProps> = ({
                     }}
                     rotateEnabled={false}
                     keepRatio={selectedId ? canvas.annotations.find(a => a.id === selectedId)?.type === 'text' : false}
-                    borderStroke="#007eff"
-                    anchorStroke="#007eff"
-                    anchorFill="#ffffff"
+                    borderStroke={UI_ACCENT_HEX}
+                    anchorStroke={UI_ACCENT_HEX}
+                    anchorFill={UI_WHITE_HEX}
                     anchorSize={10}
                     anchorCornerRadius={5}
                     enabledAnchors={selectedId && canvas.annotations.find(a => a.id === selectedId)?.type === 'text'

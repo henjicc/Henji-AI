@@ -105,7 +105,7 @@ export function ProjectManagerView({
   )
 
   return (
-    <div className="h-full overflow-auto bg-[#0b0c10] text-zinc-100">
+    <div className="h-full overflow-auto bg-canvas text-zinc-100">
       <div className="mx-auto max-w-5xl px-8 py-8">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-zinc-100">项目管理</h1>
@@ -136,7 +136,7 @@ export function ProjectManagerView({
             {sortedProjects.map((project) => (
               <UiPanel
                 key={project.id}
-                className="group cursor-pointer border-zinc-700 bg-[#14161d] p-4 text-left transition hover:border-sky-600/60 hover:shadow-lg"
+                className="group cursor-pointer border-zinc-700 bg-layer/80 p-4 text-left transition hover:border-sky-600/60 hover:shadow-lg"
                 onClick={async () => {
                   setBusyProjectId(project.id)
                   try {
@@ -216,3 +216,4 @@ export function ProjectManagerView({
     </div>
   )
 }
+

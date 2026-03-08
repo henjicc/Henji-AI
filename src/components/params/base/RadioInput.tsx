@@ -67,11 +67,11 @@ export const RadioInput: React.FC<RadioInputProps> = ({
               <div className="relative w-[18px] h-[18px] min-w-[18px] mt-0.5">
                 <div
                   className={`w-[18px] h-[18px] rounded-full border-2 transition-colors ${
-                    isSelected ? 'border-[#007eff]' : 'border-zinc-700/50'
+                    isSelected ? 'border-accent' : 'border-zinc-700/50'
                   }`}
                 >
                   {isSelected && (
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-[#007eff] animate-[radioDotAppear_0.2s_ease-out]" />
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent animate-[radioDotAppear_0.2s_ease-out]" />
                   )}
                 </div>
               </div>
@@ -88,3 +88,4 @@ export const RadioInput: React.FC<RadioInputProps> = ({
     </div>
   )
 }
+

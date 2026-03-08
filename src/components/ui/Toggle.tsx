@@ -24,7 +24,7 @@ export default function Toggle(props: ToggleProps) {
         className={`px-3 py-2 h-[38px] rounded-lg border ${disabled
             ? 'bg-zinc-800/30 text-zinc-500 border-zinc-700/30 cursor-not-allowed opacity-50'
             : checked
-              ? 'bg-[#007eff] text-white border-[#007eff]'
+              ? 'bg-accent text-white border-accent'
               : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
           }`}
       >
@@ -33,3 +33,4 @@ export default function Toggle(props: ToggleProps) {
     </div>
   )
 }
+

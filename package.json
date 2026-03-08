@@ -7,9 +7,11 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "check:colors": "node scripts/check-color-tokens.cjs",
+    "build": "npm run check:colors && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:colors": "npm run check:colors",
     "lint:fix": "eslint src --ext ts,tsx --fix",
     "tauri:dev": "call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri dev",
     "tauri:build": "call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri build",

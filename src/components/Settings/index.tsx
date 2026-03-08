@@ -47,13 +47,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       onClick={handleClose}
     >
       <div
-        className={`bg-[#131313]/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-4xl shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        className={`bg-panel/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-full max-w-4xl shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
         style={{ height: '70vh', minHeight: '450px', maxHeight: '900px' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-56 bg-zinc-900/50 border-r border-zinc-700/50 flex flex-col">
           <div className="p-4 border-b border-zinc-700/50">
-            <h2 className="text-lg font-bold text-[#007eff]">{t('title')}</h2>
+            <h2 className="text-lg font-bold text-accent">{t('title')}</h2>
           </div>
           <div className="flex-1 py-3 space-y-1">
             {tabs.map(tab => (
@@ -63,7 +63,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 size="sm"
                 className={`w-full justify-start px-4 ${
                   activeTab === tab.id
-                    ? 'bg-[#007eff]/10 text-[#007eff] border-r-2 border-[#007eff]'
+                    ? 'bg-accent/10 text-accent border-r-2 border-accent'
                     : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                 }`}
                 onClick={() => setActiveTab(tab.id)}
@@ -111,3 +111,4 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 }
 
 export default SettingsModal
+

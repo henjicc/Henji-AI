@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { SETTINGS_ACCENT_HEX } from '@/core/theme/colorTokens';
 
 export type UiRadiusPreset = 'compact' | 'default' | 'large';
 export type ThemeTonePreset = 'neutral' | 'warm' | 'cool';
@@ -32,7 +33,7 @@ const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
 function normalizeHexColor(input: string): string {
   const trimmed = input.trim();
   if (!HEX_COLOR_PATTERN.test(trimmed)) {
-    return '#3B82F6';
+    return SETTINGS_ACCENT_HEX;
   }
   return trimmed.startsWith('#') ? trimmed.toUpperCase() : `#${trimmed.toUpperCase()}`;
 }
@@ -78,7 +79,7 @@ export const useSettingsStore = create<SettingsState>()(
       ignoreAtTagWhenCopyingAndGenerating: true,
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
-      accentColor: '#3B82F6',
+      accentColor: SETTINGS_ACCENT_HEX,
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         localStorage.setItem(`${providerId}_api_key`, normalizedKey);

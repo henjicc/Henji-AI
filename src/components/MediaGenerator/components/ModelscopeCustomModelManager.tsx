@@ -167,7 +167,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
             size="sm"
             variant="ghost"
             onClick={handleOpenModelLibrary}
-            className="mx-1 h-auto px-1.5 py-0.5 text-[#66b3ff] hover:bg-blue-900/50"
+            className="mx-1 h-auto px-1.5 py-0.5 text-brand-300 hover:bg-blue-900/50"
           >
             {t('modelscopeCustomModel.tip.library')}
           </UiButton>
@@ -362,7 +362,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         variant="ghost"
                         size="sm"
                         onClick={() => handleStartEdit(model)}
-                        className="h-7 px-2.5 text-xs text-[#66b3ff] hover:bg-[#007eff]/10"
+                        className="h-7 px-2.5 text-xs text-brand-300 hover:bg-accent/10"
                         title={t('common:edit')}
                       >
                         {t('common:edit')}
@@ -396,3 +396,4 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   )
 }
 export default ModelscopeCustomModelManager
+

@@ -95,7 +95,7 @@ export function TaskList({
         const renderResult = () => {
           if (task.status === 'queued') {
             return (
-              <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg border-2 border-blue-500/30">
+              <div className="flex items-center justify-center h-64 bg-layer rounded-lg border-2 border-blue-500/30">
                 <div className="text-center">
                   <p className="text-blue-400 font-medium">{t('ui:workspace.status.queued')}</p>
                   <p className="text-zinc-400 text-sm mt-2">{t('ui:workspace.status.waiting')}</p>
@@ -106,9 +106,9 @@ export function TaskList({
 
           if (task.status === 'pending') {
             return (
-              <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
+              <div className="flex items-center justify-center h-64 bg-layer rounded-lg">
                 <div className="text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-2" />
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent mb-2" />
                   <p className="text-zinc-400">{t('ui:workspace.status.preparing')}</p>
                 </div>
               </div>
@@ -117,9 +117,9 @@ export function TaskList({
 
           if (task.status === 'generating') {
             return (
-              <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg">
+              <div className="flex items-center justify-center h-64 bg-layer rounded-lg">
                 <div className="text-center w-full px-6">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#007eff] mb-3" />
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent mb-3" />
                   <p className="text-zinc-400 mb-3">{t('ui:workspace.status.generating')}</p>
                   {progressValue !== undefined && (
                     <ProgressBar progress={progressValue} className="mt-3" duration={progressValue >= 99 ? 450 : 2800} />
@@ -131,7 +131,7 @@ export function TaskList({
 
           if (task.status === 'timeout') {
             return (
-              <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg border-2 border-yellow-500/30">
+              <div className="flex items-center justify-center h-64 bg-layer rounded-lg border-2 border-yellow-500/30">
                 <div className="text-center w-full px-6">
                   <p className="text-yellow-400 mb-2 font-medium">{t('ui:workspace.status.timeout')}</p>
                   <p className="text-zinc-400 text-sm">{t('ui:workspace.status.timeoutHint')}</p>
@@ -142,7 +142,7 @@ export function TaskList({
 
           if (task.status === 'error') {
             return (
-              <div className="flex items-center justify-center h-64 bg-[#1B1C21] rounded-lg border-2 border-red-500/20">
+              <div className="flex items-center justify-center h-64 bg-layer rounded-lg border-2 border-red-500/20">
                 <div className="text-center w-full px-6">
                   <p className="text-red-300 font-medium mb-2">{t('common:error')}</p>
                   <p className="text-zinc-300 text-sm break-words">{task.error || t('common:status.failed')}</p>
@@ -164,7 +164,7 @@ export function TaskList({
                   return (
                     <div
                       key={`${task.id}-img-${index}`}
-                      className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center"
+                      className="relative w-64 h-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center"
                       onClick={() => handleImageClick(url, urls, filePaths)}
                       onContextMenu={(e) =>
                         showMenu(
@@ -214,7 +214,7 @@ export function TaskList({
             const filePath = task.result.filePath
             return (
               <div
-                className="relative w-64 h-64 bg-[#1B1C21] rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
+                className="relative w-64 h-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
                 onClick={() => handleVideoClick(task.result!.url, filePath)}
                 onContextMenu={(e) =>
                   showMenu(e, [
@@ -276,7 +276,7 @@ export function TaskList({
         }
 
         return (
-          <div key={task.id} className="bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-3">
+          <div key={task.id} className="bg-panel/70 rounded-xl border border-zinc-700/50 p-3">
             <div className="flex items-start gap-3">
               <TaskInputPreview
                 taskId={task.id}
@@ -298,7 +298,7 @@ export function TaskList({
                       <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
                         {typeLabel}
                       </span>
-                      <span className="bg-[#007eff]/10 border border-[#2c77d6]/40 text-[#7ab5ff] px-2 py-0.5 rounded">
+                      <span className="bg-accent/10 border border-accent/40 text-brand-300 px-2 py-0.5 rounded">
                         {modelName}
                       </span>
                       {task.dimensions && (
@@ -387,3 +387,4 @@ export function TaskList({
     </div>
   )
 }
+

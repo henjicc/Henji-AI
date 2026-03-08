@@ -9,6 +9,14 @@
   --text-rgb: 255 255 255;
   --text-muted-rgb: 136 136 136;
   --accent-rgb: 59 130 246;
+  --app-rgb: 10 11 13;
+  --canvas-rgb: 11 12 16;
+  --panel-rgb: 19 19 19;
+  --layer-rgb: 27 28 33;
+  --brand-300-rgb: 122 174 255;
+  --brand-500-rgb: 76 136 255;
+  --brand-600-rgb: 47 98 209;
+  --brand-700-rgb: 45 79 138;
   --ui-surface-panel: rgb(26, 26, 26);
   --ui-surface-field: rgba(10, 10, 12, 0.92);
   --ui-border-soft: rgba(255, 255, 255, 0.14);

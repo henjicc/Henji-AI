@@ -51,7 +51,7 @@ const ApiKeysTab: React.FC = () => {
                     onClick={() => openExternal(link.url)}
                     variant="ghost"
                     size="sm"
-                    className="h-8 gap-1 border-[#007eff]/40 bg-[#007eff]/10 px-3 text-xs text-[#66b3ff] hover:bg-[#007eff]/20"
+                    className="h-8 gap-1 border-accent/40 bg-accent/10 px-3 text-xs text-brand-300 hover:bg-accent/20"
                   >
                     {link.label}
                     <ExternalLink size={12} />
@@ -69,3 +69,4 @@ const ApiKeysTab: React.FC = () => {
 }
 
 export default ApiKeysTab
+

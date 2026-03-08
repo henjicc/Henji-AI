@@ -49,7 +49,7 @@ export const SliderInput: React.FC<SliderInputProps> = ({
           {displayName}
           {param.required && <span className="text-red-500 ml-1">*</span>}
         </label>
-        <span className="text-sm font-semibold text-[#007eff]">{value}</span>
+        <span className="text-sm font-semibold text-accent">{value}</span>
       </div>
       <div className="relative py-2">
         <UiRangeInput
@@ -59,7 +59,7 @@ export const SliderInput: React.FC<SliderInputProps> = ({
           min={min}
           max={max}
           step={step}
-          className="h-1.5 cursor-grab active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#007eff] [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:hover:shadow-[0_0_0_4px_rgba(0,126,255,0.2)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[#007eff] [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-1.5 cursor-grab active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:hover:shadow-[0_0_0_4px_rgba(0,126,255,0.2)] [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
         />
       </div>
       {marks.length > 0 && (
@@ -82,3 +82,4 @@ export const SliderInput: React.FC<SliderInputProps> = ({
     </div>
   )
 }
+

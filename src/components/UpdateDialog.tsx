@@ -78,7 +78,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           if (line.startsWith('- ') || line.startsWith('* ')) {
             return (
               <div key={index} className="flex items-start gap-2 text-zinc-300 ml-2">
-                <span className="text-[#007eff] mt-1">•</span>
+                <span className="text-accent mt-1">•</span>
                 <span>{line.replace(/^[-*] /, '')}</span>
               </div>
             )
@@ -123,13 +123,13 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
         }}
       >
         {/* 头部 */}
-        <div className="bg-gradient-to-r from-[#007eff]/10 to-transparent p-6 border-b border-zinc-700/50">
+        <div className="bg-gradient-to-r from-accent/10 to-transparent p-6 border-b border-zinc-700/50">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-8 w-8 text-[#007eff]"
+                  className="h-8 w-8 text-accent"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -156,7 +156,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
                 <span className="text-zinc-600">→</span>
                 <span className="flex items-center gap-1">
                   <span className="text-zinc-400">{t('updateDialog.latestVersionLabel')}</span>
-                  <span className="font-mono text-[#007eff]">{releaseInfo.version}</span>
+                  <span className="font-mono text-accent">{releaseInfo.version}</span>
                 </span>
                 <span className="text-zinc-600">•</span>
                 <span>{formatReleaseDate(releaseInfo.publishedAt)}</span>
@@ -242,3 +242,4 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
 }
 
 export default UpdateDialog
+

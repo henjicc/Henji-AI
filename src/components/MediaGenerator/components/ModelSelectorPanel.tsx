@@ -3,7 +3,16 @@ import { useTranslation } from 'react-i18next'
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
-import { UiChipButton, UiIconButton, UiInput, UiMarqueeText, UiOptionButton } from '@/components/ui'
+import {
+  UiChipButton,
+  UiIconButton,
+  UiInput,
+  UiMarqueeText,
+  UiOptionButton,
+  UI_CARD_ACTIVE_STRONG_CLASS,
+  UI_CHIP_ACTIVE_STRONG_CLASS,
+  UI_HIGHLIGHT_RING_INSET_CLASS
+} from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
 interface ModelSelectorPanelProps {
   selectedProvider: string
@@ -47,8 +56,7 @@ const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
 const MODEL_CARD_META_TEXT_CLASS = 'text-[11px] leading-4 text-zinc-400'
 
 function getFilterChipClass(active: boolean, dimmed = false): string {
-  const activeClass =
-    'border-[#4b85ff]/80 bg-[#2f62d1] text-white'
+  const activeClass = UI_CHIP_ACTIVE_STRONG_CLASS
   const idleClass =
     'border-zinc-700/45 bg-zinc-800/85 text-zinc-100 hover:border-zinc-600/55 hover:bg-zinc-700/85'
 
@@ -335,9 +343,9 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 active={isSelected}
                 variant="card"
                 className={`relative w-full flex-col items-start border px-3 py-2.5 ${isSelected
-                  ? 'border-[#4c88ff]/75 bg-[#2d4f8a] text-white'
+                  ? UI_CARD_ACTIVE_STRONG_CLASS
                   : 'border-zinc-700/45 bg-zinc-600/10 text-zinc-100 hover:border-zinc-600/55 hover:bg-zinc-700/40'
-                  } ${isHighlighted ? 'ring-2 ring-[#7aaeff]/50 ring-inset' : ''}`}
+                  } ${isHighlighted ? UI_HIGHLIGHT_RING_INSET_CLASS : ''}`}
               >
                 {/* 两列两行（表格式）: 左列=名称/供应商，右列=收藏/类型 */}
                 <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>

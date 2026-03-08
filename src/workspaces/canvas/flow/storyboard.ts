@@ -1,5 +1,11 @@
 import { saveBase64ToUploads } from '@/utils/save'
 import type { StoryboardFrameItem } from '@/workspaces/canvas/types'
+import {
+  STORYBOARD_BG_HEX,
+  STORYBOARD_CELL_BG_HEX,
+  STORYBOARD_NOTE_BG_HEX,
+  STORYBOARD_NOTE_TEXT_HEX,
+} from '@/core/theme/colorTokens'
 
 function readRatio(ratio: string): number {
   const [wRaw = '1', hRaw = '1'] = ratio.split(':')
@@ -100,7 +106,7 @@ export async function composeStoryboardImage(params: {
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('无法初始化画布')
 
-  ctx.fillStyle = '#10131a'
+  ctx.fillStyle = STORYBOARD_BG_HEX
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.font = '14px sans-serif'
   ctx.textBaseline = 'middle'
@@ -118,17 +124,17 @@ export async function composeStoryboardImage(params: {
         const img = await loadImage(frame.imageUrl)
         ctx.drawImage(img, x, y, cellW, cellH)
       } catch {
-        ctx.fillStyle = '#1f2937'
+        ctx.fillStyle = STORYBOARD_CELL_BG_HEX
         ctx.fillRect(x, y, cellW, cellH)
       }
     } else {
-      ctx.fillStyle = '#1f2937'
+      ctx.fillStyle = STORYBOARD_CELL_BG_HEX
       ctx.fillRect(x, y, cellW, cellH)
     }
 
-    ctx.fillStyle = '#0b0d12'
+    ctx.fillStyle = STORYBOARD_NOTE_BG_HEX
     ctx.fillRect(x, y + cellH, cellW, titleH)
-    ctx.fillStyle = '#e5e7eb'
+    ctx.fillStyle = STORYBOARD_NOTE_TEXT_HEX
     const label = frame.note?.trim() ? `${idx + 1}. ${frame.note.trim()}` : `${idx + 1}.`
     ctx.fillText(label.slice(0, 58), x + 8, y + cellH + titleH / 2)
   }

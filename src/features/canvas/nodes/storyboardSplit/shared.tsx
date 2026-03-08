@@ -1,4 +1,5 @@
 import type { StoryboardExportOptions, StoryboardSplitNodeData } from '@/features/canvas/domain/canvasNodes';
+import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 
 export interface IncomingImageItem {
   imageUrl: string;
@@ -71,8 +72,8 @@ function createDefaultExportOptions(): StoryboardExportOptions {
     cellGap: 8,
     outerPadding: 0,
     fontSize: 4,
-    backgroundColor: '#0f1115',
-    textColor: '#f8fafc',
+    backgroundColor: CANVAS_BG_HEX,
+    textColor: CANVAS_TEXT_HEX,
   };
 }
 

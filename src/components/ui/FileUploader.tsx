@@ -305,7 +305,7 @@ export default function FileUploader({
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
-                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isDraggingThis ? 'ring-2 ring-[#007eff] shadow-2xl' : ''} ${isCustomDragging ? 'ring-2 ring-[#007eff]' : ''}`}>
+                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isDraggingThis ? 'ring-2 ring-accent shadow-2xl' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
                             {(() => {
                                 // 判断当前文件是视频还是图片
                                 // 优先使用 fileTypes 数组（精确），回退到 videoCount（位置判断）
@@ -369,10 +369,10 @@ export default function FileUploader({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-lg ${isDragging ? 'border-[#007eff] bg-zinc-700/90' : 'border-zinc-700/50 bg-zinc-700/80 backdrop-blur-sm hover:border-zinc-700/50'} flex-shrink-0`}
+                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-lg ${isDragging ? 'border-accent bg-zinc-700/90' : 'border-zinc-700/50 bg-zinc-700/80 backdrop-blur-sm hover:border-zinc-700/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-[#007eff]' : 'text-zinc-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-zinc-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                 </UiButton>
@@ -390,3 +390,4 @@ export default function FileUploader({
         </div>
     )
 }
+

@@ -1,4 +1,5 @@
 import type { AnnotationItem } from './types';
+import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens';
 
 export function normalizeAnnotationRect(
   x1: number,
@@ -47,7 +48,7 @@ function sanitizeAnnotation(item: unknown): AnnotationItem | null {
       y: raw.y,
       width: Math.max(0, raw.width),
       height: Math.max(0, raw.height),
-      stroke: typeof raw.stroke === 'string' ? raw.stroke : '#ff4d4f',
+      stroke: typeof raw.stroke === 'string' ? raw.stroke : ANNOTATION_DEFAULT_STROKE_HEX,
       lineWidth: isFiniteNumber(raw.lineWidth) ? Math.max(1, raw.lineWidth) : 3,
     };
   }
@@ -61,7 +62,7 @@ function sanitizeAnnotation(item: unknown): AnnotationItem | null {
       id,
       type,
       points: [raw.points[0], raw.points[1], raw.points[2], raw.points[3]],
-      stroke: typeof raw.stroke === 'string' ? raw.stroke : '#ff4d4f',
+      stroke: typeof raw.stroke === 'string' ? raw.stroke : ANNOTATION_DEFAULT_STROKE_HEX,
       lineWidth: isFiniteNumber(raw.lineWidth) ? Math.max(1, raw.lineWidth) : 3,
     };
   }
@@ -75,7 +76,7 @@ function sanitizeAnnotation(item: unknown): AnnotationItem | null {
       id,
       type,
       points: raw.points,
-      stroke: typeof raw.stroke === 'string' ? raw.stroke : '#ff4d4f',
+      stroke: typeof raw.stroke === 'string' ? raw.stroke : ANNOTATION_DEFAULT_STROKE_HEX,
       lineWidth: isFiniteNumber(raw.lineWidth) ? Math.max(1, raw.lineWidth) : 3,
     };
   }
@@ -91,7 +92,7 @@ function sanitizeAnnotation(item: unknown): AnnotationItem | null {
       x: raw.x,
       y: raw.y,
       text: raw.text,
-      color: typeof raw.color === 'string' ? raw.color : '#ffffff',
+      color: typeof raw.color === 'string' ? raw.color : ANNOTATION_DEFAULT_TEXT_HEX,
       fontSize: isFiniteNumber(raw.fontSize) ? Math.max(10, raw.fontSize) : 28,
     };
   }

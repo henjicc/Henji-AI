@@ -8,6 +8,7 @@ import {
   saveBase64ToUploads,
   saveBytesToUploads,
 } from '@/utils/save';
+import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 
 const FILE_URL_PREFIX = 'file://';
 const LOCAL_PATH_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
@@ -573,12 +574,12 @@ export async function mergeStoryboardImages(
     throw new Error('合并画布初始化失败');
   }
 
-  context.fillStyle = payload.backgroundColor || '#0f1115';
+  context.fillStyle = payload.backgroundColor || CANVAS_BG_HEX;
   context.fillRect(0, 0, canvasWidth, canvasHeight);
 
   const fit = payload.imageFit === 'contain' ? 'contain' : 'cover';
   const frameNotes = payload.frameNotes ?? [];
-  const textColor = payload.textColor || '#f8fafc';
+  const textColor = payload.textColor || CANVAS_TEXT_HEX;
   const prefix = payload.frameIndexPrefix || 'S';
 
   context.textBaseline = 'middle';

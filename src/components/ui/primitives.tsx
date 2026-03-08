@@ -11,6 +11,11 @@ import { Check, ChevronDown, X } from 'lucide-react';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motion';
 import {
   UI_BUTTON_RESET_CLASS,
+  UI_COLOR_ACCENT_BG_CLASS,
+  UI_COLOR_ACCENT_SOFT_BG_CLASS,
+  UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS,
+  UI_COLOR_ACCENT_SOFT_BORDER_CLASS,
+  UI_COLOR_ACCENT_TEXT_CLASS,
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
@@ -62,7 +67,7 @@ interface UiModalProps {
 
 function resolveButtonVariant(variant: ButtonVariant): string {
   if (variant === 'primary') {
-    return 'border border-transparent bg-[#007eff] text-white hover:brightness-110';
+    return `border border-transparent ${UI_COLOR_ACCENT_BG_CLASS} text-white hover:brightness-110`;
   }
 
   if (variant === 'ghost') {
@@ -95,8 +100,8 @@ export function UiIconButton({ className = '', active = false, showBorder = true
 
   const stateClass = active
     ? (showBorder
-      ? 'border-[#007eff]/55 bg-[#007eff]/20 text-text-dark'
-      : 'text-[#7aaeff] bg-[#007eff]/12')
+      ? `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-text-dark`
+      : `${UI_COLOR_ACCENT_TEXT_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS}`)
     : (showBorder
       ? 'text-text-muted hover:bg-zinc-700/45'
       : 'text-text-muted');
@@ -113,7 +118,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
   ({ className = '', active = false, ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-[#007eff]/55 bg-[#007eff]/18 text-text-dark' : 'text-text-dark hover:bg-zinc-700/45'} ${className}`}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-text-dark` : 'text-text-dark hover:bg-zinc-700/45'} ${className}`}
       {...props}
     />
   )
@@ -138,7 +143,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     const stateClass = (() => {
       if (variant === 'card') {
         return active
-          ? 'border-[#007eff]/60 bg-[#007eff]/18 text-white'
+          ? 'border-accent/60 bg-accent/20 text-white'
           : 'border-zinc-600/65 bg-zinc-900/45 text-text-dark hover:border-zinc-500/70 hover:bg-zinc-800/70';
       }
 
@@ -203,7 +208,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
     <input
       ref={ref}
       type="range"
-      className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-[#007eff] ${className}`}
+      className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-accent ${className}`}
       {...props}
     />
   )

@@ -21,20 +21,9 @@ import {
 } from 'lucide-react'
 import type { EditorTool, EditorToolbarProps, CropRatio } from './types'
 import { UiButton, UiChipButton, UiIconButton, UiRangeInput } from '@/components/ui'
+import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens'
 
 // ==================== 常量 ====================
-
-const COLORS = [
-    '#ff0000',  // 红
-    '#ff6b00',  // 橙
-    '#ffd000',  // 黄
-    '#00c853',  // 绿
-    '#00b0ff',  // 蓝
-    '#7c4dff',  // 紫
-    '#ff4081',  // 粉
-    '#ffffff',  // 白
-    '#000000',  // 黑
-]
 
 const RATIO_OPTIONS: { label: string; value: CropRatio }[] = [
     { label: '自由', value: 'free' },
@@ -103,7 +92,7 @@ interface InlineColorPickerProps {
 const InlineColorPicker: React.FC<InlineColorPickerProps> = ({ value, onChange }) => {
     return (
         <div className="inline-color-picker">
-            {COLORS.map((color) => (
+            {IMAGE_EDITOR_PRESET_COLORS.map((color) => (
                 <UiIconButton
                     key={color}
                     type="button"

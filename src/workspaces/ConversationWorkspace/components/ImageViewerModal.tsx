@@ -234,13 +234,13 @@ export function ImageViewerModal({
 
             <div className="flex items-center gap-4">
               {imageList.length > 1 && (
-                <div className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                <div className="bg-panel/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
                   {currentIndex + 1} / {imageList.length}
                 </div>
               )}
               <div
                 ref={scaleDisplayRef}
-                className="bg-[#131313]/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50"
+                className="bg-panel/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50"
               >
                 100%
               </div>
@@ -268,3 +268,4 @@ export function ImageViewerModal({
     </div>
   )
 }
+

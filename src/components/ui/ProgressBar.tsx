@@ -1,4 +1,5 @@
 import React from 'react'
+import { UI_ACCENT_HEX } from './styleTokens'
 
 interface ProgressBarProps {
     progress: number
@@ -12,7 +13,7 @@ interface ProgressBarProps {
 export const ProgressBar: React.FC<ProgressBarProps> = ({
     progress,
     className = '',
-    color = '#007eff',
+    color = UI_ACCENT_HEX,
     height = 'h-2',
     showPercentage = true,
     duration = 2800  // 默认 2800ms，提供丝滑的动画效果

@@ -1,6 +1,7 @@
 /**
  * Image Editor - 类型定义
  */
+import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens'
 
 // ==================== 标注类型 ====================
 
@@ -185,7 +186,7 @@ export interface ToolSettings {
 }
 
 export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
-    strokeColor: '#ff0000',
+    strokeColor: IMAGE_EDITOR_PRESET_COLORS[0],
     fillColor: 'transparent',
     strokeWidth: 3,
     fontSize: 24,
@@ -195,17 +196,7 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
 
 // ==================== 预设颜色 ====================
 
-export const PRESET_COLORS = [
-    '#ff0000',  // 红
-    '#ff6b00',  // 橙
-    '#ffd000',  // 黄
-    '#00c853',  // 绿
-    '#00b0ff',  // 蓝
-    '#7c4dff',  // 紫
-    '#ff4081',  // 粉
-    '#ffffff',  // 白
-    '#000000',  // 黑
-]
+export const PRESET_COLORS: string[] = [...IMAGE_EDITOR_PRESET_COLORS]
 
 // ==================== 组件 Props ====================
 

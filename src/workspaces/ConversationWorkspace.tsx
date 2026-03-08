@@ -256,7 +256,7 @@ const ConversationWorkspace: React.FC = () => {
     await download(filePath, true)
   }
   return (
-    <div className="h-full flex-1 bg-[#0a0b0d] text-white flex flex-col relative overflow-hidden">
+    <div className="h-full flex-1 bg-app text-white flex flex-col relative overflow-hidden">
       <NotificationToast notification={notification} visible={notificationVisible} />
       <main className="flex-1 flex flex-col relative z-10 pt-10">
         <div
@@ -357,3 +357,4 @@ const ConversationWorkspace: React.FC = () => {
 }
 
 export default ConversationWorkspace
+

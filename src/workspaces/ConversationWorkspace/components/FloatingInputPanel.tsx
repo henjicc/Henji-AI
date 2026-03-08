@@ -40,7 +40,7 @@ export function FloatingInputPanel({
       onMouseMove={onMouseMove}
     >
       <div
-        className="bg-[#131313]/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl hover:shadow-3xl cursor-pointer relative"
+        className="bg-panel/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl hover:shadow-3xl cursor-pointer relative"
         style={{
           transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
@@ -64,7 +64,7 @@ export function FloatingInputPanel({
         >
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="text-xs bg-[#007eff]/20 text-[#66b3ff] px-2 py-1 rounded whitespace-nowrap">
+              <span className="text-xs bg-accent/20 text-brand-300 px-2 py-1 rounded whitespace-nowrap">
                 {displayModel}
               </span>
               <span className="text-sm text-zinc-300 truncate flex-1">
@@ -98,3 +98,4 @@ export function FloatingInputPanel({
     </div>
   )
 }
+

@@ -105,7 +105,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
             transition-all duration-200 ease-out
             ${activeTab === tab.id
-              ? 'bg-[#00a0ea]/30 !text-[#00a0ea]'
+              ? 'bg-accent/30 !text-accent'
               : 'text-gray-400 hover:text-gray-200 hover:bg-white/10 bg-transparent'
             }
           `}
@@ -119,7 +119,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 h-10 bg-[#131313] border-b border-zinc-700/50 z-40 flex items-center justify-between px-3 text-white"
+      className="fixed top-0 left-0 right-0 h-10 bg-panel border-b border-zinc-700/50 z-40 flex items-center justify-between px-3 text-white"
       data-tauri-drag-region
       style={{ WebkitAppRegion: 'drag' }}
     >
@@ -134,7 +134,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             <UiIconButton
               type="button"
               onClick={handleClose}
-              className="!w-3 !h-3 !rounded-full !border-0 !bg-[#FF5F56] hover:!bg-[#FF5F56]/80 !p-0 group"
+              className="!w-3 !h-3 !rounded-full !border-0 !bg-red-400 hover:!bg-red-400/80 !p-0 group"
               title={t('windowControls.close')}
             >
               <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
@@ -144,7 +144,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             <UiIconButton
               type="button"
               onClick={handleMinimize}
-              className="!w-3 !h-3 !rounded-full !border-0 !bg-[#FFBD2E] hover:!bg-[#FFBD2E]/80 !p-0 group"
+              className="!w-3 !h-3 !rounded-full !border-0 !bg-yellow-400 hover:!bg-yellow-400/80 !p-0 group"
               title={t('windowControls.minimize')}
             >
               <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
@@ -154,7 +154,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             <UiIconButton
               type="button"
               onClick={handleToggleMaximize}
-              className="!w-3 !h-3 !rounded-full !border-0 !bg-[#27C93F] hover:!bg-[#27C93F]/80 !p-0 group"
+              className="!w-3 !h-3 !rounded-full !border-0 !bg-green-500 hover:!bg-green-500/80 !p-0 group"
               title={t('windowControls.maximize')}
             >
               <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
@@ -221,3 +221,4 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
 }
 
 export default WindowControls
+

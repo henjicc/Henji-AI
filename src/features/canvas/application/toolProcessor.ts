@@ -18,6 +18,7 @@ import type {
   ToolProcessor,
   ToolProcessorResult,
 } from './ports';
+import { ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens';
 
 export class CanvasToolProcessor implements ToolProcessor {
   constructor(
@@ -165,7 +166,7 @@ export class CanvasToolProcessor implements ToolProcessor {
     } else {
       const text = String(options.text ?? '').trim();
       const position = String(options.position ?? 'bottom');
-      const color = String(options.color ?? '#FFFFFF');
+      const color = String(options.color ?? ANNOTATION_DEFAULT_TEXT_HEX);
 
       if (!text) {
         return canvasToDataUrl(canvas);

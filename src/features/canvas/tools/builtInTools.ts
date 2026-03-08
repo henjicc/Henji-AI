@@ -7,6 +7,7 @@ import {
 } from '../domain/canvasNodes';
 import { stringifyAnnotationItems } from './annotation';
 import type { CanvasToolPlugin } from './types';
+import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 
 function supportsImageSourceNode(node: CanvasNode): boolean {
   return isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node);
@@ -48,7 +49,7 @@ export const annotateToolPlugin: CanvasToolPlugin = {
   editor: 'annotate',
   supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
   createInitialOptions: () => ({
-    color: '#ff4d4f',
+    color: ANNOTATION_DEFAULT_STROKE_HEX,
     lineWidthPercent: 0.4,
     fontSizePercent: 10,
     annotations: stringifyAnnotationItems([]),

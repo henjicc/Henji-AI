@@ -8,6 +8,7 @@ import { AnnotateCanvas } from './annotate/AnnotateCanvas';
 import { AnnotateToolbar } from './annotate/AnnotateToolbar';
 import { useAnnotateController } from './annotate/useAnnotateController';
 import { useSelectedStyleSync } from './annotate/useSelectedStyleSync';
+import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 import {
   clamp,
   DEFAULT_LINE_WIDTH_PERCENT,
@@ -48,7 +49,7 @@ export function AnnotateToolEditor({ options, onOptionsChange, sourceImageUrl }:
   const stageHostRef = useRef<HTMLDivElement | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const color = toText(options.color, '#ff4d4f');
+  const color = toText(options.color, ANNOTATION_DEFAULT_STROKE_HEX);
   const textBaseSize = useMemo(() => resolveTextBaseSize(image), [image]);
   const rawLineWidthPercent = toNumber(options.lineWidthPercent, Number.NaN);
   const legacyLineWidth = Math.max(1, toNumber(options.lineWidth, 4));

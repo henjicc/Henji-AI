@@ -30,6 +30,16 @@ export default {
           dark: withOpacity('--text-muted-rgb'),
         },
         accent: withOpacity('--accent-rgb'),
+        app: withOpacity('--app-rgb'),
+        canvas: withOpacity('--canvas-rgb'),
+        panel: withOpacity('--panel-rgb'),
+        layer: withOpacity('--layer-rgb'),
+        brand: {
+          300: withOpacity('--brand-300-rgb'),
+          500: withOpacity('--brand-500-rgb'),
+          600: withOpacity('--brand-600-rgb'),
+          700: withOpacity('--brand-700-rgb'),
+        },
         // 暗色主题
         dark: {
           bg: '#0a0b0d',

@@ -5,18 +5,7 @@ import React from 'react'
 import type { EditorTool, ToolSettingsProps } from './types'
 import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton, UiRangeInput } from '@/components/ui'
-
-const COLORS = [
-    '#ff0000',  // 红
-    '#ff6b00',  // 橙
-    '#ffd000',  // 黄
-    '#00c853',  // 绿
-    '#00b0ff',  // 蓝
-    '#7c4dff',  // 紫
-    '#ff4081',  // 粉
-    '#ffffff',  // 白
-    '#000000',  // 黑
-]
+import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens'
 
 interface ColorPickerProps {
     value: string
@@ -26,7 +15,7 @@ interface ColorPickerProps {
 const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange }) => {
     return (
         <div className="color-picker">
-            {COLORS.map((color) => (
+            {IMAGE_EDITOR_PRESET_COLORS.map((color) => (
                 <UiIconButton
                     key={color}
                     type="button"

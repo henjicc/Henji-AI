@@ -182,10 +182,11 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
                     <img
                         src={previewUrl}
                         alt="Dragging"
-                        className="max-w-16 max-h-16 object-contain rounded-lg shadow-2xl border-2 border-[#007eff] bg-zinc-900/80"
+                        className="max-w-16 max-h-16 object-contain rounded-lg shadow-2xl border-2 border-accent bg-zinc-900/80"
                     />
                 </div>
             )}
         </DragContext.Provider>
     )
 }
+

@@ -24,6 +24,29 @@
   "rules": {
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "react-refresh/only-export-components": "warn",
-    "no-unused-vars": "off"
-  }
+    "no-unused-vars": "off",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})/]",
+        "message": "禁止直接写十六进制颜色，请使用 @/core/theme/colorTokens 或语义化 Tailwind 类。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})/]",
+        "message": "禁止在模板字符串中直接写十六进制颜色，请使用 @/core/theme/colorTokens 或语义化 Tailwind 类。"
+      },
+      {
+        "selector": "Literal[value=/\\[#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\\]/]",
+        "message": "禁止使用 Tailwind 任意十六进制颜色类（如 bg-[#xxxxxx]），请改为语义化颜色类。"
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/core/theme/colorTokens.ts"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }

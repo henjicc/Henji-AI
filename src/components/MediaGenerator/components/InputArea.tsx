@@ -265,7 +265,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     thumbnailSrc: imageUrl
   }))
   return (
-    <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
+    <div className="relative bg-panel/70 rounded-xl border border-zinc-700/50 p-4">
       {/* 统一的文件上传区域（支持视频+图片混合上传） */}
       {shouldShowUpload && (
           <div className="mb-3">
@@ -353,7 +353,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
           className={`absolute bottom-3 right-3 h-10 w-10 rounded-full transition-all duration-300 ${isGenerateDisabled()
             ? 'border-zinc-700/30 bg-zinc-700/50 text-zinc-500'
-            : 'border-transparent bg-[#007eff] text-white shadow-lg hover:scale-105 hover:brightness-110 hover:shadow-xl'
+            : 'border-transparent bg-accent text-white shadow-lg hover:scale-105 hover:brightness-110 hover:shadow-xl'
             }`}
         >
           {isLoading ? (
@@ -384,3 +384,4 @@ const InputArea: React.FC<InputAreaProps> = ({
   )
 }
 export default InputArea
+

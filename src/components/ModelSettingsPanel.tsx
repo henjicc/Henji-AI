@@ -263,7 +263,7 @@ const ModelSettingsPanel: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       onClick={() => showAllModelsForProvider(provider.id)}
-                      className="h-7 px-2.5 text-xs text-[#66b3ff]"
+                      className="h-7 px-2.5 text-xs text-brand-300"
                     >
                       {t('modelSettings.actions.showAll')}
                     </UiButton>
@@ -315,3 +315,4 @@ const ModelSettingsPanel: React.FC = () => {
 }
 
 export default ModelSettingsPanel
+

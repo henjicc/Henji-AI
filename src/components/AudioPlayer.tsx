@@ -160,7 +160,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
 
   return (
     <div
-      className={`w-[36rem] bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4 outline-none ${className || ''}`}
+      className={`w-[36rem] bg-panel/70 rounded-xl border border-zinc-700/50 p-4 outline-none ${className || ''}`}
       onContextMenu={onContextMenu}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -196,7 +196,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
             }}
           />
         ) : (
-          <div className="w-full h-full rounded-md bg-[#1B1C21]" />
+          <div className="w-full h-full rounded-md bg-layer" />
         )}
       </div>
       <div className="mt-3 flex items-center justify-between">
@@ -208,7 +208,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
               <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z"></path>
             </svg>
           </UiIconButton>
-          <UiRangeInput min={0} max={1} step={0.01} value={volume} onChange={onVolume} className="absolute left-7 top-2 w-28 accent-[#007eff]" />
+          <UiRangeInput min={0} max={1} step={0.01} value={volume} onChange={onVolume} className="absolute left-7 top-2 w-28 accent-accent" />
         </div>
         <div className="flex items-center">
           <UiIconButton onClick={togglePlay} className="!h-8 !w-8 border-0 bg-transparent text-zinc-300 hover:opacity-70" title={t('ui:audioPlayer.playPause')}>
@@ -236,3 +236,4 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
 }
 
 export default AudioPlayer
+
