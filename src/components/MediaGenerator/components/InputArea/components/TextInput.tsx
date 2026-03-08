@@ -1,9 +1,5 @@
-/**
- * 文本输入组件
- * 职责：提供提示词输入功能
- */
-
-import React, { useRef, useEffect } from 'react'
+import React from 'react'
+import { UiTextArea } from '@/components/ui'
 
 interface TextInputProps {
   value: string
@@ -26,14 +22,6 @@ export const TextInput: React.FC<TextInputProps> = ({
   autoFocus = false,
   disabled = false
 }) => {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    if (autoFocus && textareaRef.current) {
-      textareaRef.current.focus()
-    }
-  }, [autoFocus])
-
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value)
   }
@@ -42,8 +30,7 @@ export const TextInput: React.FC<TextInputProps> = ({
 
   return (
     <div className="text-input-container">
-      <textarea
-        ref={textareaRef}
+      <UiTextArea
         className="text-input"
         value={value}
         onChange={handleChange}
@@ -51,6 +38,7 @@ export const TextInput: React.FC<TextInputProps> = ({
         placeholder={placeholder}
         maxLength={maxLength}
         rows={rows}
+        autoFocus={autoFocus}
         disabled={disabled}
       />
       <div className="text-input-footer">

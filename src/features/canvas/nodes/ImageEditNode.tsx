@@ -1,6 +1,4 @@
 import {
-  type KeyboardEvent,
-  type ReactNode,
   memo,
   useMemo,
   useState,
@@ -31,13 +29,8 @@ import {
   detectAspectRatio,
   parseAspectRatio,
   prepareNodeImage,
-  resolveImageDisplayUrl,
 } from '@/features/canvas/application/imageData';
-import {
-  insertReferenceToken,
-  removeTextRange,
-  resolveReferenceAwareDeleteRange,
-} from '@/features/canvas/application/referenceTokenEditing';
+import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
 import {
   getImageModel,
   getDefaultImageModelId,
@@ -51,8 +44,7 @@ import {
   NODE_CONTROL_PRIMARY_BUTTON_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { ModelParamsControls } from '@/features/canvas/ui/ModelParamsControls';
-import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
-import { UiButton } from '@/components/ui';
+import { ReferenceTextarea, UiButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -67,14 +59,6 @@ interface AspectRatioChoice {
   label: string;
 }
 
-interface PickerAnchor {
-  left: number;
-  top: number;
-}
-
-const IMAGE_REFERENCE_MARKER_REGEX = /@图\d+/g;
-const PICKER_FALLBACK_ANCHOR: PickerAnchor = { left: 8, top: 8 };
-const PICKER_Y_OFFSET_PX = 20;
 const IMAGE_EDIT_NODE_MIN_WIDTH = 420;
 const IMAGE_EDIT_NODE_MIN_HEIGHT = 280;
 const IMAGE_EDIT_NODE_MAX_WIDTH = 1400;
@@ -82,107 +66,6 @@ const IMAGE_EDIT_NODE_MAX_HEIGHT = 1000;
 const IMAGE_EDIT_NODE_DEFAULT_WIDTH = 520;
 const IMAGE_EDIT_NODE_DEFAULT_HEIGHT = 320;
 const AI_RESULT_TITLE_MAX_CHARS = 10;
-
-function getTextareaCaretOffset(
-  textarea: HTMLTextAreaElement,
-  caretIndex: number
-): PickerAnchor {
-  const mirror = document.createElement('div');
-  const computed = window.getComputedStyle(textarea);
-  const mirrorStyle = mirror.style;
-
-  mirrorStyle.position = 'absolute';
-  mirrorStyle.visibility = 'hidden';
-  mirrorStyle.pointerEvents = 'none';
-  mirrorStyle.whiteSpace = 'pre-wrap';
-  mirrorStyle.overflowWrap = 'break-word';
-  mirrorStyle.wordBreak = 'break-word';
-  mirrorStyle.boxSizing = computed.boxSizing;
-  mirrorStyle.width = `${textarea.clientWidth}px`;
-  mirrorStyle.font = computed.font;
-  mirrorStyle.lineHeight = computed.lineHeight;
-  mirrorStyle.letterSpacing = computed.letterSpacing;
-  mirrorStyle.padding = computed.padding;
-  mirrorStyle.border = computed.border;
-  mirrorStyle.textTransform = computed.textTransform;
-  mirrorStyle.textIndent = computed.textIndent;
-
-  mirror.textContent = textarea.value.slice(0, caretIndex);
-
-  const marker = document.createElement('span');
-  marker.textContent = textarea.value.slice(caretIndex, caretIndex + 1) || ' ';
-  mirror.appendChild(marker);
-
-  document.body.appendChild(mirror);
-
-  const left = marker.offsetLeft - textarea.scrollLeft;
-  const top = marker.offsetTop - textarea.scrollTop;
-
-  document.body.removeChild(mirror);
-
-  return {
-    left: Math.max(0, left),
-    top: Math.max(0, top),
-  };
-}
-
-function resolvePickerAnchor(
-  container: HTMLDivElement | null,
-  textarea: HTMLTextAreaElement,
-  caretIndex: number
-): PickerAnchor {
-  if (!container) {
-    return PICKER_FALLBACK_ANCHOR;
-  }
-
-  const containerRect = container.getBoundingClientRect();
-  const textareaRect = textarea.getBoundingClientRect();
-  const caretOffset = getTextareaCaretOffset(textarea, caretIndex);
-
-  return {
-    left: Math.max(0, textareaRect.left - containerRect.left + caretOffset.left),
-    top: Math.max(0, textareaRect.top - containerRect.top + caretOffset.top + PICKER_Y_OFFSET_PX),
-  };
-}
-
-function renderPromptWithHighlights(prompt: string): ReactNode {
-  if (!prompt) {
-    return ' ';
-  }
-
-  const segments: ReactNode[] = [];
-  let lastIndex = 0;
-  IMAGE_REFERENCE_MARKER_REGEX.lastIndex = 0;
-  let match = IMAGE_REFERENCE_MARKER_REGEX.exec(prompt);
-  while (match) {
-    const matchStart = match.index;
-    const matchText = match[0];
-
-    if (matchStart > lastIndex) {
-      segments.push(
-        <span key={`plain-${lastIndex}`}>{prompt.slice(lastIndex, matchStart)}</span>
-      );
-    }
-
-    segments.push(
-      <span
-        key={`ref-${matchStart}`}
-        className="relative z-0 text-white [text-shadow:0.24px_0_currentColor,-0.24px_0_currentColor] before:absolute before:-inset-x-[4px] before:-inset-y-[1px] before:-z-10 before:rounded-[7px] before:bg-accent/55 before:content-['']"
-      >
-        {matchText}
-      </span>
-    );
-
-    lastIndex = matchStart + matchText.length;
-    match = IMAGE_REFERENCE_MARKER_REGEX.exec(prompt);
-  }
-
-  if (lastIndex < prompt.length) {
-    segments.push(<span key={`plain-${lastIndex}`}>{prompt.slice(lastIndex)}</span>);
-  }
-
-  return segments;
-}
 
 function pickClosestAspectRatio(
   targetRatio: number,
@@ -221,15 +104,8 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
 
-  const rootRef = useRef<HTMLDivElement>(null);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
-  const promptHighlightRef = useRef<HTMLDivElement>(null);
   const [promptDraft, setPromptDraft] = useState(() => data.prompt ?? '');
   const promptDraftRef = useRef(promptDraft);
-  const [showImagePicker, setShowImagePicker] = useState(false);
-  const [pickerCursor, setPickerCursor] = useState<number | null>(null);
-  const [pickerActiveIndex, setPickerActiveIndex] = useState(0);
-  const [pickerAnchor, setPickerAnchor] = useState<PickerAnchor>(PICKER_FALLBACK_ANCHOR);
 
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
@@ -248,15 +124,11 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
   const incomingImageItems = useMemo(
     () =>
       incomingImages.map((imageUrl, index) => ({
-        imageUrl,
-        displayUrl: resolveImageDisplayUrl(imageUrl),
+        id: `image-ref-${index}`,
         label: `图${index + 1}`,
+        thumbnailSrc: imageUrl,
       })),
     [incomingImages]
-  );
-  const incomingImageViewerList = useMemo(
-    () => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)),
-    [incomingImageItems]
   );
 
   const imageModels = useMemo(() => listImageModels(), []);
@@ -343,35 +215,8 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     updateNodeData,
   ]);
 
-  useEffect(() => {
-    if (incomingImages.length === 0) {
-      setShowImagePicker(false);
-      setPickerCursor(null);
-      setPickerActiveIndex(0);
-      return;
-    }
-
-    setPickerActiveIndex((previous) => Math.min(previous, incomingImages.length - 1));
-  }, [incomingImages.length]);
-
-  useEffect(() => {
-    const handleOutside = (event: MouseEvent) => {
-      if (rootRef.current?.contains(event.target as globalThis.Node)) {
-        return;
-      }
-
-      setShowImagePicker(false);
-      setPickerCursor(null);
-    };
-
-    document.addEventListener('mousedown', handleOutside, true);
-    return () => {
-      document.removeEventListener('mousedown', handleOutside, true);
-    };
-  }, []);
-
   const handleGenerate = useCallback(async () => {
-    const prompt = promptDraft.replace(/@(?=图\d+)/g, '').trim();
+    const prompt = stripReferenceAtPrefix(promptDraft).trim();
     if (!prompt) {
       setError(t('node.imageEdit.promptRequired'));
       return;
@@ -469,109 +314,8 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     updateNodeData,
   ]);
 
-  const syncPromptHighlightScroll = () => {
-    if (!promptRef.current || !promptHighlightRef.current) {
-      return;
-    }
-
-    promptHighlightRef.current.scrollTop = promptRef.current.scrollTop;
-    promptHighlightRef.current.scrollLeft = promptRef.current.scrollLeft;
-  };
-
-  const insertImageReference = useCallback((imageIndex: number) => {
-    const marker = `@图${imageIndex + 1}`;
-    const currentPrompt = promptDraftRef.current;
-    const cursor = pickerCursor ?? currentPrompt.length;
-    const { nextText: nextPrompt, nextCursor } = insertReferenceToken(currentPrompt, cursor, marker);
-
-    setPromptDraft(nextPrompt);
-    commitPromptDraft(nextPrompt);
-    setShowImagePicker(false);
-    setPickerCursor(null);
-    setPickerActiveIndex(0);
-
-    requestAnimationFrame(() => {
-      promptRef.current?.focus();
-      promptRef.current?.setSelectionRange(nextCursor, nextCursor);
-      syncPromptHighlightScroll();
-    });
-  }, [commitPromptDraft, pickerCursor]);
-
-  const handlePromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Backspace' || event.key === 'Delete') {
-      const currentPrompt = promptDraftRef.current;
-      const selectionStart = event.currentTarget.selectionStart ?? currentPrompt.length;
-      const selectionEnd = event.currentTarget.selectionEnd ?? selectionStart;
-      const deletionDirection = event.key === 'Backspace' ? 'backward' : 'forward';
-      const deleteRange = resolveReferenceAwareDeleteRange(
-        currentPrompt,
-        selectionStart,
-        selectionEnd,
-        deletionDirection
-      );
-      if (deleteRange) {
-        event.preventDefault();
-        const { nextText, nextCursor } = removeTextRange(currentPrompt, deleteRange);
-        setPromptDraft(nextText);
-        commitPromptDraft(nextText);
-        requestAnimationFrame(() => {
-          promptRef.current?.focus();
-          promptRef.current?.setSelectionRange(nextCursor, nextCursor);
-          syncPromptHighlightScroll();
-        });
-        return;
-      }
-    }
-
-    if (showImagePicker && incomingImages.length > 0) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        setPickerActiveIndex((previous) => (previous + 1) % incomingImages.length);
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setPickerActiveIndex((previous) =>
-          previous === 0 ? incomingImages.length - 1 : previous - 1
-        );
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        insertImageReference(pickerActiveIndex);
-        return;
-      }
-    }
-
-    if (event.key === '@' && incomingImages.length > 0) {
-      event.preventDefault();
-      const cursor = event.currentTarget.selectionStart ?? promptDraftRef.current.length;
-      setPickerAnchor(resolvePickerAnchor(rootRef.current, event.currentTarget, cursor));
-      setPickerCursor(cursor);
-      setShowImagePicker(true);
-      setPickerActiveIndex(0);
-      return;
-    }
-
-    if (event.key === 'Escape' && showImagePicker) {
-      event.preventDefault();
-      setShowImagePicker(false);
-      setPickerCursor(null);
-      setPickerActiveIndex(0);
-      return;
-    }
-
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      event.preventDefault();
-      void handleGenerate();
-    }
-  };
-
   return (
     <div
-      ref={rootRef}
       className={`
         group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected
@@ -590,75 +334,26 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       />
 
       <div className="relative min-h-0 flex-1 rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 p-2">
-        <div className="relative h-full min-h-0">
-          <div
-            ref={promptHighlightRef}
-            aria-hidden="true"
-            className="ui-scrollbar pointer-events-none absolute inset-0 overflow-y-auto overflow-x-hidden text-sm leading-6 text-text-dark"
-            style={{ scrollbarGutter: 'stable' }}
-          >
-            <div className="min-h-full whitespace-pre-wrap break-words px-1 py-0.5">
-              {renderPromptWithHighlights(promptDraft)}
-            </div>
-          </div>
-
-          <textarea
-            ref={promptRef}
-            value={promptDraft}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              setPromptDraft(nextValue);
-              commitPromptDraft(nextValue);
-            }}
-            onKeyDown={handlePromptKeyDown}
-            onScroll={syncPromptHighlightScroll}
-            onMouseDown={(event) => event.stopPropagation()}
-            placeholder={t('node.imageEdit.promptPlaceholder')}
-            className="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words"
-            style={{ scrollbarGutter: 'stable' }}
-          />
-        </div>
-
-        {showImagePicker && incomingImageItems.length > 0 && (
-          <div
-            className="nowheel absolute z-30 w-[120px] overflow-hidden rounded-xl border border-[rgba(255,255,255,0.16)] bg-surface-dark shadow-xl"
-            style={{ left: pickerAnchor.left, top: pickerAnchor.top }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onWheelCapture={(event) => event.stopPropagation()}
-          >
-            <div
-              className="ui-scrollbar nowheel max-h-[180px] overflow-y-auto"
-              onWheelCapture={(event) => event.stopPropagation()}
-            >
-              {incomingImageItems.map((item, index) => (
-                <button
-                  key={`${item.imageUrl}-${index}`}
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    insertImageReference(index);
-                  }}
-                  onMouseEnter={() => setPickerActiveIndex(index)}
-                  className={`flex w-full items-center gap-2 border border-transparent bg-bg-dark/70 px-2 py-2 text-left text-sm text-text-dark transition-colors hover:border-[rgba(255,255,255,0.18)] ${
-                    pickerActiveIndex === index
-                      ? 'border-[rgba(255,255,255,0.24)] bg-bg-dark'
-                      : ''
-                  }`}
-                >
-                  <CanvasNodeImage
-                    src={item.displayUrl}
-                    alt={item.label}
-                    viewerSourceUrl={resolveImageDisplayUrl(item.imageUrl)}
-                    viewerImageList={incomingImageViewerList}
-                    className="h-8 w-8 rounded object-cover"
-                    draggable={false}
-                  />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <ReferenceTextarea
+          value={promptDraft}
+          onChange={(nextValue) => {
+            setPromptDraft(nextValue);
+            commitPromptDraft(nextValue);
+          }}
+          references={incomingImageItems}
+          onMouseDown={(event) => event.stopPropagation()}
+          placeholder={t('node.imageEdit.promptPlaceholder')}
+          submitShortcut="mod-enter"
+          onSubmit={() => {
+            void handleGenerate();
+          }}
+          className="relative h-full min-h-0"
+          highlightLayerClassName="text-sm leading-6 text-text-dark"
+          highlightContentClassName="px-1 py-0.5"
+          textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words"
+          pickerClassName="w-[120px]"
+          pickerListClassName="max-h-[180px]"
+        />
       </div>
 
       <div className="mt-2 flex shrink-0 items-center gap-1">

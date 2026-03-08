@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelType } from '@/core/types'
+import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens'
 import type { ModelState } from '../state/useModelState'
 
 /**
@@ -47,8 +48,8 @@ export const useGenerationHandler = (
     console.log('[GenerationHandler] Generated options:', options)
     console.log('[GenerationHandler] Model type:', modelType)
 
-    // 调用生成回调
-    onGenerate(input, selectedModel, modelType, options)
+    // 调用生成回调（将 @图N 规范化为 图N）
+    onGenerate(stripReferenceAtPrefix(input), selectedModel, modelType, options)
   }, [
     selectedModel,
     input,

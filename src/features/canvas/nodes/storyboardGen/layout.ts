@@ -1,0 +1,107 @@
+import { parseAspectRatio } from '@/features/canvas/application/imageData'
+import {
+  CONTROL_ROW_HEIGHT_PX,
+  CONTROL_ROW_MARGIN_BOTTOM_PX,
+  FRAME_CELL_MIN_HEIGHT_PX,
+  FRAME_CELL_MIN_WIDTH_PX,
+  FRAME_GRID_GAP_PX,
+  FRAME_GRID_MARGIN_BOTTOM_PX,
+  NODE_VERTICAL_PADDING_PX,
+  PARAM_ROW_HEIGHT_PX,
+  STORYBOARD_GEN_NODE_MIN_HEIGHT_PX,
+  STORYBOARD_GEN_NODE_MIN_WIDTH_PX,
+  STORYBOARD_GRID_BASE_CELL_HEIGHT_PX,
+  STORYBOARD_GRID_GAP_PX,
+  STORYBOARD_GRID_MAX_WIDTH_PX,
+  STORYBOARD_NODE_HORIZONTAL_PADDING_PX,
+  STORYBOARD_CONTROL_ROW_WIDTH_PX,
+  STORYBOARD_PARAMS_ROW_WIDTH_PX,
+  toCssAspectRatio,
+} from './shared'
+
+export interface StoryboardBaseFrameLayout {
+  nodeWidth: number
+  nodeHeight: number
+}
+
+export interface StoryboardFrameLayout {
+  cellWidth: number
+  gridWidth: number
+  paramsRowWidth: number
+  cellAspectRatio: string
+}
+
+export function computeStoryboardBaseFrameLayout(
+  frameAspectRatioValue: string,
+  gridCols: number,
+  gridRows: number
+): StoryboardBaseFrameLayout {
+  const aspectRatio = Math.max(0.1, parseAspectRatio(frameAspectRatioValue))
+  let cellWidth = STORYBOARD_GRID_BASE_CELL_HEIGHT_PX * aspectRatio
+  let gridWidth = gridCols * cellWidth + Math.max(0, gridCols - 1) * STORYBOARD_GRID_GAP_PX
+
+  if (gridWidth > STORYBOARD_GRID_MAX_WIDTH_PX) {
+    const scale = STORYBOARD_GRID_MAX_WIDTH_PX / gridWidth
+    cellWidth *= scale
+    gridWidth = gridCols * cellWidth + Math.max(0, gridCols - 1) * STORYBOARD_GRID_GAP_PX
+  }
+
+  const roundedCellWidth = Math.max(FRAME_CELL_MIN_WIDTH_PX, Math.round(cellWidth))
+  const roundedCellHeight = Math.max(FRAME_CELL_MIN_HEIGHT_PX, Math.round(roundedCellWidth / aspectRatio))
+  const roundedGridWidth = gridCols * roundedCellWidth + Math.max(0, gridCols - 1) * STORYBOARD_GRID_GAP_PX
+  const roundedGridHeight = gridRows * roundedCellHeight + Math.max(0, gridRows - 1) * FRAME_GRID_GAP_PX
+  const nodeInnerWidth = Math.max(STORYBOARD_CONTROL_ROW_WIDTH_PX, STORYBOARD_PARAMS_ROW_WIDTH_PX, roundedGridWidth)
+  const nodeWidth = Math.max(STORYBOARD_GEN_NODE_MIN_WIDTH_PX, Math.round(nodeInnerWidth + STORYBOARD_NODE_HORIZONTAL_PADDING_PX))
+  const nodeHeight = Math.max(
+    STORYBOARD_GEN_NODE_MIN_HEIGHT_PX,
+    Math.round(
+      NODE_VERTICAL_PADDING_PX
+      + CONTROL_ROW_HEIGHT_PX
+      + CONTROL_ROW_MARGIN_BOTTOM_PX
+      + roundedGridHeight
+      + FRAME_GRID_MARGIN_BOTTOM_PX
+      + PARAM_ROW_HEIGHT_PX
+    )
+  )
+
+  return {
+    nodeWidth,
+    nodeHeight,
+  }
+}
+
+export function computeStoryboardFrameLayout(
+  frameAspectRatioValue: string,
+  gridCols: number,
+  gridRows: number,
+  resolvedNodeHeight: number,
+  resolvedNodeWidth: number
+): StoryboardFrameLayout {
+  const cols = Math.max(1, gridCols)
+  const rows = Math.max(1, gridRows)
+  const aspectRatio = Math.max(0.1, parseAspectRatio(frameAspectRatioValue))
+  const innerWidth = Math.max(120, resolvedNodeWidth - STORYBOARD_NODE_HORIZONTAL_PADDING_PX)
+  const availableGridHeight = Math.max(
+    72,
+    resolvedNodeHeight
+    - NODE_VERTICAL_PADDING_PX
+    - CONTROL_ROW_HEIGHT_PX
+    - CONTROL_ROW_MARGIN_BOTTOM_PX
+    - FRAME_GRID_MARGIN_BOTTOM_PX
+    - PARAM_ROW_HEIGHT_PX
+  )
+  const widthLimitedCellWidth = (innerWidth - Math.max(0, cols - 1) * STORYBOARD_GRID_GAP_PX) / cols
+  const heightLimitedCellHeight = (availableGridHeight - Math.max(0, rows - 1) * FRAME_GRID_GAP_PX) / rows
+  const heightLimitedCellWidth = heightLimitedCellHeight * aspectRatio
+  const resolvedCellWidth = Math.floor(Math.min(widthLimitedCellWidth, heightLimitedCellWidth))
+  const cellWidth = Math.max(FRAME_CELL_MIN_WIDTH_PX, resolvedCellWidth)
+  const gridWidth = cols * cellWidth + Math.max(0, cols - 1) * STORYBOARD_GRID_GAP_PX
+  const paramsRowWidth = Math.max(STORYBOARD_PARAMS_ROW_WIDTH_PX, Math.floor(innerWidth))
+
+  return {
+    cellWidth,
+    gridWidth,
+    paramsRowWidth,
+    cellAspectRatio: toCssAspectRatio(frameAspectRatioValue),
+  }
+}

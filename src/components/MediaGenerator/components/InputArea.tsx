@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import FileUploader from '@/components/ui/FileUploader'
 import AlertDialog from '@/components/ui/AlertDialog'
+import { ReferenceTextarea } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { hasTag } from '@/core/tags'
-
-/**
- * 文件顺序项：记录每个位置是视频还是图片，以及在原数组中的索引
- */
+import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 export interface FileOrderItem {
   type: 'video' | 'image'
   index: number
@@ -79,13 +77,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onFileOrderChange,
   onGenerate
 }) => {
-  // 本地文件顺序状态（如果父组件没有提供）
-  const [localFileOrder, setLocalFileOrder] = useState<FileOrderItem[]>([])
   const { t } = useTranslation('ui')
-
-  // 使用父组件提供的 fileOrder 或本地状态
-  const currentFileOrder = fileOrder || localFileOrder
-  const setCurrentFileOrder = onFileOrderChange || setLocalFileOrder
 
   // 提示弹窗状态
   const [alertDialog, setAlertDialog] = useState<{
@@ -149,52 +141,32 @@ const InputArea: React.FC<InputAreaProps> = ({
       : t('inputArea.upload.mixed', { videoRange: videoText, imageRange: imageText })
   })()
 
-  const isSameOrder = (a: FileOrderItem[], b: FileOrderItem[]) => {
-    if (a.length !== b.length) return false
-    for (let i = 0; i < a.length; i++) {
-      if (a[i].type !== b[i].type || a[i].index !== b[i].index) return false
-    }
-    return true
-  }
-
-  useEffect(() => {
-    if (!needsVideoUpload) {
-      if (currentFileOrder.length > 0) {
-        setCurrentFileOrder([])
-      }
-      return
-    }
-
-    const newOrder: FileOrderItem[] = []
-    const existingVideoIndices = new Set<number>()
-    const existingImageIndices = new Set<number>()
-
-    currentFileOrder.forEach(item => {
-      if (item.type === 'video' && item.index < uploadedVideos.length) {
-        newOrder.push(item)
-        existingVideoIndices.add(item.index)
-      } else if (item.type === 'image' && item.index < uploadedImages.length) {
-        newOrder.push(item)
-        existingImageIndices.add(item.index)
-      }
-    })
-
-    for (let i = 0; i < uploadedVideos.length; i++) {
-      if (!existingVideoIndices.has(i)) {
-        newOrder.push({ type: 'video', index: i })
-      }
-    }
-
-    for (let i = 0; i < uploadedImages.length; i++) {
-      if (!existingImageIndices.has(i)) {
-        newOrder.push({ type: 'image', index: i })
-      }
-    }
-
-    if (!isSameOrder(currentFileOrder, newOrder)) {
-      setCurrentFileOrder(newOrder)
-    }
-  }, [needsVideoUpload, uploadedVideos.length, uploadedImages.length, currentFileOrder])
+  const {
+    currentFileOrder,
+    mixedFiles,
+    mixedMaxCount,
+    shouldHideUploadButton,
+    handleMixedFileRemove,
+    handleMixedFileReplace,
+    handleMixedFileReorder,
+    handleMixedFileClick
+  } = useMixedFileOrder({
+    needsVideoUpload,
+    needsVideoOnly,
+    uploadedImages,
+    uploadedVideos,
+    maxImageCount,
+    maxVideoCount,
+    fileOrder,
+    onFileOrderChange,
+    onImageRemove,
+    onImageReplace,
+    onImageReorder,
+    onImageClick,
+    onVideoRemove,
+    onVideoReplace,
+    onVideoClick
+  })
 
   const requirementCheck = validateGenerationRequirements(
     selectedModel,
@@ -319,125 +291,16 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
   }
 
-  // 处理混合文件移除
-  const handleMixedFileRemove = (index: number) => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
-      // 非混合模式，直接移除图片
-      onImageRemove(index)
-      return
-    }
+  const promptMinHeightClass =
+    currentModel?.type === 'audio' || !shouldShowUpload
+      ? 'min-h-[176px]'
+      : 'min-h-[100px]'
 
-    // 混合模式：根据 fileOrder 确定要移除的文件
-    const item = currentFileOrder[index]
-    if (!item) return
-
-    if (item.type === 'video' && onVideoRemove) {
-      onVideoRemove(item.index)
-    } else if (item.type === 'image') {
-      onImageRemove(item.index)
-    }
-
-    // 移除后，fileOrder 会在 useEffect 中自动更新
-  }
-
-  // 处理混合文件替换
-  const handleMixedFileReplace = (index: number, file: File) => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
-      // 非混合模式，直接替换图片
-      onImageReplace(index, file)
-      return
-    }
-
-    // 混合模式：根据 fileOrder 确定要替换的文件
-    const item = currentFileOrder[index]
-    if (!item) return
-
-    if (item.type === 'video' && onVideoReplace) {
-      onVideoReplace(item.index, file)
-    } else if (item.type === 'image') {
-      onImageReplace(item.index, file)
-    }
-  }
-
-  // 处理混合文件排序
-  const handleMixedFileReorder = (from: number, to: number) => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
-      // 非混合模式，使用原有的图片排序
-      onImageReorder(from, to)
-      return
-    }
-
-    // 混合模式：更新 fileOrder
-    if (from === to) return
-    const newOrder = [...currentFileOrder]
-    const [item] = newOrder.splice(from, 1)
-    newOrder.splice(to, 0, item)
-    setCurrentFileOrder(newOrder)
-  }
-
-  // 处理混合文件点击（视频+图片）
-  const handleMixedFileClick = (fileUrl: string, fileList: string[]) => {
-    const index = fileList.indexOf(fileUrl)
-    if (index === -1) return
-
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
-      // 非混合模式，直接点击图片
-      if (onImageClick) {
-        onImageClick(fileUrl, fileList)
-      }
-      return
-    }
-
-    // 混合模式：根据 fileOrder 确定点击的文件类型
-    const item = currentFileOrder[index]
-    if (!item) return
-
-    if (item.type === 'video' && onVideoClick) {
-      onVideoClick(fileUrl)
-    } else if (item.type === 'image' && onImageClick) {
-      // 提取所有图片用于查看器
-      const allImages = currentFileOrder
-        .filter(f => f.type === 'image')
-        .map(f => uploadedImages[f.index])
-      onImageClick(fileUrl, allImages)
-    }
-  }
-
-  // 合并视频和图片文件列表（根据 fileOrder 排序）
-  const mixedFiles = needsVideoUpload && currentFileOrder.length > 0
-    ? currentFileOrder.map(item =>
-      item.type === 'video' ? uploadedVideos[item.index] : uploadedImages[item.index]
-    )
-    : needsVideoUpload
-      ? (needsVideoOnly ? uploadedVideos : [...uploadedVideos, ...uploadedImages])
-      : uploadedImages
-
-  // 计算混合上传的最大文件数
-  const mixedMaxCount = needsVideoUpload
-    ? (needsVideoOnly ? maxVideoCount : maxVideoCount + maxImageCount)
-    : maxImageCount
-
-  // 检查是否应该隐藏上传按钮
-  const shouldHideUploadButton = (() => {
-    // 混合上传模式：检查是否达到上限
-    if (needsVideoUpload && !needsVideoOnly) {
-      const currentVideoCount = uploadedVideos.length
-      const currentImageCount = uploadedImages.length
-      return currentVideoCount >= maxVideoCount && currentImageCount >= maxImageCount
-    }
-
-    // 纯视频模式：已有1个视频时隐藏
-    if (needsVideoOnly && uploadedVideos.length >= maxVideoCount) {
-      return true
-    }
-
-    // 纯图片模式：图片达到上限时隐藏
-    if (!needsVideoUpload && uploadedImages.length >= maxImageCount) {
-      return true
-    }
-
-    return false
-  })()
+  const promptReferences = uploadedImages.map((imageUrl, index) => ({
+    id: `image-ref-${index}`,
+    label: `图${index + 1}`,
+    thumbnailSrc: imageUrl
+  }))
 
   return (
     <div className="relative bg-[#131313]/70 rounded-xl border border-zinc-700/50 p-4">
@@ -470,9 +333,10 @@ const InputArea: React.FC<InputAreaProps> = ({
 
       {/* 文本输入框 */}
       <div className="relative">
-        <textarea
+        <ReferenceTextarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={setInput}
+          references={promptReferences}
           onPaste={onPaste}
           onDrop={(e) => {
             e.preventDefault()
@@ -486,18 +350,8 @@ const InputArea: React.FC<InputAreaProps> = ({
             e.preventDefault()
             e.stopPropagation()
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              if (e.ctrlKey) {
-                // Ctrl+Enter 换行
-                return
-              } else {
-                // Enter 生成
-                e.preventDefault()
-                onGenerate()
-              }
-            }
-          }}
+          submitShortcut="enter"
+          onSubmit={onGenerate}
           placeholder={
             currentModel?.type === 'audio'
               ? t('inputArea.placeholder.audio')
@@ -505,12 +359,29 @@ const InputArea: React.FC<InputAreaProps> = ({
                 ? t('inputArea.placeholder.englishOnly')
                 : t('inputArea.placeholder.default')
           }
-          className={`w-full bg-transparent backdrop-blur-lg rounded-xl p-4 pr-14 ${
-            // 音频模型或没有图片上传组件的模型：使用较大高度
-            currentModel?.type === 'audio' || !shouldShowUpload
-              ? 'min-h-[176px]'
-              : 'min-h-[100px]'
-            } resize-none focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-white placeholder-zinc-400`}
+          className="relative isolate overflow-hidden rounded-xl bg-zinc-900/30 backdrop-blur-lg"
+          highlightLayerClassName="text-sm leading-6 text-white"
+          highlightContentClassName={`${promptMinHeightClass} px-4 py-4 pr-14`}
+          textareaClassName={`ui-scrollbar w-full bg-transparent p-4 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden rounded-xl focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-transparent caret-white placeholder-zinc-400 whitespace-pre-wrap break-words`}
+          pickerClassName="w-[150px]"
+          pickerListClassName="max-h-[180px]"
+          renderPickerItem={({ item }) => (
+            <>
+              {item.thumbnailSrc ? (
+                <img
+                  src={item.thumbnailSrc}
+                  alt={item.label}
+                  className="h-8 w-8 rounded object-cover"
+                  draggable={false}
+                />
+              ) : (
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-zinc-700/70 text-xs text-zinc-200">
+                  {item.label}
+                </span>
+              )}
+              <span>{item.label}</span>
+            </>
+          )}
           disabled={isLoading}
         />
 

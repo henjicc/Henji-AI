@@ -9,6 +9,7 @@ import { CANVAS_NODE_TYPES, type TextAnnotationNodeData } from '@/features/canva
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import { UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 type TextAnnotationNodeProps = NodeProps & {
@@ -66,7 +67,7 @@ export const TextAnnotationNode = memo(({
       />
 
       {selected ? (
-        <textarea
+        <UiTextArea
           autoFocus
           value={content}
           onChange={(event) => {
@@ -74,7 +75,7 @@ export const TextAnnotationNode = memo(({
             updateNodeData(id, { content: nextValue });
           }}
           placeholder={t('node.textAnnotation.placeholder')}
-          className="nodrag nowheel h-full w-full resize-none border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/70"
+          className="nodrag nowheel h-full w-full border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/70"
         />
       ) : (
         <div className="nodrag nowheel h-full w-full overflow-auto px-1 py-0.5 text-sm leading-6 text-text-dark">

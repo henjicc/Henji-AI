@@ -1,235 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { UiInput } from '@/components/ui';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import type { VisualToolEditorProps } from './types';
+import { NumberStepper } from './splitStoryboard/NumberStepper';
+import {
+  clampDecimal,
+  clampInteger,
+  computeSplitLayout,
+  DEFAULT_LINE_THICKNESS_PERCENT,
+  formatPercent,
+  LEGACY_DEFAULT_LINE_THICKNESS_PX,
+  MAX_GRID_SIZE,
+  MAX_LINE_THICKNESS_PERCENT,
+  MIN_GRID_SIZE,
+  PREVIEW_VIEWPORT_HEIGHT,
+  resolveLineThicknessPxFromPercent,
+  resolveMaxLineThicknessPx,
+  splitSizeLabel,
+  toFiniteNumber,
+  toPercent,
+  type SplitOptionsPatch,
+} from './splitStoryboard/shared';
 
-const MIN_GRID_SIZE = 1;
-const MAX_GRID_SIZE = 8;
-const DEFAULT_LINE_THICKNESS_PERCENT = 0.5;
-const MAX_LINE_THICKNESS_PERCENT = 20;
-const LEGACY_DEFAULT_LINE_THICKNESS_PX = 6;
-const PREVIEW_VIEWPORT_HEIGHT = 'h-[min(560px,60vh)]';
-
-interface OverlayRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-interface CellRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-interface SplitLayout {
-  lineRects: OverlayRect[];
-  cellRects: CellRect[];
-  minCellWidth: number;
-  maxCellWidth: number;
-  minCellHeight: number;
-  maxCellHeight: number;
-}
-
-function toFiniteNumber(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-  }
-
-  return fallback;
-}
-
-function clampInteger(value: number, min: number, max: number, fallback = min): number {
-  const safeValue = Number.isFinite(value) ? value : fallback;
-  return Math.max(min, Math.min(max, Math.round(safeValue)));
-}
-
-function clampDecimal(value: number, min: number, max: number, fallback = min, precision = 2): number {
-  const safeValue = Number.isFinite(value) ? value : fallback;
-  const clamped = Math.max(min, Math.min(max, safeValue));
-  const factor = 10 ** precision;
-  return Math.round(clamped * factor) / factor;
-}
-
-function resolveMaxLineThicknessPx(rows: number, cols: number, width: number, height: number): number {
-  const maxByWidth = cols > 1 ? Math.floor((width - cols) / (cols - 1)) : Number.MAX_SAFE_INTEGER;
-  const maxByHeight = rows > 1 ? Math.floor((height - rows) / (rows - 1)) : Number.MAX_SAFE_INTEGER;
-  return Math.max(0, Math.min(maxByWidth, maxByHeight));
-}
-
-function resolveLineThicknessPxFromPercent(
-  lineThicknessPercent: number,
-  rows: number,
-  cols: number,
-  width: number,
-  height: number
-): number {
-  if (lineThicknessPercent <= 0) {
-    return 0;
-  }
-
-  const basis = Math.max(1, Math.min(width, height));
-  const rawPixelThickness = Math.max(1, Math.round((basis * lineThicknessPercent) / 100));
-  const maxAllowed = resolveMaxLineThicknessPx(rows, cols, width, height);
-  return clampInteger(rawPixelThickness, 0, maxAllowed);
-}
-
-function splitSizes(total: number, segments: number): number[] {
-  const base = Math.floor(total / segments);
-  const remainder = total % segments;
-
-  return Array.from({ length: segments }, (_value, index) => base + (index < remainder ? 1 : 0));
-}
-
-function computeSplitLayout(
-  imageWidth: number,
-  imageHeight: number,
-  rows: number,
-  cols: number,
-  lineThickness: number
-): SplitLayout | null {
-  const usableWidth = imageWidth - (cols - 1) * lineThickness;
-  const usableHeight = imageHeight - (rows - 1) * lineThickness;
-
-  if (usableWidth < cols || usableHeight < rows) {
-    return null;
-  }
-
-  const colWidths = splitSizes(usableWidth, cols);
-  const rowHeights = splitSizes(usableHeight, rows);
-
-  const lineRects: OverlayRect[] = [];
-  const xOffsets: number[] = [];
-  const yOffsets: number[] = [];
-
-  let cursorX = 0;
-  for (let col = 0; col < cols; col += 1) {
-    xOffsets.push(cursorX);
-    cursorX += colWidths[col];
-    if (col < cols - 1 && lineThickness > 0) {
-      lineRects.push({
-        x: cursorX,
-        y: 0,
-        width: lineThickness,
-        height: imageHeight,
-      });
-      cursorX += lineThickness;
-    }
-  }
-
-  let cursorY = 0;
-  for (let row = 0; row < rows; row += 1) {
-    yOffsets.push(cursorY);
-    cursorY += rowHeights[row];
-    if (row < rows - 1 && lineThickness > 0) {
-      lineRects.push({
-        x: 0,
-        y: cursorY,
-        width: imageWidth,
-        height: lineThickness,
-      });
-      cursorY += lineThickness;
-    }
-  }
-
-  const cellRects: CellRect[] = [];
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      cellRects.push({
-        x: xOffsets[col],
-        y: yOffsets[row],
-        width: colWidths[col],
-        height: rowHeights[row],
-      });
-    }
-  }
-
-  return {
-    lineRects,
-    cellRects,
-    minCellWidth: Math.min(...colWidths),
-    maxCellWidth: Math.max(...colWidths),
-    minCellHeight: Math.min(...rowHeights),
-    maxCellHeight: Math.max(...rowHeights),
-  };
-}
-
-function toPercent(value: number, total: number): string {
-  if (total <= 0) {
-    return '0%';
-  }
-
-  return `${(value / total) * 100}%`;
-}
-
-function splitSizeLabel(min: number, max: number): string {
-  if (min === max) {
-    return `${min}`;
-  }
-  return `${min} - ${max}`;
-}
-
-function formatPercent(value: number): string {
-  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
-}
-
-interface NumberStepperProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}
-
-function NumberStepper({ label, value, min, max, onChange }: NumberStepperProps) {
-  const decreaseDisabled = value <= min;
-  const increaseDisabled = value >= max;
-
-  return (
-    <div className="space-y-1.5">
-      <div className="text-xs text-text-muted">{label}</div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="h-9 w-9 rounded-lg border border-[rgba(255,255,255,0.14)] bg-bg-dark/60 text-sm text-text-dark transition-colors hover:bg-bg-dark disabled:cursor-not-allowed disabled:opacity-45"
-          onClick={() => onChange(value - 1)}
-          disabled={decreaseDisabled}
-        >
-          -
-        </button>
-        <UiInput
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          step={1}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="h-9 text-center"
-        />
-        <button
-          type="button"
-          className="h-9 w-9 rounded-lg border border-[rgba(255,255,255,0.14)] bg-bg-dark/60 text-sm text-text-dark transition-colors hover:bg-bg-dark disabled:cursor-not-allowed disabled:opacity-45"
-          onClick={() => onChange(value + 1)}
-          disabled={increaseDisabled}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsChange }: VisualToolEditorProps) {
+export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsChange }: VisualToolEditorProps): JSX.Element {
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const displaySourceImageUrl = useMemo(() => resolveImageDisplayUrl(sourceImageUrl), [sourceImageUrl]);
 
@@ -305,7 +99,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
   }, [cols, lineThicknessPx, naturalSize, rows]);
 
   const updateOptions = useCallback(
-    (patch: Partial<Record<'rows' | 'cols' | 'lineThicknessPercent', number>>) => {
+    (patch: SplitOptionsPatch) => {
       const nextRows = clampInteger(
         patch.rows ?? rows,
         MIN_GRID_SIZE,

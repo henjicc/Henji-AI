@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-rgb: 15 15 15;
+  --surface-rgb: 26 26 26;
+  --border-rgb: 42 42 42;
+  --text-rgb: 255 255 255;
+  --text-muted-rgb: 136 136 136;
+  --accent-rgb: 59 130 246;
+  --ui-surface-panel: rgb(26, 26, 26);
+  --ui-surface-field: rgba(10, 10, 12, 0.92);
+  --ui-border-soft: rgba(255, 255, 255, 0.14);
+  --ui-border-strong: rgba(255, 255, 255, 0.24);
+  --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
+  --ui-radius-lg: 12px;
+  --ui-radius-xl: 16px;
+  --ui-radius-2xl: 20px;
+  --node-radius: 12px;
+}
+
 html,
 body,
 #root {
