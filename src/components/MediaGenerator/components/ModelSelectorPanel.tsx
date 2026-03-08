@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
-import { UiChipButton, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UiChipButton, UiIconButton, UiInput, UiMarqueeText, UiOptionButton } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
 interface ModelSelectorPanelProps {
   selectedProvider: string
@@ -41,6 +41,20 @@ const GRID_COLUMNS = {
   lg: 4,
   xl: 5
 }
+
+const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
+const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
+const MODEL_CARD_META_TEXT_CLASS = 'text-[11px] leading-4 text-zinc-400'
+
+function getFilterChipClass(active: boolean, dimmed = false): string {
+  const activeClass =
+    'border-[#4b85ff]/80 bg-[#2f62d1] text-white'
+  const idleClass =
+    'border-zinc-700/45 bg-zinc-800/85 text-zinc-100 hover:border-zinc-600/55 hover:bg-zinc-700/85'
+
+  return `h-8 px-3 text-xs ${active ? activeClass : idleClass} ${dimmed && !active ? 'opacity-40' : ''}`
+}
+
 /**
  * 模型选择面板
  * 从 MediaGenerator 中提取的模型选择UI
@@ -204,10 +218,10 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       ref={wrapperRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      className="flex flex-col h-full min-h-0 outline-none"
+      className="flex h-full min-h-0 flex-col bg-zinc-900/42 outline-none"
     >
       {/* 筛选区域 - 固定在顶部 */}
-      <div className="flex-shrink-0 p-4 pb-0">
+      <div className="flex-shrink-0 bg-zinc-900/46 p-4 pb-2">
         {/* 搜索框 */}
         <div className="mb-3">
           <div className="text-xs text-zinc-400 mb-2">{t('search.label')}</div>
@@ -218,11 +232,12 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('selectModel')}
-              className="pr-8"
+              className="border-zinc-700/50 bg-zinc-800/70 pr-8 text-zinc-100 placeholder:text-zinc-500 hover:border-zinc-600/60"
             />
             {searchQuery && (
               <UiIconButton
                 type="button"
+                showBorder={false}
                 onClick={() => setSearchQuery('')}
                 className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2 border-transparent bg-transparent text-zinc-400 hover:bg-zinc-700/60"
                 title={t('search.clear')}
@@ -242,7 +257,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               type="button"
               active={modelFilterProvider === 'all'}
               onClick={() => onFilterProviderChange('all')}
-              className="h-8 px-3 text-xs"
+              className={getFilterChipClass(modelFilterProvider === 'all')}
             >
               {t('all')}
             </UiChipButton>
@@ -252,7 +267,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 type="button"
                 active={modelFilterProvider === p.id}
                 onClick={() => onFilterProviderChange(p.id)}
-                className="h-8 px-3 text-xs"
+                className={getFilterChipClass(modelFilterProvider === p.id)}
               >
                 {t(`providers.${p.id}`, p.name)}
               </UiChipButton>
@@ -272,7 +287,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                   type="button"
                   active={modelFilterType === typeOption.value}
                   onClick={() => onFilterTypeChange(typeOption.value as 'all' | 'favorite' | 'image' | 'video' | 'audio')}
-                  className={`h-8 px-3 text-xs ${isTypeHidden && modelFilterType !== typeOption.value ? 'opacity-40' : ''}`}
+                  className={getFilterChipClass(modelFilterType === typeOption.value, isTypeHidden)}
                 >
                   {typeOption.label}
                 </UiChipButton>
@@ -296,7 +311,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 type="button"
                 active={modelFilterFunction === f.value}
                 onClick={() => onFilterFunctionChange(f.value)}
-                className="h-8 px-3 text-xs"
+                className={getFilterChipClass(modelFilterFunction === f.value)}
               >
                 {f.label}
               </UiChipButton>
@@ -309,6 +324,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           {filteredAndSortedModels.map(({ p, m }, index) => {
             const isHighlighted = index === highlightedIndex
+            const isSelected = p.id === selectedProvider && m.id === selectedModel
             return (
               <UiOptionButton
                 type="button"
@@ -316,39 +332,51 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 ref={isHighlighted ? highlightedItemRef : null}
                 data-close-on-select
                 onClick={() => onModelSelect(p.id, m.id)}
-                active={isHighlighted}
-                className={`relative w-full flex-col items-start px-3 py-3 ${isHighlighted ? 'ring-1 ring-[#007eff]/60' : ''}`}
+                active={isSelected}
+                variant="card"
+                className={`relative w-full flex-col items-start border px-3 py-2.5 ${isSelected
+                  ? 'border-[#4c88ff]/75 bg-[#2d4f8a] text-white'
+                  : 'border-zinc-700/45 bg-zinc-600/10 text-zinc-100 hover:border-zinc-600/55 hover:bg-zinc-700/40'
+                  } ${isHighlighted ? 'ring-2 ring-[#7aaeff]/50 ring-inset' : ''}`}
               >
-                {/* 收藏按钮 */}
-                <UiIconButton
-                  type="button"
-                  data-prevent-close
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onToggleFavorite(e, p.id, m.id)
-                  }}
-                  className="absolute top-1 right-1 z-10 h-6 w-6 border-transparent bg-transparent hover:bg-zinc-700/60"
-                  title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
-                >
-                  <svg
-                    className={`w-3.5 h-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`)
-                      ? 'fill-yellow-400 text-yellow-400'
-                      : 'fill-none text-zinc-500'
-                      }`}
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                </UiIconButton>
-                {/* 模型名称 */}
-                <div className="text-sm mb-1 pr-6">{m.name}</div>
-                {/* 底部信息行 */}
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-500">{t(`providers.${p.id}`, p.name)}</span>
-                  <span className="text-zinc-400">{m.type === 'image' ? t('types.image') : m.type === 'video' ? t('types.video') : t('types.audio')}</span>
+                {/* 两列两行（表格式）: 左列=名称/供应商，右列=收藏/类型 */}
+                <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>
+                  <UiMarqueeText
+                    text={m.name}
+                    className="col-start-1 row-start-1 min-w-0 text-left text-sm leading-5"
+                  />
+                  <div className="col-start-2 row-start-1 justify-self-end self-start">
+                    <UiIconButton
+                      type="button"
+                      showBorder={false}
+                      data-prevent-close
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onToggleFavorite(e, p.id, m.id)
+                      }}
+                      className="h-6 w-6 border-transparent bg-transparent text-zinc-500 hover:bg-zinc-700/60"
+                      title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
+                    >
+                      <svg
+                        className={`h-3.5 w-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`)
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'fill-none text-zinc-500'
+                          }`}
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                    </UiIconButton>
+                  </div>
+                  <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${MODEL_CARD_META_TEXT_CLASS}`}>
+                    {t(`providers.${p.id}`, p.name)}
+                  </span>
+                  <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${MODEL_CARD_META_TEXT_CLASS}`}>
+                    {m.type === 'image' ? t('types.image') : m.type === 'video' ? t('types.video') : t('types.audio')}
+                  </span>
                 </div>
               </UiOptionButton>
             )

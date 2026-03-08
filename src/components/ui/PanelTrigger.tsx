@@ -9,6 +9,7 @@ type PanelTriggerProps = {
   disabled?: boolean
   className?: string
   buttonClassName?: string
+  panelClassName?: string
   zIndex?: number
   panelWidth?: number
   alignment?: 'bottomLeft' | 'aboveCenter'
@@ -19,7 +20,7 @@ type PanelTriggerProps = {
 }
 
 export default function PanelTrigger(props: PanelTriggerProps) {
-  const { label, display, disabled, className, buttonClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight: _panelHeight, closeOnPanelClick = true, renderPanel, stableHeight } = props
+  const { label, display, disabled, className, buttonClassName, panelClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight: _panelHeight, closeOnPanelClick = true, renderPanel, stableHeight } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)
@@ -247,7 +248,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}
-          className={`${UI_TRIGGER_PANEL_CLASS} flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={`${UI_TRIGGER_PANEL_CLASS} ${panelClassName || ''} flex flex-col ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
           style={{
             position: 'fixed',
             top: pos.top,

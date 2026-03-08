@@ -32,6 +32,7 @@ interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
+  showBorder?: boolean;
 }
 
 interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -47,6 +48,7 @@ interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
 
 interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
+  variant?: 'default' | 'card' | 'flat';
 }
 
 interface UiModalProps {
@@ -86,10 +88,22 @@ export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
 
 UiButton.displayName = 'UiButton';
 
-export function UiIconButton({ className = '', active = false, ...props }: UiIconButtonProps) {
+export function UiIconButton({ className = '', active = false, showBorder = true, ...props }: UiIconButtonProps) {
+  const shellClass = showBorder
+    ? `${UI_FIELD_SURFACE_CLASS} border`
+    : 'border border-transparent bg-transparent backdrop-blur-0';
+
+  const stateClass = active
+    ? (showBorder
+      ? 'border-[#007eff]/55 bg-[#007eff]/20 text-text-dark'
+      : 'text-[#7aaeff] bg-[#007eff]/12')
+    : (showBorder
+      ? 'text-text-muted hover:bg-zinc-700/45'
+      : 'text-text-muted');
+
   return (
     <button
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-[#007eff]/55 bg-[#007eff]/20 text-text-dark' : 'text-text-muted hover:bg-zinc-700/45'} ${className}`}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${UI_BUTTON_RESET_CLASS} ${shellClass} ${stateClass} ${className}`}
       {...props}
     />
   );
@@ -120,10 +134,24 @@ export const UiPanel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>
 UiPanel.displayName = 'UiPanel';
 
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
-  ({ className = '', active = false, ...props }, ref) => {
-    const stateClass = active
-      ? `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_ACTIVE_CLASS}`
-      : `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_HOVER_CLASS}`;
+  ({ className = '', active = false, variant = 'default', ...props }, ref) => {
+    const stateClass = (() => {
+      if (variant === 'card') {
+        return active
+          ? 'border-[#007eff]/60 bg-[#007eff]/18 text-white'
+          : 'border-zinc-600/65 bg-zinc-900/45 text-text-dark hover:border-zinc-500/70 hover:bg-zinc-800/70';
+      }
+
+      if (variant === 'flat') {
+        return active
+          ? `${UI_OPTION_ITEM_ACTIVE_CLASS}`
+          : `border-transparent bg-transparent text-text-dark hover:bg-zinc-800/45 hover:border-zinc-600/55`;
+      }
+
+      return active
+        ? `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_ACTIVE_CLASS}`
+        : `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_HOVER_CLASS}`;
+    })();
 
     return (
       <button

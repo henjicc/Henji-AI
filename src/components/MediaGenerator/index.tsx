@@ -253,6 +253,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           display={`${currentProvider?.name}：${currentModel?.name || t('models:selectModel')}`}
           className="w-auto min-w-[180px] flex-shrink-0"
           panelWidth={1100}
+          panelClassName="border-zinc-500/70 bg-zinc-900/98 shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
           alignment="aboveCenter"
           stableHeight={true}
           closeOnPanelClick={(t) => {
