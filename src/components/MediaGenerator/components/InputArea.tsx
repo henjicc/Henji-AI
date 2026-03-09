@@ -163,6 +163,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
     return !requirementCheck.ok
   }
+  const generateDisabled = isGenerateDisabled()
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file)
@@ -348,16 +349,16 @@ const InputArea: React.FC<InputAreaProps> = ({
           disabled={isLoading}
         />
         {/* 生成按钮 */}
-          <UiIconButton
-            type="button"
-            onClick={onGenerate}
-            disabled={isGenerateDisabled()}
-            title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-            className={`absolute bottom-3 right-3 h-10 w-10 rounded-full transition-all duration-300 ${isGenerateDisabled()
-              ? 'border-zinc-700/20 bg-zinc-800/65 text-zinc-500'
-              : 'border-transparent bg-white text-zinc-900 hover:scale-105 hover:brightness-95'
-              }`}
-          >
+        <UiIconButton
+          type="button"
+          onClick={onGenerate}
+          disabled={generateDisabled}
+          title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
+          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-all duration-250 ${generateDisabled
+            ? '!border-zinc-700/25 !bg-zinc-800/65 !text-zinc-500'
+            : '!border-brand-500/55 !bg-accent !text-white hover:scale-105 hover:brightness-110'
+            }`}
+        >
             {isLoading ? (
               <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

@@ -7,6 +7,7 @@ import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { logError } from '@/utils/errorLogger'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
+import { UI_UPLOADER_CARD_BORDER_CLASS, UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS } from '../styleTokens'
 import { useReorderDrag } from './useReorderDrag'
 import { useStackedExpand } from './useStackedExpand'
 import { useFilePickerExpandLock } from './useFilePickerExpandLock'
@@ -205,6 +206,14 @@ export function StackedMediaUploader({
   const plusCollapsedTop = 42
   const plusExpandedLeft = Math.max(8, files.length * expandedStep)
   const plusExpandedTop = 4
+  const isEmptyState = files.length === 0
+  const plusUseCardShape = expanded || isEmptyState
+  const plusLeft = plusUseCardShape ? plusExpandedLeft : plusCollapsedLeft
+  const plusTop = plusUseCardShape ? plusExpandedTop : plusCollapsedTop
+  const plusRotate = isEmptyState ? 0 : (plusUseCardShape ? -2 : 0)
+  const plusZIndex = plusUseCardShape
+    ? (files.length > 0 ? 0 : 40)
+    : 40
 
   return (
     <div
@@ -226,9 +235,8 @@ export function StackedMediaUploader({
       <div className={`relative min-h-[82px] rounded-2xl bg-zinc-900/28 p-1.5 transition-colors ${isDragging ? 'bg-zinc-800/55' : ''}`}>
         {hintText && (
           <div
-            className={`line-clamp-2 max-w-[220px] text-[11px] leading-4 text-zinc-500 transition-all duration-220 ease-out ${
-              expanded ? 'mb-1.5 max-h-10 opacity-100' : 'mb-0 max-h-0 opacity-0'
-            }`}
+            className={`line-clamp-2 max-w-[220px] text-[11px] leading-4 text-zinc-500 transition-all duration-220 ease-out ${expanded ? 'mb-1.5 max-h-10 opacity-100' : 'mb-0 max-h-0 opacity-0'
+              }`}
           >
             {hintText}
           </div>
@@ -270,7 +278,7 @@ export function StackedMediaUploader({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="relative h-[64px] w-[48px] overflow-hidden rounded-[11px] border border-white/75 bg-zinc-800/35 p-0 shadow-[0_8px_16px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out hover:scale-[1.1]"
+                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-[11px] ${UI_UPLOADER_CARD_BORDER_CLASS} bg-zinc-800/35 p-0 shadow-[0_8px_16px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -316,22 +324,21 @@ export function StackedMediaUploader({
             <div
               className="absolute"
               style={{
-                left: `${expanded ? plusExpandedLeft : plusCollapsedLeft}px`,
-                top: `${expanded ? plusExpandedTop : plusCollapsedTop}px`,
-                transform: `rotate(${expanded ? -2 : 0}deg) scale(${expanded ? 1 : 0.92})`,
+                left: `${plusLeft}px`,
+                top: `${plusTop}px`,
+                transform: `rotate(${plusRotate}deg) scale(${plusUseCardShape ? 1 : 0.92})`,
                 transition: 'left 280ms cubic-bezier(0.15,0.75,0.3,1), top 280ms cubic-bezier(0.15,0.75,0.3,1), transform 280ms cubic-bezier(0.15,0.75,0.3,1), opacity 180ms ease',
-                zIndex: expanded ? 0 : 40
+                zIndex: plusZIndex
               }}
             >
               <UiButton
                 type="button"
                 variant="muted"
                 size="sm"
-                className={`p-0 text-zinc-100 ${
-                  expanded
-                    ? 'h-[64px] w-[48px] rounded-[11px] border border-white/70 bg-zinc-800/35 text-2xl shadow-[0_8px_16px_rgba(0,0,0,0.45)]'
-                    : 'h-[29px] w-[29px] aspect-square !rounded-full border-zinc-500/55 bg-zinc-700/82 text-base shadow-[0_6px_14px_rgba(0,0,0,0.42)]'
-                }`}
+                className={`p-0 text-zinc-100 ${plusUseCardShape
+                  ? `h-[64px] w-[48px] rounded-[11px] ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-zinc-900 text-2xl shadow-[0_8px_18px_rgba(0,0,0,0.38)] transition-transform duration-200 ease-out hover:scale-[1.1]`
+                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-zinc-500/55 bg-zinc-700/82 text-base shadow-[0_6px_14px_rgba(0,0,0,0.42)] transition-transform duration-200 ease-out hover:scale-[1.1]'
+                  }`}
                 onClick={(event) => {
                   event.stopPropagation()
                   beginFilePickerLock()
