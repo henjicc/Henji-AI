@@ -257,41 +257,42 @@ const InputArea: React.FC<InputAreaProps> = ({
   }
   const promptMinHeightClass =
     currentModel?.type === 'audio' || !shouldShowUpload
-      ? 'min-h-[176px]'
-      : 'min-h-[100px]'
+      ? 'min-h-[170px]'
+      : 'min-h-[146px]'
   const promptReferences = uploadedImages.map((imageUrl, index) => ({
     id: `image-ref-${index}`,
     label: `图${index + 1}`,
     thumbnailSrc: imageUrl
   }))
   return (
-    <div className="relative bg-panel/70 rounded-xl border border-zinc-700/50 p-4">
+    <div className="relative rounded-2xl border border-zinc-700/30 bg-zinc-900/20 p-2.5">
       {/* 统一的文件上传区域（支持视频+图片混合上传） */}
       {shouldShowUpload && (
-          <div className="mb-3">
-            {needsVideoUpload && (
-              <div className="text-xs text-zinc-400 mb-2">
-                {uploadHint}
-              </div>
-            )}
-            <FileUploader
-              files={mixedFiles}
-              onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
-              onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
-              onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
-              onReorder={needsVideoUpload ? handleMixedFileReorder : onImageReorder}
-              onImageClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
-              accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
-              multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
-              maxCount={mixedMaxCount}
-              hideUploadButton={shouldHideUploadButton}
-              fileTypes={needsVideoUpload && currentFileOrder.length > 0
-                ? currentFileOrder.map(item => item.type)
-                : undefined}
-              onDragStateChange={onDragStateChange}
-            />
-          </div>
-        )}
+        <div className="mb-2 px-0.5 py-0.5">
+          {needsVideoUpload && (
+            <div className="mb-1.5 text-[11px] leading-4 text-zinc-500">
+              {uploadHint}
+            </div>
+          )}
+          <FileUploader
+            files={mixedFiles}
+            onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
+            onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
+            onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
+            onReorder={needsVideoUpload ? handleMixedFileReorder : onImageReorder}
+            onImageClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
+            accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
+            multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
+            maxCount={mixedMaxCount}
+            hideUploadButton={shouldHideUploadButton}
+            fileTypes={needsVideoUpload && currentFileOrder.length > 0
+              ? currentFileOrder.map(item => item.type)
+              : undefined}
+            onDragStateChange={onDragStateChange}
+            className="gap-2.5"
+          />
+        </div>
+      )}
       {/* 文本输入框 */}
       <div className="relative">
         <ReferenceTextarea
@@ -320,10 +321,10 @@ const InputArea: React.FC<InputAreaProps> = ({
                 ? t('inputArea.placeholder.englishOnly')
                 : t('inputArea.placeholder.default')
           }
-          className="relative isolate overflow-hidden rounded-xl bg-zinc-900/30 backdrop-blur-lg"
+          className="relative isolate overflow-hidden rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
           highlightLayerClassName="text-sm leading-6 text-white"
-          highlightContentClassName={`${promptMinHeightClass} px-4 py-4 pr-14`}
-          textareaClassName={`ui-scrollbar w-full bg-transparent p-4 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden rounded-xl focus:outline-none focus:ring-2 focus:ring-white/20 transition-shadow duration-300 ease-in-out text-transparent caret-white placeholder-zinc-400 whitespace-pre-wrap break-words`}
+          highlightContentClassName={`${promptMinHeightClass} px-4 py-3 pr-14`}
+          textareaClassName={`ui-scrollbar !border-0 !bg-transparent !rounded-2xl w-full px-4 py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden focus:!ring-0 transition-colors duration-200 ease-out text-transparent caret-white placeholder-zinc-500/85 whitespace-pre-wrap break-words`}
           pickerClassName="w-[150px]"
           pickerListClassName="max-h-[180px]"
           renderPickerItem={({ item }) => (
@@ -352,8 +353,8 @@ const InputArea: React.FC<InputAreaProps> = ({
           disabled={isGenerateDisabled()}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
           className={`absolute bottom-3 right-3 h-10 w-10 rounded-full transition-all duration-300 ${isGenerateDisabled()
-            ? 'border-zinc-700/30 bg-zinc-700/50 text-zinc-500'
-            : 'border-transparent bg-accent text-white shadow-lg hover:scale-105 hover:brightness-110 hover:shadow-xl'
+            ? 'border-zinc-700/20 bg-zinc-800/65 text-zinc-500'
+            : 'border-transparent bg-white text-zinc-900 hover:scale-105 hover:brightness-95'
             }`}
         >
           {isLoading ? (

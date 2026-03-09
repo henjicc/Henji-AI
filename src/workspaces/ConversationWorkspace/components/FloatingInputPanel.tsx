@@ -33,20 +33,20 @@ export function FloatingInputPanel({
   return (
     <div
       ref={containerRef}
-      className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[95%] max-w-5xl"
+      className="fixed bottom-5 left-1/2 w-[95%] max-w-5xl -translate-x-1/2"
       style={{ zIndex: 20 }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}
     >
       <div
-        className="bg-panel/70 backdrop-blur-xl border border-zinc-700/50 rounded-2xl shadow-2xl hover:shadow-3xl cursor-pointer relative"
+        className="relative cursor-pointer overflow-hidden rounded-[24px] border border-zinc-700/35 bg-zinc-950/68 shadow-[0_12px_34px_rgba(0,0,0,0.42)] backdrop-blur-xl"
         style={{
           transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
           minHeight: isCollapsed || isCollapsing ? '52px' : 'auto',
           opacity: 1,
-          padding: isCollapsed || isCollapsing ? '12px 24px' : '16px',
+          padding: isCollapsed || isCollapsing ? '12px 22px' : '12px',
           overflow: isCollapsed && !isCollapsing ? 'visible' : 'hidden',
         }}
         onClick={() => {
@@ -59,7 +59,7 @@ export function FloatingInputPanel({
             top: isCollapsed || isCollapsing ? '12px' : '-60px',
             opacity: isCollapsed || isCollapsing ? 1 : 0,
             transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), top 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-            padding: '0 24px',
+            padding: '0 22px',
           }}
         >
           <div className="flex items-center justify-between gap-4">
