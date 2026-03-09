@@ -87,6 +87,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         />
         <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
           <UiIconButton
+            showBorder={false}
             onClick={handleIncrement}
             disabled={disabled || (param.max !== undefined && value >= param.max)}
             className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
@@ -94,6 +95,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
             ▲
           </UiIconButton>
           <UiIconButton
+            showBorder={false}
             onClick={handleDecrement}
             disabled={disabled || (param.min !== undefined && value <= param.min)}
             className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"

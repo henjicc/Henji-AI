@@ -20,7 +20,7 @@ export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = [
   {
     id: 'ppio',
     links: [
-      { id: 'register', url: 'https://ppio.com/user/register?invited_by=MLBDS6' },
+      { id: 'register', url: 'https://ppio.com/user/register?invited_by=WGY0DZ' },
       { id: 'keys', url: 'https://ppio.com/settings/key-management' }
     ]
   },

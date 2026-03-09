@@ -80,6 +80,7 @@ export default function NumberInput(props: NumberInputProps) {
         <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
           <UiIconButton
             type="button"
+            showBorder={false}
             onClick={() => {
               const next = clamp(safeValue + step)
               onChange(next)
@@ -90,6 +91,7 @@ export default function NumberInput(props: NumberInputProps) {
           >▲</UiIconButton>
           <UiIconButton
             type="button"
+            showBorder={false}
             onClick={() => {
               const next = clamp(safeValue - step)
               onChange(next)
