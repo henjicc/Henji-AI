@@ -88,6 +88,10 @@ export function ReferenceTextarea({
   const [pickerAnchor, setPickerAnchor] = useState<PickerAnchor>(PICKER_FALLBACK_ANCHOR);
 
   const highlightedText = useMemo(() => renderHighlightedText(value), [value]);
+  const referenceLabels = useMemo(
+    () => references.map((item) => item.label),
+    [references]
+  );
 
   const closePicker = useCallback(() => {
     setShowPicker(false);
@@ -168,7 +172,8 @@ export function ReferenceTextarea({
         value,
         selectionStart,
         selectionEnd,
-        deleteDirection
+        deleteDirection,
+        referenceLabels
       );
 
       if (deleteRange) {
@@ -260,6 +265,7 @@ export function ReferenceTextarea({
     pickerAnchorScale,
     pickerOffsetY,
     references.length,
+    referenceLabels,
     showPicker,
     submitShortcut,
     syncHighlightScroll,
@@ -283,7 +289,7 @@ export function ReferenceTextarea({
   const handleTextareaChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>): void => {
     const rawText = event.currentTarget.value;
     const cursor = event.currentTarget.selectionStart ?? rawText.length;
-    const normalized = normalizeReferenceTokenSpacing(rawText, cursor);
+    const normalized = normalizeReferenceTokenSpacing(rawText, cursor, referenceLabels);
     onChange(normalized.nextText);
 
     if (!normalized.changed) {
@@ -298,7 +304,7 @@ export function ReferenceTextarea({
       textareaRef.current.setSelectionRange(normalized.nextCursor, normalized.nextCursor);
       syncHighlightScroll();
     });
-  }, [onChange, syncHighlightScroll]);
+  }, [onChange, referenceLabels, syncHighlightScroll]);
 
   return (
     <div ref={rootRef} className={rootClassName}>

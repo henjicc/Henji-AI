@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import FileUploader from '@/components/ui/FileUploader'
 import AlertDialog from '@/components/ui/AlertDialog'
-import { ReferenceTextarea, UiIconButton } from '@/components/ui'
+import { ReferenceTextarea, StackedMediaUploader, UiIconButton } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { hasTag } from '@/core/tags'
@@ -259,42 +258,44 @@ const InputArea: React.FC<InputAreaProps> = ({
     currentModel?.type === 'audio' || !shouldShowUpload
       ? 'min-h-[170px]'
       : 'min-h-[146px]'
+  const promptLeftPaddingClass =
+    shouldShowUpload
+      ? 'pl-[116px]'
+      : 'pl-4'
   const promptReferences = uploadedImages.map((imageUrl, index) => ({
     id: `image-ref-${index}`,
     label: `图${index + 1}`,
     thumbnailSrc: imageUrl
   }))
+
   return (
     <div className="relative rounded-2xl border border-zinc-700/30 bg-zinc-900/20 p-2.5">
-      {/* 统一的文件上传区域（支持视频+图片混合上传） */}
-      {shouldShowUpload && (
-        <div className="mb-2 px-0.5 py-0.5">
-          {needsVideoUpload && (
-            <div className="mb-1.5 text-[11px] leading-4 text-zinc-500">
-              {uploadHint}
-            </div>
-          )}
-          <FileUploader
-            files={mixedFiles}
-            onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
-            onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
-            onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
-            onReorder={needsVideoUpload ? handleMixedFileReorder : onImageReorder}
-            onImageClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
-            accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
-            multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
-            maxCount={mixedMaxCount}
-            hideUploadButton={shouldHideUploadButton}
-            fileTypes={needsVideoUpload && currentFileOrder.length > 0
-              ? currentFileOrder.map(item => item.type)
-              : undefined}
-            onDragStateChange={onDragStateChange}
-            className="gap-2.5"
-          />
-        </div>
-      )}
-      {/* 文本输入框 */}
       <div className="relative">
+        {shouldShowUpload && (
+          <div className="pointer-events-auto absolute left-2 top-2 z-20">
+            <StackedMediaUploader
+              files={mixedFiles}
+              onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
+              onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
+              onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
+              onReorder={needsVideoUpload ? handleMixedFileReorder : onImageReorder}
+              onFileClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
+              accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
+              multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
+              maxCount={mixedMaxCount}
+              hideUploadButton={shouldHideUploadButton}
+              fileTypes={needsVideoUpload && currentFileOrder.length > 0
+                ? currentFileOrder.map(item => item.type)
+                : undefined}
+              onDragStateChange={onDragStateChange}
+              disabled={isLoading}
+              hintText={needsVideoUpload ? uploadHint : undefined}
+            />
+          </div>
+        )}
+
+        {/* 文本输入框 */}
+        <div className="relative">
         <ReferenceTextarea
           value={input}
           onChange={setInput}
@@ -323,8 +324,8 @@ const InputArea: React.FC<InputAreaProps> = ({
           }
           className="relative isolate overflow-hidden rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
           highlightLayerClassName="text-sm leading-6 text-white"
-          highlightContentClassName={`${promptMinHeightClass} px-4 py-3 pr-14`}
-          textareaClassName={`ui-scrollbar !border-0 !bg-transparent !rounded-2xl w-full px-4 py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden focus:!ring-0 transition-colors duration-200 ease-out text-transparent caret-white placeholder-zinc-500/85 whitespace-pre-wrap break-words`}
+          highlightContentClassName={`${promptMinHeightClass} ${promptLeftPaddingClass} py-3 pr-14`}
+          textareaClassName={`ui-scrollbar !border-0 !bg-transparent !backdrop-blur-0 !shadow-none !rounded-2xl w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden focus:!ring-0 focus:!shadow-none transition-colors duration-200 ease-out text-transparent caret-white placeholder-zinc-500/85 whitespace-pre-wrap break-words`}
           pickerClassName="w-[150px]"
           pickerListClassName="max-h-[180px]"
           renderPickerItem={({ item }) => (
@@ -372,6 +373,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             </svg>
           )}
         </UiIconButton>
+        </div>
       </div>
       {/* Alert Dialog */}
       <AlertDialog

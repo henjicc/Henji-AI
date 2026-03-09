@@ -84,7 +84,7 @@ export function renderHighlightedText(text: string): ReactNode {
     segments.push(
       <span
         key={`ref-${matchStart}`}
-        className="relative z-0 text-white [text-shadow:0.24px_0_currentColor,-0.24px_0_currentColor] before:absolute before:-inset-x-[4px] before:-inset-y-[1px] before:-z-10 before:rounded-[7px] before:bg-accent/55 before:content-['']"
+        className="relative z-0 text-white before:absolute before:-inset-x-[4px] before:-inset-y-[1px] before:-z-10 before:rounded-[7px] before:bg-accent/55 before:content-['']"
       >
         {matchText}
       </span>

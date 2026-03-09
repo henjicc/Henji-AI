@@ -19,14 +19,40 @@ interface TokenRange extends TextRange {
 const IMAGE_REFERENCE_TOKEN_REGEX = /@图\d+/g;
 const IMAGE_REFERENCE_PREFIX_REGEX = /@(?=\s*图\d+)/g;
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function createReferenceTokenRegex(referenceLabels?: string[]): RegExp {
+  if (!referenceLabels || referenceLabels.length === 0) {
+    return IMAGE_REFERENCE_TOKEN_REGEX;
+  }
+
+  const labels = Array.from(
+    new Set(
+      referenceLabels
+        .map((label) => label.trim())
+        .filter((label) => label.length > 0)
+    )
+  ).sort((a, b) => b.length - a.length);
+
+  if (labels.length === 0) {
+    return IMAGE_REFERENCE_TOKEN_REGEX;
+  }
+
+  const alternation = labels.map((label) => escapeRegExp(label)).join('|');
+  return new RegExp(`@(?:${alternation})`, 'g');
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function findTokenRanges(text: string): TokenRange[] {
+function findTokenRanges(text: string, referenceLabels?: string[]): TokenRange[] {
   const ranges: TokenRange[] = [];
-  IMAGE_REFERENCE_TOKEN_REGEX.lastIndex = 0;
-  let match = IMAGE_REFERENCE_TOKEN_REGEX.exec(text);
+  const tokenRegex = createReferenceTokenRegex(referenceLabels);
+  tokenRegex.lastIndex = 0;
+  let match = tokenRegex.exec(text);
   while (match) {
     const token = match[0];
     const start = match.index;
@@ -41,7 +67,7 @@ function findTokenRanges(text: string): TokenRange[] {
       blockEnd,
     });
 
-    match = IMAGE_REFERENCE_TOKEN_REGEX.exec(text);
+    match = tokenRegex.exec(text);
   }
 
   return ranges;
@@ -71,7 +97,11 @@ export function insertReferenceToken(
   };
 }
 
-export function normalizeReferenceTokenSpacing(text: string, cursor: number): NormalizedTextResult {
+export function normalizeReferenceTokenSpacing(
+  text: string,
+  cursor: number,
+  referenceLabels?: string[]
+): NormalizedTextResult {
   const safeCursor = clamp(cursor, 0, text.length);
   const segments: string[] = [];
   let changed = false;
@@ -80,8 +110,9 @@ export function normalizeReferenceTokenSpacing(text: string, cursor: number): No
   let previousTokenEnd = -1;
   let previousAddedTrailingSpace = false;
 
-  IMAGE_REFERENCE_TOKEN_REGEX.lastIndex = 0;
-  let match = IMAGE_REFERENCE_TOKEN_REGEX.exec(text);
+  const tokenRegex = createReferenceTokenRegex(referenceLabels);
+  tokenRegex.lastIndex = 0;
+  let match = tokenRegex.exec(text);
   while (match) {
     const tokenText = match[0];
     const tokenStart = match.index;
@@ -115,7 +146,7 @@ export function normalizeReferenceTokenSpacing(text: string, cursor: number): No
     lastIndex = tokenEnd;
     previousTokenEnd = tokenEnd;
     previousAddedTrailingSpace = shouldAddTrailingSpace;
-    match = IMAGE_REFERENCE_TOKEN_REGEX.exec(text);
+    match = tokenRegex.exec(text);
   }
 
   if (!changed) {
@@ -135,13 +166,14 @@ export function resolveReferenceAwareDeleteRange(
   text: string,
   selectionStart: number,
   selectionEnd: number,
-  direction: DeleteDirection
+  direction: DeleteDirection,
+  referenceLabels?: string[]
 ): TextRange | null {
   const safeStart = clamp(selectionStart, 0, text.length);
   const safeEnd = clamp(selectionEnd, 0, text.length);
   const selectionMin = Math.min(safeStart, safeEnd);
   const selectionMax = Math.max(safeStart, safeEnd);
-  const tokenRanges = findTokenRanges(text);
+  const tokenRanges = findTokenRanges(text, referenceLabels);
 
   if (selectionMin !== selectionMax) {
     let expandedStart = selectionMin;
