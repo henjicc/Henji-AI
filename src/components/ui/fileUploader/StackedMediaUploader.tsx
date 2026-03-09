@@ -223,7 +223,7 @@ export function StackedMediaUploader({
       onDrop={(event) => void handleDrop(event)}
       onMouseUp={() => void handleCustomDrop()}
     >
-      <div className={`relative min-h-[82px] rounded-2xl border border-zinc-700/30 bg-zinc-900/28 p-1.5 transition-colors ${isDragging ? 'border-accent/55 bg-zinc-800/55' : ''}`}>
+      <div className={`relative min-h-[82px] rounded-2xl bg-zinc-900/28 p-1.5 transition-colors ${isDragging ? 'bg-zinc-800/55' : ''}`}>
         {hintText && (
           <div
             className={`line-clamp-2 max-w-[220px] text-[11px] leading-4 text-zinc-500 transition-all duration-220 ease-out ${
@@ -270,7 +270,7 @@ export function StackedMediaUploader({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="relative h-[64px] w-[48px] overflow-hidden rounded-[11px] border border-white/75 bg-zinc-800/35 p-0 shadow-[0_8px_16px_rgba(0,0,0,0.45)]"
+                  className="relative h-[64px] w-[48px] overflow-hidden rounded-[11px] border border-white/75 bg-zinc-800/35 p-0 shadow-[0_8px_16px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out hover:scale-[1.1]"
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -330,7 +330,7 @@ export function StackedMediaUploader({
                 className={`p-0 text-zinc-100 ${
                   expanded
                     ? 'h-[64px] w-[48px] rounded-[11px] border border-white/70 bg-zinc-800/35 text-2xl shadow-[0_8px_16px_rgba(0,0,0,0.45)]'
-                    : 'h-9 w-9 rounded-full border-zinc-500/55 bg-zinc-700/82 text-xl shadow-[0_6px_14px_rgba(0,0,0,0.42)]'
+                    : 'h-[29px] w-[29px] aspect-square !rounded-full border-zinc-500/55 bg-zinc-700/82 text-base shadow-[0_6px_14px_rgba(0,0,0,0.42)]'
                 }`}
                 onClick={(event) => {
                   event.stopPropagation()
