@@ -1,12 +1,12 @@
 :root {
-  --bg-rgb: 15 15 15;
-  --surface-rgb: 26 26 26;
-  --border-rgb: 42 42 42;
+  --bg-rgb: 23 23 23;
+  --surface-rgb: 38 38 38;
+  --border-rgb: 64 64 64;
   --text-rgb: 255 255 255;
-  --text-muted-rgb: 136 136 136;
+  --text-muted-rgb: 163 163 163;
   --accent-rgb: 59 130 246;
-  --ui-surface-panel: rgb(26, 26, 26);
-  --ui-surface-field: rgba(10, 10, 12, 0.92);
+  --ui-surface-panel: rgb(23, 23, 23);
+  --ui-surface-field: rgba(10, 10, 10, 0.92);
   --ui-border-soft: rgba(255, 255, 255, 0.14);
   --ui-border-strong: rgba(255, 255, 255, 0.24);
   --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
@@ -31,24 +31,24 @@
 }
 
 :root[data-theme-tone='warm'] {
-  --bg-rgb: 20 15 12;
-  --surface-rgb: 32 24 20;
-  --border-rgb: 64 50 42;
-  --text-rgb: 246 237 228;
-  --text-muted-rgb: 173 149 130;
+  --bg-rgb: 38 38 38;
+  --surface-rgb: 64 64 64;
+  --border-rgb: 82 82 82;
+  --text-rgb: 255 255 255;
+  --text-muted-rgb: 212 212 212;
 }
 
 :root[data-theme-tone='cool'] {
-  --bg-rgb: 10 16 24;
-  --surface-rgb: 17 27 39;
-  --border-rgb: 42 58 78;
-  --text-rgb: 235 244 255;
-  --text-muted-rgb: 140 163 194;
+  --bg-rgb: 10 10 10;
+  --surface-rgb: 23 23 23;
+  --border-rgb: 38 38 38;
+  --text-rgb: 245 245 245;
+  --text-muted-rgb: 163 163 163;
 }
 
 .ui-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.56) transparent;
+  scrollbar-color: rgba(163, 163, 163, 0.56) transparent;
 }
 
 .ui-scrollbar::-webkit-scrollbar {
@@ -62,11 +62,11 @@
 
 .ui-scrollbar::-webkit-scrollbar-thumb {
   border-radius: 9999px;
-  background: rgba(148, 163, 184, 0.5);
+  background: rgba(163, 163, 163, 0.5);
 }
 
 .ui-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.72);
+  background: rgba(163, 163, 163, 0.72);
 }
 
 .ui-panel {

@@ -19,7 +19,7 @@ export interface SettingsDialogProps {
 
 const getActionClass = (variant: DialogActionVariant | undefined): string => {
   if (variant === 'danger') {
-    return 'bg-red-600/70 text-white hover:bg-red-600'
+    return 'bg-red-600 text-white hover:bg-red-500'
   }
   if (variant === 'secondary') {
     return ''
@@ -38,7 +38,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
         onClose?.()
       }}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/70" />
       <UiPanel
         className="relative w-[400px] p-4"
         onClick={(e) => e.stopPropagation()}

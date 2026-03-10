@@ -91,7 +91,7 @@ const UpdateSection: React.FC = () => {
             <p className="mt-2 text-xs text-zinc-500">{t('sections.updates.enableHint')}</p>
           </div>
 
-          <div className={`transition-opacity duration-300 ${!config.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`transition-colors duration-300 ${!config.enabled ? 'pointer-events-none' : ''}`}>
             <label className="block text-sm font-medium mb-2 text-zinc-300">
               {t('sections.updates.frequencyLabel')}
             </label>
@@ -111,7 +111,7 @@ const UpdateSection: React.FC = () => {
             <p className="mt-2 text-xs text-zinc-500">{t('sections.updates.frequencyHint')}</p>
           </div>
 
-          <div className="pt-3 border-t border-zinc-700/30 space-y-3">
+          <div className="space-y-3 border-t border-border-dark pt-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-zinc-300 font-medium">{t('sections.updates.currentVersionLabel')}</p>

@@ -119,7 +119,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 h-10 bg-panel border-b border-zinc-700/50 z-40 flex items-center justify-between px-3 text-white"
+      className="fixed top-0 left-0 right-0 z-[2147483647] flex h-10 items-center justify-between border-b border-zinc-700/50 bg-panel px-3 text-white"
       data-tauri-drag-region
       style={{ WebkitAppRegion: 'drag' }}
     >

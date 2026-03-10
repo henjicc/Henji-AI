@@ -38,6 +38,7 @@ interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
   showBorder?: boolean;
+  appearance?: 'default' | 'hover-only';
 }
 
 interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -75,10 +76,10 @@ function resolveButtonVariant(variant: ButtonVariant): string {
   }
 
   if (variant === 'ghost') {
-    return 'border border-zinc-700/50 bg-transparent text-text-dark hover:bg-zinc-800/45';
+    return 'border border-border-dark bg-surface-dark text-text-dark hover:bg-layer';
   }
 
-  return `${UI_FIELD_SURFACE_CLASS} border border-zinc-700/50 text-text-dark hover:bg-zinc-700/45`;
+  return `${UI_FIELD_SURFACE_CLASS} border border-border-dark text-text-dark hover:bg-layer`;
 }
 
 function resolveButtonSize(size: ButtonSize, variant: ButtonVariant): string {
@@ -113,8 +114,8 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       ref={ref}
       className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 bg-transparent px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
         active
-          ? '!bg-brand-600/25 text-accent after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-[\'\']'
-          : 'text-zinc-400 hover:bg-zinc-900/65 hover:text-zinc-100'
+          ? '!bg-layer text-accent after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-[\'\']'
+          : 'text-zinc-400 hover:bg-surface-dark hover:text-zinc-100'
       } ${className}`}
       {...props}
     />
@@ -123,18 +124,29 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
 
 UiNavButton.displayName = 'UiNavButton';
 
-export function UiIconButton({ className = '', active = false, showBorder = true, ...props }: UiIconButtonProps) {
+export function UiIconButton({
+  className = '',
+  active = false,
+  showBorder = true,
+  appearance = 'default',
+  ...props
+}: UiIconButtonProps) {
+  const hoverOnly = appearance === 'hover-only';
   const shellClass = showBorder
     ? `${UI_FIELD_SURFACE_CLASS} border`
-    : 'border border-transparent bg-transparent backdrop-blur-0';
+    : hoverOnly
+      ? 'border border-transparent bg-transparent'
+      : 'border border-border-dark bg-surface-dark';
 
   const stateClass = active
     ? (showBorder
       ? `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-text-dark`
       : `${UI_COLOR_ACCENT_TEXT_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS}`)
     : (showBorder
-      ? 'text-text-muted hover:bg-zinc-700/45'
-      : 'text-text-muted');
+      ? 'text-text-muted hover:bg-layer'
+      : hoverOnly
+        ? 'text-text-muted hover:border-border-dark hover:bg-surface-dark'
+        : 'text-text-muted');
 
   return (
     <button
@@ -148,7 +160,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
   ({ className = '', active = false, ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-brand-500/70 bg-brand-600/25 text-accent' : 'text-text-dark hover:bg-zinc-700/45'} ${className}`}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-brand-500 bg-layer text-accent' : 'text-text-dark hover:bg-layer'} ${className}`}
       {...props}
     />
   )
@@ -173,14 +185,14 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     const stateClass = (() => {
       if (variant === 'card') {
         return active
-          ? 'border-accent/60 bg-accent/20 text-white'
-          : 'border-zinc-600/65 bg-zinc-900/45 text-text-dark hover:border-zinc-500/70 hover:bg-zinc-800/70';
+          ? 'border-accent bg-brand-600 text-white'
+          : 'border-border-dark bg-surface-dark text-text-dark hover:border-text-muted hover:bg-layer';
       }
 
       if (variant === 'flat') {
         return active
           ? `${UI_OPTION_ITEM_ACTIVE_CLASS}`
-          : `border-transparent bg-transparent text-text-dark hover:bg-zinc-800/45 hover:border-zinc-600/55`;
+          : `border-border-dark bg-surface-dark text-text-dark hover:bg-layer hover:border-text-muted`;
       }
 
       return active
@@ -203,7 +215,7 @@ UiOptionButton.displayName = 'UiOptionButton';
 export function UiTextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400/85 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   );
@@ -213,7 +225,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, TextareaHTMLAttri
   ({ className = '', ...props }, ref) => (
     <textarea
       ref={ref}
-      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400/85 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   )
@@ -225,7 +237,7 @@ export const UiInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInpu
   ({ className = '', ...props }, ref) => (
     <input
       ref={ref}
-      className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-zinc-400/85 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   )
@@ -238,7 +250,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
     <input
       ref={ref}
       type="range"
-      className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-accent ${className}`}
+      className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-accent ${className}`}
       {...props}
     />
   )
@@ -268,8 +280,8 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       aria-checked={checked}
       className={`inline-flex h-5 w-5 items-center justify-center rounded border transition-colors ${
         checked
-          ? 'border-accent/60 bg-accent/20 text-accent'
-          : 'border-[rgba(255,255,255,0.2)] bg-bg-dark/60 text-transparent hover:border-[rgba(255,255,255,0.32)]'
+          ? 'border-accent bg-brand-600 text-accent'
+          : 'border-border-dark bg-bg-dark text-transparent hover:border-text-muted'
       } ${className}`}
       onClick={(event) => {
         onClick?.(event);

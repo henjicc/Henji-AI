@@ -31,7 +31,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
       />
       <p className="mt-2 text-xs text-zinc-500">{t('sections.display.priceHint')}</p>
 
-      <div className="mt-4 pt-4 border-t border-zinc-700/30">
+      <div className="mt-4 border-t border-border-dark pt-4">
         <Toggle
           label={t('sections.display.autoFocusLabel')}
           checked={enableAutoFocusModelSearch}

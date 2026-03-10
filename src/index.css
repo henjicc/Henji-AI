@@ -3,22 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --bg-rgb: 15 15 15;
-  --surface-rgb: 26 26 26;
-  --border-rgb: 42 42 42;
+  --bg-rgb: 23 23 23;
+  --surface-rgb: 38 38 38;
+  --border-rgb: 64 64 64;
   --text-rgb: 255 255 255;
-  --text-muted-rgb: 136 136 136;
+  --text-muted-rgb: 163 163 163;
   --accent-rgb: 59 130 246;
-  --app-rgb: 10 11 13;
-  --canvas-rgb: 11 12 16;
-  --panel-rgb: 19 19 19;
-  --layer-rgb: 27 28 33;
+  --app-rgb: 10 10 10;
+  --canvas-rgb: 10 10 10;
+  --panel-rgb: 23 23 23;
+  --layer-rgb: 38 38 38;
   --brand-300-rgb: 122 174 255;
   --brand-500-rgb: 76 136 255;
   --brand-600-rgb: 47 98 209;
   --brand-700-rgb: 45 79 138;
-  --ui-surface-panel: rgb(26, 26, 26);
-  --ui-surface-field: rgba(10, 10, 12, 0.92);
+  --ui-surface-panel: rgb(23, 23, 23);
+  --ui-surface-field: rgba(10, 10, 10, 0.92);
   --ui-border-soft: rgba(255, 255, 255, 0.14);
   --ui-border-strong: rgba(255, 255, 255, 0.24);
   --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
@@ -55,17 +55,17 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(163, 163, 163, 0.4);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.65);
+  background: rgba(163, 163, 163, 0.65);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  scrollbar-color: rgba(163, 163, 163, 0.5) transparent;
 }
 
 /* 动画关键帧 */
@@ -266,13 +266,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(163, 163, 163, 0.4);
   border-radius: 999px;
   transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.65);
+  background: rgba(163, 163, 163, 0.65);
 }
 
 /* 图片查看器动画 */
@@ -393,7 +393,7 @@ body {
 }
 
 .dropdown-scroll {
-  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  scrollbar-color: rgba(163, 163, 163, 0.5) transparent;
 }
 
 .dropdown-scroll::-webkit-scrollbar-track {
@@ -401,7 +401,7 @@ body {
 }
 
 .dropdown-scroll {
-  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+  scrollbar-color: rgba(163, 163, 163, 0.5) transparent;
 }
 
 /* Number input spinner removal */

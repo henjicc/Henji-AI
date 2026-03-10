@@ -17,8 +17,8 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
       data-dialog="true"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative bg-panel/80 border border-zinc-700/50 rounded-xl p-4 w-[400px] shadow-2xl">
+      <div className="absolute inset-0 bg-black/70" />
+      <div className="relative w-[400px] rounded-xl border border-border-dark bg-panel p-4 shadow-2xl">
         <div className="text-white text-base">{title}</div>
         <div className="mt-4">
           <div className="text-sm text-zinc-300 mb-2 truncate">{progress.file}</div>

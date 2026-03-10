@@ -53,7 +53,7 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
                         onClick={() => openExternal(link.url)}
                         variant="ghost"
                         size="sm"
-                        className="h-8 gap-1 border-accent/40 bg-accent/10 px-3 text-xs text-brand-300 hover:bg-accent/20"
+                        className="h-8 gap-1 border-accent bg-layer px-3 text-xs text-brand-300 hover:bg-surface-dark"
                       >
                         {link.label}
                         <ExternalLink size={12} />

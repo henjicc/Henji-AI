@@ -33,11 +33,11 @@ const UploadSection: React.FC = () => {
             options={options}
             onSelect={(value) => setProvider(value as UploadProvider)}
             className="w-40"
-            buttonClassName="w-full bg-zinc-900/50 border-zinc-700/50 h-[34px]"
+            buttonClassName="h-[34px] w-full bg-surface-dark border-border-dark"
           />
         </div>
 
-        <div className="border-t border-zinc-700/30 pt-4">
+        <div className="border-t border-border-dark pt-4">
           <Toggle
             label={t('sections.upload.fallbackLabel')}
             checked={fallbackEnabled}

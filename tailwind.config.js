@@ -42,12 +42,12 @@ export default {
         },
         // 暗色主题
         dark: {
-          bg: '#0a0b0d',
-          'bg-secondary': '#1a1a1a',
+          bg: '#0a0a0a',
+          'bg-secondary': '#171717',
           text: '#ffffff',
-          'text-secondary': '#a0a0a0',
+          'text-secondary': '#a3a3a3',
           border: '#404040',
-          accent: '#007eff',
+          accent: '#3b82f6',
         }
       },
       keyframes: {

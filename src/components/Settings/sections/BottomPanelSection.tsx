@@ -39,7 +39,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
           <p className="mt-2 text-xs text-zinc-500">{t('sections.interface.autoCollapseHint')}</p>
         </div>
 
-        <div className={`transition-opacity duration-300 ${!enableAutoCollapse ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
           <NumberInput
             label={t('sections.interface.collapseDelayLabel')}
             value={collapseDelay}
@@ -53,7 +53,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
           <p className="mt-2 text-xs text-zinc-500">{t('sections.interface.collapseDelayHint')}</p>
         </div>
 
-        <div className={`transition-opacity duration-300 ${!enableAutoCollapse ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
           <Toggle
             label={t('sections.interface.collapseOnScrollLabel')}
             checked={collapseOnScrollOnly}

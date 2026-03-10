@@ -52,7 +52,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
           <p className="mt-2 text-xs text-zinc-500">{t('sections.download.enableHint')}</p>
         </div>
 
-        <div className={`transition-opacity duration-300 ${!enableQuickDownload ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`transition-colors duration-300 ${!enableQuickDownload ? 'pointer-events-none' : ''}`}>
           <Toggle
             label={t('sections.download.buttonOnlyLabel')}
             checked={quickDownloadButtonOnly}
@@ -65,7 +65,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
           <p className="mt-2 text-xs text-zinc-500">{t('sections.download.buttonOnlyHint')}</p>
         </div>
 
-        <div className={`transition-opacity duration-300 ${!enableQuickDownload ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`transition-colors duration-300 ${!enableQuickDownload ? 'pointer-events-none' : ''}`}>
           <label className="block text-sm font-medium mb-2 text-zinc-300">
             {t('sections.download.pathLabel')}
           </label>

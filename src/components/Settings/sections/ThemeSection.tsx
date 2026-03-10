@@ -147,7 +147,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
                   {(['bg', 'surface', 'border', 'text'] as ThemeColorToken[]).map((token) => (
                     <span
                       key={`${preset.id}-${token}`}
-                      className="h-3 w-3 rounded-full border border-white/25"
+                      className="h-3 w-3 rounded-full border border-border-dark"
                       style={{ backgroundColor: preset.colors[token] }}
                     />
                   ))}
@@ -179,10 +179,8 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
                 className="!h-7 !w-7 !rounded-md"
                 aria-label={option}
                 onClick={() => onChangeAccentColor(option)}
-                style={{
-                  backgroundColor: option,
-                  borderColor: accentColor.toUpperCase() === option ? 'rgba(255,255,255,0.9)' : undefined,
-                }}
+                style={{ backgroundColor: option }}
+                active={accentColor.toUpperCase() === option}
               />
             ))}
             <UiColorInput
@@ -244,7 +242,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
           </div>
           <div className="grid grid-cols-1 gap-3">
             {THEME_COLOR_TOKENS.map((token) => (
-              <div key={token} className="rounded-lg border border-zinc-700/45 bg-zinc-900/35 p-2">
+              <div key={token} className="rounded-lg border border-border-dark bg-surface-dark p-2">
                 <div className="mb-2 text-xs text-zinc-300">{t(tokenLabelKeyMap[token])}</div>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {getTokenColorOptions(token).map((option) => (
@@ -254,11 +252,8 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
                       className="!h-6 !w-6 !rounded-md"
                       aria-label={option}
                       onClick={() => onChangeThemeColor(token, option)}
-                      style={{
-                        backgroundColor: option,
-                        borderColor:
-                          colors[token].toUpperCase() === option ? 'rgba(255,255,255,0.9)' : undefined,
-                      }}
+                      style={{ backgroundColor: option }}
+                      active={colors[token].toUpperCase() === option}
                     />
                   ))}
                 </div>

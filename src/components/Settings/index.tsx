@@ -65,9 +65,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     return () => cancelAnimationFrame(frame)
   }, [activeTab, activeSectionId])
 
-  useEffect(() => {
-    setActiveSectionId(activeSections[0]?.id ?? '')
-  }, [activeSections])
+  const handleTabSelect = (tabId: SettingsTab): void => {
+    setActiveTab(tabId)
+    setActiveSectionId(sectionMap[tabId][0]?.id ?? '')
+  }
 
   const handleSectionSelect = (sectionId: string): void => {
     setActiveSectionId(sectionId)
@@ -75,37 +76,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   return (
     <div
-      className={`fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
       onClick={handleClose}
     >
       <div
-        className={`bg-panel/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl w-[min(92vw,1320px)] shadow-2xl transform transition-all duration-300 scale-100 flex overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        className={`flex w-[min(90vw,1200px)] scale-100 transform overflow-hidden rounded-2xl border border-border-dark bg-panel shadow-2xl transition-all duration-300 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
         style={{ height: '76vh', minHeight: '500px', maxHeight: '940px' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-[156px] bg-zinc-950/58 border-r border-zinc-700/45 flex flex-col">
-          <div className="h-[58px] border-b border-zinc-700/45" />
+        <div className="flex w-[156px] flex-col border-r border-border-dark bg-app">
+          <div className="h-[58px] border-b border-border-dark" />
           <div className="flex-1 py-3">
             {tabs.map(tab => (
-              <UiNavButton
-                key={tab.id}
-                active={activeTab === tab.id}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <tab.icon className="h-[18px] w-[18px] shrink-0 opacity-90" />
+                <UiNavButton
+                  key={tab.id}
+                  active={activeTab === tab.id}
+                  onClick={() => handleTabSelect(tab.id)}
+                >
+                <tab.icon className="h-[18px] w-[18px] shrink-0" />
                 <span className="ml-3 font-medium text-[15px] leading-none text-left">{tab.label}</span>
               </UiNavButton>
             ))}
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col h-full">
-          <div className="h-[58px] border-b border-zinc-700/45 bg-zinc-900/20 px-3 flex items-center justify-end">
+        <div className="flex h-full flex-1 flex-col bg-app">
+          <div className="flex h-[58px] items-center justify-end border-b border-border-dark bg-app px-3">
             <UiIconButton
               onClick={handleClose}
               aria-label={t('actions.close')}
               showBorder={false}
-              className="!h-9 !w-9 rounded-lg border border-transparent bg-transparent text-zinc-400 hover:border-zinc-700/45 hover:bg-zinc-900/45 hover:text-white"
+              appearance="hover-only"
+              className="!h-9 !w-9 rounded-lg text-zinc-300 hover:text-white"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -114,7 +116,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
 
           <div className="flex-1 min-h-0 flex">
-            <div className="w-[190px] border-r border-zinc-700/45 p-3">
+            <div className="w-[190px] border-r border-border-dark bg-app py-3">
               <div className="space-y-1.5">
                 {activeSections.map(section => (
                   <UiNavButton
@@ -129,17 +131,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               </div>
             </div>
 
-            <div ref={contentRef} className="flex-1 overflow-y-auto settings-scroll-body">
+            <div ref={contentRef} className="settings-scroll-body flex-1 overflow-y-auto bg-app">
               {ActiveTabComponent && <ActiveTabComponent sectionId={activeSectionId} />}
             </div>
           </div>
 
-          <div className="px-5 py-4 border-t border-zinc-700/45 bg-zinc-900/20 flex justify-end">
+          <div className="flex justify-end border-t border-border-dark bg-app px-5 py-4">
             <UiButton
               onClick={handleClose}
               variant="primary"
               size="sm"
-              className="h-12 px-8 text-base shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
+              className="h-[42px] px-5 text-[16px] font-medium shadow-lg"
             >
               {t('actions.close')}
             </UiButton>
@@ -151,4 +153,3 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 }
 
 export default SettingsModal
-

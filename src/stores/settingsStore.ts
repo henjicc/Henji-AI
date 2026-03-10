@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { SETTINGS_ACCENT_HEX } from '@/core/theme/colorTokens';
+import {
+  LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
+  LEGACY_THEME_PALETTE_PRESET_HEX,
+  SETTINGS_ACCENT_HEX,
+  THEME_PALETTE_PRESET_HEX,
+} from '@/core/theme/colorTokens';
 import {
   DEFAULT_THEME_COLOR_SCHEME,
   normalizeThemeColorScheme,
@@ -39,6 +44,9 @@ interface SettingsState {
 }
 
 const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
+const LEGACY_DEFAULT_THEME_COLOR_SCHEME: ThemeColorScheme = {
+  ...LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
+};
 
 function normalizeHexColor(input: string): string {
   const trimmed = input.trim();
@@ -66,6 +74,37 @@ function normalizeApiKeys(input: ProviderApiKeys | null | undefined): ProviderAp
     acc[normalizedProviderId] = normalizeApiKey(key);
     return acc;
   }, {});
+}
+
+function shouldUpgradeLegacyNeutralTheme(input?: Partial<ThemeColorScheme>): boolean {
+  if (!input) {
+    return false;
+  }
+  const normalized = normalizeThemeColorScheme(input);
+  return Object.entries(LEGACY_DEFAULT_THEME_COLOR_SCHEME).every(([token, value]) => {
+    return normalized[token as ThemeColorToken] === value;
+  });
+}
+
+function mapLegacyPaletteTheme(input?: Partial<ThemeColorScheme>): ThemeColorScheme {
+  const normalized = normalizeThemeColorScheme(input);
+  for (const legacyPreset of LEGACY_THEME_PALETTE_PRESET_HEX) {
+    const legacyColors = normalizeThemeColorScheme(legacyPreset.colors);
+    const isMatch = Object.entries(legacyColors).every(([token, value]) => {
+      return normalized[token as ThemeColorToken] === value;
+    });
+
+    if (!isMatch) {
+      continue;
+    }
+
+    const nextPreset = THEME_PALETTE_PRESET_HEX.find((preset) => preset.id === legacyPreset.id);
+    if (nextPreset) {
+      return normalizeThemeColorScheme(nextPreset.colors);
+    }
+  }
+
+  return normalized;
 }
 
 function readLegacyApiKeysFromLocalStorage(): ProviderApiKeys {
@@ -135,7 +174,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      version: 4,
+      version: 6,
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
@@ -143,6 +182,10 @@ export const useSettingsStore = create<SettingsState>()(
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
           themeColors?: Partial<ThemeColorScheme>;
         };
+        const normalizedThemeColors = mapLegacyPaletteTheme(state.themeColors);
+        const themeColors = shouldUpgradeLegacyNeutralTheme(state.themeColors)
+          ? DEFAULT_THEME_COLOR_SCHEME
+          : normalizedThemeColors;
 
         const migratedApiKeys = {
           ...readLegacyApiKeysFromLocalStorage(),
@@ -155,7 +198,7 @@ export const useSettingsStore = create<SettingsState>()(
             ...(persistedState as object),
             apiKeys: migratedApiKeys,
             ignoreAtTagWhenCopyingAndGenerating,
-            themeColors: normalizeThemeColorScheme(state.themeColors),
+            themeColors,
           };
         }
 
@@ -163,7 +206,7 @@ export const useSettingsStore = create<SettingsState>()(
           ...(persistedState as object),
           apiKeys: state.apiKey ? { ppio: normalizeApiKey(state.apiKey) } : {},
           ignoreAtTagWhenCopyingAndGenerating,
-          themeColors: normalizeThemeColorScheme(state.themeColors),
+          themeColors,
         };
       },
     }

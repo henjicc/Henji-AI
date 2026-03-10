@@ -2,17 +2,17 @@ export const APP_ACCENT_HEX = '#007eff';
 export const SETTINGS_ACCENT_HEX = '#3B82F6';
 export const WHITE_HEX = '#ffffff';
 export const BLACK_HEX = '#000000';
-export const TEXT_LIGHT_HEX = '#e5e7eb';
+export const TEXT_LIGHT_HEX = '#E5E5E5';
 
-export const CANVAS_BG_HEX = '#0f1115';
-export const CANVAS_TEXT_HEX = '#f8fafc';
-export const CANVAS_GRID_HEX = '#1f2937';
-export const CANVAS_GRID_ALT_HEX = '#2a2a2a';
+export const CANVAS_BG_HEX = '#0A0A0A';
+export const CANVAS_TEXT_HEX = '#FAFAFA';
+export const CANVAS_GRID_HEX = '#262626';
+export const CANVAS_GRID_ALT_HEX = '#404040';
 
-export const STORYBOARD_BG_HEX = '#10131a';
-export const STORYBOARD_CELL_BG_HEX = '#1f2937';
-export const STORYBOARD_NOTE_BG_HEX = '#0b0d12';
-export const STORYBOARD_NOTE_TEXT_HEX = '#e5e7eb';
+export const STORYBOARD_BG_HEX = '#171717';
+export const STORYBOARD_CELL_BG_HEX = '#262626';
+export const STORYBOARD_NOTE_BG_HEX = '#0A0A0A';
+export const STORYBOARD_NOTE_TEXT_HEX = '#E5E5E5';
 
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
@@ -39,6 +39,18 @@ export const NANO_BANANA_ICON_COLORS = {
 } as const;
 
 export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
+  bg: '#171717',
+  surface: '#262626',
+  border: '#404040',
+  text: '#FFFFFF',
+  textMuted: '#A3A3A3',
+  app: '#0A0A0A',
+  canvas: '#0A0A0A',
+  panel: '#171717',
+  layer: '#262626',
+} as const;
+
+export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',
   surface: '#1A1A1A',
   border: '#2A2A2A',
@@ -48,6 +60,18 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   canvas: '#0B0C10',
   panel: '#131313',
   layer: '#1B1C21',
+} as const;
+
+export const LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX = {
+  bg: '#0F0F0F',
+  surface: '#1A1A1A',
+  border: '#2A2A2A',
+  text: '#FFFFFF',
+  textMuted: '#888888',
+  app: '#0A0A0A',
+  canvas: '#0B0B0B',
+  panel: '#131313',
+  layer: '#1B1B1B',
 } as const;
 
 export const ACCENT_PRESET_HEX = [
@@ -69,7 +93,62 @@ export const THEME_PALETTE_PRESET_HEX = [
   },
   {
     id: 'slate-night',
-    name: { zh: '石板夜色', en: 'Slate Night' },
+    name: { zh: '深黑灰阶', en: 'Deep Monochrome' },
+    colors: {
+      bg: '#0A0A0A',
+      surface: '#171717',
+      border: '#262626',
+      text: '#FAFAFA',
+      textMuted: '#737373',
+      app: '#000000',
+      canvas: '#0A0A0A',
+      panel: '#171717',
+      layer: '#262626',
+    },
+  },
+  {
+    id: 'graphite-pro',
+    name: { zh: '石墨灰阶', en: 'Graphite Monochrome' },
+    colors: {
+      bg: '#171717',
+      surface: '#262626',
+      border: '#525252',
+      text: '#FFFFFF',
+      textMuted: '#D4D4D4',
+      app: '#0A0A0A',
+      canvas: '#171717',
+      panel: '#262626',
+      layer: '#404040',
+    },
+  },
+  {
+    id: 'warm-film',
+    name: { zh: '银盐灰阶', en: 'Silver Grain' },
+    colors: {
+      bg: '#262626',
+      surface: '#404040',
+      border: '#737373',
+      text: '#FFFFFF',
+      textMuted: '#E5E5E5',
+      app: '#171717',
+      canvas: '#262626',
+      panel: '#404040',
+      layer: '#525252',
+    },
+  },
+] as const;
+
+export const LEGACY_THEME_PALETTE_PRESET_HEX = [
+  {
+    id: 'default',
+    colors: LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
+  },
+  {
+    id: 'default',
+    colors: LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX,
+  },
+  {
+    id: 'slate-night',
     colors: {
       bg: '#0B1020',
       surface: '#121A2C',
@@ -84,7 +163,6 @@ export const THEME_PALETTE_PRESET_HEX = [
   },
   {
     id: 'graphite-pro',
-    name: { zh: '石墨专业', en: 'Graphite Pro' },
     colors: {
       bg: '#111214',
       surface: '#1C1E22',
@@ -99,7 +177,6 @@ export const THEME_PALETTE_PRESET_HEX = [
   },
   {
     id: 'warm-film',
-    name: { zh: '暖调胶片', en: 'Warm Film' },
     colors: {
       bg: '#17120F',
       surface: '#241B16',
