@@ -1,26 +1,107 @@
 import React from 'react'
-import { useI18n } from '@/hooks/useI18n'
 import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
-import SectionCard from '../components/SectionCard'
+import ThemeSection from '../sections/ThemeSection'
+import { useSettingsStore } from '@/stores/settingsStore'
+import {
+  createRuntimeThemePayload,
+  parseRuntimeThemePayload,
+  type ThemeImportMode,
+} from '@/core/theme/runtimeTheme'
 
-const InterfaceTab: React.FC = () => {
-  const { t } = useI18n('settings')
+interface InterfaceTabProps {
+  sectionId?: string
+}
+
+const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
   const { settings, updateSetting } = useSettings()
-  return (
-    <div className="p-6 space-y-6">
-      <SectionCard title={t('tabs.interface.title')} description={t('tabs.interface.description')}>
-        <p className="text-sm text-zinc-500">{t('tabs.interface.theme.placeholder')}</p>
-      </SectionCard>
+  const currentSectionId = sectionId ?? 'interface-layout'
+  const themeTonePreset = useSettingsStore((state) => state.themeTonePreset)
+  const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset)
+  const accentColor = useSettingsStore((state) => state.accentColor)
+  const themeColors = useSettingsStore((state) => state.themeColors)
+  const setThemeTonePreset = useSettingsStore((state) => state.setThemeTonePreset)
+  const setUiRadiusPreset = useSettingsStore((state) => state.setUiRadiusPreset)
+  const setAccentColor = useSettingsStore((state) => state.setAccentColor)
+  const setThemeColor = useSettingsStore((state) => state.setThemeColor)
+  const setThemeColors = useSettingsStore((state) => state.setThemeColors)
+  const resetThemeColors = useSettingsStore((state) => state.resetThemeColors)
 
-      <BottomPanelSection
-        enableAutoCollapse={settings.enableAutoCollapse}
-        collapseDelay={settings.collapseDelay}
-        collapseOnScrollOnly={settings.collapseOnScrollOnly}
-        onToggleAutoCollapse={(value) => updateSetting('enableAutoCollapse', value)}
-        onChangeDelay={(value) => updateSetting('collapseDelay', value)}
-        onToggleScrollOnly={(value) => updateSetting('collapseOnScrollOnly', value)}
-      />
+  const handleExportTheme = (): void => {
+    const payload = createRuntimeThemePayload({
+      themeTonePreset,
+      uiRadiusPreset,
+      accentColor,
+      colors: themeColors,
+    })
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'henji-theme.json'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportTheme = async (file: File, mode: ThemeImportMode): Promise<boolean> => {
+    try {
+      const raw = await file.text()
+      const parsed = parseRuntimeThemePayload(JSON.parse(raw))
+      if (!parsed) {
+        return false
+      }
+      if (mode === 'all') {
+        setThemeTonePreset(parsed.themeTonePreset)
+        setUiRadiusPreset(parsed.uiRadiusPreset)
+        setAccentColor(parsed.accentColor)
+        setThemeColors(parsed.colors)
+      } else if (mode === 'colorsOnly') {
+        setAccentColor(parsed.accentColor)
+        setThemeColors(parsed.colors)
+      } else {
+        setThemeTonePreset(parsed.themeTonePreset)
+        setUiRadiusPreset(parsed.uiRadiusPreset)
+      }
+      return true
+    } catch (error) {
+      console.error('[InterfaceTab] Failed to import theme:', error)
+      return false
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-5">
+      {currentSectionId === 'interface-layout' && (
+        <section className="space-y-5">
+          <BottomPanelSection
+            enableAutoCollapse={settings.enableAutoCollapse}
+            collapseDelay={settings.collapseDelay}
+            collapseOnScrollOnly={settings.collapseOnScrollOnly}
+            onToggleAutoCollapse={(value) => updateSetting('enableAutoCollapse', value)}
+            onChangeDelay={(value) => updateSetting('collapseDelay', value)}
+            onToggleScrollOnly={(value) => updateSetting('collapseOnScrollOnly', value)}
+          />
+        </section>
+      )}
+
+      {currentSectionId === 'interface-theme' && (
+        <section className="space-y-5">
+          <ThemeSection
+            themeTonePreset={themeTonePreset}
+            uiRadiusPreset={uiRadiusPreset}
+            accentColor={accentColor}
+            colors={themeColors}
+            onChangeThemeTone={setThemeTonePreset}
+            onChangeUiRadius={setUiRadiusPreset}
+            onChangeAccentColor={setAccentColor}
+            onChangeThemeColor={setThemeColor}
+            onApplyPalette={setThemeColors}
+            onResetThemeColors={resetThemeColors}
+            onExportTheme={handleExportTheme}
+            onImportTheme={handleImportTheme}
+          />
+        </section>
+      )}
     </div>
   )
 }

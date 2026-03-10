@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
-import { DragDropProvider } from './contexts/DragDropContext'
-import GlobalContextMenuProvider from './contexts/GlobalContextMenuProvider'
 import { databaseService } from './services/database/DatabaseService'
 import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
 import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from './core/panels'
+import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 
 /**
  * 简化后的 App 组件
@@ -17,6 +16,7 @@ import { registerDefaultPanels } from './core/panels'
  * 3. 管理 Tab 切换和工作区渲染
  */
 const App: React.FC = () => {
+  useApplyRuntimeTheme()
   const [activeTab, setActiveTab] = useState('conversation')
   const [isReady, setIsReady] = useState(false)
 
@@ -61,26 +61,22 @@ const App: React.FC = () => {
   }, [])
 
   return (
-    <DragDropProvider>
-      <GlobalContextMenuProvider>
-        <div
-          className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
-          style={{
-            opacity: isReady ? 1 : 0,
-            transition: 'opacity 0.3s ease-in-out'
-          }}
-        >
-          {/* 标题栏（含 Tab 切换） */}
-          <WindowControls
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-          />
+    <div
+      className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
+      style={{
+        opacity: isReady ? 1 : 0,
+        transition: 'opacity 0.3s ease-in-out'
+      }}
+    >
+      {/* 标题栏（含 Tab 切换） */}
+      <WindowControls
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-          {/* 工作区容器 */}
-          <TabContainer activeTab={activeTab} />
-        </div>
-      </GlobalContextMenuProvider>
-    </DragDropProvider>
+      {/* 工作区容器 */}
+      <TabContainer activeTab={activeTab} />
+    </div>
   )
 }
 

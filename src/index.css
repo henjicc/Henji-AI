@@ -202,7 +202,7 @@ body,
 
 /* 固定滚动条占位，避免 Tab 切换时内容宽度跳动 */
 .settings-scroll-body {
-  padding: 20px;
+  padding: 0;
   scrollbar-gutter: stable both-edges;
 }
 

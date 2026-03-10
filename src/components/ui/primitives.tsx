@@ -28,7 +28,7 @@ import { useDialogTransition } from './useDialogTransition';
 
 type ButtonVariant = 'primary' | 'muted' | 'ghost';
 
-type ButtonSize = 'sm' | 'md';
+type ButtonSize = 'sm' | 'md' | 'control';
 
 interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -41,6 +41,10 @@ interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  active?: boolean;
+}
+
+interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
 }
 
@@ -77,21 +81,47 @@ function resolveButtonVariant(variant: ButtonVariant): string {
   return `${UI_FIELD_SURFACE_CLASS} border border-zinc-700/50 text-text-dark hover:bg-zinc-700/45`;
 }
 
-function resolveButtonSize(size: ButtonSize): string {
-  return size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-3.5 text-sm';
+function resolveButtonSize(size: ButtonSize, variant: ButtonVariant): string {
+  if (size === 'sm') {
+    return 'h-8 px-3 text-xs';
+  }
+
+  if (size === 'control') {
+    return variant === 'primary'
+      ? 'h-[40px] min-h-[40px] px-4 text-sm leading-none'
+      : 'h-[42px] min-h-[42px] px-4 text-sm leading-none';
+  }
+
+  return 'h-10 px-3.5 text-sm';
 }
 
 export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
   ({ className = '', variant = 'muted', size = 'md', ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${resolveButtonVariant(variant)} ${resolveButtonSize(size)} ${className}`}
+      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${resolveButtonVariant(variant)} ${resolveButtonSize(size, variant)} ${className}`}
       {...props}
     />
   )
 );
 
 UiButton.displayName = 'UiButton';
+
+export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
+  ({ className = '', active = false, ...props }, ref) => (
+    <button
+      ref={ref}
+      className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 bg-transparent px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
+        active
+          ? '!bg-brand-600/25 text-accent after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-[\'\']'
+          : 'text-zinc-400 hover:bg-zinc-900/65 hover:text-zinc-100'
+      } ${className}`}
+      {...props}
+    />
+  )
+);
+
+UiNavButton.displayName = 'UiNavButton';
 
 export function UiIconButton({ className = '', active = false, showBorder = true, ...props }: UiIconButtonProps) {
   const shellClass = showBorder
@@ -118,7 +148,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
   ({ className = '', active = false, ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-text-dark` : 'text-text-dark hover:bg-zinc-700/45'} ${className}`}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-brand-500/70 bg-brand-600/25 text-accent' : 'text-text-dark hover:bg-zinc-700/45'} ${className}`}
       {...props}
     />
   )

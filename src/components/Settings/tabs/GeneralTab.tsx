@@ -7,43 +7,61 @@ import ConcurrencySection from '../sections/ConcurrencySection'
 import DisplaySection from '../sections/DisplaySection'
 import DownloadSection from '../sections/DownloadSection'
 import UpdateSection from '../sections/UpdateSection'
-import { useI18n } from '@/hooks/useI18n'
 
-const GeneralTab: React.FC = () => {
-  const { t } = useI18n('settings')
+interface GeneralTabProps {
+  sectionId?: string
+}
+
+const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
   const { settings, updateSetting } = useSettings()
+  const currentSectionId = sectionId ?? 'general-basic'
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-white mb-2">{t('tabs.general.title')}</h3>
-        <p className="text-sm text-zinc-400">{t('tabs.general.description')}</p>
-      </div>
-      <LanguageSection />
-      <HistorySection
-        maxHistoryCount={settings.maxHistoryCount}
-        onChange={(value) => updateSetting('maxHistoryCount', value)}
-      />
-      <DataPathSection />
-      <ConcurrencySection
-        maxConcurrentTasks={settings.maxConcurrentTasks}
-        onChange={(value) => updateSetting('maxConcurrentTasks', value)}
-      />
-      <DisplaySection
-        showPriceEstimate={settings.showPriceEstimate}
-        enableAutoFocusModelSearch={settings.enableAutoFocusModelSearch}
-        onToggleShowPrice={(value) => updateSetting('showPriceEstimate', value)}
-        onToggleAutoFocus={(value) => updateSetting('enableAutoFocusModelSearch', value)}
-      />
-      <DownloadSection
-        enableQuickDownload={settings.enableQuickDownload}
-        quickDownloadButtonOnly={settings.quickDownloadButtonOnly}
-        quickDownloadPath={settings.quickDownloadPath}
-        onToggleQuickDownload={(value) => updateSetting('enableQuickDownload', value)}
-        onToggleButtonOnly={(value) => updateSetting('quickDownloadButtonOnly', value)}
-        onChangePath={(value) => updateSetting('quickDownloadPath', value)}
-      />
-      <UpdateSection />
+    <div className="p-4 space-y-5">
+      {currentSectionId === 'general-basic' && (
+        <section className="space-y-5">
+          <LanguageSection />
+          <HistorySection
+            maxHistoryCount={settings.maxHistoryCount}
+            onChange={(value) => updateSetting('maxHistoryCount', value)}
+          />
+        </section>
+      )}
+
+      {currentSectionId === 'general-storage' && (
+        <section className="space-y-5">
+          <DataPathSection />
+          <DownloadSection
+            enableQuickDownload={settings.enableQuickDownload}
+            quickDownloadButtonOnly={settings.quickDownloadButtonOnly}
+            quickDownloadPath={settings.quickDownloadPath}
+            onToggleQuickDownload={(value) => updateSetting('enableQuickDownload', value)}
+            onToggleButtonOnly={(value) => updateSetting('quickDownloadButtonOnly', value)}
+            onChangePath={(value) => updateSetting('quickDownloadPath', value)}
+          />
+        </section>
+      )}
+
+      {currentSectionId === 'general-behavior' && (
+        <section className="space-y-5">
+          <ConcurrencySection
+            maxConcurrentTasks={settings.maxConcurrentTasks}
+            onChange={(value) => updateSetting('maxConcurrentTasks', value)}
+          />
+          <DisplaySection
+            showPriceEstimate={settings.showPriceEstimate}
+            enableAutoFocusModelSearch={settings.enableAutoFocusModelSearch}
+            onToggleShowPrice={(value) => updateSetting('showPriceEstimate', value)}
+            onToggleAutoFocus={(value) => updateSetting('enableAutoFocusModelSearch', value)}
+          />
+        </section>
+      )}
+
+      {currentSectionId === 'general-maintenance' && (
+        <section className="space-y-5">
+          <UpdateSection />
+        </section>
+      )}
     </div>
   )
 }

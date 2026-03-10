@@ -112,11 +112,7 @@
     "interface": {
       "label": "Interface",
       "title": "Interface Settings",
-      "description": "Customize the app's appearance and interaction.",
-      "theme": {
-        "label": "Theme",
-        "placeholder": "Theme settings coming soon..."
-      }
+      "description": "Customize the app's appearance and interaction."
     },
     "models": {
       "label": "Models",
@@ -194,6 +190,55 @@
       "collapseDelayHint": "Delay before collapsing after mouse leaves",
       "collapseOnScrollLabel": "Collapse only on scroll",
       "collapseOnScrollHint": "Only collapse while scrolling history"
+    },
+    "theme": {
+      "title": "Theme Appearance",
+      "description": "Customize the global style with curated color tokens and live preview.",
+      "tone": {
+        "label": "Tone Preset",
+        "neutral": "Neutral",
+        "warm": "Warm",
+        "cool": "Cool"
+      },
+      "radius": {
+        "label": "Corner Radius",
+        "compact": "Compact",
+        "default": "Default",
+        "large": "Large"
+      },
+      "palette": {
+        "label": "Palette Presets"
+      },
+      "accent": {
+        "label": "Accent Color"
+      },
+      "advanced": {
+        "label": "Advanced Token Mapping"
+      },
+      "portable": {
+        "label": "Theme Profile",
+        "export": "Export JSON",
+        "import": "Import JSON",
+        "chooseModeTitle": "Select Import Mode",
+        "chooseModeDesc": "Import the full theme, or only colors/layout tokens.",
+        "modeAll": "Import All",
+        "modeColors": "Colors Only",
+        "modeLayout": "Layout Only",
+        "feedbackTitle": "Theme Import Result",
+        "importSuccess": "Theme imported successfully",
+        "importFail": "Import failed: invalid theme file"
+      },
+      "tokens": {
+        "bg": "Background",
+        "surface": "Surface",
+        "border": "Border",
+        "text": "Text",
+        "textMuted": "Muted Text",
+        "app": "App Base",
+        "canvas": "Canvas Base",
+        "panel": "Panel Base",
+        "layer": "Layer Base"
+      }
     },
     "upload": {
       "title": "Generic Upload Service",

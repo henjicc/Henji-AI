@@ -112,11 +112,7 @@
     "interface": {
       "label": "界面",
       "title": "界面设置",
-      "description": "自定义应用的外观和交互行为。",
-      "theme": {
-        "label": "界面主题",
-        "placeholder": "主题设置功能开发中..."
-      }
+      "description": "自定义应用的外观和交互行为。"
     },
     "models": {
       "label": "模型",
@@ -194,6 +190,55 @@
       "collapseDelayHint": "鼠标离开面板后等待多久自动折叠",
       "collapseOnScrollLabel": "仅滚动时折叠",
       "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠"
+    },
+    "theme": {
+      "title": "主题外观",
+      "description": "通过规范化配色与尺寸选项，自定义全局界面风格并实时预览。",
+      "tone": {
+        "label": "色调预设",
+        "neutral": "中性",
+        "warm": "暖色",
+        "cool": "冷色"
+      },
+      "radius": {
+        "label": "圆角尺寸",
+        "compact": "紧凑",
+        "default": "默认",
+        "large": "舒展"
+      },
+      "palette": {
+        "label": "主题色板"
+      },
+      "accent": {
+        "label": "高亮色"
+      },
+      "advanced": {
+        "label": "高级颜色映射"
+      },
+      "portable": {
+        "label": "主题配置文件",
+        "export": "导出 JSON",
+        "import": "导入 JSON",
+        "chooseModeTitle": "选择导入方式",
+        "chooseModeDesc": "你可以导入完整主题，或只导入颜色/结构配置。",
+        "modeAll": "导入全部",
+        "modeColors": "仅导入配色",
+        "modeLayout": "仅导入结构",
+        "feedbackTitle": "主题导入结果",
+        "importSuccess": "主题导入成功",
+        "importFail": "导入失败：文件格式不正确"
+      },
+      "tokens": {
+        "bg": "背景",
+        "surface": "表面",
+        "border": "边框",
+        "text": "正文",
+        "textMuted": "次级文字",
+        "app": "应用底色",
+        "canvas": "画布底色",
+        "panel": "面板底色",
+        "layer": "层级底色"
+      }
     },
     "upload": {
       "title": "通用文件上传服务",

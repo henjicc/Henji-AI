@@ -38,7 +38,7 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
 内部系统与外部 API 完全隔离：
 
 - 所有外部 API 调用必须通过 `src/core/providers/`（新系统）
-- **禁止**在组件或服务中直接使用 `fetch()` 或 `axios`
+- **禁止**在业务组件中直接使用 `fetch()` 或 `axios`；服务层仅允许封装非模型生成场景的网络请求
 - 每个提供商有自己的 Provider 类实现 `ProviderHandler` 接口
 - Provider 处理所有提供商特定细节（认证、请求格式、响应解析、轮询）
 - 通过 `GenerationService` 统一调用各提供商
@@ -63,6 +63,8 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
 - **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
 - **禁止回退**：禁止在业务组件重新引入原生控件并单独写一套样式
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
+- **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
+- **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`，避免散落色值
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 
 ### 5. 画布模块拆分约定（新增）
@@ -74,6 +76,17 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
   - `src/features/canvas/hooks/useCanvasShortcuts.ts`
 - 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`（例如 `CanvasOverlays.tsx`、`CanvasEmptyHint.tsx`）
 - 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
+
+### 6. 主题与运行时样式落地约定（新增）
+
+- `settingsStore` 中的 `themeTonePreset` / `uiRadiusPreset` / `accentColor` 变更后，必须同步到 `document.documentElement`（`data-*` 或 CSS 变量）
+- 禁止“有设置项但未生效”的状态长期存在；新增主题设置时需同时提交“状态 + 应用层同步器”
+- 主题状态必须单一数据源，避免多套 store 并存且互不联动
+
+### 7. 根级 Provider 挂载约定（新增）
+
+- 全局 Provider（如拖拽、全局菜单、通知）只允许在应用根层挂载一次
+- 禁止在 `main.tsx` 与 `App.tsx`（或其他根容器）重复包裹同一 Provider，避免事件重复订阅与状态分叉
 
 ## 目录结构
 
@@ -153,7 +166,8 @@ old-Henji-AI/           # 旧项目代码备份（仅供对照）
 
 3. **禁止直接 API 调用**
    - 所有外部 API 必须通过 `src/core/providers/`（新系统）
-   - 禁止在组件/服务中直接使用 `fetch()` 或 `axios`
+   - 禁止在业务组件中直接使用 `fetch()` 或 `axios`
+   - 服务层的网络请求仅用于非模型生成领域能力（如上传/更新检查），且必须集中封装
    - **不要使用** `src/adapters/`（旧系统，正在淘汰）
 
 4. **禁止模型特定 UI 逻辑**
@@ -190,6 +204,29 @@ old-Henji-AI/           # 旧项目代码备份（仅供对照）
    - 上传能力统一复用 `FileUploader` / `UiInput(type=file)` 方案
    - 拖拽排序逻辑统一复用 `src/components/ui/fileUploader/useReorderDrag.ts`
    - 禁止在业务组件重复实现上传/排序基础交互
+
+11. **颜色硬编码约束（新增）**
+   - 新增/修改 UI 代码时，禁止直接写十六进制颜色（如 `#007eff`）或 `rgb/rgba` 字面量
+   - 颜色应先沉淀到 `src/index.css` 变量、`tailwind.config.js` 语义色或 `src/core/theme/colorTokens.ts`
+   - 例外仅限图像处理/画布绘制等算法场景（Canvas/SVG 像素绘制），且应优先复用已有 token
+
+12. **API 调用边界约束（修订）**
+   - 模型生成主链路（提交任务、轮询、结果解析）必须通过 `src/core/providers/` + `GenerationService`
+   - `services/`、`utils/` 中允许存在非模型生成场景的网络请求（如更新检查、上传、资源转换），但必须封装在服务层，禁止散落到业务 UI
+   - 新增外部 API 集成时，先判断是否属于“模型生成主链路”；属于则必须走 Provider，不属于则落在对应领域服务
+
+13. **文件体积治理约束（新增）**
+   - 400 行上限仍是目标约束；对存量超长文件，采用“禁止继续增长 + 修改即拆分”的治理策略
+   - 新建文件禁止超过 400 行；修改存量超长文件时，优先拆出 hooks / utils / 子组件
+
+14. **类型治理约束（修订）**
+   - 目标仍为禁止 `any`，但当前存量代码较多；执行策略为“增量零新增 any”
+   - 若确需新增 `any`，必须在同一处添加原因注释与后续替换计划
+
+15. **画布实现单源约束（新增）**
+   - `src/features/canvas/` 为当前主实现目录
+   - `src/workspaces/canvas/` 视为历史/过渡代码，除迁移与删除外不再新增功能
+   - 新画布能力必须落在 `src/features/canvas/`
 
 ## 添加新模型
 
@@ -286,20 +323,24 @@ window.__reloadModels()        // 重新加载所有模型
 ```bash
 npm run build
 rg -n "<button|<input|<select|<textarea" src --glob "*.tsx"
+rg -n "#[0-9a-fA-F]{3,8}|rgba?\(" src --glob "*.tsx" --glob "*.ts"
+rg -n "\bany\b" src --glob "*.ts" --glob "*.tsx"
 ```
 
 期望结果：
 - `npm run build` 通过
 - 原生控件命中仅存在于 `src/components/ui/primitives.tsx`
+- 新增改动中不引入新的颜色硬编码（`#xxxxxx` / `rgb` / `rgba`）
+- 不新增 `any`（允许存量，禁止增量）
 
 文件长度硬约束检查：
 
 ```bash
-powershell -Command "Get-ChildItem -Path src -Recurse -Include *.tsx | ForEach-Object { $count=(Get-Content $_.FullName).Count; if($count -gt 400){ \"$($_.FullName)`t$count\" } }"
+powershell -Command "$files = Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx; foreach ($f in $files) { $count = (Get-Content $f.FullName).Count; if ($count -gt 400) { Write-Output \"$($f.FullName)`t$count\" } }"
 ```
 
 期望结果：
-- 无 `> 400` 行的 `tsx` 文件
+- 新文件无 `> 400` 行，存量超长文件不继续膨胀并持续拆分
 
 ## 常见问题
 
@@ -336,6 +377,11 @@ powershell -Command "Get-ChildItem -Path src -Recurse -Include *.tsx | ForEach-O
 - `迁移计划_新系统完全替代adapters/清单.md` - 架构迁移计划
 - `src/components/ui/primitives.tsx` - UI primitives 唯一原生标签落点
 - `src/components/ui/styleTokens.ts` - UI 视觉 token
+- `src/core/theme/colorTokens.ts` - 主题与画布颜色常量
+- `src/index.css` - 全局 CSS 变量（语义色源头）
+- `tailwind.config.js` - CSS 变量到 Tailwind 语义类映射
+- `src/stores/settingsStore.ts` - 主题/界面设置状态源（含 tone/radius/accent）
+- `src/stores/themeStore.ts` - 主题状态历史实现（修改前先确认是否保留或合并）
 - `src/components/ui/ReferenceTextarea.tsx` - 引用输入与高亮核心组件
 - `src/components/ui/referenceTextareaUtils.tsx` - 引用高亮渲染工具
 - `src/features/canvas/canvasUtils.ts` - 画布通用计算与连接预览

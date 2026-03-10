@@ -37,18 +37,18 @@ const DataPathSection: React.FC = () => {
         <label className="block text-sm font-medium mb-2 text-zinc-300">
           {t('sections.dataPath.pathLabel')}
         </label>
-        <div className="flex gap-2">
+        <div className="flex items-stretch gap-2">
           <UiInput
             value={currentPath}
             readOnly
-            className="h-10 flex-1 font-mono"
+            className="h-[42px] flex-1 font-mono"
           />
           <UiButton
             onClick={selectDirectory}
             disabled={isMigrating}
             variant="primary"
-            size="sm"
-            className="h-10 whitespace-nowrap px-4"
+            size="control"
+            className="shrink-0 whitespace-nowrap"
           >
             {t('actions.select')}
           </UiButton>
@@ -56,8 +56,8 @@ const DataPathSection: React.FC = () => {
             onClick={openResetConfirm}
             disabled={isMigrating}
             variant="muted"
-            size="sm"
-            className="h-10 whitespace-nowrap px-4"
+            size="control"
+            className="shrink-0 whitespace-nowrap"
           >
             {t('actions.resetDefault')}
           </UiButton>

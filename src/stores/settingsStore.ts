@@ -1,9 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { SETTINGS_ACCENT_HEX } from '@/core/theme/colorTokens';
+import {
+  DEFAULT_THEME_COLOR_SCHEME,
+  normalizeThemeColorScheme,
+  type ThemeColorScheme,
+  type ThemeColorToken,
+  type ThemeTonePreset,
+  type UiRadiusPreset,
+} from '@/core/theme/runtimeTheme';
 
-export type UiRadiusPreset = 'compact' | 'default' | 'large';
-export type ThemeTonePreset = 'neutral' | 'warm' | 'cool';
 export type ProviderApiKeys = Record<string, string>;
 const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope'] as const;
 
@@ -17,6 +23,7 @@ interface SettingsState {
   uiRadiusPreset: UiRadiusPreset;
   themeTonePreset: ThemeTonePreset;
   accentColor: string;
+  themeColors: ThemeColorScheme;
   setProviderApiKey: (providerId: string, key: string) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
@@ -26,6 +33,9 @@ interface SettingsState {
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
   setAccentColor: (color: string) => void;
+  setThemeColor: (token: ThemeColorToken, color: string) => void;
+  setThemeColors: (colors: Partial<ThemeColorScheme>) => void;
+  resetThemeColors: () => void;
 }
 
 const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
@@ -80,6 +90,7 @@ export const useSettingsStore = create<SettingsState>()(
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
       accentColor: SETTINGS_ACCENT_HEX,
+      themeColors: DEFAULT_THEME_COLOR_SCHEME,
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         localStorage.setItem(`${providerId}_api_key`, normalizedKey);
@@ -106,15 +117,31 @@ export const useSettingsStore = create<SettingsState>()(
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
       setAccentColor: (color) => set({ accentColor: normalizeHexColor(color) }),
+      setThemeColor: (token, color) =>
+        set((state) => ({
+          themeColors: normalizeThemeColorScheme({
+            ...state.themeColors,
+            [token]: color,
+          }),
+        })),
+      setThemeColors: (colors) =>
+        set((state) => ({
+          themeColors: normalizeThemeColorScheme({
+            ...state.themeColors,
+            ...colors,
+          }),
+        })),
+      resetThemeColors: () => set({ themeColors: DEFAULT_THEME_COLOR_SCHEME }),
     }),
     {
       name: 'settings-storage',
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
           apiKeys?: ProviderApiKeys;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
+          themeColors?: Partial<ThemeColorScheme>;
         };
 
         const migratedApiKeys = {
@@ -128,6 +155,7 @@ export const useSettingsStore = create<SettingsState>()(
             ...(persistedState as object),
             apiKeys: migratedApiKeys,
             ignoreAtTagWhenCopyingAndGenerating,
+            themeColors: normalizeThemeColorScheme(state.themeColors),
           };
         }
 
@@ -135,6 +163,7 @@ export const useSettingsStore = create<SettingsState>()(
           ...(persistedState as object),
           apiKeys: state.apiKey ? { ppio: normalizeApiKey(state.apiKey) } : {},
           ignoreAtTagWhenCopyingAndGenerating,
+          themeColors: normalizeThemeColorScheme(state.themeColors),
         };
       },
     }

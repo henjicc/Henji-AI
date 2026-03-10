@@ -37,3 +37,79 @@ export const NANO_BANANA_ICON_COLORS = {
   peelBright: '#FCD53F',
   peelHighlight: '#FFF478',
 } as const;
+
+export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
+  bg: '#0F0F0F',
+  surface: '#1A1A1A',
+  border: '#2A2A2A',
+  text: '#FFFFFF',
+  textMuted: '#888888',
+  app: '#0A0B0D',
+  canvas: '#0B0C10',
+  panel: '#131313',
+  layer: '#1B1C21',
+} as const;
+
+export const ACCENT_PRESET_HEX = [
+  '#3B82F6',
+  '#2563EB',
+  '#0EA5E9',
+  '#14B8A6',
+  '#22C55E',
+  '#F59E0B',
+  '#EF4444',
+  '#A855F7',
+] as const;
+
+export const THEME_PALETTE_PRESET_HEX = [
+  {
+    id: 'default',
+    name: { zh: '经典深色', en: 'Classic Dark' },
+    colors: DEFAULT_THEME_COLOR_SCHEME_HEX,
+  },
+  {
+    id: 'slate-night',
+    name: { zh: '石板夜色', en: 'Slate Night' },
+    colors: {
+      bg: '#0B1020',
+      surface: '#121A2C',
+      border: '#22304A',
+      text: '#EAF0FF',
+      textMuted: '#9BA8C8',
+      app: '#090E1A',
+      canvas: '#0A1222',
+      panel: '#10182A',
+      layer: '#1A243A',
+    },
+  },
+  {
+    id: 'graphite-pro',
+    name: { zh: '石墨专业', en: 'Graphite Pro' },
+    colors: {
+      bg: '#111214',
+      surface: '#1C1E22',
+      border: '#333842',
+      text: '#F5F7FB',
+      textMuted: '#A3AAB6',
+      app: '#0D0E10',
+      canvas: '#101217',
+      panel: '#171A1F',
+      layer: '#242A33',
+    },
+  },
+  {
+    id: 'warm-film',
+    name: { zh: '暖调胶片', en: 'Warm Film' },
+    colors: {
+      bg: '#17120F',
+      surface: '#241B16',
+      border: '#3C2F25',
+      text: '#F5E9DE',
+      textMuted: '#C0A893',
+      app: '#120F0D',
+      canvas: '#17120D',
+      panel: '#1F1712',
+      layer: '#2C221A',
+    },
+  },
+] as const;

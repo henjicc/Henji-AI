@@ -102,7 +102,7 @@ const UpdateSection: React.FC = () => {
                   onClick={() => updateFrequency(freq)}
                   disabled={!config.enabled}
                   active={config.frequency === freq}
-                  className={`justify-center px-4 py-2.5 text-sm font-medium ${config.frequency === freq ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  className={`justify-center px-4 text-sm font-medium ${config.frequency === freq ? '' : 'text-zinc-400 hover:text-zinc-200'}`}
                 >
                   {t(`sections.updates.frequency.${freq}`)}
                 </UiChipButton>
