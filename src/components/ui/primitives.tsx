@@ -39,6 +39,7 @@ interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
   showBorder?: boolean;
   appearance?: 'default' | 'hover-only';
+  hoverVariant?: 'default' | 'danger';
 }
 
 interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -129,6 +130,7 @@ export function UiIconButton({
   active = false,
   showBorder = true,
   appearance = 'default',
+  hoverVariant = 'default',
   ...props
 }: UiIconButtonProps) {
   const hoverOnly = appearance === 'hover-only';
@@ -143,10 +145,16 @@ export function UiIconButton({
       ? `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-text-dark`
       : `${UI_COLOR_ACCENT_TEXT_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS}`)
     : (showBorder
-      ? 'text-text-muted hover:bg-layer'
+      ? hoverVariant === 'danger'
+        ? 'text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
+        : 'text-text-muted hover:bg-layer'
       : hoverOnly
-        ? 'text-text-muted hover:border-border-dark hover:bg-surface-dark'
-        : 'text-text-muted');
+        ? hoverVariant === 'danger'
+          ? 'text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
+          : 'text-text-muted hover:border-border-dark hover:bg-surface-dark'
+        : hoverVariant === 'danger'
+          ? 'text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
+          : 'text-text-muted');
 
   return (
     <button

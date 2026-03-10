@@ -142,7 +142,7 @@ export function TaskList({
 
           if (task.status === 'error') {
             return (
-              <div className="flex items-center justify-center h-64 bg-layer rounded-lg border-2 border-red-500/20">
+              <div className="flex items-center justify-center h-64 bg-app rounded-lg border-2 border-red-500/20">
                 <div className="text-center w-full px-6">
                   <p className="text-red-300 font-medium mb-2">{t('common:error')}</p>
                   <p className="text-zinc-300 text-sm break-words">{task.error || t('common:status.failed')}</p>
@@ -369,7 +369,8 @@ export function TaskList({
 
                   <UiIconButton
                     onClick={() => onDelete(task.id)}
-                    className="!h-8 !w-8 bg-red-700/40 text-red-200 hover:bg-red-600/50"
+                    hoverVariant="danger"
+                    className="!h-8 !w-8 bg-zinc-700/40"
                     title={t('common:delete')}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
