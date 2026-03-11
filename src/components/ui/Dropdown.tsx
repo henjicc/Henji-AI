@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  UI_OPTION_ITEM_ACTIVE_CLASS,
+  UI_DROPDOWN_OPTION_ACTIVE_CLASS,
   UI_TRIGGER_BUTTON_CLASS,
   UI_TRIGGER_PANEL_CLASS,
 } from './styleTokens'
@@ -36,6 +36,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [minWidthPx, setMinWidthPx] = useState<number | null>(null)
   const lastMinWidthRef = useRef<number | null>(null)
+  const isSelectedOption = (optValue: T): boolean => {
+    if (value === undefined) return false
+    return String(value) === String(optValue)
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -131,7 +135,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       {(open || closing) && (
         portal && fixedPos ? (
           createPortal(
-            <div className={`${UI_TRIGGER_PANEL_CLASS} ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            <div className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
               style={{ position: 'fixed', top: fixedPos.top, left: fixedPos.left, width: fixedPos.width, zIndex }}
               data-dropdown-portal="true"
             >
@@ -142,11 +146,11 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                   {(options || []).map(opt => (
                     <UiOptionButton
                     key={String(opt.value)}
-                    active={value === opt.value}
-                    className={`w-full rounded-none border-x-0 border-b-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
+                    active={isSelectedOption(opt.value)}
+                    className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
                       ? 'opacity-50 cursor-not-allowed'
-                      : value === opt.value
-                        ? `${UI_OPTION_ITEM_ACTIVE_CLASS} cursor-pointer`
+                      : isSelectedOption(opt.value)
+                        ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
                         : 'cursor-pointer'
                         }`}
                     onClick={() => {
@@ -166,7 +170,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           )
         ) : (
           <div
-            className={`absolute left-0 z-50 mt-1 w-full ${UI_TRIGGER_PANEL_CLASS} ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            className={`absolute left-0 z-50 mt-1 w-full ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             data-dropdown-portal="true"
           >
             {renderPanel ? (
@@ -176,11 +180,11 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 {(options || []).map(opt => (
                   <UiOptionButton
                   key={String(opt.value)}
-                  active={value === opt.value}
-                  className={`w-full rounded-none border-x-0 border-b-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
+                  active={isSelectedOption(opt.value)}
+                  className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
                       ? 'opacity-50 cursor-not-allowed'
-                      : value === opt.value
-                        ? `${UI_OPTION_ITEM_ACTIVE_CLASS} cursor-pointer`
+                      : isSelectedOption(opt.value)
+                        ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
                         : 'cursor-pointer'
                       }`}
                   onClick={() => {

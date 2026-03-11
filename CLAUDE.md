@@ -65,6 +65,7 @@ npm run tauri:dev:mac    # 运行 Tauri 开发模式（macOS）
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 - **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`，避免散落色值
+- **颜色查改入口**：调色时只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处查找/修改，不新增额外“颜色清单”文件
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 
 ### 5. 画布模块拆分约定（新增）

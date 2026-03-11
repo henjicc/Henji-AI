@@ -43,5 +43,8 @@ export const UI_OPTION_ITEM_HOVER_CLASS =
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
 
+export const UI_DROPDOWN_OPTION_ACTIVE_CLASS =
+  'bg-brand-700/50';
+
 export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-[1.5px] border-white/42';
 export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-[1.5px] !border-white/42';

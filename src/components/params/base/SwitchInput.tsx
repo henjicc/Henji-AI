@@ -10,7 +10,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SwitchParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UiButton } from '@/components/ui'
+import Toggle from '@/components/ui/Toggle'
 
 interface SwitchInputProps {
   param: SwitchParamDef
@@ -34,37 +34,21 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
   const onText = t('common:on', '开启')
   const offText = t('common:off', '关闭')
 
-  // 处理点击
-  const handleClick = () => {
-    if (!disabled) {
-      onChange(!value)
-    }
-  }
-
   return (
-    <div className="w-auto">
-      {displayName && (
-        <label className="block text-sm font-medium mb-1 text-zinc-300">
+    <Toggle
+      className="w-auto"
+      label={displayName ? (
+        <>
           {displayName}
           {param.required && <span className="text-red-500 ml-1">*</span>}
-        </label>
-      )}
-      <UiButton
-        onClick={handleClick}
-        disabled={disabled}
-        variant="muted"
-        size="sm"
-        className={`px-3 h-[38px] ${
-          disabled
-            ? 'bg-zinc-800/30 text-zinc-500 border-zinc-700/30'
-            : value
-              ? 'bg-accent text-white border-accent'
-              : 'text-zinc-300'
-        }`}
-      >
-        {value ? onText : offText}
-      </UiButton>
-    </div>
+        </>
+      ) : undefined}
+      checked={value}
+      onChange={onChange}
+      onText={onText}
+      offText={offText}
+      disabled={disabled}
+    />
   )
 }
 
