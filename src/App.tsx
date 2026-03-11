@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
+import SettingsModal from '@/components/Settings'
 import { databaseService } from './services/database/DatabaseService'
 import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
@@ -19,6 +20,7 @@ const App: React.FC = () => {
   useApplyRuntimeTheme()
   const [activeTab, setActiveTab] = useState('conversation')
   const [isReady, setIsReady] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // 应用初始化
   useEffect(() => {
@@ -72,10 +74,12 @@ const App: React.FC = () => {
       <WindowControls
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* 工作区容器 */}
       <TabContainer activeTab={activeTab} />
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
     </div>
   )
 }

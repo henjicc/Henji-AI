@@ -27,12 +27,14 @@ interface TabConfig {
 interface WindowControlsProps {
   activeTab?: string
   onTabChange?: (tabId: string) => void
+  onOpenSettings?: () => void
 }
 
-const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversation', onTabChange }) => {
+const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversation', onTabChange, onOpenSettings }) => {
   const { t } = useI18n('ui')
   const [isTauri, setIsTauri] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
+  const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
   const tabs: TabConfig[] = [
     {
       id: 'conversation',
@@ -76,6 +78,40 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
     }
   }, [])
 
+  React.useEffect(() => {
+    if (!isTauri) return
+    const win = getCurrentWindow()
+    let unlisten: (() => void) | null = null
+    let isDisposed = false
+
+    const syncMaximizeState = async (): Promise<void> => {
+      try {
+        const maximized = await win.isMaximized()
+        if (!isDisposed) {
+          setIsMaximized(maximized)
+        }
+      } catch (error) {
+        logError('[WindowControls] isMaximized failed', error)
+      }
+    }
+
+    void syncMaximizeState()
+    void win.onResized(() => {
+      void syncMaximizeState()
+    }).then((fn) => {
+      unlisten = fn
+    }).catch((error) => {
+      logError('[WindowControls] onResized listener failed', error)
+    })
+
+    return () => {
+      isDisposed = true
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [isTauri])
+
   if (!isTauri) return null
   const win = getCurrentWindow()
 
@@ -83,10 +119,18 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
     try { await win.minimize() } catch (e) { logError('[WindowControls] minimize failed', e) }
   }
   const handleToggleMaximize = async () => {
-    try { await win.toggleMaximize() } catch (e) { logError('[WindowControls] toggleMaximize failed', e) }
+    try {
+      await win.toggleMaximize()
+      setIsMaximized(await win.isMaximized())
+    } catch (e) {
+      logError('[WindowControls] toggleMaximize failed', e)
+    }
   }
   const handleClose = async () => {
     try { await win.close() } catch (e) { console.error('[WindowControls] close failed', e) }
+  }
+  const handleOpenSettings = (): void => {
+    onOpenSettings?.()
   }
 
   // Tab 组件 - 居中显示
@@ -131,6 +175,17 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
             data-tauri-ignore-drag-region
             style={{ WebkitAppRegion: 'no-drag' }}
           >
+            <UiIconButton
+              type="button"
+              onClick={handleOpenSettings}
+              className="!w-6 !h-6 !rounded-md border-0 bg-transparent hover:bg-zinc-800/80"
+              title={t('actions.settings')}
+            >
+              <svg className="w-3.5 h-3.5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </UiIconButton>
             <UiIconButton
               type="button"
               onClick={handleClose}
@@ -185,6 +240,17 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
           >
             <UiIconButton
               type="button"
+              onClick={handleOpenSettings}
+              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-zinc-800/80"
+              title={t('actions.settings')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </UiIconButton>
+            <UiIconButton
+              type="button"
               onClick={handleMinimize}
               className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-zinc-800/80"
               title={t('windowControls.minimize')}
@@ -199,9 +265,15 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
               className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-zinc-800/80"
               title={t('windowControls.toggleMaximize')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="6" y="6" width="12" height="12" />
-              </svg>
+              {isMaximized ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" className="w-2.5 h-2.5" fill="currentColor">
+                  <path d="M2048 1638h-410v410H0V410h410V0h1638zM1434 614H205v1229h1229zm409-409H614v205h1024v1024h205z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="6" width="12" height="12" />
+                </svg>
+              )}
             </UiIconButton>
             <UiIconButton
               type="button"

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MediaGenerator from '@/components/MediaGenerator'
-import SettingsModal from '@/components/Settings'
 import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
 import TestModeIndicator from '@/components/TestModeIndicator'
@@ -90,7 +89,6 @@ const ConversationWorkspace: React.FC = () => {
     imageEditStatesRef,
   })
   const { showUpdateDialog, releaseInfo, currentVersion, closeUpdateDialog } = useUpdateCheck()
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false)
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
   useTestModeShortcuts({ togglePanel: () => setIsTestPanelOpen((v) => !v) })
@@ -295,7 +293,6 @@ const ConversationWorkspace: React.FC = () => {
             onGenerate={handleGenerate}
             isLoading={isGenerating}
             isGenerating={isGenerating}
-            onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenClearHistory={() => setIsClearDialogOpen(true)}
             onImageClick={(url: string, list: string[]) => openImageViewer(url, list, undefined, true)}
             onSetUploadedImagesRef={(setter) => {
@@ -311,7 +308,6 @@ const ConversationWorkspace: React.FC = () => {
           />
         </FloatingInputPanel>
       </main>
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
       <ClearHistoryDialog
         open={isClearDialogOpen}
         onClose={() => setIsClearDialogOpen(false)}
