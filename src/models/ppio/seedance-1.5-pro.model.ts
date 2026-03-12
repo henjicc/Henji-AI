@@ -159,7 +159,7 @@ export const seedance15ProModel = defineModel({
     }
   ],
   endpoints: {
-    selector: (params) => {
+    selector: async (params) => {
       const images = params.images || []
 
       return images.length > 0 ? '/async/seedance-v1.5-pro-i2v' : '/async/seedance-v1.5-pro-t2v'

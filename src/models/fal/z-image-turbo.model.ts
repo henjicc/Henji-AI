@@ -11,7 +11,7 @@ export const zImageTurboModel = defineModel({
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-z-image-turbo',
-    name: 'Z-Image Turbo',
+    name: { key: 'meta.name', fallback: 'Z-Image Turbo' },
     description: 'Z-Image Turbo 快速图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image', 'fast']
   },

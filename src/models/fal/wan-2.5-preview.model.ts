@@ -10,7 +10,7 @@ export const wan25PreviewModel = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-wan-25-preview',
-    name: 'Wan 2.5 Preview',
+    name: { key: 'meta.name', fallback: 'Wan 2.5 Preview' },
     description: 'Wan 2.5 Preview 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-wan-2.5-preview', 'wan-25-preview']

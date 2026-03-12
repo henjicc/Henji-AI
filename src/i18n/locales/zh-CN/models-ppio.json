@@ -2,7 +2,7 @@
   "defs": {
     "ppio-seedream-4.0": {
       "meta": {
-        "name": "即梦图片 4.0",
+        "name": "Seedream 4.0",
         "description": "派欧云即梦图片生成模型 4.0 版本，支持 2K/4K 分辨率"
       },
       "params": {
@@ -31,11 +31,14 @@
         "3": "CFG Scale",
         "4": "生成模式",
         "5": "负面提示词"
+      },
+      "meta": {
+        "name": "可灵 2.5 Turbo"
       }
     },
     "ppio-kling-2.6-pro": {
       "meta": {
-        "name": "可灵视频 2.6 Pro",
+        "name": "可灵 2.6 Pro",
         "description": "派欧云可灵视频生成模型 2.6 Pro 版本，支持文/图生视频和动作控制两种模式"
       },
       "auto": {
@@ -55,7 +58,7 @@
     },
     "ppio-kling-o1": {
       "meta": {
-        "name": "可灵视频 O1",
+        "name": "可灵 O1",
         "description": "派欧云可灵视频生成模型 O1 版本，支持文/图生视频、首尾帧、参考生视频、视频编辑四种模式"
       },
       "auto": {
@@ -75,6 +78,9 @@
         "1": "时长",
         "2": "分辨率",
         "3": "提示词优化"
+      },
+      "meta": {
+        "name": "Minimax Hailuo 02"
       }
     },
     "ppio-minimax-hailuo-2.3": {
@@ -83,6 +89,9 @@
         "2": "分辨率",
         "3": "快速模式",
         "4": "提示词扩展"
+      },
+      "meta": {
+        "name": "Minimax Hailuo 2.3"
       }
     },
     "ppio-minimax-speech-2.6": {
@@ -97,6 +106,9 @@
         "8": "比特率",
         "9": "音频格式",
         "10": "声道"
+      },
+      "meta": {
+        "name": "Minimax Speech 2.6"
       }
     },
     "ppio-pixverse-v4.5": {
@@ -105,11 +117,14 @@
         "2": "分辨率",
         "3": "快速模式",
         "4": "负面提示词"
+      },
+      "meta": {
+        "name": "PixVerse V4.5"
       }
     },
     "ppio-seedance-v1.5-pro": {
       "meta": {
-        "name": "即舞视频 1.5 Pro",
+        "name": "Seedance 1.5 Pro",
         "description": "派欧云即舞视频生成模型 1.5 Pro 版本，支持文生视频、图生视频、首尾帧三种模式"
       },
       "auto": {
@@ -133,11 +148,14 @@
         "3": "宽高比",
         "4": "分辨率",
         "5": "相机固定"
+      },
+      "meta": {
+        "name": "Seedance 1"
       }
     },
     "ppio-seedream-4.5": {
       "meta": {
-        "name": "即梦图片 4.5",
+        "name": "Seedream 4.5",
         "description": "派欧云即梦图片生成模型 4.5 版本，支持 2K/4K 分辨率"
       },
       "auto": {
@@ -158,6 +176,9 @@
         "3": "风格",
         "4": "运动幅度",
         "5": "生成音频"
+      },
+      "meta": {
+        "name": "Vidu Q1"
       }
     },
     "ppio-wan-2.5-preview": {
@@ -168,11 +189,14 @@
         "4": "智能改写",
         "5": "生成音频",
         "6": "负面提示词"
+      },
+      "meta": {
+        "name": "Wan 2.5 Preview"
       }
     },
     "ppio-wan-2.6": {
       "meta": {
-        "name": "万象视频 2.6",
+        "name": "Wan 2.6",
         "description": "派欧云万象视频生成模型 2.6 版本，支持文/图生视频和参考生视频两种模式"
       },
       "auto": {

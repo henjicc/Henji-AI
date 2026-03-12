@@ -10,7 +10,7 @@ export const klingVideoV26ProModel = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-v2.6-pro',
-    name: 'Kling Video V2.6 Pro',
+    name: { key: 'meta.name', fallback: 'Kling Video V2.6 Pro' },
     description: 'Kling Video V2.6 Pro 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

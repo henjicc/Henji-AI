@@ -14,7 +14,6 @@ interface BuildStoryboardPromptParams {
 
 interface GenerateStoryboardImageParams {
   prompt: string
-  providerApiKey: string
   providerId: string
   selectedAspectRatio: string
   incomingImages: string[]
@@ -70,8 +69,7 @@ export function buildStoryboardPrompt({
 
 export async function generateStoryboardImage({
   prompt,
-  providerApiKey,
-  providerId,
+  providerId: _providerId,
   selectedAspectRatio,
   incomingImages,
   supportedAspectRatioValues,
@@ -85,8 +83,6 @@ export async function generateStoryboardImage({
   frameDescriptionDrafts,
   ignoreAtTagWhenCopyingAndGenerating,
 }: GenerateStoryboardImageParams): Promise<GeneratedStoryboardImage> {
-  await canvasAiGateway.setApiKey(providerId, providerApiKey)
-
   let resolvedRequestAspectRatio = selectedAspectRatio
   if (resolvedRequestAspectRatio === AUTO_REQUEST_ASPECT_RATIO) {
     if (incomingImages.length > 0) {

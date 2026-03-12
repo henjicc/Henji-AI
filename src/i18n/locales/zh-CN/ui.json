@@ -267,7 +267,7 @@
     "details": "查看详情"
   },
   "workspace": {
-    "inputImageAlt": "输入图像 {{index}}",
+    "inputImageAlt": "输入图片 {{index}}",
     "panelHint": "鼠标移动到此处来展开面板......",
     "actions": {
       "regenerate": "重新生成",

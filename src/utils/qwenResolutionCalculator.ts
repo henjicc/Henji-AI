@@ -4,7 +4,7 @@
  * 特点：
  * - 不使用基数系统
  * - 每个比例自动计算符合 [64, 2048] 范围的最佳值
- * - 优先使用较大的分辨率以获得更好的图像质量
+ * - 优先使用较大的分辨率以获得更好的图片质量
  */
 
 import { logWarning } from '../utils/errorLogger'
@@ -104,7 +104,7 @@ export function calculateQwenResolutions(
  * 1. 尽可能保持原图的实际宽高比
  * 2. 确保宽高都在 [64, 2048] 范围内
  * 3. 取整到 8 的倍数
- * 4. 优先使用较大的分辨率以获得更好的图像质量
+ * 4. 优先使用较大的分辨率以获得更好的图片质量
  *
  * @param imageWidth - 图片宽度
  * @param imageHeight - 图片高度

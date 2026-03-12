@@ -31,6 +31,9 @@
         "3": "CFG Scale",
         "4": "Generation Mode",
         "5": "Negative Prompt"
+      },
+      "meta": {
+        "name": "Kling 2.5 Turbo"
       }
     },
     "ppio-kling-2.6-pro": {
@@ -75,6 +78,9 @@
         "1": "Duration",
         "2": "Resolution",
         "3": "Prompt Optimizer"
+      },
+      "meta": {
+        "name": "Minimax Hailuo 02"
       }
     },
     "ppio-minimax-hailuo-2.3": {
@@ -83,6 +89,9 @@
         "2": "Resolution",
         "3": "Fast Mode",
         "4": "Prompt Extension"
+      },
+      "meta": {
+        "name": "Minimax Hailuo 2.3"
       }
     },
     "ppio-minimax-speech-2.6": {
@@ -97,6 +106,9 @@
         "8": "Bitrate",
         "9": "Audio Format",
         "10": "Channel"
+      },
+      "meta": {
+        "name": "Minimax Speech 2.6"
       }
     },
     "ppio-pixverse-v4.5": {
@@ -105,6 +117,9 @@
         "2": "Resolution",
         "3": "Fast Mode",
         "4": "Negative Prompt"
+      },
+      "meta": {
+        "name": "PixVerse V4.5"
       }
     },
     "ppio-seedance-v1.5-pro": {
@@ -133,6 +148,9 @@
         "3": "Aspect Ratio",
         "4": "Resolution",
         "5": "Camera Fixed"
+      },
+      "meta": {
+        "name": "Seedance 1"
       }
     },
     "ppio-seedream-4.5": {
@@ -158,6 +176,9 @@
         "3": "Style",
         "4": "Movement Amplitude",
         "5": "Generate Audio"
+      },
+      "meta": {
+        "name": "Vidu Q1"
       }
     },
     "ppio-wan-2.5-preview": {
@@ -168,6 +189,9 @@
         "4": "Prompt Extend",
         "5": "Generate Audio",
         "6": "Negative Prompt"
+      },
+      "meta": {
+        "name": "Wan 2.5 Preview"
       }
     },
     "ppio-wan-2.6": {

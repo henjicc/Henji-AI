@@ -19,7 +19,7 @@ export const nanoBananaExample: ModelDefinition = {
       en: 'Nano Banana'
     },
     description: {
-      zh: 'Google 最先进的图像生成和编辑模型',
+      zh: 'Google 最先进的图片生成和编辑模型',
       en: 'Google\'s most advanced image generation and editing model'
     },
     tags: [
@@ -103,7 +103,7 @@ export const seedream40Example: ModelDefinition = {
       en: 'Seedream 4.0'
     },
     description: {
-      zh: '先进的图像生成模型，支持4K分辨率',
+      zh: '先进的图片生成模型，支持4K分辨率',
       en: 'Advanced image generation model with 4K resolution'
     },
     tags: [

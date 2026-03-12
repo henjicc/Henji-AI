@@ -12,7 +12,7 @@ export const wan25PreviewModel = defineModel({
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-wan-2.5-preview',
-    name: 'Wan 2.5 Preview',
+    name: { key: 'meta.name', fallback: 'Wan 2.5 Preview' },
     description: '万象 2.5 预览版视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video'],
     progress: {

@@ -10,7 +10,7 @@ export const sora2Model = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-sora-2',
-    name: 'Sora 2',
+    name: { key: 'meta.name', fallback: 'Sora 2' },
     description: 'Sora 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

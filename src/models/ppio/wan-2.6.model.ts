@@ -154,7 +154,7 @@ export const wan26Model = defineModel({
     }
   ],
   endpoints: {
-    selector: (params) => {
+    selector: async (params) => {
       const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
 

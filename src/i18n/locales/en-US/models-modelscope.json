@@ -36,6 +36,9 @@
         "6": "Base Size",
         "7": "Steps",
         "8": "Guidance"
+      },
+      "meta": {
+        "name": "ModelScope Custom"
       }
     },
     "Qwen/Qwen-Image-Edit-2509": {

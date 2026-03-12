@@ -10,7 +10,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
     id: 'Qwen/Qwen-Image-Edit-2509',
     provider: 'modelscope',
     type: 'image',
-        i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2509',
+    i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2509',
     name: { key: 'meta.name', fallback: 'Qwen-Image-Edit-2509' },
     description: { key: 'meta.description', fallback: 'ModelScope Qwen image editing model (image required)' },
     tags: ['image-to-image', 'supports-image-editing', 'provider-modelscope'],
@@ -30,7 +30,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
       require: { images: { exact: 1 } },
       message: {
         title: '图片必需',
-        message: '图像编辑需要上传1张图片',
+        message: '图片编辑需要上传1张图片',
         type: 'warning'
       }
     },

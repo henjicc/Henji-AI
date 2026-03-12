@@ -10,7 +10,7 @@ export const seedreamV4Model = defineModel({
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4',
-    name: 'Seedream V4',
+    name: { key: 'meta.name', fallback: 'Seedream V4' },
     description: 'Bytedance Seedream V4 图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image']
   },

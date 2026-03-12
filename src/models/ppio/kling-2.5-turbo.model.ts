@@ -12,7 +12,7 @@ export const kling25TurboModel = defineModel({
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-2.5-turbo',
-    name: 'Kling 2.5 Turbo',
+    name: { key: 'meta.name', fallback: 'Kling 2.5 Turbo' },
     description: '可灵 2.5 Turbo 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

@@ -10,7 +10,7 @@ export const seedanceModel = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-bytedance-seedance-v1',
-    name: 'Seedance',
+    name: { key: 'meta.name', fallback: 'Seedance' },
     description: 'Bytedance Seedance 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-bytedance-seedance', 'bytedance-seedance-v1']

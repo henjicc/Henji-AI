@@ -24,10 +24,16 @@
       "identifier": "http:allow-fetch",
       "allow": [
         {
-          "url": "http://*"
+          "url": "https://api.github.com/*"
         },
         {
-          "url": "https://*"
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://objects.githubusercontent.com/*"
+        },
+        {
+          "url": "https://github-releases.githubusercontent.com/*"
         }
       ]
     },
@@ -35,10 +41,16 @@
       "identifier": "http:allow-fetch-read-body",
       "allow": [
         {
-          "url": "http://*"
+          "url": "https://api.github.com/*"
         },
         {
-          "url": "https://*"
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://objects.githubusercontent.com/*"
+        },
+        {
+          "url": "https://github-releases.githubusercontent.com/*"
         }
       ]
     },
@@ -46,10 +58,16 @@
       "identifier": "http:allow-fetch-send",
       "allow": [
         {
-          "url": "http://*"
+          "url": "https://api.github.com/*"
         },
         {
-          "url": "https://*"
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://objects.githubusercontent.com/*"
+        },
+        {
+          "url": "https://github-releases.githubusercontent.com/*"
         }
       ]
     },

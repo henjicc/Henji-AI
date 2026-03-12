@@ -36,12 +36,15 @@
         "6": "基数",
         "7": "采样步数",
         "8": "提示词引导系数"
+      },
+      "meta": {
+        "name": "ModelScope Custom"
       }
     },
     "Qwen/Qwen-Image-Edit-2509": {
       "meta": {
         "name": "Qwen-Image-Edit-2509",
-        "description": "魔搭 Qwen 图像编辑模型（需上传图片）"
+        "description": "魔搭 Qwen 图片编辑模型（需上传图片）"
       },
       "auto": {
         "1": "宽高比",

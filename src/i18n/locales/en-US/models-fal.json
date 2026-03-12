@@ -7,6 +7,9 @@
         "3": "Resolution",
         "4": "Fast Mode",
         "5": "Prompt Optimizer"
+      },
+      "meta": {
+        "name": "MiniMax Hailuo 02"
       }
     },
     "fal-ai-minimax-hailuo-2.3": {
@@ -15,6 +18,9 @@
         "2": "Duration",
         "3": "Fast Mode",
         "4": "Prompt Optimizer"
+      },
+      "meta": {
+        "name": "MiniMax Hailuo 2.3"
       }
     },
     "fal-ai-kling-image-o1": {
@@ -23,6 +29,9 @@
         "2": "Aspect Ratio",
         "3": "Auto",
         "4": "Resolution"
+      },
+      "meta": {
+        "name": "Kling Image O1"
       }
     },
     "fal-ai-kling-video-o1": {
@@ -36,6 +45,9 @@
         "7": "Aspect Ratio",
         "8": "Auto",
         "9": "Keep Audio"
+      },
+      "meta": {
+        "name": "Kling Video O1"
       }
     },
     "fal-ai-kling-video-v2.6-pro": {
@@ -52,6 +64,9 @@
         "10": "Aspect Ratio",
         "11": "CFG Scale",
         "12": "Generate Audio"
+      },
+      "meta": {
+        "name": "Kling Video V2.6 Pro"
       }
     },
     "fal-ai-ltx-2": {
@@ -71,6 +86,9 @@
         "13": "Replace Audio",
         "14": "Replace Video",
         "15": "Replace Audio & Video"
+      },
+      "meta": {
+        "name": "LTX 2"
       }
     },
     "fal-ai-nano-banana-pro": {
@@ -79,6 +97,9 @@
         "2": "Aspect Ratio",
         "3": "Smart",
         "4": "Resolution"
+      },
+      "meta": {
+        "name": "Nano Banana Pro"
       }
     },
     "fal-ai-nano-banana": {
@@ -86,6 +107,9 @@
         "1": "Number of Images",
         "2": "Aspect Ratio",
         "3": "Smart"
+      },
+      "meta": {
+        "name": "Nano Banana"
       }
     },
     "fal-ai-pixverse-v5.5": {
@@ -103,6 +127,9 @@
         "11": "Enhanced",
         "12": "Generate Audio",
         "13": "Multi Clip"
+      },
+      "meta": {
+        "name": "PixVerse V5.5"
       }
     },
     "fal-ai-bytedance-seedance-v1": {
@@ -119,18 +146,27 @@
         "10": "Duration",
         "11": "Camera Fixed",
         "12": "Fast Mode"
+      },
+      "meta": {
+        "name": "Seedance 1"
       }
     },
     "fal-ai-bytedance-seedream-v4.5": {
       "auto": {
         "1": "Number of Images",
         "2": "Image Size"
+      },
+      "meta": {
+        "name": "Seedream 4.5"
       }
     },
     "fal-ai-bytedance-seedream-v4": {
       "auto": {
         "1": "Number of Images",
         "2": "Image Size"
+      },
+      "meta": {
+        "name": "Seedream 4.0"
       }
     },
     "fal-ai-sora-2": {
@@ -143,6 +179,9 @@
         "6": "Smart",
         "7": "Auto",
         "8": "Resolution"
+      },
+      "meta": {
+        "name": "Sora 2"
       }
     },
     "fal-ai-veo-3.1": {
@@ -160,6 +199,9 @@
         "11": "Auto Fix",
         "12": "Fast Mode",
         "13": "Enhance Prompt"
+      },
+      "meta": {
+        "name": "Veo 3.1"
       }
     },
     "fal-ai-vidu-q2": {
@@ -180,6 +222,9 @@
         "14": "High",
         "15": "Background Music",
         "16": "Turbo"
+      },
+      "meta": {
+        "name": "Vidu Q2"
       }
     },
     "fal-ai-wan-25-preview": {
@@ -188,6 +233,9 @@
         "2": "Aspect Ratio",
         "3": "Resolution",
         "4": "Prompt Expansion"
+      },
+      "meta": {
+        "name": "Wan 2.5 Preview"
       }
     },
     "fal-ai-z-image-turbo": {
@@ -197,6 +245,9 @@
         "3": "Inference Steps",
         "4": "Prompt Expansion",
         "5": "Acceleration"
+      },
+      "meta": {
+        "name": "Z-Image Turbo"
       }
     }
   }

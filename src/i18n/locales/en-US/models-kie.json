@@ -78,7 +78,7 @@
     },
     "kie-seedance-v3": {
       "meta": {
-        "name": "Seedance V3",
+        "name": "Seedance 3",
         "description": "KIE Seedance V3 video generation model"
       },
       "auto": {

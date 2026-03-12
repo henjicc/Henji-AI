@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react'
 
 /**
- * 图像变换 Hook
- * 职责：管理图像的变换操作（旋转、缩放、翻转等）
+ * 图片变换 Hook
+ * 职责：管理图片的变换操作（旋转、缩放、翻转等）
  */
 
 interface Transform {

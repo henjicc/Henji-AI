@@ -45,7 +45,7 @@ export const modelscopeCustomModel = defineModel({
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.modelscope-custom',
-    name: { key: 'auto.1', fallback: 'ModelScope Custom' },
+    name: { key: 'meta.name', fallback: 'ModelScope Custom' },
     description: { key: 'auto.2', fallback: 'ModelScope custom model by ID' },
     tags: ['text-to-image', 'image-to-image', 'provider-modelscope'],
     polling: {

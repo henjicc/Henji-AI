@@ -10,7 +10,7 @@ export const nanoBananaProModel = defineModel({
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-nano-banana-pro',
-    name: 'Nano Banana Pro',
+    name: { key: 'meta.name', fallback: 'Nano Banana Pro' },
     description: 'Nano Banana Pro 高质量图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image', 'high-quality']
   },

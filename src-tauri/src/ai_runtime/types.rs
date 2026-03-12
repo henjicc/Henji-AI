@@ -1,0 +1,127 @@
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GenerateStatus {
+    Completed,
+    Failed,
+    Timeout,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiGenerateRequestDto {
+    pub model_id: String,
+    #[serde(default)]
+    pub params: Map<String, Value>,
+    #[serde(default)]
+    pub request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiGenerateResponseDto {
+    pub status: GenerateStatus,
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderKeyStatusDto {
+    pub provider_id: String,
+    pub configured: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelManifest {
+    #[serde(default)]
+    pub models: Vec<ModelManifestItem>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelManifestItem {
+    pub model_id: String,
+    pub provider_id: String,
+    #[serde(default)]
+    pub model_type: Option<String>,
+    #[serde(default)]
+    pub polling: Option<PollingConfig>,
+    #[serde(default)]
+    pub endpoints: Option<EndpointConfigDsl>,
+    #[serde(default)]
+    pub request: Option<RequestConfigDsl>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PollingConfig {
+    pub interval: u64,
+    pub max_attempts: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointRuleDsl {
+    pub when: Value,
+    pub route: String,
+    #[serde(default)]
+    pub method: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointConfigDsl {
+    pub default_route: String,
+    #[serde(default)]
+    pub rules: Vec<EndpointRuleDsl>,
+    #[serde(default)]
+    pub selector_js: Option<String>,
+    #[serde(default)]
+    pub method: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestTransformDsl {
+    pub name: String,
+    #[serde(default)]
+    pub args: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestFieldDsl {
+    pub from: String,
+    pub to: String,
+    #[serde(default)]
+    pub transforms: Vec<RequestTransformDsl>,
+    #[serde(default)]
+    pub when: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestConfigDsl {
+    #[serde(default)]
+    pub constants: Map<String, Value>,
+    #[serde(default)]
+    pub fields: Vec<RequestFieldDsl>,
+    #[serde(default)]
+    pub remove_empty: Vec<String>,
+    #[serde(default)]
+    pub builder_js: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderExecutionResult {
+    pub status: GenerateStatus,
+    pub url: String,
+    pub metadata: Value,
+}

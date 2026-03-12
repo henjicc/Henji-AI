@@ -4,6 +4,7 @@
 )]
 
 mod clipboard_files;
+mod ai_runtime;
 mod image_commands;
 mod modelscope;
 
@@ -81,6 +82,12 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init()) // 支持拖放图片到外部应用
         .plugin(tauri_plugin_sql::Builder::default().build()) // SQLite 数据库支持
         .invoke_handler(tauri::generate_handler![
+            ai_runtime::commands::ai_set_provider_api_key,
+            ai_runtime::commands::ai_remove_provider_api_key,
+            ai_runtime::commands::ai_get_provider_key_status,
+            ai_runtime::commands::ai_reload_model_manifest,
+            ai_runtime::commands::ai_generate,
+            ai_runtime::commands::ai_cancel_task,
             modelscope::modelscope_submit_task,
             modelscope::modelscope_check_status,
             toggle_devtools,

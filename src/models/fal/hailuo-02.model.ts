@@ -10,7 +10,7 @@ export const hailuo02Model = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-minimax-hailuo-02',
-    name: 'MiniMax Hailuo 02',
+    name: { key: 'meta.name', fallback: 'MiniMax Hailuo 02' },
     description: 'MiniMax Hailuo 02 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-hailuo-02', 'minimax-hailuo-02-fal']

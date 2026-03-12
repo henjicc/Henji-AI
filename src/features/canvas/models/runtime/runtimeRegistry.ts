@@ -46,7 +46,7 @@ const FALLBACK_ASPECT_RATIOS: AspectRatioOption[] = [
 ];
 
 const DEFAULT_MODEL_DURATION_MS = 60_000;
-const DEFAULT_MODEL_DESCRIPTION = '图像生成模型';
+const DEFAULT_MODEL_DESCRIPTION = '图片生成模型';
 
 const LEGACY_IMAGE_MODEL_ALIASES = ['ppio/gemini-3.1-flash', 'gemini-3.1-flash', 'gemini-3.1-flash-edit'];
 

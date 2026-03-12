@@ -15,11 +15,11 @@ import {
   type UiRadiusPreset,
 } from '@/core/theme/runtimeTheme';
 
-export type ProviderApiKeys = Record<string, string>;
-const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope'] as const;
+export type ProviderKeyStatusMap = Record<string, boolean>;
+const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair'] as const;
 
 interface SettingsState {
-  apiKeys: ProviderApiKeys;
+  providerKeyStatus: ProviderKeyStatusMap;
   downloadPresetPaths: string[];
   useUploadFilenameAsNodeTitle: boolean;
   storyboardGenKeepStyleConsistent: boolean;
@@ -30,6 +30,8 @@ interface SettingsState {
   accentColor: string;
   themeColors: ThemeColorScheme;
   setProviderApiKey: (providerId: string, key: string) => void;
+  setProviderKeyStatus: (providerId: string, configured: boolean) => void;
+  setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
   setStoryboardGenKeepStyleConsistent: (enabled: boolean) => void;
@@ -58,22 +60,6 @@ function normalizeHexColor(input: string): string {
 
 function normalizeApiKey(input: string): string {
   return input.trim();
-}
-
-function normalizeApiKeys(input: ProviderApiKeys | null | undefined): ProviderApiKeys {
-  if (!input) {
-    return {};
-  }
-
-  return Object.entries(input).reduce<ProviderApiKeys>((acc, [providerId, key]) => {
-    const normalizedProviderId = providerId.trim();
-    if (!normalizedProviderId) {
-      return acc;
-    }
-
-    acc[normalizedProviderId] = normalizeApiKey(key);
-    return acc;
-  }, {});
 }
 
 function shouldUpgradeLegacyNeutralTheme(input?: Partial<ThemeColorScheme>): boolean {
@@ -107,20 +93,32 @@ function mapLegacyPaletteTheme(input?: Partial<ThemeColorScheme>): ThemeColorSch
   return normalized;
 }
 
-function readLegacyApiKeysFromLocalStorage(): ProviderApiKeys {
-  return KNOWN_PROVIDER_IDS.reduce<ProviderApiKeys>((acc, providerId) => {
-    const key = localStorage.getItem(`${providerId}_api_key`)?.trim() || '';
-    if (key) {
-      acc[providerId] = key;
-    }
+function createDefaultProviderKeyStatus(): ProviderKeyStatusMap {
+  return KNOWN_PROVIDER_IDS.reduce<ProviderKeyStatusMap>((acc, providerId) => {
+    acc[providerId] = false;
     return acc;
   }, {});
+}
+
+function normalizeProviderKeyStatus(input: unknown): ProviderKeyStatusMap {
+  const defaults = createDefaultProviderKeyStatus();
+  if (!input || typeof input !== 'object') {
+    return defaults;
+  }
+
+  const entries = Object.entries(input as Record<string, unknown>);
+  entries.forEach(([providerId, configured]) => {
+    if (!providerId.trim()) return;
+    defaults[providerId] = configured === true;
+  });
+
+  return defaults;
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      apiKeys: readLegacyApiKeysFromLocalStorage(),
+      providerKeyStatus: createDefaultProviderKeyStatus(),
       downloadPresetPaths: [],
       useUploadFilenameAsNodeTitle: true,
       storyboardGenKeepStyleConsistent: true,
@@ -132,14 +130,27 @@ export const useSettingsStore = create<SettingsState>()(
       themeColors: DEFAULT_THEME_COLOR_SCHEME,
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
-        localStorage.setItem(`${providerId}_api_key`, normalizedKey);
         set((state) => ({
-          apiKeys: {
-            ...state.apiKeys,
-            [providerId]: normalizedKey,
+          providerKeyStatus: {
+            ...state.providerKeyStatus,
+            [providerId]: normalizedKey.length > 0,
           },
         }));
       },
+      setProviderKeyStatus: (providerId, configured) =>
+        set((state) => ({
+          providerKeyStatus: {
+            ...state.providerKeyStatus,
+            [providerId]: configured,
+          },
+        })),
+      setProviderKeyStatuses: (status) =>
+        set((state) => ({
+          providerKeyStatus: {
+            ...state.providerKeyStatus,
+            ...status,
+          },
+        })),
       setDownloadPresetPaths: (paths) => {
         const uniquePaths = Array.from(
           new Set(paths.map((path) => path.trim()).filter((path) => path.length > 0))
@@ -174,11 +185,12 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      version: 6,
+      version: 7,
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
-          apiKeys?: ProviderApiKeys;
+          apiKeys?: Record<string, string>;
+          providerKeyStatus?: ProviderKeyStatusMap;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
           themeColors?: Partial<ThemeColorScheme>;
         };
@@ -187,24 +199,21 @@ export const useSettingsStore = create<SettingsState>()(
           ? DEFAULT_THEME_COLOR_SCHEME
           : normalizedThemeColors;
 
-        const migratedApiKeys = {
-          ...readLegacyApiKeysFromLocalStorage(),
-          ...normalizeApiKeys(state.apiKeys),
-        };
-        const ignoreAtTagWhenCopyingAndGenerating =
-          state.ignoreAtTagWhenCopyingAndGenerating ?? true;
-        if (Object.keys(migratedApiKeys).length > 0) {
-          return {
-            ...(persistedState as object),
-            apiKeys: migratedApiKeys,
-            ignoreAtTagWhenCopyingAndGenerating,
-            themeColors,
-          };
+        const migratedProviderStatus = normalizeProviderKeyStatus(state.providerKeyStatus);
+        if (state.apiKeys && typeof state.apiKeys === 'object') {
+          Object.entries(state.apiKeys).forEach(([providerId, key]) => {
+            migratedProviderStatus[providerId] = normalizeApiKey(String(key)).length > 0;
+          });
+        }
+        if (state.apiKey) {
+          migratedProviderStatus.ppio = normalizeApiKey(state.apiKey).length > 0;
         }
 
+        const ignoreAtTagWhenCopyingAndGenerating =
+          state.ignoreAtTagWhenCopyingAndGenerating ?? true;
         return {
           ...(persistedState as object),
-          apiKeys: state.apiKey ? { ppio: normalizeApiKey(state.apiKey) } : {},
+          providerKeyStatus: migratedProviderStatus,
           ignoreAtTagWhenCopyingAndGenerating,
           themeColors,
         };

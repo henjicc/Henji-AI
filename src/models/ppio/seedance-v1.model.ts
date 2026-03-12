@@ -10,7 +10,7 @@ export const seedanceV1Model = defineModel({
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-seedance-v1',
-    name: 'Seedance V1',
+    name: { key: 'meta.name', fallback: 'Seedance V1' },
     description: 'Seedance V1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

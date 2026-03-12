@@ -3,6 +3,19 @@ import i18n from '@/i18n/config'
 import type { I18nText } from '@/core/types/I18nText'
 import { getI18nText } from '@/core/types/I18nText'
 
+const PROVIDER_ORDER: Record<string, number> = {
+  ppio: 0,
+  kie: 1,
+  modelscope: 2,
+  fal: 3
+}
+
+const MODEL_TYPE_ORDER: Record<'image' | 'video' | 'audio', number> = {
+  image: 0,
+  video: 1,
+  audio: 2
+}
+
 /**
  * 供应商 ID 到显示名称的映射
  */
@@ -83,7 +96,24 @@ export function getAvailableProviders() {
     })
   })
 
-  return Array.from(providerMap.values())
+  const providers = Array.from(providerMap.values())
+
+  providers.forEach((provider) => {
+    provider.models.sort((a, b) => {
+      const typeDiff = MODEL_TYPE_ORDER[a.type] - MODEL_TYPE_ORDER[b.type]
+      if (typeDiff !== 0) return typeDiff
+      return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
+    })
+  })
+
+  providers.sort((a, b) => {
+    const orderA = PROVIDER_ORDER[a.id] ?? Number.MAX_SAFE_INTEGER
+    const orderB = PROVIDER_ORDER[b.id] ?? Number.MAX_SAFE_INTEGER
+    if (orderA !== orderB) return orderA - orderB
+    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
+  })
+
+  return providers
 }
 
 /**

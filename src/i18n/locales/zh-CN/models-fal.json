@@ -7,6 +7,9 @@
         "3": "分辨率",
         "4": "快速模式",
         "5": "提示词优化"
+      },
+      "meta": {
+        "name": "MiniMax Hailuo 02"
       }
     },
     "fal-ai-minimax-hailuo-2.3": {
@@ -15,6 +18,9 @@
         "2": "时长",
         "3": "快速模式",
         "4": "提示词优化"
+      },
+      "meta": {
+        "name": "MiniMax Hailuo 2.3"
       }
     },
     "fal-ai-kling-image-o1": {
@@ -23,6 +29,9 @@
         "2": "宽高比",
         "3": "智能",
         "4": "分辨率"
+      },
+      "meta": {
+        "name": "可灵 Image O1"
       }
     },
     "fal-ai-kling-video-o1": {
@@ -36,6 +45,9 @@
         "7": "比例",
         "8": "自动",
         "9": "保留音频"
+      },
+      "meta": {
+        "name": "可灵 Video O1"
       }
     },
     "fal-ai-kling-video-v2.6-pro": {
@@ -52,6 +64,9 @@
         "10": "比例",
         "11": "CFG Scale",
         "12": "生成音频"
+      },
+      "meta": {
+        "name": "可灵 Video V2.6 Pro"
       }
     },
     "fal-ai-ltx-2": {
@@ -71,6 +86,9 @@
         "13": "替换音频",
         "14": "替换视频",
         "15": "替换音频和视频"
+      },
+      "meta": {
+        "name": "LTX 2"
       }
     },
     "fal-ai-nano-banana-pro": {
@@ -79,6 +97,9 @@
         "2": "宽高比",
         "3": "智能",
         "4": "分辨率"
+      },
+      "meta": {
+        "name": "Nano Banana Pro"
       }
     },
     "fal-ai-nano-banana": {
@@ -86,6 +107,9 @@
         "1": "生成数量",
         "2": "宽高比",
         "3": "智能"
+      },
+      "meta": {
+        "name": "Nano Banana"
       }
     },
     "fal-ai-pixverse-v5.5": {
@@ -103,6 +127,9 @@
         "11": "Enhanced",
         "12": "生成音频",
         "13": "多镜头"
+      },
+      "meta": {
+        "name": "PixVerse V5.5"
       }
     },
     "fal-ai-bytedance-seedance-v1": {
@@ -119,18 +146,27 @@
         "10": "时长",
         "11": "固定相机",
         "12": "快速模式"
+      },
+      "meta": {
+        "name": "Seedance 1"
       }
     },
     "fal-ai-bytedance-seedream-v4.5": {
       "auto": {
         "1": "生成数量",
         "2": "尺寸"
+      },
+      "meta": {
+        "name": "Seedream 4.5"
       }
     },
     "fal-ai-bytedance-seedream-v4": {
       "auto": {
         "1": "生成数量",
         "2": "尺寸"
+      },
+      "meta": {
+        "name": "Seedream 4.0"
       }
     },
     "fal-ai-sora-2": {
@@ -143,6 +179,9 @@
         "6": "智能",
         "7": "自动",
         "8": "分辨率"
+      },
+      "meta": {
+        "name": "Sora 2"
       }
     },
     "fal-ai-veo-3.1": {
@@ -160,6 +199,9 @@
         "11": "Auto Fix",
         "12": "快速模式",
         "13": "增强提示词"
+      },
+      "meta": {
+        "name": "Veo 3.1"
       }
     },
     "fal-ai-vidu-q2": {
@@ -180,6 +222,9 @@
         "14": "高",
         "15": "背景音乐",
         "16": "快速模式"
+      },
+      "meta": {
+        "name": "Vidu Q2"
       }
     },
     "fal-ai-wan-25-preview": {
@@ -188,6 +233,9 @@
         "2": "比例",
         "3": "分辨率",
         "4": "提示词扩展"
+      },
+      "meta": {
+        "name": "Wan 2.5 Preview"
       }
     },
     "fal-ai-z-image-turbo": {
@@ -197,6 +245,9 @@
         "3": "推理步数",
         "4": "提示词扩展",
         "5": "加速模式"
+      },
+      "meta": {
+        "name": "Z-Image Turbo"
       }
     }
   }

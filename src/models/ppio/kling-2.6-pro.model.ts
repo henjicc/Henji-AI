@@ -170,7 +170,7 @@ export const kling26ProModel = defineModel({
     }
   ],
   endpoints: {
-    selector: (params: Record<string, any>) => {
+    selector: async (params: Record<string, any>) => {
       // 使用原始参数 ID（ppioKling26Mode），不是 API 字段名（mode）
       const mode = params.ppioKling26Mode || 'text-image-to-video'
       const images = params.images || []

@@ -1,50 +1,65 @@
 /**
- * GenerationService - 统一的媒体生成服务
+ * GenerationService - unified AI runtime gateway.
  *
- * 职责：
- * - 自动路由到正确的 Provider
- * - 管理 API 密钥
- * - 缓存 Provider 实例
- * - 统一错误处理
- *
- * 使用单例模式，全局只有一个实例
+ * Frontend only prepares model params and delegates execution to Rust backend.
  */
 
 import { registry } from '@/core/ModelRegistry'
 import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
-import {
-  ProviderHandler,
-  GenerateResult,
-  ProgressStatus,
-  ProviderError,
-  ProviderErrorCode,
-} from '@/core/providers/base'
+import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ProviderId } from '@/core/types'
-import { providerFactoryRegistry, type ProviderFactory } from '@/core/providers/ProviderFactoryRegistry'
+import {
+  aiCancelTask,
+  aiGenerate,
+  aiGetProviderKeyStatus,
+  aiRemoveProviderApiKey,
+  aiSetProviderApiKey,
+  type ProviderKeyStatusDto,
+} from '@/commands/aiRuntime'
 
 /**
- * GenerationService 单例类
+ * Backward-compatible type kept for API stability.
  */
-export class GenerationService {
-  /** Provider 实例缓存 */
-  private providers: Map<string, ProviderHandler>
+export type ProviderFactory = never
 
-  /** 单例实例 */
-  private static instance: GenerationService | null = null
-
-  /**
-   * 私有构造函数（单例模式）
-   */
-  private constructor() {
-    this.providers = new Map()
-    // this.log('GenerationService initialized')
+function getErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    const trimmed = error.trim()
+    return trimmed.length > 0 ? trimmed : 'Generation failed'
   }
 
-  /**
-   * 获取单例实例
-   *
-   * @returns GenerationService 实例
-   */
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>
+    if (typeof record.message === 'string' && record.message.trim().length > 0) {
+      return record.message
+    }
+  }
+
+  return 'Generation failed'
+}
+
+function formatFailedMetadata(metadata: Record<string, unknown> | undefined): string {
+  if (!metadata || Object.keys(metadata).length === 0) return ''
+  try {
+    return `: ${JSON.stringify(metadata)}`
+  } catch {
+    return ''
+  }
+}
+
+export class GenerationService {
+  private static instance: GenerationService | null = null
+
+  private keyStatusCache: Map<string, boolean>
+
+  private constructor() {
+    this.keyStatusCache = new Map()
+  }
+
   static getInstance(): GenerationService {
     if (!GenerationService.instance) {
       GenerationService.instance = new GenerationService()
@@ -52,73 +67,49 @@ export class GenerationService {
     return GenerationService.instance
   }
 
-  /**
-   * 统一生成接口
-   *
-   * 自动路由到正确的 Provider 并执行生成
-   *
-   * @param modelId - 模型 ID
-   * @param params - 生成参数
-   * @param onProgress - 进度回调（可选）
-   * @returns Promise<生成结果>
-   */
   async generate(
     modelId: string,
     params: Record<string, any>,
     onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
-    this.log('Starting generation', { modelId, params })
-
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
 
     try {
-      // 1. 从 ModelRegistry 获取模型定义
       const model = registry.getModel(modelId)
       if (!model) {
         throw new Error(`Model not found: ${modelId}`)
       }
 
-      this.log('Model found', {
-        modelId,
-        provider: model.meta.provider,
-        type: model.meta.type,
-      })
-
-      // 2. 获取对应的 Provider
-      const provider = this.getProvider(model.meta.provider)
-
-      this.log('Provider obtained', { provider: model.meta.provider })
-
-      // 3. 启动进度跟踪（如提供回调）
       const progressSpec = onProgress ? resolveProgressSpec(model, params as Record<string, unknown>) : null
       progressTracker = onProgress && progressSpec
         ? createProgressTracker(progressSpec, onProgress)
         : null
-
       progressTracker?.start()
 
-      // 4. 调用 Provider 的 generate 方法
-      const result = await provider.generate(model, params)
+      const response = await aiGenerate({
+        modelId,
+        params,
+      })
+
+      if (response.status !== 'completed') {
+        throw new Error(`Generation ${response.status}${formatFailedMetadata(response.metadata)}`)
+      }
 
       progressTracker?.complete()
 
-      this.log('Generation completed', { modelId, result })
-
-      return result
+      return {
+        status: response.status,
+        url: response.url,
+        filePath: response.filePath,
+        metadata: response.metadata,
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Generation failed'
+      const message = getErrorMessage(error)
       progressTracker?.fail(message)
-      this.handleError(error, modelId)
+      throw new Error(`Generation failed for ${modelId}: ${message}`)
     }
   }
 
-  /**
-   * 生成图片（语义化方法）
-   *
-   * @param modelId - 模型 ID
-   * @param params - 生成参数
-   * @returns Promise<生成结果>
-   */
   async generateImage(
     modelId: string,
     params: Record<string, any>,
@@ -127,13 +118,6 @@ export class GenerationService {
     return this.generate(modelId, params, onProgress)
   }
 
-  /**
-   * 生成视频（语义化方法）
-   *
-   * @param modelId - 模型 ID
-   * @param params - 生成参数
-   * @returns Promise<生成结果>
-   */
   async generateVideo(
     modelId: string,
     params: Record<string, any>,
@@ -142,13 +126,6 @@ export class GenerationService {
     return this.generate(modelId, params, onProgress)
   }
 
-  /**
-   * 生成音频（语义化方法）
-   *
-   * @param modelId - 模型 ID
-   * @param params - 生成参数
-   * @returns Promise<生成结果>
-   */
   async generateAudio(
     modelId: string,
     params: Record<string, any>,
@@ -157,186 +134,63 @@ export class GenerationService {
     return this.generate(modelId, params, onProgress)
   }
 
-  /**
-   * 获取或创建 Provider 实例
-   *
-   * 使用懒加载 + 缓存策略
-   *
-   * @param providerName - Provider 名称
-   * @returns ProviderHandler 实例
-   */
-  private getProvider(providerName: string): ProviderHandler {
-    // 检查缓存
-    if (this.providers.has(providerName)) {
-      this.log('Provider found in cache', { provider: providerName })
-      return this.providers.get(providerName)!
+  async setApiKey(provider: string, apiKey: string): Promise<void> {
+    const trimmed = apiKey.trim()
+    if (!trimmed) {
+      await aiRemoveProviderApiKey(provider)
+      this.keyStatusCache.set(provider, false)
+      return
     }
 
-    this.log('Creating new provider instance', { provider: providerName })
-
-    // 创建新的 Provider
-    const provider = this.initializeProvider(providerName)
-    this.providers.set(providerName, provider)
-
-    return provider
+    await aiSetProviderApiKey(provider, trimmed)
+    this.keyStatusCache.set(provider, true)
   }
 
-  /**
-   * 初始化 Provider 实例
-   *
-   * 根据 provider 名称创建对应的实例
-   *
-   * @param providerName - Provider 名称
-   * @returns ProviderHandler 实例
-   */
-  private initializeProvider(providerName: string): ProviderHandler {
-    // 获取 API Key
-    const apiKey = this.getApiKey(providerName)
-    if (!apiKey) {
-      throw new ProviderError(
-        `API密钥未配置，请在设置中添加 ${providerName} 的 API 密钥`,
-        providerName,
-        ProviderErrorCode.API_KEY_MISSING
-      )
-    }
-
-    return providerFactoryRegistry.create(providerName as ProviderId, apiKey)
+  async removeApiKey(provider: string): Promise<void> {
+    await aiRemoveProviderApiKey(provider)
+    this.keyStatusCache.set(provider, false)
   }
 
-  /**
-   * 获取 API 密钥
-   *
-   * @param provider - Provider 名称
-   * @returns API 密钥或 null
-   */
-  private getApiKey(provider: string): string | null {
-    // 使用下划线格式的密钥名（与旧系统保持一致）：{provider}_api_key
-    const key = `${provider}_api_key`
-    return localStorage.getItem(key)
+  async validateApiKey(provider: string): Promise<boolean> {
+    const statusList = await aiGetProviderKeyStatus()
+    this.syncKeyStatusCache(statusList)
+    return this.keyStatusCache.get(provider) === true
   }
 
-  /**
-   * 设置 API 密钥
-   *
-   * @param provider - Provider 名称
-   * @param apiKey - API 密钥
-   */
-  setApiKey(provider: string, apiKey: string): void {
-    // 使用下划线格式的密钥名（与旧系统保持一致）：{provider}_api_key
-    const key = `${provider}_api_key`
-    localStorage.setItem(key, apiKey)
-
-    this.log('API key updated', { provider })
-
-    // 清除缓存的 Provider 实例，下次使用时会重新创建
-    if (this.providers.has(provider)) {
-      this.providers.delete(provider)
-      this.log('Provider cache cleared', { provider })
-    }
+  async getConfiguredProviders(): Promise<string[]> {
+    const statusList = await aiGetProviderKeyStatus()
+    this.syncKeyStatusCache(statusList)
+    return statusList.filter((item) => item.configured).map((item) => item.providerId)
   }
 
-  /**
-   * 验证 API 密钥是否已配置
-   *
-   * @param provider - Provider 名称
-   * @returns 是否已配置
-   */
-  validateApiKey(provider: string): boolean {
-    return !!this.getApiKey(provider)
+  async cancelTask(taskId: string): Promise<void> {
+    await aiCancelTask(taskId)
   }
 
-  /**
-   * 获取所有已配置的 Provider
-   *
-   * @returns Provider 名称数组
-   */
-  getConfiguredProviders(): string[] {
-    return providerFactoryRegistry.listProviderIds().filter((p) => this.validateApiKey(String(p))).map(String)
-  }
-
-  /**
-   * 注册 Provider 工厂（用于扩展新的 Provider，无需修改 GenerationService）
-   *
-   * @param providerId - Provider ID
-   * @param factory - Provider 工厂函数
-   * @param options - 注册选项
-   */
   registerProviderFactory(
-    providerId: ProviderId,
-    factory: ProviderFactory,
-    options?: { overwrite?: boolean }
+    _providerId: ProviderId,
+    _factory: ProviderFactory,
+    _options?: { overwrite?: boolean }
   ): void {
-    providerFactoryRegistry.register(providerId, factory, options)
-
-    // If a provider instance is already cached, drop it so the new factory takes effect.
-    const key = String(providerId)
-    if (this.providers.has(key)) {
-      this.providers.delete(key)
-    }
-  }
-
-  /**
-   * 清除 Provider 缓存
-   *
-   * @param provider - Provider 名称（可选，不指定则清除所有）
-   */
-  clearProviderCache(provider?: string): void {
-    if (provider) {
-      this.providers.delete(provider)
-      this.log('Provider cache cleared', { provider })
-    } else {
-      this.providers.clear()
-      this.log('All provider caches cleared')
-    }
-  }
-
-  /**
-   * 错误处理
-   *
-   * @param error - 错误对象
-   * @param modelId - 模型 ID
-   */
-  private handleError(error: any, modelId: string): never {
-    // 如果已经是 ProviderError，直接抛出
-    if (error instanceof ProviderError) {
-      console.error(
-        `[GenerationService] Provider error for ${modelId}:`,
-        error.toJSON()
-      )
-      throw error
-    }
-
-    // 包装为通用错误
-    console.error(`[GenerationService] Error for ${modelId}:`, error)
-    const message = error?.message || String(error)
-    throw new Error(`Generation failed for ${modelId}: ${message}`)
-  }
-
-  /**
-   * 日志输出
-   *
-   * @param message - 日志消息
-   * @param data - 附加数据
-   */
-  private log(message: string, data?: any): void {
-    // 开发环境下输出日志
     if (import.meta.env.DEV) {
-      console.log(`[GenerationService]`, message, data || '')
+      console.warn('[GenerationService] registerProviderFactory is deprecated in backend runtime mode')
     }
   }
 
-  /**
-   * 重置服务（主要用于测试）
-   */
+  clearProviderCache(_provider?: string): void {
+    // No-op: provider execution moved to backend runtime.
+  }
+
+  private syncKeyStatusCache(statusList: ProviderKeyStatusDto[]): void {
+    this.keyStatusCache.clear()
+    statusList.forEach((item) => {
+      this.keyStatusCache.set(item.providerId, item.configured)
+    })
+  }
+
   static reset(): void {
-    if (GenerationService.instance) {
-      GenerationService.instance.providers.clear()
-      GenerationService.instance = null
-    }
+    GenerationService.instance = null
   }
 }
 
-/**
- * 导出单例实例的便捷访问方式
- */
 export const generationService = GenerationService.getInstance()

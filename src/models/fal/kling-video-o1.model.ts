@@ -10,7 +10,7 @@ export const klingVideoO1Model = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-o1',
-    name: 'Kling Video O1',
+    name: { key: 'meta.name', fallback: 'Kling Video O1' },
     description: 'Kling Video O1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

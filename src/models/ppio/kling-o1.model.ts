@@ -215,7 +215,7 @@ export const klingO1Model = defineModel({
     }
   ],
   endpoints: {
-    selector: (params) => {
+    selector: async (params) => {
       const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video'
       const images = params.images || []
 

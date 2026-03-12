@@ -1,6 +1,6 @@
 /**
  * 编辑器画布组件
- * 职责：显示和操作图像画布
+ * 职责：显示和操作图片画布
  */
 
 import React, { useRef, useEffect } from 'react'

@@ -47,7 +47,7 @@
     },
     "kie-kling-v2-6": {
       "meta": {
-        "name": "Kling V2.6",
+        "name": "可灵 V2.6",
         "description": "KIE Kling V2.6 视频生成模型，支持文/图生视频与动作控制"
       },
       "auto": {
@@ -67,7 +67,7 @@
     "kie-nano-banana-pro": {
       "meta": {
         "name": "Nano Banana Pro",
-        "description": "KIE Nano Banana Pro 图像生成模型"
+        "description": "KIE Nano Banana Pro 图片生成模型"
       },
       "auto": {
         "1": "宽高比",
@@ -78,7 +78,7 @@
     },
     "kie-seedance-v3": {
       "meta": {
-        "name": "Seedance V3",
+        "name": "Seedance 3",
         "description": "KIE Seedance V3 视频生成模型"
       },
       "auto": {
@@ -93,8 +93,8 @@
     },
     "kie-seedream-4.0": {
       "meta": {
-        "name": "即梦图片 4.0",
-        "description": "KIE Seedream 4.0 图像生成模型"
+        "name": "Seedream 4.0",
+        "description": "KIE Seedream 4.0 图片生成模型"
       },
       "auto": {
         "1": "宽高比",
@@ -105,8 +105,8 @@
     },
     "kie-seedream-4.5": {
       "meta": {
-        "name": "即梦图片 4.5",
-        "description": "KIE Seedream 4.5 图像生成模型"
+        "name": "Seedream 4.5",
+        "description": "KIE Seedream 4.5 图片生成模型"
       },
       "auto": {
         "1": "宽高比",

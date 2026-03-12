@@ -83,7 +83,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
   const addNode = useCanvasStore((state) => state.addNode);
   const findNodePosition = useCanvasStore((state) => state.findNodePosition);
   const addEdge = useCanvasStore((state) => state.addEdge);
-  const apiKeys = useSettingsStore((state) => state.apiKeys);
+  const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus);
 
   const incomingImages = useMemo(
     () => graphImageResolver.collectInputImages(id, nodes, edges),
@@ -106,7 +106,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     const modelId = data.model ?? getDefaultImageModelId();
     return getImageModel(modelId);
   }, [data.model]);
-  const providerApiKey = apiKeys[selectedModel.providerId] ?? '';
+  const providerKeyConfigured = providerKeyStatus[selectedModel.providerId] === true;
 
   const selectedResolution = useMemo(
     () =>
@@ -182,7 +182,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       return;
     }
 
-    if (!providerApiKey) {
+    if (!providerKeyConfigured) {
       setError(t('node.imageEdit.apiKeyRequired'));
       return;
     }
@@ -211,8 +211,6 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     addEdge(id, newNodeId);
 
     try {
-      await canvasAiGateway.setApiKey(selectedModel.providerId, providerApiKey);
-
       let resolvedRequestAspectRatio = selectedAspectRatio.value;
       if (resolvedRequestAspectRatio === AUTO_REQUEST_ASPECT_RATIO) {
         if (incomingImages.length > 0) {
@@ -255,7 +253,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
         generationStartedAt: null,
       });
     }
-  }, [addNode, addEdge, providerApiKey, findNodePosition, promptDraft, data.extraParams, id, incomingImages, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedModel.providerId, selectedResolution.value, supportedAspectRatioValues, t, updateNodeData]);
+  }, [addNode, addEdge, providerKeyConfigured, findNodePosition, promptDraft, data.extraParams, id, incomingImages, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedResolution.value, supportedAspectRatioValues, t, updateNodeData]);
 
   return (
     <div

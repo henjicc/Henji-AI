@@ -26,7 +26,7 @@ function resolveImageModelId(inputModelId: string): string {
 
   const imageModels = registry.getModelsByType('image');
   if (imageModels.length === 0) {
-    throw new Error('未找到可用的图像模型，请先加载模型配置');
+    throw new Error('未找到可用的图片模型，请先加载模型配置');
   }
 
   const shortId = requested.includes('/') ? requested.split('/').pop() ?? requested : requested;
@@ -50,7 +50,7 @@ function resolveImageModelId(inputModelId: string): string {
 }
 
 export async function setApiKey(provider: string, apiKey: string): Promise<void> {
-  GenerationService.getInstance().setApiKey(provider, apiKey);
+  await GenerationService.getInstance().setApiKey(provider, apiKey);
 }
 
 export async function generateImage(request: GenerateRequest): Promise<string> {

@@ -10,7 +10,7 @@ export const viduQ1Model = defineModel({
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-vidu-q1',
-    name: 'Vidu Q1',
+    name: { key: 'meta.name', fallback: 'Vidu Q1' },
     description: 'Vidu Q1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

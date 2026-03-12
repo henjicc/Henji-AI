@@ -1,62 +1,40 @@
 import type { ProviderId } from '@/core/types'
-import type { ProviderHandler } from '@/core/providers/base'
-import { PPIOProvider } from '@/core/providers/PPIOProvider'
-import { FalProvider } from '@/core/providers/FalProvider'
-import { KIEProvider } from '@/core/providers/KIEProvider'
-import { ModelscopeProvider } from '@/core/providers/ModelscopeProvider'
 
-export type ProviderFactory = (apiKey: string) => ProviderHandler
+export type ProviderFactory = never
 
 export interface RegisterProviderFactoryOptions {
-  /** Whether overwriting an existing factory is allowed. Defaults to false. */
   overwrite?: boolean
 }
 
+const BUILTIN_PROVIDER_IDS: ProviderId[] = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair']
+
 /**
- * Central registry for provider factories.
+ * ProviderFactoryRegistry is kept for compatibility.
  *
- * This avoids hard-coded `switch(provider)` logic in services and makes it easy
- * to add providers via registration.
+ * In backend runtime mode, all provider execution is handled by Rust `ai_runtime`.
  */
 export class ProviderFactoryRegistry {
-  private factories = new Map<ProviderId, ProviderFactory>()
-
-  constructor() {
-    // Built-in providers
-    this.register('ppio', (apiKey) => new PPIOProvider(apiKey), { overwrite: true })
-    this.register('fal', (apiKey) => new FalProvider(apiKey), { overwrite: true })
-    this.register('kie', (apiKey) => new KIEProvider(apiKey), { overwrite: true })
-    this.register('modelscope', (apiKey) => new ModelscopeProvider(apiKey), { overwrite: true })
-  }
+  private readonly providerIds = new Set<ProviderId>(BUILTIN_PROVIDER_IDS)
 
   register(
     providerId: ProviderId,
-    factory: ProviderFactory,
-    options: RegisterProviderFactoryOptions = {}
+    _factory: ProviderFactory,
+    _options: RegisterProviderFactoryOptions = {}
   ): void {
-    const overwrite = options.overwrite === true
-    if (this.factories.has(providerId) && !overwrite) {
-      throw new Error(`[ProviderFactoryRegistry] Factory already registered: ${String(providerId)}`)
-    }
-    this.factories.set(providerId, factory)
+    this.providerIds.add(providerId)
   }
 
   has(providerId: ProviderId): boolean {
-    return this.factories.has(providerId)
+    return this.providerIds.has(providerId)
   }
 
   listProviderIds(): ProviderId[] {
-    return Array.from(this.factories.keys())
+    return Array.from(this.providerIds)
   }
 
-  create(providerId: ProviderId, apiKey: string): ProviderHandler {
-    const factory = this.factories.get(providerId)
-    if (!factory) {
-      throw new Error(`[ProviderFactoryRegistry] Unsupported provider: ${String(providerId)}`)
-    }
-    return factory(apiKey)
+  create(_providerId: ProviderId, _apiKey: string): never {
+    throw new Error('[ProviderFactoryRegistry] create() is unavailable in backend runtime mode')
   }
 }
 
 export const providerFactoryRegistry = new ProviderFactoryRegistry()
-

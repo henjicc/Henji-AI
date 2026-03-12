@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 
 /**
  * 选区管理 Hook
- * 职责：管理图像编辑器中的选区
+ * 职责：管理图片编辑器中的选区
  */
 
 interface Selection {

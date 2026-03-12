@@ -7,7 +7,7 @@ export const imageModel: ImageModelDefinition = {
   mediaType: 'image',
   displayName: 'Nano Banana 2',
   providerId: 'ppio',
-  description: '高性价比图像生成与编辑模型',
+  description: '高性价比图片生成与编辑模型',
   eta: '1min',
   expectedDurationMs: 60000,
   defaultAspectRatio: '1:1',

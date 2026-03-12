@@ -58,7 +58,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const addNode = useCanvasStore((state) => state.addNode)
   const addEdge = useCanvasStore((state) => state.addEdge)
   const findNodePosition = useCanvasStore((state) => state.findNodePosition)
-  const apiKeys = useSettingsStore((state) => state.apiKeys)
+  const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const keepStyleConsistent = useSettingsStore((state) => state.storyboardGenKeepStyleConsistent)
   const disableTextInImage = useSettingsStore((state) => state.storyboardGenDisableTextInImage)
   const ignoreAtTagWhenCopyingAndGenerating = useSettingsStore(
@@ -95,7 +95,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     const modelId = nodeData.model ?? getDefaultImageModelId()
     return getImageModel(modelId)
   }, [nodeData.model])
-  const providerApiKey = apiKeys[selectedModel.providerId] ?? ''
+  const providerKeyConfigured = providerKeyStatus[selectedModel.providerId] === true
 
   const selectedResolution = useMemo((): AspectRatioChoice => {
     const found = nodeData.size
@@ -218,7 +218,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       setError('请填写至少一个分镜内容描述')
       return
     }
-    if (!providerApiKey) {
+    if (!providerKeyConfigured) {
       setError('请在设置中填写 API Key')
       return
     }
@@ -249,7 +249,6 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     try {
       const generated = await generateStoryboardImage({
         prompt,
-        providerApiKey,
         providerId: selectedModel.providerId,
         selectedAspectRatio: selectedAspectRatio.value,
         incomingImages,
@@ -276,7 +275,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       setError(generationError instanceof Error ? generationError.message : '生成失败')
       updateNodeData(newNodeId, { isGenerating: false, generationStartedAt: null })
     }
-  }, [addEdge, addNode, buildPrompt, findNodePosition, frameAspectRatioValue, id, ignoreAtTagWhenCopyingAndGenerating, incomingImages, nodeData.extraParams, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerApiKey, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedModel.id, selectedModel.providerId, selectedResolution.value, setSelectedNode, supportedAspectRatioValues, updateNodeData])
+  }, [addEdge, addNode, buildPrompt, findNodePosition, frameAspectRatioValue, id, ignoreAtTagWhenCopyingAndGenerating, incomingImages, nodeData.extraParams, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedModel.id, selectedModel.providerId, selectedResolution.value, setSelectedNode, supportedAspectRatioValues, updateNodeData])
 
   const handleRowChange = useCallback((delta: number): void => {
     const nextRows = Math.max(1, Math.min(9, nodeData.gridRows + delta))

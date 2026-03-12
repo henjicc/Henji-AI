@@ -10,7 +10,7 @@ export const ltx2Model = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-ltx-2',
-    name: 'LTX 2',
+    name: { key: 'meta.name', fallback: 'LTX 2' },
     description: 'LTX 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

@@ -1,0 +1,648 @@
+{
+  "models": [
+    {
+      "modelId": "black-forest-labs/FLUX.1-Krea-dev",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => buildModelscopeRequest(params, {\n    modelId: 'black-forest-labs/FLUX.1-Krea-dev',\n    allowGuidance: true,\n    allowNegativePrompt: true,\n    allowImage: false,\n    baseSize: 1024\n})"
+      }
+    },
+    {
+      "modelId": "fal-ai-bytedance-seedance-v1",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "text-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.falSeedanceV1Mode || 'text-to-video';\n    const version = params.falSeedanceV1Version || 'lite';\n    const fastMode = params.falSeedanceV1FastMode === true;\n    const versionPath = version === 'pro' ? 'pro' : 'lite';\n    const fastPath = fastMode && version === 'pro' && mode !== 'reference-to-video' ? '/fast' : '';\n    if (mode === 'reference-to-video') {\n        return 'fal-ai/bytedance/seedance/v1/lite/reference-to-video';\n    }\n    if (mode === 'image-to-video') {\n        return `fal-ai/bytedance/seedance/v1/${versionPath}${fastPath}/image-to-video`;\n    }\n    return `fal-ai/bytedance/seedance/v1/${versionPath}${fastPath}/text-to-video`;\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const mode = params.falSeedanceV1Mode || 'text-to-video';\n    const duration = params.falSeedanceV1VideoDuration || 5;\n    const resolution = params.falSeedanceV1Resolution || '720p';\n    const cameraFixed = params.falSeedanceV1CameraFixed || false;\n    const aspectRatio = params.falSeedanceV1AspectRatio;\n    const requestData = {\n        prompt,\n        duration: `${duration}`,\n        enable_safety_checker: false,\n        resolution,\n        camera_fixed: cameraFixed\n    };\n    if (aspectRatio && aspectRatio !== 'smart') {\n        requestData.aspect_ratio = aspectRatio;\n    }\n    if (mode === 'reference-to-video') {\n        if (images.length > 0) {\n            requestData.reference_image_urls = images;\n        }\n    }\n    else if (mode === 'image-to-video') {\n        if (images.length > 0) {\n            requestData.image_url = images[0];\n            if (images.length > 1) {\n                requestData.end_image_url = images[1];\n            }\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-bytedance-seedream-v4",
+      "providerId": "fal",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "fal-ai/bytedance/seedream/v4/edit",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0\n        ? 'fal-ai/bytedance/seedream/v4/edit'\n        : 'fal-ai/bytedance/seedream/v4/text-to-image';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    let imageSize = { width: 2048, height: 2048 };\n    if (params.imageSize) {\n        const [width, height] = params.imageSize.split('*').map(Number);\n        imageSize = { width, height };\n    }\n    const requestData = {\n        prompt,\n        image_size: imageSize,\n        num_images: params.falSeedream40NumImages || 1,\n        enable_safety_checker: false\n    };\n    if (images.length > 0) {\n        requestData.image_urls = images;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-bytedance-seedream-v4.5",
+      "providerId": "fal",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "fal-ai/bytedance/seedream/v4.5/edit",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0\n        ? 'fal-ai/bytedance/seedream/v4.5/edit'\n        : 'fal-ai/bytedance/seedream/v4.5/text-to-image';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    let imageSize = { width: 2048, height: 2048 };\n    if (params.imageSize) {\n        const [width, height] = params.imageSize.split('*').map(Number);\n        imageSize = { width, height };\n    }\n    const requestData = {\n        prompt,\n        image_size: imageSize,\n        num_images: params.falSeedream45NumImages || 1,\n        enable_safety_checker: false\n    };\n    if (images.length > 0) {\n        requestData.image_urls = images;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-kling-image-o1",
+      "providerId": "fal",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "fal-ai/kling-image/o1",
+        "selectorJs": "() => 'fal-ai/kling-image/o1'"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const requestData = {\n        prompt,\n        image_urls: images\n    };\n    if (params.falKlingImageO1NumImages !== undefined && params.falKlingImageO1NumImages > 0) {\n        requestData.num_images = params.falKlingImageO1NumImages;\n    }\n    const aspectRatio = params.falKlingImageO1AspectRatio;\n    if (aspectRatio && aspectRatio !== 'auto') {\n        requestData.aspect_ratio = aspectRatio;\n    }\n    const resolution = params.falKlingImageO1Resolution;\n    if (resolution) {\n        requestData.resolution = resolution;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-kling-video-o1",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "image-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.falKlingVideoO1Mode || 'image-to-video';\n    switch (mode) {\n        case 'image-to-video':\n            return 'fal-ai/kling-video/o1/image-to-video';\n        case 'reference-to-video':\n            return 'fal-ai/kling-video/o1/reference-to-video';\n        case 'video-to-video-edit':\n            return 'fal-ai/kling-video/o1/video-to-video/edit';\n        case 'video-to-video-reference':\n            return 'fal-ai/kling-video/o1/video-to-video/reference';\n        default:\n            return 'fal-ai/kling-video/o1/image-to-video';\n    }\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const mode = params.falKlingVideoO1Mode || 'image-to-video';\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.falKlingVideoO1VideoDuration || 5;\n    const aspectRatio = params.falKlingVideoO1AspectRatio;\n    const keepAudio = params.falKlingVideoO1KeepAudio || false;\n    const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v) => typeof v === 'string' && v.startsWith('http')) : undefined);\n    const requestData = {\n        prompt,\n        duration: `${duration}`\n    };\n    if (mode === 'image-to-video') {\n        if (images.length > 0) {\n            requestData.start_image_url = images[0];\n            if (images.length > 1) {\n                requestData.end_image_url = images[1];\n            }\n        }\n    }\n    if (mode === 'reference-to-video') {\n        if (images.length > 0) {\n            requestData.image_urls = images;\n        }\n        if (aspectRatio && aspectRatio !== 'auto') {\n            requestData.aspect_ratio = aspectRatio;\n        }\n    }\n    if (mode === 'video-to-video-edit' || mode === 'video-to-video-reference') {\n        if (videoInput) {\n            requestData.video_url = videoInput;\n        }\n        requestData.keep_audio = keepAudio;\n        if (images.length > 0) {\n            requestData.image_urls = images;\n        }\n        if (mode === 'video-to-video-reference' && aspectRatio && aspectRatio !== 'auto') {\n            requestData.aspect_ratio = aspectRatio;\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-kling-video-v2.6-pro",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "text-image-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.falKlingV26ProMode || 'text-image-to-video';\n    if (mode === 'motion-control') {\n        const resolution = params.falKlingV26ProResolution || '720p';\n        return resolution === '1080p'\n            ? 'fal-ai/kling-video/v2.6/pro/motion-control'\n            : 'fal-ai/kling-video/v2.6/standard/motion-control';\n    }\n    const images = params.images || [];\n    return images.length > 0\n        ? 'fal-ai/kling-video/v2.6/pro/image-to-video'\n        : 'fal-ai/kling-video/v2.6/pro/text-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const mode = params.falKlingV26ProMode || 'text-image-to-video';\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.falKlingV26ProVideoDuration || 5;\n    const aspectRatio = params.falKlingV26ProAspectRatio || '16:9';\n    const generateAudio = params.falKlingV26ProGenerateAudio === true;\n    const cfgScale = params.falKlingV26ProCfgScale;\n    const characterOrientation = params.falKlingV26ProCharacterOrientation || 'video';\n    const keepOriginalSound = params.falKlingV26ProKeepOriginalSound !== false;\n    const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v) => typeof v === 'string' && v.startsWith('http')) : undefined);\n    if (mode === 'motion-control') {\n        const requestData = {\n            image_url: images[0],\n            video_url: videoInput,\n            character_orientation: characterOrientation,\n            keep_original_sound: keepOriginalSound\n        };\n        if (prompt) {\n            requestData.prompt = prompt;\n        }\n        return requestData;\n    }\n    const requestData = {\n        prompt,\n        duration: `${duration}`,\n        generate_audio: generateAudio\n    };\n    if (images.length > 0) {\n        requestData.image_url = images[0];\n    }\n    else {\n        if (aspectRatio && aspectRatio !== 'auto') {\n            requestData.aspect_ratio = aspectRatio;\n        }\n        if (cfgScale !== undefined) {\n            requestData.cfg_scale = cfgScale;\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-ltx-2",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "text-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.falLtx2Mode || 'text-to-video';\n    const fastMode = params.falLtx2FastMode !== false;\n    if (mode === 'retake-video') {\n        return 'fal-ai/ltx-2/retake-video';\n    }\n    if (mode === 'image-to-video') {\n        return fastMode ? 'fal-ai/ltx-2/image-to-video/fast' : 'fal-ai/ltx-2/image-to-video';\n    }\n    return fastMode ? 'fal-ai/ltx-2/text-to-video/fast' : 'fal-ai/ltx-2/text-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const mode = params.falLtx2Mode || 'text-to-video';\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.falLtx2VideoDuration || 6;\n    const resolution = params.falLtx2Resolution || '1080p';\n    const fps = params.falLtx2Fps || 25;\n    const generateAudio = params.falLtx2GenerateAudio !== false;\n    const retakeStartTime = params.falLtx2RetakeStartTime || 0;\n    const retakeMode = params.falLtx2RetakeMode || 'replace_audio_and_video';\n    const retakeDuration = params.falLtx2RetakeDuration || duration;\n    const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v) => typeof v === 'string' && v.startsWith('http')) : undefined);\n    if (mode === 'retake-video') {\n        return {\n            prompt,\n            video_url: videoInput,\n            start_time: retakeStartTime,\n            duration: retakeDuration,\n            retake_mode: retakeMode\n        };\n    }\n    const requestData = {\n        prompt,\n        duration,\n        resolution,\n        aspect_ratio: '16:9',\n        fps,\n        generate_audio: generateAudio\n    };\n    if (mode === 'image-to-video' && images.length > 0) {\n        requestData.image_url = images[0];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-minimax-hailuo-02",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "standard",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    const imageCount = images.length;\n    const version = params.falHailuo02Version || 'standard';\n    const fastMode = params.falHailuo02FastMode === true;\n    if (imageCount === 0) {\n        return version === 'pro'\n            ? 'fal-ai/minimax/hailuo-02/pro/text-to-video'\n            : 'fal-ai/minimax/hailuo-02/standard/text-to-video';\n    }\n    if (imageCount === 1 && fastMode) {\n        return 'fal-ai/minimax/hailuo-02-fast/image-to-video';\n    }\n    if (version === 'pro') {\n        return 'fal-ai/minimax/hailuo-02/pro/image-to-video';\n    }\n    return 'fal-ai/minimax/hailuo-02/standard/image-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const version = params.falHailuo02Version || 'standard';\n    const resolution = params.falHailuo02Resolution || '768P';\n    const duration = params.falHailuo02Duration || '6';\n    const promptOptimizer = params.falHailuo02PromptOptimizer !== false;\n    const requestData = { prompt };\n    if (promptOptimizer !== undefined) {\n        requestData.prompt_optimizer = promptOptimizer;\n    }\n    if (version === 'standard') {\n        requestData.duration = duration;\n    }\n    if (version === 'standard' && images.length > 0 && params.falHailuo02FastMode !== true) {\n        requestData.resolution = resolution;\n    }\n    if (images.length === 1) {\n        requestData.image_url = images[0];\n    }\n    else if (images.length >= 2) {\n        requestData.first_frame_image_url = images[0];\n        requestData.last_frame_image_url = images[1];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-minimax-hailuo-2.3",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "standard",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    const version = params.falHailuo23Version || 'standard';\n    const fastMode = params.falHailuo23FastMode !== false;\n    if (images.length > 0) {\n        if (fastMode) {\n            return version === 'pro'\n                ? 'fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video'\n                : 'fal-ai/minimax/hailuo-2.3-fast/standard/image-to-video';\n        }\n        return version === 'pro'\n            ? 'fal-ai/minimax/hailuo-2.3/pro/image-to-video'\n            : 'fal-ai/minimax/hailuo-2.3/standard/image-to-video';\n    }\n    return version === 'pro'\n        ? 'fal-ai/minimax/hailuo-2.3/pro/text-to-video'\n        : 'fal-ai/minimax/hailuo-2.3/standard/text-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const version = params.falHailuo23Version || 'standard';\n    const duration = params.falHailuo23Duration || '6';\n    const promptOptimizer = params.falHailuo23PromptOptimizer !== false;\n    const requestData = { prompt };\n    if (promptOptimizer !== undefined) {\n        requestData.prompt_optimizer = promptOptimizer;\n    }\n    if (version === 'standard') {\n        requestData.duration = duration;\n    }\n    if (images.length > 0) {\n        requestData.image_url = images[0];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-nano-banana",
+      "providerId": "fal",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "fal-ai/nano-banana/edit",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0 ? 'fal-ai/nano-banana/edit' : 'fal-ai/nano-banana';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const requestData = {\n        prompt\n    };\n    if (params.falNanoBananaNumImages !== undefined) {\n        requestData.num_images = params.falNanoBananaNumImages;\n    }\n    const aspectRatio = params.falNanoBananaAspectRatio;\n    if (aspectRatio && aspectRatio !== 'auto' && aspectRatio !== 'smart') {\n        requestData.aspect_ratio = aspectRatio;\n    }\n    if (images.length > 0) {\n        requestData.image_urls = images;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-nano-banana-pro",
+      "providerId": "fal",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "fal-ai/nano-banana-pro/edit",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0 ? 'fal-ai/nano-banana-pro/edit' : 'fal-ai/nano-banana-pro';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const requestData = { prompt };\n    if (params.falNanoBananaProNumImages !== undefined) {\n        requestData.num_images = params.falNanoBananaProNumImages;\n    }\n    if (params.falNanoBananaProResolution !== undefined) {\n        requestData.resolution = params.falNanoBananaProResolution;\n    }\n    const aspectRatio = params.falNanoBananaProAspectRatio;\n    if (aspectRatio && aspectRatio !== 'auto' && aspectRatio !== 'smart') {\n        requestData.aspect_ratio = aspectRatio;\n    }\n    if (images.length > 0) {\n        requestData.image_urls = images;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-pixverse-v5.5",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "fal-ai/pixverse/v5.5/text-to-video",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    if (images.length === 0) {\n        return 'fal-ai/pixverse/v5.5/text-to-video';\n    }\n    if (images.length === 1) {\n        return 'fal-ai/pixverse/v5.5/image-to-video';\n    }\n    return 'fal-ai/pixverse/v5.5/transition';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const aspectRatio = params.pixverseAspectRatio;\n    const resolution = params.pixverseResolution;\n    const duration = params.falPixverse55VideoDuration || 5;\n    const requestData = { prompt };\n    if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        requestData.aspect_ratio = aspectRatio;\n    }\n    if (resolution) {\n        requestData.resolution = resolution;\n    }\n    requestData.duration = String(duration);\n    if (params.pixverseStyle && params.pixverseStyle !== 'none') {\n        requestData.style = params.pixverseStyle;\n    }\n    if (params.pixverseThinkingType) {\n        requestData.thinking_type = params.pixverseThinkingType;\n    }\n    if (params.pixverseGenerateAudio !== undefined) {\n        requestData.generate_audio_switch = params.pixverseGenerateAudio;\n    }\n    if (params.pixverseMultiClip !== undefined) {\n        requestData.generate_multi_clip_switch = params.pixverseMultiClip;\n    }\n    if (images.length === 1) {\n        requestData.image_url = images[0];\n    }\n    else if (images.length >= 2) {\n        requestData.first_image_url = images[0];\n        requestData.end_image_url = images[1];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-sora-2",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "standard",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    const mode = params.falSora2Mode || 'standard';\n    if (images.length > 0) {\n        return mode === 'pro'\n            ? 'fal-ai/sora-2/image-to-video/pro'\n            : 'fal-ai/sora-2/image-to-video';\n    }\n    return mode === 'pro'\n        ? 'fal-ai/sora-2/text-to-video/pro'\n        : 'fal-ai/sora-2/text-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.falSora2Duration || 4;\n    const aspectRatio = params.falSora2AspectRatio;\n    const resolution = params.falSora2Resolution;\n    const requestData = {\n        prompt,\n        duration,\n        delete_video: true\n    };\n    if (images.length > 0) {\n        if (aspectRatio && aspectRatio !== 'smart') {\n            requestData.aspect_ratio = aspectRatio;\n        }\n        if (resolution) {\n            requestData.resolution = resolution;\n        }\n        requestData.image_url = images[0];\n    }\n    else {\n        const safeAspect = aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto'\n            ? aspectRatio\n            : '16:9';\n        requestData.aspect_ratio = safeAspect;\n        requestData.resolution = resolution || '720p';\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-veo-3.1",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "text-image-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.falVeo31Mode || 'text-image-to-video';\n    const images = params.images || [];\n    const fastMode = params.falVeo31FastMode === true;\n    if (mode === 'start-end-frame') {\n        return fastMode\n            ? 'fal-ai/veo3.1/fast/first-last-frame-to-video'\n            : 'fal-ai/veo3.1/first-last-frame-to-video';\n    }\n    if (mode === 'reference-to-video') {\n        return 'fal-ai/veo3.1/reference-to-video';\n    }\n    if (images.length > 0) {\n        return fastMode ? 'fal-ai/veo3.1/fast/image-to-video' : 'fal-ai/veo3.1/image-to-video';\n    }\n    return fastMode ? 'fal-ai/veo3.1/fast' : 'fal-ai/veo3.1';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const mode = params.falVeo31Mode || 'text-image-to-video';\n    const duration = params.falVeo31VideoDuration || 8;\n    const aspectRatio = params.falVeo31AspectRatio;\n    const resolution = params.falVeo31Resolution || '720p';\n    const enhancePrompt = params.falVeo31EnhancePrompt;\n    const generateAudio = params.falVeo31GenerateAudio;\n    const autoFix = params.falVeo31AutoFix;\n    const requestData = {\n        prompt,\n        duration: `${duration}s`\n    };\n    if (aspectRatio && aspectRatio !== 'auto' && aspectRatio !== 'smart' && mode !== 'reference-to-video') {\n        requestData.aspect_ratio = aspectRatio;\n    }\n    if (resolution) {\n        requestData.resolution = resolution;\n    }\n    if (enhancePrompt !== undefined) {\n        requestData.enhance_prompt = enhancePrompt;\n    }\n    if (generateAudio !== undefined) {\n        requestData.generate_audio = generateAudio;\n    }\n    if (autoFix !== undefined) {\n        requestData.auto_fix = autoFix;\n    }\n    if (images.length > 0) {\n        if (mode === 'start-end-frame') {\n            requestData.first_frame_url = images[0];\n            requestData.last_frame_url = images[1];\n        }\n        else if (mode === 'reference-to-video') {\n            requestData.image_urls = images;\n        }\n        else {\n            requestData.image_url = images[0];\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-vidu-q2",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "text-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.viduQ2Mode || 'text-to-video';\n    const fastMode = params.viduQ2FastMode !== false;\n    if (mode === 'video-extension') {\n        return 'fal-ai/vidu/q2/video-extension/pro';\n    }\n    if (mode === 'reference-to-video') {\n        return 'fal-ai/vidu/q2/reference-to-video';\n    }\n    if (mode === 'image-to-video') {\n        return fastMode\n            ? 'fal-ai/vidu/q2/image-to-video/turbo'\n            : 'fal-ai/vidu/q2/image-to-video/pro';\n    }\n    return 'fal-ai/vidu/q2/text-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const mode = params.viduQ2Mode || 'text-to-video';\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.falViduQ2VideoDuration || 4;\n    const aspectRatio = params.viduQ2AspectRatio;\n    const resolution = params.viduQ2Resolution || '720p';\n    const movementAmplitude = params.viduQ2MovementAmplitude || 'auto';\n    const bgm = params.viduQ2Bgm === true;\n    const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v) => typeof v === 'string' && v.startsWith('http')) : undefined);\n    const requestData = { prompt };\n    requestData.duration = duration;\n    if (mode === 'text-to-video' || mode === 'reference-to-video') {\n        if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n            requestData.aspect_ratio = aspectRatio;\n        }\n        requestData.resolution = resolution;\n    }\n    else if (mode === 'image-to-video') {\n        requestData.resolution = resolution;\n    }\n    else if (mode === 'video-extension') {\n        requestData.resolution = resolution;\n    }\n    if (mode !== 'video-extension') {\n        requestData.movement_amplitude = movementAmplitude;\n    }\n    requestData.bgm = bgm;\n    if (images.length > 0) {\n        if (mode === 'reference-to-video') {\n            requestData.reference_image_urls = images.slice(0, 7);\n        }\n        else if (mode === 'image-to-video') {\n            requestData.image_url = images[0];\n        }\n    }\n    if (mode === 'video-extension' && videoInput) {\n        requestData.video_url = videoInput;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-wan-25-preview",
+      "providerId": "fal",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "fal-ai/wan-25-preview/image-to-video",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0\n        ? 'fal-ai/wan-25-preview/image-to-video'\n        : 'fal-ai/wan-25-preview/text-to-video';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.falWan25VideoDuration || 5;\n    const aspectRatio = params.falWan25AspectRatio;\n    const resolution = params.falWan25Resolution;\n    const promptExpansion = params.falWan25PromptExpansion;\n    const requestData = {\n        prompt,\n        enable_safety_checker: false,\n        duration: `${duration}`\n    };\n    if (promptExpansion !== undefined) {\n        requestData.enable_prompt_expansion = promptExpansion;\n    }\n    if (images.length > 0) {\n        requestData.image_url = images[0];\n        if (resolution) {\n            requestData.resolution = resolution.toLowerCase();\n        }\n    }\n    else {\n        if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n            requestData.aspect_ratio = aspectRatio;\n        }\n        if (resolution) {\n            requestData.resolution = resolution.toLowerCase();\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "fal-ai-z-image-turbo",
+      "providerId": "fal",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "fal-ai/z-image/turbo",
+        "selectorJs": "() => 'fal-ai/z-image/turbo'"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const imageSize = parseImageSize(params.falZImageTurboImageSize);\n    const requestData = {\n        prompt,\n        image_size: imageSize,\n        num_inference_steps: params.falZImageTurboNumInferenceSteps || 8,\n        num_images: params.falZImageTurboNumImages || 1,\n        enable_safety_checker: false,\n        output_format: 'png',\n        enable_prompt_expansion: params.falZImageTurboEnablePromptExpansion || false,\n        acceleration: params.falZImageTurboAcceleration || 'none'\n    };\n    if (images.length > 0) {\n        requestData.image_urls = images;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "kie-grok-imagine",
+      "providerId": "kie",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const prompt = params.prompt || '';\n    const aspectRatio = params.kieGrokImagineAspectRatio || params.aspect_ratio;\n    const input = { prompt };\n    if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        input.aspect_ratio = aspectRatio;\n    }\n    return {\n        model: 'grok-imagine/text-to-image',\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-grok-imagine-video",
+      "providerId": "kie",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const hasImages = images.length > 0;\n    const aspectRatio = params.kieGrokImagineVideoAspectRatio || params.aspect_ratio;\n    const mode = params.kieGrokImagineVideoMode || params.mode;\n    const model = hasImages\n        ? 'grok-imagine/image-to-video'\n        : 'grok-imagine/text-to-video';\n    const input = { prompt };\n    if (!hasImages && aspectRatio) {\n        input.aspect_ratio = aspectRatio;\n    }\n    if (hasImages) {\n        input.image_urls = [images[0]];\n    }\n    if (mode) {\n        input.mode = hasImages && mode === 'spicy' ? 'normal' : mode;\n    }\n    return {\n        model,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-hailuo-02",
+      "providerId": "kie",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    var _a, _b;\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const duration = params.kieHailuo02Duration || params.duration || 6;\n    const resolution = params.kieHailuo02Resolution || params.resolution || '768P';\n    const promptOptimizer = (_b = (_a = params.kieHailuo02PromptOptimizer) !== null && _a !== void 0 ? _a : params.prompt_optimizer) !== null && _b !== void 0 ? _b : false;\n    const usePro = duration === 6 && resolution === '1080P';\n    let model;\n    if (images.length === 0) {\n        model = usePro\n            ? 'hailuo/02-text-to-video-pro'\n            : 'hailuo/02-text-to-video-standard';\n    }\n    else {\n        model = usePro\n            ? 'hailuo/02-image-to-video-pro'\n            : 'hailuo/02-image-to-video-standard';\n    }\n    const input = { prompt };\n    if (images.length > 0) {\n        input.image_url = images[0];\n        if (images.length > 1) {\n            input.end_image_url = images[1];\n        }\n    }\n    if (!usePro) {\n        input.duration = String(duration);\n        if (images.length > 0) {\n            input.resolution = resolution;\n        }\n    }\n    if (promptOptimizer) {\n        input.prompt_optimizer = true;\n    }\n    return {\n        model,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-hailuo-2-3",
+      "providerId": "kie",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const mode = params.kieHailuo23Mode || params.mode || 'standard';\n    const duration = params.kieHailuo23Duration || params.duration || 6;\n    const resolution = params.kieHailuo23Resolution || params.resolution || '768P';\n    const model = mode === 'pro'\n        ? 'hailuo/2-3-image-to-video-pro'\n        : 'hailuo/2-3-image-to-video-standard';\n    return {\n        model,\n        input: {\n            prompt,\n            image_url: images.length > 0 ? images[0] : '',\n            duration: String(duration),\n            resolution\n        }\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-kling-v2-6",
+      "providerId": "kie",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 180
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    var _a, _b;\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const mode = params.kieKlingV26Mode || params.mode || 'text-image-to-video';\n    const duration = params.kieKlingV26Duration || params.duration || '5';\n    const aspectRatio = params.kieKlingV26AspectRatio || params.aspect_ratio || '16:9';\n    const resolution = params.kieKlingV26Resolution || params.resolution || '720p';\n    const enableAudio = (_b = (_a = params.kieKlingV26EnableAudio) !== null && _a !== void 0 ? _a : params.enable_audio) !== null && _b !== void 0 ? _b : false;\n    const characterOrientation = params.kieKlingV26CharacterOrientation || params.character_orientation || 'video';\n    const videoUrl = params.video;\n    if (mode === 'motion-control') {\n        if (images.length === 0) {\n            throw new Error('动作控制模式需要上传一张参考图片');\n        }\n        if (!videoUrl) {\n            throw new Error('动作控制模式需要上传一个参考视频');\n        }\n        return {\n            model: 'kling-2.6/motion-control',\n            input: {\n                prompt,\n                input_urls: images,\n                video_urls: [videoUrl],\n                character_orientation: characterOrientation,\n                mode: resolution\n            }\n        };\n    }\n    const hasImages = images.length > 0;\n    const model = hasImages\n        ? 'kling-2.6/image-to-video'\n        : 'kling-2.6/text-to-video';\n    const input = {\n        prompt,\n        duration: String(duration),\n        sound: enableAudio\n    };\n    if (!hasImages && aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        input.aspect_ratio = aspectRatio;\n    }\n    if (hasImages) {\n        input.image_urls = images;\n    }\n    return {\n        model,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-nano-banana-pro",
+      "providerId": "kie",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const aspectRatio = params.kieNanoBananaAspectRatio || params.aspect_ratio;\n    const resolution = params.kieNanoBananaResolution || params.resolution;\n    const input = { prompt };\n    if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        input.aspect_ratio = aspectRatio;\n    }\n    if (resolution) {\n        input.resolution = resolution;\n    }\n    if (images.length > 0) {\n        input.image_input = images;\n    }\n    return {\n        model: 'nano-banana-pro',\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-seedance-v3",
+      "providerId": "kie",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 150
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const version = params.kieSeedanceV3Version || params.version || 'lite';\n    const fastMode = params.kieSeedanceV3FastMode !== undefined\n        ? params.kieSeedanceV3FastMode\n        : (params.fast_mode !== undefined ? params.fast_mode : true);\n    const aspectRatio = params.kieSeedanceV3AspectRatio || params.aspect_ratio || '16:9';\n    let resolution = params.kieSeedanceV3Resolution || params.resolution || '720p';\n    const duration = params.kieSeedanceV3Duration || params.duration || '5';\n    const cameraFixed = params.kieSeedanceV3CameraFixed !== undefined\n        ? params.kieSeedanceV3CameraFixed\n        : (params.camera_fixed !== undefined ? params.camera_fixed : false);\n    const validResolutions = ['480p', '720p', '1080p'];\n    if (!validResolutions.includes(resolution)) {\n        resolution = '720p';\n    }\n    if (version === 'pro' && fastMode && images.length > 0 && resolution === '480p') {\n        resolution = '720p';\n    }\n    let model;\n    if (images.length === 0) {\n        model = version === 'pro'\n            ? 'bytedance/v1-pro-text-to-video'\n            : 'bytedance/v1-lite-text-to-video';\n    }\n    else {\n        if (version === 'pro') {\n            model = fastMode\n                ? 'bytedance/v1-pro-fast-image-to-video'\n                : 'bytedance/v1-pro-image-to-video';\n        }\n        else {\n            model = 'bytedance/v1-lite-image-to-video';\n        }\n    }\n    const input = { prompt };\n    if (images.length === 0 && aspectRatio && aspectRatio !== 'smart') {\n        input.aspect_ratio = aspectRatio;\n    }\n    input.resolution = resolution;\n    input.duration = String(duration);\n    if (!(version === 'pro' && fastMode && images.length > 0)) {\n        input.camera_fixed = cameraFixed;\n    }\n    if (images.length > 0) {\n        input.image_url = images[0];\n    }\n    input.enable_safety_checker = false;\n    return {\n        model,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-seedream-4.0",
+      "providerId": "kie",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const aspectRatio = params.kieSeedream40AspectRatio || params.image_size || params.aspect_ratio;\n    const resolution = params.kieSeedream40Resolution || params.image_resolution || params.resolution;\n    const maxImages = params.kieSeedream40MaxImages || params.max_images || params.maxImages;\n    const modelName = images.length === 0\n        ? 'bytedance/seedream-v4-text-to-image'\n        : 'bytedance/seedream-v4-edit';\n    const input = { prompt };\n    if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        input.image_size = mapSeedream40ImageSize(String(aspectRatio));\n    }\n    if (resolution) {\n        input.image_resolution = resolution;\n    }\n    if (maxImages !== undefined) {\n        input.max_images = maxImages;\n    }\n    if (images.length > 0) {\n        input.image_urls = images;\n    }\n    return {\n        model: modelName,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-seedream-4.5",
+      "providerId": "kie",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const aspectRatio = params.kieSeedreamAspectRatio || params.aspect_ratio;\n    const quality = params.kieSeedreamQuality || params.quality;\n    const modelName = images.length === 0\n        ? 'seedream/4.5-text-to-image'\n        : 'seedream/4.5-edit';\n    const input = { prompt };\n    if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        input.aspect_ratio = aspectRatio;\n    }\n    if (quality) {\n        input.quality = mapSeedream45Quality(String(quality));\n    }\n    if (images.length > 0) {\n        input.image_urls = images;\n    }\n    return {\n        model: modelName,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-sora-2",
+      "providerId": "kie",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 150
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const mode = params.kieSora2Mode || params.mode || 'standard';\n    const duration = params.kieSora2Duration || params.duration || '10';\n    const aspectRatio = params.kieSora2AspectRatio || params.aspect_ratio || '16:9';\n    const quality = params.kieSora2Quality || params.quality || 'standard';\n    const usePro = mode === 'professional';\n    const model = images.length === 0\n        ? (usePro ? 'sora-2-pro-text-to-video' : 'sora-2-text-to-video')\n        : (usePro ? 'sora-2-pro-image-to-video' : 'sora-2-image-to-video');\n    const mappedRatio = mapSora2AspectRatio(String(aspectRatio));\n    const input = {\n        prompt,\n        n_frames: duration,\n        remove_watermark: true\n    };\n    if (mappedRatio && mappedRatio !== 'smart') {\n        input.aspect_ratio = mappedRatio;\n    }\n    if (usePro) {\n        input.size = quality;\n    }\n    if (images.length > 0) {\n        input.image_urls = [images[0]];\n    }\n    return {\n        model,\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "kie-z-image",
+      "providerId": "kie",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const prompt = params.prompt || '';\n    const aspectRatio = params.kieZImageAspectRatio || params.aspect_ratio;\n    const input = { prompt };\n    if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {\n        input.aspect_ratio = aspectRatio;\n    }\n    return {\n        model: 'z-image',\n        input\n    };\n}"
+      }
+    },
+    {
+      "modelId": "modelscope-custom",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const customId = typeof params.modelscopeCustomModel === 'string' ? params.modelscopeCustomModel.trim() : '';\n    if (!customId) {\n        throw new Error('请先填写自定义模型ID');\n    }\n    return buildModelscopeRequest(params, {\n        modelId: customId,\n        allowGuidance: true,\n        allowNegativePrompt: false,\n        allowImage: true,\n        baseSize: 1024\n    });\n}"
+      }
+    },
+    {
+      "modelId": "MusePublic/14_ckpt_SD_XL",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => buildModelscopeRequest(params, {\n    modelId: 'MusePublic/14_ckpt_SD_XL',\n    allowGuidance: true,\n    allowNegativePrompt: true,\n    allowImage: false,\n    baseSize: 1024\n})"
+      }
+    },
+    {
+      "modelId": "MusePublic/majicMIX_realistic",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => buildModelscopeRequest(params, {\n    modelId: 'MusePublic/majicMIX_realistic',\n    allowGuidance: true,\n    allowNegativePrompt: true,\n    allowImage: false,\n    baseSize: 1024\n})"
+      }
+    },
+    {
+      "modelId": "ppio-kling-2.5-turbo",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "/async/kling-2.5-turbo-i2v",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0 ? '/async/kling-2.5-turbo-i2v' : '/async/kling-2.5-turbo-t2v';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    var _a, _b;\n    const images = params.images || [];\n    const duration = params.ppioKling25TurboDuration || params.duration || 5;\n    const cfgScale = (_b = (_a = params.ppioKling25TurboCfgScale) !== null && _a !== void 0 ? _a : params.cfg_scale) !== null && _b !== void 0 ? _b : 0.5;\n    const mode = params.ppioKling25TurboMode || params.mode || 'pro';\n    const prompt = (params.prompt || '').slice(0, 2500);\n    const negativePrompt = params.ppioKling25TurboNegativePrompt\n        ? String(params.ppioKling25TurboNegativePrompt).slice(0, 2500)\n        : (params.negative_prompt ? String(params.negative_prompt).slice(0, 2500) : undefined);\n    const requestData = {\n        prompt,\n        duration: String(duration),\n        cfg_scale: cfgScale,\n        mode\n    };\n    if (negativePrompt) {\n        requestData.negative_prompt = negativePrompt;\n    }\n    if (images.length > 0) {\n        // 图生视频\n        requestData.image = images[0];\n    }\n    else {\n        // 文生视频\n        const aspectRatio = params.ppioKling25TurboAspectRatio || params.aspect_ratio || '16:9';\n        requestData.aspect_ratio = aspectRatio;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-kling-2.6-pro",
+      "providerId": "ppio",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/async/kling-v2.6-pro-t2v",
+        "selectorJs": "(params) => {\n    // 使用原始参数 ID（ppioKling26Mode），不是 API 字段名（mode）\n    const mode = params.ppioKling26Mode || 'text-image-to-video';\n    const images = params.images || [];\n    if (mode === 'motion-control') {\n        return 'motion-control';\n    }\n    else if (images.length > 0) {\n        return 'image-to-video';\n    }\n    else {\n        return 'text-to-video';\n    }\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    var _a;\n    const mode = (params.ppioKling26Mode || params.mode || 'text-image-to-video');\n    const images = (params.images || []);\n    const videos = (params.videos || []);\n    const video = params.video || videos[0];\n    const prompt = (params.prompt || '').slice(0, 2500);\n    if (mode === 'motion-control') {\n        return {\n            prompt,\n            image: images[0],\n            video,\n            character_orientation: params.ppioKling26CharacterOrientation || params.character_orientation || 'video',\n            keep_original_sound: params.ppioKling26KeepOriginalSound !== undefined\n                ? params.ppioKling26KeepOriginalSound\n                : (params.keep_original_sound !== undefined ? params.keep_original_sound : true)\n        };\n    }\n    const requestData = {\n        prompt,\n        duration: params.ppioKling26VideoDuration || params.duration || 5,\n        sound: params.ppioKling26Sound !== undefined ? params.ppioKling26Sound : (params.sound || false),\n        aspect_ratio: params.ppioKling26AspectRatio || params.aspect_ratio || '16:9'\n    };\n    const cfgScale = (_a = params.ppioKling26CfgScale) !== null && _a !== void 0 ? _a : params.cfg_scale;\n    if (cfgScale !== undefined) {\n        requestData.cfg_scale = cfgScale;\n    }\n    if (images.length > 0) {\n        requestData.image = images[0];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-kling-o1",
+      "providerId": "ppio",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "text-image-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video';\n    const images = params.images || [];\n    switch (mode) {\n        case 'text-image-to-video':\n            return images.length === 0 ? '/async/kling-o1-t2v' : '/async/kling-o1-i2v';\n        case 'start-end-frame':\n            return '/async/kling-o1-i2v';\n        case 'reference-to-video':\n            return '/async/kling-o1-ref2v';\n        case 'video-edit':\n            return '/async/kling-o1-video-edit';\n        default:\n            throw new Error(`Unsupported mode: ${mode}`);\n    }\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video';\n    const images = params.images || [];\n    const videos = params.videos || [];\n    const video = params.video || videos[0];\n    const duration = params.ppioKlingO1VideoDuration || params.duration || 5;\n    const aspectRatio = params.ppioKlingO1AspectRatio || params.aspect_ratio || '16:9';\n    const keepAudio = params.ppioKlingO1KeepAudio !== undefined ? params.ppioKlingO1KeepAudio : (params.keep_original_sound !== undefined ? params.keep_original_sound : true);\n    const fastMode = params.ppioKlingO1FastMode !== undefined ? params.ppioKlingO1FastMode : (params.fast_mode || false);\n    const prompt = (params.prompt || '').slice(0, 2500);\n    // Mode-specific logic\n    switch (mode) {\n        case 'text-image-to-video':\n            if (images.length === 0) {\n                // Text-to-video\n                return {\n                    prompt,\n                    duration,\n                    aspect_ratio: aspectRatio\n                };\n            }\n            else {\n                // Image-to-video\n                return {\n                    prompt,\n                    duration,\n                    image: images[0],\n                    ...(images.length > 1 ? { last_image: images[1] } : {}),\n                    aspect_ratio: aspectRatio\n                };\n            }\n        case 'start-end-frame':\n            return {\n                prompt,\n                duration,\n                image: images[0],\n                ...(images.length > 1 ? { last_image: images[1] } : {}),\n                aspect_ratio: aspectRatio\n            };\n        case 'reference-to-video':\n            return {\n                prompt,\n                duration,\n                video,\n                aspect_ratio: aspectRatio,\n                keep_original_sound: keepAudio,\n                ...(images.length > 0 ? { images: images.slice(0, 7) } : {})\n            };\n        case 'video-edit':\n            return {\n                prompt,\n                video,\n                fast_mode: fastMode,\n                keep_original_sound: keepAudio,\n                ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),\n                ...(images.length > 0 ? { images: images.slice(0, 4) } : {})\n            };\n    }\n    return { prompt, duration, aspect_ratio: aspectRatio };\n}"
+      }
+    },
+    {
+      "modelId": "ppio-minimax-hailuo-02",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "/async/minimax-hailuo-02",
+        "selectorJs": "(params) => {\n    return '/async/minimax-hailuo-02';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    // Inline normalizeHailuo logic\n    const durationInput = params.ppioHailuo02Duration || params.duration;\n    const duration = durationInput === 10 ? 10 : 6;\n    const resInput = (params.ppioHailuo02Resolution || params.resolution || '').toUpperCase();\n    const resolution = duration === 10 ? '768P' : (resInput === '1080P' ? '1080P' : '768P');\n    const enable = params.ppioHailuo02PromptExtend === undefined ? (params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion) : params.ppioHailuo02PromptExtend;\n    const prompt = params.prompt || '';\n    const requestData = {\n        prompt,\n        duration,\n        resolution,\n        enable_prompt_expansion: enable\n    };\n    if (images.length >= 2) {\n        requestData.image = images[0];\n        requestData.end_image = images[1];\n    }\n    else if (images.length === 1) {\n        requestData.image = images[0];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-minimax-hailuo-2.3",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "/async/minimax-hailuo-2.3-fast-i2v",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    const isFast = params.ppioHailuo23FastMode && images.length > 0;\n    if (images.length > 0) {\n        return isFast ? '/async/minimax-hailuo-2.3-fast-i2v' : '/async/minimax-hailuo-2.3-i2v';\n    }\n    else {\n        return '/async/minimax-hailuo-2.3-t2v';\n    }\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const durationInput = params.ppioHailuo23VideoDuration || params.duration;\n    const duration = durationInput === 10 ? 10 : 6;\n    const resInput = (params.ppioHailuo23VideoResolution || params.resolution || '').toUpperCase();\n    const resolution = duration === 10 ? '768P' : (resInput === '1080P' ? '1080P' : '768P');\n    const enable = params.ppioHailuo23PromptExtend === undefined ? (params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion) : params.ppioHailuo23PromptExtend;\n    const prompt = params.prompt || '';\n    const requestData = {\n        prompt,\n        duration,\n        resolution,\n        enable_prompt_expansion: enable\n    };\n    if (images.length > 0) {\n        requestData.image = images[0];\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-minimax-speech-2.6",
+      "providerId": "ppio",
+      "modelType": "audio",
+      "endpoints": {
+        "defaultRoute": "hd",
+        "selectorJs": "(params) => {\n    const spec = params.minimaxAudioSpec || params.spec || 'hd';\n    return spec === 'turbo' ? '/minimax-speech-2.6-turbo' : '/minimax-speech-2.6-hd';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const text = params.text || params.prompt || '';\n    const requestData = {\n        text,\n        output_format: params.output_format || 'url'\n    };\n    // Build voice_setting\n    const voice_setting = {};\n    const voiceId = params.minimaxVoiceId || params.voice_id;\n    if (voiceId)\n        voice_setting.voice_id = voiceId;\n    if (params.minimaxAudioSpeed !== undefined)\n        voice_setting.speed = params.minimaxAudioSpeed;\n    if (params.minimaxAudioVol !== undefined)\n        voice_setting.vol = params.minimaxAudioVol;\n    if (params.minimaxAudioPitch !== undefined)\n        voice_setting.pitch = params.minimaxAudioPitch;\n    if (params.minimaxAudioEmotion)\n        voice_setting.emotion = params.minimaxAudioEmotion;\n    requestData.voice_setting = voice_setting;\n    // Build audio_setting\n    const audio_setting = {};\n    if (params.minimaxAudioSampleRate !== undefined)\n        audio_setting.sample_rate = params.minimaxAudioSampleRate;\n    if (params.minimaxAudioBitrate !== undefined)\n        audio_setting.bitrate = params.minimaxAudioBitrate;\n    if (params.minimaxAudioFormat)\n        audio_setting.format = params.minimaxAudioFormat;\n    if (params.minimaxAudioChannel !== undefined)\n        audio_setting.channel = params.minimaxAudioChannel;\n    if (Object.keys(audio_setting).length > 0) {\n        requestData.audio_setting = audio_setting;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-pixverse-v4.5",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "/async/pixverse-v4.5-i2v",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0 ? '/async/pixverse-v4.5-i2v' : '/async/pixverse-v4.5-t2v';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const resInput = (params.ppioPixverse45VideoResolution || params.resolution || '').toLowerCase();\n    const allowed = ['360p', '540p', '720p', '1080p'];\n    const resolution = allowed.includes(resInput) ? resInput : '540p';\n    const aspectRatio = params.ppioPixverse45VideoAspectRatio || params.aspect_ratio || '16:9';\n    const fastMode = params.ppioPixverse45FastMode !== undefined ? params.ppioPixverse45FastMode : (params.fast_mode || false);\n    const prompt = params.prompt || '';\n    const negativePrompt = params.ppioPixverse45NegativePrompt || params.negative_prompt || '';\n    // Fast mode doesn't support 1080p\n    const finalResolution = fastMode && resolution === '1080p' ? '720p' : resolution;\n    if (images.length > 0) {\n        // Image-to-video\n        return {\n            prompt,\n            image: images[0],\n            resolution: finalResolution,\n            ...(negativePrompt ? { negative_prompt: String(negativePrompt).slice(0, 2048) } : {}),\n            fast_mode: fastMode\n        };\n    }\n    else {\n        // Text-to-video\n        return {\n            prompt,\n            aspect_ratio: aspectRatio,\n            resolution: finalResolution,\n            ...(negativePrompt ? { negative_prompt: String(negativePrompt).slice(0, 2048) } : {}),\n            fast_mode: fastMode\n        };\n    }\n}"
+      }
+    },
+    {
+      "modelId": "ppio-seedance-v1",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "lite",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    const variant = params.ppioSeedanceV1Variant || params.variant || 'lite';\n    if (images.length > 0) {\n        return `/async/seedance-v1-${variant}-i2v`;\n    }\n    else {\n        return `/async/seedance-v1-${variant}-t2v`;\n    }\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const resolution = params.ppioSeedanceV1Resolution || params.resolution || '720p';\n    const aspect = params.ppioSeedanceV1AspectRatio || params.aspect_ratio || '16:9';\n    const duration = params.ppioSeedanceV1VideoDuration || params.duration || 5;\n    const camera_fixed = params.ppioSeedanceV1CameraFixed || params.camera_fixed || false;\n    const prompt = params.prompt || '';\n    const requestData = {\n        prompt,\n        resolution,\n        duration,\n        camera_fixed,\n        seed: -1\n    };\n    if (aspect && aspect !== 'smart') {\n        requestData.aspect_ratio = aspect;\n    }\n    if (images.length > 0) {\n        requestData.image = images[0];\n        if (images.length > 1) {\n            requestData.last_image = images[1];\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-seedance-v1.5-pro",
+      "providerId": "ppio",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/async/seedance-v1.5-pro-i2v",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0 ? '/async/seedance-v1.5-pro-i2v' : '/async/seedance-v1.5-pro-t2v';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const resolution = params.ppioSeedance15ProResolution || params.resolution || '720p';\n    const duration = params.ppioSeedance15ProDuration || params.duration || 5;\n    const cameraFixed = params.ppioSeedance15ProCameraFixed || params.camera_fixed || false;\n    const serviceTier = params.ppioSeedance15ProServiceTier || params.service_tier || 'default';\n    const generateAudio = params.ppioSeedance15ProGenerateAudio !== undefined ? params.ppioSeedance15ProGenerateAudio : (params.generate_audio !== undefined ? params.generate_audio : true);\n    const ratio = params.ppioSeedance15ProAspectRatio || params.ratio || 'adaptive';\n    const requestData = {\n        prompt: params.prompt,\n        resolution,\n        ratio,\n        duration,\n        camera_fixed: cameraFixed,\n        service_tier: serviceTier,\n        generate_audio: generateAudio,\n        fps: 24,\n        seed: -1,\n        watermark: false\n    };\n    // Add image(s) if present\n    if (images.length > 0) {\n        requestData.image = images[0];\n        // Add last_image for start-end-frame mode\n        if (images.length >= 2) {\n            requestData.last_image = images[1];\n        }\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-seedream-4.0",
+      "providerId": "ppio",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/seedream-4.0"
+      },
+      "request": {
+        "builderJs": "(params) => { const maxImages = params.maxImages || params.max_images || 1; const prompt = typeof params.prompt === 'string' ? params.prompt : ''; const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt; const requestData = { prompt: finalPrompt, watermark: false }; if (params.resolution) {\n    const resolution = params.resolution;\n    if (resolution.aspectRatio !== 'smart') {\n        if (resolution.width && resolution.height) {\n            requestData.size = resolution.width + 'x' + resolution.height;\n        }\n        else if (params.size) {\n            requestData.size = params.size;\n        }\n    }\n    else if (params.size) {\n        requestData.size = params.size;\n    }\n}\nelse if (params.size) {\n    requestData.size = params.size;\n} if (Array.isArray(params.images) && params.images.length > 0) {\n    requestData.images = params.images;\n} if (maxImages > 1) {\n    requestData.sequential_image_generation = 'auto';\n    requestData.max_images = maxImages;\n}\nelse {\n    requestData.sequential_image_generation = 'disabled';\n} return requestData; }"
+      }
+    },
+    {
+      "modelId": "ppio-seedream-4.5",
+      "providerId": "ppio",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/seedream-4.5"
+      },
+      "request": {
+        "builderJs": "(params) => { const maxImages = params.maxImages || params.max_images || 1; const prompt = typeof params.prompt === 'string' ? params.prompt : ''; const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt; const requestData = { prompt: finalPrompt, watermark: false }; if (params.resolution) {\n    const resolution = params.resolution;\n    if (resolution.aspectRatio !== 'smart') {\n        if (resolution.width && resolution.height) {\n            requestData.size = resolution.width + 'x' + resolution.height;\n        }\n        else if (params.size) {\n            requestData.size = params.size;\n        }\n    }\n    else if (params.size) {\n        requestData.size = params.size;\n    }\n}\nelse if (params.size) {\n    requestData.size = params.size;\n} if (Array.isArray(params.images) && params.images.length > 0) {\n    requestData.image = params.images;\n} if (maxImages > 1) {\n    requestData.sequential_image_generation = 'auto';\n    requestData.sequential_image_generation_options = { max_images: maxImages };\n}\nelse {\n    requestData.sequential_image_generation = 'disabled';\n} if (params.optimizePrompt === true) {\n    requestData.optimize_prompt_options = { mode: 'standard' };\n} return requestData; }"
+      }
+    },
+    {
+      "modelId": "ppio-vidu-q1",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "text-image-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video';\n    const images = params.images || [];\n    switch (mode) {\n        case 'text-image-to-video':\n            return images.length > 0 ? '/async/vidu-q1-img2video' : '/async/vidu-q1-text2video';\n        case 'start-end-frame':\n            return '/async/vidu-q1-startend2video';\n        case 'reference-to-video':\n            return '/async/vidu-q1-reference2video';\n        default:\n            throw new Error(`Unsupported mode: ${mode}`);\n    }\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video';\n    const images = params.images || [];\n    const prompt = params.prompt || '';\n    const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto';\n    const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false);\n    const requestData = {\n        prompt,\n        duration: 5,\n        resolution: '1080p',\n        movement_amplitude: movementAmplitude,\n        bgm\n    };\n    if (params.seed !== undefined) {\n        requestData.seed = params.seed;\n    }\n    switch (mode) {\n        case 'text-image-to-video':\n            if (images.length > 0) {\n                requestData.images = [images[0]];\n            }\n            else {\n                requestData.aspect_ratio = params.ppioViduQ1AspectRatio || params.aspect_ratio || '16:9';\n                requestData.style = params.ppioViduQ1Style || params.style || 'general';\n            }\n            break;\n        case 'start-end-frame':\n            if (images.length >= 2) {\n                requestData.images = [images[0], images[1]];\n            }\n            break;\n        case 'reference-to-video':\n            if (images.length > 0) {\n                requestData.images = images.slice(0, 7);\n                requestData.aspect_ratio = params.ppioViduQ1AspectRatio || params.aspect_ratio || '16:9';\n            }\n            break;\n    }\n    return requestData;\n}"
+      }
+    },
+    {
+      "modelId": "ppio-wan-2.5-preview",
+      "providerId": "ppio",
+      "modelType": "video",
+      "endpoints": {
+        "defaultRoute": "/async/wan-2.5-i2v-preview",
+        "selectorJs": "(params) => {\n    const images = params.images || [];\n    return images.length > 0 ? '/async/wan-2.5-i2v-preview' : '/async/wan-2.5-t2v-preview';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const images = params.images || [];\n    const duration = params.ppioWan25VideoDuration || params.duration || 5;\n    const prompt_extend = params.ppioWan25PromptExtend !== undefined ? params.ppioWan25PromptExtend : (params.prompt_extend === undefined ? true : params.prompt_extend);\n    const audio = params.ppioWan25Audio !== undefined ? params.ppioWan25Audio : (params.audio === undefined ? true : params.audio);\n    const prompt = params.prompt || '';\n    const negativePrompt = params.ppioWan25NegativePrompt || params.negative_prompt || '';\n    const audioUrl = params.audio_url;\n    if (images.length > 0) {\n        // Image-to-video\n        return {\n            input: {\n                prompt,\n                negative_prompt: negativePrompt,\n                img_url: images[0],\n                ...(audioUrl ? { audio_url: audioUrl } : {})\n            },\n            parameters: {\n                resolution: params.ppioWan25Resolution || params.resolution || '1080P',\n                duration,\n                prompt_extend,\n                watermark: false,\n                audio\n            }\n        };\n    }\n    else {\n        // Text-to-video\n        return {\n            input: {\n                prompt,\n                negative_prompt: negativePrompt,\n                ...(audioUrl ? { audio_url: audioUrl } : {})\n            },\n            parameters: {\n                size: params.ppioWan25Size || params.size || '1920*1080',\n                duration,\n                prompt_extend,\n                watermark: false,\n                audio\n            }\n        };\n    }\n}"
+      }
+    },
+    {
+      "modelId": "ppio-wan-2.6",
+      "providerId": "ppio",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "text-image-to-video",
+        "selectorJs": "(params) => {\n    const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video';\n    const images = params.images || [];\n    if (mode === 'reference-to-video') {\n        return '/async/wan2.6-v2v';\n    }\n    if (images.length > 0) {\n        return '/async/wan2.6-i2v';\n    }\n    return '/async/wan2.6-t2v';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    var _a;\n    const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video';\n    const images = params.images || [];\n    const videos = params.videos || [];\n    const video = params.video || videos[0];\n    const aspectRatio = params.ppioWan26AspectRatio || params.aspect_ratio || '16:9';\n    const quality = params.ppioWan26Quality || params.quality || '720P';\n    const duration = params.ppioWan26VideoDuration || params.duration || 5;\n    const shotType = params.ppioWan26ShotType || params.shot_type || 'multi';\n    const audio = params.ppioWan26Audio !== undefined ? params.ppioWan26Audio : (params.audio !== undefined ? params.audio : true);\n    const promptExtend = params.ppioWan26PromptExtend !== undefined ? params.ppioWan26PromptExtend : (params.prompt_extend !== undefined ? params.prompt_extend : true);\n    const prompt = (params.prompt || '').slice(0, 2000);\n    const negativePrompt = params.ppioWan26NegativePrompt || params.negative_prompt;\n    const resolutionMap = {\n        '16:9': { '720P': '1280*720', '1080P': '1920*1080' },\n        '9:16': { '720P': '720*1280', '1080P': '1080*1920' },\n        '1:1': { '720P': '960*960', '1080P': '1440*1440' },\n        '4:3': { '720P': '1088*832', '1080P': '1632*1248' },\n        '3:4': { '720P': '832*1088', '1080P': '1248*1632' }\n    };\n    const input = { prompt };\n    if (negativePrompt) {\n        input.negative_prompt = negativePrompt;\n    }\n    if (params.audio_url) {\n        input.audio_url = params.audio_url;\n    }\n    if (mode === 'reference-to-video') {\n        if (video) {\n            input.reference_video_urls = [video];\n        }\n    }\n    else if (images.length > 0) {\n        input.img_url = images[0];\n        if (params.template) {\n            input.template = params.template;\n        }\n    }\n    const parameters = {\n        audio,\n        duration,\n        shot_type: shotType,\n        watermark: false,\n        prompt_extend: promptExtend\n    };\n    if (params.seed !== undefined) {\n        parameters.seed = params.seed;\n    }\n    if (mode === 'reference-to-video' || images.length === 0) {\n        parameters.size = ((_a = resolutionMap[aspectRatio]) === null || _a === void 0 ? void 0 : _a[quality]) || '1280*720';\n    }\n    else {\n        parameters.resolution = quality;\n    }\n    return { input, parameters };\n}"
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen-Image",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => buildModelscopeRequest(params, {\n    modelId: 'Qwen/Qwen-Image',\n    allowGuidance: true,\n    allowNegativePrompt: true,\n    allowImage: false,\n    baseSize: 1024\n})"
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen-Image-Edit-2509",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => buildModelscopeRequest(params, {\n    modelId: 'Qwen/Qwen-Image-Edit-2509',\n    allowGuidance: false,\n    allowNegativePrompt: false,\n    allowImage: true,\n    baseSize: 1024\n})"
+      }
+    },
+    {
+      "modelId": "Tongyi-MAI/Z-Image-Turbo",
+      "providerId": "modelscope",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/api/v1/jobs/createTask"
+      },
+      "request": {
+        "builderJs": "(params) => buildModelscopeRequest(params, {\n    modelId: 'Tongyi-MAI/Z-Image-Turbo',\n    allowGuidance: false,\n    allowNegativePrompt: true,\n    allowImage: false,\n    baseSize: 1440\n})"
+      }
+    }
+  ]
+}

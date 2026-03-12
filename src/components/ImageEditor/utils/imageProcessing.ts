@@ -1,10 +1,10 @@
 /**
- * 图像处理工具函数
- * 职责：提供图像处理算法
+ * 图片处理工具函数
+ * 职责：提供图片处理算法
  */
 
 /**
- * 调整图像亮度
+ * 调整图片亮度
  */
 export function adjustBrightness(imageData: ImageData, brightness: number): ImageData {
   const data = imageData.data
@@ -20,7 +20,7 @@ export function adjustBrightness(imageData: ImageData, brightness: number): Imag
 }
 
 /**
- * 调整图像对比度
+ * 调整图片对比度
  */
 export function adjustContrast(imageData: ImageData, contrast: number): ImageData {
   const data = imageData.data
@@ -36,7 +36,7 @@ export function adjustContrast(imageData: ImageData, contrast: number): ImageDat
 }
 
 /**
- * 调整图像饱和度
+ * 调整图片饱和度
  */
 export function adjustSaturation(imageData: ImageData, saturation: number): ImageData {
   const data = imageData.data

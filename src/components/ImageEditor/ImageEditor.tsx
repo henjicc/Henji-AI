@@ -97,7 +97,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         stageRef,
         contentGroupRef,
     })
-    // ==================== 图像与布局 ====================
+    // ==================== 图片与布局 ====================
     const handleImageLoaded = useCallback((_: HTMLImageElement, size: { width: number; height: number }) => {
         setCropRect({
             x: size.width * 0.1,

@@ -10,7 +10,7 @@ export const viduQ2Model = defineModel({
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-vidu-q2',
-    name: 'Vidu Q2',
+    name: { key: 'meta.name', fallback: 'Vidu Q2' },
     description: 'Vidu Q2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },

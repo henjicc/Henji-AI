@@ -10,7 +10,7 @@ export const minimaxSpeech26Model = defineModel({
     provider: 'ppio',
     type: 'audio',
         i18nScope: 'models.defs.ppio-minimax-speech-2.6',
-    name: 'Minimax Speech 2.6',
+    name: { key: 'meta.name', fallback: 'Minimax Speech 2.6' },
     description: 'Minimax Speech 2.6 音频生成模型，支持高质量语音合成',
     tags: ['audio', 'text-to-speech', 'voice-synthesis']
   },
