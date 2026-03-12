@@ -11,7 +11,13 @@ import { useHistoryDrag } from '../hooks/useHistoryDrag'
 import { TaskInputPreview } from './TaskInputPreview'
 import { TaskPrompt } from './TaskPrompt'
 import { CopyIcon, DownloadIcon, UsePromptIcon } from './TaskActionIcons'
-
+const DEFAULT_RESULT_ASPECT_RATIO = '1 / 1'
+function toAspectRatio(dimensions?: string): string {
+  const normalized = dimensions?.trim().toLowerCase()
+  if (!normalized) return DEFAULT_RESULT_ASPECT_RATIO
+  const matched = normalized.match(/^(\d+(?:\.\d+)?)\s*[:x]\s*(\d+(?:\.\d+)?)$/)
+  return matched ? `${matched[1]} / ${matched[2]}` : DEFAULT_RESULT_ASPECT_RATIO
+}
 export interface TaskListProps {
   tasks: GenerationTask[]
   taskProgress: Record<string, number>
@@ -75,7 +81,7 @@ export function TaskList({
   }
 
   return (
-    <div className="max-w-6xl mx-auto w-[90%] space-y-4">
+    <div className="max-w-6xl mx-auto w-[90%] space-y-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">{t('history:title')}</h2>
       </div>
@@ -91,6 +97,7 @@ export function TaskList({
         const createdAtLabel = task.result?.createdAt ? formatDate(task.result.createdAt) : ''
         const inputImages = task.images ?? []
         const inputVideos = task.videos ?? []
+        const resultAspectRatio = toAspectRatio(task.dimensions)
 
         const renderResult = () => {
           if (task.status === 'queued') {
@@ -164,7 +171,8 @@ export function TaskList({
                   return (
                     <div
                       key={`${task.id}-img-${index}`}
-                      className="relative w-64 h-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center"
+                      className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center"
+                      style={{ aspectRatio: resultAspectRatio }}
                       onClick={() => handleImageClick(url, urls, filePaths)}
                       onContextMenu={(e) =>
                         showMenu(
@@ -214,7 +222,8 @@ export function TaskList({
             const filePath = task.result.filePath
             return (
               <div
-                className="relative w-64 h-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
+                className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
+                style={{ aspectRatio: resultAspectRatio }}
                 onClick={() => handleVideoClick(task.result!.url, filePath)}
                 onContextMenu={(e) =>
                   showMenu(e, [
@@ -276,7 +285,7 @@ export function TaskList({
         }
 
         return (
-          <div key={task.id} className="bg-panel/70 rounded-xl border border-zinc-700/50 p-3">
+          <div key={task.id} className="rounded-xl p-3">
             <div className="flex items-start gap-3">
               <TaskInputPreview
                 taskId={task.id}
