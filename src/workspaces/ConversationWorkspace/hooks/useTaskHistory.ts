@@ -53,6 +53,9 @@ function parseHistoryTimestamp(value?: string | null): Date {
 async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): Promise<GenerationTask> {
   const rawParams: unknown = record.params
   const safeParams: Record<string, unknown> = isRecord(rawParams) ? rawParams : {}
+  const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
+  const paramsForTaskOptions: Record<string, unknown> = { ...safeParams }
+  delete paramsForTaskOptions['__resultUrl']
 
   const uploadedFilePathsRaw = safeParams['uploadedFilePaths']
   const uploadedVideoFilePathsRaw = safeParams['uploadedVideoFilePaths']
@@ -89,11 +92,15 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     ])
     : [null, null]
 
-  const result = absoluteResultFilePath
+  const resolvedResultUrl = absoluteResultFilePath
+    ? await toDisplayUrlString(absoluteResultFilePath, record.type)
+    : resultUrlFromParams
+
+  const result = resolvedResultUrl
     ? {
         id: record.id,
         type: record.type,
-        url: await toDisplayUrlString(absoluteResultFilePath, record.type),
+        url: resolvedResultUrl,
         filePath: absoluteResultFilePath,
         prompt: record.prompt ?? '',
         createdAt: parseHistoryTimestamp(record.createdAt),
@@ -101,7 +108,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     : undefined
 
   const options: GeneratorOptions = {
-    ...safeParams,
+    ...paramsForTaskOptions,
     ...(uploadedFilePathsAbs ? { uploadedFilePaths: uploadedFilePathsAbs } : {}),
     ...(uploadedVideoFilePathsAbs ? { uploadedVideoFilePaths: uploadedVideoFilePathsAbs } : {}),
   }
@@ -123,6 +130,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     videos,
     uploadedFilePaths: uploadedFilePathsAbs,
     uploadedVideoFilePaths: uploadedVideoFilePathsAbs,
+    serverTaskId: record.taskId ?? undefined,
     options,
   }
 }
@@ -248,6 +256,9 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
           if (task.uploadedVideoFilePaths?.length) {
             optionsCopy['uploadedVideoFilePaths'] = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, true)
           }
+          if (task.result?.url) {
+            optionsCopy['__resultUrl'] = task.result.url
+          }
 
           const historyRecord: Omit<HistoryRecord, 'createdAt' | 'updatedAt'> = {
             id: task.id,
@@ -257,7 +268,7 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
             prompt: task.prompt,
             params: optionsCopy as unknown as HistoryRecord['params'],
             filePath: relativeFilePath,
-            taskId: null,
+            taskId: task.serverTaskId ?? null,
             status: task.status,
             errorMessage: task.error ?? null,
             cost: null,

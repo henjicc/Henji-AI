@@ -34,6 +34,7 @@ export interface GenerationTask {
   videos?: string[]
   uploadedFilePaths?: string[]
   uploadedVideoFilePaths?: string[]
+  serverTaskId?: string
 
   dimensions?: string
   duration?: string
@@ -50,4 +51,3 @@ export interface ProgressStatusLike {
   progress?: number
   message?: string
 }
-

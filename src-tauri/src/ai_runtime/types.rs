@@ -19,6 +19,15 @@ pub struct AiGenerateRequestDto {
     pub request_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiContinuePollingRequestDto {
+    pub model_id: String,
+    pub task_id: String,
+    #[serde(default)]
+    pub params: Map<String, Value>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiGenerateResponseDto {

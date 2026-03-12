@@ -1,4 +1,4 @@
-﻿{
+{
   "generate": "生成",
   "generating": "生成中...",
   "cancel": "取消",
@@ -6,7 +6,7 @@
   "download": "下载",
   "delete": "删除",
   "upload": "上传",
-  "retry": "重试",
+  "retry": "再次轮询",
   "actions": {
     "clearHistory": "清除历史",
     "settings": "设置"

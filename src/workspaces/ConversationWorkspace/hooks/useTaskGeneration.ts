@@ -7,11 +7,8 @@ import { logError, logInfo } from '@/utils/errorLogger'
 import {
   dataUrlToBlob,
   ensureCompressedJpegBytesWithPica,
-  fileToBlobSrc,
   isDesktop,
-  saveAudioFromUrl,
   saveBytesToUploads,
-  saveImageFromUrl,
   saveBase64ToUploads,
 } from '@/utils/save'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
@@ -19,8 +16,11 @@ import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { saveEditState } from '@/utils/editStatePersistence'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
-import { joinMulti, splitMulti } from '../utils/multiFile'
+import { splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
+import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
+import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
+import { continuePollingTask } from './continuePollingTask'
 
 type GenerationProgressCallback = NonNullable<Parameters<GenerationService['generate']>[2]>
 type GenerationProgressStatus = Parameters<GenerationProgressCallback>[0]
@@ -32,7 +32,6 @@ export interface UseTaskGenerationMessages {
 }
 
 export interface UseTaskGenerationParams {
-  tasks: GenerationTask[]
   setTasks: React.Dispatch<React.SetStateAction<GenerationTask[]>>
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   updateProgress: (taskId: string, progress: number) => void
@@ -46,6 +45,7 @@ export interface UseTaskGenerationParams {
 export interface UseTaskGenerationReturn {
   isGenerating: boolean
   handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
+  handleContinuePolling: (task: GenerationTask) => Promise<void>
 }
 
 function createTaskId(): string {
@@ -75,7 +75,6 @@ function asGeneratorOptions(value: unknown): GeneratorOptions {
 }
 
 export function useTaskGeneration({
-  tasks,
   setTasks,
   updateTask,
   updateProgress,
@@ -128,37 +127,25 @@ export function useTaskGeneration({
 
       const result = await generateWithService(task.model, task.prompt, options, handleProgress)
       const resultObj: Record<string, unknown> = isRecord(result) ? result : {}
-
-      let url = typeof resultObj['url'] === 'string' ? resultObj['url'] : undefined
-      let filePath = typeof resultObj['filePath'] === 'string' ? resultObj['filePath'] : undefined
-
-      // 图片/音频：如果 Provider 未落盘，桌面端补一次本地保存
-      if (isDesktop() && url && !filePath) {
-        try {
-          if (task.type === 'image') {
-            const urls = splitMulti(url)
-            const display: string[] = []
-            const paths: string[] = []
-            for (const u of urls) {
-              const { fullPath } = await saveImageFromUrl(u)
-              display.push(await fileToBlobSrc(fullPath))
-              paths.push(fullPath)
-            }
-            url = joinMulti(display)
-            filePath = joinMulti(paths)
-          }
-
-          if (task.type === 'audio') {
-            const { fullPath } = await saveAudioFromUrl(url)
-            url = await fileToBlobSrc(fullPath)
-            filePath = fullPath
-          }
-        } catch (e) {
-          logError('[Workspace] 本地保存失败，回退在线地址', e)
-        }
+      const metadata = resultObj['metadata']
+      const serverTaskId = extractServerTaskIdFromMetadata(metadata)
+      if (serverTaskId) {
+        updateTask(taskId, { serverTaskId })
       }
+      logInfo('[Workspace] 生成响应', { model: task.model, taskId: serverTaskId, metadata })
+
+      const normalized = await normalizeMediaResultForDesktop(
+        task,
+        {
+          url: typeof resultObj['url'] === 'string' ? resultObj['url'] : undefined,
+          filePath: typeof resultObj['filePath'] === 'string' ? resultObj['filePath'] : undefined,
+        },
+        '[Workspace] 本地保存失败，回退在线地址'
+      )
+      const { url, filePath } = normalized
 
       if (!url) {
+        logError('[Workspace] 生成响应缺少 URL', { model: task.model, result: resultObj })
         throw new Error(messages.genericGenerateFailed)
       }
 
@@ -187,11 +174,28 @@ export function useTaskGeneration({
       })
     } catch (error) {
       logError('[Workspace] 生成失败', error)
-      updateTask(taskId, { status: 'error', error: maybeToUserMessage(error) || messages.genericGenerateFailed })
+      const errorMessage = maybeToUserMessage(error) || messages.genericGenerateFailed
+      const serverTaskIdFromError = extractServerTaskIdFromErrorMessage(errorMessage)
+      updateTask(taskId, {
+        status: 'error',
+        error: errorMessage,
+        ...(serverTaskIdFromError ? { serverTaskId: serverTaskIdFromError } : {}),
+      })
     } finally {
       delete lastProgressRef.current[taskId]
     }
   }, [generateWithService, messages.genericGenerateFailed, updateProgress, updateTask])
+
+  const handleContinuePolling = useCallback(async (task: GenerationTask): Promise<void> => {
+    await continuePollingTask({
+      task,
+      genericGenerateFailed: messages.genericGenerateFailed,
+      notify,
+      updateTask,
+      updateProgress,
+      toUserMessage: maybeToUserMessage,
+    })
+  }, [messages.genericGenerateFailed, notify, updateProgress, updateTask])
 
   const handleGenerate = useCallback(async (
     input: string,
@@ -351,5 +355,5 @@ export function useTaskGeneration({
     updateTask,
   ])
 
-  return { isGenerating, handleGenerate }
+  return { isGenerating, handleGenerate, handleContinuePolling }
 }

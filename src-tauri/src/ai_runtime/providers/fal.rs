@@ -1,6 +1,6 @@
 use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
 use crate::ai_runtime::polling::{cancelled_error, timeout_error, wait_interval_ms};
-use crate::ai_runtime::providers::ProviderExecutionInput;
+use crate::ai_runtime::providers::{ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::types::{GenerateStatus, ProviderExecutionResult};
 use serde_json::{json, Value};
@@ -31,9 +31,37 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
 
     let urls = extract_urls(&final_payload);
     if urls.is_empty() {
+        let request_id = final_payload
+            .get("request_id")
+            .and_then(Value::as_str)
+            .unwrap_or(input.request_id);
         return Err(AiRuntimeError::new(
             "empty_result",
-            "Fal response has no media URL",
+            format!("Fal response has no media URL (request_id={})", request_id),
+        ));
+    }
+
+    Ok(ProviderExecutionResult {
+        status: GenerateStatus::Completed,
+        url: urls.join("|||"),
+        metadata: final_payload,
+    })
+}
+
+pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResult<ProviderExecutionResult> {
+    let request_id = input.task_id.to_string();
+    let status_url = format!(
+        "{}/{}/requests/{}/status",
+        FAL_QUEUE_BASE_URL,
+        input.route.trim_start_matches('/'),
+        input.task_id
+    );
+    let final_payload = poll_by_status_url(input, &status_url).await?;
+    let urls = extract_urls(&final_payload);
+    if urls.is_empty() {
+        return Err(AiRuntimeError::new(
+            "empty_result",
+            format!("Fal response has no media URL (request_id={})", request_id),
         ));
     }
 
@@ -107,7 +135,27 @@ async fn resolve_async_payload(
                 })
         })
         .ok_or_else(|| AiRuntimeError::new("invalid_response", "Fal async response missing status_url"))?;
+    let request_ref = submit_payload
+        .get("request_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .unwrap_or_else(|| status_url.clone());
 
+    let continue_input = ProviderContinuePollingInput {
+        client: input.client,
+        api_key: input.api_key,
+        route: input.route,
+        task_id: &request_ref,
+        request_id: input.request_id,
+        polling: input.polling,
+    };
+    poll_by_status_url(continue_input, &status_url).await
+}
+
+async fn poll_by_status_url(
+    input: ProviderContinuePollingInput<'_>,
+    status_url: &str,
+) -> AiResult<Value> {
     let interval = input.polling.map(|p| p.interval).unwrap_or(3000);
     let max_attempts = input.polling.map(|p| p.max_attempts).unwrap_or(200);
 
@@ -120,7 +168,7 @@ async fn resolve_async_payload(
 
         let response = input
             .client
-            .get(&status_url)
+            .get(status_url)
             .header("Authorization", format!("Key {}", input.api_key))
             .send()
             .await?;
@@ -145,13 +193,22 @@ async fn resolve_async_payload(
                     .send()
                     .await?;
 
-                let response_json = final_response
+                let mut response_json = final_response
                     .json::<Value>()
                     .await
                     .map_err(|e| AiRuntimeError::new("invalid_json", e.to_string()))?;
+                if let Value::Object(map) = &mut response_json {
+                    map.entry("request_id".to_string())
+                        .or_insert_with(|| Value::String(input.task_id.to_string()));
+                }
                 return Ok(response_json);
             }
-            return Ok(payload);
+            let mut enriched = payload;
+            if let Value::Object(map) = &mut enriched {
+                map.entry("request_id".to_string())
+                    .or_insert_with(|| Value::String(input.task_id.to_string()));
+            }
+            return Ok(enriched);
         }
 
         if state == "FAILED" || state == "ERROR" {
@@ -159,7 +216,7 @@ async fn resolve_async_payload(
         }
     }
 
-    Err(timeout_error(max_attempts))
+    Err(timeout_error(max_attempts).with_context(format!("request_id={}", input.task_id)))
 }
 
 fn strip_sync_mode(value: Value) -> Value {

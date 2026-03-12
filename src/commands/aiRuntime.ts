@@ -11,6 +11,12 @@ export interface AiGenerateRequestDto {
   requestId?: string
 }
 
+export interface AiContinuePollingRequestDto {
+  modelId: string
+  taskId: string
+  params?: Record<string, unknown>
+}
+
 export interface AiGenerateResponseDto {
   status: 'completed' | 'failed' | 'timeout'
   url: string
@@ -42,6 +48,11 @@ export async function aiGetProviderKeyStatus(): Promise<ProviderKeyStatusDto[]> 
 export async function aiGenerate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto> {
   ensureDesktopRuntime()
   return await invoke<AiGenerateResponseDto>('ai_generate', { request })
+}
+
+export async function aiContinuePolling(request: AiContinuePollingRequestDto): Promise<AiGenerateResponseDto> {
+  ensureDesktopRuntime()
+  return await invoke<AiGenerateResponseDto>('ai_continue_polling', { request })
 }
 
 export async function aiCancelTask(taskId: string): Promise<void> {

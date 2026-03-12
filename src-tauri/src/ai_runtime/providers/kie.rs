@@ -1,6 +1,6 @@
 use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
 use crate::ai_runtime::polling::{cancelled_error, timeout_error, wait_interval_ms};
-use crate::ai_runtime::providers::ProviderExecutionInput;
+use crate::ai_runtime::providers::{ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::types::{GenerateStatus, ProviderExecutionResult};
 use serde_json::Value;
@@ -20,9 +20,38 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
 
     let urls = extract_urls(&final_payload);
     if urls.is_empty() {
+        let task_id = extract_task_id(&final_payload).unwrap_or_else(|| "unknown".to_string());
         return Err(AiRuntimeError::new(
             "empty_result",
-            "KIE response has no media URL",
+            format!("KIE response has no media URL (task_id={})", task_id),
+        ));
+    }
+
+    Ok(ProviderExecutionResult {
+        status: GenerateStatus::Completed,
+        url: urls.join("|||"),
+        metadata: final_payload,
+    })
+}
+
+pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResult<ProviderExecutionResult> {
+    let null_body = Value::Null;
+    let shim = ProviderExecutionInput {
+        client: input.client,
+        api_key: input.api_key,
+        route: input.route,
+        method: "GET",
+        body: &null_body,
+        request_id: input.request_id,
+        polling: input.polling,
+    };
+
+    let final_payload = poll_task(&shim, input.task_id).await?;
+    let urls = extract_urls(&final_payload);
+    if urls.is_empty() {
+        return Err(AiRuntimeError::new(
+            "empty_result",
+            format!("KIE response has no media URL (task_id={})", input.task_id),
         ));
     }
 
@@ -115,7 +144,7 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
         }
     }
 
-    Err(timeout_error(max_attempts))
+    Err(timeout_error(max_attempts).with_context(format!("task_id={}", task_id)))
 }
 
 fn extract_task_id(payload: &Value) -> Option<String> {

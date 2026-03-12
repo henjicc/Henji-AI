@@ -1,4 +1,4 @@
-﻿{
+{
   "generate": "Generate",
   "generating": "Generating...",
   "cancel": "Cancel",
@@ -6,7 +6,7 @@
   "download": "Download",
   "delete": "Delete",
   "upload": "Upload",
-  "retry": "Retry",
+  "retry": "Poll Again",
   "actions": {
     "clearHistory": "Clear History",
     "settings": "Settings"

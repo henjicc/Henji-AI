@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import MediaGenerator from '@/components/MediaGenerator'
 import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
@@ -26,6 +27,7 @@ import { useTestModeShortcuts } from './ConversationWorkspace/hooks/useTestModeS
 import { useToast } from './ConversationWorkspace/hooks/useToast'
 import { useUpdateCheck } from './ConversationWorkspace/hooks/useUpdateCheck'
 import { useAutoScrollOnResize } from './ConversationWorkspace/hooks/useAutoScrollOnResize'
+import { splitMulti } from './ConversationWorkspace/utils/multiFile'
 
 const ConversationWorkspace: React.FC = () => {
   const { t } = useI18n()
@@ -73,8 +75,7 @@ const ConversationWorkspace: React.FC = () => {
       genericGenerateFailed: t('ui:workspace.toast.generateFailed'),
     }
   }, [t])
-  const { isGenerating, handleGenerate } = useTaskGeneration({
-    tasks,
+  const { isGenerating, handleGenerate, handleContinuePolling } = useTaskGeneration({
     setTasks,
     updateTask,
     updateProgress,
@@ -233,9 +234,14 @@ const ConversationWorkspace: React.FC = () => {
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
   const [currentVideoPath, setCurrentVideoPath] = useState<string | undefined>(undefined)
-  const openVideoViewer = (url: string, filePath?: string) => {
-    setCurrentVideoUrl(url)
-    setCurrentVideoPath(filePath)
+  const openVideoViewer = (url?: string, filePath?: string) => {
+    const rawUrl = typeof url === 'string' ? url : ''
+    const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
+    const normalizedUrl = normalizedFilePath
+      ? convertFileSrc(normalizedFilePath.replace(/\\/g, '/'))
+      : (rawUrl ? (splitMulti(rawUrl)[0] ?? '') : '')
+    setCurrentVideoUrl(normalizedUrl)
+    setCurrentVideoPath(normalizedFilePath)
     setIsVideoViewerOpen(true)
   }
   const closeVideoViewer = () => {
@@ -244,8 +250,9 @@ const ConversationWorkspace: React.FC = () => {
   }
   useEffect(() => {
     const handleOpenVideoViewer = (event: Event) => {
-      const e = event as CustomEvent<{ url: string; filePath?: string }>
-      openVideoViewer(e.detail.url, e.detail.filePath)
+      const e = event as CustomEvent<{ url?: string; videoUrl?: string; filePath?: string }>
+      const url = typeof e.detail.url === 'string' ? e.detail.url : e.detail.videoUrl
+      openVideoViewer(url, e.detail.filePath)
     }
     window.addEventListener('open-video-viewer', handleOpenVideoViewer as EventListener)
     return () => window.removeEventListener('open-video-viewer', handleOpenVideoViewer as EventListener)
@@ -270,6 +277,7 @@ const ConversationWorkspace: React.FC = () => {
               onDownload={download}
               onCopyImage={copyImageToClipboard}
               onRegenerate={handleRegenerate}
+              onRetryPolling={handleContinuePolling}
               onReedit={handleReedit}
               onDelete={deleteTask}
               onUsePrompt={handleUsePrompt}

@@ -87,6 +87,7 @@ pub fn run() {
             ai_runtime::commands::ai_get_provider_key_status,
             ai_runtime::commands::ai_reload_model_manifest,
             ai_runtime::commands::ai_generate,
+            ai_runtime::commands::ai_continue_polling,
             ai_runtime::commands::ai_cancel_task,
             modelscope::modelscope_submit_task,
             modelscope::modelscope_check_status,

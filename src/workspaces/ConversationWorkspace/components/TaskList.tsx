@@ -1,8 +1,9 @@
 import React from 'react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { UiIconButton } from '@/components/ui'
+import { UiButton, UiIconButton } from '@/components/ui'
 import AudioPlayer from '@/components/AudioPlayer'
 import { getModelDisplayName } from '@/utils/modelHelpers'
 import type { GenerationTask } from '../types'
@@ -25,13 +26,13 @@ export interface TaskListProps {
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
   onCopyImage: (filePath?: string) => Promise<void>
   onRegenerate: (task: GenerationTask) => Promise<void>
+  onRetryPolling: (task: GenerationTask) => Promise<void>
   onReedit: (task: GenerationTask) => void
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string) => void
 }
-
 export function TaskList({
   tasks,
   taskProgress,
@@ -39,6 +40,7 @@ export function TaskList({
   onDownload,
   onCopyImage,
   onRegenerate,
+  onRetryPolling,
   onReedit,
   onDelete,
   onUsePrompt,
@@ -47,7 +49,6 @@ export function TaskList({
 }: TaskListProps): JSX.Element {
   const { t, i18n } = useI18n()
   const { startImageDrag, startVideoDrag, shouldIgnoreClick, markContextMenu } = useHistoryDrag()
-
   const formatDate = (value?: Date): string => {
     if (!value) return ''
     const locale = i18n.language || 'zh-CN'
@@ -61,17 +62,14 @@ export function TaskList({
       hour12: false,
     })
   }
-
   const handleImageClick = (url: string, list: string[], filePaths: string[]) => {
     if (shouldIgnoreClick()) return
     onOpenImageViewer(url, list, filePaths)
   }
-
   const handleVideoClick = (url: string, filePath?: string) => {
     if (shouldIgnoreClick()) return
     onOpenVideoViewer(url, filePath)
   }
-
   if (tasks.length === 0) {
     return (
       <div className="max-w-6xl mx-auto w-[90%] py-20 text-center text-zinc-500">
@@ -79,21 +77,15 @@ export function TaskList({
       </div>
     )
   }
-
   return (
     <div className="max-w-6xl mx-auto w-[90%] space-y-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">{t('history:title')}</h2>
       </div>
-
       {tasks.map((task) => {
         const modelName = getModelDisplayName(task.model)
         const progressValue = taskProgress[task.id] ?? task.progress
-        const typeLabel = task.type === 'image'
-          ? t('ui:workspaceToolbar.filter.image')
-          : task.type === 'video'
-            ? t('ui:workspaceToolbar.filter.video')
-            : t('ui:workspaceToolbar.filter.audio')
+        const typeLabel = task.type === 'image' ? t('ui:workspaceToolbar.filter.image') : task.type === 'video' ? t('ui:workspaceToolbar.filter.video') : t('ui:workspaceToolbar.filter.audio')
         const createdAtLabel = task.result?.createdAt ? formatDate(task.result.createdAt) : ''
         const inputImages = task.images ?? []
         const inputVideos = task.videos ?? []
@@ -142,6 +134,11 @@ export function TaskList({
                 <div className="text-center w-full px-6">
                   <p className="text-yellow-400 mb-2 font-medium">{t('ui:workspace.status.timeout')}</p>
                   <p className="text-zinc-400 text-sm">{t('ui:workspace.status.timeoutHint')}</p>
+                  <div className="mt-5 flex justify-center">
+                    <UiButton variant="primary" size="sm" className="h-9 px-4" onClick={() => onRetryPolling(task)}>
+                      {t('ui:retry')}
+                    </UiButton>
+                  </div>
                 </div>
               </div>
             )
@@ -153,6 +150,11 @@ export function TaskList({
                 <div className="text-center w-full px-6">
                   <p className="text-red-300 font-medium mb-2">{t('common:error')}</p>
                   <p className="text-zinc-300 text-sm break-words">{task.error || t('common:status.failed')}</p>
+                  <div className="mt-5 flex justify-center">
+                    <UiButton variant="primary" size="sm" className="h-9 px-4" onClick={() => onRetryPolling(task)}>
+                      {t('ui:retry')}
+                    </UiButton>
+                  </div>
                 </div>
               </div>
             )
@@ -219,12 +221,15 @@ export function TaskList({
           }
 
           if (task.result.type === 'video') {
-            const filePath = task.result.filePath
+            const urls = splitMulti(task.result.url)
+            const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
+            const filePath = filePaths[0]
+            const videoUrl = filePath ? convertFileSrc(filePath.replace(/\\/g, '/')) : (urls[0] ?? '')
             return (
               <div
                 className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
                 style={{ aspectRatio: resultAspectRatio }}
-                onClick={() => handleVideoClick(task.result!.url, filePath)}
+                onClick={() => handleVideoClick(videoUrl, filePath)}
                 onContextMenu={(e) =>
                   showMenu(e, [
                     {
@@ -242,11 +247,11 @@ export function TaskList({
                   if (e.button !== 0) return
                   if (!filePath) return
                   e.stopPropagation()
-                  startVideoDrag(e, task.result!.url, filePath)
+                  startVideoDrag(e, videoUrl, filePath)
                 }}
                 onContextMenuCapture={() => markContextMenu()}
               >
-                <video src={task.result.url} className="max-w-full max-h-full object-contain" draggable={false} muted preload="metadata" />
+                <video src={videoUrl} className="max-w-full max-h-full object-contain" draggable={false} muted preload="metadata" />
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="h-10 w-10 rounded-full bg-zinc-900/60 backdrop-blur-sm flex items-center justify-center text-white">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
@@ -355,7 +360,6 @@ export function TaskList({
                       <DownloadIcon className="h-4 w-4" />
                     </UiIconButton>
                   )}
-
                   <UiIconButton
                     onClick={() => onRegenerate(task)}
                     className="!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50"
@@ -365,7 +369,6 @@ export function TaskList({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                   </UiIconButton>
-
                   <UiIconButton
                     onClick={() => onReedit(task)}
                     className="!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50"
@@ -375,7 +378,6 @@ export function TaskList({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </UiIconButton>
-
                   <UiIconButton
                     onClick={() => onDelete(task.id)}
                     hoverVariant="danger"
@@ -389,7 +391,6 @@ export function TaskList({
                 </div>
               </div>
             </div>
-
             <div className="pt-3">{renderResult()}</div>
           </div>
         )
@@ -397,4 +398,3 @@ export function TaskList({
     </div>
   )
 }
-

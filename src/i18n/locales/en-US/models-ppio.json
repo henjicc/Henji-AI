@@ -115,8 +115,7 @@
       "auto": {
         "1": "Aspect Ratio",
         "2": "Resolution",
-        "3": "Fast Mode",
-        "4": "Negative Prompt"
+        "3": "Fast Mode"
       },
       "meta": {
         "name": "PixVerse V4.5"
@@ -150,7 +149,7 @@
         "5": "Camera Fixed"
       },
       "meta": {
-        "name": "Seedance 1"
+        "name": "Seedance 1.0"
       }
     },
     "ppio-seedream-4.5": {

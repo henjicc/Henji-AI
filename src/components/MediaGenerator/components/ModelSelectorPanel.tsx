@@ -50,7 +50,6 @@ const GRID_COLUMNS = {
   lg: 4,
   xl: 5
 }
-
 const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
 const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
 const MODEL_CARD_META_TEXT_CLASS = 'text-[11px] leading-4 text-zinc-400'
@@ -380,30 +379,22 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                     className="col-start-1 row-start-1 min-w-0 text-left text-sm leading-5"
                   />
                   <div className="col-start-2 row-start-1 justify-self-end self-start">
-                    <UiIconButton
-                      type="button"
-                      showBorder={false}
+                    <span
                       data-prevent-close
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onToggleFavorite(e, p.id, m.id)
-                      }}
-                      className="h-6 w-6 border-transparent bg-transparent text-zinc-500 hover:bg-zinc-700/60"
+                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
+                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-zinc-500 transition-colors hover:bg-zinc-700/60"
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
                       <svg
-                        className={`h-3.5 w-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`)
-                          ? 'fill-yellow-400 text-yellow-400'
-                          : 'fill-none text-zinc-500'
-                          }`}
+                        className={`h-3.5 w-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-zinc-500'}`}
                         stroke="currentColor"
                         strokeWidth="2"
                         viewBox="0 0 24 24"
                       >
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                       </svg>
-                    </UiIconButton>
+                    </span>
                   </div>
                   <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${MODEL_CARD_META_TEXT_CLASS}`}>
                     {t(`providers.${p.id}`, p.name)}

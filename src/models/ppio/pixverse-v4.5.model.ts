@@ -60,15 +60,6 @@ export const pixverseV45Model = defineModel({
       name: { key: 'auto.3', fallback: 'Fast Mode' },
       default: false,
       apiField: 'fast_mode'
-    },
-    // 4. 负面提示词
-    {
-      id: 'ppioPixverse45NegativePrompt',
-      type: 'textarea',
-      order: 4,
-      name: { key: 'auto.4', fallback: 'Negative Prompt' },
-      default: '',
-      apiField: 'negative_prompt'
     }
   ],
   linkages: [
@@ -118,7 +109,6 @@ export const pixverseV45Model = defineModel({
       const aspectRatio = params.ppioPixverse45VideoAspectRatio || params.aspect_ratio || '16:9'
       const fastMode = params.ppioPixverse45FastMode !== undefined ? params.ppioPixverse45FastMode : (params.fast_mode || false)
       const prompt = params.prompt || ''
-      const negativePrompt = params.ppioPixverse45NegativePrompt || params.negative_prompt || ''
 
       // Fast mode doesn't support 1080p
       const finalResolution = fastMode && resolution === '1080p' ? '720p' : resolution
@@ -129,7 +119,6 @@ export const pixverseV45Model = defineModel({
           prompt,
           image: images[0],
           resolution: finalResolution,
-          ...(negativePrompt ? { negative_prompt: String(negativePrompt).slice(0, 2048) } : {}),
           fast_mode: fastMode
         }
       } else {
@@ -138,7 +127,6 @@ export const pixverseV45Model = defineModel({
           prompt,
           aspect_ratio: aspectRatio,
           resolution: finalResolution,
-          ...(negativePrompt ? { negative_prompt: String(negativePrompt).slice(0, 2048) } : {}),
           fast_mode: fastMode
         }
       }

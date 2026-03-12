@@ -1,6 +1,6 @@
 use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
 use crate::ai_runtime::polling::{cancelled_error, timeout_error, wait_interval_ms};
-use crate::ai_runtime::providers::ProviderExecutionInput;
+use crate::ai_runtime::providers::{ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::types::{GenerateStatus, ProviderExecutionResult};
 use serde_json::Value;
@@ -19,9 +19,55 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
 
     let urls = extract_urls(&final_payload);
     if urls.is_empty() {
+        let task_id = extract_task_id(&final_payload).unwrap_or_else(|| "unknown".to_string());
+        let preview = payload_preview(&final_payload);
+        eprintln!(
+            "[ai_runtime][ppio][empty_result] task_id={} payload={}",
+            task_id, preview
+        );
         return Err(AiRuntimeError::new(
             "empty_result",
-            "PPIO response has no media URL",
+            format!(
+                "PPIO response has no media URL (task_id={}). payload={}",
+                task_id, preview
+            ),
+        ));
+    }
+
+    Ok(ProviderExecutionResult {
+        status: GenerateStatus::Completed,
+        url: urls.join("|||"),
+        metadata: final_payload,
+    })
+}
+
+pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResult<ProviderExecutionResult> {
+    let null_body = Value::Null;
+    let shim = ProviderExecutionInput {
+        client: input.client,
+        api_key: input.api_key,
+        route: input.route,
+        method: "GET",
+        body: &null_body,
+        request_id: input.request_id,
+        polling: input.polling,
+    };
+
+    let final_payload = poll_task(&shim, input.task_id).await?;
+    let urls = extract_urls(&final_payload);
+    if urls.is_empty() {
+        let task_id = extract_task_id(&final_payload).unwrap_or_else(|| input.task_id.to_string());
+        let preview = payload_preview(&final_payload);
+        eprintln!(
+            "[ai_runtime][ppio][continue_polling][empty_result] task_id={} payload={}",
+            task_id, preview
+        );
+        return Err(AiRuntimeError::new(
+            "empty_result",
+            format!(
+                "PPIO response has no media URL (task_id={}). payload={}",
+                task_id, preview
+            ),
         ));
     }
 
@@ -109,7 +155,7 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
         }
     }
 
-    Err(timeout_error(max_attempts))
+    Err(timeout_error(max_attempts).with_context(format!("task_id={}", task_id)))
 }
 
 fn extract_task_id(payload: &Value) -> Option<String> {
@@ -117,6 +163,12 @@ fn extract_task_id(payload: &Value) -> Option<String> {
         .get("task_id")
         .and_then(Value::as_str)
         .map(ToString::to_string)
+        .or_else(|| {
+            payload
+                .pointer("/task/task_id")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
         .or_else(|| {
             payload
                 .pointer("/data/task_id")
@@ -154,8 +206,11 @@ fn extract_string_array(value: Option<&Value>, target: &mut Vec<String>) {
             continue;
         }
 
-        if let Some(url) = item.get("url").and_then(Value::as_str) {
-            target.push(url.to_string());
+        for key in ["url", "image_url", "video_url", "audio_url"] {
+            if let Some(url) = item.get(key).and_then(Value::as_str) {
+                target.push(url.to_string());
+                break;
+            }
         }
     }
 }
@@ -168,4 +223,13 @@ fn normalize_endpoint(base: &str, route: &str) -> String {
         return format!("{}{}", base, route);
     }
     format!("{}/{}", base, route)
+}
+
+fn payload_preview(payload: &Value) -> String {
+    let serialized = serde_json::to_string(payload).unwrap_or_else(|_| "<payload_serialize_failed>".to_string());
+    const MAX_LEN: usize = 1800;
+    if serialized.len() <= MAX_LEN {
+        return serialized;
+    }
+    format!("{}...(truncated)", &serialized[..MAX_LEN])
 }

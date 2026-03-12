@@ -10,6 +10,7 @@ import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ProviderId } from '@/core/types'
 import {
   aiCancelTask,
+  aiContinuePolling,
   aiGenerate,
   aiGetProviderKeyStatus,
   aiRemoveProviderApiKey,
@@ -132,6 +133,34 @@ export class GenerationService {
     onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
     return this.generate(modelId, params, onProgress)
+  }
+
+  async continuePolling(
+    modelId: string,
+    taskId: string,
+    params: Record<string, unknown> = {}
+  ): Promise<GenerateResult> {
+    try {
+      const response = await aiContinuePolling({
+        modelId,
+        taskId,
+        params,
+      })
+
+      if (response.status !== 'completed') {
+        throw new Error(`Continue polling ${response.status}${formatFailedMetadata(response.metadata)}`)
+      }
+
+      return {
+        status: response.status,
+        url: response.url,
+        filePath: response.filePath,
+        metadata: response.metadata,
+      }
+    } catch (error) {
+      const message = getErrorMessage(error)
+      throw new Error(`Continue polling failed for ${modelId}: ${message}`)
+    }
   }
 
   async setApiKey(provider: string, apiKey: string): Promise<void> {
