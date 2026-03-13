@@ -61,13 +61,17 @@ export function resolveInputLimits(
   context: InputLimitContext = {}
 ): ResolvedInputLimits {
   const model = registry.getModel(modelId)
-  const config = resolveConfig(model?.inputLimits, params)
+  const normalizedParams = {
+    ...registry.getDefaultValues(modelId),
+    ...params
+  }
+  const config = resolveConfig(model?.inputLimits, normalizedParams)
 
   let images = normalizeLimit(config.images, DEFAULT_IMAGE_MAX)
   let videos = normalizeLimit(config.videos, DEFAULT_VIDEO_MAX)
   let videoConstraints: VideoConstraints | undefined
 
-  const rules = resolveRules(config.rules, params, context)
+  const rules = resolveRules(config.rules, normalizedParams, context)
 
   for (const { rule, matches } of rules) {
     if (!matches) continue

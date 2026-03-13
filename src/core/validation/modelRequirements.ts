@@ -48,8 +48,12 @@ export function validateGenerationRequirements(
   inputs: GenerationInputs
 ): RequirementValidationResult {
   const requirements = getRequirements(modelId)
+  const paramsWithDefaults = {
+    ...registry.getDefaultValues(modelId),
+    ...params
+  }
 
-  const normalized = normalizeParams(params, inputs)
+  const normalized = normalizeParams(paramsWithDefaults, inputs)
   const context = {
     imagesCount: inputs.imagesCount,
     videosCount: inputs.videosCount,
@@ -95,7 +99,7 @@ export function validateGenerationRequirements(
 
   const limits = resolveInputLimits(
     modelId,
-    params,
+    paramsWithDefaults,
     { imagesCount: inputs.imagesCount, videosCount: inputs.videosCount }
   )
 

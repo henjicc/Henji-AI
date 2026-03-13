@@ -108,29 +108,26 @@ export const viduQ1Model = defineModel({
     }
   ],
   linkages: [
-    // Auto-switch mode based on image count
+    // Only auto-switch between text/image and start-end-frame.
+    // Reference-to-video must remain a manual choice because 1..7 images are all valid there.
     {
       trigger: 'uploadedImages',
       effect: 'autoSwitch',
       target: 'ppioViduQ1Mode',
       condition: (images, allParams) => {
         const count = images?.length || 0
-        const currentMode = allParams.ppioViduQ1Mode
-        let targetMode: string
-        if (count === 0 || count === 1) {
-          targetMode = 'text-image-to-video'
-        } else if (count === 2) {
-          targetMode = 'start-end-frame'
+        const currentMode = allParams.ppioViduQ1Mode || 'text-image-to-video'
+
+        if (currentMode === 'reference-to-video') {
+          return false
         } else {
-          targetMode = 'reference-to-video'
+          const targetMode = count === 2 ? 'start-end-frame' : 'text-image-to-video'
+          return currentMode !== targetMode
         }
-        return currentMode !== targetMode
       },
       value: (images) => {
         const count = images?.length || 0
-        if (count === 0 || count === 1) return 'text-image-to-video'
-        if (count === 2) return 'start-end-frame'
-        return 'reference-to-video'
+        return count === 2 ? 'start-end-frame' : 'text-image-to-video'
       }
     },
     // Hide aspect ratio in start-end-frame mode
@@ -183,7 +180,9 @@ export const viduQ1Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video'
-      const images = params.images || []
+      const images = Array.isArray(params.uploadedFilePaths) && params.uploadedFilePaths.length > 0
+        ? params.uploadedFilePaths.filter((item) => typeof item === 'string' && item.trim().length > 0)
+        : (Array.isArray(params.images) ? params.images : [])
       const prompt = params.prompt || ''
       const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto'
       const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false)
