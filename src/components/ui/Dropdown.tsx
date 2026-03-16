@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  UI_FIELD_LABEL_CLASS,
   UI_DROPDOWN_OPTION_ACTIVE_CLASS,
   UI_TRIGGER_BUTTON_CLASS,
   UI_TRIGGER_PANEL_CLASS,
@@ -26,10 +27,25 @@ type DropdownProps<T extends string | number | boolean> = {
   panelClassName?: string
   portal?: boolean
   zIndex?: number
+  minWidthStrategy?: 'options' | 'display'
 }
 
 export default function Dropdown<T extends string | number | boolean>(props: DropdownProps<T>) {
-  const { label, value, display, options, onSelect, renderPanel, disabled, className, buttonClassName, panelClassName, portal = true, zIndex = 1000 } = props
+  const {
+    label,
+    value,
+    display,
+    options,
+    onSelect,
+    renderPanel,
+    disabled,
+    className,
+    buttonClassName,
+    panelClassName,
+    portal = true,
+    zIndex = 1000,
+    minWidthStrategy = 'options',
+  } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -55,13 +71,15 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!ref.current) return
     const btn = ref.current.querySelector('[data-dropdown-button]') as HTMLElement | null
     if (!btn) return
     const computeMinWidth = () => {
       if (!portal) return
-      const labels: string[] = (options || []).map(o => String((o as any).label ?? o))
+      const labels: string[] = minWidthStrategy === 'display'
+        ? [String(display ?? value ?? '')]
+        : (options || []).map(o => String((o as any).label ?? o))
       if (!labels.length) labels.push(String(display ?? value ?? ''))
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
@@ -80,7 +98,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       setMinWidthPx(minW)
     }
     computeMinWidth()
-  }, [options, display, value, portal])
+  }, [options, display, value, portal, minWidthStrategy])
 
   useEffect(() => {
     const updatePos = () => {
@@ -104,7 +122,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
 
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
-      {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
+      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiButton
         type="button"
         disabled={disabled}

@@ -20,6 +20,9 @@ export const UI_PANEL_SURFACE_CLASS =
 export const UI_FIELD_SURFACE_CLASS =
   'bg-surface-dark border border-border-dark text-text-dark';
 
+export const UI_FIELD_LABEL_CLASS =
+  'block text-sm font-medium text-zinc-300 mb-1.5';
+
 export const UI_FIELD_FOCUS_CLASS =
   'outline-none focus:outline-none focus-visible:outline-none focus:ring-inset focus:ring-2 focus:ring-accent focus:ring-offset-0 focus:border-brand-500 transition-shadow duration-300 ease-out';
 

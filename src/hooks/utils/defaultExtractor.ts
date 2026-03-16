@@ -7,6 +7,47 @@
 import type { ParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 
+const ASPECT_HINT_PATTERN = /(aspect|ratio|宽高比|比例)/i
+const RATIO_VALUE_PATTERN = /^(\d+)\s*:\s*(\d+)$/
+const SMART_VALUE_PATTERN = /^(smart|auto|adaptive|智能)$/i
+
+function isChoiceParam(param: ParamDef): param is Extract<ParamDef, { type: 'dropdown' | 'radio' }> {
+  return param.type === 'dropdown' || param.type === 'radio'
+}
+
+function isAspectLikeParam(param: Extract<ParamDef, { type: 'dropdown' | 'radio' }>): boolean {
+  const searchText = [
+    param.id,
+    param.apiField,
+    getI18nText(param.name, 'zh'),
+    getI18nText(param.name, 'en'),
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  if (ASPECT_HINT_PATTERN.test(searchText)) {
+    return true
+  }
+
+  const ratioLikeCount = param.options.reduce((count, option) => {
+    const valueText = String(option.value || '').trim()
+    const labelText = String(getI18nText(option.label, 'zh') || getI18nText(option.label, 'en') || '').trim()
+    if (RATIO_VALUE_PATTERN.test(valueText) || RATIO_VALUE_PATTERN.test(labelText)) {
+      return count + 1
+    }
+    return count
+  }, 0)
+
+  return ratioLikeCount >= 2
+}
+
+function getSmartOptionValue(
+  param: Extract<ParamDef, { type: 'dropdown' | 'radio' }>
+): string | number | null {
+  const candidate = param.options.find((option) => SMART_VALUE_PATTERN.test(String(option.value).trim()))
+  return candidate ? candidate.value : null
+}
+
 /**
  * 从参数 Schema 提取默认值
  *
@@ -29,6 +70,11 @@ export function extractDefaults(schema: ParamDef[]): Record<string, any> {
   const defaults: Record<string, any> = {}
 
   for (const param of schema) {
+    if (isChoiceParam(param) && isAspectLikeParam(param)) {
+      const smartValue = getSmartOptionValue(param)
+      defaults[param.id] = smartValue ?? 'smart'
+      continue
+    }
     if (param.default !== undefined) {
       defaults[param.id] = param.default
     }
@@ -72,6 +118,14 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
   if (paramDef.type === 'dropdown' || paramDef.type === 'radio') {
     if ('options' in paramDef && paramDef.options) {
       const validValues = paramDef.options.map((opt) => opt.value)
+      if (validValues.includes(value)) {
+        return true
+      }
+
+      if (isAspectLikeParam(paramDef) && SMART_VALUE_PATTERN.test(String(value).trim())) {
+        return true
+      }
+
       if (!validValues.includes(value)) {
         return false
       }

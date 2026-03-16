@@ -8,6 +8,8 @@ import { registry } from '@/core/ModelRegistry'
 import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ProviderId } from '@/core/types'
+import { UploadService } from '@/services/upload/UploadService'
+import { logInfo } from '@/utils/errorLogger'
 import {
   aiCancelTask,
   aiContinuePolling,
@@ -41,6 +43,20 @@ function getErrorMessage(error: unknown): string {
   }
 
   return 'Generation failed'
+}
+
+function attachUploadRuntimeParams(params: Record<string, any>): Record<string, any> {
+  const uploadService = UploadService.getInstance()
+  const next = {
+    ...params,
+    __upload_provider: uploadService.getCurrentProvider(),
+    __upload_fallback: uploadService.isFallbackEnabled(),
+  }
+  logInfo('[GenerationService] 上传策略', {
+    provider: next.__upload_provider,
+    fallbackEnabled: next.__upload_fallback,
+  })
+  return next
 }
 
 function formatFailedMetadata(metadata: Record<string, unknown> | undefined): string {
@@ -89,7 +105,7 @@ export class GenerationService {
 
       const response = await aiGenerate({
         modelId,
-        params,
+        params: attachUploadRuntimeParams(params),
       })
 
       if (response.status !== 'completed') {

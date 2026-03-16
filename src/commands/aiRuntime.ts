@@ -40,6 +40,11 @@ export async function aiRemoveProviderApiKey(providerId: string): Promise<void> 
   await invoke('ai_remove_provider_api_key', { providerId })
 }
 
+export async function aiGetProviderApiKey(providerId: string): Promise<string | null> {
+  ensureDesktopRuntime()
+  return await invoke<string | null>('ai_get_provider_api_key', { providerId })
+}
+
 export async function aiGetProviderKeyStatus(): Promise<ProviderKeyStatusDto[]> {
   ensureDesktopRuntime()
   return await invoke<ProviderKeyStatusDto[]>('ai_get_provider_key_status')

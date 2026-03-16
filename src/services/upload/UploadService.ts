@@ -1,4 +1,5 @@
 import { logInfo } from '../../utils/errorLogger'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 export type UploadProviderType = 'fal' | 'kie' | 'bizyair'
 
@@ -9,22 +10,7 @@ export type UploadProviderType = 'fal' | 'kie' | 'bizyair'
  */
 export class UploadService {
   private static instance: UploadService
-
-  private currentProvider: UploadProviderType = 'bizyair'
-
-  private fallbackEnabled = true
-
-  private constructor() {
-    const savedProvider = localStorage.getItem('general_upload_provider') as UploadProviderType | null
-    if (savedProvider && ['fal', 'kie', 'bizyair'].includes(savedProvider)) {
-      this.currentProvider = savedProvider
-    }
-
-    const savedFallback = localStorage.getItem('general_upload_fallback')
-    if (savedFallback !== null) {
-      this.fallbackEnabled = savedFallback !== 'false'
-    }
-  }
+  private constructor() {}
 
   static getInstance(): UploadService {
     if (!UploadService.instance) {
@@ -34,23 +20,21 @@ export class UploadService {
   }
 
   setProvider(type: UploadProviderType): void {
-    this.currentProvider = type
-    localStorage.setItem('general_upload_provider', type)
+    useSettingsStore.getState().setUploadProvider(type)
     logInfo('[UploadService]', `Provider set to ${type}`)
   }
 
   setFallbackEnabled(enabled: boolean): void {
-    this.fallbackEnabled = enabled
-    localStorage.setItem('general_upload_fallback', String(enabled))
+    useSettingsStore.getState().setUploadFallbackEnabled(enabled)
     logInfo('[UploadService]', `Fallback enabled: ${enabled}`)
   }
 
   getCurrentProvider(): UploadProviderType {
-    return this.currentProvider
+    return useSettingsStore.getState().uploadProvider
   }
 
   isFallbackEnabled(): boolean {
-    return this.fallbackEnabled
+    return useSettingsStore.getState().uploadFallbackEnabled
   }
 
   async uploadFile(_file: File | Blob | string, _filename?: string): Promise<string> {

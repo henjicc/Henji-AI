@@ -84,6 +84,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ai_runtime::commands::ai_set_provider_api_key,
             ai_runtime::commands::ai_remove_provider_api_key,
+            ai_runtime::commands::ai_get_provider_api_key,
             ai_runtime::commands::ai_get_provider_key_status,
             ai_runtime::commands::ai_reload_model_manifest,
             ai_runtime::commands::ai_generate,

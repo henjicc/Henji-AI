@@ -48,9 +48,13 @@ export const klingImageO1Model = defineModel({
     {
       id: 'falKlingImageO1Resolution',
       order: 3,
-      type: 'text',
+      type: 'dropdown',
       name: { key: 'auto.4', fallback: 'Resolution' },
-      default: '2K'
+      default: '1K',
+      options: [
+        { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' }
+      ]
     }
   ],
   linkages: [

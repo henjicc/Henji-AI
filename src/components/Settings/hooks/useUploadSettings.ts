@@ -1,27 +1,18 @@
-import { useMemo, useState } from 'react'
-import { UploadService, type UploadProviderType } from '@/services/upload/UploadService'
+import type { UploadProvider } from '@/core/config/providers'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 export interface UseUploadSettingsResult {
-  provider: UploadProviderType
+  provider: UploadProvider
   fallbackEnabled: boolean
-  setProvider: (provider: UploadProviderType) => void
+  setProvider: (provider: UploadProvider) => void
   setFallbackEnabled: (enabled: boolean) => void
 }
 
 export function useUploadSettings(): UseUploadSettingsResult {
-  const service = useMemo(() => UploadService.getInstance(), [])
-  const [provider, setProviderState] = useState<UploadProviderType>(service.getCurrentProvider())
-  const [fallbackEnabled, setFallbackEnabledState] = useState<boolean>(service.isFallbackEnabled())
-
-  const setProvider = (next: UploadProviderType) => {
-    service.setProvider(next)
-    setProviderState(next)
-  }
-
-  const setFallbackEnabled = (enabled: boolean) => {
-    service.setFallbackEnabled(enabled)
-    setFallbackEnabledState(enabled)
-  }
+  const provider = useSettingsStore((state) => state.uploadProvider)
+  const fallbackEnabled = useSettingsStore((state) => state.uploadFallbackEnabled)
+  const setProvider = useSettingsStore((state) => state.setUploadProvider)
+  const setFallbackEnabled = useSettingsStore((state) => state.setUploadFallbackEnabled)
 
   return { provider, fallbackEnabled, setProvider, setFallbackEnabled }
 }

@@ -20,7 +20,9 @@ pub async fn upload_to_bizyair(api_key: &str, bytes: &[u8], filename: &str) -> A
     let storage = token_data
         .pointer("/data/storage")
         .and_then(Value::as_object)
-        .ok_or_else(|| AiRuntimeError::new("upload_failed", "BizyAir token missing data.storage"))?;
+        .ok_or_else(|| {
+            AiRuntimeError::new("upload_failed", "BizyAir token missing data.storage")
+        })?;
 
     let access_key_id = read_string(file_info, "access_key_id")?;
     let access_key_secret = read_string(file_info, "access_key_secret")?;
@@ -188,16 +190,15 @@ fn to_bearer_auth(api_key: &str) -> String {
     format!("Bearer {}", api_key)
 }
 
-fn read_string(
-    source: &serde_json::Map<String, Value>,
-    key: &'static str,
-) -> AiResult<String> {
+fn read_string(source: &serde_json::Map<String, Value>, key: &'static str) -> AiResult<String> {
     source
         .get(key)
         .and_then(Value::as_str)
         .filter(|v| !v.trim().is_empty())
         .map(ToString::to_string)
-        .ok_or_else(|| AiRuntimeError::new("upload_failed", format!("BizyAir token missing {}", key)))
+        .ok_or_else(|| {
+            AiRuntimeError::new("upload_failed", format!("BizyAir token missing {}", key))
+        })
 }
 
 fn normalize_oss_upload_base(endpoint: &str, bucket: &str) -> AiResult<String> {

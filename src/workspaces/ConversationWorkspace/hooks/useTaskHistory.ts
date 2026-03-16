@@ -97,11 +97,11 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     : resultUrlFromParams
 
   const result = resolvedResultUrl
-    ? {
+      ? {
         id: record.id,
         type: record.type,
         url: resolvedResultUrl,
-        filePath: absoluteResultFilePath,
+        filePath: absoluteResultFilePath ?? undefined,
         prompt: record.prompt ?? '',
         createdAt: parseHistoryTimestamp(record.createdAt),
       }

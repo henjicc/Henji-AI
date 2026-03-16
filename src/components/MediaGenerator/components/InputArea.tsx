@@ -256,7 +256,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     }
   }
   const promptMinHeightClass =
-    currentModel?.type === 'audio' || !shouldShowUpload
+    currentModel?.type === 'audio'
       ? 'min-h-[170px]'
       : 'min-h-[146px]'
   const promptLeftPaddingClass =

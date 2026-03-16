@@ -5,20 +5,24 @@ use crate::ai_runtime::model_manifest::{get_manifest_store, reload_manifest_stor
 use crate::ai_runtime::providers::{self, ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::request_builder_dsl;
 use crate::ai_runtime::task_registry;
-use crate::ai_runtime::upload;
 use crate::ai_runtime::types::{
     AiContinuePollingRequestDto, AiGenerateRequestDto, AiGenerateResponseDto, ProviderKeyStatusDto,
 };
+use crate::ai_runtime::upload;
 
 #[tauri::command]
 pub async fn ai_set_provider_api_key(provider_id: String, api_key: String) -> Result<(), String> {
-    key_store::set_provider_api_key(provider_id.trim(), api_key.trim())
-        .map_err(|e| e.to_string())
+    key_store::set_provider_api_key(provider_id.trim(), api_key.trim()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn ai_remove_provider_api_key(provider_id: String) -> Result<(), String> {
     key_store::remove_provider_api_key(provider_id.trim()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_get_provider_api_key(provider_id: String) -> Result<Option<String>, String> {
+    key_store::get_provider_api_key(provider_id.trim()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -63,7 +67,12 @@ pub async fn ai_generate(
 
     let api_key = key_store::get_provider_api_key(&provider_id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("[api_key_missing] API key not configured for provider: {}", provider_id))?;
+        .ok_or_else(|| {
+            format!(
+                "[api_key_missing] API key not configured for provider: {}",
+                provider_id
+            )
+        })?;
 
     let built_request = request_builder_dsl::build_request(&request.params, maybe_model.as_ref())
         .map_err(|e| e.to_string())?;
@@ -72,9 +81,16 @@ pub async fn ai_generate(
         return Err("[invalid_route] Request route is empty".to_string());
     }
 
-    let preprocessed_body = upload::preprocess_request_body(&provider_id, &built_request.body)
-        .await
-        .map_err(|e| e.to_string())?;
+    let upload_strategy = upload::resolve_upload_strategy(&request.params);
+    let preprocessed_body =
+        upload::preprocess_request_body(
+            &provider_id,
+            &built_request.route,
+            &built_request.body,
+            &upload_strategy,
+        )
+            .await
+            .map_err(|e| e.to_string())?;
 
     let execution_input = ProviderExecutionInput {
         client: &client,
@@ -83,7 +99,9 @@ pub async fn ai_generate(
         method: &built_request.method,
         body: &preprocessed_body,
         request_id: &request_id,
-        polling: maybe_model.as_ref().and_then(|model| model.polling.as_ref()),
+        polling: maybe_model
+            .as_ref()
+            .and_then(|model| model.polling.as_ref()),
     };
 
     let provider_result = providers::execute_generate(&provider_id, execution_input)
@@ -107,7 +125,11 @@ pub async fn ai_continue_polling(
     app: tauri::AppHandle,
     request: AiContinuePollingRequestDto,
 ) -> Result<AiGenerateResponseDto, String> {
-    let request_id = format!("continue-{}-{}", request.model_id, chrono_like_timestamp_ms());
+    let request_id = format!(
+        "continue-{}-{}",
+        request.model_id,
+        chrono_like_timestamp_ms()
+    );
     task_registry::clear_cancel_flag(&request_id);
 
     let client = reqwest::Client::new();
@@ -121,7 +143,12 @@ pub async fn ai_continue_polling(
 
     let api_key = key_store::get_provider_api_key(&provider_id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("[api_key_missing] API key not configured for provider: {}", provider_id))?;
+        .ok_or_else(|| {
+            format!(
+                "[api_key_missing] API key not configured for provider: {}",
+                provider_id
+            )
+        })?;
 
     let built_request = request_builder_dsl::build_request(&request.params, maybe_model.as_ref())
         .map_err(|e| e.to_string())?;
@@ -132,7 +159,9 @@ pub async fn ai_continue_polling(
         route: &built_request.route,
         task_id: request.task_id.trim(),
         request_id: &request_id,
-        polling: maybe_model.as_ref().and_then(|model| model.polling.as_ref()),
+        polling: maybe_model
+            .as_ref()
+            .and_then(|model| model.polling.as_ref()),
     };
 
     let provider_result = providers::execute_continue_polling(&provider_id, execution_input)
@@ -202,12 +231,20 @@ fn resolve_provider_id_from_model(
     .to_string())
 }
 
-async fn save_media_paths(app: &tauri::AppHandle, joined_urls: &str) -> Result<Option<String>, String> {
+async fn save_media_paths(
+    app: &tauri::AppHandle,
+    joined_urls: &str,
+) -> Result<Option<String>, String> {
     let mut saved_paths: Vec<String> = Vec::new();
-    for url in joined_urls.split("|||").map(str::trim).filter(|u| !u.is_empty()) {
+    for url in joined_urls
+        .split("|||")
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+    {
         if let Some(path) = media_store::save_media_from_url(app, url)
             .await
-            .map_err(|e| e.to_string())? {
+            .map_err(|e| e.to_string())?
+        {
             saved_paths.push(path);
         }
     }

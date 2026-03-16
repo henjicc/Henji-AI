@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { UiButton } from './primitives'
+import { UI_FIELD_LABEL_CLASS } from './styleTokens'
 
 type ToggleProps = {
   label?: ReactNode
@@ -15,7 +16,7 @@ export default function Toggle(props: ToggleProps) {
   const { label, checked, onChange, onText = '开启', offText = '关闭', className, disabled = false } = props
   return (
     <div className={className}>
-      {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
+      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiButton
         type="button"
         variant={disabled ? 'ghost' : 'muted'}

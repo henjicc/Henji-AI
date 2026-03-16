@@ -235,12 +235,18 @@ export const seedream40Model = defineModel({
             if (params.resolution) {
                 const resolution = params.resolution
 
-                // 如果是智能模式且有上传图片，根据图片尺寸和质量档位计算 size
-                if (resolution.aspectRatio === 'smart' && params.images && params.images.length > 0) {
+                // 智能模式：有图按首图比例，无图按 1:1
+                if (resolution.aspectRatio === 'smart') {
                     try {
-                        // 从第一张图片获取尺寸
-                        const imageSize = await getImageSize(params.images[0])
-                        const ratio = imageSize.width / imageSize.height
+                        const hasImages = params.images && params.images.length > 0
+                        let ratio = 1
+                        let sourceLabel = '1:1 默认'
+
+                        if (hasImages) {
+                            const imageSize = await getImageSize(params.images[0])
+                            ratio = imageSize.width / imageSize.height
+                            sourceLabel = `${imageSize.width}x${imageSize.height}`
+                        }
                         const quality = resolution.quality || '2K'
                         const targetPixels = quality === '4K' ? 16777216 : 4194304
 
@@ -299,7 +305,7 @@ export const seedream40Model = defineModel({
                         const finalRatio = width / height
                         if (finalRatio >= constraints.minRatio && finalRatio <= constraints.maxRatio) {
                             requestData.size = `${width}x${height}`
-                            console.log(`[Seedream 4.0] 智能模式计算尺寸: ${imageSize.width}x${imageSize.height} (${ratio.toFixed(2)}) -> ${width}x${height} (${quality})`)
+                            console.log(`[Seedream 4.0] 智能模式计算尺寸: ${sourceLabel} (${ratio.toFixed(2)}) -> ${width}x${height} (${quality})`)
                         }
                     } catch (error) {
                         console.error('[Seedream 4.0] 智能模式计算尺寸失败:', error)

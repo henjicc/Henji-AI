@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { UploadProvider } from '@/core/config/providers';
 import {
   LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
   LEGACY_THEME_PALETTE_PRESET_HEX,
@@ -17,9 +18,12 @@ import {
 
 export type ProviderKeyStatusMap = Record<string, boolean>;
 const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair'] as const;
+const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'bizyair';
 
 interface SettingsState {
   providerKeyStatus: ProviderKeyStatusMap;
+  uploadProvider: UploadProvider;
+  uploadFallbackEnabled: boolean;
   downloadPresetPaths: string[];
   useUploadFilenameAsNodeTitle: boolean;
   storyboardGenKeepStyleConsistent: boolean;
@@ -32,6 +36,8 @@ interface SettingsState {
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
+  setUploadProvider: (provider: UploadProvider) => void;
+  setUploadFallbackEnabled: (enabled: boolean) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
   setStoryboardGenKeepStyleConsistent: (enabled: boolean) => void;
@@ -115,10 +121,33 @@ function normalizeProviderKeyStatus(input: unknown): ProviderKeyStatusMap {
   return defaults;
 }
 
+function normalizeUploadProvider(input: unknown): UploadProvider {
+  return input === 'fal' || input === 'kie' || input === 'bizyair'
+    ? input
+    : DEFAULT_UPLOAD_PROVIDER;
+}
+
+function resolveLegacyUploadProvider(): UploadProvider {
+  if (typeof localStorage === 'undefined') {
+    return DEFAULT_UPLOAD_PROVIDER;
+  }
+  return normalizeUploadProvider(localStorage.getItem('general_upload_provider'));
+}
+
+function resolveLegacyUploadFallback(): boolean {
+  if (typeof localStorage === 'undefined') {
+    return true;
+  }
+  const saved = localStorage.getItem('general_upload_fallback');
+  return saved !== 'false';
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       providerKeyStatus: createDefaultProviderKeyStatus(),
+      uploadProvider: DEFAULT_UPLOAD_PROVIDER,
+      uploadFallbackEnabled: true,
       downloadPresetPaths: [],
       useUploadFilenameAsNodeTitle: true,
       storyboardGenKeepStyleConsistent: true,
@@ -151,6 +180,8 @@ export const useSettingsStore = create<SettingsState>()(
             ...status,
           },
         })),
+      setUploadProvider: (uploadProvider) => set({ uploadProvider }),
+      setUploadFallbackEnabled: (uploadFallbackEnabled) => set({ uploadFallbackEnabled }),
       setDownloadPresetPaths: (paths) => {
         const uniquePaths = Array.from(
           new Set(paths.map((path) => path.trim()).filter((path) => path.length > 0))
@@ -185,12 +216,14 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      version: 7,
+      version: 8,
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
           apiKeys?: Record<string, string>;
           providerKeyStatus?: ProviderKeyStatusMap;
+          uploadProvider?: UploadProvider;
+          uploadFallbackEnabled?: boolean;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
           themeColors?: Partial<ThemeColorScheme>;
         };
@@ -211,9 +244,16 @@ export const useSettingsStore = create<SettingsState>()(
 
         const ignoreAtTagWhenCopyingAndGenerating =
           state.ignoreAtTagWhenCopyingAndGenerating ?? true;
+        const uploadProvider = normalizeUploadProvider(
+          state.uploadProvider ?? resolveLegacyUploadProvider()
+        );
+        const uploadFallbackEnabled =
+          state.uploadFallbackEnabled ?? resolveLegacyUploadFallback();
         return {
           ...(persistedState as object),
           providerKeyStatus: migratedProviderStatus,
+          uploadProvider,
+          uploadFallbackEnabled,
           ignoreAtTagWhenCopyingAndGenerating,
           themeColors,
         };

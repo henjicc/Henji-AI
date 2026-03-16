@@ -6,11 +6,15 @@ use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
 use crate::ai_runtime::key_store;
 use base64::Engine;
 use serde_json::{Map, Value};
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 
-const IMAGE_FIELD_HINTS: [&str; 12] = [
+const IMAGE_FIELD_HINTS: [&str; 14] = [
     "image",
     "images",
+    "img_url",
+    "img_urls",
     "image_url",
     "image_urls",
     "start_image_url",
@@ -34,6 +38,11 @@ const VIDEO_FIELD_HINTS: [&str; 8] = [
     "input_video",
 ];
 
+const UPLOAD_PROVIDER_PARAM: &str = "__upload_provider";
+const UPLOAD_FALLBACK_PARAM: &str = "__upload_fallback";
+const UPLOAD_PROVIDER_PRIORITY: [&str; 3] = ["bizyair", "kie", "fal"];
+const PUBLIC_URL_UPLOAD_PROVIDERS: [&str; 2] = ["bizyair", "kie"];
+
 #[derive(Debug, Clone, Copy)]
 enum MediaKind {
     Image,
@@ -41,67 +50,101 @@ enum MediaKind {
     Unknown,
 }
 
-pub async fn preprocess_request_body(provider_id: &str, body: &Value) -> AiResult<Value> {
-    let mut next = body.clone();
+#[derive(Debug, Clone)]
+pub struct UploadStrategy {
+    pub primary_provider: Option<String>,
+    pub fallback_enabled: bool,
+}
 
-    let Some(map) = next.as_object_mut() else {
-        return Ok(next);
-    };
+pub fn resolve_upload_strategy(params: &Map<String, Value>) -> UploadStrategy {
+    let primary_provider = params
+        .get(UPLOAD_PROVIDER_PARAM)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
 
-    for (key, value) in map.iter_mut() {
-        let media_kind = classify_media_key(key);
-        if matches!(media_kind, MediaKind::Unknown) {
-            continue;
-        }
+    let fallback_enabled = params
+        .get(UPLOAD_FALLBACK_PARAM)
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
 
-        preprocess_field_value(provider_id, media_kind, value).await?;
+    UploadStrategy {
+        primary_provider,
+        fallback_enabled,
     }
+}
 
+pub async fn preprocess_request_body(
+    provider_id: &str,
+    route: &str,
+    body: &Value,
+    strategy: &UploadStrategy,
+) -> AiResult<Value> {
+    let mut next = body.clone();
+    preprocess_field_value(provider_id, route, strategy, MediaKind::Unknown, None, &mut next).await?;
     Ok(next)
 }
 
-async fn preprocess_field_value(
-    provider_id: &str,
+fn preprocess_field_value<'a>(
+    provider_id: &'a str,
+    route: &'a str,
+    strategy: &'a UploadStrategy,
     media_kind: MediaKind,
-    value: &mut Value,
-) -> AiResult<()> {
-    match value {
-        Value::String(source) => {
-            let next = rewrite_media_source(provider_id, media_kind, source).await?;
-            *value = Value::String(next);
-            Ok(())
-        }
-        Value::Array(items) => {
-            for item in items.iter_mut() {
-                if let Value::String(source) = item {
-                    let next = rewrite_media_source(provider_id, media_kind, source).await?;
-                    *item = Value::String(next);
-                }
+    field_name: Option<&'a str>,
+    value: &'a mut Value,
+) -> Pin<Box<dyn Future<Output = AiResult<()>> + Send + 'a>> {
+    Box::pin(async move {
+        match value {
+            Value::String(source) if !matches!(media_kind, MediaKind::Unknown) => {
+                let next =
+                    rewrite_media_source(provider_id, route, strategy, media_kind, field_name, source)
+                        .await?;
+                *source = next;
+                Ok(())
             }
-            Ok(())
+            Value::Array(items) => {
+                for item in items.iter_mut() {
+                    preprocess_field_value(provider_id, route, strategy, media_kind, field_name, item)
+                        .await?;
+                }
+                Ok(())
+            }
+            Value::Object(obj) => {
+                for (key, nested_value) in obj.iter_mut() {
+                    let next_kind = inherit_media_kind(media_kind, key);
+                    preprocess_field_value(
+                        provider_id,
+                        route,
+                        strategy,
+                        next_kind,
+                        Some(key.as_str()),
+                        nested_value,
+                    )
+                    .await?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
         }
-        Value::Object(obj) => preprocess_embedded_urls(provider_id, media_kind, obj).await,
-        _ => Ok(()),
-    }
+    })
 }
 
-async fn preprocess_embedded_urls(
-    provider_id: &str,
-    media_kind: MediaKind,
-    obj: &mut Map<String, Value>,
-) -> AiResult<()> {
-    for key in ["url", "image_url", "video_url", "src"] {
-        if let Some(Value::String(source)) = obj.get_mut(key) {
-            let next = rewrite_media_source(provider_id, media_kind, source).await?;
-            *source = next;
-        }
+fn inherit_media_kind(current: MediaKind, key: &str) -> MediaKind {
+    let nested = classify_media_key(key);
+    if matches!(nested, MediaKind::Unknown) {
+        current
+    } else {
+        nested
     }
-    Ok(())
 }
 
 async fn rewrite_media_source(
     provider_id: &str,
+    route: &str,
+    strategy: &UploadStrategy,
     media_kind: MediaKind,
+    field_name: Option<&str>,
     source: &str,
 ) -> AiResult<String> {
     let trimmed = source.trim();
@@ -120,7 +163,9 @@ async fn rewrite_media_source(
     }
 
     let prepared = prepare_media_binary(trimmed, media_kind)?;
-
+    if requires_public_media_url(provider_id, route, field_name) {
+        return upload_for_public_url(&prepared, strategy).await;
+    }
     match provider_id {
         // Fal accepts data URI payloads directly.
         "fal" => fal::upload_to_fal("", &prepared.bytes, &prepared.filename).await,
@@ -133,12 +178,9 @@ async fn rewrite_media_source(
             }
 
             if let Some(bizyair_key) = key_store::get_provider_api_key("bizyair")? {
-                let try_bizyair = bizyair::upload_to_bizyair(
-                    &bizyair_key,
-                    &prepared.bytes,
-                    &prepared.filename,
-                )
-                .await;
+                let try_bizyair =
+                    bizyair::upload_to_bizyair(&bizyair_key, &prepared.bytes, &prepared.filename)
+                        .await;
                 if try_bizyair.is_ok() {
                     return try_bizyair;
                 }
@@ -149,6 +191,135 @@ async fn rewrite_media_source(
         }
 
         _ => Ok(to_data_uri(&prepared.bytes, &prepared.mime_type)),
+    }
+}
+
+async fn upload_for_public_url(prepared: &PreparedMediaBinary, strategy: &UploadStrategy) -> AiResult<String> {
+    let providers = build_public_url_upload_candidates(strategy);
+    let mut failures: Vec<String> = Vec::new();
+    eprintln!(
+        "[ai_runtime][upload][public_url] primary={:?} fallback={} candidates={}",
+        strategy.primary_provider,
+        strategy.fallback_enabled,
+        providers.join(",")
+    );
+
+    if providers.is_empty() && !strategy.fallback_enabled {
+        if let Some(primary) = strategy.primary_provider.as_deref() {
+            failures.push(format!("当前首选上传服务 {} 不支持该模型所需的公网 URL 上传", display_upload_provider(primary)));
+        }
+    }
+
+    for provider in providers {
+        match try_upload_with_provider(provider, prepared).await? {
+            UploadAttempt::Success(url) => {
+                eprintln!(
+                    "[ai_runtime][upload][public_url] success provider={} filename={}",
+                    provider,
+                    prepared.filename
+                );
+                return Ok(url);
+            }
+            UploadAttempt::Skipped => {
+                eprintln!(
+                    "[ai_runtime][upload][public_url] skipped provider={} filename={}",
+                    provider,
+                    prepared.filename
+                );
+                failures.push(format!("{} 未配置或不支持当前公网 URL 上传", display_upload_provider(provider)));
+            }
+            UploadAttempt::Failed(message) => {
+                eprintln!(
+                    "[ai_runtime][upload][public_url] failed provider={} filename={} error={}",
+                    provider,
+                    prepared.filename,
+                    message
+                );
+                failures.push(message);
+            }
+        }
+    }
+
+    if failures.is_empty() {
+        failures.push("未检测到可用的公网上传服务。".to_string());
+    }
+
+    Err(AiRuntimeError::new(
+        "public_media_url_required",
+        format!(
+            "当前 PPIO 模型字段要求公网 HTTP/HTTPS 媒体 URL。请直接传入公网 URL，或先配置 BizyAir / KIE 的 API Key 以启用自动上传。{}",
+            failures.join("；")
+        ),
+    ))
+}
+
+enum UploadAttempt {
+    Success(String),
+    Skipped,
+    Failed(String),
+}
+
+async fn try_upload_with_provider(provider: &str, prepared: &PreparedMediaBinary) -> AiResult<UploadAttempt> {
+    match provider {
+        "bizyair" => {
+            let Some(api_key) = key_store::get_provider_api_key("bizyair")? else {
+                return Ok(UploadAttempt::Skipped);
+            };
+
+            match bizyair::upload_to_bizyair(&api_key, &prepared.bytes, &prepared.filename).await {
+                Ok(url) => Ok(UploadAttempt::Success(url)),
+                Err(err) => Ok(UploadAttempt::Failed(format!("BizyAir 上传失败: {}", err))),
+            }
+        }
+        "kie" => {
+            let Some(api_key) = key_store::get_provider_api_key("kie")? else {
+                return Ok(UploadAttempt::Skipped);
+            };
+
+            match kie::upload_to_kie(&api_key, &prepared.bytes, &prepared.filename).await {
+                Ok(url) => Ok(UploadAttempt::Success(url)),
+                Err(err) => Ok(UploadAttempt::Failed(format!("KIE 上传失败: {}", err))),
+            }
+        }
+        _ => Ok(UploadAttempt::Skipped),
+    }
+}
+
+fn build_public_url_upload_candidates(strategy: &UploadStrategy) -> Vec<&'static str> {
+    let mut candidates: Vec<&'static str> = Vec::new();
+
+    if let Some(primary) = strategy.primary_provider.as_deref() {
+        if let Some(provider) = match_public_url_provider(primary) {
+            candidates.push(provider);
+        } else if !strategy.fallback_enabled {
+            return Vec::new();
+        }
+    }
+
+    if strategy.fallback_enabled {
+        for provider in UPLOAD_PROVIDER_PRIORITY {
+            if !PUBLIC_URL_UPLOAD_PROVIDERS.contains(&provider) || candidates.contains(&provider) {
+                continue;
+            }
+            candidates.push(provider);
+        }
+    }
+
+    candidates
+}
+
+fn match_public_url_provider(provider: &str) -> Option<&'static str> {
+    PUBLIC_URL_UPLOAD_PROVIDERS
+        .into_iter()
+        .find(|candidate| *candidate == provider)
+}
+
+fn display_upload_provider(provider: &str) -> &'static str {
+    match provider {
+        "bizyair" => "BizyAir",
+        "kie" => "KIE",
+        "fal" => "Fal",
+        _ => "Upload provider",
     }
 }
 
@@ -195,15 +366,38 @@ fn prepare_media_binary(source: &str, media_kind: MediaKind) -> AiResult<Prepare
 fn classify_media_key(key: &str) -> MediaKind {
     let normalized = key.to_lowercase();
 
-    if IMAGE_FIELD_HINTS.iter().any(|hint| normalized.contains(hint)) {
+    if IMAGE_FIELD_HINTS
+        .iter()
+        .any(|hint| normalized.contains(hint))
+    {
         return MediaKind::Image;
     }
 
-    if VIDEO_FIELD_HINTS.iter().any(|hint| normalized.contains(hint)) {
+    if VIDEO_FIELD_HINTS
+        .iter()
+        .any(|hint| normalized.contains(hint))
+    {
         return MediaKind::Video;
     }
 
     MediaKind::Unknown
+}
+
+fn requires_public_media_url(provider_id: &str, route: &str, field_name: Option<&str>) -> bool {
+    if provider_id != "ppio" {
+        return false;
+    }
+
+    if route != "/async/wan-2.5-i2v-preview" {
+        return false;
+    }
+
+    let Some(field_name) = field_name else {
+        return false;
+    };
+
+    let normalized = field_name.to_lowercase();
+    normalized.contains("img_url") || normalized.ends_with("_url") || normalized.ends_with("_urls")
 }
 
 fn parse_data_uri(input: &str) -> AiResult<Option<(Vec<u8>, String)>> {
@@ -212,7 +406,10 @@ fn parse_data_uri(input: &str) -> AiResult<Option<(Vec<u8>, String)>> {
     }
 
     let Some((header, payload)) = input.split_once(',') else {
-        return Err(AiRuntimeError::new("invalid_data_uri", "Invalid data URI format"));
+        return Err(AiRuntimeError::new(
+            "invalid_data_uri",
+            "Invalid data URI format",
+        ));
     };
 
     let mime = header

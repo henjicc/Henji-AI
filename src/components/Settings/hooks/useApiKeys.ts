@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import {
+  aiGetProviderApiKey,
   aiGetProviderKeyStatus,
   aiRemoveProviderApiKey,
   aiSetProviderApiKey,
@@ -17,7 +18,6 @@ export interface UseApiKeysResult {
   toggleVisibility: (provider: ApiKeyProvider) => void
 }
 
-const MASKED_VALUE = '********'
 const WRITE_DEBOUNCE_MS = 450
 
 const createEmptyKeys = (): ApiKeys => {
@@ -51,11 +51,31 @@ export function useApiKeys(): UseApiKeysResult {
 
         const loadedKeys = createEmptyKeys()
         const statusMap: Record<string, boolean> = {}
+        const configuredProviders: ApiKeyProvider[] = []
+
         statusList.forEach((item) => {
           statusMap[item.providerId] = item.configured
           if (item.configured && item.providerId in loadedKeys) {
-            loadedKeys[item.providerId as ApiKeyProvider] = MASKED_VALUE
+            configuredProviders.push(item.providerId as ApiKeyProvider)
           }
+        })
+
+        const loadedValues = await Promise.all(
+          configuredProviders.map(async (providerId) => {
+            try {
+              const apiKey = await aiGetProviderApiKey(providerId)
+              return [providerId, apiKey ?? ''] as const
+            } catch (error) {
+              console.error(`[useApiKeys] load key failed: ${providerId}`, error)
+              return [providerId, ''] as const
+            }
+          })
+        )
+
+        if (disposed) return
+
+        loadedValues.forEach(([providerId, apiKey]) => {
+          loadedKeys[providerId] = apiKey
         })
 
         setProviderKeyStatuses(statusMap)
@@ -90,10 +110,6 @@ export function useApiKeys(): UseApiKeysResult {
           if (!trimmed) {
             await aiRemoveProviderApiKey(provider)
             setProviderKeyStatus(provider, false)
-            return
-          }
-
-          if (trimmed === MASKED_VALUE) {
             return
           }
 

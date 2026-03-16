@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
+import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
 
 type PanelTriggerProps = {
@@ -17,10 +17,26 @@ type PanelTriggerProps = {
   closeOnPanelClick?: boolean | ((target: Node) => boolean)
   renderPanel: () => React.ReactNode
   stableHeight?: boolean
+  freezePositionOnOpen?: boolean
 }
 
 export default function PanelTrigger(props: PanelTriggerProps) {
-  const { label, display, disabled, className, buttonClassName, panelClassName, zIndex = 1000, panelWidth, alignment = 'bottomLeft', panelHeight: _panelHeight, closeOnPanelClick = true, renderPanel, stableHeight } = props
+  const {
+    label,
+    display,
+    disabled,
+    className,
+    buttonClassName,
+    panelClassName,
+    zIndex = 1000,
+    panelWidth,
+    alignment = 'bottomLeft',
+    panelHeight: _panelHeight,
+    closeOnPanelClick = true,
+    renderPanel,
+    stableHeight,
+    freezePositionOnOpen = false,
+  } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)
@@ -93,6 +109,9 @@ export default function PanelTrigger(props: PanelTriggerProps) {
 
     if (open) {
       updateAnchor()
+      if (freezePositionOnOpen) {
+        return
+      }
       const onScrollOrResize = () => {
         updateAnchor()
       }
@@ -103,9 +122,10 @@ export default function PanelTrigger(props: PanelTriggerProps) {
         window.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, alignment, panelWidth])
+  }, [open, alignment, panelWidth, freezePositionOnOpen])
 
   useLayoutEffect(() => {
+    if (freezePositionOnOpen) return
     if (!open) return
     if (!anchorRectRef.current) return
 
@@ -143,7 +163,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
     }
 
     updatePos()
-  }, [open, alignment, panelWidth, stableHeight])
+  }, [open, alignment, panelWidth, stableHeight, freezePositionOnOpen])
 
   useEffect(() => {
     if (!open || !panelRef.current) return
@@ -162,6 +182,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   }, [open, alignment, panelWidth, stableHeight])
 
   useEffect(() => {
+    if (freezePositionOnOpen) return
     if (!open) return
     if (!anchorRectRef.current) return
     requestAnimationFrame(() => {
@@ -195,11 +216,11 @@ export default function PanelTrigger(props: PanelTriggerProps) {
 
       setReady(true)
     })
-  }, [open, alignment, panelWidth, stableHeight])
+  }, [open, alignment, panelWidth, stableHeight, freezePositionOnOpen])
 
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
-      {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
+      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiButton
         type="button"
         disabled={disabled}
