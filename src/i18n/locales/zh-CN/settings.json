@@ -15,6 +15,7 @@
         "label": "派欧云 API 密钥",
         "placeholder": "请输入派欧云 API 密钥",
         "help": "前往官网注册并在密钥管理页面获取 API 密钥。",
+        "guide": "先去 {{register}} 注册，然后去 {{keys}} 获取密钥。",
         "links": {
           "register": "派欧云官网",
           "keys": "密钥管理"
@@ -25,6 +26,7 @@
         "label": "Fal.ai API 密钥",
         "placeholder": "请输入 Fal.ai API 密钥",
         "help": "在控制台获取 API 密钥。",
+        "guide": "先去 {{home}} 登录，然后去 {{console}} 创建密钥。",
         "links": {
           "home": "Fal.ai 官网",
           "console": "Fal.ai 控制台"
@@ -35,6 +37,7 @@
         "label": "魔搭 API 密钥",
         "placeholder": "请输入魔搭 API 密钥",
         "help": "注册并查看说明后在访问令牌页面获取。",
+        "guide": "先去 {{home}} 注册，然后看一下 {{docs}}，最后去 {{token}} 获取令牌。",
         "links": {
           "home": "魔搭官网",
           "docs": "相关说明",
@@ -46,6 +49,7 @@
         "label": "KIE API 密钥",
         "placeholder": "请输入 KIE API 密钥",
         "help": "前往 KIE 控制台获取 API 密钥。",
+        "guide": "先去 {{home}} 登录，然后去 {{keys}} 获取密钥。",
         "links": {
           "home": "KIE 官网",
           "keys": "API 密钥"
@@ -56,6 +60,7 @@
         "label": "BizyAir API 密钥",
         "placeholder": "请输入 BizyAir API 密钥",
         "help": "注册并在密钥管理页面获取 API 密钥。",
+        "guide": "先去 {{home}} 注册，然后去 {{keys}} 获取密钥。",
         "links": {
           "home": "BizyAir 官网",
           "keys": "密钥管理"

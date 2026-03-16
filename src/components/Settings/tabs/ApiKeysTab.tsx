@@ -8,9 +8,47 @@ import UploadSection from '../sections/UploadSection'
 import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { useExternalLink } from '../hooks/useExternalLink'
 import { ExternalLink } from 'lucide-react'
+import type { ProviderLink } from '@/core/config/providers'
 
 interface ApiKeysTabProps {
   sectionId?: string
+}
+
+const GUIDE_PLACEHOLDER_PATTERN = /(\{\{[a-z0-9_-]+\}\})/gi
+
+function renderGuideParts(
+  guide: string,
+  links: ProviderLink[],
+  labels: Record<string, string>,
+  openExternal: (url: string) => void
+): React.ReactNode[] {
+  const linksById = new Map(links.map(link => [link.id, link]))
+
+  return guide.split(GUIDE_PLACEHOLDER_PATTERN).map((part, index) => {
+    const match = part.match(/^\{\{([a-z0-9_-]+)\}\}$/i)
+
+    if (!match) {
+      return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>
+    }
+
+    const link = linksById.get(match[1])
+    if (!link) {
+      return <React.Fragment key={`missing-${index}`}>{part}</React.Fragment>
+    }
+
+    return (
+      <UiButton
+        key={`link-${link.id}-${index}`}
+        onClick={() => openExternal(link.url)}
+        variant="ghost"
+        size="sm"
+        className="!inline !h-auto !min-h-0 !rounded-none !border-0 !bg-transparent !px-0 !py-0 align-baseline !text-sm !font-medium !leading-6 !text-brand-300 hover:!bg-transparent hover:!text-brand-300 hover:underline [&_svg]:ml-0.5 [&_svg]:inline-block [&_svg]:translate-y-[-1px]"
+      >
+        {labels[link.id] ?? link.id}
+        <ExternalLink size={12} />
+      </UiButton>
+    )
+  })
 }
 
 const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
@@ -24,19 +62,19 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
       {currentSectionId === 'api-keys' && (
         <section className="space-y-5">
           {API_KEY_PROVIDERS.map(provider => {
-            const label = t(`apiKeys.providers.${provider.id}.label`)
             const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
             const title = t(`apiKeys.providers.${provider.id}.title`)
-            const help = t(`apiKeys.providers.${provider.id}.help`)
-            const links = provider.links.map(link => ({
-              label: t(`apiKeys.providers.${provider.id}.links.${link.id}`),
-              url: link.url,
-              highlight: link.highlight
-            }))
+            const guide = t(`apiKeys.providers.${provider.id}.guide`)
+            const linkLabels = Object.fromEntries(
+              provider.links.map(link => [link.id, t(`apiKeys.providers.${provider.id}.links.${link.id}`)])
+            )
             return (
-              <SectionCard key={provider.id} title={title} description={help}>
+              <SectionCard
+                key={provider.id}
+                title={title}
+                titleClassName="text-sm normal-case tracking-normal text-text-dark"
+              >
                 <ApiKeyInput
-                  label={label}
                   value={keys[provider.id]}
                   visible={visibility[provider.id]}
                   onChange={(value) => updateKey(provider.id, value)}
@@ -45,21 +83,10 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
                   showLabel={t('apiKeys.visibility.show')}
                   hideLabel={t('apiKeys.visibility.hide')}
                 />
-                {links.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {links.map(link => (
-                      <UiButton
-                        key={link.url}
-                        onClick={() => openExternal(link.url)}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 gap-1 border-accent bg-layer px-3 text-xs text-brand-300 hover:bg-surface-dark"
-                      >
-                        {link.label}
-                        <ExternalLink size={12} />
-                      </UiButton>
-                    ))}
-                  </div>
+                {provider.links.length > 0 ? (
+                  <p className="text-sm leading-6 text-text-muted">
+                    {renderGuideParts(guide, provider.links, linkLabels, openExternal)}
+                  </p>
                 ) : null}
               </SectionCard>
             )

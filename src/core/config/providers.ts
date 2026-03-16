@@ -42,7 +42,7 @@ export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = [
   {
     id: 'kie',
     links: [
-      { id: 'home', url: 'https://kie.ai/zh-CN' },
+      { id: 'home', url: 'https://kie.ai?ref=eef20ef0b0595cad227d45b29c635f6c' },
       { id: 'keys', url: 'https://kie.ai/zh-CN/api-key' }
     ]
   },

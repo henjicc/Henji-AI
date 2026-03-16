@@ -3,7 +3,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { UiButton, UiInput } from '@/components/ui'
 
 interface ApiKeyInputProps {
-  label: string
+  label?: string
   value: string
   visible: boolean
   onChange: (value: string) => void
@@ -26,7 +26,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   const toggleLabel = visible ? hideLabel : showLabel
   return (
     <div className="mb-4">
-      <label className="block text-sm font-medium text-zinc-300 mb-2">{label}</label>
+      {label ? <label className="mb-2 block text-sm font-medium text-text-dark">{label}</label> : null}
       <div className="flex gap-2">
         <UiInput
           type={visible ? 'text' : 'password'}
@@ -39,7 +39,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           onClick={onToggleVisibility}
           variant="muted"
           size="sm"
-          className="w-10 px-0"
+          className="w-10 self-stretch !h-auto px-0"
           title={toggleLabel}
           aria-label={toggleLabel}
         >

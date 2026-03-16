@@ -416,6 +416,13 @@ input[type="number"] {
   appearance: textfield;
 }
 
+/* 隐藏系统为 password 输入框注入的默认显隐/清除按钮，避免和业务侧按钮重复 */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input[type="password"]::-webkit-credentials-auto-fill-button {
+  display: none;
+}
+
 .progress-container {
   width: 100%;
   height: 6px;
