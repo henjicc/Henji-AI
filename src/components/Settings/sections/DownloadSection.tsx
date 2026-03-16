@@ -1,7 +1,7 @@
 import React from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import Toggle from '@/components/ui/Toggle'
-import { UiButton, UiInput } from '@/components/ui'
+import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -75,13 +75,13 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               onChange={(e) => onChangePath(e.target.value)}
               placeholder={t('sections.download.pathPlaceholder')}
               disabled={!enableQuickDownload}
-              className="h-[42px] flex-1"
+              className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} flex-1`}
             />
             <UiButton
               onClick={handleSelectPath}
               disabled={!enableQuickDownload}
               variant="primary"
-              size="control"
+              size="field"
               className="shrink-0 whitespace-nowrap"
             >
               {t('actions.select')}

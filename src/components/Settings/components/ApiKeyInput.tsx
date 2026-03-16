@@ -1,6 +1,6 @@
 import React from 'react'
 import { Eye, EyeOff } from 'lucide-react'
-import { UiButton, UiInput } from '@/components/ui'
+import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
 
 interface ApiKeyInputProps {
   label?: string
@@ -33,13 +33,13 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="flex-1"
+          className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} flex-1`}
         />
         <UiButton
           onClick={onToggleVisibility}
           variant="muted"
-          size="sm"
-          className="w-10 self-stretch !h-auto px-0"
+          size="field"
+          className="w-10 px-0"
           title={toggleLabel}
           aria-label={toggleLabel}
         >

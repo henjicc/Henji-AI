@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiButton, UiInput } from '@/components/ui'
+import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import SettingsDialog from '../components/SettingsDialog'
 import SettingsProgressDialog from '../components/SettingsProgressDialog'
@@ -41,13 +41,13 @@ const DataPathSection: React.FC = () => {
           <UiInput
             value={currentPath}
             readOnly
-            className="h-[42px] flex-1 font-mono"
+            className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} flex-1 font-mono`}
           />
           <UiButton
             onClick={selectDirectory}
             disabled={isMigrating}
             variant="primary"
-            size="control"
+            size="field"
             className="shrink-0 whitespace-nowrap"
           >
             {t('actions.select')}
@@ -56,7 +56,7 @@ const DataPathSection: React.FC = () => {
             onClick={openResetConfirm}
             disabled={isMigrating}
             variant="muted"
-            size="control"
+            size="field"
             className="shrink-0 whitespace-nowrap"
           >
             {t('actions.resetDefault')}

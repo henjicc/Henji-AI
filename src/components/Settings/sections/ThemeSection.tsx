@@ -1,6 +1,7 @@
 import React from 'react';
 import Dropdown from '@/components/ui/Dropdown';
 import {
+  UI_FIELD_CONTROL_HEIGHT_CLASS,
   UiButton,
   UiColorInput,
   UiIconButton,
@@ -186,12 +187,12 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
             <UiColorInput
               value={accentColor}
               onChange={(event) => onChangeAccentColor(event.target.value)}
-              className="ml-1"
+              className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} ml-1`}
             />
             <UiInput
               value={accentColor}
               onChange={(event) => onChangeAccentColor(event.target.value)}
-              className="h-9 w-28 font-mono text-xs uppercase"
+              className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} w-28 font-mono text-xs uppercase`}
             />
           </div>
         </div>
@@ -203,16 +204,16 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <UiButton
               variant="muted"
-              size="sm"
-              className="h-9 px-3"
+              size="field"
+              className="px-3"
               onClick={onExportTheme}
             >
               {t('sections.theme.portable.export')}
             </UiButton>
             <UiButton
               variant="muted"
-              size="sm"
-              className="h-9 px-3"
+              size="field"
+              className="px-3"
               disabled={importing}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -261,11 +262,12 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
                   <UiColorInput
                     value={colors[token]}
                     onChange={(event) => onChangeThemeColor(token, event.target.value)}
+                    className={UI_FIELD_CONTROL_HEIGHT_CLASS}
                   />
                   <UiInput
                     value={colors[token] || DEFAULT_THEME_COLOR_SCHEME[token]}
                     onChange={(event) => onChangeThemeColor(token, event.target.value)}
-                    className="h-9 font-mono text-xs uppercase"
+                    className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} font-mono text-xs uppercase`}
                   />
                 </div>
               </div>

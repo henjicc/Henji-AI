@@ -16,6 +16,7 @@ import {
   UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS,
   UI_COLOR_ACCENT_SOFT_BORDER_CLASS,
   UI_COLOR_ACCENT_TEXT_CLASS,
+  UI_FIELD_CONTROL_HEIGHT_CLASS,
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
@@ -28,7 +29,7 @@ import { useDialogTransition } from './useDialogTransition';
 
 type ButtonVariant = 'primary' | 'muted' | 'ghost';
 
-type ButtonSize = 'sm' | 'md' | 'control';
+type ButtonSize = 'sm' | 'md' | 'control' | 'field';
 
 interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -86,6 +87,10 @@ function resolveButtonVariant(variant: ButtonVariant): string {
 function resolveButtonSize(size: ButtonSize, variant: ButtonVariant): string {
   if (size === 'sm') {
     return 'h-8 px-3 text-xs';
+  }
+
+  if (size === 'field') {
+    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} min-h-[42px] px-3.5 text-sm leading-none`;
   }
 
   if (size === 'control') {
