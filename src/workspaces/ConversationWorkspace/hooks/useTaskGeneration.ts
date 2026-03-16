@@ -74,6 +74,40 @@ function asGeneratorOptions(value: unknown): GeneratorOptions {
   return isRecord(value) ? (value as GeneratorOptions) : {}
 }
 
+function classifyMediaSourceKind(source: string): string {
+  const trimmed = source.trim()
+  if (!trimmed) return 'empty'
+  if (trimmed.startsWith('data:')) return 'data-url'
+  if (trimmed.startsWith('blob:')) return 'blob-url'
+  if (trimmed.startsWith('asset://localhost/')) return 'asset-url'
+  if (trimmed.startsWith('tauri://localhost/')) return 'tauri-url'
+  if (trimmed.startsWith('http://asset.localhost/') || trimmed.startsWith('https://asset.localhost/')) {
+    return 'asset-http-url'
+  }
+  if (trimmed.startsWith('http://tauri.localhost/') || trimmed.startsWith('https://tauri.localhost/')) {
+    return 'tauri-http-url'
+  }
+  if (trimmed.startsWith('file://')) return 'file-url'
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return 'remote-url'
+  if (/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(trimmed)) return 'local-path'
+  return 'other'
+}
+
+function summarizeMediaSources(values: unknown): Array<Record<string, unknown>> {
+  if (!isStringArray(values)) {
+    return []
+  }
+
+  return values.map((value, index) => ({
+    index,
+    kind: classifyMediaSourceKind(value),
+    length: value.length,
+    preview: value.startsWith('data:')
+      ? value.slice(0, 48)
+      : value.slice(0, 140),
+  }))
+}
+
 export function useTaskGeneration({
   setTasks,
   updateTask,
@@ -278,6 +312,16 @@ export function useTaskGeneration({
     const videoUrls = uploadedVideoFilePaths?.length
       ? uploadedVideoFilePaths.map((p) => convertFileSrc(p))
       : uploadedVideos
+
+    if (model === 'ppio-wan-2.5-preview') {
+      logInfo('[Workspace] Wan 2.5 Preview 请求媒体输入', {
+        model,
+        images: summarizeMediaSources(options.images),
+        uploadedFilePaths: summarizeMediaSources(options.uploadedFilePaths),
+        videos: summarizeMediaSources(options.videos),
+        uploadedVideoFilePaths: summarizeMediaSources(options.uploadedVideoFilePaths),
+      })
+    }
 
     const taskId = createTaskId()
 

@@ -81,8 +81,31 @@ pub async fn preprocess_request_body(
     body: &Value,
     strategy: &UploadStrategy,
 ) -> AiResult<Value> {
+    if should_trace_upload(provider_id, route) {
+        eprintln!(
+            "[ai_runtime][upload][trace] start provider={} route={} strategy.primary={:?} fallback={} img_url_before={} images_before={}",
+            provider_id,
+            route,
+            strategy.primary_provider,
+            strategy.fallback_enabled,
+            summarize_json_pointer(body, "/input/img_url"),
+            summarize_json_pointer(body, "/images")
+        );
+    }
+
     let mut next = body.clone();
     preprocess_field_value(provider_id, route, strategy, MediaKind::Unknown, None, &mut next).await?;
+
+    if should_trace_upload(provider_id, route) {
+        eprintln!(
+            "[ai_runtime][upload][trace] done provider={} route={} img_url_after={} images_after={}",
+            provider_id,
+            route,
+            summarize_json_pointer(&next, "/input/img_url"),
+            summarize_json_pointer(&next, "/images")
+        );
+    }
+
     Ok(next)
 }
 
@@ -152,6 +175,16 @@ async fn rewrite_media_source(
         return Ok(source.to_string());
     }
 
+    if should_trace_upload(provider_id, route) {
+        eprintln!(
+            "[ai_runtime][upload][trace] field={} kind={} requires_public={} source={}",
+            field_name.unwrap_or("<unknown>"),
+            describe_source_kind(trimmed),
+            requires_public_media_url(provider_id, route, field_name),
+            summarize_source(trimmed)
+        );
+    }
+
     if is_remote_http_url(trimmed) {
         return Ok(source.to_string());
     }
@@ -164,6 +197,14 @@ async fn rewrite_media_source(
 
     let prepared = prepare_media_binary(trimmed, media_kind)?;
     if requires_public_media_url(provider_id, route, field_name) {
+        if should_trace_upload(provider_id, route) {
+            eprintln!(
+                "[ai_runtime][upload][trace] public_url_upload filename={} mime={} bytes={}",
+                prepared.filename,
+                prepared.mime_type,
+                prepared.bytes.len()
+            );
+        }
         return upload_for_public_url(&prepared, strategy).await;
     }
     match provider_id {
@@ -363,6 +404,74 @@ fn prepare_media_binary(source: &str, media_kind: MediaKind) -> AiResult<Prepare
     })
 }
 
+fn should_trace_upload(provider_id: &str, route: &str) -> bool {
+    provider_id == "ppio" && route == "/async/wan-2.5-i2v-preview"
+}
+
+fn summarize_json_pointer(value: &Value, pointer: &str) -> String {
+    match value.pointer(pointer) {
+        Some(Value::String(text)) => summarize_source(text),
+        Some(Value::Array(items)) => {
+            let summaries = items
+                .iter()
+                .take(3)
+                .map(|item| match item {
+                    Value::String(text) => summarize_source(text),
+                    _ => item.to_string(),
+                })
+                .collect::<Vec<String>>()
+                .join(", ");
+            format!("[{}] len={}", summaries, items.len())
+        }
+        Some(other) => other.to_string(),
+        None => "<missing>".to_string(),
+    }
+}
+
+fn summarize_source(source: &str) -> String {
+    let trimmed = source.trim();
+    if trimmed.starts_with("data:") {
+        return format!("data-uri(len={})", trimmed.len());
+    }
+
+    if trimmed.len() <= 160 {
+        return trimmed.to_string();
+    }
+
+    format!("{}...(len={})", &trimmed[..160], trimmed.len())
+}
+
+fn describe_source_kind(source: &str) -> &'static str {
+    if source.starts_with("data:") {
+        return "data-uri";
+    }
+    if source.starts_with("blob:") {
+        return "blob-url";
+    }
+    if source.starts_with("asset://localhost/") {
+        return "asset-url";
+    }
+    if source.starts_with("tauri://localhost/") {
+        return "tauri-url";
+    }
+    if source.starts_with("http://asset.localhost/") || source.starts_with("https://asset.localhost/") {
+        return "asset-http-url";
+    }
+    if source.starts_with("http://tauri.localhost/") || source.starts_with("https://tauri.localhost/") {
+        return "tauri-http-url";
+    }
+    if source.starts_with("file://") {
+        return "file-url";
+    }
+    if is_remote_http_url(source) {
+        return "remote-url";
+    }
+    if is_local_path(source) {
+        return "local-path";
+    }
+    "other"
+}
+
 fn classify_media_key(key: &str) -> MediaKind {
     let normalized = key.to_lowercase();
 
@@ -434,16 +543,20 @@ fn parse_data_uri(input: &str) -> AiResult<Option<(Vec<u8>, String)>> {
 }
 
 fn normalize_local_source(source: &str) -> Option<String> {
-    if source.starts_with("http://asset.localhost/") {
-        let encoded = source.trim_start_matches("http://asset.localhost/");
-        let decoded = urlencoding::decode(encoded).ok()?.to_string();
-        return Some(strip_windows_drive_prefix(decoded));
-    }
-
-    if source.starts_with("http://tauri.localhost/") {
-        let encoded = source.trim_start_matches("http://tauri.localhost/");
-        let decoded = urlencoding::decode(encoded).ok()?.to_string();
-        return Some(strip_windows_drive_prefix(decoded));
+    for prefix in [
+        "http://asset.localhost/",
+        "https://asset.localhost/",
+        "http://tauri.localhost/",
+        "https://tauri.localhost/",
+        "asset://localhost/",
+        "tauri://localhost/",
+        "file://localhost/",
+        "file:///",
+        "file://",
+    ] {
+        if let Some(decoded) = decode_local_source_with_prefix(source, prefix) {
+            return Some(strip_windows_drive_prefix(decoded));
+        }
     }
 
     if is_local_path(source) {
@@ -451,6 +564,15 @@ fn normalize_local_source(source: &str) -> Option<String> {
     }
 
     None
+}
+
+fn decode_local_source_with_prefix(source: &str, prefix: &str) -> Option<String> {
+    if !source.starts_with(prefix) {
+        return None;
+    }
+
+    let encoded = source.trim_start_matches(prefix);
+    urlencoding::decode(encoded).ok().map(|value| value.to_string())
 }
 
 fn strip_windows_drive_prefix(path: String) -> String {

@@ -6,6 +6,14 @@
 
 import { defineModel } from '@/core'
 
+function resolveUploadedMediaSources(
+  values: unknown
+): string[] {
+  return Array.isArray(values)
+    ? values.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+}
+
 export const wan26Model = defineModel({
   meta: {
     id: 'ppio-wan-2.6',
@@ -170,8 +178,12 @@ export const wan26Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
-      const images = params.images || []
-      const videos = params.videos || []
+      const images = resolveUploadedMediaSources(params.uploadedFilePaths).length > 0
+        ? resolveUploadedMediaSources(params.uploadedFilePaths)
+        : resolveUploadedMediaSources(params.images)
+      const videos = resolveUploadedMediaSources(params.uploadedVideoFilePaths).length > 0
+        ? resolveUploadedMediaSources(params.uploadedVideoFilePaths)
+        : resolveUploadedMediaSources(params.videos)
       const video = params.video || videos[0]
       const aspectRatio = params.ppioWan26AspectRatio || params.aspect_ratio || '16:9'
       const quality = params.ppioWan26Quality || params.quality || '720P'

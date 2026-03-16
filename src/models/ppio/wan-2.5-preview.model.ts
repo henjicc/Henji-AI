@@ -6,6 +6,62 @@
 
 import { defineModel } from '@/core'
 
+const DEFAULT_WAN25_SIZE = '1280*720'
+const DEFAULT_WAN25_RESOLUTION = '720P'
+const SUPPORTED_WAN25_SIZES = new Set([
+  '832*480',
+  '480*832',
+  '624*624',
+  '1280*720',
+  '720*1280',
+  '960*960',
+  '1088*832',
+  '832*1088',
+  '1920*1080',
+  '1080*1920',
+  '1440*1440',
+  '1632*1248',
+  '1248*1632',
+])
+const SUPPORTED_WAN25_RESOLUTIONS = new Set(['480P', '720P', '1080P'])
+
+function resolveUploadedImageSources(params: Record<string, unknown>): string[] {
+  const persistedImages = Array.isArray(params.uploadedFilePaths)
+    ? params.uploadedFilePaths.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+
+  if (persistedImages.length > 0) {
+    return persistedImages
+  }
+
+  return Array.isArray(params.images)
+    ? params.images.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+}
+
+function resolveBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function resolveDuration(value: unknown): 5 | 10 {
+  return value === 10 ? 10 : 5
+}
+
+function resolveSupportedValue(
+  preferred: unknown,
+  legacy: unknown,
+  supportedValues: ReadonlySet<string>,
+  fallback: string
+): string {
+  if (typeof preferred === 'string' && supportedValues.has(preferred)) {
+    return preferred
+  }
+  if (typeof legacy === 'string' && supportedValues.has(legacy)) {
+    return legacy
+  }
+  return fallback
+}
+
 export const wan25PreviewModel = defineModel({
   meta: {
     id: 'ppio-wan-2.5-preview',
@@ -48,7 +104,7 @@ export const wan25PreviewModel = defineModel({
       type: 'dropdown',
       order: 2,
       name: { key: 'auto.2', fallback: 'Size' },
-      default: '1280*720',
+      default: DEFAULT_WAN25_SIZE,
       options: [
         { value: '832*480', label: '832×480' },
         { value: '480*832', label: '480×832' },
@@ -72,7 +128,7 @@ export const wan25PreviewModel = defineModel({
       type: 'dropdown',
       order: 3,
       name: { key: 'auto.3', fallback: 'Resolution' },
-      default: '720P',
+      default: DEFAULT_WAN25_RESOLUTION,
       options: [
         { value: '480P', label: '480P' },
         { value: '720P', label: '720P' },
@@ -126,19 +182,39 @@ export const wan25PreviewModel = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const images = resolveUploadedImageSources(params)
       return images.length > 0 ? '/async/wan-2.5-i2v-preview' : '/async/wan-2.5-t2v-preview'
     }
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
-      const duration = params.ppioWan25VideoDuration || params.duration || 5
-      const prompt_extend = params.ppioWan25PromptExtend !== undefined ? params.ppioWan25PromptExtend : (params.prompt_extend === undefined ? true : params.prompt_extend)
-      const audio = params.ppioWan25Audio !== undefined ? params.ppioWan25Audio : (params.audio === undefined ? true : params.audio)
-      const prompt = params.prompt || ''
-      const negativePrompt = params.ppioWan25NegativePrompt || params.negative_prompt || ''
+      const images = resolveUploadedImageSources(params)
+      const duration = resolveDuration(params.ppioWan25VideoDuration ?? params.duration)
+      const prompt_extend = resolveBoolean(
+        params.ppioWan25PromptExtend ?? params.prompt_extend,
+        true
+      )
+      const audio = resolveBoolean(params.ppioWan25Audio ?? params.audio, true)
+      const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+      const negativePrompt =
+        typeof params.ppioWan25NegativePrompt === 'string'
+          ? params.ppioWan25NegativePrompt
+          : typeof params.negative_prompt === 'string'
+            ? params.negative_prompt
+            : ''
       const audioUrl = params.audio_url
+      const resolution = resolveSupportedValue(
+        params.ppioWan25Resolution,
+        params.resolution,
+        SUPPORTED_WAN25_RESOLUTIONS,
+        DEFAULT_WAN25_RESOLUTION
+      )
+      const size = resolveSupportedValue(
+        params.ppioWan25Size,
+        params.size,
+        SUPPORTED_WAN25_SIZES,
+        DEFAULT_WAN25_SIZE
+      )
 
       if (images.length > 0) {
         // Image-to-video
@@ -150,7 +226,7 @@ export const wan25PreviewModel = defineModel({
             ...(audioUrl ? { audio_url: audioUrl } : {})
           },
           parameters: {
-            resolution: params.ppioWan25Resolution || params.resolution || '1080P',
+            resolution,
             duration,
             prompt_extend,
             watermark: false,
@@ -166,7 +242,7 @@ export const wan25PreviewModel = defineModel({
             ...(audioUrl ? { audio_url: audioUrl } : {})
           },
           parameters: {
-            size: params.ppioWan25Size || params.size || '1920*1080',
+            size,
             duration,
             prompt_extend,
             watermark: false,

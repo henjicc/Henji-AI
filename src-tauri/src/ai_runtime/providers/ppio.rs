@@ -9,11 +9,27 @@ const PPIO_BASE_URL: &str = "https://api.ppinfra.com/v3";
 
 pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExecutionResult> {
     let endpoint = normalize_endpoint(PPIO_BASE_URL, input.route);
+    eprintln!(
+        "[ai_runtime][ppio][submit] route={} body={}",
+        input.route,
+        request_summary(input.body)
+    );
     let response = send_json(&input, &endpoint).await?;
 
     let final_payload = if let Some(task_id) = extract_task_id(&response) {
+        eprintln!(
+            "[ai_runtime][ppio][submit_ok] route={} task_id={} payload={}",
+            input.route,
+            task_id,
+            payload_preview(&response)
+        );
         poll_task(&input, &task_id).await?
     } else {
+        eprintln!(
+            "[ai_runtime][ppio][submit_sync] route={} payload={}",
+            input.route,
+            payload_preview(&response)
+        );
         response
     };
 
@@ -131,11 +147,25 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
             .bearer_auth(input.api_key)
             .send()
             .await?;
+        let status = response.status();
 
         let payload = response
             .json::<Value>()
             .await
             .map_err(|e| AiRuntimeError::new("invalid_json", e.to_string()))?;
+
+        if !status.is_success() {
+            eprintln!(
+                "[ai_runtime][ppio][poll_http_error] task_id={} status={} payload={}",
+                task_id,
+                status,
+                payload_preview(&payload)
+            );
+            return Err(AiRuntimeError::new(
+                "provider_http_error",
+                format!("PPIO poll HTTP {}: {}", status, payload),
+            ));
+        }
 
         let state = payload
             .pointer("/task/status")
@@ -147,11 +177,17 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
         }
 
         if state == "TASK_STATUS_FAILED" {
-            let reason = payload
-                .pointer("/task/reason")
-                .and_then(Value::as_str)
-                .unwrap_or("task failed");
-            return Err(AiRuntimeError::new("provider_task_failed", reason));
+            let reason = extract_task_failure_reason(&payload);
+            eprintln!(
+                "[ai_runtime][ppio][task_failed] task_id={} reason={} payload={}",
+                task_id,
+                reason,
+                payload_preview(&payload)
+            );
+            return Err(AiRuntimeError::new(
+                "provider_task_failed",
+                format!("{} (task_id={})", reason, task_id),
+            ));
         }
     }
 
@@ -232,4 +268,118 @@ fn payload_preview(payload: &Value) -> String {
         return serialized;
     }
     format!("{}...(truncated)", &serialized[..MAX_LEN])
+}
+
+fn request_summary(body: &Value) -> String {
+    let prompt_len = body
+        .pointer("/input/prompt")
+        .and_then(Value::as_str)
+        .map(|value| value.chars().count())
+        .unwrap_or(0);
+    let negative_prompt_len = body
+        .pointer("/input/negative_prompt")
+        .and_then(Value::as_str)
+        .map(|value| value.chars().count())
+        .unwrap_or(0);
+    let img_url = body
+        .pointer("/input/img_url")
+        .and_then(Value::as_str)
+        .map(describe_media_source)
+        .unwrap_or_else(|| "<missing>".to_string());
+    let audio_url = body
+        .pointer("/input/audio_url")
+        .and_then(Value::as_str)
+        .map(describe_media_source)
+        .unwrap_or_else(|| "<missing>".to_string());
+    let duration = scalar_preview(body.pointer("/parameters/duration"));
+    let resolution = scalar_preview(body.pointer("/parameters/resolution"));
+    let size = scalar_preview(body.pointer("/parameters/size"));
+    let prompt_extend = scalar_preview(body.pointer("/parameters/prompt_extend"));
+    let audio = scalar_preview(body.pointer("/parameters/audio"));
+    let watermark = scalar_preview(body.pointer("/parameters/watermark"));
+
+    format!(
+        "{{prompt_len={}, negative_prompt_len={}, img_url={}, audio_url={}, duration={}, resolution={}, size={}, prompt_extend={}, audio={}, watermark={}}}",
+        prompt_len,
+        negative_prompt_len,
+        img_url,
+        audio_url,
+        duration,
+        resolution,
+        size,
+        prompt_extend,
+        audio,
+        watermark
+    )
+}
+
+fn describe_media_source(value: &str) -> String {
+    let trimmed = value.trim();
+    let kind = if trimmed.starts_with("data:") {
+        "data-url"
+    } else if trimmed.starts_with("asset://localhost/") {
+        "asset-url"
+    } else if trimmed.starts_with("tauri://localhost/") {
+        "tauri-url"
+    } else if trimmed.starts_with("http://asset.localhost/") || trimmed.starts_with("https://asset.localhost/") {
+        "asset-http-url"
+    } else if trimmed.starts_with("http://tauri.localhost/") || trimmed.starts_with("https://tauri.localhost/") {
+        "tauri-http-url"
+    } else if trimmed.starts_with("file://") {
+        "file-url"
+    } else if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        "remote-url"
+    } else if trimmed.starts_with('/') || trimmed.contains(":\\") || trimmed.starts_with("\\\\") {
+        "local-path"
+    } else {
+        "other"
+    };
+
+    format!("{}:{}", kind, truncate_value(trimmed, 180))
+}
+
+fn truncate_value(value: &str, max_len: usize) -> String {
+    let mut chars = value.chars();
+    let truncated: String = chars.by_ref().take(max_len).collect();
+    if chars.next().is_none() {
+        return truncated;
+    }
+    format!("{}...(truncated)", truncated)
+}
+
+fn scalar_preview(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(v)) => format!("\"{}\"", truncate_value(v, 80)),
+        Some(Value::Bool(v)) => v.to_string(),
+        Some(Value::Number(v)) => v.to_string(),
+        Some(Value::Null) => "null".to_string(),
+        Some(other) => truncate_value(&other.to_string(), 120),
+        None => "<missing>".to_string(),
+    }
+}
+
+fn extract_task_failure_reason(payload: &Value) -> String {
+    let pointers = [
+        "/task/reason",
+        "/task/message",
+        "/task/error",
+        "/message",
+        "/error",
+        "/reason",
+        "/task/output/message",
+        "/task/output/error",
+        "/task/extra/debug_info/message",
+        "/task/extra/debug_info/error",
+    ];
+
+    for pointer in pointers {
+        if let Some(value) = payload.pointer(pointer) {
+            let preview = scalar_preview(Some(value));
+            if preview != "<missing>" && preview != "null" && preview != "\"\"" {
+                return preview.trim_matches('"').to_string();
+            }
+        }
+    }
+
+    "task failed".to_string()
 }
