@@ -10,6 +10,7 @@ import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
 import { logInfo } from '@/utils/errorLogger'
+import { recordApiTrace } from '@/utils/testMode'
 import {
   aiCancelTask,
   aiContinuePolling,
@@ -17,6 +18,7 @@ import {
   aiGetProviderKeyStatus,
   aiRemoveProviderApiKey,
   aiSetProviderApiKey,
+  type AiGenerateResponseDto,
   type ProviderKeyStatusDto,
 } from '@/commands/aiRuntime'
 
@@ -68,6 +70,33 @@ function formatFailedMetadata(metadata: Record<string, unknown> | undefined): st
   }
 }
 
+function recordRuntimeTrace(
+  modelId: string,
+  params: Record<string, unknown>,
+  trace: AiGenerateResponseDto['trace']
+): void {
+  if (!trace) {
+    return
+  }
+
+  logInfo('[GenerationService] 实际 API 交互', trace)
+
+  const prompt = typeof params.prompt === 'string'
+    ? params.prompt
+    : typeof params.text === 'string'
+      ? params.text
+      : undefined
+
+  const model = registry.getModel(modelId)
+  recordApiTrace({
+    model: modelId,
+    type: model?.meta.type,
+    prompt,
+    timestamp: new Date().toISOString(),
+    trace
+  })
+}
+
 export class GenerationService {
   private static instance: GenerationService | null = null
 
@@ -107,6 +136,7 @@ export class GenerationService {
         modelId,
         params: attachUploadRuntimeParams(params),
       })
+      recordRuntimeTrace(modelId, params, response.trace)
 
       if (response.status !== 'completed') {
         throw new Error(`Generation ${response.status}${formatFailedMetadata(response.metadata)}`)
@@ -119,6 +149,7 @@ export class GenerationService {
         url: response.url,
         filePath: response.filePath,
         metadata: response.metadata,
+        trace: response.trace,
       }
     } catch (error) {
       const message = getErrorMessage(error)
@@ -162,6 +193,7 @@ export class GenerationService {
         taskId,
         params,
       })
+      recordRuntimeTrace(modelId, params, response.trace)
 
       if (response.status !== 'completed') {
         throw new Error(`Continue polling ${response.status}${formatFailedMetadata(response.metadata)}`)
@@ -172,6 +204,7 @@ export class GenerationService {
         url: response.url,
         filePath: response.filePath,
         metadata: response.metadata,
+        trace: response.trace,
       }
     } catch (error) {
       const message = getErrorMessage(error)

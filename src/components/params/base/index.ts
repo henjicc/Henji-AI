@@ -6,7 +6,6 @@
 
 export { TextInput } from './TextInput'
 export { NumberInput } from './NumberInput'
-export { SliderInput } from './SliderInput'
 export { DropdownInput } from './DropdownInput'
 export { SwitchInput } from './SwitchInput'
 export { RadioInput } from './RadioInput'

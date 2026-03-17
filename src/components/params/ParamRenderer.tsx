@@ -6,6 +6,7 @@
 
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
 import { panelRegistry } from '@/core/panels/PanelRegistry'
 import { getI18nText } from '@/core/types/I18nText'
@@ -14,7 +15,6 @@ import type { CompositePanelConfig } from '@/core/types/CompositePanel'
 // 导入真实的新系统组件
 import { TextInput } from './base/TextInput'
 import { NumberInput } from './base/NumberInput'
-import { SliderInput } from './base/SliderInput'
 import { DropdownInput } from './base/DropdownInput'
 import { SwitchInput } from './base/SwitchInput'
 import { RadioInput } from './base/RadioInput'
@@ -40,7 +40,7 @@ function formatPanelDisplayValue(value: any, panel: string): string {
     if (value.aspectRatio === 'smart') return '智能'
     if (value.aspectRatio) {
       const quality = value.quality ? ` (${value.quality})` : ''
-      return `${value.aspectRatio}${quality}`
+      return `${formatAspectRatioDisplayLabel(String(value.aspectRatio), value.aspectRatio)}${quality}`
     }
     if (value.preset) return value.preset
     if (value.width && value.height) return `${value.width}×${value.height}`
@@ -84,7 +84,6 @@ const COMPONENT_MAP: Partial<Record<string, React.ComponentType<any>>> = {
   text: TextInput,
   textarea: TextInput,
   number: NumberInput,
-  slider: SliderInput,
   dropdown: DropdownInput,
   switch: SwitchInput,
   radio: RadioInput,

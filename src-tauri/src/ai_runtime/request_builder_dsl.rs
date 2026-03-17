@@ -39,7 +39,7 @@ fn resolve_route(params: &Map<String, Value>, model: Option<&ModelManifestItem>)
             if let Some(selector_js) = &endpoint_dsl.selector_js {
                 let value = crate::ai_runtime::js_runtime::eval_function(selector_js, params)?;
                 if let Some(route) = value.as_str() {
-                    return Ok(route.to_string());
+                    return Ok(resolve_named_route(endpoint_dsl, route));
                 }
                 return Err(AiRuntimeError::new(
                     "invalid_selector_result",
@@ -64,10 +64,18 @@ fn resolve_method(model: Option<&ModelManifestItem>) -> String {
 fn select_endpoint_from_dsl(params: &Map<String, Value>, endpoint_dsl: &EndpointConfigDsl) -> String {
     for rule in &endpoint_dsl.rules {
         if matches_rule(params, rule) {
-            return rule.route.clone();
+            return resolve_named_route(endpoint_dsl, &rule.route);
         }
     }
-    endpoint_dsl.default_route.clone()
+    resolve_named_route(endpoint_dsl, &endpoint_dsl.default_route)
+}
+
+fn resolve_named_route(endpoint_dsl: &EndpointConfigDsl, route: &str) -> String {
+    endpoint_dsl
+        .routes
+        .get(route)
+        .map(|entry| entry.path.clone())
+        .unwrap_or_else(|| route.to_string())
 }
 
 fn matches_rule(params: &Map<String, Value>, rule: &EndpointRuleDsl) -> bool {

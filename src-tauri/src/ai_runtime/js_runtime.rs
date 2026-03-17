@@ -171,6 +171,79 @@ function buildModelscopeRequest(params, options) {
 
   return request;
 }
+
+function filterMediaSources(values) {
+  if (!Array.isArray(values)) return [];
+  return values.filter(function (item) {
+    return typeof item === "string" && item.trim().length > 0;
+  });
+}
+
+function resolvePpioImageSources(params) {
+  const preferred = filterMediaSources(params.uploadedFilePaths);
+  return preferred.length > 0 ? preferred : filterMediaSources(params.images);
+}
+
+function resolvePpioVideoSources(params) {
+  const preferred = filterMediaSources(params.uploadedVideoFilePaths);
+  return preferred.length > 0 ? preferred : filterMediaSources(params.videos);
+}
+
+function resolvePpioPrimaryVideoSource(params) {
+  const preferred = resolvePpioVideoSources(params);
+  if (preferred.length > 0) {
+    return preferred[0];
+  }
+  return typeof params.video === "string" && params.video.trim().length > 0
+    ? params.video
+    : undefined;
+}
+
+function resolveUploadedImageSources(params) {
+  return resolvePpioImageSources(params);
+}
+
+function resolveUploadedMediaSources(values) {
+  return filterMediaSources(values);
+}
+
+function resolveBoolean(value, fallbackValue) {
+  return typeof value === "boolean" ? value : fallbackValue;
+}
+
+function resolveDuration(value) {
+  return value === 10 ? 10 : 5;
+}
+
+const DEFAULT_WAN25_SIZE = "1280*720";
+const DEFAULT_WAN25_RESOLUTION = "720P";
+const SUPPORTED_WAN25_SIZES = [
+  "832*480",
+  "480*832",
+  "624*624",
+  "1280*720",
+  "720*1280",
+  "960*960",
+  "1088*832",
+  "832*1088",
+  "1920*1080",
+  "1080*1920",
+  "1440*1440",
+  "1632*1248",
+  "1248*1632"
+];
+const SUPPORTED_WAN25_RESOLUTIONS = ["480P", "720P", "1080P"];
+
+function resolveSupportedValue(preferred, legacy, supportedValues, fallbackValue) {
+  const allowedValues = Array.isArray(supportedValues) ? supportedValues : [];
+  if (typeof preferred === "string" && allowedValues.includes(preferred)) {
+    return preferred;
+  }
+  if (typeof legacy === "string" && allowedValues.includes(legacy)) {
+    return legacy;
+  }
+  return fallbackValue;
+}
 "#;
 
 pub fn eval_function(function_source: &str, params: &Map<String, Value>) -> AiResult<Value> {

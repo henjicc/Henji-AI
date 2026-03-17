@@ -1,9 +1,11 @@
 pub mod bizyair;
 pub mod fal;
 pub mod kie;
+pub mod ppio_media;
 
 use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
 use crate::ai_runtime::key_store;
+use crate::ai_runtime::upload::ppio_media::{resolve_ppio_media_rewrite_mode, PpioMediaRewriteMode};
 use base64::Engine;
 use serde_json::{Map, Value};
 use std::future::Future;
@@ -176,17 +178,31 @@ async fn rewrite_media_source(
     }
 
     if should_trace_upload(provider_id, route) {
+        let rewrite_mode = match media_kind {
+            MediaKind::Video => resolve_rewrite_mode(provider_id, route, field_name, true),
+            MediaKind::Image => resolve_rewrite_mode(provider_id, route, field_name, false),
+            MediaKind::Unknown => PpioMediaRewriteMode::DataUri,
+        };
         eprintln!(
-            "[ai_runtime][upload][trace] field={} kind={} requires_public={} source={}",
+            "[ai_runtime][upload][trace] field={} kind={} rewrite_mode={} source={}",
             field_name.unwrap_or("<unknown>"),
             describe_source_kind(trimmed),
-            requires_public_media_url(provider_id, route, field_name),
+            describe_rewrite_mode(rewrite_mode),
             summarize_source(trimmed)
         );
     }
 
     if is_remote_http_url(trimmed) {
         return Ok(source.to_string());
+    }
+    if trimmed.starts_with("blob:") {
+        return Err(AiRuntimeError::new(
+            "unsupported_media_source",
+            format!(
+                "Blob URL is not supported by backend runtime for field {}. Please use persisted uploaded file paths instead.",
+                field_name.unwrap_or("<unknown>")
+            ),
+        ));
     }
 
     // Some non-media config fields (e.g. "sequential_image_generation": "disabled")
@@ -196,21 +212,29 @@ async fn rewrite_media_source(
     }
 
     let prepared = prepare_media_binary(trimmed, media_kind)?;
-    if requires_public_media_url(provider_id, route, field_name) {
-        if should_trace_upload(provider_id, route) {
-            eprintln!(
-                "[ai_runtime][upload][trace] public_url_upload filename={} mime={} bytes={}",
-                prepared.filename,
-                prepared.mime_type,
-                prepared.bytes.len()
-            );
-        }
-        return upload_for_public_url(&prepared, strategy).await;
-    }
     match provider_id {
         // Fal accepts data URI payloads directly.
         "fal" => fal::upload_to_fal("", &prepared.bytes, &prepared.filename).await,
-        "ppio" => Ok(to_data_uri(&prepared.bytes, &prepared.mime_type)),
+        "ppio" => match resolve_rewrite_mode(
+            provider_id,
+            route,
+            field_name,
+            matches!(media_kind, MediaKind::Video),
+        ) {
+            PpioMediaRewriteMode::PublicUrl => {
+                if should_trace_upload(provider_id, route) {
+                    eprintln!(
+                        "[ai_runtime][upload][trace] public_url_upload filename={} mime={} bytes={}",
+                        prepared.filename,
+                        prepared.mime_type,
+                        prepared.bytes.len()
+                    );
+                }
+                upload_for_public_url(&prepared, strategy).await
+            }
+            PpioMediaRewriteMode::RawBase64 => Ok(to_base64(&prepared.bytes)),
+            PpioMediaRewriteMode::DataUri => Ok(to_data_uri(&prepared.bytes, &prepared.mime_type)),
+        },
 
         // KIE / ModelScope expect a hosted URL.
         "kie" | "modelscope" => {
@@ -405,7 +429,29 @@ fn prepare_media_binary(source: &str, media_kind: MediaKind) -> AiResult<Prepare
 }
 
 fn should_trace_upload(provider_id: &str, route: &str) -> bool {
-    provider_id == "ppio" && route == "/async/wan-2.5-i2v-preview"
+    provider_id == "ppio"
+        && matches!(
+            route,
+            "/async/wan-2.5-i2v-preview"
+                | "/async/wan2.6-i2v"
+                | "/async/wan2.6-v2v"
+                | "/async/kling-2.5-turbo-i2v"
+                | "/async/kling-v2.6-pro-i2v"
+                | "/async/kling-v2.6-pro-motion-control"
+                | "/async/kling-o1-i2v"
+                | "/async/kling-o1-ref2v"
+                | "/async/kling-o1-video-edit"
+                | "/async/minimax-hailuo-02"
+                | "/async/minimax-hailuo-2.3-i2v"
+                | "/async/minimax-hailuo-2.3-fast-i2v"
+                | "/async/pixverse-v4.5-i2v"
+                | "/async/seedance-v1.5-pro-i2v"
+                | "/async/seedance-v1-lite-i2v"
+                | "/async/seedance-v1-pro-i2v"
+                | "/async/vidu-q1-img2video"
+                | "/async/vidu-q1-startend2video"
+                | "/async/vidu-q1-reference2video"
+        )
 }
 
 fn summarize_json_pointer(value: &Value, pointer: &str) -> String {
@@ -490,23 +536,6 @@ fn classify_media_key(key: &str) -> MediaKind {
     }
 
     MediaKind::Unknown
-}
-
-fn requires_public_media_url(provider_id: &str, route: &str, field_name: Option<&str>) -> bool {
-    if provider_id != "ppio" {
-        return false;
-    }
-
-    if route != "/async/wan-2.5-i2v-preview" {
-        return false;
-    }
-
-    let Some(field_name) = field_name else {
-        return false;
-    };
-
-    let normalized = field_name.to_lowercase();
-    normalized.contains("img_url") || normalized.ends_with("_url") || normalized.ends_with("_urls")
 }
 
 fn parse_data_uri(input: &str) -> AiResult<Option<(Vec<u8>, String)>> {
@@ -601,6 +630,31 @@ fn is_local_path(value: &str) -> bool {
 fn to_data_uri(bytes: &[u8], mime_type: &str) -> String {
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
     format!("data:{};base64,{}", mime_type, encoded)
+}
+
+fn to_base64(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+fn resolve_rewrite_mode(
+    provider_id: &str,
+    route: &str,
+    field_name: Option<&str>,
+    is_video: bool,
+) -> PpioMediaRewriteMode {
+    if provider_id == "ppio" {
+        return resolve_ppio_media_rewrite_mode(route, field_name, is_video);
+    }
+
+    PpioMediaRewriteMode::DataUri
+}
+
+fn describe_rewrite_mode(mode: PpioMediaRewriteMode) -> &'static str {
+    match mode {
+        PpioMediaRewriteMode::DataUri => "data-uri",
+        PpioMediaRewriteMode::RawBase64 => "raw-base64",
+        PpioMediaRewriteMode::PublicUrl => "public-url",
+    }
 }
 
 fn infer_mime_from_path(path: &str, media_kind: MediaKind) -> String {

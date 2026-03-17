@@ -182,7 +182,7 @@ export interface FilterRangeLinkage extends BaseLinkage {
   effect: 'filterRange'
 
   /**
-   * 目标参数ID（必须是 number 或 slider 类型）
+   * 目标参数ID（必须是 number 类型）
    */
   target: string
 

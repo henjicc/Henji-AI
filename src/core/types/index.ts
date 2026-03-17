@@ -71,7 +71,6 @@ export type {
   BaseParamDef,
   TextParamDef,
   NumberParamDef,
-  SliderParamDef,
   DropdownParamDef,
   SwitchParamDef,
   RadioParamDef,
@@ -168,3 +167,5 @@ export type {
   ToolNodeCategory,
   ToolNodeDefinition
 } from './ToolNodeDefinition'
+
+export type { AiRuntimeTrace, AiRuntimeTracePhase } from './AiRuntimeTrace'

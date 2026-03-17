@@ -171,8 +171,8 @@ export class LinkageEngine {
       return null
     }
 
-    // 只有 slider 和 number 有范围
-    if (paramDef.type !== 'slider' && paramDef.type !== 'number') {
+    // 只有 number 有范围
+    if (paramDef.type !== 'number') {
       return null
     }
 

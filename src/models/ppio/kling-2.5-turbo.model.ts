@@ -5,6 +5,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const kling25TurboModel = defineModel({
   meta: {
@@ -51,7 +52,7 @@ export const kling25TurboModel = defineModel({
     // 3. CFG Scale
     {
       id: 'ppioKling25TurboCfgScale',
-      type: 'slider',
+      type: 'number',
       order: 3,
       name: { key: 'auto.3', fallback: 'CFG Scale' },
       default: 0.5,
@@ -85,13 +86,13 @@ export const kling25TurboModel = defineModel({
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       return images.length > 0 ? '/async/kling-2.5-turbo-i2v' : '/async/kling-2.5-turbo-t2v'
     }
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const duration = params.ppioKling25TurboDuration || params.duration || 5
       const cfgScale = params.ppioKling25TurboCfgScale ?? params.cfg_scale ?? 0.5
       const mode = params.ppioKling25TurboMode || params.mode || 'pro'

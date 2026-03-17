@@ -5,6 +5,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const minimaxHailuo23Model = defineModel({
   meta: {
@@ -100,7 +101,7 @@ export const minimaxHailuo23Model = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const isFast = params.ppioHailuo23FastMode && images.length > 0
 
       if (images.length > 0) {
@@ -112,7 +113,7 @@ export const minimaxHailuo23Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const durationInput = params.ppioHailuo23VideoDuration || params.duration
       const duration = durationInput === 10 ? 10 : 6
 

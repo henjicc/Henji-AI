@@ -5,14 +5,7 @@
  */
 
 import { defineModel } from '@/core'
-
-function resolveUploadedMediaSources(
-  values: unknown
-): string[] {
-  return Array.isArray(values)
-    ? values.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    : []
-}
+import { resolvePpioImageSources, resolvePpioPrimaryVideoSource, resolvePpioVideoSources } from './mediaSources'
 
 export const wan26Model = defineModel({
   meta: {
@@ -164,7 +157,7 @@ export const wan26Model = defineModel({
   endpoints: {
     selector: async (params) => {
       const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
 
       if (mode === 'reference-to-video') {
         return '/async/wan2.6-v2v'
@@ -178,13 +171,9 @@ export const wan26Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
-      const images = resolveUploadedMediaSources(params.uploadedFilePaths).length > 0
-        ? resolveUploadedMediaSources(params.uploadedFilePaths)
-        : resolveUploadedMediaSources(params.images)
-      const videos = resolveUploadedMediaSources(params.uploadedVideoFilePaths).length > 0
-        ? resolveUploadedMediaSources(params.uploadedVideoFilePaths)
-        : resolveUploadedMediaSources(params.videos)
-      const video = params.video || videos[0]
+      const images = resolvePpioImageSources(params)
+      const videos = resolvePpioVideoSources(params)
+      const video = resolvePpioPrimaryVideoSource(params) || videos[0]
       const aspectRatio = params.ppioWan26AspectRatio || params.aspect_ratio || '16:9'
       const quality = params.ppioWan26Quality || params.quality || '720P'
       const duration = params.ppioWan26VideoDuration || params.duration || 5

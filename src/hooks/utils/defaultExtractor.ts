@@ -105,7 +105,7 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
   }
 
   // 数值范围检查
-  if (paramDef.type === 'slider' || paramDef.type === 'number') {
+  if (paramDef.type === 'number') {
     if ('min' in paramDef && paramDef.min !== undefined && value < paramDef.min) {
       return false
     }

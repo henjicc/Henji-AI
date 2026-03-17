@@ -131,7 +131,6 @@ export class NodeConverter implements INodeConverter {
       case 'dropdown':
         return 'string'
       case 'number':
-      case 'slider':
         return 'number'
       case 'switch':
         return 'boolean'

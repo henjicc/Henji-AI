@@ -44,7 +44,7 @@ export const minimaxSpeech26Model = defineModel({
     // 3. 语速
     {
       id: 'minimaxAudioSpeed',
-      type: 'slider',
+      type: 'number',
       order: 3,
       name: { key: 'auto.3', fallback: 'Speed' },
       default: 1.0,
@@ -56,7 +56,7 @@ export const minimaxSpeech26Model = defineModel({
     // 4. 音量
     {
       id: 'minimaxAudioVol',
-      type: 'slider',
+      type: 'number',
       order: 4,
       name: { key: 'auto.4', fallback: 'Volume' },
       default: 1.0,
@@ -68,7 +68,7 @@ export const minimaxSpeech26Model = defineModel({
     // 5. 音调
     {
       id: 'minimaxAudioPitch',
-      type: 'slider',
+      type: 'number',
       order: 5,
       name: { key: 'auto.5', fallback: 'Pitch' },
       default: 0,

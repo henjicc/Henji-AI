@@ -4,6 +4,7 @@ import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiOptionButton } from '@/components/ui'
 import { getI18nText } from '@/core/types'
 import {
+  formatAspectRatioDisplayLabel,
   isSmartAspectValue,
   type ChoiceOptionDescriptor,
   type ChoiceParamDescriptor,
@@ -82,8 +83,15 @@ function getEffectiveChoiceValue(
   return param.options.find((option) => option.disabled !== true)?.value
 }
 
-function getOptionLabel(option: ChoiceOptionDescriptor, language: string): string {
-  return String(getI18nText(option.label, language) || option.value)
+function getOptionLabel(
+  option: ChoiceOptionDescriptor,
+  language: string,
+  normalizeAspectRatio = false
+): string {
+  const label = String(getI18nText(option.label, language) || option.value)
+  return normalizeAspectRatio
+    ? formatAspectRatioDisplayLabel(label, option.value)
+    : label
 }
 
 function isChoiceValueMatch(left: unknown, right: unknown): boolean {
@@ -103,7 +111,8 @@ function getActiveLabel(
   param: ChoiceParamDescriptor | undefined,
   value: unknown,
   language: string,
-  smartLabel: string
+  smartLabel: string,
+  normalizeAspectRatio = false
 ): string {
   if (!param || isUnsetValue(value)) {
     return ''
@@ -115,10 +124,12 @@ function getActiveLabel(
 
   const option = param.options.find((candidate) => isChoiceValueMatch(candidate.value, value))
   if (option) {
-    return getOptionLabel(option, language)
+    return getOptionLabel(option, language, normalizeAspectRatio)
   }
 
-  return String(value)
+  return normalizeAspectRatio
+    ? formatAspectRatioDisplayLabel(String(value), value)
+    : String(value)
 }
 
 function getCurrentDerivedOption(
@@ -214,7 +225,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
     const baseOptions = aspectParam.options
       .filter((option) => !(typeof option.value === 'string' && isSmartAspectValue(option.value)))
       .map((option) => {
-        const label = getOptionLabel(option, i18n.language)
+        const label = getOptionLabel(option, i18n.language, true)
         const ratio = parseRatio(String(option.value)) ?? parseRatio(label)
         return {
           value: option.value,
@@ -278,7 +289,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
 
   const aspectDisplay = sizeDerivedSpec
     ? (selectedDerived?.ratioText || '')
-    : getActiveLabel(aspectParam, aspectValue, i18n.language, smartLabel)
+    : getActiveLabel(aspectParam, aspectValue, i18n.language, smartLabel, true)
   const resolutionDisplay = sizeDerivedSpec
     ? (selectedDerived?.tierLabel || '')
     : getActiveLabel(resolutionParam, resolutionValue, i18n.language, smartLabel)

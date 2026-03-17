@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react'
 import { getTestModeState, type TestModeState } from '@/utils/testMode'
 import { UiIconButton, UiPanel } from '@/components/ui'
 import { ChevronDown } from 'lucide-react'
+import { ApiTraceViewer } from '@/components/debug/ApiTraceViewer'
 
 const TestModeParamsDisplay: React.FC = () => {
   const [state, setState] = useState<TestModeState>(getTestModeState())
@@ -28,41 +29,13 @@ const TestModeParamsDisplay: React.FC = () => {
     }
   }, [])
 
-  // 如果测试模式未启用或没有参数，不显示
-  if (!state.enabled || !state.lastParams) {
+  // 如果测试模式未启用或没有调试记录，不显示
+  if (!state.enabled || (!state.lastTrace && !state.lastParams)) {
     return null
   }
 
-  const { lastParams } = state
-  const { model, options, timestamp } = lastParams
-
-  // 过滤出真正会传递给 API 的参数
-  const getApiParams = () => {
-    // 需要排除的参数（UI 状态参数和内部参数）
-    const excludePatterns = [
-      /^ppio/,           // ppioPixverse45VideoResolution 等
-      /^fal[A-Z]/,       // falWan25VideoDuration 等
-      /^video[A-Z]/,     // videoNegativePrompt 等
-      /^uploaded/,       // uploadedFilePaths 等
-      /^aspect_ratio$/,  // 通用参数
-      /^num_images$/,    // 通用参数
-    ]
-
-    const apiParams: Record<string, unknown> = {}
-
-    for (const [key, value] of Object.entries(options)) {
-      // 检查是否应该排除
-      const shouldExclude = excludePatterns.some(pattern => pattern.test(key))
-
-      if (!shouldExclude) {
-        apiParams[key] = value
-      }
-    }
-
-    return apiParams
-  }
-
-  const apiParams = getApiParams()
+  const modelLabel = state.lastTrace?.model ?? String(state.lastParams?.model ?? '未知模型')
+  const lastTimestamp = state.lastTrace?.timestamp ?? String(state.lastParams?.timestamp ?? '')
 
   return (
     <UiPanel
@@ -77,7 +50,7 @@ const TestModeParamsDisplay: React.FC = () => {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
           <span className="text-xs font-medium text-yellow-500">
-            {model} - API 参数
+            {modelLabel} - 真实 API 日志
           </span>
         </div>
         <UiIconButton
@@ -91,12 +64,16 @@ const TestModeParamsDisplay: React.FC = () => {
       {/* 内容区域 */}
       {!isCollapsed && (
         <div className="p-3 text-xs">
-          <pre className="text-gray-300 whitespace-pre-wrap break-all max-h-[500px] overflow-y-auto">
-            {JSON.stringify(apiParams, null, 2)}
-          </pre>
-          {timestamp && (
+          {state.lastTrace ? (
+            <ApiTraceViewer traceRecord={state.lastTrace} compact />
+          ) : (
+            <pre className="text-gray-300 whitespace-pre-wrap break-all max-h-[500px] overflow-y-auto">
+              {JSON.stringify(state.lastParams, null, 2)}
+            </pre>
+          )}
+          {lastTimestamp && (
             <div className="mt-2 pt-2 border-t border-zinc-700/50 text-gray-500 text-[10px]">
-              {new Date(timestamp).toLocaleTimeString('zh-CN')}
+              {new Date(lastTimestamp).toLocaleTimeString('zh-CN')}
             </div>
           )}
         </div>

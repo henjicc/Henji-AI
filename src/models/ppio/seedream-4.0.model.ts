@@ -13,6 +13,7 @@
 
 import { defineModel } from '@/core'
 import type { CompositePanelDef } from '@/core/types'
+import { resolvePpioImageSources } from './mediaSources'
 
 /**
  * 从 base64 或 URL 获取图片尺寸
@@ -218,6 +219,10 @@ export const seedream40Model = defineModel({
 
     request: {
         builder: async (params) => {
+            const requestImages = resolvePpioImageSources(params)
+            const previewImages = Array.isArray(params.images)
+                ? params.images.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+                : requestImages
             // 处理组图数量：当 maxImages > 1 时，在 prompt 前添加"生成X张"
             // 兼容两种参数格式：maxImages（参数ID）和 max_images（API字段名）
             const maxImages = params.maxImages || params.max_images || 1
@@ -238,12 +243,12 @@ export const seedream40Model = defineModel({
                 // 智能模式：有图按首图比例，无图按 1:1
                 if (resolution.aspectRatio === 'smart') {
                     try {
-                        const hasImages = params.images && params.images.length > 0
+                        const hasImages = previewImages.length > 0
                         let ratio = 1
                         let sourceLabel = '1:1 默认'
 
                         if (hasImages) {
-                            const imageSize = await getImageSize(params.images[0])
+                            const imageSize = await getImageSize(previewImages[0])
                             ratio = imageSize.width / imageSize.height
                             sourceLabel = `${imageSize.width}x${imageSize.height}`
                         }
@@ -329,8 +334,8 @@ export const seedream40Model = defineModel({
             }
 
             // 处理图片上传
-            if (params.images && params.images.length > 0) {
-                requestData.images = params.images
+            if (requestImages.length > 0) {
+                requestData.images = requestImages
             }
 
             // 处理组图设置（maxImages 已在函数开头声明）

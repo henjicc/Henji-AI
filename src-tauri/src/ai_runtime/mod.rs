@@ -8,5 +8,6 @@ pub mod polling;
 pub mod providers;
 pub mod request_builder_dsl;
 pub mod task_registry;
+pub mod trace;
 pub mod types;
 pub mod upload;

@@ -10,7 +10,6 @@
  * 基础组件：
  * - text: 文本输入框
  * - number: 数字输入框
- * - slider: 滑块
  * - dropdown: 下拉选择
  * - switch: 开关
  * - radio: 单选按钮组
@@ -29,7 +28,6 @@ export type ComponentType =
   | 'text'
   | 'textarea'
   | 'number'
-  | 'slider'
   | 'dropdown'
   | 'switch'
   | 'radio'

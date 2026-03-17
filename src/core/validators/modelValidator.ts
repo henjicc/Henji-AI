@@ -238,7 +238,6 @@ function validateParam(param: ParamDef, index: number): void {
     'text',
     'textarea',
     'number',
-    'slider',
     'dropdown',
     'switch',
     'radio',
@@ -276,7 +275,7 @@ function validateParam(param: ParamDef, index: number): void {
     }
   }
 
-  if (param.type === 'slider' || param.type === 'number') {
+  if (param.type === 'number') {
     if (!('min' in param) || typeof param.min !== 'number') {
       throw new ModelValidationError(`${prefix}.min is required for ${param.type}`)
     }

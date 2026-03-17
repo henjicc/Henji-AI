@@ -5,6 +5,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 const DEFAULT_WAN25_SIZE = '1280*720'
 const DEFAULT_WAN25_RESOLUTION = '720P'
@@ -24,20 +25,6 @@ const SUPPORTED_WAN25_SIZES = new Set([
   '1248*1632',
 ])
 const SUPPORTED_WAN25_RESOLUTIONS = new Set(['480P', '720P', '1080P'])
-
-function resolveUploadedImageSources(params: Record<string, unknown>): string[] {
-  const persistedImages = Array.isArray(params.uploadedFilePaths)
-    ? params.uploadedFilePaths.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    : []
-
-  if (persistedImages.length > 0) {
-    return persistedImages
-  }
-
-  return Array.isArray(params.images)
-    ? params.images.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-    : []
-}
 
 function resolveBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
@@ -182,13 +169,13 @@ export const wan25PreviewModel = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = resolveUploadedImageSources(params)
+      const images = resolvePpioImageSources(params)
       return images.length > 0 ? '/async/wan-2.5-i2v-preview' : '/async/wan-2.5-t2v-preview'
     }
   },
   request: {
     builder: (params) => {
-      const images = resolveUploadedImageSources(params)
+      const images = resolvePpioImageSources(params)
       const duration = resolveDuration(params.ppioWan25VideoDuration ?? params.duration)
       const prompt_extend = resolveBoolean(
         params.ppioWan25PromptExtend ?? params.prompt_extend,

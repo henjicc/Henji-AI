@@ -73,7 +73,7 @@ export const nanoBananaParams: ParamDef[] = [
   // 图片数量
   {
     id: 'numImages',
-    component: 'slider',
+    component: 'number',
     order: 4,
     name: { zh: '图片数量', en: 'Number of Images' },
     valueType: 'number',
@@ -115,7 +115,7 @@ export const nanoBananaParams: ParamDef[] = [
       // 引导系数
       {
         id: 'guidanceScale',
-        component: 'slider',
+        component: 'number',
         order: 2,
         name: { zh: '引导系数', en: 'Guidance Scale' },
         tooltip: { zh: '数值越大，生成结果越贴近提示词', en: 'Higher values make the result closer to the prompt' },
@@ -218,7 +218,7 @@ export const kling26ProParams: ParamDef[] = [
   // 视频时长
   {
     id: 'duration',
-    component: 'slider',
+    component: 'number',
     order: 5,
     name: { zh: '时长', en: 'Duration' },
     valueType: 'number',
@@ -280,7 +280,7 @@ export const kling26ProParams: ParamDef[] = [
   // CFG Scale（快速模式下禁用）
   {
     id: 'cfgScale',
-    component: 'slider',
+    component: 'number',
     order: 9,
     name: { zh: 'CFG 系数', en: 'CFG Scale' },
     valueType: 'number',
@@ -350,7 +350,7 @@ export const seedream40Params: ParamDef[] = [
   // 生成数量（组图）
   {
     id: 'maxImages',
-    component: 'slider',
+    component: 'number',
     order: 4,
     name: { zh: '生成数量', en: 'Number of Images' },
     tooltip: { zh: '一次生成多张图片', en: 'Generate multiple images at once' },

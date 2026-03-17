@@ -5,6 +5,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const seedance15ProModel = defineModel({
   meta: {
@@ -160,14 +161,14 @@ export const seedance15ProModel = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
 
       return images.length > 0 ? '/async/seedance-v1.5-pro-i2v' : '/async/seedance-v1.5-pro-t2v'
     }
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const resolution = params.ppioSeedance15ProResolution || params.resolution || '720p'
       const duration = params.ppioSeedance15ProDuration || params.duration || 5
       const cameraFixed = params.ppioSeedance15ProCameraFixed || params.camera_fixed || false

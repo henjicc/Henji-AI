@@ -4,6 +4,7 @@
  */
 
 import { logError, logInfo } from '../utils/errorLogger'
+import type { AiRuntimeTrace } from '@/core/types'
 export interface TestModeOptions {
   skipRequest: boolean // 不发送实际请求
   logParams: boolean   // 在控制台输出参数
@@ -17,7 +18,16 @@ export interface TestModeOptions {
 export interface TestModeState {
   enabled: boolean
   options: TestModeOptions
-  lastParams: any | null
+  lastParams: Record<string, unknown> | null
+  lastTrace: TestModeTraceRecord | null
+}
+
+export interface TestModeTraceRecord {
+  model: string
+  type?: string
+  prompt?: string
+  timestamp: string
+  trace: AiRuntimeTrace
 }
 
 const STORAGE_KEY = 'henji_test_mode'
@@ -29,12 +39,63 @@ const DEFAULT_OPTIONS: TestModeOptions = {
   enableDevTools: false
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isAiRuntimeTrace(value: unknown): value is AiRuntimeTrace {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  return typeof value.modelId === 'string' &&
+    typeof value.providerId === 'string' &&
+    typeof value.requestId === 'string' &&
+    (value.phase === 'generate' || value.phase === 'continuePolling') &&
+    typeof value.route === 'string' &&
+    typeof value.method === 'string' &&
+    'responseBody' in value
+}
+
+function normalizeTestModeState(value: unknown): TestModeState {
+  if (!isRecord(value)) {
+    return {
+      enabled: false,
+      options: DEFAULT_OPTIONS,
+      lastParams: null,
+      lastTrace: null
+    }
+  }
+
+  const rawOptions = isRecord(value.options) ? value.options : {}
+
+  return {
+    enabled: value.enabled === true,
+    options: {
+      skipRequest: rawOptions.skipRequest !== false,
+      logParams: rawOptions.logParams !== false,
+      enableDevTools: rawOptions.enableDevTools === true
+    },
+    lastParams: isRecord(value.lastParams) ? value.lastParams : null,
+    lastTrace: isRecord(value.lastTrace) && typeof value.lastTrace.model === 'string' &&
+      typeof value.lastTrace.timestamp === 'string' && isAiRuntimeTrace(value.lastTrace.trace)
+      ? {
+          model: value.lastTrace.model,
+          type: typeof value.lastTrace.type === 'string' ? value.lastTrace.type : undefined,
+          prompt: typeof value.lastTrace.prompt === 'string' ? value.lastTrace.prompt : undefined,
+          timestamp: value.lastTrace.timestamp,
+          trace: value.lastTrace.trace
+        }
+      : null
+  }
+}
+
 // 获取测试模式状态
 export function getTestModeState(): TestModeState {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
-      return JSON.parse(stored)
+      return normalizeTestModeState(JSON.parse(stored))
     }
   } catch (e) {
     logError('[TestMode] Failed to load state:', e)
@@ -43,7 +104,8 @@ export function getTestModeState(): TestModeState {
   return {
     enabled: false,
     options: DEFAULT_OPTIONS,
-    lastParams: null
+    lastParams: null,
+    lastTrace: null
   }
 }
 
@@ -210,6 +272,7 @@ export function logRequestParams(params: any): void {
     ...params,
     options: formatBase64(params.options)
   }
+  state.lastTrace = null
   saveTestModeState(state)
 
   // 输出到控制台
@@ -259,6 +322,38 @@ export function logRequestParams(params: any): void {
 
     console.groupEnd()
   }
+}
+
+export function recordApiTrace(record: TestModeTraceRecord): void {
+  const state = getTestModeState()
+  if (!state.enabled) return
+
+  state.lastTrace = record
+  saveTestModeState(state)
+
+  if (!state.options.logParams) {
+    return
+  }
+
+  console.groupCollapsed(`🧪 [测试模式] 真实 API 交互 - ${record.model}`)
+  logInfo('[Trace] 概览', {
+    model: record.model,
+    type: record.type,
+    phase: record.trace.phase,
+    provider: record.trace.providerId,
+    route: record.trace.route,
+    method: record.trace.method,
+    requestId: record.trace.requestId,
+    taskId: record.trace.taskId,
+    timestamp: record.timestamp
+  })
+  console.group('📤 最终实际请求')
+  console.log(record.trace.requestBody ?? '[无 JSON Body]')
+  console.groupEnd()
+  console.group('📥 API 实际响应')
+  console.log(record.trace.responseBody)
+  console.groupEnd()
+  console.groupEnd()
 }
 
 // 检查是否应该跳过请求

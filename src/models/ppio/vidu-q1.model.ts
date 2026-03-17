@@ -3,6 +3,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const viduQ1Model = defineModel({
   meta: {
@@ -163,7 +164,7 @@ export const viduQ1Model = defineModel({
   endpoints: {
     selector: async (params) => {
       const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video'
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
 
       switch (mode) {
         case 'text-image-to-video':
@@ -180,9 +181,7 @@ export const viduQ1Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.ppioViduQ1Mode || params.mode || 'text-image-to-video'
-      const images = Array.isArray(params.uploadedFilePaths) && params.uploadedFilePaths.length > 0
-        ? params.uploadedFilePaths.filter((item) => typeof item === 'string' && item.trim().length > 0)
-        : (Array.isArray(params.images) ? params.images : [])
+      const images = resolvePpioImageSources(params)
       const prompt = params.prompt || ''
       const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto'
       const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false)

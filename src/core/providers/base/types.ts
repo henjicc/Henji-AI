@@ -4,7 +4,7 @@
  * 定义所有 Provider 系统共享的类型接口
  */
 
-import { ModelDefinition } from '@/core/types'
+import type { AiRuntimeTrace } from '@/core/types'
 
 /**
  * 生成结果接口
@@ -20,6 +20,8 @@ export interface GenerateResult {
   status: 'completed' | 'timeout' | 'failed'
   /** 额外元数据 */
   metadata?: Record<string, any>
+  /** 真实 API 请求/响应追踪 */
+  trace?: AiRuntimeTrace
 }
 
 /**

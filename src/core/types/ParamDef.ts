@@ -201,51 +201,6 @@ export interface NumberParamDef extends BaseParamDef {
    * 占位符（可选）
    */
   placeholder?: I18nText
-}
-
-/**
- * 滑块参数
- *
- * @example
- * ```typescript
- * {
- *   id: 'duration',
- *   component: 'slider',
- *   order: 2,
- *   name: { zh: '时长', en: 'Duration' },
- *   valueType: 'number',
- *   default: 5,
- *   min: 5,
- *   max: 15,
- *   step: 5,
- *   unit: '秒',
- *   marks: [
- *     { value: 5, label: '5s' },
- *     { value: 10, label: '10s' },
- *     { value: 15, label: '15s' }
- *   ],
- *   api: 'duration'
- * }
- * ```
- */
-export interface SliderParamDef extends BaseParamDef {
-  type: 'slider'
-  valueType?: 'number'
-
-  /**
-   * 最小值
-   */
-  min: number
-
-  /**
-   * 最大值
-   */
-  max: number
-
-  /**
-   * 步长
-   */
-  step: number
 
   /**
    * 单位（可选）
@@ -681,7 +636,6 @@ export interface AspectRatioParamDef extends BaseParamDef {
 export type ParamDef =
   | TextParamDef
   | NumberParamDef
-  | SliderParamDef
   | DropdownParamDef
   | SwitchParamDef
   | RadioParamDef

@@ -5,6 +5,11 @@
  */
 
 import { defineModel } from '@/core'
+import {
+  resolvePpioImageSources,
+  resolvePpioPrimaryVideoSource,
+  resolvePpioVideoSources,
+} from './mediaSources'
 
 export const klingO1Model = defineModel({
   meta: {
@@ -217,7 +222,7 @@ export const klingO1Model = defineModel({
   endpoints: {
     selector: async (params) => {
       const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video'
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
 
       switch (mode) {
         case 'text-image-to-video':
@@ -240,9 +245,9 @@ export const klingO1Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.ppioKlingO1Mode || params.mode || 'text-image-to-video'
-      const images = params.images || []
-      const videos = params.videos || []
-      const video = params.video || videos[0]
+      const images = resolvePpioImageSources(params)
+      const videos = resolvePpioVideoSources(params)
+      const video = resolvePpioPrimaryVideoSource(params) || videos[0]
       const duration = params.ppioKlingO1VideoDuration || params.duration || 5
       const aspectRatio = params.ppioKlingO1AspectRatio || params.aspect_ratio || '16:9'
       const keepAudio = params.ppioKlingO1KeepAudio !== undefined ? params.ppioKlingO1KeepAudio : (params.keep_original_sound !== undefined ? params.keep_original_sound : true)

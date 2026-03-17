@@ -3,6 +3,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const seedanceV1Model = defineModel({
   meta: {
@@ -104,7 +105,7 @@ export const seedanceV1Model = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const variant = params.ppioSeedanceV1Variant || params.variant || 'lite'
 
       if (images.length > 0) {
@@ -116,7 +117,7 @@ export const seedanceV1Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const resolution = params.ppioSeedanceV1Resolution || params.resolution || '720p'
       const aspect = params.ppioSeedanceV1AspectRatio || params.aspect_ratio || '16:9'
       const duration = params.ppioSeedanceV1VideoDuration || params.duration || 5

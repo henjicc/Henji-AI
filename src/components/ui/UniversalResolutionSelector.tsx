@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 import PanelTrigger from './PanelTrigger'
 import { ResolutionConfig } from '@/types/schema'
+import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
 import { logInfo, logWarning } from '@/utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
@@ -227,6 +228,13 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
     }
 
     const selected = options.find((item) => item.value === value)
+    if (config.type === 'aspect_ratio') {
+      return formatAspectRatioDisplayLabel(
+        selected?.label || String(value ?? ''),
+        value
+      )
+    }
+
     return selected?.label || String(value ?? '')
   })()
 
@@ -320,7 +328,11 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     }`}
                   >
                     {config.visualize && config.type !== 'resolution' && renderVisualization(option.value)}
-                    <span className="font-medium">{option.label}</span>
+                    <span className="font-medium">
+                      {config.type === 'aspect_ratio'
+                        ? formatAspectRatioDisplayLabel(option.label, option.value)
+                        : option.label}
+                    </span>
                   </UiOptionButton>
                 ))}
               </div>

@@ -1,5 +1,7 @@
+use crate::ai_runtime::trace::AiRuntimeTrace;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -37,6 +39,8 @@ pub struct AiGenerateResponseDto {
     pub file_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace: Option<AiRuntimeTrace>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,6 +90,14 @@ pub struct EndpointRuleDsl {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EndpointNamedRouteDsl {
+    pub path: String,
+    #[serde(default)]
+    pub method: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EndpointConfigDsl {
     pub default_route: String,
     #[serde(default)]
@@ -94,6 +106,8 @@ pub struct EndpointConfigDsl {
     pub selector_js: Option<String>,
     #[serde(default)]
     pub method: Option<String>,
+    #[serde(default)]
+    pub routes: HashMap<String, EndpointNamedRouteDsl>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

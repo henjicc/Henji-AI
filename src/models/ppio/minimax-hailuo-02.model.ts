@@ -3,6 +3,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const minimaxHailuo02Model = defineModel({
   meta: {
@@ -76,7 +77,7 @@ export const minimaxHailuo02Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       // Inline normalizeHailuo logic
       const durationInput = params.ppioHailuo02Duration || params.duration
       const duration = durationInput === 10 ? 10 : 6

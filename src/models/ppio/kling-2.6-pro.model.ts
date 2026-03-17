@@ -5,6 +5,11 @@
  */
 
 import { defineModel } from '@/core'
+import {
+  resolvePpioImageSources,
+  resolvePpioPrimaryVideoSource,
+  resolvePpioVideoSources,
+} from './mediaSources'
 
 export const kling26ProModel = defineModel({
   meta: {
@@ -173,7 +178,7 @@ export const kling26ProModel = defineModel({
     selector: async (params: Record<string, any>) => {
       // 使用原始参数 ID（ppioKling26Mode），不是 API 字段名（mode）
       const mode = params.ppioKling26Mode || 'text-image-to-video'
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
 
       if (mode === 'motion-control') {
         return 'motion-control'
@@ -192,9 +197,9 @@ export const kling26ProModel = defineModel({
   request: {
     builder: (params) => {
       const mode = (params.ppioKling26Mode || params.mode || 'text-image-to-video') as string
-      const images = (params.images || []) as string[]
-      const videos = (params.videos || []) as string[]
-      const video = params.video || videos[0]
+      const images = resolvePpioImageSources(params)
+      const videos = resolvePpioVideoSources(params)
+      const video = resolvePpioPrimaryVideoSource(params) || videos[0]
       const prompt = ((params.prompt || '') as string).slice(0, 2500)
 
       if (mode === 'motion-control') {

@@ -24,6 +24,7 @@ export interface RatioResolutionPanelSpec {
 
 const SMART_VALUES = new Set(['smart', 'auto', 'adaptive', '智能'])
 const RATIO_PATTERN = /^(\d+)\s*:\s*(\d+)$/
+const RATIO_TEXT_PATTERN = /(\d+\s*:\s*\d+)/
 const RESOLUTION_PATTERN = /^(\d{3,4}[pP]|[1248][kK]|\d+\s*[x*]\s*\d+)$/
 const ASPECT_HINT_PATTERN = /(aspect|ratio|宽高比|比例)/i
 const RESOLUTION_HINT_PATTERN = /(resolution|size|分辨率|尺寸)/i
@@ -124,6 +125,33 @@ function parseRatioFromRaw(raw: unknown): number | null {
   }
 
   return parseRatioText(raw)
+}
+
+function extractAspectRatioText(raw: unknown): string | null {
+  if (typeof raw !== 'string') {
+    return null
+  }
+
+  const normalized = raw.trim().toLowerCase()
+  const alias = RATIO_ALIASES[normalized]
+  if (alias) {
+    return alias
+  }
+
+  const match = raw.trim().match(RATIO_TEXT_PATTERN)
+  if (!match) {
+    return null
+  }
+
+  const ratioText = match[1].replace(/\s+/g, '')
+  return parseRatioText(ratioText) !== null ? ratioText : null
+}
+
+export function formatAspectRatioDisplayLabel(
+  label: string,
+  value?: unknown
+): string {
+  return extractAspectRatioText(value) ?? extractAspectRatioText(label) ?? label
 }
 
 function hasRatioLikeOptions(param: ChoiceParamDescriptor): boolean {

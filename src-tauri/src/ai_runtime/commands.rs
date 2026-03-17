@@ -5,6 +5,7 @@ use crate::ai_runtime::model_manifest::{get_manifest_store, reload_manifest_stor
 use crate::ai_runtime::providers::{self, ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::request_builder_dsl;
 use crate::ai_runtime::task_registry;
+use crate::ai_runtime::trace;
 use crate::ai_runtime::types::{
     AiContinuePollingRequestDto, AiGenerateRequestDto, AiGenerateResponseDto, ProviderKeyStatusDto,
 };
@@ -107,6 +108,16 @@ pub async fn ai_generate(
     let provider_result = providers::execute_generate(&provider_id, execution_input)
         .await
         .map_err(|e| e.to_string())?;
+    let trace_payload = trace::build_generate_trace(
+        &request.model_id,
+        &provider_id,
+        &request_id,
+        &built_request.route,
+        &built_request.method,
+        &preprocessed_body,
+        &provider_result.metadata,
+    );
+    trace::log_trace(&trace_payload);
 
     let file_path = save_media_paths(&app, &provider_result.url).await?;
 
@@ -117,6 +128,7 @@ pub async fn ai_generate(
         url: provider_result.url,
         file_path,
         metadata: Some(provider_result.metadata),
+        trace: Some(trace_payload),
     })
 }
 
@@ -167,6 +179,15 @@ pub async fn ai_continue_polling(
     let provider_result = providers::execute_continue_polling(&provider_id, execution_input)
         .await
         .map_err(|e| e.to_string())?;
+    let trace_payload = trace::build_continue_polling_trace(
+        &request.model_id,
+        &provider_id,
+        &request_id,
+        &built_request.route,
+        request.task_id.trim(),
+        &provider_result.metadata,
+    );
+    trace::log_trace(&trace_payload);
 
     let file_path = save_media_paths(&app, &provider_result.url).await?;
 
@@ -177,6 +198,7 @@ pub async fn ai_continue_polling(
         url: provider_result.url,
         file_path,
         metadata: Some(provider_result.metadata),
+        trace: Some(trace_payload),
     })
 }
 

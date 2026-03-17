@@ -79,7 +79,7 @@ export function validateParams(
       continue
     }
 
-    // 3. 检查范围（slider/number）
+    // 3. 检查范围（number）
     const rangeError = validateRange(paramDef, value)
     if (rangeError) {
       errors.push(rangeError)

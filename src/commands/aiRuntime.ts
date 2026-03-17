@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import type { AiRuntimeTrace } from '@/core/types'
 
 export interface ProviderKeyStatusDto {
   providerId: string
@@ -22,6 +23,7 @@ export interface AiGenerateResponseDto {
   url: string
   filePath?: string
   metadata?: Record<string, unknown>
+  trace?: AiRuntimeTrace
 }
 
 function ensureDesktopRuntime(): void {

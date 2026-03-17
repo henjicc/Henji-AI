@@ -16,7 +16,6 @@ export type ComponentType =
   | 'preset-resolution'
   | 'text-input'
   | 'number-input'
-  | 'slider'
   | 'dropdown'
   | 'switch'
   | 'radio'

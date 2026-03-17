@@ -5,6 +5,7 @@
  */
 
 import { defineModel } from '@/core'
+import { resolvePpioImageSources } from './mediaSources'
 
 export const pixverseV45Model = defineModel({
   meta: {
@@ -96,13 +97,13 @@ export const pixverseV45Model = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       return images.length > 0 ? '/async/pixverse-v4.5-i2v' : '/async/pixverse-v4.5-t2v'
     }
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolvePpioImageSources(params)
       const resInput = (params.ppioPixverse45VideoResolution || params.resolution || '').toLowerCase()
       const allowed = ['360p', '540p', '720p', '1080p']
       const resolution = allowed.includes(resInput) ? resInput : '540p'

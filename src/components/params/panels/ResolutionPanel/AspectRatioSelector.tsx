@@ -4,6 +4,7 @@
 
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import type { AspectRatioOption } from './types'
 import { getI18nText } from '@/core/types'
 import { UiOptionButton } from '@/components/ui'
@@ -59,7 +60,10 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
           .filter(option => !(smartMatchEnabled && option.value === 'smart'))
           .map((option) => {
             const iconSize = option.icon || getIconSize(option.value)
-            const label = getI18nText(option.label, i18n.language)
+            const label = formatAspectRatioDisplayLabel(
+              String(getI18nText(option.label, i18n.language) || option.value),
+              option.value
+            )
 
             return (
               <UiOptionButton
