@@ -4,7 +4,7 @@
  * 派欧云即舞视频 1.5 Pro - 支持文生视频、图生视频、首尾帧
  */
 
-import { defineModel } from '@/core'
+import { defineModel, modelScopedText, sharedFieldText, sharedOptionText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 export const seedance15ProModel = defineModel({
@@ -29,7 +29,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: 'adaptive',
       options: [
         { value: '16:9', label: '16:9' },
@@ -38,7 +38,7 @@ export const seedance15ProModel = defineModel({
         { value: '3:4', label: '3:4' },
         { value: '9:16', label: '9:16' },
         { value: '21:9', label: '21:9' },
-        { value: 'adaptive', label: { key: 'auto.2', fallback: 'Adaptive' } }
+        { value: 'adaptive', label: sharedOptionText('adaptive') }
       ],
       apiField: 'aspect_ratio'
     },
@@ -48,7 +48,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProResolution',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.3', fallback: 'Quality' },
+      name: sharedFieldText('quality'),
       default: '720p',
       options: [
         { value: '480p', label: '480P' },
@@ -62,7 +62,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProDuration',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.4', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 4, label: '4s' },
@@ -83,7 +83,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProGenerateAudio',
       type: 'switch',
       order: 4,
-      name: { key: 'auto.5', fallback: 'Generate Audio' },
+      name: sharedFieldText('generateAudio'),
       default: true,
       apiField: 'generate_audio'
     },
@@ -93,7 +93,7 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProCameraFixed',
       type: 'switch',
       order: 5,
-      name: { key: 'auto.6', fallback: 'Fixed Camera' },
+      name: sharedFieldText('fixedCamera'),
       default: false,
       apiField: 'camera_fixed'
     },
@@ -103,12 +103,12 @@ export const seedance15ProModel = defineModel({
       id: 'ppioSeedance15ProServiceTier',
       type: 'dropdown',
       order: 6,
-      name: { key: 'auto.7', fallback: 'Service Tier' },
-      tooltip: { key: 'auto.8', fallback: 'Online mode has lower RPM and concurrency quotas, suitable for time-sensitive scenarios. Offline mode has higher TPD quotas at 50% price, suitable for delay-insensitive scenarios.' },
+      name: sharedFieldText('serviceTier'),
+      tooltip: modelScopedText('params.ppioSeedance15ProServiceTier.tooltip', 'Online mode has lower RPM and concurrency quotas, suitable for time-sensitive scenarios. Offline mode has higher TPD quotas at 50% price, suitable for delay-insensitive scenarios.'),
       default: 'default',
       options: [
-        { value: 'default', label: { key: 'auto.9', fallback: 'Online Mode' } },
-        { value: 'flex', label: { key: 'auto.10', fallback: 'Offline Mode' } }
+        { value: 'default', label: sharedOptionText('onlineMode') },
+        { value: 'flex', label: sharedOptionText('offlineMode') }
       ],
       apiField: 'service_tier'
     }
@@ -151,7 +151,7 @@ export const seedance15ProModel = defineModel({
         if (imageCount > 0) {
           // Add smart option at the beginning
           return [
-            { value: 'adaptive', label: { key: 'auto.11', fallback: 'Adaptive' } },
+            { value: 'adaptive', label: sharedOptionText('adaptive') },
             ...options
           ]
         }

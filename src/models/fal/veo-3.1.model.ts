@@ -2,7 +2,7 @@
  * Veo 3.1 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 
 export const veo31Model = defineModel({
   meta: {
@@ -45,19 +45,19 @@ export const veo31Model = defineModel({
       id: 'falVeo31Mode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
-        { value: 'start-end-frame', label: { key: 'auto.3', fallback: 'Start/End Frame' } },
-        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } }
+        { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
+        { value: 'start-end-frame', label: sharedModeText('startEndFrame', 'Start/End Frame') },
+        { value: 'reference-to-video', label: sharedModeText('referenceToVideo') }
       ]
     },
     {
       id: 'falVeo31VideoDuration',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.5', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 8,
       options: [
         { value: 4, label: '4s' },
@@ -69,11 +69,14 @@ export const veo31Model = defineModel({
       id: 'falVeo31AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.6', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
+      visible: {
+        condition: 'falVeo31Mode !== "reference-to-video"'
+      },
       options: [
-        { value: 'auto', label: { key: 'auto.7', fallback: 'Auto' } },
-        { value: 'smart', label: { key: 'auto.8', fallback: 'Smart' } },
+        { value: 'auto', label: sharedOptionText('auto') },
+        { value: 'smart', label: sharedOptionText('smart') },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
@@ -83,7 +86,7 @@ export const veo31Model = defineModel({
       id: 'falVeo31Resolution',
       order: 4,
       type: 'dropdown',
-      name: { key: 'auto.9', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '720p',
       options: [
         { value: '720p', label: '720p' },
@@ -94,28 +97,28 @@ export const veo31Model = defineModel({
       id: 'falVeo31GenerateAudio',
       order: 5,
       type: 'switch',
-      name: { key: 'auto.10', fallback: 'Generate Audio' },
+      name: sharedFieldText('generateAudio'),
       default: false
     },
     {
       id: 'falVeo31AutoFix',
       order: 6,
       type: 'switch',
-      name: { key: 'auto.11', fallback: 'Auto Fix' },
+      name: sharedFieldText('autoFix'),
       default: false
     },
     {
       id: 'falVeo31FastMode',
       order: 7,
       type: 'switch',
-      name: { key: 'auto.12', fallback: 'Fast Mode' },
+      name: sharedFieldText('fastMode'),
       default: false
     },
     {
       id: 'falVeo31EnhancePrompt',
       order: 8,
       type: 'switch',
-      name: { key: 'auto.13', fallback: 'Enhance Prompt' },
+      name: sharedFieldText('enhancePrompt'),
       default: false
     }
   ],

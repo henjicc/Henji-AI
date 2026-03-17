@@ -4,7 +4,7 @@
  * 万象 2.5 预览版本，支持文生视频和图生视频
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 const DEFAULT_WAN25_SIZE = '1280*720'
@@ -77,7 +77,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25VideoDuration',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -90,7 +90,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25Size',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Size' },
+      name: sharedFieldText('size'),
       default: DEFAULT_WAN25_SIZE,
       options: [
         { value: '832*480', label: '832×480' },
@@ -114,7 +114,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25Resolution',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: DEFAULT_WAN25_RESOLUTION,
       options: [
         { value: '480P', label: '480P' },
@@ -128,7 +128,7 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25PromptExtend',
       type: 'switch',
       order: 4,
-      name: { key: 'auto.4', fallback: 'Prompt Extend' },
+      name: sharedFieldText('promptRewrite'),
       default: true,
       apiField: 'prompt_extend'
     },
@@ -137,18 +137,9 @@ export const wan25PreviewModel = defineModel({
       id: 'ppioWan25Audio',
       type: 'switch',
       order: 5,
-      name: { key: 'auto.5', fallback: 'Generate Audio' },
+      name: sharedFieldText('generateAudio'),
       default: true,
       apiField: 'audio'
-    },
-    // 6. 负面提示词
-    {
-      id: 'ppioWan25NegativePrompt',
-      type: 'textarea',
-      order: 6,
-      name: { key: 'auto.6', fallback: 'Negative Prompt' },
-      default: '',
-      apiField: 'negative_prompt'
     }
   ],
   linkages: [
@@ -183,12 +174,6 @@ export const wan25PreviewModel = defineModel({
       )
       const audio = resolveBoolean(params.ppioWan25Audio ?? params.audio, true)
       const prompt = typeof params.prompt === 'string' ? params.prompt : ''
-      const negativePrompt =
-        typeof params.ppioWan25NegativePrompt === 'string'
-          ? params.ppioWan25NegativePrompt
-          : typeof params.negative_prompt === 'string'
-            ? params.negative_prompt
-            : ''
       const audioUrl = params.audio_url
       const resolution = resolveSupportedValue(
         params.ppioWan25Resolution,
@@ -208,7 +193,6 @@ export const wan25PreviewModel = defineModel({
         return {
           input: {
             prompt,
-            negative_prompt: negativePrompt,
             img_url: images[0],
             ...(audioUrl ? { audio_url: audioUrl } : {})
           },
@@ -225,7 +209,6 @@ export const wan25PreviewModel = defineModel({
         return {
           input: {
             prompt,
-            negative_prompt: negativePrompt,
             ...(audioUrl ? { audio_url: audioUrl } : {})
           },
           parameters: {

@@ -2,7 +2,7 @@
  * KIE Sora 2 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -38,21 +38,21 @@ export const kieSora2Model = defineModel({
       id: 'kieSora2Mode',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'standard',
       options: [
-        { value: 'standard', label: { key: 'auto.2', fallback: 'Standard' } },
-        { value: 'professional', label: { key: 'auto.3', fallback: 'Professional' } }
+        { value: 'standard', label: sharedOptionText('standard') },
+        { value: 'professional', label: sharedOptionText('professional') }
       ]
     },
     {
       id: 'kieSora2AspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.4', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
-        { value: 'smart', label: { key: 'auto.5', fallback: 'Smart' } },
+        { value: 'smart', label: sharedOptionText('smart') },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' }
       ]
@@ -61,7 +61,7 @@ export const kieSora2Model = defineModel({
       id: 'kieSora2Duration',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.6', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: '10',
       options: [
         { value: '10', label: '10s' },
@@ -72,11 +72,14 @@ export const kieSora2Model = defineModel({
       id: 'kieSora2Quality',
       type: 'dropdown',
       order: 4,
-      name: { key: 'auto.7', fallback: 'Quality' },
+      name: sharedFieldText('quality'),
       default: 'standard',
+      visible: {
+        condition: 'kieSora2Mode === "professional"'
+      },
       options: [
-        { value: 'standard', label: { key: 'auto.8', fallback: 'Standard' } },
-        { value: 'high', label: { key: 'auto.9', fallback: 'High' } }
+        { value: 'standard', label: sharedOptionText('standard') },
+        { value: 'high', label: sharedOptionText('high') }
       ]
     }
   ],

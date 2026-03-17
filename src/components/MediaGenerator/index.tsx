@@ -284,6 +284,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           currentModel={currentModel}
           selectedModel={uiState.selectedModel}
           uploadedImages={uiState.uploadedImages}
+          uploadedVideos={uiState.uploadedVideos}
           values={modelState.params}
           onChange={modelState.setParam}
         />

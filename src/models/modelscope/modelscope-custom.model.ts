@@ -2,7 +2,7 @@
  * ModelScope 自定义模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
 
 const MODELSCOPE_CUSTOM_STORAGE_KEY = 'modelscope_custom_models'
@@ -46,7 +46,7 @@ export const modelscopeCustomModel = defineModel({
     type: 'image',
         i18nScope: 'models.defs.modelscope-custom',
     name: { key: 'meta.name', fallback: 'ModelScope Custom' },
-    description: { key: 'auto.2', fallback: 'ModelScope custom model by ID' },
+    description: { key: 'meta.description', fallback: 'ModelScope custom model by ID' },
     tags: ['text-to-image', 'image-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,
@@ -60,7 +60,7 @@ export const modelscopeCustomModel = defineModel({
       id: 'modelscopeCustomModel',
       type: 'composite',
       order: 1,
-      name: { key: 'auto.3', fallback: 'Model' },
+      name: sharedFieldText('model'),
       default: '',
       valueType: 'string',
       panel: 'modelscope-custom-model'
@@ -69,10 +69,10 @@ export const modelscopeCustomModel = defineModel({
       id: 'modelscopeImageSize',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.4', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: [
-        { value: 'smart', label: { key: 'auto.5', fallback: 'Smart' } },
+        { value: 'smart', label: sharedOptionText('smart') },
         ...MODELSCOPE_ASPECT_RATIO_OPTIONS
       ]
     },
@@ -80,7 +80,7 @@ export const modelscopeCustomModel = defineModel({
       id: 'resolutionBaseSize',
       type: 'number',
       order: 3,
-      name: { key: 'auto.6', fallback: 'Base Size' },
+      name: sharedFieldText('baseSize'),
       default: 1024,
       min: 512,
       max: 2048,
@@ -90,7 +90,7 @@ export const modelscopeCustomModel = defineModel({
       id: 'modelscopeSteps',
       type: 'number',
       order: 4,
-      name: { key: 'auto.7', fallback: 'Steps' },
+      name: sharedFieldText('steps'),
       default: 30,
       min: 1,
       max: 100,
@@ -100,7 +100,7 @@ export const modelscopeCustomModel = defineModel({
       id: 'modelscopeGuidance',
       type: 'number',
       order: 5,
-      name: { key: 'auto.8', fallback: 'Guidance' },
+      name: sharedFieldText('guidance'),
       default: 7.5,
       min: 1.5,
       max: 20,

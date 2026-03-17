@@ -2,7 +2,7 @@
  * KIE Seedream 4.5 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -29,10 +29,10 @@ export const kieSeedream45Model = defineModel({
       id: 'kieSeedreamAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: [
-        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
+        { value: 'smart', label: sharedOptionText('smart') },
         { value: '1:1', label: '1:1' },
         { value: '4:3', label: '4:3' },
         { value: '3:4', label: '3:4' },
@@ -44,7 +44,7 @@ export const kieSeedream45Model = defineModel({
       id: 'kieSeedreamQuality',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.3', fallback: 'Quality' },
+      name: sharedFieldText('quality'),
       default: '2K',
       options: [
         { value: '2K', label: '2K' },

@@ -2,7 +2,7 @@
  * KIE Nano Banana Pro 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -22,7 +22,7 @@ export const kieNanoBananaProModel = defineModel({
       id: 'kieNanoBananaAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },
@@ -30,14 +30,14 @@ export const kieNanoBananaProModel = defineModel({
         { value: '3:4', label: '3:4' },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
-        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } }
+        { value: 'smart', label: sharedOptionText('smart') }
       ]
     },
     {
       id: 'kieNanoBananaResolution',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.3', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '2K',
       options: [
         { value: '1K', label: '1K' },
@@ -49,7 +49,7 @@ export const kieNanoBananaProModel = defineModel({
       id: 'kieNanoBananaOutputFormat',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.4', fallback: 'Output Format' },
+      name: sharedFieldText('outputFormat'),
       default: 'png',
       options: [
         { value: 'png', label: 'PNG' },

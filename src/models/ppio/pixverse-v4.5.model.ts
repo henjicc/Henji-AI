@@ -4,7 +4,7 @@
  * PixVerse V4.5 视频生成模型，支持文生视频和图生视频
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 export const pixverseV45Model = defineModel({
@@ -27,7 +27,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45VideoAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -43,7 +43,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45VideoResolution',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '540p',
       options: [
         { value: '360p', label: '360P' },
@@ -58,7 +58,7 @@ export const pixverseV45Model = defineModel({
       id: 'ppioPixverse45FastMode',
       type: 'switch',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Fast Mode' },
+      name: sharedFieldText('fastMode'),
       default: false,
       apiField: 'fast_mode'
     }

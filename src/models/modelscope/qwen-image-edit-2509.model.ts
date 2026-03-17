@@ -2,7 +2,7 @@
  * ModelScope Qwen-Image-Edit-2509 模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
 
 export const modelscopeQwenImageEdit2509Model = defineModel({
@@ -49,10 +49,10 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
       id: 'modelscopeImageSize',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: 'smart',
       options: [
-        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
+        { value: 'smart', label: sharedOptionText('smart') },
         ...MODELSCOPE_ASPECT_RATIO_OPTIONS
       ]
     },
@@ -60,7 +60,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
       id: 'modelscopeSteps',
       type: 'number',
       order: 2,
-      name: { key: 'auto.3', fallback: 'Steps' },
+      name: sharedFieldText('steps'),
       default: 30,
       min: 1,
       max: 100,

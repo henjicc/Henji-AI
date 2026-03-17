@@ -8,7 +8,9 @@
 import React, { useMemo } from 'react'
 import { registry } from '@/core/ModelRegistry'
 import { getI18nText, type ParamDef } from '@/core/types'
+import { LinkageEngine } from '@/core/linkage'
 import { ParamRenderer } from '@/components/params/ParamRenderer'
+import { isParamDisabled, isParamVisible } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import AspectResolutionPanel from './AspectResolutionPanel'
 
@@ -16,6 +18,7 @@ interface ParameterPanelProps {
   currentModel: any
   selectedModel: string
   uploadedImages: string[]
+  uploadedVideos: string[]
   values: Record<string, any>
   onChange: (id: string, value: any) => void
 }
@@ -34,6 +37,12 @@ function isDurationParam(param: ParamDef): boolean {
   return DURATION_PARAM_HINT.test(searchText)
 }
 
+function isPrimaryModeParam(param: ParamDef): boolean {
+  const zhName = getI18nText(param.name, 'zh').trim().toLowerCase()
+  const enName = getI18nText(param.name, 'en').trim().toLowerCase()
+  return zhName === '模式' || enName === 'mode'
+}
+
 /**
  * 参数配置面板
  * 根据当前选择的模型从 ModelRegistry 获取参数定义并自动渲染
@@ -44,6 +53,7 @@ function isDurationParam(param: ParamDef): boolean {
 const ParameterPanel: React.FC<ParameterPanelProps> = ({
   selectedModel,
   uploadedImages,
+  uploadedVideos,
   values,
   onChange
 }) => {
@@ -69,27 +79,68 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return null
   }
 
+  const linkageEngine = useMemo(() => {
+    if (!modelDef.linkages || modelDef.linkages.length === 0) {
+      return null
+    }
+    return new LinkageEngine(modelDef.linkages)
+  }, [modelDef.linkages])
+
+  const runtimeValues = useMemo(
+    () => ({
+      ...values,
+      uploadedImages,
+      uploadedVideos,
+    }),
+    [uploadedImages, uploadedVideos, values]
+  )
+
+  const visibleParams = useMemo(
+    () => params.filter((param) => isParamVisible(param, runtimeValues, linkageEngine)),
+    [linkageEngine, params, runtimeValues]
+  )
+
   const specialPanelSpec = useMemo(() => {
     if (modelDef.meta.provider === 'modelscope') {
       return null
     }
-    return analyzeRatioResolutionParams(params, uploadedImages)
-  }, [modelDef.meta.provider, params, uploadedImages])
+    return analyzeRatioResolutionParams(visibleParams, uploadedImages)
+  }, [modelDef.meta.provider, visibleParams, uploadedImages])
 
   const consumedParamIds = new Set(specialPanelSpec?.consumedParamIds || [])
-  const renderParams = params.filter((param) => !consumedParamIds.has(param.id))
+  const renderParams = visibleParams.filter((param) => !consumedParamIds.has(param.id))
+  const modeParams = useMemo(
+    () => renderParams.filter(isPrimaryModeParam),
+    [renderParams]
+  )
+  const nonModeParams = useMemo(
+    () => renderParams.filter((param) => !isPrimaryModeParam(param)),
+    [renderParams]
+  )
   const orderedRenderParams = useMemo(() => {
     if (!specialPanelSpec) {
-      return renderParams
+      return nonModeParams
     }
-    const durationParams = renderParams.filter(isDurationParam)
-    const normalParams = renderParams.filter((param) => !isDurationParam(param))
+    const durationParams = nonModeParams.filter(isDurationParam)
+    const normalParams = nonModeParams.filter((param) => !isDurationParam(param))
     return [...durationParams, ...normalParams]
-  }, [renderParams, specialPanelSpec])
+  }, [nonModeParams, specialPanelSpec])
 
-  // 渲染参数（分辨率/比例特殊面板始终置顶）
+  // 渲染参数：主模式参数始终跟在模型选择器后，分辨率/比例面板保持其余参数前置
   return (
     <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+      {modeParams.map((param) => (
+        <ParamRenderer
+          key={param.id}
+          param={param}
+          value={values[param.id]}
+          onChange={(value) => onChange(param.id, value)}
+          allValues={runtimeValues}
+          uploadedImages={uploadedImages}
+          uploadedVideos={uploadedVideos}
+          disabled={isParamDisabled(param, runtimeValues, linkageEngine)}
+        />
+      ))}
       {specialPanelSpec && (
         <AspectResolutionPanel
           aspectParam={specialPanelSpec.aspectParam}
@@ -105,8 +156,10 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           param={param}
           value={values[param.id]}
           onChange={(value) => onChange(param.id, value)}
-          allValues={values}
+          allValues={runtimeValues}
           uploadedImages={uploadedImages}
+          uploadedVideos={uploadedVideos}
+          disabled={isParamDisabled(param, runtimeValues, linkageEngine)}
         />
       ))}
     </div>

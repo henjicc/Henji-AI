@@ -4,7 +4,7 @@
  * 派欧云可灵视频 2.6 Pro - 支持文/图生视频、动作控制
  */
 
-import { defineModel } from '@/core'
+import { defineModel, modelScopedText, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 import {
   resolvePpioImageSources,
   resolvePpioPrimaryVideoSource,
@@ -71,11 +71,11 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26Mode',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
-        { value: 'motion-control', label: { key: 'auto.3', fallback: 'Motion Control' } }
+        { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
+        { value: 'motion-control', label: sharedModeText('motionControl') }
       ],
       apiField: 'mode'
     },
@@ -85,7 +85,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26VideoDuration',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.4', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -99,7 +99,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26AspectRatio',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.5', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -114,7 +114,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26CfgScale',
       type: 'number',
       order: 4,
-      name: { key: 'auto.6', fallback: 'CFG Scale' },
+      name: sharedFieldText('cfgScale'),
       default: 0.5,
       min: 0,
       max: 1,
@@ -127,7 +127,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26Sound',
       type: 'switch',
       order: 5,
-      name: { key: 'auto.7', fallback: 'Generate Audio' },
+      name: sharedFieldText('generateAudio'),
       default: true,
       apiField: 'sound'
     },
@@ -137,12 +137,15 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26CharacterOrientation',
       type: 'dropdown',
       order: 6,
-      name: { key: 'auto.8', fallback: 'Character Orientation' },
-      tooltip: { key: 'auto.9', fallback: 'Default is character orientation consistent with video. You can control other information through prompts. Maximum 30s generation duration.\n\nIf you choose character orientation consistent with image, the character actions/expressions will be generated according to the motion video, and the orientation will be consistent with the character orientation in the image. Maximum 5s generation duration.' },
+      name: sharedFieldText('characterOrientation'),
+      tooltip: modelScopedText(
+        'params.ppioKling26CharacterOrientation.tooltip',
+        'Default is character orientation consistent with video. You can control other information through prompts. Maximum 30s generation duration.\n\nIf you choose character orientation consistent with image, the character actions/expressions will be generated according to the motion video, and the orientation will be consistent with the character orientation in the image. Maximum 5s generation duration.'
+      ),
       default: 'video',
       options: [
-        { value: 'video', label: { key: 'auto.10', fallback: 'Consistent with Video' } },
-        { value: 'image', label: { key: 'auto.11', fallback: 'Consistent with Image' } }
+        { value: 'video', label: sharedOptionText('consistentWithVideo') },
+        { value: 'image', label: sharedOptionText('consistentWithImage') }
       ],
       apiField: 'character_orientation'
     },
@@ -152,7 +155,7 @@ export const kling26ProModel = defineModel({
       id: 'ppioKling26KeepOriginalSound',
       type: 'switch',
       order: 7,
-      name: { key: 'auto.12', fallback: 'Keep Original Sound' },
+      name: sharedFieldText('keepOriginalSound'),
       default: true,
       apiField: 'keep_original_sound'
     }

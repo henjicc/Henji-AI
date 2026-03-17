@@ -2,7 +2,7 @@
  * Seedance V1 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 export const seedanceV1Model = defineModel({
@@ -25,7 +25,7 @@ export const seedanceV1Model = defineModel({
       id: 'ppioSeedanceV1Variant',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Variant' },
+      name: sharedFieldText('variant'),
       default: 'lite',
       options: [
         { value: 'lite', label: 'Lite' },
@@ -38,7 +38,7 @@ export const seedanceV1Model = defineModel({
       id: 'ppioSeedanceV1VideoDuration',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -51,7 +51,7 @@ export const seedanceV1Model = defineModel({
       id: 'ppioSeedanceV1AspectRatio',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
         { value: 'smart', label: '智能' },
@@ -70,7 +70,7 @@ export const seedanceV1Model = defineModel({
       id: 'ppioSeedanceV1Resolution',
       type: 'dropdown',
       order: 4,
-      name: { key: 'auto.4', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '720p',
       options: [
         { value: '480p', label: '480P' },
@@ -84,7 +84,7 @@ export const seedanceV1Model = defineModel({
       id: 'ppioSeedanceV1CameraFixed',
       type: 'switch',
       order: 5,
-      name: { key: 'auto.5', fallback: 'Camera Fixed' },
+      name: sharedFieldText('cameraFixed'),
       default: false,
       apiField: 'camera_fixed'
     }

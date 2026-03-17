@@ -26,6 +26,9 @@ export * from './linkage'
 // 模型加载器
 export * from './loaders'
 
+// 国际化辅助
+export * from './i18n'
+
 // 请求构建系统
 export * from './request'
 

@@ -2,7 +2,7 @@
  * Seedance 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 
 export const seedanceModel = defineModel({
   meta: {
@@ -60,19 +60,19 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1Mode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-to-video',
       options: [
-        { value: 'text-to-video', label: { key: 'auto.2', fallback: 'Text to Video' } },
-        { value: 'image-to-video', label: { key: 'auto.3', fallback: 'Image to Video' } },
-        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } }
+        { value: 'text-to-video', label: sharedModeText('textToVideo') },
+        { value: 'image-to-video', label: sharedModeText('imageToVideo') },
+        { value: 'reference-to-video', label: sharedModeText('referenceToVideo') }
       ]
     },
     {
       id: 'falSeedanceV1Version',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.5', fallback: 'Version' },
+      name: sharedFieldText('version'),
       default: 'lite',
       options: [
         { value: 'lite', label: 'Lite' },
@@ -83,11 +83,11 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.6', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
-        { value: 'smart', label: { key: 'auto.7', fallback: 'Smart' } },
-        { value: 'auto', label: { key: 'auto.8', fallback: 'Auto' } },
+        { value: 'smart', label: sharedOptionText('smart') },
+        { value: 'auto', label: sharedOptionText('auto') },
         { value: '21:9', label: '21:9' },
         { value: '16:9', label: '16:9' },
         { value: '4:3', label: '4:3' },
@@ -101,7 +101,7 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1Resolution',
       order: 4,
       type: 'dropdown',
-      name: { key: 'auto.9', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '720p',
       options: [
         { value: '480p', label: '480p' },
@@ -113,7 +113,7 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1VideoDuration',
       order: 5,
       type: 'dropdown',
-      name: { key: 'auto.10', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 2, label: '2s' },
@@ -133,15 +133,19 @@ export const seedanceModel = defineModel({
       id: 'falSeedanceV1CameraFixed',
       order: 6,
       type: 'switch',
-      name: { key: 'auto.11', fallback: 'Camera Fixed' },
+      name: sharedFieldText('cameraFixed'),
       default: false
     },
     {
       id: 'falSeedanceV1FastMode',
       order: 7,
       type: 'switch',
-      name: { key: 'auto.12', fallback: 'Fast Mode' },
-      default: true
+      name: sharedFieldText('fastMode'),
+      default: true,
+      visible: {
+        condition:
+          'falSeedanceV1Version === "pro" && falSeedanceV1Mode !== "reference-to-video"'
+      }
     }
   ],
   linkages: [],

@@ -4,7 +4,7 @@
  * 可灵 2.5 Turbo 版本，支持文生视频和图生视频
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 export const kling25TurboModel = defineModel({
@@ -27,7 +27,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboDuration',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5秒' },
@@ -40,7 +40,7 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboAspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9 横屏' },
@@ -54,33 +54,12 @@ export const kling25TurboModel = defineModel({
       id: 'ppioKling25TurboCfgScale',
       type: 'number',
       order: 3,
-      name: { key: 'auto.3', fallback: 'CFG Scale' },
+      name: sharedFieldText('cfgScale'),
       default: 0.5,
       min: 0,
       max: 1,
       step: 0.1,
       apiField: 'cfg_scale'
-    },
-    // 4. 模式
-    {
-      id: 'ppioKling25TurboMode',
-      type: 'dropdown',
-      order: 4,
-      name: { key: 'auto.4', fallback: 'Generation Mode' },
-      default: 'pro',
-      options: [
-        { value: 'pro', label: 'Pro 模式' }
-      ],
-      apiField: 'mode'
-    },
-    // 5. 负面提示词
-    {
-      id: 'ppioKling25TurboNegativePrompt',
-      type: 'textarea',
-      order: 5,
-      name: { key: 'auto.5', fallback: 'Negative Prompt' },
-      default: '',
-      apiField: 'negative_prompt'
     }
   ],
   linkages: [],
@@ -95,21 +74,13 @@ export const kling25TurboModel = defineModel({
       const images = resolvePpioImageSources(params)
       const duration = params.ppioKling25TurboDuration || params.duration || 5
       const cfgScale = params.ppioKling25TurboCfgScale ?? params.cfg_scale ?? 0.5
-      const mode = params.ppioKling25TurboMode || params.mode || 'pro'
       const prompt = (params.prompt || '').slice(0, 2500)
-      const negativePrompt = params.ppioKling25TurboNegativePrompt
-        ? String(params.ppioKling25TurboNegativePrompt).slice(0, 2500)
-        : (params.negative_prompt ? String(params.negative_prompt).slice(0, 2500) : undefined)
 
       const requestData: any = {
         prompt,
         duration: String(duration),
         cfg_scale: cfgScale,
-        mode
-      }
-
-      if (negativePrompt) {
-        requestData.negative_prompt = negativePrompt
+        mode: 'pro'
       }
 
       if (images.length > 0) {

@@ -2,7 +2,7 @@
  * Kling Video V2.6 Pro 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 
 export const klingVideoV26ProModel = defineModel({
   meta: {
@@ -57,19 +57,22 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProMode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
-        { value: 'motion-control', label: { key: 'auto.3', fallback: 'Motion Control' } }
+        { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
+        { value: 'motion-control', label: sharedModeText('motionControl') }
       ]
     },
     {
       id: 'falKlingV26ProResolution',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.4', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '720p',
+      visible: {
+        condition: 'falKlingV26ProMode === "motion-control"'
+      },
       options: [
         { value: '720p', label: '720p' },
         { value: '1080p', label: '1080p' }
@@ -79,26 +82,35 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProCharacterOrientation',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.5', fallback: 'Character Orientation' },
+      name: sharedFieldText('characterOrientation'),
       default: 'video',
+      visible: {
+        condition: 'falKlingV26ProMode === "motion-control"'
+      },
       options: [
-        { value: 'video', label: { key: 'auto.6', fallback: 'Match Video' } },
-        { value: 'image', label: { key: 'auto.7', fallback: 'Match Image' } }
+        { value: 'video', label: sharedOptionText('matchVideo') },
+        { value: 'image', label: sharedOptionText('matchImage') }
       ]
     },
     {
       id: 'falKlingV26ProKeepOriginalSound',
       order: 4,
       type: 'switch',
-      name: { key: 'auto.8', fallback: 'Keep Original Sound' },
-      default: true
+      name: sharedFieldText('keepOriginalSound'),
+      default: true,
+      visible: {
+        condition: 'falKlingV26ProMode === "motion-control"'
+      }
     },
     {
       id: 'falKlingV26ProVideoDuration',
       order: 5,
       type: 'dropdown',
-      name: { key: 'auto.9', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
+      visible: {
+        condition: 'falKlingV26ProMode !== "motion-control"'
+      },
       options: [
         { value: 5, label: '5s' },
         { value: 10, label: '10s' }
@@ -108,8 +120,13 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProAspectRatio',
       order: 6,
       type: 'dropdown',
-      name: { key: 'auto.10', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
+      visible: {
+        condition: (params: Record<string, unknown>) =>
+          params.falKlingV26ProMode !== 'motion-control' &&
+          ((params.uploadedImages as unknown[] | undefined)?.length ?? 0) === 0
+      },
       options: [
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
@@ -120,18 +137,26 @@ export const klingVideoV26ProModel = defineModel({
       id: 'falKlingV26ProCfgScale',
       order: 7,
       type: 'number',
-      name: { key: 'auto.11', fallback: 'CFG Scale' },
+      name: sharedFieldText('cfgScale'),
       default: 0.5,
       min: 0,
       max: 1,
-      step: 0.1
+      step: 0.1,
+      visible: {
+        condition: (params: Record<string, unknown>) =>
+          params.falKlingV26ProMode !== 'motion-control' &&
+          ((params.uploadedImages as unknown[] | undefined)?.length ?? 0) === 0
+      }
     },
     {
       id: 'falKlingV26ProGenerateAudio',
       order: 8,
       type: 'switch',
-      name: { key: 'auto.12', fallback: 'Generate Audio' },
-      default: false
+      name: sharedFieldText('generateAudio'),
+      default: false,
+      visible: {
+        condition: 'falKlingV26ProMode !== "motion-control"'
+      }
     }
   ],
   linkages: [],

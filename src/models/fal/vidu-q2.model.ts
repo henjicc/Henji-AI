@@ -2,7 +2,7 @@
  * Vidu Q2 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 
 export const viduQ2Model = defineModel({
   meta: {
@@ -50,20 +50,20 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2Mode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-to-video',
       options: [
-        { value: 'text-to-video', label: { key: 'auto.2', fallback: 'Text to Video' } },
-        { value: 'image-to-video', label: { key: 'auto.3', fallback: 'Image to Video' } },
-        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } },
-        { value: 'video-extension', label: { key: 'auto.5', fallback: 'Video Extension' } }
+        { value: 'text-to-video', label: sharedModeText('textToVideo') },
+        { value: 'image-to-video', label: sharedModeText('imageToVideo') },
+        { value: 'reference-to-video', label: sharedModeText('referenceToVideo') },
+        { value: 'video-extension', label: sharedModeText('videoExtension') }
       ]
     },
     {
       id: 'falViduQ2VideoDuration',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.6', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 4,
       options: [
         { value: 4, label: '4s' },
@@ -75,10 +75,13 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.7', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
+      visible: {
+        condition: 'viduQ2Mode === "text-to-video" || viduQ2Mode === "reference-to-video"'
+      },
       options: [
-        { value: 'smart', label: { key: 'auto.8', fallback: 'Smart' } },
+        { value: 'smart', label: sharedOptionText('smart') },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
@@ -88,8 +91,11 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2Resolution',
       order: 4,
       type: 'dropdown',
-      name: { key: 'auto.9', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '720p',
+      visible: {
+        condition: 'viduQ2Mode === "image-to-video" || viduQ2Mode === "video-extension"'
+      },
       options: [
         { value: '720p', label: '720p' },
         { value: '1080p', label: '1080p' }
@@ -99,28 +105,34 @@ export const viduQ2Model = defineModel({
       id: 'viduQ2MovementAmplitude',
       order: 5,
       type: 'dropdown',
-      name: { key: 'auto.10', fallback: 'Movement Amplitude' },
+      name: sharedFieldText('movementAmplitude'),
       default: 'auto',
+      visible: {
+        condition: 'viduQ2Mode !== "video-extension"'
+      },
       options: [
-        { value: 'auto', label: { key: 'auto.11', fallback: 'Auto' } },
-        { value: 'low', label: { key: 'auto.12', fallback: 'Low' } },
-        { value: 'medium', label: { key: 'auto.13', fallback: 'Medium' } },
-        { value: 'high', label: { key: 'auto.14', fallback: 'High' } }
+        { value: 'auto', label: sharedOptionText('auto') },
+        { value: 'low', label: sharedOptionText('low') },
+        { value: 'medium', label: sharedOptionText('medium') },
+        { value: 'high', label: sharedOptionText('high') }
       ]
     },
     {
       id: 'viduQ2Bgm',
       order: 6,
       type: 'switch',
-      name: { key: 'auto.15', fallback: 'Background Music' },
+      name: sharedFieldText('backgroundMusic'),
       default: false
     },
     {
       id: 'viduQ2FastMode',
       order: 7,
       type: 'switch',
-      name: { key: 'auto.16', fallback: 'Turbo' },
-      default: true
+      name: sharedFieldText('turboMode'),
+      default: true,
+      visible: {
+        condition: 'viduQ2Mode === "image-to-video"'
+      }
     }
   ],
   linkages: [],

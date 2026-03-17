@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[allow(dead_code)]
 pub enum GenerateStatus {
     Completed,
     Failed,
@@ -62,6 +63,7 @@ pub struct ModelManifest {
 pub struct ModelManifestItem {
     pub model_id: String,
     pub provider_id: String,
+    #[allow(dead_code)]
     #[serde(default)]
     pub model_type: Option<String>,
     #[serde(default)]
@@ -84,6 +86,7 @@ pub struct PollingConfig {
 pub struct EndpointRuleDsl {
     pub when: Value,
     pub route: String,
+    #[allow(dead_code)]
     #[serde(default)]
     pub method: Option<String>,
 }
@@ -92,6 +95,7 @@ pub struct EndpointRuleDsl {
 #[serde(rename_all = "camelCase")]
 pub struct EndpointNamedRouteDsl {
     pub path: String,
+    #[allow(dead_code)]
     #[serde(default)]
     pub method: Option<String>,
 }

@@ -59,12 +59,3 @@ pub fn get_provider_key_status(provider_ids: &[String]) -> AiResult<Vec<Provider
         })
         .collect()
 }
-
-pub fn default_provider_key_status() -> AiResult<Vec<ProviderKeyStatusDto>> {
-    let provider_ids = KNOWN_PROVIDER_IDS
-        .iter()
-        .map(|id| id.to_string())
-        .collect::<Vec<String>>();
-
-    get_provider_key_status(&provider_ids)
-}

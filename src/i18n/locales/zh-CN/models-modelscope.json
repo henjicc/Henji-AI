@@ -4,90 +4,42 @@
       "meta": {
         "name": "FLUX.1-Krea-dev",
         "description": "魔搭 FLUX.1-Krea-dev 文生图模型"
-      },
-      "auto": {
-        "1": "宽高比",
-        "2": "基数",
-        "3": "采样步数",
-        "4": "提示词引导系数",
-        "5": "负面提示词"
       }
     },
     "MusePublic/majicMIX_realistic": {
       "meta": {
         "name": "majicMIX Realistic",
         "description": "魔搭 majicMIX 写实风格模型"
-      },
-      "auto": {
-        "1": "宽高比",
-        "2": "基数",
-        "3": "采样步数",
-        "4": "提示词引导系数",
-        "5": "负面提示词"
       }
     },
     "modelscope-custom": {
-      "auto": {
-        "1": "魔搭自定义模型",
-        "2": "使用自定义模型ID的魔搭推理模型",
-        "3": "模型",
-        "4": "宽高比",
-        "5": "智能",
-        "6": "基数",
-        "7": "采样步数",
-        "8": "提示词引导系数"
-      },
       "meta": {
-        "name": "ModelScope Custom"
+        "name": "ModelScope Custom",
+        "description": "使用自定义模型ID的魔搭推理模型"
       }
     },
     "Qwen/Qwen-Image-Edit-2509": {
       "meta": {
         "name": "Qwen-Image-Edit-2509",
         "description": "魔搭 Qwen 图片编辑模型（需上传图片）"
-      },
-      "auto": {
-        "1": "宽高比",
-        "2": "智能",
-        "3": "采样步数"
       }
     },
     "Qwen/Qwen-Image": {
       "meta": {
         "name": "Qwen-Image",
         "description": "魔搭 Qwen-Image 文生图模型"
-      },
-      "auto": {
-        "1": "宽高比",
-        "2": "基数",
-        "3": "采样步数",
-        "4": "提示词引导系数",
-        "5": "负面提示词"
       }
     },
     "MusePublic/14_ckpt_SD_XL": {
       "meta": {
         "name": "SD XL 1.4",
         "description": "魔搭 SD XL 文生图模型"
-      },
-      "auto": {
-        "1": "宽高比",
-        "2": "基数",
-        "3": "采样步数",
-        "4": "提示词引导系数",
-        "5": "负面提示词"
       }
     },
     "Tongyi-MAI/Z-Image-Turbo": {
       "meta": {
         "name": "Z-Image-Turbo",
         "description": "魔搭 Z-Image-Turbo 文生图模型"
-      },
-      "auto": {
-        "1": "宽高比",
-        "2": "基数",
-        "3": "采样步数",
-        "4": "负面提示词"
       }
     }
   }

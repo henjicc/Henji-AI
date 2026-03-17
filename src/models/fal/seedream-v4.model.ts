@@ -2,7 +2,7 @@
  * Seedream V4 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 import type { CompositePanelDef } from '@/core/types'
 import {
   calculateSeedreamSizeFromRatio,
@@ -72,7 +72,7 @@ export const seedreamV4Model = defineModel({
       order: 1,
       type: 'composite',
       valueType: 'object',
-      name: { key: 'auto.1', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       panel: 'resolution',
       default: {
         mode: 'hybrid',
@@ -85,7 +85,7 @@ export const seedreamV4Model = defineModel({
         mode: 'hybrid',
         aspectRatios: {
           options: [
-            { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
+            { value: 'smart', label: sharedOptionText('smart') },
             { value: '21:9', label: '21:9' },
             { value: '16:9', label: '16:9' },
             { value: '3:2', label: '3:2' },
@@ -100,8 +100,8 @@ export const seedreamV4Model = defineModel({
         },
         qualityTiers: {
           options: [
-            { value: '2K', label: { key: 'auto.3', fallback: '2K' } },
-            { value: '4K', label: { key: 'auto.4', fallback: '4K' } },
+            { value: '2K', label: sharedOptionText('2k') },
+            { value: '4K', label: sharedOptionText('4k') },
           ],
           default: '2K',
         },
@@ -120,7 +120,7 @@ export const seedreamV4Model = defineModel({
       id: 'falSeedream40NumImages',
       order: 2,
       type: 'number',
-      name: { key: 'auto.5', fallback: 'Number of Images' },
+      name: sharedFieldText('numberOfImages'),
       default: 1,
       min: 1,
       max: 6,

@@ -2,7 +2,7 @@
  * Vidu Q1 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 export const viduQ1Model = defineModel({
@@ -47,7 +47,7 @@ export const viduQ1Model = defineModel({
       id: 'ppioViduQ1Mode',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-image-to-video',
       options: [
         { value: 'text-image-to-video', label: '文/图生视频' },
@@ -61,7 +61,7 @@ export const viduQ1Model = defineModel({
       id: 'ppioViduQ1AspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -75,7 +75,7 @@ export const viduQ1Model = defineModel({
       id: 'ppioViduQ1Style',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Style' },
+      name: sharedFieldText('style'),
       default: 'general',
       options: [
         { value: 'general', label: '通用' },
@@ -88,7 +88,7 @@ export const viduQ1Model = defineModel({
       id: 'ppioViduQ1MovementAmplitude',
       type: 'dropdown',
       order: 4,
-      name: { key: 'auto.4', fallback: 'Movement Amplitude' },
+      name: sharedFieldText('movementAmplitude'),
       default: 'auto',
       options: [
         { value: 'auto', label: '自动' },
@@ -103,7 +103,7 @@ export const viduQ1Model = defineModel({
       id: 'ppioViduQ1Bgm',
       type: 'switch',
       order: 5,
-      name: { key: 'auto.5', fallback: 'Generate Audio' },
+      name: sharedFieldText('generateAudio'),
       default: false,
       apiField: 'bgm'
     }

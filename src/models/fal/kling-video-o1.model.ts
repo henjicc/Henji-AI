@@ -2,7 +2,7 @@
  * Kling Video O1 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 
 export const klingVideoO1Model = defineModel({
   meta: {
@@ -46,20 +46,20 @@ export const klingVideoO1Model = defineModel({
       id: 'falKlingVideoO1Mode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'image-to-video',
       options: [
-        { value: 'image-to-video', label: { key: 'auto.2', fallback: 'Image to Video' } },
-        { value: 'reference-to-video', label: { key: 'auto.3', fallback: 'Reference to Video' } },
-        { value: 'video-to-video-edit', label: { key: 'auto.4', fallback: 'Video Edit' } },
-        { value: 'video-to-video-reference', label: { key: 'auto.5', fallback: 'Video Reference' } }
+        { value: 'image-to-video', label: sharedModeText('imageToVideo') },
+        { value: 'reference-to-video', label: sharedModeText('referenceToVideo') },
+        { value: 'video-to-video-edit', label: sharedModeText('videoEdit') },
+        { value: 'video-to-video-reference', label: sharedModeText('videoReference') }
       ]
     },
     {
       id: 'falKlingVideoO1VideoDuration',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.6', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -70,10 +70,14 @@ export const klingVideoO1Model = defineModel({
       id: 'falKlingVideoO1AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.7', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
+      visible: {
+        condition:
+          'falKlingVideoO1Mode === "reference-to-video" || falKlingVideoO1Mode === "video-to-video-reference"'
+      },
       options: [
-        { value: 'auto', label: { key: 'auto.8', fallback: 'Auto' } },
+        { value: 'auto', label: sharedOptionText('auto') },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
         { value: '1:1', label: '1:1' }
@@ -83,8 +87,12 @@ export const klingVideoO1Model = defineModel({
       id: 'falKlingVideoO1KeepAudio',
       order: 4,
       type: 'switch',
-      name: { key: 'auto.9', fallback: 'Keep Audio' },
-      default: false
+      name: sharedFieldText('keepAudio'),
+      default: false,
+      visible: {
+        condition:
+          'falKlingVideoO1Mode === "video-to-video-edit" || falKlingVideoO1Mode === "video-to-video-reference"'
+      }
     }
   ],
   linkages: [],

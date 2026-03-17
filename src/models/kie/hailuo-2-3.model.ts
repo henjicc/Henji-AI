@@ -2,7 +2,7 @@
  * KIE Hailuo 2.3 图生视频模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -51,18 +51,18 @@ export const kieHailuo23Model = defineModel({
       id: 'kieHailuo23Mode',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'standard',
       options: [
-        { value: 'standard', label: { key: 'auto.2', fallback: 'Standard' } },
-        { value: 'pro', label: { key: 'auto.3', fallback: 'Pro' } }
+        { value: 'standard', label: sharedOptionText('standard') },
+        { value: 'pro', label: sharedOptionText('pro') }
       ]
     },
     {
       id: 'kieHailuo23Duration',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.4', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -73,7 +73,7 @@ export const kieHailuo23Model = defineModel({
       id: 'kieHailuo23Resolution',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.5', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '768P',
       options: [
         { value: '768P', label: '768P' },

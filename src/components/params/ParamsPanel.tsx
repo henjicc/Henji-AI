@@ -5,8 +5,11 @@
  */
 
 import React, { forwardRef, useImperativeHandle, useMemo, useEffect } from 'react'
+import { registry } from '@/core/ModelRegistry'
+import { LinkageEngine } from '@/core/linkage'
 import { useModelParams } from '@/hooks/useModelParams'
 import { ParamRenderer } from './ParamRenderer'
+import { isParamDisabled, isParamVisible } from './paramVisibility'
 import './ParamsPanel.css'
 
 interface ParamsPanelProps {
@@ -58,6 +61,19 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
       })
     }, [schema])
 
+    const modelDef = useMemo(() => registry.getModel(modelId), [modelId])
+    const linkageEngine = useMemo(() => {
+      if (!modelDef?.linkages?.length) {
+        return null
+      }
+      return new LinkageEngine(modelDef.linkages)
+    }, [modelDef])
+
+    const visibleSchema = useMemo(
+      () => sortedSchema.filter((param) => isParamVisible(param, params, linkageEngine)),
+      [linkageEngine, params, sortedSchema]
+    )
+
     // 加载状态
     if (!schema || schema.length === 0) {
       return (
@@ -69,13 +85,14 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
 
     return (
       <div className={`params-panel ${className || ''}`}>
-        {sortedSchema.map(paramDef => (
+        {visibleSchema.map(paramDef => (
           <ParamRenderer
             key={paramDef.id}
             param={paramDef}
             value={params[paramDef.id]}
             onChange={(value) => setParam(paramDef.id, value)}
             allValues={params}
+            disabled={isParamDisabled(paramDef, params, linkageEngine)}
           />
         ))}
       </div>

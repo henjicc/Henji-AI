@@ -2,7 +2,7 @@
  * Hailuo 02 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 
 export const hailuo02Model = defineModel({
   meta: {
@@ -30,7 +30,7 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02Version',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Version' },
+      name: sharedFieldText('version'),
       default: 'standard',
       options: [
         { value: 'standard', label: 'Standard' },
@@ -41,7 +41,7 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02Duration',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.2', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: '6',
       options: [
         { value: '6', label: '6s' },
@@ -52,7 +52,7 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02Resolution',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.3', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '768P',
       options: [
         { value: '512P', label: '512P' },
@@ -64,14 +64,14 @@ export const hailuo02Model = defineModel({
       id: 'falHailuo02FastMode',
       order: 4,
       type: 'switch',
-      name: { key: 'auto.4', fallback: 'Fast Mode' },
+      name: sharedFieldText('fastMode'),
       default: false
     },
     {
       id: 'falHailuo02PromptOptimizer',
       order: 5,
       type: 'switch',
-      name: { key: 'auto.5', fallback: 'Prompt Optimizer' },
+      name: sharedFieldText('promptOptimizer'),
       default: true
     }
   ],

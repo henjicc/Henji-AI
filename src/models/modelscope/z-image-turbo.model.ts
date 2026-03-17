@@ -2,7 +2,7 @@
  * ModelScope Z-Image-Turbo 模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
 
 export const modelscopeZImageTurboModel = defineModel({
@@ -29,7 +29,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'modelscopeImageSize',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: MODELSCOPE_ASPECT_RATIO_OPTIONS
     },
@@ -37,7 +37,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'resolutionBaseSize',
       type: 'number',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Base Size' },
+      name: sharedFieldText('baseSize'),
       default: 1440,
       min: 512,
       max: 2048,
@@ -47,7 +47,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'modelscopeSteps',
       type: 'number',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Steps' },
+      name: sharedFieldText('steps'),
       default: 10,
       min: 1,
       max: 100,
@@ -57,7 +57,7 @@ export const modelscopeZImageTurboModel = defineModel({
       id: 'modelscopeNegativePrompt',
       type: 'text',
       order: 4,
-      name: { key: 'auto.4', fallback: 'Negative Prompt' },
+      name: sharedFieldText('negativePrompt'),
       default: ''
     }
   ],

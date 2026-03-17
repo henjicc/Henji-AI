@@ -2,7 +2,7 @@
  * KIE Grok Imagine 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -31,7 +31,7 @@ export const kieGrokImagineVideoModel = defineModel({
       id: 'kieGrokImagineVideoAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '2:3',
       options: [
         { value: '2:3', label: '2:3' },
@@ -45,11 +45,11 @@ export const kieGrokImagineVideoModel = defineModel({
       id: 'kieGrokImagineVideoMode',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'normal',
       options: [
-        { value: 'normal', label: { key: 'auto.3', fallback: 'Normal' } },
-        { value: 'spicy', label: { key: 'auto.4', fallback: 'Spicy' } }
+        { value: 'normal', label: sharedOptionText('normal') },
+        { value: 'spicy', label: sharedOptionText('spicy') }
       ]
     }
   ],

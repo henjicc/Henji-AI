@@ -4,7 +4,7 @@
  * Minimax 海螺 2.3 视频生成模型，支持文生视频和图生视频
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { resolvePpioImageSources } from './mediaSources'
 
 export const minimaxHailuo23Model = defineModel({
@@ -27,7 +27,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23VideoDuration',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 6,
       options: [
         { value: 6, label: '6s' },
@@ -40,7 +40,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23VideoResolution',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '768P',
       options: [
         { value: '768P', label: '768P' },
@@ -53,7 +53,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23FastMode',
       type: 'switch',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Fast Mode' },
+      name: sharedFieldText('fastMode'),
       default: false,
       apiField: 'fast_mode'
     },
@@ -62,7 +62,7 @@ export const minimaxHailuo23Model = defineModel({
       id: 'ppioHailuo23PromptExtend',
       type: 'switch',
       order: 4,
-      name: { key: 'auto.4', fallback: 'Prompt Extension' },
+      name: sharedFieldText('promptExtension'),
       default: true,
       apiField: 'enable_prompt_expansion'
     }

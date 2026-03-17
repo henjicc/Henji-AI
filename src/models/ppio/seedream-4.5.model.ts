@@ -10,7 +10,7 @@
  * - 4K模式：目标像素 4096×4096
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText, sharedText } from '@/core'
 import type { CompositePanelDef } from '@/core/types'
 import { resolvePpioImageSources } from './mediaSources'
 
@@ -59,7 +59,7 @@ export const seedream45Model = defineModel({
             id: 'resolution',
             type: 'composite',
             order: 1,
-            name: { key: 'auto.1', fallback: 'Resolution' },
+            name: sharedFieldText('resolution'),
             panel: 'resolution',
             default: {
                 mode: 'aspect-quality',
@@ -70,7 +70,7 @@ export const seedream45Model = defineModel({
                 mode: 'aspect-quality',
                 aspectRatios: {
                     options: [
-                        { value: 'smart', label: { key: 'auto.2', fallback: 'Smart' } },
+                        { value: 'smart', label: sharedOptionText('smart') },
                         { value: '21:9', label: '21:9' },
                         { value: '16:9', label: '16:9' },
                         { value: '3:2', label: '3:2' },
@@ -85,8 +85,8 @@ export const seedream45Model = defineModel({
                 },
                 qualityTiers: {
                     options: [
-                        { value: '2K', label: { key: 'auto.3', fallback: 'HD 2K' } },
-                        { value: '4K', label: { key: 'auto.4', fallback: 'UHD 4K' } }
+                        { value: '2K', label: sharedOptionText('hd2k') },
+                        { value: '4K', label: sharedOptionText('uhd4k') }
                     ],
                     default: '2K'
                 },
@@ -107,8 +107,8 @@ export const seedream45Model = defineModel({
             id: 'maxImages',
             type: 'number',
             order: 2,
-            name: { key: 'auto.5', fallback: 'Quantity' },
-            tooltip: { key: 'auto.6', fallback: 'Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.' },
+            name: sharedFieldText('quantity'),
+            tooltip: sharedText('tips.numberOfImagesLimit'),
             default: 1,
             min: 1,
             max: 15,
@@ -120,8 +120,8 @@ export const seedream45Model = defineModel({
             id: 'optimizePrompt',
             type: 'switch',
             order: 3,
-            name: { key: 'auto.7', fallback: 'Prompt Optimization' },
-            tooltip: { key: 'auto.8', fallback: 'When enabled, the model will automatically optimize prompts for better generation results. Currently only supports standard mode.' },
+            name: sharedFieldText('promptOptimization'),
+            tooltip: sharedText('tips.promptOptimization'),
             default: false
         }
     ],

@@ -11,6 +11,7 @@ import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
 import { panelRegistry } from '@/core/panels/PanelRegistry'
 import { getI18nText } from '@/core/types/I18nText'
 import type { CompositePanelConfig } from '@/core/types/CompositePanel'
+import { isParamDisabled, isParamVisible } from './paramVisibility'
 
 // 导入真实的新系统组件
 import { TextInput } from './base/TextInput'
@@ -118,15 +119,17 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
 }) => {
   const { i18n } = useTranslation()
 
-  // 检查是否应该显示（基于 linkages 中的 Hide 效果）
-  const isVisible = useMemo(() => {
-    // 这里可以添加基于 linkages 的可见性逻辑
-    // 暂时默认显示
-    return true
-  }, [param, allValues])
+  const visible = useMemo(
+    () => isParamVisible(param, allValues, null),
+    [allValues, param]
+  )
+  const disabled = useMemo(
+    () => externalDisabled || isParamDisabled(param, allValues, null),
+    [allValues, externalDisabled, param]
+  )
 
   // 如果不可见，返回 null
-  if (!isVisible) {
+  if (!visible) {
     return null
   }
 
@@ -215,7 +218,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       param={param}
       value={value}
       onChange={onChange}
-      disabled={externalDisabled}
+      disabled={disabled}
     />
   )
 

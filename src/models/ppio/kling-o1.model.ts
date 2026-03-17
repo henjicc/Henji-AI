@@ -4,7 +4,7 @@
  * 派欧云可灵视频 O1 - 支持文/图生视频、首尾帧、参考生视频、视频编辑
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText } from '@/core'
 import {
   resolvePpioImageSources,
   resolvePpioPrimaryVideoSource,
@@ -86,13 +86,13 @@ export const klingO1Model = defineModel({
       type: 'dropdown',
       order: 1,
       valueType: 'string',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
-        { value: 'start-end-frame', label: { key: 'auto.3', fallback: 'Start-End Frame' } },
-        { value: 'reference-to-video', label: { key: 'auto.4', fallback: 'Reference to Video' } },
-        { value: 'video-edit', label: { key: 'auto.5', fallback: 'Video Edit' } }
+        { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
+        { value: 'start-end-frame', label: sharedModeText('startEndFrame') },
+        { value: 'reference-to-video', label: sharedModeText('referenceToVideo') },
+        { value: 'video-edit', label: sharedModeText('videoEdit') }
       ]
     },
 
@@ -102,8 +102,11 @@ export const klingO1Model = defineModel({
       type: 'dropdown',
       order: 2,
       valueType: 'number',
-      name: { key: 'auto.6', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
+      visible: {
+        condition: 'ppioKlingO1Mode !== "video-edit"'
+      },
       options: [
         { value: 5, label: '5s' },
         { value: 10, label: '10s' }
@@ -116,8 +119,11 @@ export const klingO1Model = defineModel({
       type: 'dropdown',
       order: 3,
       valueType: 'string',
-      name: { key: 'auto.7', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
+      visible: {
+        condition: 'ppioKlingO1Mode !== "video-edit"'
+      },
       options: [
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
@@ -131,8 +137,12 @@ export const klingO1Model = defineModel({
       type: 'switch',
       order: 4,
       valueType: 'boolean',
-      name: { key: 'auto.8', fallback: 'Keep Audio' },
-      default: true
+      name: sharedFieldText('keepAudio'),
+      default: true,
+      visible: {
+        condition:
+          'ppioKlingO1Mode === "reference-to-video" || ppioKlingO1Mode === "video-edit"'
+      }
     },
 
     // 5. Fast mode parameter
@@ -141,8 +151,11 @@ export const klingO1Model = defineModel({
       type: 'switch',
       order: 5,
       valueType: 'boolean',
-      name: { key: 'auto.9', fallback: 'Fast Mode' },
-      default: false
+      name: sharedFieldText('fastMode'),
+      default: false,
+      visible: {
+        condition: 'ppioKlingO1Mode === "video-edit"'
+      }
     }
   ],
   linkages: [

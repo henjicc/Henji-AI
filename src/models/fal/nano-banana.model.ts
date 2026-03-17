@@ -2,7 +2,7 @@
  * Nano Banana 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 export const nanoBananaModel = defineModel({
   meta: {
@@ -20,7 +20,7 @@ export const nanoBananaModel = defineModel({
       id: 'falNanoBananaNumImages',
       order: 1,
       type: 'number',
-      name: { key: 'auto.1', fallback: 'Number of Images' },
+      name: sharedFieldText('numberOfImages'),
       default: 1,
       min: 1,
       max: 4
@@ -30,10 +30,10 @@ export const nanoBananaModel = defineModel({
       id: 'falNanoBananaAspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: [
-        { value: 'smart', label: { key: 'auto.3', fallback: 'Smart' } },
+        { value: 'smart', label: sharedOptionText('smart') },
         { value: '1:1', label: '1:1' },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },

@@ -2,7 +2,7 @@
  * Sora 2 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 export const sora2Model = defineModel({
   meta: {
@@ -23,18 +23,18 @@ export const sora2Model = defineModel({
       id: 'falSora2Mode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'standard',
       options: [
-        { value: 'standard', label: { key: 'auto.2', fallback: 'Standard' } },
-        { value: 'pro', label: { key: 'auto.3', fallback: 'Pro' } }
+        { value: 'standard', label: sharedOptionText('standard') },
+        { value: 'pro', label: sharedOptionText('pro') }
       ]
     },
     {
       id: 'falSora2Duration',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.4', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 4,
       options: [
         { value: 4, label: '4s' },
@@ -46,11 +46,11 @@ export const sora2Model = defineModel({
       id: 'falSora2AspectRatio',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.5', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
-        { value: 'smart', label: { key: 'auto.6', fallback: 'Smart' } },
-        { value: 'auto', label: { key: 'auto.7', fallback: 'Auto' } },
+        { value: 'smart', label: sharedOptionText('smart') },
+        { value: 'auto', label: sharedOptionText('auto') },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' }
       ]
@@ -59,7 +59,7 @@ export const sora2Model = defineModel({
       id: 'falSora2Resolution',
       order: 4,
       type: 'dropdown',
-      name: { key: 'auto.8', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '720p',
       options: [
         { value: '720p', label: '720p' },

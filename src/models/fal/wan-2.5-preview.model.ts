@@ -2,7 +2,7 @@
  * Wan 2.5 Preview 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 
 export const wan25PreviewModel = defineModel({
   meta: {
@@ -24,7 +24,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25VideoDuration',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -35,7 +35,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25AspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -47,7 +47,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25Resolution',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.3', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '1080p',
       options: [
         { value: '480p', label: '480p' },
@@ -59,7 +59,7 @@ export const wan25PreviewModel = defineModel({
       id: 'falWan25PromptExpansion',
       order: 4,
       type: 'switch',
-      name: { key: 'auto.4', fallback: 'Prompt Expansion' },
+      name: sharedFieldText('promptExpansion'),
       default: true
     }
   ],

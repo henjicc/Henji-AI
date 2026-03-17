@@ -2,7 +2,7 @@
  * LTX 2 视频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 
 export const ltx2Model = defineModel({
   meta: {
@@ -46,20 +46,23 @@ export const ltx2Model = defineModel({
       id: 'falLtx2Mode',
       order: 1,
       type: 'dropdown',
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-to-video',
       options: [
-        { value: 'text-to-video', label: { key: 'auto.2', fallback: 'Text to Video' } },
-        { value: 'image-to-video', label: { key: 'auto.3', fallback: 'Image to Video' } },
-        { value: 'retake-video', label: { key: 'auto.4', fallback: 'Retake Video' } }
+        { value: 'text-to-video', label: sharedModeText('textToVideo') },
+        { value: 'image-to-video', label: sharedModeText('imageToVideo') },
+        { value: 'retake-video', label: sharedModeText('retakeVideo') }
       ]
     },
     {
       id: 'falLtx2Resolution',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.5', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '1080p',
+      visible: {
+        condition: 'falLtx2Mode !== "retake-video"'
+      },
       options: [
         { value: '1080p', label: '1080p' },
         { value: '1440p', label: '1440p' },
@@ -70,8 +73,11 @@ export const ltx2Model = defineModel({
       id: 'falLtx2VideoDuration',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.6', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 6,
+      visible: {
+        condition: 'falLtx2Mode !== "retake-video"'
+      },
       options: [
         { value: 6, label: '6s' },
         { value: 8, label: '8s' },
@@ -82,18 +88,24 @@ export const ltx2Model = defineModel({
       id: 'falLtx2RetakeDuration',
       order: 4,
       type: 'number',
-      name: { key: 'auto.7', fallback: 'Retake Duration' },
+      name: sharedFieldText('retakeDuration'),
       default: 5,
       min: 2,
       max: 20,
-      step: 1
+      step: 1,
+      visible: {
+        condition: 'falLtx2Mode === "retake-video"'
+      }
     },
     {
       id: 'falLtx2Fps',
       order: 5,
       type: 'dropdown',
-      name: { key: 'auto.8', fallback: 'FPS' },
+      name: sharedFieldText('fps'),
       default: 25,
+      visible: {
+        condition: 'falLtx2Mode !== "retake-video"'
+      },
       options: [
         { value: 25, label: '25 FPS' },
         { value: 50, label: '50 FPS' }
@@ -103,36 +115,48 @@ export const ltx2Model = defineModel({
       id: 'falLtx2GenerateAudio',
       order: 6,
       type: 'switch',
-      name: { key: 'auto.9', fallback: 'Generate Audio' },
-      default: true
+      name: sharedFieldText('generateAudio'),
+      default: true,
+      visible: {
+        condition: 'falLtx2Mode !== "retake-video"'
+      }
     },
     {
       id: 'falLtx2FastMode',
       order: 7,
       type: 'switch',
-      name: { key: 'auto.10', fallback: 'Fast Mode' },
-      default: true
+      name: sharedFieldText('fastMode'),
+      default: true,
+      visible: {
+        condition: 'falLtx2Mode !== "retake-video"'
+      }
     },
     {
       id: 'falLtx2RetakeStartTime',
       order: 8,
       type: 'number',
-      name: { key: 'auto.11', fallback: 'Start Time' },
+      name: sharedFieldText('startTime'),
       default: 0,
       min: 0,
       max: 20,
-      step: 1
+      step: 1,
+      visible: {
+        condition: 'falLtx2Mode === "retake-video"'
+      }
     },
     {
       id: 'falLtx2RetakeMode',
       order: 9,
       type: 'dropdown',
-      name: { key: 'auto.12', fallback: 'Retake Mode' },
+      name: sharedFieldText('retakeMode'),
       default: 'replace_audio_and_video',
+      visible: {
+        condition: 'falLtx2Mode === "retake-video"'
+      },
       options: [
-        { value: 'replace_audio', label: { key: 'auto.13', fallback: 'Replace Audio' } },
-        { value: 'replace_video', label: { key: 'auto.14', fallback: 'Replace Video' } },
-        { value: 'replace_audio_and_video', label: { key: 'auto.15', fallback: 'Replace Audio & Video' } }
+        { value: 'replace_audio', label: sharedOptionText('replaceAudio') },
+        { value: 'replace_video', label: sharedOptionText('replaceVideo') },
+        { value: 'replace_audio_and_video', label: sharedOptionText('replaceAudioAndVideo') }
       ]
     }
   ],

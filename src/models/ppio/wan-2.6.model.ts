@@ -4,7 +4,7 @@
  * 派欧云万象视频 2.6 - 支持文/图生视频、参考生视频
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
 import { resolvePpioImageSources, resolvePpioPrimaryVideoSource, resolvePpioVideoSources } from './mediaSources'
 
 export const wan26Model = defineModel({
@@ -52,11 +52,11 @@ export const wan26Model = defineModel({
       id: 'ppioWan26Mode',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Mode' },
+      name: sharedFieldText('mode'),
       default: 'text-image-to-video',
       options: [
-        { value: 'text-image-to-video', label: { key: 'auto.2', fallback: 'Text/Image to Video' } },
-        { value: 'reference-to-video', label: { key: 'auto.3', fallback: 'Reference to Video' } }
+        { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
+        { value: 'reference-to-video', label: sharedModeText('referenceToVideo') }
       ],
       apiField: 'mode'
     },
@@ -66,7 +66,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26AspectRatio',
       type: 'dropdown',
       order: 2,
-      name: { key: 'auto.4', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '16:9',
       options: [
         { value: '16:9', label: '16:9' },
@@ -83,7 +83,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26Quality',
       type: 'dropdown',
       order: 3,
-      name: { key: 'auto.5', fallback: 'Quality' },
+      name: sharedFieldText('quality'),
       default: '720P',
       options: [
         { value: '720P', label: '720P' },
@@ -97,7 +97,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26VideoDuration',
       type: 'dropdown',
       order: 4,
-      name: { key: 'auto.6', fallback: 'Duration' },
+      name: sharedFieldText('duration'),
       default: 5,
       options: [
         { value: 5, label: '5s' },
@@ -112,11 +112,11 @@ export const wan26Model = defineModel({
       id: 'ppioWan26ShotType',
       type: 'dropdown',
       order: 5,
-      name: { key: 'auto.7', fallback: 'Shot Type' },
+      name: sharedFieldText('shotType'),
       default: 'multi',
       options: [
-        { value: 'multi', label: { key: 'auto.8', fallback: 'Multi-shot' } },
-        { value: 'single', label: { key: 'auto.9', fallback: 'Single-shot' } }
+        { value: 'multi', label: sharedOptionText('multiShot') },
+        { value: 'single', label: sharedOptionText('singleShot') }
       ],
       apiField: 'shot_type'
     },
@@ -126,7 +126,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26Audio',
       type: 'switch',
       order: 6,
-      name: { key: 'auto.10', fallback: 'Generate Audio' },
+      name: sharedFieldText('generateAudio'),
       default: true,
       apiField: 'audio'
     },
@@ -136,7 +136,7 @@ export const wan26Model = defineModel({
       id: 'ppioWan26PromptExtend',
       type: 'switch',
       order: 7,
-      name: { key: 'auto.11', fallback: 'Prompt Extend' },
+      name: sharedFieldText('promptExtension'),
       default: true,
       apiField: 'prompt_extend'
     }
@@ -181,7 +181,6 @@ export const wan26Model = defineModel({
       const audio = params.ppioWan26Audio !== undefined ? params.ppioWan26Audio : (params.audio !== undefined ? params.audio : true)
       const promptExtend = params.ppioWan26PromptExtend !== undefined ? params.ppioWan26PromptExtend : (params.prompt_extend !== undefined ? params.prompt_extend : true)
       const prompt = (params.prompt || '').slice(0, 2000)
-      const negativePrompt = params.ppioWan26NegativePrompt || params.negative_prompt
 
       const resolutionMap: Record<string, Record<string, string>> = {
         '16:9': { '720P': '1280*720', '1080P': '1920*1080' },
@@ -192,9 +191,6 @@ export const wan26Model = defineModel({
       }
 
       const input: Record<string, any> = { prompt }
-      if (negativePrompt) {
-        input.negative_prompt = negativePrompt
-      }
       if (params.audio_url) {
         input.audio_url = params.audio_url
       }

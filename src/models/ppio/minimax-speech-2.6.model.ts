@@ -2,7 +2,7 @@
  * Minimax Speech 2.6 音频生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 
 export const minimaxSpeech26Model = defineModel({
   meta: {
@@ -24,7 +24,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioSpec',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Audio Spec' },
+      name: sharedFieldText('audioSpec'),
       default: 'hd',
       options: [
         { value: 'hd', label: 'HD' },
@@ -37,7 +37,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxVoiceId',
       type: 'text',
       order: 2,
-      name: { key: 'auto.2', fallback: 'Voice ID' },
+      name: sharedFieldText('voiceId'),
       default: 'male-qn-qingse',
       apiField: 'voice_id'
     },
@@ -46,7 +46,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioSpeed',
       type: 'number',
       order: 3,
-      name: { key: 'auto.3', fallback: 'Speed' },
+      name: sharedFieldText('speed'),
       default: 1.0,
       min: 0.5,
       max: 2.0,
@@ -58,7 +58,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioVol',
       type: 'number',
       order: 4,
-      name: { key: 'auto.4', fallback: 'Volume' },
+      name: sharedFieldText('volume'),
       default: 1.0,
       min: 0.1,
       max: 10.0,
@@ -70,7 +70,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioPitch',
       type: 'number',
       order: 5,
-      name: { key: 'auto.5', fallback: 'Pitch' },
+      name: sharedFieldText('pitch'),
       default: 0,
       min: -12,
       max: 12,
@@ -82,7 +82,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioEmotion',
       type: 'text',
       order: 6,
-      name: { key: 'auto.6', fallback: 'Emotion' },
+      name: sharedFieldText('emotion'),
       default: '',
       apiField: 'emotion'
     },
@@ -91,7 +91,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioSampleRate',
       type: 'dropdown',
       order: 7,
-      name: { key: 'auto.7', fallback: 'Sample Rate' },
+      name: sharedFieldText('sampleRate'),
       default: 32000,
       options: [
         { value: 16000, label: '16000 Hz' },
@@ -105,7 +105,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioBitrate',
       type: 'dropdown',
       order: 8,
-      name: { key: 'auto.8', fallback: 'Bitrate' },
+      name: sharedFieldText('bitrate'),
       default: 128000,
       options: [
         { value: 64000, label: '64 kbps' },
@@ -119,7 +119,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioFormat',
       type: 'dropdown',
       order: 9,
-      name: { key: 'auto.9', fallback: 'Audio Format' },
+      name: sharedFieldText('audioFormat'),
       default: 'mp3',
       options: [
         { value: 'mp3', label: 'MP3' },
@@ -134,7 +134,7 @@ export const minimaxSpeech26Model = defineModel({
       id: 'minimaxAudioChannel',
       type: 'dropdown',
       order: 10,
-      name: { key: 'auto.10', fallback: 'Channel' },
+      name: sharedFieldText('channel'),
       default: 1,
       options: [
         { value: 1, label: '单声道' },

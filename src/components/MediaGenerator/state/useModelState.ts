@@ -24,23 +24,17 @@ export const useModelState = (modelId: string, uiState: UIState) => {
 
   // 将上传的图片同步到参数中（供联动使用）
   useEffect(() => {
-    if (uiState.uploadedImages.length > 0) {
-      setParam('uploadedImages', uiState.uploadedImages)
-    }
+    setParam('uploadedImages', uiState.uploadedImages)
   }, [uiState.uploadedImages, setParam])
 
   // 将上传的视频同步到参数中（供联动使用）
   useEffect(() => {
-    if (uiState.uploadedVideos.length > 0) {
-      setParam('uploadedVideos', uiState.uploadedVideos)
-    }
+    setParam('uploadedVideos', uiState.uploadedVideos)
   }, [uiState.uploadedVideos, setParam])
 
   // 将上传视频时长同步到参数中（供联动使用）
   useEffect(() => {
-    if (uiState.uploadedVideoDuration > 0) {
-      setParam('uploadedVideoDuration', uiState.uploadedVideoDuration)
-    }
+    setParam('uploadedVideoDuration', uiState.uploadedVideoDuration)
   }, [uiState.uploadedVideoDuration, setParam])
 
   // 监听模型切换，重置参数

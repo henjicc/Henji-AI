@@ -61,10 +61,10 @@ opt-level = 3
 [profile.dev.package.flate2]
 opt-level = 3
 
-[profile.dev.package.deflate]
+[profile.dev.package.fdeflate]
 opt-level = 3
 
-[profile.dev.package.adler]
+[profile.dev.package.adler2]
 opt-level = 3
 
 [profile.dev.package.crc32fast]

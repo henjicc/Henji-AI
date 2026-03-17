@@ -2,7 +2,7 @@
  * Z-Image Turbo 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 import { parseImageSize } from './utils'
 
 export const zImageTurboModel = defineModel({
@@ -25,7 +25,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboImageSize',
       order: 1,
       type: 'text',
-      name: { key: 'auto.1', fallback: 'Image Size' },
+      name: sharedFieldText('imageSize'),
       default: 'landscape_4_3'
     },
     // 2. 生成数量
@@ -33,7 +33,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboNumImages',
       order: 2,
       type: 'number',
-      name: { key: 'auto.2', fallback: 'Number of Images' },
+      name: sharedFieldText('numberOfImages'),
       default: 1,
       min: 1,
       max: 4
@@ -43,7 +43,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboNumInferenceSteps',
       order: 3,
       type: 'number',
-      name: { key: 'auto.3', fallback: 'Inference Steps' },
+      name: sharedFieldText('inferenceSteps'),
       default: 8,
       min: 1,
       max: 50
@@ -53,7 +53,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboEnablePromptExpansion',
       order: 4,
       type: 'switch',
-      name: { key: 'auto.4', fallback: 'Prompt Expansion' },
+      name: sharedFieldText('promptExpansion'),
       default: false
     },
     // 5. 加速模式
@@ -61,7 +61,7 @@ export const zImageTurboModel = defineModel({
       id: 'falZImageTurboAcceleration',
       order: 5,
       type: 'dropdown',
-      name: { key: 'auto.5', fallback: 'Acceleration' },
+      name: sharedFieldText('acceleration'),
       default: 'none',
       options: [
         { value: 'none', label: '无' },

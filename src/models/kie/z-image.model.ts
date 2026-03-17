@@ -2,7 +2,7 @@
  * KIE Z-Image 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText } from '@/core'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -22,7 +22,7 @@ export const kieZImageModel = defineModel({
       id: 'kieZImageAspectRatio',
       type: 'dropdown',
       order: 1,
-      name: { key: 'auto.1', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: [
         { value: '1:1', label: '1:1' },

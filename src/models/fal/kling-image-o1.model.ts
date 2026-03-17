@@ -2,7 +2,7 @@
  * Kling Image O1 图片生成模型
  */
 
-import { defineModel } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 export const klingImageO1Model = defineModel({
   meta: {
@@ -20,7 +20,7 @@ export const klingImageO1Model = defineModel({
       id: 'falKlingImageO1NumImages',
       order: 1,
       type: 'number',
-      name: { key: 'auto.1', fallback: 'Number of Images' },
+      name: sharedFieldText('numberOfImages'),
       default: 1,
       min: 1,
       max: 9
@@ -30,10 +30,10 @@ export const klingImageO1Model = defineModel({
       id: 'falKlingImageO1AspectRatio',
       order: 2,
       type: 'dropdown',
-      name: { key: 'auto.2', fallback: 'Aspect Ratio' },
+      name: sharedFieldText('aspectRatio'),
       default: '1:1',
       options: [
-        { value: 'auto', label: { key: 'auto.3', fallback: 'Auto' } },
+        { value: 'auto', label: sharedOptionText('auto') },
         { value: '1:1', label: '1:1' },
         { value: '16:9', label: '16:9' },
         { value: '9:16', label: '9:16' },
@@ -49,7 +49,7 @@ export const klingImageO1Model = defineModel({
       id: 'falKlingImageO1Resolution',
       order: 3,
       type: 'dropdown',
-      name: { key: 'auto.4', fallback: 'Resolution' },
+      name: sharedFieldText('resolution'),
       default: '1K',
       options: [
         { value: '1K', label: '1K' },
