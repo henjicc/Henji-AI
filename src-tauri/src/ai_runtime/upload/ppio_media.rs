@@ -14,6 +14,10 @@ pub fn resolve_ppio_media_rewrite_mode(
         .map(|value| value.trim().to_lowercase())
         .unwrap_or_default();
 
+    if normalized.ends_with("_base64") || normalized.ends_with("_base64s") {
+        return PpioMediaRewriteMode::RawBase64;
+    }
+
     if normalized.ends_with("_url") || normalized.ends_with("_urls") || is_video {
         return PpioMediaRewriteMode::PublicUrl;
     }

@@ -504,6 +504,18 @@
       }
     },
     {
+      "modelId": "ppio-nano-banana-2",
+      "providerId": "ppio",
+      "modelType": "image",
+      "endpoints": {
+        "defaultRoute": "/gemini-3.1-flash-image-edit",
+        "selectorJs": "(params) => {\n    const requestImages = resolvePpioImageSources(params);\n    return requestImages.length > 0\n        ? '/gemini-3.1-flash-image-edit'\n        : '/gemini-3.1-flash-image-text-to-image';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const requestImages = resolvePpioImageSources(params);\n    const supportedAspectRatios = [\n        '1:1',\n        '1:4',\n        '1:8',\n        '2:3',\n        '3:2',\n        '3:4',\n        '4:1',\n        '4:3',\n        '4:5',\n        '5:4',\n        '8:1',\n        '9:16',\n        '16:9',\n        '21:9'\n    ];\n    const parseAspectRatio = (value) => {\n        if (typeof value !== 'string' || value.indexOf(':') === -1) {\n            return null;\n        }\n        const parts = value.split(':').map(Number);\n        if (parts.length !== 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1]) || parts[0] <= 0 || parts[1] <= 0) {\n            return null;\n        }\n        return parts[0] / parts[1];\n    };\n    const resolveClosestAspectRatio = (targetRatio) => {\n        let bestValue = '1:1';\n        let bestDistance = Number.POSITIVE_INFINITY;\n        for (const candidate of supportedAspectRatios) {\n            const ratio = parseAspectRatio(candidate);\n            if (ratio === null) {\n                continue;\n            }\n            const distance = Math.abs(ratio - targetRatio);\n            if (distance < bestDistance) {\n                bestDistance = distance;\n                bestValue = candidate;\n            }\n        }\n        return bestValue;\n    };\n    const resolution = params.resolution && typeof params.resolution === 'object'\n        ? params.resolution\n        : {};\n    const quality = typeof resolution.quality === 'string'\n        ? resolution.quality\n        : '1K';\n    const rawAspectRatio = typeof resolution.aspectRatio === 'string'\n        ? resolution.aspectRatio\n        : 'smart';\n    const imageRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0\n        ? params.__firstImageRatio\n        : 1;\n    const aspectRatio = rawAspectRatio === 'smart' || rawAspectRatio === 'auto' || rawAspectRatio.length === 0\n        ? resolveClosestAspectRatio(imageRatioHint)\n        : rawAspectRatio;\n    const requestData = {\n        prompt: typeof params.prompt === 'string' ? params.prompt : '',\n        size: quality === '0.5K' || quality === '1K' || quality === '2K' || quality === '4K' ? quality : '1K',\n        aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1'\n    };\n    if (requestImages.length > 0) {\n        requestData.image_base64s = requestImages.slice(0, 14);\n    }\n    return requestData;\n}"
+      }
+    },
+    {
       "modelId": "ppio-pixverse-v4.5",
       "providerId": "ppio",
       "modelType": "video",

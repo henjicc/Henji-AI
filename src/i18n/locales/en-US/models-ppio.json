@@ -94,6 +94,12 @@
         "description": "PPIO Seedream image generation model v5.0 lite, supports text/image generation and sequential image generation"
       }
     },
+    "ppio-nano-banana-2": {
+      "meta": {
+        "name": "Nano Banana 2",
+        "description": "PPIO Nano Banana 2 image model with automatic switching between text-to-image and image editing endpoints"
+      }
+    },
     "ppio-vidu-q1": {
       "meta": {
         "name": "Vidu Q1"

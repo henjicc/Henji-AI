@@ -94,6 +94,12 @@
         "description": "派欧云即梦图片生成模型 5.0 lite 版本，支持文生图、图生图和组图生成"
       }
     },
+    "ppio-nano-banana-2": {
+      "meta": {
+        "name": "Nano Banana 2",
+        "description": "派欧云 Nano Banana 2 图片模型，支持文生图与图片编辑，并根据是否上传图片自动切换端点"
+      }
+    },
     "ppio-vidu-q1": {
       "meta": {
         "name": "Vidu Q1"

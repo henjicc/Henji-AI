@@ -218,6 +218,7 @@ fn extract_urls(payload: &Value) -> Vec<String> {
     let mut urls = Vec::new();
 
     extract_string_array(payload.pointer("/images"), &mut urls);
+    extract_string_array(payload.pointer("/image_urls"), &mut urls);
     extract_string_array(payload.pointer("/videos"), &mut urls);
     extract_string_array(payload.pointer("/audios"), &mut urls);
 
