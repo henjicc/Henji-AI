@@ -9,7 +9,7 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 
 ## 1. 识别场景并路由
 
-- 先读取 `references/intake-checklist.md`，输出确认清单并等待用户确认。
+- 先读取 `references/intake-checklist.md`，输出精简确认清单并等待用户确认。
 - 若用户需求是“新增供应商”，读取 `references/new-provider.md`。
 - 若用户需求是“现有供应商新增模型”，读取 `references/new-model-existing-provider.md`。
 - 若用户需求是“新模型且未接入对应供应商”，先读取 `references/new-provider.md`，再读取 `references/new-provider-and-model.md`。
@@ -19,11 +19,14 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 设计参数顺序时，读取 `references/param-order-patterns.md`。
 - 处理“不展示参数/固定默认请求值”时，读取 `references/hidden-default-params.md`。
 - 判断图片/视频/音频差异时，读取 `references/modality-differences.md`。
+- 涉及比例/分辨率时，优先执行“智能比例 + 本地转具体值”的规则（见 `references/param-order-patterns.md`）。
 
 ## 3. 执行规则
 
 - 信息不足时，停止编码并向用户补充最小必要信息。
+- 若用户未提供价格或计费规则，必须先追问价格，再继续模型实现。
 - 优先复用同供应商、同模态、同模型家族的现有模型定义；仅将其作为起点，以官方 API 文档为准。
+- 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src-tauri/src/ai_runtime/*`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
 

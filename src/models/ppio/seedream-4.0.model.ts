@@ -243,11 +243,15 @@ export const seedream40Model = defineModel({
                 // 智能模式：有图按首图比例，无图按 1:1
                 if (resolution.aspectRatio === 'smart') {
                     try {
-                        const hasImages = previewImages.length > 0
-                        let ratio = 1
-                        let sourceLabel = '1:1 默认'
+                        const ratioHint = typeof params.__firstImageRatio === 'number' &&
+                            Number.isFinite(params.__firstImageRatio) &&
+                            params.__firstImageRatio > 0
+                            ? params.__firstImageRatio
+                            : null
+                        let ratio = ratioHint ?? 1
+                        let sourceLabel = ratioHint ? `hint:${ratioHint.toFixed(4)}` : '1:1 默认'
 
-                        if (hasImages) {
+                        if (ratioHint === null && previewImages.length > 0) {
                             const imageSize = await getImageSize(previewImages[0])
                             ratio = imageSize.width / imageSize.height
                             sourceLabel = `${imageSize.width}x${imageSize.height}`

@@ -12,10 +12,325 @@ const KNOWN_ENDPOINT_CONSTANTS = {
 }
 
 const CUSTOM_BUILDER_OVERRIDES = {
-  'ppio-seedream-4.0': `(params) => { const maxImages = params.maxImages || params.max_images || 1; const prompt = typeof params.prompt === 'string' ? params.prompt : ''; const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt; const requestData = { prompt: finalPrompt, watermark: false }; const requestImages = resolvePpioImageSources(params); if (params.resolution) { const resolution = params.resolution; if (resolution.width && resolution.height) { requestData.size = resolution.width + 'x' + resolution.height; } else { const quality = resolution.quality === '4K' ? '4K' : '2K'; const target = quality === '4K' ? 16777216 : 4194304; const ratioText = (resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio) ? '1:1' : String(resolution.aspectRatio); const pair = ratioText.split(':').map(Number); const ratio = pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 1; let h = Math.sqrt(target / ratio); let w = h * ratio; let width = Math.max(15, Math.round(w)); let height = Math.max(15, Math.round(h)); const maxPixels = 16777216; if (width * height > maxPixels) { const scale = Math.sqrt(maxPixels / (width * height)); width = Math.max(15, Math.round(width * scale)); height = Math.max(15, Math.round(height * scale)); } requestData.size = width + 'x' + height; } } else if (params.size) { requestData.size = params.size; } if (requestImages.length > 0) { requestData.images = requestImages; } if (maxImages > 1) { requestData.sequential_image_generation = 'auto'; requestData.max_images = maxImages; } else { requestData.sequential_image_generation = 'disabled'; } return requestData; }`,
-  'ppio-seedream-4.5': `(params) => { const maxImages = params.maxImages || params.max_images || 1; const prompt = typeof params.prompt === 'string' ? params.prompt : ''; const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt; const requestData = { prompt: finalPrompt, watermark: false }; const requestImages = resolvePpioImageSources(params); if (params.resolution) { const resolution = params.resolution; if (resolution.width && resolution.height) { requestData.size = resolution.width + 'x' + resolution.height; } else { const quality = resolution.quality === '4K' ? '4K' : '2K'; const target = quality === '4K' ? 16777216 : 4194304; const ratioText = (resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio) ? '1:1' : String(resolution.aspectRatio); const pair = ratioText.split(':').map(Number); const ratio = pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 1; let h = Math.sqrt(target / ratio); let w = h * ratio; let width = Math.max(1920, Math.round(w)); let height = Math.max(1920, Math.round(h)); const maxPixels = 16777216; if (width * height > maxPixels) { const scale = Math.sqrt(maxPixels / (width * height)); width = Math.max(1920, Math.round(width * scale)); height = Math.max(1920, Math.round(height * scale)); } requestData.size = width + 'x' + height; } } else if (params.size) { requestData.size = params.size; } if (requestImages.length > 0) { requestData.image = requestImages; } if (maxImages > 1) { requestData.sequential_image_generation = 'auto'; requestData.sequential_image_generation_options = { max_images: maxImages }; } else { requestData.sequential_image_generation = 'disabled'; } if (params.optimizePrompt === true) { requestData.optimize_prompt_options = { mode: 'standard' }; } return requestData; }`,
-  'fal-ai-bytedance-seedream-v4': `(params) => { const images = Array.isArray(params.images) ? params.images : []; const prompt = typeof params.prompt === 'string' ? params.prompt : ''; const numImages = Number(params.falSeedream40NumImages || 1); const resolution = params.falSeedreamV4Resolution || {}; const ratioText = (resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio) ? '1:1' : String(resolution.aspectRatio); const quality = resolution.quality === '4K' ? '4K' : '2K'; let width = Number(resolution.width || 0); let height = Number(resolution.height || 0); if (!(width > 0 && height > 0)) { const pair = ratioText.split(':').map(Number); const ratio = pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 1; const target = quality === '4K' ? 16777216 : 4194304; let h = Math.sqrt(target / ratio); let w = h * ratio; width = Math.round(w); height = Math.round(h); } width = Math.max(1024, Math.min(4096, Math.round(width))); height = Math.max(1024, Math.min(4096, Math.round(height))); const pixels = width * height; if (pixels > 16777216) { const scale = Math.sqrt(16777216 / pixels); width = Math.max(1024, Math.min(4096, Math.round(width * scale))); height = Math.max(1024, Math.min(4096, Math.round(height * scale))); } const requestData = { prompt, image_size: { width, height }, num_images: numImages, enable_safety_checker: false }; if (images.length > 0) { requestData.image_urls = images; } return requestData; }`,
-  'fal-ai-bytedance-seedream-v4.5': `(params) => { const images = Array.isArray(params.images) ? params.images : []; const prompt = typeof params.prompt === 'string' ? params.prompt : ''; const numImages = Number(params.falSeedream45NumImages || 1); const resolution = params.falSeedreamV45Resolution || {}; const ratioText = (resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio) ? '1:1' : String(resolution.aspectRatio); const quality = resolution.quality === '4K' ? '4K' : '2K'; let width = Number(resolution.width || 0); let height = Number(resolution.height || 0); if (!(width > 0 && height > 0)) { const pair = ratioText.split(':').map(Number); const ratio = pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 1; const target = quality === '4K' ? 16777216 : 4194304; let h = Math.sqrt(target / ratio); let w = h * ratio; width = Math.round(w); height = Math.round(h); } width = Math.max(1920, Math.min(4096, Math.round(width))); height = Math.max(1920, Math.min(4096, Math.round(height))); let pixels = width * height; if (pixels < 3686400) { const scale = Math.sqrt(3686400 / Math.max(1, pixels)); width = Math.max(1920, Math.min(4096, Math.round(width * scale))); height = Math.max(1920, Math.min(4096, Math.round(height * scale))); pixels = width * height; } if (pixels > 16777216) { const scale = Math.sqrt(16777216 / pixels); width = Math.max(1920, Math.min(4096, Math.round(width * scale))); height = Math.max(1920, Math.min(4096, Math.round(height * scale))); } const requestData = { prompt, image_size: { width, height }, num_images: numImages, enable_safety_checker: false }; if (images.length > 0) { requestData.image_urls = images; } return requestData; }`,
+  'ppio-seedream-4.0': `(params) => {
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const normalizeSize = (ratio, targetPixels) => {
+      const normalizedRatio = clamp(ratio, 1 / 16, 16)
+      const normalizedPixels = clamp(targetPixels, 1048576, 16777216)
+      let h = Math.sqrt(normalizedPixels / normalizedRatio)
+      let w = h * normalizedRatio
+      let width = Math.max(1, Math.round(w))
+      let height = Math.max(1, Math.round(h))
+      let pixels = width * height
+      if (pixels < 1048576) {
+        const scale = Math.sqrt(1048576 / Math.max(1, pixels))
+        width = Math.max(1, Math.round(width * scale))
+        height = Math.max(1, Math.round(height * scale))
+        pixels = width * height
+      }
+      if (pixels > 16777216) {
+        const scale = Math.sqrt(16777216 / pixels)
+        width = Math.max(1, Math.round(width * scale))
+        height = Math.max(1, Math.round(height * scale))
+      }
+      return { width, height }
+    }
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : 1
+    const maxImages = params.maxImages || params.max_images || 1
+    const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+    const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt
+    const requestData = { prompt: finalPrompt, watermark: false }
+    const requestImages = resolvePpioImageSources(params)
+    if (params.resolution) {
+      const resolution = params.resolution
+      const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
+      if (!isSmart && resolution.width && resolution.height) {
+        const size = normalizeSize(Number(resolution.width) / Number(resolution.height), Number(resolution.width) * Number(resolution.height))
+        requestData.size = size.width + 'x' + size.height
+      } else {
+        const quality = resolution.quality === '4K' ? '4K' : '2K'
+        const target = quality === '4K' ? 16777216 : 4194304
+        const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+        const size = normalizeSize(ratio, target)
+        requestData.size = size.width + 'x' + size.height
+      }
+    } else if (params.size) {
+      requestData.size = params.size
+    }
+    if (requestImages.length > 0) {
+      requestData.images = requestImages
+    }
+    if (maxImages > 1) {
+      requestData.sequential_image_generation = 'auto'
+      requestData.max_images = maxImages
+    } else {
+      requestData.sequential_image_generation = 'disabled'
+    }
+    return requestData
+  }`,
+  'ppio-seedream-4.5': `(params) => {
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const normalizeSize = (ratio, targetPixels) => {
+      const normalizedRatio = clamp(ratio, 1 / 16, 16)
+      const normalizedPixels = clamp(targetPixels, 3686400, 16777216)
+      let h = Math.sqrt(normalizedPixels / normalizedRatio)
+      let w = h * normalizedRatio
+      let width = Math.max(1, Math.round(w))
+      let height = Math.max(1, Math.round(h))
+      let pixels = width * height
+      if (pixels < 3686400) {
+        const scale = Math.sqrt(3686400 / Math.max(1, pixels))
+        width = Math.max(1, Math.round(width * scale))
+        height = Math.max(1, Math.round(height * scale))
+        pixels = width * height
+      }
+      if (pixels > 16777216) {
+        const scale = Math.sqrt(16777216 / pixels)
+        width = Math.max(1, Math.round(width * scale))
+        height = Math.max(1, Math.round(height * scale))
+      }
+      return { width, height }
+    }
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : 1
+    const maxImages = params.maxImages || params.max_images || 1
+    const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+    const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt
+    const requestData = { prompt: finalPrompt, watermark: false }
+    const requestImages = resolvePpioImageSources(params)
+    if (params.resolution) {
+      const resolution = params.resolution
+      const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
+      if (!isSmart && resolution.width && resolution.height) {
+        const size = normalizeSize(Number(resolution.width) / Number(resolution.height), Number(resolution.width) * Number(resolution.height))
+        requestData.size = size.width + 'x' + size.height
+      } else {
+        const quality = resolution.quality === '4K' ? '4K' : '2K'
+        const target = quality === '4K' ? 16777216 : 4194304
+        const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+        const size = normalizeSize(ratio, target)
+        requestData.size = size.width + 'x' + size.height
+      }
+    } else if (params.size) {
+      requestData.size = params.size
+    }
+    if (requestImages.length > 0) {
+      requestData.image = requestImages
+    }
+    if (maxImages > 1) {
+      requestData.sequential_image_generation = 'auto'
+      requestData.sequential_image_generation_options = { max_images: maxImages }
+    } else {
+      requestData.sequential_image_generation = 'disabled'
+    }
+    if (params.optimizePrompt === true) {
+      requestData.optimize_prompt_options = { mode: 'standard' }
+    }
+    return requestData
+  }`,
+  'fal-ai-bytedance-seedream-v4': `(params) => {
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : 1
+    const images = Array.isArray(params.images) ? params.images : []
+    const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+    const numImages = Number(params.falSeedream40NumImages || 1)
+    const resolution = params.falSeedreamV4Resolution || {}
+    const quality = resolution.quality === '4K' ? '4K' : '2K'
+    const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
+    let width = Number(resolution.width || 0)
+    let height = Number(resolution.height || 0)
+    if (!(width > 0 && height > 0) || isSmart) {
+      const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+      const normalizedRatio = clamp(ratio, 1 / 16, 16)
+      const target = quality === '4K' ? 16777216 : 4194304
+      let h = Math.sqrt(target / normalizedRatio)
+      let w = h * normalizedRatio
+      width = Math.round(w)
+      height = Math.round(h)
+    }
+    width = Math.max(1024, Math.min(4096, Math.round(width)))
+    height = Math.max(1024, Math.min(4096, Math.round(height)))
+    const pixels = width * height
+    if (pixels > 16777216) {
+      const scale = Math.sqrt(16777216 / pixels)
+      width = Math.max(1024, Math.min(4096, Math.round(width * scale)))
+      height = Math.max(1024, Math.min(4096, Math.round(height * scale)))
+    }
+    const requestData = { prompt, image_size: { width, height }, num_images: numImages, enable_safety_checker: false }
+    if (images.length > 0) {
+      requestData.image_urls = images
+    }
+    return requestData
+  }`,
+  'fal-ai-bytedance-seedream-v4.5': `(params) => {
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : 1
+    const images = Array.isArray(params.images) ? params.images : []
+    const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+    const numImages = Number(params.falSeedream45NumImages || 1)
+    const resolution = params.falSeedreamV45Resolution || {}
+    const quality = resolution.quality === '4K' ? '4K' : '2K'
+    const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
+    let width = Number(resolution.width || 0)
+    let height = Number(resolution.height || 0)
+    if (!(width > 0 && height > 0) || isSmart) {
+      const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+      const normalizedRatio = clamp(ratio, 1 / 16, 16)
+      const target = quality === '4K' ? 16777216 : 4194304
+      let h = Math.sqrt(target / normalizedRatio)
+      let w = h * normalizedRatio
+      width = Math.round(w)
+      height = Math.round(h)
+    }
+    width = Math.max(1, Math.min(4096, Math.round(width)))
+    height = Math.max(1, Math.min(4096, Math.round(height)))
+    let pixels = width * height
+    if (pixels < 3686400) {
+      const scale = Math.sqrt(3686400 / Math.max(1, pixels))
+      width = Math.max(1, Math.min(4096, Math.round(width * scale)))
+      height = Math.max(1, Math.min(4096, Math.round(height * scale)))
+      pixels = width * height
+    }
+    if (pixels > 16777216) {
+      const scale = Math.sqrt(16777216 / pixels)
+      width = Math.max(1, Math.min(4096, Math.round(width * scale)))
+      height = Math.max(1, Math.min(4096, Math.round(height * scale)))
+    }
+    const requestData = { prompt, image_size: { width, height }, num_images: numImages, enable_safety_checker: false }
+    if (images.length > 0) {
+      requestData.image_urls = images
+    }
+    return requestData
+  }`,
+  'kie-seedream-4.0': `(params) => {
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const pickClosestRatio = (target) => {
+      const options = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16']
+      let best = '1:1'
+      let bestDiff = Number.POSITIVE_INFINITY
+      for (const ratioText of options) {
+        const ratio = parseRatio(ratioText)
+        if (!ratio) continue
+        const diff = Math.abs(ratio - target)
+        if (diff < bestDiff) {
+          bestDiff = diff
+          best = ratioText
+        }
+      }
+      return best
+    }
+    const mapImageSize = (ratio) => {
+      if (!ratio) return 'square_hd'
+      if (ratio.includes('_')) return ratio
+      if (ratio === '1:1') return 'square_hd'
+      if (ratio === '4:3') return 'landscape_4_3'
+      if (ratio === '3:4') return 'portrait_4_3'
+      if (ratio === '3:2') return 'landscape_3_2'
+      if (ratio === '2:3') return 'portrait_3_2'
+      if (ratio === '16:9') return 'landscape_16_9'
+      if (ratio === '9:16') return 'portrait_16_9'
+      if (ratio === '21:9') return 'landscape_21_9'
+      return 'square_hd'
+    }
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : null
+    const images = Array.isArray(params.images) ? params.images : []
+    const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+    const rawAspect = params.kieSeedream40AspectRatio || params.image_size || params.aspect_ratio
+    const resolution = params.kieSeedream40Resolution || params.image_resolution || params.resolution
+    const maxImages = params.kieSeedream40MaxImages || params.max_images || params.maxImages
+    const modelName = images.length === 0 ? 'bytedance/seedream-v4-text-to-image' : 'bytedance/seedream-v4-edit'
+    const input = { prompt }
+    const aspectText = typeof rawAspect === 'string' ? rawAspect : ''
+    const isSmart = !aspectText || aspectText === 'smart' || aspectText === 'auto'
+    const normalizedAspect = isSmart
+      ? (smartRatioHint ? pickClosestRatio(smartRatioHint) : '1:1')
+      : aspectText
+    input.image_size = mapImageSize(String(normalizedAspect))
+    if (resolution) {
+      input.image_resolution = resolution
+    }
+    if (maxImages !== undefined) {
+      input.max_images = maxImages
+    }
+    if (images.length > 0) {
+      input.image_urls = images
+    }
+    return { model: modelName, input }
+  }`,
+  'kie-seedream-4.5': `(params) => {
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const pickClosestRatio = (target) => {
+      const options = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16']
+      let best = '1:1'
+      let bestDiff = Number.POSITIVE_INFINITY
+      for (const ratioText of options) {
+        const ratio = parseRatio(ratioText)
+        if (!ratio) continue
+        const diff = Math.abs(ratio - target)
+        if (diff < bestDiff) {
+          bestDiff = diff
+          best = ratioText
+        }
+      }
+      return best
+    }
+    const mapQuality = (value) => {
+      if (value === '4K' || value === 'high') return 'high'
+      return 'basic'
+    }
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : null
+    const images = Array.isArray(params.images) ? params.images : []
+    const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+    const rawAspect = params.kieSeedreamAspectRatio || params.aspect_ratio
+    const quality = params.kieSeedreamQuality || params.quality
+    const modelName = images.length === 0 ? 'seedream/4.5-text-to-image' : 'seedream/4.5-edit'
+    const input = { prompt }
+    const aspectText = typeof rawAspect === 'string' ? rawAspect : ''
+    const isSmart = !aspectText || aspectText === 'smart' || aspectText === 'auto'
+    input.aspect_ratio = isSmart
+      ? (smartRatioHint ? pickClosestRatio(smartRatioHint) : '1:1')
+      : aspectText
+    if (quality) {
+      input.quality = mapQuality(String(quality))
+    }
+    if (images.length > 0) {
+      input.image_urls = images
+    }
+    return { model: modelName, input }
+  }`,
 }
 
 function walk(dir, files = []) {

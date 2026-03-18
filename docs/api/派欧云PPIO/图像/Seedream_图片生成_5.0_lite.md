@@ -7,7 +7,7 @@ captured_at: "2026-03-18T04:14:46.899Z"
 
 **POST** `/v3/seedream-5.0-lite`
 
-图片生成模型 Seedream 5.0 lite 的调用 API，支持文生图、单图生图、多图生图，以及组图生成功能。
+图片生成模型 Seedream 5.0 Lite 的调用 API，支持文生图、单图生图、多图生图，以及组图生成功能。
 
 ## 请求头
 

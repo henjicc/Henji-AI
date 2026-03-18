@@ -92,9 +92,9 @@ export const seedream45Model = defineModel({
                 },
                 customSize: {
                     enabled: true,
-                    minWidth: 1920,
+                    minWidth: 480,
                     maxWidth: 4096,
-                    minHeight: 1920,
+                    minHeight: 480,
                     maxHeight: 4096,
                     step: 1,
                     lockRatio: false
@@ -153,8 +153,7 @@ export const seedream45Model = defineModel({
                     minRatio: 1 / 16,
                     maxRatio: 16,
                     minPixels: 3686400,      // 约 1920*1920
-                    absoluteMaxPixels: 16777216,  // 4096*4096
-                    minSize: 1920
+                    absoluteMaxPixels: 16777216  // 4096*4096
                 }
 
                 // 计算理想尺寸
@@ -195,10 +194,6 @@ export const seedream45Model = defineModel({
                     width = Math.round(width * scale)
                     height = Math.round(height * scale)
                 }
-
-                // 确保最小尺寸（4.5 要求更高的最小像素）
-                if (width < constraints.minSize) width = constraints.minSize
-                if (height < constraints.minSize) height = constraints.minSize
 
                 // 验证宽高比是否在范围内
                 const finalRatio = width / height
@@ -242,11 +237,15 @@ export const seedream45Model = defineModel({
                 // 智能模式：有图按首图比例，无图按 1:1
                 if (resolution.aspectRatio === 'smart') {
                     try {
-                        const hasImages = previewImages.length > 0
-                        let ratio = 1
-                        let sourceLabel = '1:1 默认'
+                        const ratioHint = typeof params.__firstImageRatio === 'number' &&
+                            Number.isFinite(params.__firstImageRatio) &&
+                            params.__firstImageRatio > 0
+                            ? params.__firstImageRatio
+                            : null
+                        let ratio = ratioHint ?? 1
+                        let sourceLabel = ratioHint ? `hint:${ratioHint.toFixed(4)}` : '1:1 默认'
 
-                        if (hasImages) {
+                        if (ratioHint === null && previewImages.length > 0) {
                             const imageSize = await getImageSize(previewImages[0])
                             ratio = imageSize.width / imageSize.height
                             sourceLabel = `${imageSize.width}x${imageSize.height}`
@@ -259,8 +258,7 @@ export const seedream45Model = defineModel({
                             minRatio: 1 / 16,
                             maxRatio: 16,
                             minPixels: 3686400,
-                            absoluteMaxPixels: 16777216,
-                            minSize: 1920
+                            absoluteMaxPixels: 16777216
                         }
 
                         // 计算理想尺寸
@@ -301,10 +299,6 @@ export const seedream45Model = defineModel({
                             width = Math.round(width * scale)
                             height = Math.round(height * scale)
                         }
-
-                        // 确保最小尺寸
-                        if (width < constraints.minSize) width = constraints.minSize
-                        if (height < constraints.minSize) height = constraints.minSize
 
                         // 验证宽高比是否在范围内
                         const finalRatio = width / height

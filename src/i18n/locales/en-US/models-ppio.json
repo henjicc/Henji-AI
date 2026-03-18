@@ -88,6 +88,12 @@
         "description": "PPIO Seedream image generation model v4.5, supports 2K/4K resolution"
       }
     },
+    "ppio-seedream-5.0-lite": {
+      "meta": {
+        "name": "Seedream 5.0 Lite",
+        "description": "PPIO Seedream image generation model v5.0 lite, supports text/image generation and sequential image generation"
+      }
+    },
     "ppio-vidu-q1": {
       "meta": {
         "name": "Vidu Q1"

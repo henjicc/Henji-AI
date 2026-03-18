@@ -5,9 +5,10 @@
  */
 
 import { registry } from '@/core/ModelRegistry'
+import { findSquareAspectValue, getAspectChoiceParams, isSmartAspectValue, resolveClosestAspectValue } from '@/core/params/ratioResolution'
 import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
-import type { ProviderId } from '@/core/types'
+import type { ModelDefinition, ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
 import { logInfo } from '@/utils/errorLogger'
 import { recordApiTrace } from '@/utils/testMode'
@@ -47,7 +48,7 @@ function getErrorMessage(error: unknown): string {
   return 'Generation failed'
 }
 
-function attachUploadRuntimeParams(params: Record<string, any>): Record<string, any> {
+function attachUploadRuntimeParams(params: Record<string, unknown>): Record<string, unknown> {
   const uploadService = UploadService.getInstance()
   const next = {
     ...params,
@@ -68,6 +69,99 @@ function formatFailedMetadata(metadata: Record<string, unknown> | undefined): st
   } catch {
     return ''
   }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function getFirstImageSource(params: Record<string, unknown>): string | null {
+  const candidates: unknown[] = [params.images, params.uploadedFilePaths]
+  for (const candidate of candidates) {
+    if (!isStringArray(candidate)) {
+      continue
+    }
+
+    const first = candidate.find((item) => item.trim().length > 0)
+    if (first) {
+      return first
+    }
+  }
+
+  return null
+}
+
+function resolveChoiceSmartAspectValues(
+  model: ModelDefinition,
+  params: Record<string, unknown>,
+  hasReferenceImage: boolean,
+  targetRatio: number
+): void {
+  const aspectParams = getAspectChoiceParams(model.params)
+  for (const aspectParam of aspectParams) {
+    const currentValue = params[aspectParam.id] ?? (
+      aspectParam.apiField ? params[aspectParam.apiField] : undefined
+    )
+
+    if (!isSmartAspectValue(currentValue)) {
+      continue
+    }
+
+    let resolvedValue = hasReferenceImage
+      ? resolveClosestAspectValue(aspectParam, targetRatio)
+      : findSquareAspectValue(aspectParam)
+
+    if (resolvedValue === null) {
+      resolvedValue = resolveClosestAspectValue(aspectParam, 1)
+    }
+
+    if (resolvedValue !== null) {
+      params[aspectParam.id] = resolvedValue
+      if (aspectParam.apiField) {
+        params[aspectParam.apiField] = resolvedValue
+      }
+    }
+  }
+}
+
+async function readImageRatio(imageSource: string): Promise<number | null> {
+  if (typeof Image === 'undefined') {
+    return null
+  }
+
+  return new Promise((resolve) => {
+    const image = new Image()
+    image.onload = () => {
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        resolve(image.naturalWidth / image.naturalHeight)
+        return
+      }
+      resolve(null)
+    }
+    image.onerror = () => resolve(null)
+    image.src = imageSource
+  })
+}
+
+async function normalizeSmartAspectParams(
+  model: ModelDefinition,
+  params: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const nextParams: Record<string, unknown> = { ...params }
+  const firstImageSource = getFirstImageSource(nextParams)
+  const imageRatio = firstImageSource ? await readImageRatio(firstImageSource) : null
+  const hasReferenceImage = imageRatio !== null && Number.isFinite(imageRatio) && imageRatio > 0
+  const targetRatio = hasReferenceImage ? imageRatio : 1
+
+  if (hasReferenceImage) {
+    nextParams.__firstImageRatio = targetRatio
+  } else {
+    delete nextParams.__firstImageRatio
+  }
+
+  resolveChoiceSmartAspectValues(model, nextParams, hasReferenceImage, targetRatio)
+
+  return nextParams
 }
 
 function recordRuntimeTrace(
@@ -132,9 +226,10 @@ export class GenerationService {
         : null
       progressTracker?.start()
 
+      const normalizedParams = await normalizeSmartAspectParams(model, params as Record<string, unknown>)
       const response = await aiGenerate({
         modelId,
-        params: attachUploadRuntimeParams(params),
+        params: attachUploadRuntimeParams(normalizedParams),
       })
       recordRuntimeTrace(modelId, params, response.trace)
 

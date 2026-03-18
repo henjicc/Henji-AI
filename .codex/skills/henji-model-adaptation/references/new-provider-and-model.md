@@ -17,6 +17,7 @@
 - 按 `new-model-existing-provider.md` 适配目标模型。
 - 设计参数顺序时读取 `param-order-patterns.md`。
 - 处理隐藏/固定参数时读取 `hidden-default-params.md`。
+- 若用户未提供价格，先补齐价格策略再继续。
 
 ## Phase 3：用户确认门
 
