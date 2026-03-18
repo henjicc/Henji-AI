@@ -10,6 +10,7 @@ import {
   isDesktop,
   saveBytesToUploads,
   saveBase64ToUploads,
+  saveUploadVideo,
 } from '@/utils/save'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
@@ -108,6 +109,26 @@ function summarizeMediaSources(values: unknown): Array<Record<string, unknown>> 
   }))
 }
 
+function isFileValue(value: unknown): value is File {
+  return typeof File !== 'undefined' && value instanceof File
+}
+
+function toVideoDisplayUrl(path: string): string {
+  return convertFileSrc(path.replace(/\\/g, '/'))
+}
+
+function isLikelyVideoSource(value: string): boolean {
+  const source = value.trim()
+  if (!source) return false
+  if (source.startsWith('data:video/')) return true
+  if (source.startsWith('blob:')) return true
+  if (source.startsWith('asset://localhost/')) return true
+  if (source.startsWith('tauri://localhost/')) return true
+  if (source.startsWith('file://')) return true
+  if (source.startsWith('http://') || source.startsWith('https://')) return true
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)
+}
+
 export function useTaskGeneration({
   setTasks,
   updateTask,
@@ -147,6 +168,16 @@ export function useTaskGeneration({
       if (task.uploadedFilePaths) options.uploadedFilePaths = task.uploadedFilePaths
       if (task.uploadedVideoFilePaths) options.uploadedVideoFilePaths = task.uploadedVideoFilePaths
       if (task.images) options.images = task.images
+      if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length > 0) {
+        const videoUrls = task.uploadedVideoFilePaths.map(toVideoDisplayUrl)
+        if (!isStringArray(options.videos) || options.videos.length === 0) {
+          options.videos = videoUrls
+        }
+        if (typeof options.video !== 'string' || options.video.trim().length === 0) {
+          options.video = videoUrls[0]
+        }
+        ;(options as Record<string, unknown>).uploadedVideos = options.videos
+      }
 
       updateTask(taskId, { status: 'generating' })
 
@@ -290,7 +321,52 @@ export function useTaskGeneration({
       }
     }
 
-    const hasAnyInput = input.trim().length > 0 || (isStringArray(options.images) && options.images.length > 0)
+    // 生成前处理上传视频：持久化到 uploads，避免请求/历史记录中使用缩略图 data URL
+    const uploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths)
+      ? [...options.uploadedVideoFilePaths]
+      : []
+    const inlineVideo = options.video
+
+    if (isFileValue(inlineVideo) && uploadedVideoFilePaths.length === 0) {
+      try {
+        const savedVideo = await saveUploadVideo(inlineVideo, 'persist')
+        uploadedVideoFilePaths.push(savedVideo.fullPath)
+      } catch (error) {
+        logError('[Workspace] 持久化上传视频失败', error)
+        notify('视频保存失败，请重试上传后再生成', 'error')
+        return
+      }
+    }
+
+    if (uploadedVideoFilePaths.length > 0) {
+      const videoSourceUrls = uploadedVideoFilePaths.map(toVideoDisplayUrl)
+      options.uploadedVideoFilePaths = uploadedVideoFilePaths
+      options.videos = videoSourceUrls
+      ;(options as Record<string, unknown>).uploadedVideos = videoSourceUrls
+      options.video = videoSourceUrls[0]
+    }
+
+    const sanitizedVideos = isStringArray(options.videos)
+      ? options.videos.filter(isLikelyVideoSource)
+      : []
+    if (sanitizedVideos.length > 0) {
+      options.videos = sanitizedVideos
+      ;(options as Record<string, unknown>).uploadedVideos = sanitizedVideos
+      if (typeof options.video !== 'string' || options.video.trim().length === 0) {
+        options.video = sanitizedVideos[0]
+      }
+    } else {
+      delete options.videos
+      delete (options as Record<string, unknown>).uploadedVideos
+      if (typeof options.video === 'string' && !isLikelyVideoSource(options.video)) {
+        delete options.video
+      }
+    }
+
+    const hasAnyInput =
+      input.trim().length > 0 ||
+      (isStringArray(options.images) && options.images.length > 0) ||
+      (isStringArray(options.videos) && options.videos.length > 0)
     if (!hasAnyInput) {
       notify(messages.missingInput, 'error')
       return
@@ -307,10 +383,10 @@ export function useTaskGeneration({
     const providerId = isRecord(info) && typeof info['provider'] === 'string' ? info['provider'] : undefined
 
     // 视频缩略图：优先使用视频文件 URL，避免 <video> 无法渲染 base64 缩略图第一帧
-    const uploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths : undefined
+    const taskUploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths : undefined
     const uploadedVideos = isStringArray(options.videos) ? options.videos : undefined
-    const videoUrls = uploadedVideoFilePaths?.length
-      ? uploadedVideoFilePaths.map((p) => convertFileSrc(p))
+    const videoUrls = taskUploadedVideoFilePaths?.length
+      ? taskUploadedVideoFilePaths.map(toVideoDisplayUrl)
       : uploadedVideos
 
     if (model === 'ppio-wan-2.5-preview') {
@@ -360,7 +436,7 @@ export function useTaskGeneration({
       images: isStringArray(options.images) ? options.images : undefined,
       videos: videoUrls,
       uploadedFilePaths: isStringArray(options.uploadedFilePaths) ? options.uploadedFilePaths : undefined,
-      uploadedVideoFilePaths,
+      uploadedVideoFilePaths: taskUploadedVideoFilePaths,
       options,
     }
 

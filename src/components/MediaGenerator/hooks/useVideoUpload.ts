@@ -59,15 +59,17 @@ export const useVideoUpload = (
 
       logInfo('[useVideoUpload] 视频元数据:', metadata)
 
-      // 验证视频
-      const validation = validateVideo(metadata, validationOptions)
-      if (!validation.valid) {
-        if (onError) {
-          onError('视频验证失败', validation.errors.join(', '))
+      // 仅在显式提供约束时校验（由模型 inputLimits.videoConstraints 驱动）
+      if (validationOptions) {
+        const validation = validateVideo(metadata, validationOptions)
+        if (!validation.valid) {
+          if (onError) {
+            onError('视频验证失败', validation.errors.join(', '))
+          }
+          URL.revokeObjectURL(videoElement.src)
+          setIsProcessingVideo(false)
+          return
         }
-        URL.revokeObjectURL(videoElement.src)
-        setIsProcessingVideo(false)
-        return
       }
 
       // 【关键修复】立即释放用于验证的 blob URL，避免 WebKit 后续访问已释放的 URL
@@ -100,7 +102,14 @@ export const useVideoUpload = (
       }
       setIsProcessingVideo(false)
     }
-  }, [setUploadedVideos, setUploadedVideoFiles, validationOptions, setUploadedVideoDuration])
+  }, [
+    onError,
+    setUploadedVideoDuration,
+    setUploadedVideoFilePaths,
+    setUploadedVideoFiles,
+    setUploadedVideos,
+    validationOptions
+  ])
 
   /**
    * 移除视频

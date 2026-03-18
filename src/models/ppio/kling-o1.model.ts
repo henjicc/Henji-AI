@@ -37,12 +37,20 @@ export const klingO1Model = defineModel({
       {
         when: 'ppioKlingO1Mode === "reference-to-video"',
         images: { max: 7 },
-        videos: { exact: 1 }
+        videos: { exact: 1 },
+        videoConstraints: {
+          minDurationSec: 3,
+          maxDurationSec: 10
+        }
       },
       {
         when: 'ppioKlingO1Mode === "video-edit"',
         images: { max: 4 },
-        videos: { exact: 1 }
+        videos: { exact: 1 },
+        videoConstraints: {
+          minDurationSec: 3,
+          maxDurationSec: 10
+        }
       }
     ]
   },
@@ -63,7 +71,7 @@ export const klingO1Model = defineModel({
       require: { videos: { exact: 1 } },
       message: {
         title: '视频必需',
-        message: '参考生视频模式需要上传视频才能生成',
+        message: '参考生视频模式需要上传1个3-10秒视频才能生成',
         type: 'warning'
       }
     },
@@ -73,7 +81,7 @@ export const klingO1Model = defineModel({
       require: { videos: { exact: 1 } },
       message: {
         title: '视频必需',
-        message: '视频编辑模式需要上传视频才能生成',
+        message: '视频编辑模式需要上传1个3-10秒视频才能生成',
         type: 'warning'
       }
     }

@@ -57,6 +57,20 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 2. 模型参数管理（使用新系统）
   const modelState = useModelState(uiState.selectedModel, uiState)
 
+  const inputLimits = resolveInputLimits(
+    uiState.selectedModel,
+    modelState.params,
+    { imagesCount: uiState.uploadedImages.length, videosCount: uiState.uploadedVideos.length }
+  )
+  const maxImageCount = inputLimits.images.max
+  const videoValidationOptions = inputLimits.videoConstraints
+    ? {
+      minDuration: inputLimits.videoConstraints.minDurationSec,
+      maxDuration: inputLimits.videoConstraints.maxDurationSec,
+      maxSizeMB: inputLimits.videoConstraints.maxSizeMB
+    }
+    : undefined
+
   // 3. 模型可见性管理
   useModelVisibility(
     uiState.selectedProvider,
@@ -80,8 +94,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uiState.uploadedVideoFiles,
     uiState.setUploadedVideoFiles,
     uiState.setUploadedVideoFilePaths,
-    undefined,
-    undefined,
+    uiState.showAlert,
+    videoValidationOptions,
     uiState.setUploadedVideoDuration
   )
 
@@ -102,12 +116,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const providers = getAvailableProviders()
   const currentProvider = providers.find(p => p.id === uiState.selectedProvider)
   const currentModel = getModelInfo(uiState.selectedModel)
-  const inputLimits = resolveInputLimits(
-    uiState.selectedModel,
-    modelState.params,
-    { imagesCount: uiState.uploadedImages.length, videosCount: uiState.uploadedVideos.length }
-  )
-  const maxImageCount = inputLimits.images.max
 
   useEffect(() => {
     if (maxImageCount === 0 && uiState.uploadedImages.length > 0) {

@@ -178,6 +178,7 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
 
         if state == "TASK_STATUS_FAILED" {
             let reason = extract_task_failure_reason(&payload);
+            let summary = summarize_task_failure(&payload);
             eprintln!(
                 "[ai_runtime][ppio][task_failed] task_id={} reason={} payload={}",
                 task_id,
@@ -186,7 +187,7 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
             );
             return Err(AiRuntimeError::new(
                 "provider_task_failed",
-                format!("{} (task_id={})", reason, task_id),
+                format!("{} (task_id={}, {})", reason, task_id, summary),
             ));
         }
     }
@@ -314,4 +315,35 @@ fn extract_task_failure_reason(payload: &Value) -> String {
     }
 
     "task failed".to_string()
+}
+
+fn summarize_task_failure(payload: &Value) -> String {
+    let task_type = payload
+        .pointer("/task/task_type")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let progress = payload
+        .pointer("/task/progress_percent")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let image_count = payload
+        .get("images")
+        .and_then(Value::as_array)
+        .map(|v| v.len())
+        .unwrap_or(0);
+    let video_count = payload
+        .get("videos")
+        .and_then(Value::as_array)
+        .map(|v| v.len())
+        .unwrap_or(0);
+    let audio_count = payload
+        .get("audios")
+        .and_then(Value::as_array)
+        .map(|v| v.len())
+        .unwrap_or(0);
+
+    format!(
+        "task_type={}, progress={}%, result(images={}, videos={}, audios={})",
+        task_type, progress, image_count, video_count, audio_count
+    )
 }

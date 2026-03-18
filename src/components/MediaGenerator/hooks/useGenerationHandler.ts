@@ -125,8 +125,15 @@ export const useGenerationHandler = (
 
     const options = await resolveSmartAspectValues(selectedModel, rawOptions)
 
-    console.log('[GenerationHandler] Generated options:', options)
-    console.log('[GenerationHandler] Model type:', modelType)
+    console.log('[GenerationHandler] Prepared options summary:', {
+      model: selectedModel,
+      modelType,
+      imagesCount: Array.isArray(options.images) ? options.images.length : 0,
+      videosCount: Array.isArray(options.videos) ? options.videos.length : 0,
+      uploadedFilePathsCount: Array.isArray(options.uploadedFilePaths) ? options.uploadedFilePaths.length : 0,
+      uploadedVideoFilePathsCount: Array.isArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths.length : 0,
+      hasInlineVideoFile: options.video instanceof File
+    })
 
     // 调用生成回调（将 @图N 规范化为 图N）
     onGenerate(stripReferenceAtPrefix(input), selectedModel, modelType, options)
