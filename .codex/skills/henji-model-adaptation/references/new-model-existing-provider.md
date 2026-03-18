@@ -45,9 +45,11 @@
 - 以 API 文档为准，不盲拷旧模型字段。
 - 不要把全局 prompt 再定义为模型 params（项目已有统一 prompt 输入）。
 - PPIO 多媒体优先复用 `src/models/ppio/mediaSources.ts`。
+- builder 必须“自包含”：只使用函数体内可访问的变量/函数。不要依赖文件顶层 helper（Rust JS 沙箱执行时会 `ReferenceError`）。
 - 比例字段必须发送最终具体值（如 `16:9`），不发送 `smart/auto`。
 - UI 层的复合参数/特殊组合，必须在 builder 转成 API 要求字段后再发送。
 - 禁止把 UI 值未经转换直接透传给 API。
+- 若该模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，需要同步更新 override。
 
 ## 5) i18n 与文案
 
@@ -77,3 +79,4 @@
 
 - `npm run build`
 - 推荐 `npm run tauri:dev` 验证真实提交与回包
+- 若本地已有运行中的 Tauri 进程，改完后需重启或触发 manifest reload，确认 runtime 使用最新 `model-manifest.json`。

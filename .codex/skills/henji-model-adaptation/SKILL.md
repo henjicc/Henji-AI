@@ -29,9 +29,12 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src-tauri/src/ai_runtime/*`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
+- 牢记 runtime 约束：`request.builder` 会被序列化为 `builderJs` 在 Rust JS 沙箱独立执行，不能依赖模型文件顶层 helper/闭包变量。
+- 若模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，修改模型 builder 时必须同步检查 override，避免 manifest 与源码行为不一致。
 
 ## 4. 完成标准
 
 - 通过 `npm run build`。
 - 新增能力不引入跨层调用与 UI 直连模型 API。
 - 新增参数满足顺序约定，并明确“显示/请求”策略。
+- 需要验证运行中的 Tauri 进程已加载新 manifest（重启 `npm run tauri:dev` 或执行 manifest reload 命令）。
