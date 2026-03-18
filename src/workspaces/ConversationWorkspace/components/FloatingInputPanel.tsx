@@ -40,7 +40,7 @@ export function FloatingInputPanel({
       onMouseMove={onMouseMove}
     >
       <div
-        className="relative cursor-pointer overflow-hidden rounded-[24px] border border-zinc-700/35 bg-zinc-950/68 shadow-[0_12px_34px_rgba(0,0,0,0.42)] backdrop-blur-xl"
+        className="relative cursor-pointer overflow-hidden rounded-[24px] border border-border-dark bg-app shadow-2xl"
         style={{
           transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
@@ -67,13 +67,13 @@ export function FloatingInputPanel({
               <span className="text-xs bg-accent/20 text-brand-300 px-2 py-1 rounded whitespace-nowrap">
                 {displayModel}
               </span>
-              <span className="text-sm text-zinc-300 truncate flex-1">
+              <span className="text-sm text-text-muted truncate flex-1">
                 {hintText}
               </span>
             </div>
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 text-zinc-400"
+              className="h-5 w-5 text-text-muted"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
