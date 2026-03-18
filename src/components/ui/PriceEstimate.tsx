@@ -45,12 +45,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
     }
 
     // 格式化价格显示
-    const formatPrice = (value: number) => {
-        // 小于1元显示4位小数，否则2位
-        const formatted = value.toFixed(value < 1 ? 4 : 2)
-        // 移除尾部的0
-        return formatted.replace(/\.?0+$/, '')
-    }
+    const formatPrice = (value: number): string => value.toFixed(2)
 
     // 生成价格显示文本
     const currency = model.pricing.currency || '¥'
