@@ -8,8 +8,8 @@
     },
     "kie-grok-imagine": {
       "meta": {
-        "name": "Grok Imagine",
-        "description": "KIE Grok Imagine 文生图模型"
+        "name": "Grok Imagine 图片",
+        "description": "KIE Grok Imagine 图片生成模型"
       }
     },
     "kie-hailuo-02": {

@@ -8,8 +8,8 @@
     },
     "kie-grok-imagine": {
       "meta": {
-        "name": "Grok Imagine",
-        "description": "KIE Grok Imagine text-to-image model"
+        "name": "Grok Imagine Image",
+        "description": "KIE Grok Imagine Image text-to-image model"
       }
     },
     "kie-hailuo-02": {
