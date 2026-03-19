@@ -468,6 +468,22 @@
       }
     },
     {
+      "modelId": "ppio-kling-3.0",
+      "providerId": "ppio",
+      "modelType": "video",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/async/kling-v3.0-std-t2v",
+        "selectorJs": "(params) => {\n    var _a;\n    const uploadedFilePaths = Array.isArray(params.uploadedFilePaths)\n        ? params.uploadedFilePaths.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const legacyImages = Array.isArray(params.images)\n        ? params.images.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const requestImages = uploadedFilePaths.length > 0 ? uploadedFilePaths : legacyImages;\n    const rawResolution = (_a = params.ppioKling30Resolution) !== null && _a !== void 0 ? _a : params.resolution;\n    const resolution = rawResolution === '1080P' ? '1080P' : '720P';\n    const version = resolution === '1080P' ? 'pro' : 'std';\n    const modality = requestImages.length > 0 ? 'i2v' : 't2v';\n    return `/async/kling-v3.0-${version}-${modality}`;\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    var _a, _b, _c, _d;\n    const uploadedFilePaths = Array.isArray(params.uploadedFilePaths)\n        ? params.uploadedFilePaths.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const legacyImages = Array.isArray(params.images)\n        ? params.images.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const requestImages = uploadedFilePaths.length > 0 ? uploadedFilePaths : legacyImages;\n    const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 2500) : '';\n    const durationValue = (_a = params.ppioKling30Duration) !== null && _a !== void 0 ? _a : params.duration;\n    const duration = typeof durationValue === 'number' ? durationValue : Number(durationValue || 5);\n    const cfgScaleValue = (_b = params.ppioKling30CfgScale) !== null && _b !== void 0 ? _b : params.cfg_scale;\n    const cfgScale = typeof cfgScaleValue === 'number' ? cfgScaleValue : Number(cfgScaleValue !== null && cfgScaleValue !== void 0 ? cfgScaleValue : 0.5);\n    const rawSound = (_c = params.ppioKling30Sound) !== null && _c !== void 0 ? _c : params.sound;\n    const sound = rawSound === true;\n    const requestData = {\n        prompt,\n        duration,\n        sound,\n        cfg_scale: Number.isFinite(cfgScale) ? cfgScale : 0.5\n    };\n    if (requestImages.length > 0) {\n        requestData.image = requestImages[0];\n        if (requestImages.length > 1) {\n            requestData.end_image = requestImages[1];\n        }\n        return requestData;\n    }\n    const rawAspectRatio = (_d = params.ppioKling30AspectRatio) !== null && _d !== void 0 ? _d : params.aspect_ratio;\n    const aspectRatio = rawAspectRatio === '9:16' || rawAspectRatio === '1:1' ? rawAspectRatio : '16:9';\n    requestData.aspect_ratio = aspectRatio;\n    return requestData;\n}"
+      }
+    },
+    {
       "modelId": "ppio-kling-o1",
       "providerId": "ppio",
       "modelType": "video",

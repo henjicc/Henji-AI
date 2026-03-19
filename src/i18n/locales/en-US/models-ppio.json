@@ -46,6 +46,12 @@
         "description": "PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes"
       }
     },
+    "ppio-kling-3.0": {
+      "meta": {
+        "name": "Kling 3.0",
+        "description": "PPIO Kling video generation model v3.0 with automatic switching between Standard/Pro resolution and text/image-to-video based on image input"
+      }
+    },
     "ppio-minimax-hailuo-02": {
       "meta": {
         "name": "Minimax Hailuo 02"

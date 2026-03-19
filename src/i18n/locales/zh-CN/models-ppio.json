@@ -46,6 +46,12 @@
         "description": "派欧云可灵视频生成模型 O1 版本，支持文/图生视频、首尾帧、参考生视频、视频编辑四种模式"
       }
     },
+    "ppio-kling-3.0": {
+      "meta": {
+        "name": "可灵 3.0",
+        "description": "派欧云可灵视频生成模型 3.0 版本，支持按分辨率自动切换 Standard/Pro，并根据是否上传图片自动切换文生视频与图生视频"
+      }
+    },
     "ppio-minimax-hailuo-02": {
       "meta": {
         "name": "Minimax Hailuo 02"
