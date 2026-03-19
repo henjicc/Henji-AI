@@ -29,6 +29,8 @@ import { useUpdateCheck } from './ConversationWorkspace/hooks/useUpdateCheck'
 import { useAutoScrollOnResize } from './ConversationWorkspace/hooks/useAutoScrollOnResize'
 import { splitMulti } from './ConversationWorkspace/utils/multiFile'
 
+const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 1100
+
 const ConversationWorkspace: React.FC = () => {
   const { t } = useI18n()
   useDataDirectoryInit()
@@ -292,6 +294,7 @@ const ConversationWorkspace: React.FC = () => {
           isCollapsing={isCollapsing}
           modelLabel={panelModelId ? getModelDisplayName(panelModelId) : ''}
           prompt={panelPrompt}
+          maxWidthPx={FLOATING_INPUT_PANEL_MAX_WIDTH_PX}
           onExpand={expandPanelSmooth}
           onMouseEnter={handlePanelMouseEnter}
           onMouseLeave={handlePanelMouseLeave}

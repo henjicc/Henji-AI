@@ -69,10 +69,15 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
     disabled: option.disabled === true
   }))
 
-  const fallbackOption = useMemo(
-    () => options.find((option) => option.disabled !== true),
-    [options]
-  )
+  const fallbackOption = useMemo(() => {
+    const defaultOption = options.find(
+      (option) => option.disabled !== true && isSameValue(option.value, param.default)
+    )
+    if (defaultOption) {
+      return defaultOption
+    }
+    return options.find((option) => option.disabled !== true)
+  }, [options, param.default])
 
   const effectiveValue = !isUnsetValue(value)
     ? value

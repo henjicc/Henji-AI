@@ -117,6 +117,12 @@
         "name": "Vidu Q1"
       }
     },
+    "ppio-vidu-q2": {
+      "meta": {
+        "name": "Vidu Q2",
+        "description": "PPIO Vidu Q2 unified family model driven by edition and mode dimensions"
+      }
+    },
     "ppio-wan-2.5-preview": {
       "meta": {
         "name": "Wan 2.5 Preview"

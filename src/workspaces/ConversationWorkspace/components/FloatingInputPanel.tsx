@@ -7,6 +7,8 @@ interface FloatingInputPanelProps {
   isCollapsing: boolean
   modelLabel: string
   prompt: string
+  maxWidthPx?: number
+  viewportGutterPx?: number
   onExpand: () => void
   onMouseEnter: () => void
   onMouseLeave: () => void
@@ -20,6 +22,8 @@ export function FloatingInputPanel({
   isCollapsing,
   modelLabel,
   prompt,
+  maxWidthPx = 1320,
+  viewportGutterPx = 20,
   onExpand,
   onMouseEnter,
   onMouseLeave,
@@ -33,8 +37,11 @@ export function FloatingInputPanel({
   return (
     <div
       ref={containerRef}
-      className="fixed bottom-5 left-1/2 w-[95%] max-w-5xl -translate-x-1/2"
-      style={{ zIndex: 20 }}
+      className="fixed bottom-5 left-1/2 -translate-x-1/2"
+      style={{
+        zIndex: 20,
+        width: `min(calc(100vw - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}

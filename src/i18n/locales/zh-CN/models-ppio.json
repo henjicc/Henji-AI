@@ -117,6 +117,12 @@
         "name": "Vidu Q1"
       }
     },
+    "ppio-vidu-q2": {
+      "meta": {
+        "name": "Vidu Q2",
+        "description": "派欧云 Vidu Q2 家族统一模型，使用版本 edition 与模式 mode 双维度驱动"
+      }
+    },
     "ppio-wan-2.5-preview": {
       "meta": {
         "name": "Wan 2.5 Preview"

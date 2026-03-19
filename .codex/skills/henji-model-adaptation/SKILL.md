@@ -57,7 +57,7 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 若参数是否显示依赖“是否已上传图片/视频”，先核对前端显隐/联动实际使用的运行时字段名；当前仓库里，参数面板显隐通常依赖 `uploadedImages` / `uploadedVideos`，而 `uploadedFilePaths` 更偏向请求构建。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src-tauri/src/ai_runtime/*`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
-- 牢记 runtime 约束：`request.builder` 会被序列化为 `builderJs` 在 Rust JS 沙箱独立执行，不能依赖模型文件顶层 helper/闭包变量。
+- 牢记 runtime 约束：`endpoints.selector` 与 `request.builder` 都会被序列化后在 Rust JS 沙箱独立执行，不能依赖模型文件顶层 helper/闭包变量；需要的工具函数应内联在函数体内。
 - 若模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，修改模型 builder 时必须同步检查 override，避免 manifest 与源码行为不一致。
 - 多端点模型除“自动切路由”外，还要检查“分支参数契约”：
   - 文档只在部分端点定义的参数，应只在对应分支显示/发送；
@@ -67,6 +67,10 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
   - `meta.tags` 是否完整覆盖模型对外宣称的能力（如 `start-end-frame`、`reference-mode`、`motion-control`）；
   - 文案、筛选标签、输入约束、builder 映射是否一致；
   - 不要出现“请求层已支持某能力，但 tags 没标，导致功能筛选缺失”的情况。
+- 改动参数默认值后，必须做一次“首屏默认值一致性”检查：
+  - 模型 schema 的 `default` 与 UI 首次渲染显示值必须一致；
+  - 若出现“默认值回到首项”的现象，优先排查下拉组件回退策略是否错误地回退到首个 option，而不是 `param.default`；
+  - 同时检查 linkage 的 `autoSwitch/reset` 是否在初始化阶段覆盖了默认值。
 
 ## 4. 完成标准
 
@@ -74,3 +78,4 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 新增能力不引入跨层调用与 UI 直连模型 API。
 - 新增参数满足顺序约定，并明确“显示/请求”策略。
 - 需要验证运行中的 Tauri 进程已加载新 manifest（重启 `npm run tauri:dev` 或执行 manifest reload 命令）。
+- 默认值改动需通过“冷启动可见验证”：重启开发进程后确认参数面板初始显示值正确（不是仅看请求 builder 兜底）。
