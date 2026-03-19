@@ -123,6 +123,12 @@
         "description": "PPIO Vidu Q2 unified family model driven by edition and mode dimensions"
       }
     },
+    "ppio-vidu-q3": {
+      "meta": {
+        "name": "Vidu Q3",
+        "description": "PPIO Vidu Q3 unified model with Turbo as default and Pro enabled by the Pro Mode switch, with auto routing between text/image and start-end generation"
+      }
+    },
     "ppio-wan-2.5-preview": {
       "meta": {
         "name": "Wan 2.5 Preview"

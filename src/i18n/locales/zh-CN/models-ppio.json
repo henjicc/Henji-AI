@@ -123,6 +123,12 @@
         "description": "派欧云 Vidu Q2 家族统一模型，使用版本 edition 与模式 mode 双维度驱动"
       }
     },
+    "ppio-vidu-q3": {
+      "meta": {
+        "name": "Vidu Q3",
+        "description": "派欧云 Vidu Q3 统一模型，关闭专业模式为 Turbo，开启专业模式为 Pro，并自动在文/图生视频与首尾帧之间切换"
+      }
+    },
     "ppio-wan-2.5-preview": {
       "meta": {
         "name": "Wan 2.5 Preview"
