@@ -18,6 +18,23 @@ function pickFirstValue(value: string | undefined): string {
   return first?.trim() ?? '';
 }
 
+function extractTaskIdFromMetadata(metadata: Record<string, unknown> | undefined): string | undefined {
+  if (!metadata) return undefined
+  const direct = metadata.task_id ?? metadata.taskId ?? metadata.request_id ?? metadata.requestId
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    return direct.trim()
+  }
+  const task = metadata.task
+  if (task && typeof task === 'object') {
+    const taskRecord = task as Record<string, unknown>
+    const nested = taskRecord.task_id ?? taskRecord.taskId ?? taskRecord.request_id ?? taskRecord.requestId
+    if (typeof nested === 'string' && nested.trim().length > 0) {
+      return nested.trim()
+    }
+  }
+  return undefined
+}
+
 function resolveImageModelId(inputModelId: string): string {
   const requested = inputModelId.trim();
   if (requested && registry.getModel(requested)) {
@@ -55,6 +72,7 @@ export async function setApiKey(provider: string, apiKey: string): Promise<void>
 
 export async function generateImage(request: GenerateRequest): Promise<string> {
   const modelId = resolveImageModelId(request.model);
+  const generationService = GenerationService.getInstance();
   const params: Record<string, unknown> = {
     ...(request.extra_params ?? {}),
     prompt: request.prompt,
@@ -69,7 +87,15 @@ export async function generateImage(request: GenerateRequest): Promise<string> {
     params.uploadedFilePaths = request.reference_images;
   }
 
-  const result = await GenerationService.getInstance().generate(modelId, params);
+  let result = await generationService.generate(modelId, params);
+  if (result.status === 'pending') {
+    const taskId = result.taskId ?? extractTaskIdFromMetadata(result.metadata)
+    if (!taskId) {
+      throw new Error('异步任务缺少 taskId，无法继续轮询')
+    }
+    result = await generationService.continuePolling(modelId, taskId, params)
+  }
+
   const firstUrl = pickFirstValue(result.url);
   const firstPath = pickFirstValue(result.filePath);
   const output = firstPath || firstUrl;

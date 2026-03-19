@@ -17,7 +17,7 @@ export interface GenerateResult {
   /** 任务ID（用于异步任务跟踪） */
   taskId?: string
   /** 生成状态 */
-  status: 'completed' | 'timeout' | 'failed'
+  status: 'completed' | 'pending' | 'failed'
   /** 额外元数据 */
   metadata?: Record<string, any>
   /** 真实 API 请求/响应追踪 */

@@ -15,8 +15,12 @@ export function extractServerTaskIdFromMetadata(metadata: unknown): string | und
   if (!isRecord(metadata)) return undefined
   const candidates: unknown[] = [metadata['task_id'], metadata['taskId'], metadata['request_id'], metadata['requestId']]
   const taskObj = metadata['task']
+  const dataObj = metadata['data']
   if (isRecord(taskObj)) {
     candidates.push(taskObj['task_id'], taskObj['taskId'], taskObj['request_id'], taskObj['requestId'])
+  }
+  if (isRecord(dataObj)) {
+    candidates.push(dataObj['task_id'], dataObj['taskId'], dataObj['request_id'], dataObj['requestId'])
   }
   for (const candidate of candidates) {
     const id = normalizeServerTaskId(candidate)

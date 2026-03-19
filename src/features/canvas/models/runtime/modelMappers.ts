@@ -27,13 +27,6 @@ function resolveExpectedDurationMs(model: ModelDefinition, defaultDurationMs: nu
     return Math.max(10_000, Math.round(intervalMs * attempts));
   }
 
-  if (model.meta.polling?.expectedAttempts) {
-    return Math.max(
-      10_000,
-      Math.round(model.meta.polling.interval * model.meta.polling.expectedAttempts)
-    );
-  }
-
   return defaultDurationMs;
 }
 

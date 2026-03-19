@@ -233,6 +233,18 @@ export class GenerationService {
       })
       recordRuntimeTrace(modelId, params, response.trace)
 
+      if (response.status === 'pending') {
+        progressTracker?.stop()
+        return {
+          status: response.status,
+          taskId: response.taskId,
+          url: response.url,
+          filePath: response.filePath,
+          metadata: response.metadata,
+          trace: response.trace,
+        }
+      }
+
       if (response.status !== 'completed') {
         throw new Error(`Generation ${response.status}${formatFailedMetadata(response.metadata)}`)
       }
@@ -280,9 +292,19 @@ export class GenerationService {
   async continuePolling(
     modelId: string,
     taskId: string,
-    params: Record<string, unknown> = {}
+    params: Record<string, unknown> = {},
+    onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
+    let progressTracker: ReturnType<typeof createProgressTracker> | null = null
+
     try {
+      const model = registry.getModel(modelId)
+      const progressSpec = model && onProgress ? resolveProgressSpec(model, params) : null
+      progressTracker = onProgress && progressSpec
+        ? createProgressTracker(progressSpec, onProgress)
+        : null
+      progressTracker?.start()
+
       const response = await aiContinuePolling({
         modelId,
         taskId,
@@ -294,8 +316,11 @@ export class GenerationService {
         throw new Error(`Continue polling ${response.status}${formatFailedMetadata(response.metadata)}`)
       }
 
+      progressTracker?.complete()
+
       return {
         status: response.status,
+        taskId: response.taskId,
         url: response.url,
         filePath: response.filePath,
         metadata: response.metadata,
@@ -303,6 +328,7 @@ export class GenerationService {
       }
     } catch (error) {
       const message = getErrorMessage(error)
+      progressTracker?.fail(message)
       throw new Error(`Continue polling failed for ${modelId}: ${message}`)
     }
   }

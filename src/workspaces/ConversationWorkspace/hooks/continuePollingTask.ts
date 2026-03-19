@@ -3,8 +3,11 @@ import { logError, logInfo } from '@/utils/errorLogger'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
+import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
+
+type ContinuePollingProgressCallback = NonNullable<Parameters<GenerationService['continuePolling']>[3]>
 
 export interface ContinuePollingTaskParams {
   task: GenerationTask
@@ -41,14 +44,23 @@ export async function continuePollingTask({
     if (task.images) options.images = task.images
 
     updateTask(task.id, { status: 'generating', error: undefined, serverTaskId })
-    updateProgress(task.id, Math.max(1, task.progress ?? 0))
+    let currentProgress = Math.max(1, task.progress ?? 0)
+    updateProgress(task.id, currentProgress)
+
+    const handleProgress: ContinuePollingProgressCallback = (status) => {
+      if (status.progress === undefined) return
+      const next = Math.max(currentProgress, status.progress)
+      if (next <= currentProgress) return
+      currentProgress = next
+      updateProgress(task.id, currentProgress)
+    }
 
     const generationService = GenerationService.getInstance()
     const result = await generationService.continuePolling(task.model, serverTaskId, {
       prompt: task.prompt,
       text: task.prompt,
       ...options,
-    })
+    }, handleProgress)
     const resultObj: Record<string, unknown> = {
       url: result.url,
       filePath: result.filePath,
@@ -78,7 +90,7 @@ export async function continuePollingTask({
     ])
 
     updateProgress(task.id, 100)
-    await new Promise((r) => setTimeout(r, 180))
+    await new Promise((r) => setTimeout(r, resolveProgressSettleDelayMs(currentProgress)))
     updateTask(task.id, {
       status: 'success',
       progress: 100,

@@ -128,22 +128,6 @@ export function TaskList({
             )
           }
 
-          if (task.status === 'timeout') {
-            return (
-              <div className="flex items-center justify-center h-64 bg-layer rounded-lg border-2 border-yellow-500/30">
-                <div className="text-center w-full px-6">
-                  <p className="text-yellow-400 mb-2 font-medium">{t('ui:workspace.status.timeout')}</p>
-                  <p className="text-zinc-400 text-sm">{t('ui:workspace.status.timeoutHint')}</p>
-                  <div className="mt-5 flex justify-center">
-                    <UiButton variant="primary" size="sm" className="h-9 px-4" onClick={() => onRetryPolling(task)}>
-                      {t('ui:retry')}
-                    </UiButton>
-                  </div>
-                </div>
-              </div>
-            )
-          }
-
           if (task.status === 'error') {
             return (
               <div className="flex items-center justify-center h-64 bg-app rounded-lg border-2 border-red-500/20">

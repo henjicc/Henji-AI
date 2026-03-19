@@ -23,6 +23,7 @@ import { useTaskCleanup } from './ConversationWorkspace/hooks/useTaskCleanup'
 import { useTaskGeneration } from './ConversationWorkspace/hooks/useTaskGeneration'
 import { useTaskReplay } from './ConversationWorkspace/hooks/useTaskReplay'
 import { useTaskState } from './ConversationWorkspace/hooks/useTaskState'
+import { useAutoResumePolling } from './ConversationWorkspace/hooks/useAutoResumePolling'
 import { useTestModeShortcuts } from './ConversationWorkspace/hooks/useTestModeShortcuts'
 import { useToast } from './ConversationWorkspace/hooks/useToast'
 import { useUpdateCheck } from './ConversationWorkspace/hooks/useUpdateCheck'
@@ -86,6 +87,11 @@ const ConversationWorkspace: React.FC = () => {
     imageEditStatesRef,
     setUploadedImagesRef,
     setUploadedFilePathsRef,
+  })
+  useAutoResumePolling({
+    tasks,
+    isTasksLoaded,
+    handleContinuePolling,
   })
   const { handleRegenerate, handleReedit } = useTaskReplay({
     handleGenerate,
@@ -364,4 +370,3 @@ const ConversationWorkspace: React.FC = () => {
 }
 
 export default ConversationWorkspace
-

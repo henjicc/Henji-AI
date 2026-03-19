@@ -1,5 +1,5 @@
 use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
-use crate::ai_runtime::polling::{cancelled_error, timeout_error, wait_interval_ms};
+use crate::ai_runtime::polling::{cancelled_error, wait_interval_ms};
 use crate::ai_runtime::providers::{ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::types::{GenerateStatus, ProviderExecutionResult};
@@ -16,27 +16,31 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
     );
     let response = send_json(&input, &endpoint).await?;
 
-    let final_payload = if let Some(task_id) = extract_task_id(&response) {
+    if let Some(task_id) = extract_task_id(&response) {
         eprintln!(
             "[ai_runtime][ppio][submit_ok] route={} task_id={} payload={}",
             input.route,
             task_id,
             payload_preview(&response)
         );
-        poll_task(&input, &task_id).await?
-    } else {
-        eprintln!(
-            "[ai_runtime][ppio][submit_sync] route={} payload={}",
-            input.route,
-            payload_preview(&response)
-        );
-        response
-    };
+        return Ok(ProviderExecutionResult {
+            status: GenerateStatus::Pending,
+            url: String::new(),
+            task_id: Some(task_id),
+            metadata: response,
+        });
+    }
 
-    let urls = extract_urls(&final_payload);
+    eprintln!(
+        "[ai_runtime][ppio][submit_sync] route={} payload={}",
+        input.route,
+        payload_preview(&response)
+    );
+
+    let urls = extract_urls(&response);
     if urls.is_empty() {
-        let task_id = extract_task_id(&final_payload).unwrap_or_else(|| "unknown".to_string());
-        let preview = payload_preview(&final_payload);
+        let task_id = extract_task_id(&response).unwrap_or_else(|| "unknown".to_string());
+        let preview = payload_preview(&response);
         eprintln!(
             "[ai_runtime][ppio][empty_result] task_id={} payload={}",
             task_id, preview
@@ -53,7 +57,8 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
     Ok(ProviderExecutionResult {
         status: GenerateStatus::Completed,
         url: urls.join("|||"),
-        metadata: final_payload,
+        task_id: extract_task_id(&response),
+        metadata: response,
     })
 }
 
@@ -90,6 +95,7 @@ pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResu
     Ok(ProviderExecutionResult {
         status: GenerateStatus::Completed,
         url: urls.join("|||"),
+        task_id: Some(input.task_id.to_string()),
         metadata: final_payload,
     })
 }
@@ -128,9 +134,8 @@ async fn send_json(input: &ProviderExecutionInput<'_>, endpoint: &str) -> AiResu
 
 async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResult<Value> {
     let interval = input.polling.map(|p| p.interval).unwrap_or(3000);
-    let max_attempts = input.polling.map(|p| p.max_attempts).unwrap_or(120);
 
-    for _ in 0..max_attempts {
+    loop {
         if task_registry::is_cancelled(input.request_id) {
             return Err(cancelled_error(input.request_id));
         }
@@ -191,8 +196,6 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
             ));
         }
     }
-
-    Err(timeout_error(max_attempts).with_context(format!("task_id={}", task_id)))
 }
 
 fn extract_task_id(payload: &Value) -> Option<String> {

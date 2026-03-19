@@ -18,6 +18,7 @@ import type { ImageEditState } from '@/components/ImageEditor'
 import { saveEditState } from '@/utils/editStatePersistence'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { splitMulti } from '../utils/multiFile'
+import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { isRecord, isStringArray } from '../utils/typeGuards'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
@@ -194,10 +195,33 @@ export function useTaskGeneration({
       const resultObj: Record<string, unknown> = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
       const serverTaskId = extractServerTaskIdFromMetadata(metadata)
+        ?? (typeof resultObj['taskId'] === 'string' ? resultObj['taskId'] : undefined)
       if (serverTaskId) {
         updateTask(taskId, { serverTaskId })
       }
       logInfo('[Workspace] 生成响应', { model: task.model, taskId: serverTaskId, metadata })
+
+      if (resultObj['status'] === 'pending') {
+        if (!serverTaskId) {
+          throw new Error(messages.genericGenerateFailed)
+        }
+
+        await continuePollingTask({
+          task: {
+            ...task,
+            status: 'generating',
+            serverTaskId,
+            progress: lastProgressRef.current[taskId] ?? task.progress,
+            options,
+          },
+          genericGenerateFailed: messages.genericGenerateFailed,
+          notify,
+          updateTask,
+          updateProgress,
+          toUserMessage: maybeToUserMessage,
+        })
+        return
+      }
 
       const normalized = await normalizeMediaResultForDesktop(
         task,
@@ -220,8 +244,9 @@ export function useTaskGeneration({
         getMediaDurationFormatted(firstCheck, task.type),
       ])
 
+      const progressBeforeComplete = lastProgressRef.current[taskId] ?? 0
       updateProgress(taskId, 100)
-      await new Promise((r) => setTimeout(r, 180))
+      await new Promise((r) => setTimeout(r, resolveProgressSettleDelayMs(progressBeforeComplete)))
 
       updateTask(taskId, {
         status: 'success',
@@ -249,7 +274,7 @@ export function useTaskGeneration({
     } finally {
       delete lastProgressRef.current[taskId]
     }
-  }, [generateWithService, messages.genericGenerateFailed, updateProgress, updateTask])
+  }, [generateWithService, messages.genericGenerateFailed, notify, updateProgress, updateTask])
 
   const handleContinuePolling = useCallback(async (task: GenerationTask): Promise<void> => {
     await continuePollingTask({

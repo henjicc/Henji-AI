@@ -104,11 +104,11 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
   }, [clearTaskProgress, setTasks, tasks])
 
   const clearFailedTasks = useCallback(async (): Promise<void> => {
-    const failedTasks = tasks.filter((t) => t.status === 'error' || t.status === 'timeout')
+    const failedTasks = tasks.filter((t) => t.status === 'error')
     if (failedTasks.length === 0) return
 
     if (!isDesktop()) {
-      setTasks((prev) => prev.filter((t) => t.status !== 'error' && t.status !== 'timeout'))
+      setTasks((prev) => prev.filter((t) => t.status !== 'error'))
       failedTasks.forEach((t) => clearTaskProgress?.(t.id))
       return
     }
@@ -245,4 +245,3 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
 
   return { deleteTask, clearFailedTasks, clearAllTasks }
 }
-

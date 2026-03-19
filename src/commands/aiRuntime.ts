@@ -19,9 +19,10 @@ export interface AiContinuePollingRequestDto {
 }
 
 export interface AiGenerateResponseDto {
-  status: 'completed' | 'failed' | 'timeout'
+  status: 'completed' | 'pending' | 'failed'
   url: string
   filePath?: string
+  taskId?: string
   metadata?: Record<string, unknown>
   trace?: AiRuntimeTrace
 }

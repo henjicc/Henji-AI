@@ -9,6 +9,7 @@ export interface ProgressSpec {
 
 export interface ProgressTracker {
   start: () => void
+  stop: () => void
   complete: () => void
   fail: (message?: string) => void
 }
@@ -25,12 +26,93 @@ const DEFAULT_POLLING_ATTEMPTS = 120
 const DEFAULT_POLLING_INTERVAL = 3000
 
 const DEFAULT_DURATION_BY_TYPE: Record<ModelType, { baseMs: number; minMs: number; maxMs: number }> = {
-  image: { baseMs: 20000, minMs: 8000, maxMs: 60000 },
-  video: { baseMs: 45000, minMs: 15000, maxMs: 180000 },
-  audio: { baseMs: 20000, minMs: 8000, maxMs: 90000 }
+  image: { baseMs: 60000, minMs: 15000, maxMs: 240000 },
+  video: { baseMs: 120000, minMs: 30000, maxMs: 900000 },
+  audio: { baseMs: 10000, minMs: 3000, maxMs: 120000 }
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+
+const parseNumberLike = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim())
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  return null
+}
+
+const pickFirstFiniteNumber = (params: Record<string, unknown>, keys: string[]): number | null => {
+  for (const key of keys) {
+    const raw = parseNumberLike(params[key])
+    if (raw !== null) {
+      return raw
+    }
+  }
+  return null
+}
+
+const resolveAudioTextLength = (params: Record<string, unknown>): number => {
+  const textCandidates = [params.text, params.prompt]
+  for (const candidate of textCandidates) {
+    if (typeof candidate === 'string') {
+      const normalized = candidate.trim()
+      if (normalized.length > 0) {
+        return normalized.length
+      }
+    }
+  }
+  return 0
+}
+
+const resolveGenericDurationMs = (
+  modelType: ModelType,
+  params: Record<string, unknown>,
+  defaults: { baseMs: number; minMs: number; maxMs: number }
+): number => {
+  if (modelType === 'image') {
+    const imageCount = Math.max(
+      1,
+      Math.round(
+        pickFirstFiniteNumber(params, [
+          'maxImages',
+          'max_images',
+          'numImages',
+          'num_images',
+          'imageCount',
+          'image_count'
+        ]) ?? 1
+      )
+    )
+    const durationMs = defaults.baseMs + (imageCount - 1) * 12000
+    return clamp(durationMs, defaults.minMs, defaults.maxMs)
+  }
+
+  if (modelType === 'video') {
+    const videoDurationSeconds = pickFirstFiniteNumber(params, [
+      'duration',
+      'videoDuration',
+      'video_duration',
+      'ppioWan25VideoDuration',
+      'seconds'
+    ]) ?? 5
+    const normalizedSeconds = clamp(videoDurationSeconds, 1, 30)
+    const scale = clamp(normalizedSeconds / 5, 0.5, 6)
+    const durationMs = Math.round(defaults.baseMs * scale)
+    return clamp(durationMs, defaults.minMs, defaults.maxMs)
+  }
+
+  const textLength = resolveAudioTextLength(params)
+  const extraBlocks = Math.max(0, Math.ceil((textLength - 120) / 80))
+  const durationMs = defaults.baseMs + extraBlocks * 800
+  return clamp(durationMs, defaults.minMs, defaults.maxMs)
+}
 
 const getUnitCount = (params: Record<string, unknown>, scaleWith?: string): number => {
   if (!scaleWith) return 1
@@ -66,25 +148,26 @@ const resolveExpectedDurationMs = (
   params: Record<string, unknown>
 ): { durationMs: number; tickMs: number; curve: Required<ProgressCurveConfig> } | null => {
   const progress = model.meta.progress
-  const mode: ProgressConfig['mode'] = progress?.mode ?? (model.meta.polling ? 'polling' : 'time')
+  const mode: ProgressConfig['mode'] = progress?.mode ?? 'time'
   const typeDefaults = DEFAULT_DURATION_BY_TYPE[model.meta.type]
 
   if (mode === 'time') {
-    const baseDurationMs = progress?.mode === 'time'
-      ? progress.baseDurationMs
-      : typeDefaults.baseMs
-    const perUnitMs = progress?.mode === 'time' ? progress.perUnitMs ?? 0 : 0
-    const unitCount = getUnitCount(params, progress?.mode === 'time' ? progress.scaleWith : undefined)
-    const rawDuration = baseDurationMs + perUnitMs * Math.max(0, unitCount - 1)
+    const hasModelTimeConfig = progress?.mode === 'time'
+    const minDurationMs = hasModelTimeConfig ? progress.minDurationMs ?? typeDefaults.minMs : typeDefaults.minMs
+    const maxDurationMs = hasModelTimeConfig ? progress.maxDurationMs ?? typeDefaults.maxMs : typeDefaults.maxMs
 
-    const minDurationMs = progress?.mode === 'time' ? progress.minDurationMs ?? typeDefaults.minMs : typeDefaults.minMs
-    const maxDurationMs = progress?.mode === 'time' ? progress.maxDurationMs ?? typeDefaults.maxMs : typeDefaults.maxMs
-    const durationMs = clamp(rawDuration, minDurationMs, maxDurationMs)
+    const durationMs = hasModelTimeConfig
+      ? clamp(
+        progress.baseDurationMs + (progress.perUnitMs ?? 0) * Math.max(0, getUnitCount(params, progress.scaleWith) - 1),
+        minDurationMs,
+        maxDurationMs
+      )
+      : resolveGenericDurationMs(model.meta.type, params, typeDefaults)
 
     return {
       durationMs,
-      tickMs: progress?.mode === 'time' ? progress.tickMs ?? DEFAULT_TICK_MS : DEFAULT_TICK_MS,
-      curve: resolveCurve(progress?.mode === 'time' ? progress.curve : undefined)
+      tickMs: hasModelTimeConfig ? progress.tickMs ?? DEFAULT_TICK_MS : DEFAULT_TICK_MS,
+      curve: resolveCurve(hasModelTimeConfig ? progress.curve : undefined)
     }
   }
 
@@ -204,6 +287,9 @@ export const createProgressTracker = (
       emit(0, 'IN_PROGRESS')
       tick()
       timer = setInterval(tick, spec.tickMs)
+    },
+    stop: (): void => {
+      stopTimer()
     },
     complete: (): void => {
       stopTimer()

@@ -7,7 +7,8 @@ use crate::ai_runtime::request_builder_dsl;
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::trace;
 use crate::ai_runtime::types::{
-    AiContinuePollingRequestDto, AiGenerateRequestDto, AiGenerateResponseDto, ProviderKeyStatusDto,
+    AiContinuePollingRequestDto, AiGenerateRequestDto, AiGenerateResponseDto, GenerateStatus,
+    ProviderKeyStatusDto,
 };
 use crate::ai_runtime::upload;
 
@@ -119,7 +120,11 @@ pub async fn ai_generate(
     );
     trace::log_trace(&trace_payload);
 
-    let file_path = save_media_paths(&app, &provider_result.url).await?;
+    let file_path = if matches!(provider_result.status, GenerateStatus::Completed) {
+        save_media_paths(&app, &provider_result.url).await?
+    } else {
+        None
+    };
 
     task_registry::clear_cancel_flag(&request_id);
 
@@ -127,6 +132,7 @@ pub async fn ai_generate(
         status: provider_result.status,
         url: provider_result.url,
         file_path,
+        task_id: provider_result.task_id,
         metadata: Some(provider_result.metadata),
         trace: Some(trace_payload),
     })
@@ -197,6 +203,7 @@ pub async fn ai_continue_polling(
         status: provider_result.status,
         url: provider_result.url,
         file_path,
+        task_id: provider_result.task_id,
         metadata: Some(provider_result.metadata),
         trace: Some(trace_payload),
     })

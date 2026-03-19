@@ -8,8 +8,8 @@ use std::collections::HashMap;
 #[allow(dead_code)]
 pub enum GenerateStatus {
     Completed,
+    Pending,
     Failed,
-    Timeout,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,6 +38,8 @@ pub struct AiGenerateResponseDto {
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -150,5 +152,6 @@ pub struct RequestConfigDsl {
 pub struct ProviderExecutionResult {
     pub status: GenerateStatus,
     pub url: String,
+    pub task_id: Option<String>,
     pub metadata: Value,
 }

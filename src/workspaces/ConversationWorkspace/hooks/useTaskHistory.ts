@@ -14,6 +14,7 @@ import { isRecord, isStringArray } from '../utils/typeGuards'
 function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   if (status === 'completed') return 'success'
   if (status === 'failed') return 'error'
+  if (status === 'timeout') return 'error'
   return status
 }
 
@@ -221,7 +222,7 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
         const dataRoot = await getDataRoot()
 
         const tasksToSave = tasks.filter((t) =>
-          ['success', 'error', 'timeout', 'pending', 'queued', 'generating'].includes(t.status)
+          ['success', 'error', 'pending', 'queued', 'generating'].includes(t.status)
         )
 
         const allRecords = await databaseService.getHistory()

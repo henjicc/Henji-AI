@@ -1,5 +1,5 @@
 use crate::ai_runtime::errors::{AiResult, AiRuntimeError};
-use crate::ai_runtime::polling::{cancelled_error, timeout_error, wait_interval_ms};
+use crate::ai_runtime::polling::{cancelled_error, wait_interval_ms};
 use crate::ai_runtime::providers::{ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::types::{GenerateStatus, ProviderExecutionResult};
@@ -23,15 +23,32 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
         submit_async(&input, &clean_input).await?
     };
 
-    let final_payload = if sync_mode {
-        submit_payload
-    } else {
-        resolve_async_payload(&input, submit_payload).await?
-    };
+    if !sync_mode {
+        let task_id = submit_payload
+            .get("request_id")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(ToString::to_string)
+            .or_else(|| {
+                submit_payload
+                    .get("status_url")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .map(ToString::to_string)
+            })
+            .unwrap_or_else(|| input.request_id.to_string());
 
-    let urls = extract_urls(&final_payload);
+        return Ok(ProviderExecutionResult {
+            status: GenerateStatus::Pending,
+            url: String::new(),
+            task_id: Some(task_id),
+            metadata: submit_payload,
+        });
+    }
+
+    let urls = extract_urls(&submit_payload);
     if urls.is_empty() {
-        let request_id = final_payload
+        let request_id = submit_payload
             .get("request_id")
             .and_then(Value::as_str)
             .unwrap_or(input.request_id);
@@ -44,18 +61,27 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
     Ok(ProviderExecutionResult {
         status: GenerateStatus::Completed,
         url: urls.join("|||"),
-        metadata: final_payload,
+        task_id: submit_payload
+            .get("request_id")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        metadata: submit_payload,
     })
 }
 
 pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResult<ProviderExecutionResult> {
     let request_id = input.task_id.to_string();
-    let status_url = format!(
-        "{}/{}/requests/{}/status",
-        FAL_QUEUE_BASE_URL,
-        input.route.trim_start_matches('/'),
-        input.task_id
-    );
+    let status_url = if input.task_id.starts_with("http://") || input.task_id.starts_with("https://") {
+        input.task_id.to_string()
+    } else {
+        format!(
+            "{}/{}/requests/{}/status",
+            FAL_QUEUE_BASE_URL,
+            input.route.trim_start_matches('/'),
+            input.task_id
+        )
+    };
+    let task_id = input.task_id.to_string();
     let final_payload = poll_by_status_url(input, &status_url).await?;
     let urls = extract_urls(&final_payload);
     if urls.is_empty() {
@@ -68,6 +94,7 @@ pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResu
     Ok(ProviderExecutionResult {
         status: GenerateStatus::Completed,
         url: urls.join("|||"),
+        task_id: Some(task_id),
         metadata: final_payload,
     })
 }
@@ -113,53 +140,13 @@ async fn send_fal_request(
     Ok(payload)
 }
 
-async fn resolve_async_payload(
-    input: &ProviderExecutionInput<'_>,
-    submit_payload: Value,
-) -> AiResult<Value> {
-    let status_url = submit_payload
-        .get("status_url")
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-        .or_else(|| {
-            submit_payload
-                .get("request_id")
-                .and_then(Value::as_str)
-                .map(|request_id| {
-                    format!(
-                        "{}/{}/requests/{}/status",
-                        FAL_QUEUE_BASE_URL,
-                        input.route.trim_start_matches('/'),
-                        request_id
-                    )
-                })
-        })
-        .ok_or_else(|| AiRuntimeError::new("invalid_response", "Fal async response missing status_url"))?;
-    let request_ref = submit_payload
-        .get("request_id")
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-        .unwrap_or_else(|| status_url.clone());
-
-    let continue_input = ProviderContinuePollingInput {
-        client: input.client,
-        api_key: input.api_key,
-        route: input.route,
-        task_id: &request_ref,
-        request_id: input.request_id,
-        polling: input.polling,
-    };
-    poll_by_status_url(continue_input, &status_url).await
-}
-
 async fn poll_by_status_url(
     input: ProviderContinuePollingInput<'_>,
     status_url: &str,
 ) -> AiResult<Value> {
     let interval = input.polling.map(|p| p.interval).unwrap_or(3000);
-    let max_attempts = input.polling.map(|p| p.max_attempts).unwrap_or(200);
 
-    for _ in 0..max_attempts {
+    loop {
         if task_registry::is_cancelled(input.request_id) {
             return Err(cancelled_error(input.request_id));
         }
@@ -215,8 +202,6 @@ async fn poll_by_status_url(
             return Err(AiRuntimeError::new("provider_task_failed", "Fal task failed"));
         }
     }
-
-    Err(timeout_error(max_attempts).with_context(format!("request_id={}", input.task_id)))
 }
 
 fn strip_sync_mode(value: Value) -> Value {
