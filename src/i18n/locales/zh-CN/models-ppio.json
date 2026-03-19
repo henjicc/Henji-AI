@@ -100,6 +100,12 @@
         "description": "派欧云 Nano Banana 2 图片模型，支持文生图与图片编辑，并根据是否上传图片自动切换端点"
       }
     },
+    "ppio-grok-imagine-image": {
+      "meta": {
+        "name": "Grok Imagine 图片",
+        "description": "派欧云 Grok Imagine 图片模型，支持文生图与图片编辑，并根据是否上传图片自动切换端点"
+      }
+    },
     "ppio-vidu-q1": {
       "meta": {
         "name": "Vidu Q1"

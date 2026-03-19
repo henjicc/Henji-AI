@@ -43,6 +43,9 @@
 
 - 顺序规则见 `param-order-patterns.md`。
 - 先通过 schema 表达模式差异，不在 UI 里写 `if (modelId===...)`。
+- 若某参数只被部分端点支持，优先用 `visible` / linkage / requirements 把它限制在对应分支，而不是“全局展示 + builder 静默丢弃”。
+- 若参数显隐依赖上传素材，先确认当前前端给显隐系统注入的是哪个运行时字段；当前仓库通常用 `uploadedImages` / `uploadedVideos` 做显隐与联动判断，不要想当然写成 `uploadedFilePaths`。
+- `output_format` / `outputFormat` 按当前产品约定一律不新增到 `params`；即使 API 文档支持，也默认不展示。
 - 需要媒体输入约束时优先用：
   - `inputLimits`
   - `requirements`
@@ -70,10 +73,13 @@
 - 以 API 文档为准，不盲拷旧模型字段。
 - 不要把全局 prompt 再定义为模型 params（项目已有统一 prompt 输入）。
 - PPIO 多媒体优先复用 `src/models/ppio/mediaSources.ts`。
+- 先确认 `endpoints` 里的 route 是否符合该 provider 在仓库中的既有写法；不要只照着接口文档里的标题或相对路径手填，尤其要检查是否存在统一前缀（例如 `/async`）。
 - builder 必须“自包含”：只使用函数体内可访问的变量/函数。不要依赖文件顶层 helper（Rust JS 沙箱执行时会 `ReferenceError`）。
 - 比例字段必须发送最终具体值（如 `16:9`），不发送 `smart/auto`。
 - UI 层的复合参数/特殊组合，必须在 builder 转成 API 要求字段后再发送。
 - 禁止把 UI 值未经转换直接透传给 API。
+- `output_format` / `outputFormat` 按当前产品约定一律不发送；新增模型不要因为参考旧实现或接口文档存在该字段而补传。
+- 多端点 builder 必须按端点分支只发送该分支文档定义的字段；例如图片编辑未定义 `aspect_ratio` / `output_format` 时，就不要因为文生图分支支持而一并透传。
 - 多端点模型必须同时检查：
   - `endpoints.selector` 是否完整覆盖所有路由分支；
   - builder 是否按分支输出不同字段；
@@ -110,3 +116,4 @@
 - `npm run build`
 - 推荐 `npm run tauri:dev` 验证真实提交与回包
 - 若本地已有运行中的 Tauri 进程，改完后需重启或触发 manifest reload，确认 runtime 使用最新 `model-manifest.json`。
+- 若出现“UI 仍显示旧参数”或“请求仍打到旧路由”，先排查是否是运行中的 Tauri / dev 进程未重载最新 manifest，而不是直接怀疑 builder。

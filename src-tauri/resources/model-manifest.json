@@ -410,6 +410,22 @@
       }
     },
     {
+      "modelId": "ppio-grok-imagine-image",
+      "providerId": "ppio",
+      "modelType": "image",
+      "polling": {
+        "interval": 3000,
+        "maxAttempts": 120
+      },
+      "endpoints": {
+        "defaultRoute": "/async/grok-imagine-image-t2i",
+        "selectorJs": "(params) => {\n    const uploadedFilePaths = Array.isArray(params.uploadedFilePaths)\n        ? params.uploadedFilePaths.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const legacyImages = Array.isArray(params.images)\n        ? params.images.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const requestImages = uploadedFilePaths.length > 0 ? uploadedFilePaths : legacyImages;\n    return requestImages.length > 0\n        ? '/async/grok-imagine-image-edit'\n        : '/async/grok-imagine-image-t2i';\n}"
+      },
+      "request": {
+        "builderJs": "(params) => {\n    const uploadedFilePaths = Array.isArray(params.uploadedFilePaths)\n        ? params.uploadedFilePaths.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const legacyImages = Array.isArray(params.images)\n        ? params.images.filter((item) => typeof item === 'string' && item.trim().length > 0)\n        : [];\n    const requestImages = uploadedFilePaths.length > 0 ? uploadedFilePaths : legacyImages;\n    const supportedAspectRatios = ['2:1', '20:9', '16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16', '9:20', '1:2'];\n    const parseAspectRatio = (value) => {\n        if (typeof value !== 'string' || value.indexOf(':') === -1) {\n            return null;\n        }\n        const parts = value.split(':').map(Number);\n        if (parts.length !== 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1]) || parts[0] <= 0 || parts[1] <= 0) {\n            return null;\n        }\n        return parts[0] / parts[1];\n    };\n    const resolveClosestAspectRatio = (targetRatio) => {\n        let bestValue = '1:1';\n        let bestDistance = Number.POSITIVE_INFINITY;\n        for (const candidate of supportedAspectRatios) {\n            const ratio = parseAspectRatio(candidate);\n            if (ratio === null) {\n                continue;\n            }\n            const distance = Math.abs(ratio - targetRatio);\n            if (distance < bestDistance) {\n                bestDistance = distance;\n                bestValue = candidate;\n            }\n        }\n        return bestValue;\n    };\n    const requestData = {\n        prompt: typeof params.prompt === 'string' ? params.prompt : ''\n    };\n    if (requestImages.length > 0) {\n        requestData.image = requestImages[0];\n        return requestData;\n    }\n    const imageRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0\n        ? params.__firstImageRatio\n        : 1;\n    const rawAspectRatio = typeof params.aspectRatio === 'string'\n        ? params.aspectRatio\n        : 'smart';\n    const aspectRatio = rawAspectRatio === 'smart' || rawAspectRatio === 'auto' || rawAspectRatio.length === 0\n        ? resolveClosestAspectRatio(imageRatioHint)\n        : rawAspectRatio;\n    requestData.aspect_ratio = supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1';\n    return requestData;\n}"
+      }
+    },
+    {
       "modelId": "ppio-kling-2.5-turbo",
       "providerId": "ppio",
       "modelType": "video",

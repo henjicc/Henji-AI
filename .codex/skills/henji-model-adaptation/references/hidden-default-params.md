@@ -10,6 +10,7 @@
 
 - 直接不定义到 `params`，也不要在 builder 发送。
 - 常见于产品暂不开放的高级参数（例如部分模型的 negative prompt）。
+- Henji-AI 当前新增适配约定：`output_format` / `outputFormat` 统一走这一类，不展示也不请求。
 
 ## C. 不显示但固定请求
 
@@ -33,7 +34,7 @@
   - `src/models/ppio/wan-2.6.model.ts`
 - `remove_watermark: true`
   - `src/models/kie/sora2.model.ts`
-- 固定输出格式
+- 历史存量里存在输出格式字段，但不要作为新增适配参考：
   - `output_format: 'png'` in `src/models/fal/z-image-turbo.model.ts`
   - `output_format: 'url'` in `src/models/ppio/minimax-speech-2.6.model.ts`
 
@@ -55,3 +56,4 @@
 - 不发送 API 文档未定义字段。
 - 固定默认值要集中在 builder，避免散落在 UI。
 - 同一字段在同供应商模型中保持命名一致。
+- 对于 `output_format` / `outputFormat`，当前新增模型直接不定义、不发送；不要因为文档支持或仓库里有历史存量就继续扩散。

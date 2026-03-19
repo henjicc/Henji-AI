@@ -43,11 +43,18 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 信息不足时，停止编码并向用户补充最小必要信息。
 - 若用户未提供价格或计费规则，必须先追问价格，再继续模型实现。
 - 优先复用同供应商、同模态、同模型家族的现有模型定义；仅将其作为起点，以官方 API 文档为准。
+- 对接已接入的 provider 时，先核对该 provider 在仓库里的既有 route 写法与 runtime 约定，再决定 `endpoints` 填什么；不要只按文档标题猜路径，也不要漏掉现有 provider 统一前缀（例如部分 PPIO 路由实际要走 `/async/...`）。
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
+- Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。
+- 若参数是否显示依赖“是否已上传图片/视频”，先核对前端显隐/联动实际使用的运行时字段名；当前仓库里，参数面板显隐通常依赖 `uploadedImages` / `uploadedVideos`，而 `uploadedFilePaths` 更偏向请求构建。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src-tauri/src/ai_runtime/*`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
 - 牢记 runtime 约束：`request.builder` 会被序列化为 `builderJs` 在 Rust JS 沙箱独立执行，不能依赖模型文件顶层 helper/闭包变量。
 - 若模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，修改模型 builder 时必须同步检查 override，避免 manifest 与源码行为不一致。
+- 多端点模型除“自动切路由”外，还要检查“分支参数契约”：
+  - 文档只在部分端点定义的参数，应只在对应分支显示/发送；
+  - 不要把分支不支持的参数继续展示在 UI 上，再靠 builder 静默忽略；
+  - 文档未定义字段默认不发送。
 
 ## 4. 完成标准
 
