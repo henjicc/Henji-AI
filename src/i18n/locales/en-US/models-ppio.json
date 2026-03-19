@@ -49,7 +49,7 @@
     "ppio-kling-3.0": {
       "meta": {
         "name": "Kling 3.0",
-        "description": "PPIO Kling video generation model v3.0 with automatic switching between Standard/Pro resolution and text/image-to-video based on image input"
+        "description": "PPIO Kling video generation model v3.0 with automatic switching between Standard/Pro resolution and support for text-to-video, image-to-video, and start-end-frame"
       }
     },
     "ppio-minimax-hailuo-02": {

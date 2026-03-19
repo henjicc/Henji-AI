@@ -9,9 +9,9 @@ export const kling30Model = defineModel({
     name: { key: 'meta.name', fallback: 'Kling 3.0' },
     description: {
       key: 'meta.description',
-      fallback: 'PPIO Kling video generation model v3.0 with automatic switching between Standard/Pro resolution and text/image-to-video'
+      fallback: 'PPIO Kling video generation model v3.0 with automatic switching between Standard/Pro resolution and support for text-to-video, image-to-video, and start-end-frame'
     },
-    tags: ['text-to-video', 'image-to-video', 'provider-ppio'],
+    tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'provider-ppio'],
     polling: {
       interval: 3000,
       maxAttempts: 120,

@@ -49,7 +49,7 @@
     "ppio-kling-3.0": {
       "meta": {
         "name": "可灵 3.0",
-        "description": "派欧云可灵视频生成模型 3.0 版本，支持按分辨率自动切换 Standard/Pro，并根据是否上传图片自动切换文生视频与图生视频"
+        "description": "派欧云可灵视频生成模型 3.0 版本，支持按分辨率自动切换 Standard/Pro，并支持文生视频、图生视频与首尾帧"
       }
     },
     "ppio-minimax-hailuo-02": {

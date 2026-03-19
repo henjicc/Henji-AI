@@ -24,6 +24,7 @@
   - `meta.id/provider/type/i18nScope/name/description/tags`
   - `params/linkages/endpoints/request/pricing`
 - 文件名必须以 `.model.ts` 结尾。
+- `meta.tags` 不是装饰信息，而是功能筛选数据源；凡是产品要支持筛选的能力，都必须在适配时显式核对是否已写入 tags。
 
 ### 2.1) 先判断要不要“一个模型多端点”
 
@@ -38,12 +39,17 @@
   - 图片：`无图=文生图，有图=图像编辑` -> 一个模型，自动切换。
   - 视频：`0张图=文生视频，1张图=首帧，2张图=首尾帧` -> 一个模型；可纯自动切换，也可保留 `mode` 并在 2 张图时自动切到 `首尾帧`。
   - 视频：再加 `多参考图` / `视频编辑` / `视频参考` -> 一个模型，但应显式 `mode`。
+  - 注意：`首尾帧` 不一定意味着独立端点或独立 `mode`。若文档是在同一个 i2v 端点中通过第二张图/`end_image`/`last_image` 之类字段启用该能力，仍应视为模型支持 `start-end-frame`，并补齐 tags、输入约束与 builder 映射。
 
 ## 3) 参数设计
 
 - 顺序规则见 `param-order-patterns.md`。
 - 先通过 schema 表达模式差异，不在 UI 里写 `if (modelId===...)`。
 - 若某参数只被部分端点支持，优先用 `visible` / linkage / requirements 把它限制在对应分支，而不是“全局展示 + builder 静默丢弃”。
+- 若某能力来自同端点内的可选字段，而不是独立端点：
+  - 仍要把该能力反映到 `meta.tags`；
+  - 仍要通过 `inputLimits` / `requirements` 明确素材数量；
+  - 不要求一定暴露 `mode`，但不能因为“没有独立路由”就漏掉功能声明。
 - 若参数显隐依赖上传素材，先确认当前前端给显隐系统注入的是哪个运行时字段；当前仓库通常用 `uploadedImages` / `uploadedVideos` 做显隐与联动判断，不要想当然写成 `uploadedFilePaths`。
 - `output_format` / `outputFormat` 按当前产品约定一律不新增到 `params`；即使 API 文档支持，也默认不展示。
 - 需要媒体输入约束时优先用：
@@ -80,6 +86,10 @@
 - 禁止把 UI 值未经转换直接透传给 API。
 - `output_format` / `outputFormat` 按当前产品约定一律不发送；新增模型不要因为参考旧实现或接口文档存在该字段而补传。
 - 多端点 builder 必须按端点分支只发送该分支文档定义的字段；例如图片编辑未定义 `aspect_ratio` / `output_format` 时，就不要因为文生图分支支持而一并透传。
+- 单端点多能力 builder 也要检查：
+  - 是否已正确发送触发该能力的可选字段（如 `end_image` / `last_image`）；
+  - 是否因为只关注 route 而遗漏能力字段；
+  - 是否同步补齐了与该能力对应的 `meta.tags`。
 - 多端点模型必须同时检查：
   - `endpoints.selector` 是否完整覆盖所有路由分支；
   - builder 是否按分支输出不同字段；
@@ -92,6 +102,7 @@
 - 在 `src/i18n/locales/zh-CN/models-{provider}.json` 新增 `defs.{modelId}`。
 - 在 `src/i18n/locales/en-US/models-{provider}.json` 同步新增。
 - 若用了 shared helper，确保 key 存在并能通过 i18n 检查。
+- 描述文案应与实际能力一致；若模型支持首尾帧/参考模式/动作控制等能力，但文案或 tags 未体现，视为适配不完整。
 
 ## 6) 价格（必须确认）
 
