@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.linkage.smartMatch')
+
 /**
  * 智能匹配算法
  *
@@ -29,7 +33,7 @@ export function findClosestRatio(targetRatio: number, ratios: string[]): string 
     const [w, h] = ratio.split(':').map(Number)
 
     if (isNaN(w) || isNaN(h) || h === 0) {
-      console.warn(`[SmartMatch] Invalid ratio format: ${ratio}`)
+      logger.warn(`[SmartMatch] Invalid ratio format: ${ratio}`)
       continue
     }
 
@@ -63,6 +67,7 @@ export function findClosestRatio(targetRatio: number, ratios: string[]): string 
  */
 export function findClosestAspectRatio(
   imageSize: { width: number; height: number },
+
   ratios: string[]
 ): string {
   if (imageSize.height === 0) {
@@ -132,7 +137,7 @@ export async function smartMatchImageRatio(
     const size = await getImageSize(imageDataUrl)
     return findClosestAspectRatio(size, availableRatios)
   } catch (error) {
-    console.error('[SmartMatch] Failed to match image ratio:', error)
+    logger.error('[SmartMatch] Failed to match image ratio:', error)
     // 返回第一个可用比例作为降级
     return availableRatios[0] || '16:9'
   }

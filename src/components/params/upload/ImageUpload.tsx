@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.params.upload.ImageUpload')
 /**
  * ImageUpload 组件
  *
@@ -84,7 +87,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   const handleEdit = (index: number) => {
     // setEditingIndex(index)
     // TODO: 集成 ImageEditor
-    console.log('Edit image at index:', index)
+    logger.info('Edit image at index:', index)
   }
 
   return (
@@ -98,6 +101,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         {value.map((url, index) => {
           const displayUrl = param.format === 'base64' && !param.base64Prefix
             ? `data:image/png;base64,${url}`
+
             : url
 
           return (

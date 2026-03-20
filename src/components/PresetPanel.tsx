@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Preset, PresetSaveMode } from '../types/preset'
@@ -6,9 +7,11 @@ import { canDeleteFile } from '../utils/fileRefCount'
 import { readJsonFromAppData } from '../utils/save'
 import { remove } from '@tauri-apps/plugin-fs'
 import PanelTrigger from './ui/PanelTrigger'
-import { logError, logInfo } from '../utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+
+const logger = createLogger('components.PresetPanel')
+
 interface PresetPanelProps {
     getCurrentState: () => Record<string, any>
     onLoadPreset: (params: Record<string, any>) => void
@@ -69,7 +72,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             setSaveMode(null)
             setPresetName('')
         } catch (error) {
-            logError('保存预设失败:', error)
+            logger.error('保存预设失败:', error)
             alert(t('ui:presets.alerts.saveFailed'))
         }
     }
@@ -102,17 +105,17 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                     if (canDelete) {
                         try {
                             await remove(filePath)
-                            logInfo('[PresetPanel] 删除无引用文件:', filePath)
+                            logger.info('[PresetPanel] 删除无引用文件:', filePath)
                         } catch (error) {
-                            logError('[PresetPanel] 删除文件失败:', { data: [filePath, error] })
+                            logger.error('[PresetPanel] 删除文件失败:', { data: [filePath, error] })
                         }
                     } else {
-                        logInfo('[PresetPanel] 保留文件(仍有引用):', filePath)
+                        logger.info('[PresetPanel] 保留文件(仍有引用):', filePath)
                     }
                 }
             }
         } catch (error) {
-            logError('删除预设失败:', error)
+            logger.error('删除预设失败:', error)
             alert(t('ui:presets.alerts.deleteFailed'))
         } finally {
             setDeletingClosing(true)
@@ -364,3 +367,4 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     )
 }
 export default PresetPanel
+

@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.resolutionCalculator')
+
 /**
  * 通用分辨率计算工具
  *
@@ -5,8 +9,6 @@
  * - 基数（baseSize）：控制正方形（1:1）时的边长
  * - 其他比例的分辨率根据基数计算，确保总像素数不超过 baseSize × baseSize
  */
-
-import { logWarning } from '../utils/errorLogger'
 export interface ResolutionSize {
   width: number
   height: number
@@ -71,7 +73,7 @@ export function calculateResolutions(
   for (const ratio of aspectRatios) {
     const [w, h] = ratio.split(':').map(Number)
     if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
-      logWarning('', `Invalid aspect ratio: ${ratio}`)
+      logger.warn('', `Invalid aspect ratio: ${ratio}`)
       continue
     }
     result[ratio] = calculateResolution(baseSize, w, h)
@@ -208,3 +210,4 @@ export function calculateResolutionWithBounds(
 
   return { width, height }
 }
+

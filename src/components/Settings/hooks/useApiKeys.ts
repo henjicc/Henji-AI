@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import { useEffect, useRef, useState } from 'react'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import {
@@ -7,6 +8,8 @@ import {
   aiSetProviderApiKey,
 } from '@/commands/aiRuntime'
 import { useSettingsStore } from '@/stores/settingsStore'
+
+const logger = createLogger('components.Settings.hooks.useApiKeys')
 
 type ApiKeys = Record<ApiKeyProvider, string>
 type ApiKeyVisibility = Record<ApiKeyProvider, boolean>
@@ -66,7 +69,7 @@ export function useApiKeys(): UseApiKeysResult {
               const apiKey = await aiGetProviderApiKey(providerId)
               return [providerId, apiKey ?? ''] as const
             } catch (error) {
-              console.error(`[useApiKeys] load key failed: ${providerId}`, error)
+              logger.error(`[useApiKeys] load key failed: ${providerId}`, error)
               return [providerId, ''] as const
             }
           })
@@ -81,7 +84,7 @@ export function useApiKeys(): UseApiKeysResult {
         setProviderKeyStatuses(statusMap)
         setKeys(loadedKeys)
       } catch (error) {
-        console.error('[useApiKeys] load key status failed', error)
+        logger.error('[useApiKeys] load key status failed', error)
       }
     }
 
@@ -116,7 +119,7 @@ export function useApiKeys(): UseApiKeysResult {
           await aiSetProviderApiKey(provider, trimmed)
           setProviderKeyStatus(provider, true)
         } catch (error) {
-          console.error(`[useApiKeys] update key failed: ${provider}`, error)
+          logger.error(`[useApiKeys] update key failed: ${provider}`, error)
         }
       })()
     }, WRITE_DEBOUNCE_MS)
@@ -128,3 +131,4 @@ export function useApiKeys(): UseApiKeysResult {
 
   return { keys, visibility, updateKey, toggleVisibility }
 }
+

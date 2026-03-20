@@ -1,11 +1,13 @@
+import { createLogger } from '@/core/logging'
 import { GenerationService } from '@/core/services/GenerationService'
-import { logError, logInfo } from '@/utils/errorLogger'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.continuePollingTask')
 
 type ContinuePollingProgressCallback = NonNullable<Parameters<GenerationService['continuePolling']>[3]>
 
@@ -31,13 +33,13 @@ export async function continuePollingTask({
     ?? extractServerTaskIdFromMetadata(task.result as unknown)
 
   if (!serverTaskId) {
-    logError('[Workspace] 再次轮询失败：缺少有效任务ID', { taskId: task.id, model: task.model, error: task.error })
+    logger.error('[Workspace] 再次轮询失败：缺少有效任务ID', { taskId: task.id, model: task.model, error: task.error })
     notify(genericGenerateFailed, 'error')
     return
   }
 
   try {
-    logInfo('[Workspace] 开始再次轮询', { taskId: task.id, model: task.model, serverTaskId })
+    logger.info('[Workspace] 开始再次轮询', { taskId: task.id, model: task.model, serverTaskId })
     const options = { ...(task.options ?? {}) }
     if (task.uploadedFilePaths) options.uploadedFilePaths = task.uploadedFilePaths
     if (task.uploadedVideoFilePaths) options.uploadedVideoFilePaths = task.uploadedVideoFilePaths
@@ -66,7 +68,7 @@ export async function continuePollingTask({
       filePath: result.filePath,
       metadata: result.metadata,
     }
-    logInfo('[Workspace] 继续轮询响应', { model: task.model, taskId: serverTaskId, metadata: resultObj['metadata'] })
+    logger.info('[Workspace] 继续轮询响应', { model: task.model, taskId: serverTaskId, metadata: resultObj['metadata'] })
 
     const normalized = await normalizeMediaResultForDesktop(
       task,
@@ -79,7 +81,7 @@ export async function continuePollingTask({
     const { url, filePath } = normalized
 
     if (!url) {
-      logError('[Workspace] 继续轮询响应缺少 URL', { model: task.model, result: resultObj })
+      logger.error('[Workspace] 继续轮询响应缺少 URL', { model: task.model, result: resultObj })
       throw new Error(genericGenerateFailed)
     }
 
@@ -107,7 +109,7 @@ export async function continuePollingTask({
       },
     })
   } catch (error) {
-    logError('[Workspace] 继续轮询失败', error)
+    logger.error('[Workspace] 继续轮询失败', error)
     const errorMessage = toUserMessage(error) || genericGenerateFailed
     updateTask(task.id, {
       status: 'error',
@@ -116,3 +118,4 @@ export async function continuePollingTask({
     })
   }
 }
+

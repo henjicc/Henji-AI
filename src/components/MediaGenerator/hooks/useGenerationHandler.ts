@@ -1,14 +1,18 @@
+import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelType } from '@/core/types'
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens'
 import type { ModelState } from '../state/useModelState'
 import {
+
   findSquareAspectValue,
   getAspectChoiceParams,
   isSmartAspectValue,
   resolveClosestAspectValue,
 } from '@/core/params/ratioResolution'
+
+const logger = createLogger('components.MediaGenerator.hooks.useGenerationHandler')
 
 function getFirstImageSource(options: Record<string, unknown>): string | null {
   const images = options.images
@@ -103,7 +107,7 @@ export const useGenerationHandler = (
     const modelInfo = registry.getModelInfo(selectedModel)
 
     if (!modelInfo) {
-      console.error(`[GenerationHandler] Model not found: ${selectedModel}`)
+      logger.error(`[GenerationHandler] Model not found: ${selectedModel}`)
       return
     }
 
@@ -125,7 +129,7 @@ export const useGenerationHandler = (
 
     const options = await resolveSmartAspectValues(selectedModel, rawOptions)
 
-    console.log('[GenerationHandler] Prepared options summary:', {
+    logger.info('[GenerationHandler] Prepared options summary:', {
       model: selectedModel,
       modelType,
       imagesCount: Array.isArray(options.images) ? options.images.length : 0,
@@ -151,3 +155,4 @@ export const useGenerationHandler = (
 
   return { handleGenerate }
 }
+

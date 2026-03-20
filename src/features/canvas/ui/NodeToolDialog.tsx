@@ -1,5 +1,8 @@
+import { createLogger } from '@/core/logging'
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+
+const logger = createLogger('features.canvas.ui.NodeToolDialog')
 
 import {
   NODE_TOOL_TYPES,
@@ -120,7 +123,7 @@ export function NodeToolDialog() {
           cols: nextCols,
         }));
       } catch (error) {
-        console.warn('[StoryboardMetadata] read failed on split dialog init', error);
+        logger.warn('[StoryboardMetadata] read failed on split dialog init', error);
       }
     })();
 

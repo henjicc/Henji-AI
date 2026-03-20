@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.tags')
 /**
  * 模型标签系统工具函数
  */
@@ -112,7 +115,7 @@ export function hasAllTags(modelId: string, tags: ModelTag[]): boolean {
  * @example
  * ```typescript
  * const tags = getModelTags('nano-banana')
- * console.log(tags) // ['text-to-image', 'supports-image-editing', ...]
+ * logger.info(tags) // ['text-to-image', 'supports-image-editing', ...]
  * ```
  */
 export function getModelTags(modelId: string): ModelTag[] {
@@ -131,7 +134,7 @@ export function getModelTags(modelId: string): ModelTag[] {
  * ```typescript
  * // 获取所有支持图片编辑的模型
  * const models = getModelsByTag('supports-image-editing')
- * console.log(models) // ['nano-banana', 'seedream-4.0', ...]
+ * logger.info(models) // ['nano-banana', 'seedream-4.0', ...]
  * ```
  */
 export function getModelsByTag(tag: ModelTag): string[] {
@@ -204,3 +207,4 @@ export function getModelsByAllTags(tags: ModelTag[]): string[] {
 export function clearTagsCache(): void {
   modelTagsMap = null
 }
+

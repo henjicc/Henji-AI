@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.updateConfig')
+
 /**
  * 更新检测配置管理
  * 管理更新检测的设置和忽略的版本
@@ -28,7 +32,7 @@ export function getUpdateConfig(): UpdateConfig {
       return { ...DEFAULT_CONFIG, ...JSON.parse(stored) }
     }
   } catch (error) {
-    console.error('读取更新配置失败:', error)
+    logger.error('读取更新配置失败:', error)
   }
   return DEFAULT_CONFIG
 }
@@ -42,7 +46,7 @@ export function saveUpdateConfig(config: Partial<UpdateConfig>): void {
     const updated = { ...current, ...config }
     localStorage.setItem(UPDATE_CONFIG_KEY, JSON.stringify(updated))
   } catch (error) {
-    console.error('保存更新配置失败:', error)
+    logger.error('保存更新配置失败:', error)
   }
 }
 
@@ -150,3 +154,4 @@ export function getFrequencyLabel(frequency: UpdateConfig['frequency']): string 
   }
   return labels[frequency]
 }
+

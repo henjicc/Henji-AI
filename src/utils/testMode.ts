@@ -1,10 +1,13 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.testMode')
 /**
  * 测试模式工具
  * 用于开发和调试，不影响生产功能
  */
-
-import { logError, logInfo } from '../utils/errorLogger'
 import type { AiRuntimeTrace } from '@/core/types'
+import { refreshLogConfigByRuntime } from '@/core/logging'
+
 export interface TestModeOptions {
   skipRequest: boolean // 不发送实际请求
   logParams: boolean   // 在控制台输出参数
@@ -18,8 +21,6 @@ export interface TestModeOptions {
 export interface TestModeState {
   enabled: boolean
   options: TestModeOptions
-  lastParams: Record<string, unknown> | null
-  lastTrace: TestModeTraceRecord | null
 }
 
 export interface TestModeTraceRecord {
@@ -43,27 +44,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function isAiRuntimeTrace(value: unknown): value is AiRuntimeTrace {
-  if (!isRecord(value)) {
-    return false
-  }
-
-  return typeof value.modelId === 'string' &&
-    typeof value.providerId === 'string' &&
-    typeof value.requestId === 'string' &&
-    (value.phase === 'generate' || value.phase === 'continuePolling') &&
-    typeof value.route === 'string' &&
-    typeof value.method === 'string' &&
-    'responseBody' in value
-}
-
 function normalizeTestModeState(value: unknown): TestModeState {
   if (!isRecord(value)) {
     return {
       enabled: false,
       options: DEFAULT_OPTIONS,
-      lastParams: null,
-      lastTrace: null
     }
   }
 
@@ -75,18 +60,7 @@ function normalizeTestModeState(value: unknown): TestModeState {
       skipRequest: rawOptions.skipRequest !== false,
       logParams: rawOptions.logParams !== false,
       enableDevTools: rawOptions.enableDevTools === true
-    },
-    lastParams: isRecord(value.lastParams) ? value.lastParams : null,
-    lastTrace: isRecord(value.lastTrace) && typeof value.lastTrace.model === 'string' &&
-      typeof value.lastTrace.timestamp === 'string' && isAiRuntimeTrace(value.lastTrace.trace)
-      ? {
-          model: value.lastTrace.model,
-          type: typeof value.lastTrace.type === 'string' ? value.lastTrace.type : undefined,
-          prompt: typeof value.lastTrace.prompt === 'string' ? value.lastTrace.prompt : undefined,
-          timestamp: value.lastTrace.timestamp,
-          trace: value.lastTrace.trace
-        }
-      : null
+    }
   }
 }
 
@@ -98,14 +72,12 @@ export function getTestModeState(): TestModeState {
       return normalizeTestModeState(JSON.parse(stored))
     }
   } catch (e) {
-    logError('[TestMode] Failed to load state:', e)
+    logger.error('[TestMode] Failed to load state:', e)
   }
 
   return {
     enabled: false,
     options: DEFAULT_OPTIONS,
-    lastParams: null,
-    lastTrace: null
   }
 }
 
@@ -113,10 +85,11 @@ export function getTestModeState(): TestModeState {
 export function saveTestModeState(state: TestModeState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    refreshLogConfigByRuntime()
     // 触发自定义事件，通知其他组件状态已更新
     window.dispatchEvent(new CustomEvent('test-mode-changed', { detail: state }))
   } catch (e) {
-    logError('[TestMode] Failed to save state:', e)
+    logger.error('[TestMode] Failed to save state:', e)
   }
 }
 
@@ -126,7 +99,7 @@ export function toggleTestMode(): boolean {
   state.enabled = !state.enabled
   saveTestModeState(state)
 
-  logInfo('', `[TestMode] ${state.enabled ? '已开启' : '已关闭'}`)
+  logger.info('', `[TestMode] ${state.enabled ? '已开启' : '已关闭'}`)
 
   return state.enabled
 }
@@ -146,6 +119,7 @@ function formatBase64(value: any): any {
     // 检测 Base64 数据（data:image/... 或 data:video/...）
     if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
       const match = value.match(/^data:([^;]+);/)
+
       const mimeType = match ? match[1] : 'unknown'
       const sizeKB = Math.round(value.length * 0.75 / 1024) // 估算大小
       return `[Base64 ${mimeType} ~${sizeKB}KB]`
@@ -267,60 +241,52 @@ export function logRequestParams(params: any): void {
 
   if (!state.enabled) return
 
-  // 保存最后的参数（格式化 Base64）
-  state.lastParams = {
-    ...params,
-    options: formatBase64(params.options)
-  }
-  state.lastTrace = null
-  saveTestModeState(state)
-
   // 输出到控制台
   if (state.options.logParams) {
     const { input, model, type, options = {} } = params
 
-    console.group('🧪 [测试模式] 请求参数详情')
+    logger.group('🧪 [测试模式] 请求参数详情')
 
     // 基本信息
-    console.group('📋 基本信息')
-    logInfo('模型:', model)
-    logInfo('类型:', type === 'image' ? '图片' : type === 'video' ? '视频' : type === 'audio' ? '音频' : type)
-    logInfo('提示词:', input || '(无)')
-    logInfo('时间:', new Date(params.timestamp).toLocaleString('zh-CN'))
-    console.groupEnd()
+    logger.group('📋 基本信息')
+    logger.info('模型:', model)
+    logger.info('类型:', type === 'image' ? '图片' : type === 'video' ? '视频' : type === 'audio' ? '音频' : type)
+    logger.info('提示词:', input || '(无)')
+    logger.info('时间:', new Date(params.timestamp).toLocaleString('zh-CN'))
+    logger.groupEnd()
 
     // 关键参数
     const keyParams = extractKeyParams(options, type)
     if (Object.keys(keyParams).length > 0) {
-      console.group('⚙️ 关键参数')
+      logger.group('⚙️ 关键参数')
       for (const [key, value] of Object.entries(keyParams)) {
-        logInfo(`${key}:`, value)
+        logger.info(`${key}:`, value)
       }
-      console.groupEnd()
+      logger.groupEnd()
     }
 
     // 上传的文件
     const files = analyzeUploadedFiles(options)
     if (Object.keys(files).length > 0) {
-      console.group('📁 上传文件')
+      logger.group('📁 上传文件')
       for (const [key, value] of Object.entries(files)) {
-        logInfo(`${key}:`, value)
+        logger.info(`${key}:`, value)
       }
-      console.groupEnd()
+      logger.groupEnd()
     }
 
     // 完整参数（格式化 Base64）
-    console.group('📦 完整参数 (Base64已简化)')
+    logger.group('📦 完整参数 (Base64已简化)')
     const formattedOptions = formatBase64(options)
-    logInfo('', formattedOptions)
-    console.groupEnd()
+    logger.info('', formattedOptions)
+    logger.groupEnd()
 
     // 原始参数（折叠，仅在需要时展开）
-    console.groupCollapsed('🔍 原始参数 (包含Base64)')
-    logInfo('完整options对象:', options)
-    console.groupEnd()
+    logger.groupCollapsed('🔍 原始参数 (包含Base64)')
+    logger.info('完整options对象:', options)
+    logger.groupEnd()
 
-    console.groupEnd()
+    logger.groupEnd()
   }
 }
 
@@ -328,32 +294,27 @@ export function recordApiTrace(record: TestModeTraceRecord): void {
   const state = getTestModeState()
   if (!state.enabled) return
 
-  state.lastTrace = record
-  saveTestModeState(state)
-
   if (!state.options.logParams) {
     return
   }
 
-  console.groupCollapsed(`🧪 [测试模式] 真实 API 交互 - ${record.model}`)
-  logInfo('[Trace] 概览', {
-    model: record.model,
-    type: record.type,
-    phase: record.trace.phase,
-    provider: record.trace.providerId,
-    route: record.trace.route,
-    method: record.trace.method,
+  logger.info('真实 API 交互', {
+    event: 'api.trace',
+    modelId: record.model,
+    providerId: record.trace.providerId,
     requestId: record.trace.requestId,
     taskId: record.trace.taskId,
-    timestamp: record.timestamp
+    context: {
+      model: record.model,
+      type: record.type,
+      phase: record.trace.phase,
+      route: record.trace.route,
+      method: record.trace.method,
+      timestamp: record.timestamp,
+      requestBody: record.trace.requestBody ?? '[no_request_body]',
+      responseBody: record.trace.responseBody,
+    },
   })
-  console.group('📤 最终实际请求')
-  console.log(record.trace.requestBody ?? '[无 JSON Body]')
-  console.groupEnd()
-  console.group('📥 API 实际响应')
-  console.log(record.trace.responseBody)
-  console.groupEnd()
-  console.groupEnd()
 }
 
 // 检查是否应该跳过请求

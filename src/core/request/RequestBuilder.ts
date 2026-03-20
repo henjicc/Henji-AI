@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.request.RequestBuilder')
 /**
  * RequestBuilder - 统一的请求构建器
  *
@@ -87,9 +90,9 @@ export class RequestBuilder {
     const { debug = false, validate: _validate = true, context = {}, tracker } = options
 
     if (debug) {
-      console.log('[RequestBuilder] Building request for:', modelId)
-      console.log('[RequestBuilder] Params:', params)
-      console.log('[RequestBuilder] Context:', context)
+      logger.info('[RequestBuilder] Building request for:', modelId)
+      logger.info('[RequestBuilder] Params:', params)
+      logger.info('[RequestBuilder] Context:', context)
     }
 
     // 获取模型定义
@@ -102,12 +105,12 @@ export class RequestBuilder {
     // 检查是否有新配置
     if (this.hasNewConfig(model)) {
       if (debug) {
-        console.log('[RequestBuilder] Using new config engine')
+        logger.info('[RequestBuilder] Using new config engine')
       }
       return await this.buildWithNewConfig(model, params, context, debug, tracker)
     } else {
       if (debug) {
-        console.log('[RequestBuilder] Using legacy builder (fallback)')
+        logger.info('[RequestBuilder] Using legacy builder (fallback)')
       }
       return this.buildWithOldConfig(modelId, params, context)
     }
@@ -146,8 +149,8 @@ export class RequestBuilder {
     const { endpoint: endpointKey, route } = await selector.select(params, selectContext)
 
     if (debug) {
-      console.log('[RequestBuilder] Selected endpoint:', endpointKey)
-      console.log('[RequestBuilder] Resolved route:', route)
+      logger.info('[RequestBuilder] Selected endpoint:', endpointKey)
+      logger.info('[RequestBuilder] Resolved route:', route)
     }
 
     // 3. 构建请求体
@@ -156,7 +159,7 @@ export class RequestBuilder {
     // 3.0 如果模型定义了 request.builder，优先使用它
     if (model.request?.builder && typeof model.request.builder === 'function') {
       if (debug) {
-        console.log('[RequestBuilder] Using model request.builder')
+        logger.info('[RequestBuilder] Using model request.builder')
       }
       // 支持异步 builder
       const builderResult = model.request.builder(params)
@@ -166,7 +169,7 @@ export class RequestBuilder {
       if (model.request?.base) {
         body = { ...model.request.base }
         if (debug) {
-          console.log('[RequestBuilder] Base params:', model.request.base)
+          logger.info('[RequestBuilder] Base params:', model.request.base)
         }
       }
 
@@ -180,9 +183,9 @@ export class RequestBuilder {
       }
 
       if (debug) {
-        console.log('[RequestBuilder] Input params keys:', Object.keys(params))
-        console.log('[RequestBuilder] Model param IDs:', model.params.map(p => p.id))
-        console.log('[RequestBuilder] API field mapping:', apiFieldToParamId)
+        logger.info('[RequestBuilder] Input params keys:', Object.keys(params))
+        logger.info('[RequestBuilder] Model param IDs:', model.params.map(p => p.id))
+        logger.info('[RequestBuilder] API field mapping:', apiFieldToParamId)
       }
 
       for (const paramDef of model.params) {
@@ -193,7 +196,7 @@ export class RequestBuilder {
         }
 
         if (debug) {
-          console.log(`[RequestBuilder] Checking param ${paramDef.id}:`, value)
+          logger.info(`[RequestBuilder] Checking param ${paramDef.id}:`, value)
         }
 
         // 跳过未设置的参数
@@ -222,7 +225,7 @@ export class RequestBuilder {
           }
 
           if (debug) {
-            console.log(`[RequestBuilder] Mapped ${paramDef.id}:`, mapped)
+            logger.info(`[RequestBuilder] Mapped ${paramDef.id}:`, mapped)
           }
         }
       }
@@ -234,7 +237,7 @@ export class RequestBuilder {
       if (preprocessed) {
         body = preprocessed
         if (debug) {
-          console.log('[RequestBuilder] Preprocessed body:', body)
+          logger.info('[RequestBuilder] Preprocessed body:', body)
         }
       }
     }
@@ -302,7 +305,7 @@ export class RequestBuilder {
     if ('apiMapping' in paramDef && (paramDef as any).apiMapping?.[endpointKey]) {
       const mapping = (paramDef as any).apiMapping[endpointKey]
       if (debug) {
-        console.log(`[RequestBuilder] Using apiMapping for ${paramDef.id} at endpoint ${endpointKey}`)
+        logger.info(`[RequestBuilder] Using apiMapping for ${paramDef.id} at endpoint ${endpointKey}`)
       }
       return mapping.transform(value, allParams)
     }
@@ -310,7 +313,7 @@ export class RequestBuilder {
     // 2. apiTransform（通用转换）
     if ('apiTransform' in paramDef && paramDef.apiTransform) {
       if (debug) {
-        console.log(`[RequestBuilder] Using apiTransform for ${paramDef.id}`)
+        logger.info(`[RequestBuilder] Using apiTransform for ${paramDef.id}`)
       }
       return (paramDef as any).apiTransform(value, allParams)
     }
@@ -318,14 +321,14 @@ export class RequestBuilder {
     // 3. apiField（简单映射）
     if ('apiField' in paramDef && paramDef.apiField) {
       if (debug) {
-        console.log(`[RequestBuilder] Using apiField for ${paramDef.id}: ${paramDef.apiField}`)
+        logger.info(`[RequestBuilder] Using apiField for ${paramDef.id}: ${paramDef.apiField}`)
       }
       return { [(paramDef.apiField as string)]: this.convertType(value, paramDef.valueType) }
     }
 
     // 无映射配置，不发送
     if (debug) {
-      console.log(`[RequestBuilder] No mapping for ${paramDef.id}, skipping`)
+      logger.info(`[RequestBuilder] No mapping for ${paramDef.id}, skipping`)
     }
     return {}
   }
@@ -363,9 +366,9 @@ export class RequestBuilder {
     _params: Record<string, any>,
     _context: Record<string, any>
   ): BuildResult {
-    console.warn(`[RequestBuilder] Using legacy builder for: ${modelId}`)
-    console.warn('[RequestBuilder] Legacy builder integration not implemented yet')
-    console.warn('[RequestBuilder] Please migrate this model to new config system')
+    logger.warn(`[RequestBuilder] Using legacy builder for: ${modelId}`)
+    logger.warn('[RequestBuilder] Legacy builder integration not implemented yet')
+    logger.warn('[RequestBuilder] Please migrate this model to new config system')
 
     // TODO: 集成旧的 optionsBuilder
     // const oldBuilder = require('@/components/MediaGenerator/builders/optionsBuilder')
@@ -381,3 +384,4 @@ export class RequestBuilder {
  * 单例实例
  */
 export const requestBuilder = new RequestBuilder()
+

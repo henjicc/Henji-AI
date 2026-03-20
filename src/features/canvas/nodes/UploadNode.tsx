@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import {
   memo,
   useCallback,
@@ -12,6 +13,8 @@ import {
 import { Handle, Position, useViewport, type NodeProps } from '@xyflow/react';
 import { Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+const logger = createLogger('features.canvas.nodes.UploadNode')
 
 import {
   CANVAS_NODE_TYPES,
@@ -126,7 +129,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         if (!perf || perf.sequence !== sequence) {
           return;
         }
-        console.info(
+        logger.info(
           `[upload-perf][e2e] preview-state-committed nodeId=${id} name="${file.name}" elapsed=${Math.round(performance.now() - started)}ms`
         );
       });
@@ -144,14 +147,14 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         }
         updateNodeData(id, nextData);
 
-        console.info(
+        logger.info(
           `[upload-perf][node] processFile success nodeId=${id} name="${file.name}" size=${file.size}B elapsed=${Math.round(performance.now() - started)}ms`
         );
       } catch (error) {
         if (uploadSequenceRef.current === sequence) {
           clearTransientPreview();
         }
-        console.error(
+        logger.error(
           `[upload-perf][node] processFile failed nodeId=${id} name="${file.name}" size=${file.size}B elapsed=${Math.round(performance.now() - started)}ms`,
           error
         );
@@ -173,7 +176,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
 
     if (isTransient && !perf.transientLoaded) {
       perf.transientLoaded = true;
-      console.info(
+      logger.info(
         `[upload-perf][e2e] first-visible transient nodeId=${id} name="${perf.name}" size=${perf.size}B elapsed=${Math.round(now - perf.startedAt)}ms`
       );
       requestAnimationFrame(() => {
@@ -181,7 +184,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         if (!nextPerf || nextPerf.sequence !== perf.sequence) {
           return;
         }
-        console.info(
+        logger.info(
           `[upload-perf][e2e] first-painted transient nodeId=${id} name="${nextPerf.name}" elapsed=${Math.round(performance.now() - nextPerf.startedAt)}ms`
         );
       });
@@ -190,7 +193,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
 
     if (!isTransient && !perf.stableLoaded) {
       perf.stableLoaded = true;
-      console.info(
+      logger.info(
         `[upload-perf][e2e] stable-visible nodeId=${id} name="${perf.name}" size=${perf.size}B elapsed=${Math.round(now - perf.startedAt)}ms`
       );
       if (uploadSequenceRef.current === perf.sequence) {
@@ -201,7 +204,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         if (!nextPerf || nextPerf.sequence !== perf.sequence) {
           return;
         }
-        console.info(
+        logger.info(
           `[upload-perf][e2e] stable-painted nodeId=${id} name="${nextPerf.name}" elapsed=${Math.round(performance.now() - nextPerf.startedAt)}ms`
         );
       });

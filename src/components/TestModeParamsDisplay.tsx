@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react'
 import { getTestModeState, type TestModeState } from '@/utils/testMode'
 import { UiIconButton, UiPanel } from '@/components/ui'
 import { ChevronDown } from 'lucide-react'
-import { ApiTraceViewer } from '@/components/debug/ApiTraceViewer'
+import { UnifiedLogViewer } from '@/components/debug/UnifiedLogViewer'
 
 const TestModeParamsDisplay: React.FC = () => {
   const [state, setState] = useState<TestModeState>(getTestModeState())
@@ -29,13 +29,9 @@ const TestModeParamsDisplay: React.FC = () => {
     }
   }, [])
 
-  // 如果测试模式未启用或没有调试记录，不显示
-  if (!state.enabled || (!state.lastTrace && !state.lastParams)) {
+  if (!state.enabled) {
     return null
   }
-
-  const modelLabel = state.lastTrace?.model ?? String(state.lastParams?.model ?? '未知模型')
-  const lastTimestamp = state.lastTrace?.timestamp ?? String(state.lastParams?.timestamp ?? '')
 
   return (
     <UiPanel
@@ -50,7 +46,7 @@ const TestModeParamsDisplay: React.FC = () => {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
           <span className="text-xs font-medium text-yellow-500">
-            {modelLabel} - 真实 API 日志
+            测试模式 - 统一日志查看器
           </span>
         </div>
         <UiIconButton
@@ -64,18 +60,7 @@ const TestModeParamsDisplay: React.FC = () => {
       {/* 内容区域 */}
       {!isCollapsed && (
         <div className="p-3 text-xs">
-          {state.lastTrace ? (
-            <ApiTraceViewer traceRecord={state.lastTrace} compact />
-          ) : (
-            <pre className="text-gray-300 whitespace-pre-wrap break-all max-h-[500px] overflow-y-auto">
-              {JSON.stringify(state.lastParams, null, 2)}
-            </pre>
-          )}
-          {lastTimestamp && (
-            <div className="mt-2 pt-2 border-t border-zinc-700/50 text-gray-500 text-[10px]">
-              {new Date(lastTimestamp).toLocaleTimeString('zh-CN')}
-            </div>
-          )}
+          <UnifiedLogViewer />
         </div>
       )}
     </UiPanel>

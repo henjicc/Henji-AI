@@ -9,19 +9,21 @@ const PPIO_BASE_URL: &str = "https://api.ppinfra.com/v3";
 
 pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExecutionResult> {
     let endpoint = normalize_endpoint(PPIO_BASE_URL, input.route);
-    eprintln!(
-        "[ai_runtime][ppio][submit] route={} body={}",
-        input.route,
-        payload_preview(input.body)
+    tracing::info!(
+        target: "ai_runtime.ppio",
+        route = %input.route,
+        body = %payload_preview(input.body),
+        "submit request"
     );
     let response = send_json(&input, &endpoint).await?;
 
     if let Some(task_id) = extract_task_id(&response) {
-        eprintln!(
-            "[ai_runtime][ppio][submit_ok] route={} task_id={} payload={}",
-            input.route,
-            task_id,
-            payload_preview(&response)
+        tracing::info!(
+            target: "ai_runtime.ppio",
+            route = %input.route,
+            task_id = %task_id,
+            payload = %payload_preview(&response),
+            "submit success"
         );
         return Ok(ProviderExecutionResult {
             status: GenerateStatus::Pending,
@@ -31,19 +33,22 @@ pub async fn execute(input: ProviderExecutionInput<'_>) -> AiResult<ProviderExec
         });
     }
 
-    eprintln!(
-        "[ai_runtime][ppio][submit_sync] route={} payload={}",
-        input.route,
-        payload_preview(&response)
+    tracing::info!(
+        target: "ai_runtime.ppio",
+        route = %input.route,
+        payload = %payload_preview(&response),
+        "submit sync result"
     );
 
     let urls = extract_urls(&response);
     if urls.is_empty() {
         let task_id = extract_task_id(&response).unwrap_or_else(|| "unknown".to_string());
         let preview = payload_preview(&response);
-        eprintln!(
-            "[ai_runtime][ppio][empty_result] task_id={} payload={}",
-            task_id, preview
+        tracing::error!(
+            target: "ai_runtime.ppio",
+            task_id = %task_id,
+            payload = %preview,
+            "empty result after submit"
         );
         return Err(AiRuntimeError::new(
             "empty_result",
@@ -79,9 +84,11 @@ pub async fn continue_polling(input: ProviderContinuePollingInput<'_>) -> AiResu
     if urls.is_empty() {
         let task_id = extract_task_id(&final_payload).unwrap_or_else(|| input.task_id.to_string());
         let preview = payload_preview(&final_payload);
-        eprintln!(
-            "[ai_runtime][ppio][continue_polling][empty_result] task_id={} payload={}",
-            task_id, preview
+        tracing::error!(
+            target: "ai_runtime.ppio",
+            task_id = %task_id,
+            payload = %preview,
+            "empty result while continue polling"
         );
         return Err(AiRuntimeError::new(
             "empty_result",
@@ -160,11 +167,12 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
             .map_err(|e| AiRuntimeError::new("invalid_json", e.to_string()))?;
 
         if !status.is_success() {
-            eprintln!(
-                "[ai_runtime][ppio][poll_http_error] task_id={} status={} payload={}",
-                task_id,
-                status,
-                payload_preview(&payload)
+            tracing::error!(
+                target: "ai_runtime.ppio",
+                task_id = %task_id,
+                status = %status,
+                payload = %payload_preview(&payload),
+                "poll http error"
             );
             return Err(AiRuntimeError::new(
                 "provider_http_error",
@@ -184,11 +192,12 @@ async fn poll_task(input: &ProviderExecutionInput<'_>, task_id: &str) -> AiResul
         if state == "TASK_STATUS_FAILED" {
             let reason = extract_task_failure_reason(&payload);
             let summary = summarize_task_failure(&payload);
-            eprintln!(
-                "[ai_runtime][ppio][task_failed] task_id={} reason={} payload={}",
-                task_id,
-                reason,
-                payload_preview(&payload)
+            tracing::error!(
+                target: "ai_runtime.ppio",
+                task_id = %task_id,
+                reason = %reason,
+                payload = %payload_preview(&payload),
+                "task failed"
             );
             return Err(AiRuntimeError::new(
                 "provider_task_failed",

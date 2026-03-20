@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('scripts.analyzeHistory')
 /**
  * History Analysis Script
  *
@@ -29,9 +32,9 @@ export async function analyzeHistoryFile(): Promise<MigrationStats> {
     const content = await readTextFile(historyPath)
     const data: LegacyHistoryItem[] = JSON.parse(content)
 
-    console.log('========== History Data Analysis ==========')
-    console.log(`Total records: ${data.length}`)
-    console.log(`File size: ${(content.length / 1024 / 1024).toFixed(2)} MB`)
+    logger.info('========== History Data Analysis ==========')
+    logger.info(`Total records: ${data.length}`)
+    logger.info(`File size: ${(content.length / 1024 / 1024).toFixed(2)} MB`)
 
     // Statistics
     let base64Count = 0
@@ -52,14 +55,14 @@ export async function analyzeHistoryFile(): Promise<MigrationStats> {
       }
     }
 
-    console.log(`\nBase64 data statistics:`)
-    console.log(`  Records with Base64: ${base64Count}`)
-    console.log(`  Base64 data size: ${(base64Size / 1024 / 1024).toFixed(2)} MB`)
-    console.log(`  Percentage of file: ${((base64Size / content.length) * 100).toFixed(1)}%`)
+    logger.info(`\nBase64 data statistics:`)
+    logger.info(`  Records with Base64: ${base64Count}`)
+    logger.info(`  Base64 data size: ${(base64Size / 1024 / 1024).toFixed(2)} MB`)
+    logger.info(`  Percentage of file: ${((base64Size / content.length) * 100).toFixed(1)}%`)
 
-    console.log(`\nFile path statistics:`)
-    console.log(`  Valid paths: ${validFilePathCount}`)
-    console.log(`  Missing paths: ${missingFileCount}`)
+    logger.info(`\nFile path statistics:`)
+    logger.info(`  Valid paths: ${validFilePathCount}`)
+    logger.info(`  Missing paths: ${missingFileCount}`)
 
     // Type statistics
     const typeStats = data.reduce((acc, item) => {
@@ -67,9 +70,9 @@ export async function analyzeHistoryFile(): Promise<MigrationStats> {
       return acc
     }, {} as Record<string, number>)
 
-    console.log(`\nType distribution:`)
+    logger.info(`\nType distribution:`)
     Object.entries(typeStats).forEach(([type, count]) => {
-      console.log(`  ${type}: ${count}`)
+      logger.info(`  ${type}: ${count}`)
     })
 
     // Provider statistics
@@ -78,9 +81,9 @@ export async function analyzeHistoryFile(): Promise<MigrationStats> {
       return acc
     }, {} as Record<string, number>)
 
-    console.log(`\nProvider distribution:`)
+    logger.info(`\nProvider distribution:`)
     Object.entries(providerStats).forEach(([provider, count]) => {
-      console.log(`  ${provider}: ${count}`)
+      logger.info(`  ${provider}: ${count}`)
     })
 
     return {
@@ -93,7 +96,8 @@ export async function analyzeHistoryFile(): Promise<MigrationStats> {
       providerStats,
     }
   } catch (error) {
-    console.error('Failed to analyze history file:', error)
+    logger.error('Failed to analyze history file:', error)
     throw error
   }
 }
+

@@ -1,8 +1,10 @@
+import { createLogger } from '@/core/logging'
 import { useEffect, useState } from 'react'
 import type { ReleaseInfo } from '@/services/updateChecker'
 import { checkForUpdates, getCurrentVersion } from '@/services/updateChecker'
 import { isVersionIgnored, shouldCheckForUpdates, updateLastCheckTime } from '@/utils/updateConfig'
-import { logError, logInfo } from '@/utils/errorLogger'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useUpdateCheck')
 
 export interface UseUpdateCheckReturn {
   showUpdateDialog: boolean
@@ -21,21 +23,21 @@ export function useUpdateCheck(): UseUpdateCheckReturn {
       if (!shouldCheckForUpdates()) return
 
       try {
-        logInfo('[Workspace] 开始检查更新...', {})
+        logger.info('[Workspace] 开始检查更新...', {})
         const result = await checkForUpdates()
         updateLastCheckTime()
 
         if (result.hasUpdate && result.releaseInfo) {
           const latestVersion = result.latestVersion || result.releaseInfo.version
           if (isVersionIgnored(latestVersion)) {
-            logInfo('[Workspace] 版本已忽略', { latestVersion })
+            logger.info('[Workspace] 版本已忽略', { latestVersion })
             return
           }
           setReleaseInfo(result.releaseInfo)
           setShowUpdateDialog(true)
         }
       } catch (error) {
-        logError('[Workspace] 检查更新失败', error)
+        logger.error('[Workspace] 检查更新失败', error)
       }
     }
 
@@ -53,3 +55,4 @@ export function useUpdateCheck(): UseUpdateCheckReturn {
     closeUpdateDialog: () => setShowUpdateDialog(false),
   }
 }
+

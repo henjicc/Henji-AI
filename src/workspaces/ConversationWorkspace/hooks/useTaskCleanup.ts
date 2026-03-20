@@ -1,12 +1,14 @@
+import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { remove } from '@tauri-apps/plugin-fs'
-import { logError, logInfo } from '@/utils/errorLogger'
 import { canDeleteFile } from '@/utils/fileRefCount'
 import { loadPresets } from '@/utils/preset'
 import { deleteEditState } from '@/utils/editStatePersistence'
 import { deleteWaveformCacheForAudio, isDesktop } from '@/utils/save'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskCleanup')
 
 export interface UseTaskCleanupParams {
   tasks: GenerationTask[]
@@ -25,7 +27,7 @@ async function deleteThumbnailCacheSafe(fullPath: string): Promise<void> {
     const mod = await import('@/utils/imageConversion')
     await mod.deleteThumbnailCache(fullPath)
   } catch (e) {
-    logError('[Workspace] 删除缩略图缓存失败', { data: [fullPath, e] })
+    logger.error('[Workspace] 删除缩略图缓存失败', { data: [fullPath, e] })
   }
 }
 
@@ -33,7 +35,7 @@ async function removeFileSafe(fullPath: string): Promise<void> {
   try {
     await remove(fullPath)
   } catch (e) {
-    logError('[Workspace] 删除文件失败', { data: [fullPath, e] })
+    logger.error('[Workspace] 删除文件失败', { data: [fullPath, e] })
   }
 }
 
@@ -66,7 +68,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
           try {
             await deleteWaveformCacheForAudio(p)
           } catch (e) {
-            logError('[Workspace] 删除波形缓存失败', { data: [p, e] })
+            logger.error('[Workspace] 删除波形缓存失败', { data: [p, e] })
           }
         }
       }
@@ -152,7 +154,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       try {
         await deleteWaveformCacheForAudio(p)
       } catch (e) {
-        logError('[Workspace] 删除波形缓存失败', { data: [p, e] })
+        logger.error('[Workspace] 删除波形缓存失败', { data: [p, e] })
       }
     }
 
@@ -170,7 +172,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       await deleteThumbnailCacheSafe(filePath)
     }
 
-    logInfo('[Workspace] 已清理失败任务', { count: failedTasks.length })
+    logger.info('[Workspace] 已清理失败任务', { count: failedTasks.length })
     setTasks(remainingTasks)
     failedTasks.forEach((t) => clearTaskProgress?.(t.id))
   }, [clearTaskProgress, setTasks, tasks])
@@ -220,7 +222,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       try {
         await deleteWaveformCacheForAudio(p)
       } catch (e) {
-        logError('[Workspace] 删除波形缓存失败', { data: [p, e] })
+        logger.error('[Workspace] 删除波形缓存失败', { data: [p, e] })
       }
     }
 
@@ -238,10 +240,11 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       await deleteThumbnailCacheSafe(filePath)
     }
 
-    logInfo('[Workspace] 已清空全部任务', { count: tasks.length })
+    logger.info('[Workspace] 已清空全部任务', { count: tasks.length })
     tasks.forEach((t) => clearTaskProgress?.(t.id))
     setTasks([])
   }, [clearTaskProgress, setTasks, tasks])
 
   return { deleteTask, clearFailedTasks, clearAllTasks }
 }
+

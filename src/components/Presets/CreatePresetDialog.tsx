@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.Presets.CreatePresetDialog')
 /**
  * CreatePresetDialog Component
  *
@@ -44,7 +47,7 @@ export function CreatePresetDialog({
 
       onClose()
     } catch (error) {
-      console.error('Failed to save preset:', error)
+      logger.error('Failed to save preset:', error)
     } finally {
       setSaving(false)
     }
@@ -113,3 +116,4 @@ export function CreatePresetDialog({
     </div>
   )
 }
+

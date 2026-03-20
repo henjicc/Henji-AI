@@ -11,6 +11,21 @@ use crate::ai_runtime::types::{
     ProviderKeyStatusDto,
 };
 use crate::ai_runtime::upload;
+use serde::Serialize;
+use tauri::Emitter;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeRequestPreviewEvent {
+    request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_id: Option<String>,
+    model_id: String,
+    provider_id: String,
+    method: String,
+    route: String,
+    request_body: serde_json::Value,
+}
 
 #[tauri::command]
 pub async fn ai_set_provider_api_key(provider_id: String, api_key: String) -> Result<(), String> {
@@ -56,6 +71,13 @@ pub async fn ai_generate(
     request: AiGenerateRequestDto,
 ) -> Result<AiGenerateResponseDto, String> {
     let request_id = resolve_request_id(&request);
+    tracing::info!(
+        target: "ai_runtime.generate",
+        event = "ai_runtime.generate.start",
+        request_id = %request_id,
+        model_id = %request.model_id,
+        "ai_generate start"
+    );
     task_registry::clear_cancel_flag(&request_id);
 
     let client = reqwest::Client::new();
@@ -93,6 +115,16 @@ pub async fn ai_generate(
         )
             .await
             .map_err(|e| e.to_string())?;
+    let preview_event = RuntimeRequestPreviewEvent {
+        request_id: request_id.clone(),
+        task_id: None,
+        model_id: request.model_id.clone(),
+        provider_id: provider_id.clone(),
+        method: built_request.method.clone(),
+        route: built_request.route.clone(),
+        request_body: preprocessed_body.clone(),
+    };
+    let _ = app.emit("henji://runtime-request-preview", &preview_event);
 
     let execution_input = ProviderExecutionInput {
         client: &client,
@@ -119,6 +151,16 @@ pub async fn ai_generate(
         &provider_result.metadata,
     );
     trace::log_trace(&trace_payload);
+    tracing::info!(
+        target: "ai_runtime.generate",
+        event = "ai_runtime.generate.result",
+        request_id = %request_id,
+        task_id = %provider_result.task_id.clone().unwrap_or_default(),
+        status = %format!("{:?}", provider_result.status),
+        model_id = %request.model_id,
+        provider_id = %provider_id,
+        "ai_generate result"
+    );
 
     let file_path = if matches!(provider_result.status, GenerateStatus::Completed) {
         save_media_paths(&app, &provider_result.url).await?
@@ -147,6 +189,14 @@ pub async fn ai_continue_polling(
         "continue-{}-{}",
         request.model_id,
         chrono_like_timestamp_ms()
+    );
+    tracing::info!(
+        target: "ai_runtime.continue_polling",
+        event = "ai_runtime.continue_polling.start",
+        request_id = %request_id,
+        task_id = %request.task_id,
+        model_id = %request.model_id,
+        "ai_continue_polling start"
     );
     task_registry::clear_cancel_flag(&request_id);
 
@@ -181,6 +231,16 @@ pub async fn ai_continue_polling(
             .as_ref()
             .and_then(|model| model.polling.as_ref()),
     };
+    let preview_event = RuntimeRequestPreviewEvent {
+        request_id: request_id.clone(),
+        task_id: Some(request.task_id.trim().to_string()),
+        model_id: request.model_id.clone(),
+        provider_id: provider_id.clone(),
+        method: "GET".to_string(),
+        route: built_request.route.clone(),
+        request_body: built_request.body.clone(),
+    };
+    let _ = app.emit("henji://runtime-request-preview", &preview_event);
 
     let provider_result = providers::execute_continue_polling(&provider_id, execution_input)
         .await
@@ -194,6 +254,16 @@ pub async fn ai_continue_polling(
         &provider_result.metadata,
     );
     trace::log_trace(&trace_payload);
+    tracing::info!(
+        target: "ai_runtime.continue_polling",
+        event = "ai_runtime.continue_polling.result",
+        request_id = %request_id,
+        task_id = %request.task_id,
+        status = %format!("{:?}", provider_result.status),
+        model_id = %request.model_id,
+        provider_id = %provider_id,
+        "ai_continue_polling result"
+    );
 
     let file_path = save_media_paths(&app, &provider_result.url).await?;
 
@@ -211,7 +281,19 @@ pub async fn ai_continue_polling(
 
 #[tauri::command]
 pub async fn ai_cancel_task(task_id: String) -> Result<(), String> {
+    tracing::info!(
+        target: "ai_runtime.cancel",
+        event = "ai_runtime.cancel.requested",
+        task_id = %task_id,
+        "ai_cancel_task requested"
+    );
     task_registry::cancel_task(task_id.trim());
+    tracing::info!(
+        target: "ai_runtime.cancel",
+        event = "ai_runtime.cancel.completed",
+        task_id = %task_id,
+        "ai_cancel_task completed"
+    );
     Ok(())
 }
 

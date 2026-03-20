@@ -1,10 +1,12 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('services.updateChecker')
 /**
  * 更新检测服务
  * 通过 GitHub API 检查应用是否有新版本
  */
 
 import { fetch } from '@tauri-apps/plugin-http'
-import { logError } from '../utils/errorLogger'
 
 export interface ReleaseInfo {
   version: string
@@ -37,6 +39,7 @@ function compareVersions(v1: string, v2: string): boolean {
   const parts2 = v2.replace(/^v/, '').split('.').map(Number)
 
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+
     const part1 = parts1[i] || 0
     const part2 = parts2[i] || 0
 
@@ -117,7 +120,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       releaseInfo
     }
   } catch (error) {
-    logError('检查更新失败:', error)
+    logger.error('检查更新失败:', error)
     throw error
   }
 }

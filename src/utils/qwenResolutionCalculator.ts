@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.qwenResolutionCalculator')
+
 /**
  * Qwen-Image-Edit-2509 专用分辨率计算工具
  *
@@ -6,8 +10,6 @@
  * - 每个比例自动计算符合 [64, 2048] 范围的最佳值
  * - 优先使用较大的分辨率以获得更好的图片质量
  */
-
-import { logWarning } from '../utils/errorLogger'
 export interface ResolutionSize {
   width: number
   height: number
@@ -88,7 +90,7 @@ export function calculateQwenResolutions(
   for (const ratio of aspectRatios) {
     const [w, h] = ratio.split(':').map(Number)
     if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
-      logWarning('', `Invalid aspect ratio: ${ratio}`)
+      logger.warn('', `Invalid aspect ratio: ${ratio}`)
       continue
     }
     result[ratio] = calculateQwenResolution(w, h)
@@ -209,3 +211,4 @@ export const QWEN_ASPECT_RATIOS = [
   '9:16',
   '9:21'
 ] as const
+

@@ -1,8 +1,10 @@
+import { createLogger } from '@/core/logging'
 import { mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
 import * as path from '@tauri-apps/api/path'
 import { getWaveformsPath } from '@/utils/dataPath'
-import { logWarning } from '@/utils/errorLogger'
 import { sha256HexString } from './hash'
+
+const logger = createLogger('utils.save.waveformCache')
 
 async function waveformCachePaths(audioFullPath: string): Promise<{ full: string }> {
   const hash = await sha256HexString(audioFullPath)
@@ -40,7 +42,8 @@ export async function deleteWaveformCacheForAudio(audioFullPath: string): Promis
     const { full } = await waveformCachePaths(audioFullPath)
     await remove(full)
   } catch (e) {
-    logWarning('[save] delete waveform cache failed', e)
+    logger.warn('[save] delete waveform cache failed', e)
   }
 }
+
 

@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.services.GenerationService')
 /**
  * GenerationService - unified AI runtime gateway.
  *
@@ -10,9 +13,9 @@ import { createProgressTracker, resolveProgressSpec } from '@/core/progress/prog
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ModelDefinition, ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
-import { logInfo } from '@/utils/errorLogger'
 import { recordApiTrace } from '@/utils/testMode'
 import {
+
   aiCancelTask,
   aiContinuePolling,
   aiGenerate,
@@ -48,6 +51,13 @@ function getErrorMessage(error: unknown): string {
   return 'Generation failed'
 }
 
+function createRequestId(modelId: string): string {
+  const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  return `${modelId}-${suffix}`
+}
+
 function attachUploadRuntimeParams(params: Record<string, unknown>): Record<string, unknown> {
   const uploadService = UploadService.getInstance()
   const next = {
@@ -55,7 +65,7 @@ function attachUploadRuntimeParams(params: Record<string, unknown>): Record<stri
     __upload_provider: uploadService.getCurrentProvider(),
     __upload_fallback: uploadService.isFallbackEnabled(),
   }
-  logInfo('[GenerationService] 上传策略', {
+  logger.info('[GenerationService] 上传策略', {
     provider: next.__upload_provider,
     fallbackEnabled: next.__upload_fallback,
   })
@@ -91,13 +101,55 @@ function getFirstImageSource(params: Record<string, unknown>): string | null {
   return null
 }
 
+type SmartAspectResolveReason = 'reference-image' | 'fallback-square' | 'fallback-nearest'
+
+interface SmartAspectAdjustment {
+  paramId: string
+  apiField?: string
+  from?: string | number
+  to: string | number
+  reason: SmartAspectResolveReason
+}
+
+interface SmartAspectResolutionReport {
+  totalSmartParams: number
+  adjustments: SmartAspectAdjustment[]
+  unresolvedParamIds: string[]
+}
+
+interface SmartAspectNormalizationResult {
+  params: Record<string, unknown>
+  report: {
+    hasReferenceImage: boolean
+    hasImageInput: boolean
+    imageRatioReadFailed: boolean
+    referenceImageRatio?: number
+    totalSmartParams: number
+    adjustments: SmartAspectAdjustment[]
+    unresolvedParamIds: string[]
+  }
+}
+
+interface ResolutionPreprocessSummary {
+  mode: 'smart' | 'fixed' | 'unknown'
+  aspectRatio?: string
+  quality?: string
+  width?: number
+  height?: number
+  ratioHint?: number
+}
+
 function resolveChoiceSmartAspectValues(
   model: ModelDefinition,
   params: Record<string, unknown>,
   hasReferenceImage: boolean,
   targetRatio: number
-): void {
+): SmartAspectResolutionReport {
   const aspectParams = getAspectChoiceParams(model.params)
+  const adjustments: SmartAspectAdjustment[] = []
+  const unresolvedParamIds: string[] = []
+  let totalSmartParams = 0
+
   for (const aspectParam of aspectParams) {
     const currentValue = params[aspectParam.id] ?? (
       aspectParam.apiField ? params[aspectParam.apiField] : undefined
@@ -106,21 +158,43 @@ function resolveChoiceSmartAspectValues(
     if (!isSmartAspectValue(currentValue)) {
       continue
     }
+    totalSmartParams += 1
 
+    let reason: SmartAspectResolveReason = hasReferenceImage ? 'reference-image' : 'fallback-square'
     let resolvedValue = hasReferenceImage
       ? resolveClosestAspectValue(aspectParam, targetRatio)
       : findSquareAspectValue(aspectParam)
 
     if (resolvedValue === null) {
+      reason = 'fallback-nearest'
       resolvedValue = resolveClosestAspectValue(aspectParam, 1)
     }
 
     if (resolvedValue !== null) {
+      const before = typeof currentValue === 'string' || typeof currentValue === 'number'
+        ? currentValue
+        : undefined
       params[aspectParam.id] = resolvedValue
       if (aspectParam.apiField) {
         params[aspectParam.apiField] = resolvedValue
       }
+      adjustments.push({
+        paramId: aspectParam.id,
+        apiField: aspectParam.apiField,
+        from: before,
+        to: resolvedValue,
+        reason,
+      })
+      continue
     }
+
+    unresolvedParamIds.push(aspectParam.id)
+  }
+
+  return {
+    totalSmartParams,
+    adjustments,
+    unresolvedParamIds,
   }
 }
 
@@ -146,9 +220,10 @@ async function readImageRatio(imageSource: string): Promise<number | null> {
 async function normalizeSmartAspectParams(
   model: ModelDefinition,
   params: Record<string, unknown>
-): Promise<Record<string, unknown>> {
+): Promise<SmartAspectNormalizationResult> {
   const nextParams: Record<string, unknown> = { ...params }
   const firstImageSource = getFirstImageSource(nextParams)
+  const hasImageInput = typeof firstImageSource === 'string' && firstImageSource.trim().length > 0
   const imageRatio = firstImageSource ? await readImageRatio(firstImageSource) : null
   const hasReferenceImage = imageRatio !== null && Number.isFinite(imageRatio) && imageRatio > 0
   const targetRatio = hasReferenceImage ? imageRatio : 1
@@ -159,9 +234,126 @@ async function normalizeSmartAspectParams(
     delete nextParams.__firstImageRatio
   }
 
-  resolveChoiceSmartAspectValues(model, nextParams, hasReferenceImage, targetRatio)
+  const report = resolveChoiceSmartAspectValues(model, nextParams, hasReferenceImage, targetRatio)
 
-  return nextParams
+  return {
+    params: nextParams,
+    report: {
+      hasReferenceImage,
+      hasImageInput,
+      imageRatioReadFailed: hasImageInput && !hasReferenceImage,
+      referenceImageRatio: hasReferenceImage ? targetRatio : undefined,
+      totalSmartParams: report.totalSmartParams,
+      adjustments: report.adjustments,
+      unresolvedParamIds: report.unresolvedParamIds,
+    },
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getNumberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function getStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined
+}
+
+function buildResolutionPreprocessSummary(
+  sourceParams: Record<string, unknown>,
+  runtimeParams: Record<string, unknown>
+): ResolutionPreprocessSummary | null {
+  const resolution = isRecord(sourceParams.resolution) ? sourceParams.resolution : null
+  if (!resolution) {
+    return null
+  }
+
+  const aspectRatio = getStringValue(resolution.aspectRatio)
+  const quality = getStringValue(resolution.quality)
+  const width = getNumberValue(resolution.width)
+  const height = getNumberValue(resolution.height)
+  const ratioHint = getNumberValue(runtimeParams.__firstImageRatio)
+
+  if (aspectRatio === 'smart') {
+    return {
+      mode: 'smart',
+      aspectRatio,
+      quality,
+      ratioHint,
+    }
+  }
+
+  if (aspectRatio) {
+    return {
+      mode: 'fixed',
+      aspectRatio,
+      quality,
+      width,
+      height,
+      ratioHint,
+    }
+  }
+
+  return {
+    mode: 'unknown',
+    quality,
+    width,
+    height,
+    ratioHint,
+  }
+}
+
+function countNonEmptyStringItems(value: unknown): number {
+  if (!Array.isArray(value)) {
+    return 0
+  }
+  return value.filter((item) => typeof item === 'string' && item.trim().length > 0).length
+}
+
+function hasPromptInput(params: Record<string, unknown>): boolean {
+  const candidates = [params.prompt, params.text]
+  return candidates.some((candidate) => typeof candidate === 'string' && candidate.trim().length > 0)
+}
+
+function buildGeneratePreflightSummary(
+  sourceParams: Record<string, unknown>,
+  runtimeParams: Record<string, unknown>,
+  normalization: SmartAspectNormalizationResult['report']
+): Record<string, unknown> {
+  const imagesCount = countNonEmptyStringItems(runtimeParams.images)
+  const videosCount = countNonEmptyStringItems(runtimeParams.videos)
+  const uploadedImagePathCount = countNonEmptyStringItems(runtimeParams.uploadedFilePaths)
+  const uploadedVideoPathCount = countNonEmptyStringItems(runtimeParams.uploadedVideoFilePaths)
+  const hasVideoInput = videosCount > 0 || uploadedVideoPathCount > 0 || typeof runtimeParams.video === 'string'
+  const resolutionPreprocess = buildResolutionPreprocessSummary(sourceParams, runtimeParams)
+
+  return {
+    smartAspect: {
+      totalSmartParams: normalization.totalSmartParams,
+      hasReferenceImage: normalization.hasReferenceImage,
+      hasImageInput: normalization.hasImageInput,
+      imageRatioReadFailed: normalization.imageRatioReadFailed,
+      referenceImageRatio: normalization.referenceImageRatio,
+      adjustments: normalization.adjustments,
+      unresolvedParamIds: normalization.unresolvedParamIds,
+    },
+    resolutionPreprocess,
+    mediaInputs: {
+      hasPrompt: hasPromptInput(sourceParams),
+      imagesCount,
+      videosCount,
+      uploadedImagePathCount,
+      uploadedVideoPathCount,
+      hasVideoInput,
+    },
+    uploadStrategy: {
+      provider: runtimeParams.__upload_provider,
+      fallbackEnabled: runtimeParams.__upload_fallback === true,
+    },
+  }
 }
 
 function recordRuntimeTrace(
@@ -173,7 +365,19 @@ function recordRuntimeTrace(
     return
   }
 
-  logInfo('[GenerationService] 实际 API 交互', trace)
+  logger.info('[GenerationService] API原始响应(JSON)', {
+    event: 'generation.runtime.response_json',
+    requestId: trace.requestId,
+    taskId: trace.taskId,
+    modelId: trace.modelId || modelId,
+    providerId: trace.providerId,
+    context: {
+      phase: trace.phase,
+      route: trace.route,
+      method: trace.method,
+      responseBody: trace.responseBody,
+    },
+  })
 
   const prompt = typeof params.prompt === 'string'
     ? params.prompt
@@ -213,6 +417,7 @@ export class GenerationService {
     onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
+    const requestId = createRequestId(modelId)
 
     try {
       const model = registry.getModel(modelId)
@@ -226,14 +431,37 @@ export class GenerationService {
         : null
       progressTracker?.start()
 
-      const normalizedParams = await normalizeSmartAspectParams(model, params as Record<string, unknown>)
+      const sourceParams = params as Record<string, unknown>
+      const normalized = await normalizeSmartAspectParams(model, sourceParams)
+      const runtimeParams = attachUploadRuntimeParams(normalized.params)
+      const preflightSummary = buildGeneratePreflightSummary(sourceParams, runtimeParams, normalized.report)
+      logger.info('[GenerationService] 开始生成', {
+        event: 'generation.generate.start',
+        requestId,
+        modelId,
+        providerId: model.meta.provider,
+        context: {
+          preflight: preflightSummary,
+        },
+      })
+
       const response = await aiGenerate({
         modelId,
-        params: attachUploadRuntimeParams(normalizedParams),
+        params: runtimeParams,
+        requestId,
       })
       recordRuntimeTrace(modelId, params, response.trace)
 
       if (response.status === 'pending') {
+        logger.info('[GenerationService] 生成进入轮询', {
+          event: 'generation.generate.pending',
+          requestId,
+          taskId: response.taskId,
+          modelId,
+          context: {
+            metadata: response.metadata,
+          },
+        })
         progressTracker?.stop()
         return {
           status: response.status,
@@ -246,9 +474,29 @@ export class GenerationService {
       }
 
       if (response.status !== 'completed') {
+        logger.error('[GenerationService] 生成失败状态', {
+          event: 'generation.generate.invalid_status',
+          requestId,
+          taskId: response.taskId,
+          modelId,
+          context: {
+            status: response.status,
+            metadata: response.metadata,
+          },
+        })
         throw new Error(`Generation ${response.status}${formatFailedMetadata(response.metadata)}`)
       }
 
+      logger.info('[GenerationService] 生成完成', {
+        event: 'generation.generate.completed',
+        requestId,
+        taskId: response.taskId,
+        modelId,
+        context: {
+          hasUrl: Boolean(response.url),
+          hasFilePath: Boolean(response.filePath),
+        },
+      })
       progressTracker?.complete()
 
       return {
@@ -260,6 +508,14 @@ export class GenerationService {
       }
     } catch (error) {
       const message = getErrorMessage(error)
+      logger.error('[GenerationService] 生成异常', error, {
+        event: 'generation.generate.failed',
+        requestId,
+        modelId,
+        context: {
+          message,
+        },
+      })
       progressTracker?.fail(message)
       throw new Error(`Generation failed for ${modelId}: ${message}`)
     }
@@ -296,6 +552,7 @@ export class GenerationService {
     onProgress?: (status: ProgressStatus) => void
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
+    const requestId = createRequestId(`${modelId}-continue`)
 
     try {
       const model = registry.getModel(modelId)
@@ -305,6 +562,13 @@ export class GenerationService {
         : null
       progressTracker?.start()
 
+      logger.info('[GenerationService] 开始继续轮询', {
+        event: 'generation.continue_polling.start',
+        requestId,
+        taskId,
+        modelId,
+      })
+
       const response = await aiContinuePolling({
         modelId,
         taskId,
@@ -313,9 +577,29 @@ export class GenerationService {
       recordRuntimeTrace(modelId, params, response.trace)
 
       if (response.status !== 'completed') {
+        logger.error('[GenerationService] 继续轮询返回非完成状态', {
+          event: 'generation.continue_polling.invalid_status',
+          requestId,
+          taskId,
+          modelId,
+          context: {
+            status: response.status,
+            metadata: response.metadata,
+          },
+        })
         throw new Error(`Continue polling ${response.status}${formatFailedMetadata(response.metadata)}`)
       }
 
+      logger.info('[GenerationService] 继续轮询完成', {
+        event: 'generation.continue_polling.completed',
+        requestId,
+        taskId: response.taskId || taskId,
+        modelId,
+        context: {
+          hasUrl: Boolean(response.url),
+          hasFilePath: Boolean(response.filePath),
+        },
+      })
       progressTracker?.complete()
 
       return {
@@ -328,6 +612,15 @@ export class GenerationService {
       }
     } catch (error) {
       const message = getErrorMessage(error)
+      logger.error('[GenerationService] 继续轮询异常', error, {
+        event: 'generation.continue_polling.failed',
+        requestId,
+        taskId,
+        modelId,
+        context: {
+          message,
+        },
+      })
       progressTracker?.fail(message)
       throw new Error(`Continue polling failed for ${modelId}: ${message}`)
     }
@@ -363,7 +656,23 @@ export class GenerationService {
   }
 
   async cancelTask(taskId: string): Promise<void> {
-    await aiCancelTask(taskId)
+    logger.info('[GenerationService] 请求取消任务', {
+      event: 'generation.cancel.start',
+      taskId,
+    })
+    try {
+      await aiCancelTask(taskId)
+      logger.info('[GenerationService] 取消任务完成', {
+        event: 'generation.cancel.completed',
+        taskId,
+      })
+    } catch (error) {
+      logger.error('[GenerationService] 取消任务失败', error, {
+        event: 'generation.cancel.failed',
+        taskId,
+      })
+      throw error
+    }
   }
 
   registerProviderFactory(
@@ -372,7 +681,7 @@ export class GenerationService {
     _options?: { overwrite?: boolean }
   ): void {
     if (import.meta.env.DEV) {
-      console.warn('[GenerationService] registerProviderFactory is deprecated in backend runtime mode')
+      logger.warn('[GenerationService] registerProviderFactory is deprecated in backend runtime mode')
     }
   }
 
@@ -393,3 +702,4 @@ export class GenerationService {
 }
 
 export const generationService = GenerationService.getInstance()
+

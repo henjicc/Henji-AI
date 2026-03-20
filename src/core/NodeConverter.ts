@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.NodeConverter')
 /**
  * NodeConverter - 节点转换器
  *
@@ -7,6 +10,7 @@
 import { registry } from './ModelRegistry'
 import { requestBuilder } from './request/RequestBuilder'
 import type {
+
   ModelDefinition,
   ParamDef,
   ModelNode,
@@ -197,7 +201,7 @@ export class NodeConverter implements INodeConverter {
           }
         }
       } catch (error: any) {
-        console.error(`Node execution failed:`, error)
+        logger.error(`Node execution failed:`, error)
         return {
           output: null,
           metadata: {
@@ -268,3 +272,4 @@ export class NodeConverter implements INodeConverter {
  * 单例实例
  */
 export const nodeConverter = NodeConverter.getInstance()
+

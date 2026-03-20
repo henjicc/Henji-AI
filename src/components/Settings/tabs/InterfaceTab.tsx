@@ -1,13 +1,17 @@
+import { createLogger } from '@/core/logging'
 import React from 'react'
 import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
 import ThemeSection from '../sections/ThemeSection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
+
   createRuntimeThemePayload,
   parseRuntimeThemePayload,
   type ThemeImportMode,
 } from '@/core/theme/runtimeTheme'
+
+const logger = createLogger('components.Settings.tabs.InterfaceTab')
 
 interface InterfaceTabProps {
   sectionId?: string
@@ -64,7 +68,7 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
       }
       return true
     } catch (error) {
-      console.error('[InterfaceTab] Failed to import theme:', error)
+      logger.error('[InterfaceTab] Failed to import theme:', error)
       return false
     }
   }
@@ -107,3 +111,4 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
 }
 
 export default InterfaceTab
+

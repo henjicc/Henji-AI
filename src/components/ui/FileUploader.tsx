@@ -1,12 +1,14 @@
+import { createLogger } from '@/core/logging'
 import React, { useRef, useState } from 'react'
 import { useTauriDragDrop } from '../../hooks/useTauriDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
-import { logError, logInfo } from '../../utils/errorLogger'
 import { useReorderDrag } from './fileUploader/useReorderDrag'
 import { UiButton, UiIconButton, UiInput } from './primitives'
+
+const logger = createLogger('components.ui.FileUploader')
 
 export interface FileUploaderProps {
     files: string[]
@@ -106,7 +108,7 @@ export default function FileUploader({
         e.stopPropagation()
         dragCounter.current += 1
         setIsHTML5Dragging(true)
-        logInfo('[FileUploader] wrapper dragenter', { types: Array.from(e.dataTransfer.types || []) })
+        logger.info('[FileUploader] wrapper dragenter', { types: Array.from(e.dataTransfer.types || []) })
         const hasReorderType = Array.from(e.dataTransfer.types || []).includes('text/henji-reorder-index')
         if (hasReorderType) {
             e.dataTransfer.dropEffect = 'move'
@@ -126,7 +128,7 @@ export default function FileUploader({
         e.preventDefault()
         e.stopPropagation()
         const hasReorderType = Array.from(e.dataTransfer.types || []).includes('text/henji-reorder-index')
-        logInfo('[FileUploader] wrapper dragover', { types: Array.from(e.dataTransfer.types || []), hasReorderType })
+        logger.info('[FileUploader] wrapper dragover', { types: Array.from(e.dataTransfer.types || []), hasReorderType })
         e.dataTransfer.dropEffect = hasReorderType ? 'move' : 'copy'
     }
 
@@ -139,13 +141,13 @@ export default function FileUploader({
         if (disabled) return
 
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            logInfo('[FileUploader] wrapper drop files', { fileCount: e.dataTransfer.files.length })
+            logger.info('[FileUploader] wrapper drop files', { fileCount: e.dataTransfer.files.length })
             handleFiles(Array.from(e.dataTransfer.files))
             return
         }
 
         const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
-        logInfo('[FileUploader] wrapper drop reorder', { fromIndexData })
+        logger.info('[FileUploader] wrapper drop reorder', { fromIndexData })
         if (fromIndexData) {
 
         }
@@ -176,7 +178,7 @@ export default function FileUploader({
 
                     handleFiles([file])
                 } catch (error) {
-                    logError('Failed to convert dragged image:', error)
+                    logger.error('Failed to convert dragged image:', error)
                 }
             } else if (dragData.type === 'video') {
                 try {
@@ -191,10 +193,10 @@ export default function FileUploader({
                         file = new File([blob], filename, { type: mime })
                         handleFiles([file])
                     } else {
-                        logError('Video drag requires a file path', {})
+                        logger.error('Video drag requires a file path', {})
                     }
                 } catch (error) {
-                    logError('Failed to convert dragged video:', error)
+                    logger.error('Failed to convert dragged video:', error)
                 }
             }
             endDrag()
@@ -277,7 +279,7 @@ export default function FileUploader({
                                 }
                                 onReplace(targetIndex, file)
                             } catch (error) {
-                                logError('Failed to convert dragged image:', error)
+                                logger.error('Failed to convert dragged image:', error)
                             }
                         }
                         endDrag()
@@ -390,4 +392,5 @@ export default function FileUploader({
         </div>
     )
 }
+
 

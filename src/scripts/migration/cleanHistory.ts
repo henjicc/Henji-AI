@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('scripts.migration.cleanHistory')
 /**
  * Data Cleaning Logic
  *
@@ -25,7 +28,7 @@ export function cleanHistoryItem(
   try {
     // Validate required fields
     if (!legacy.id || !legacy.provider || !legacy.model || !legacy.type) {
-      console.warn(`[Clean] Skipping invalid record: ${legacy.id}`)
+      logger.warn(`[Clean] Skipping invalid record: ${legacy.id}`)
       return null
     }
 
@@ -40,14 +43,14 @@ export function cleanHistoryItem(
 
       // Validate path format
       if (!filePath || filePath.startsWith('data:')) {
-        console.warn(`[Clean] Invalid file path: ${legacy.id}`)
+        logger.warn(`[Clean] Invalid file path: ${legacy.id}`)
         filePath = null
       }
     }
 
     // If no valid file path, skip this record
     if (!filePath) {
-      console.warn(`[Clean] Skipping record without file path: ${legacy.id}`)
+      logger.warn(`[Clean] Skipping record without file path: ${legacy.id}`)
       return null
     }
 
@@ -79,7 +82,8 @@ export function cleanHistoryItem(
       duration: null,  // Old data doesn't have duration info
     }
   } catch (error) {
-    console.error(`[Clean] Failed to clean record: ${legacy.id}`, error)
+    logger.error(`[Clean] Failed to clean record: ${legacy.id}`, error)
     return null
   }
 }
+

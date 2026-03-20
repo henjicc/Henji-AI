@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('services.customModels.CustomModelService')
 /**
  * 自定义模型管理服务
  */
@@ -134,7 +137,7 @@ export class CustomModelService {
       this.registerToRegistry(model)
     }
 
-    // console.log(`[CustomModelService] Loaded ${enabledModels.length} custom models`)
+    // logger.info(`[CustomModelService] Loaded ${enabledModels.length} custom models`)
   }
 
   /**
@@ -142,7 +145,7 @@ export class CustomModelService {
    */
   private registerToRegistry(customModel: CustomModel): void {
     registry.register(customModel.config as any)
-    console.log(`[CustomModelService] Registered custom model: ${customModel.id}`)
+    logger.info(`[CustomModelService] Registered custom model: ${customModel.id}`)
   }
 
   /**
@@ -150,7 +153,7 @@ export class CustomModelService {
    */
   private unregisterFromRegistry(customModel: CustomModel): void {
     registry.unregister(customModel.id)
-    console.log(`[CustomModelService] Unregistered custom model: ${customModel.id}`)
+    logger.info(`[CustomModelService] Unregistered custom model: ${customModel.id}`)
   }
 
   /**
@@ -200,3 +203,4 @@ export function getCustomModelService(db: DatabaseService): CustomModelService {
   }
   return customModelServiceInstance
 }
+

@@ -1,5 +1,8 @@
+import { createLogger } from '@/core/logging'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
+
+const logger = createLogger('components.MediaGenerator.preset.PresetManager')
 
 /**
  * 预设管理器（配置驱动）
@@ -10,7 +13,7 @@ export class PresetManager {
   private static getModelOrWarn(modelId: string): ModelDefinition | null {
     const model = registry.getModel(modelId)
     if (!model) {
-      console.warn(`[PresetManager] Model not found: ${modelId}`)
+      logger.warn(`[PresetManager] Model not found: ${modelId}`)
       return null
     }
     return model
@@ -45,7 +48,7 @@ export class PresetManager {
       }
     }
 
-    console.log(`[PresetManager] Loaded ${Object.keys(params).length} params for ${modelId}`)
+    logger.info(`[PresetManager] Loaded ${Object.keys(params).length} params for ${modelId}`)
     return params
   }
 
@@ -79,7 +82,7 @@ export class PresetManager {
       }
     }
 
-    console.log(`[PresetManager] Saved ${Object.keys(presetData).length} params for ${modelId}`)
+    logger.info(`[PresetManager] Saved ${Object.keys(presetData).length} params for ${modelId}`)
     return presetData
   }
 
@@ -130,7 +133,7 @@ export class PresetManager {
       setParam(key, value)
     })
 
-    console.log(`[PresetManager] Applied preset to ${modelId}`)
+    logger.info(`[PresetManager] Applied preset to ${modelId}`)
   }
 
   /**
@@ -176,3 +179,4 @@ export class PresetManager {
     }
   }
 }
+

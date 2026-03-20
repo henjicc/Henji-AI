@@ -1,15 +1,17 @@
+import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
-import { logError, logInfo } from '@/utils/errorLogger'
 import { formatDuration, getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import { fileToBlobSrc, isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskHistory')
 
 function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   if (status === 'completed') return 'success'
@@ -139,6 +141,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
 async function loadHistoryWithRetries(): Promise<HistoryRecord[]> {
   const maxRetries = 10
   for (let retries = 0; retries < maxRetries; retries++) {
+
     try {
       return await databaseService.getHistory()
     } catch (error) {
@@ -177,9 +180,9 @@ export function useLoadTaskHistory({
       const dataRoot = await getDataRoot()
       const loadedTasks = await Promise.all(historyRecords.map((r) => mapHistoryRecordToTask(r, dataRoot)))
       setTasks(loadedTasks.reverse())
-      logInfo('[Workspace] 历史记录加载完成', { count: loadedTasks.length })
+      logger.info('[Workspace] 历史记录加载完成', { count: loadedTasks.length })
     } catch (error) {
-      logError('[Workspace] 加载历史记录失败:', error)
+      logger.error('[Workspace] 加载历史记录失败:', error)
     } finally {
       setIsTasksLoaded(true)
       setTimeout(() => {
@@ -192,7 +195,7 @@ export function useLoadTaskHistory({
     void load()
 
     const handlePathChange = () => {
-      logInfo('[Workspace] 检测到数据路径变更，重新加载历史记录', {})
+      logger.info('[Workspace] 检测到数据路径变更，重新加载历史记录', {})
       void load()
     }
 
@@ -283,9 +286,9 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
           }
         }
 
-        logInfo('[Workspace] 历史记录保存完成', { count: tasksToSave.length })
+        logger.info('[Workspace] 历史记录保存完成', { count: tasksToSave.length })
       } catch (error) {
-        logError('[Workspace] 保存历史记录失败:', error)
+        logger.error('[Workspace] 保存历史记录失败:', error)
       }
     }
 

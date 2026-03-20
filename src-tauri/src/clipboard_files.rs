@@ -95,7 +95,12 @@ pub fn read_clipboard_files() -> Result<Vec<ClipboardFile>, String> {
                             });
                         }
                         Err(e) => {
-                            eprintln!("读取文件失败 {}: {}", path_str, e);
+                            tracing::error!(
+                                target: "clipboard.files",
+                                file = %path_str,
+                                error = %e,
+                                "read clipboard file failed"
+                            );
                         }
                     }
                 }

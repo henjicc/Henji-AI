@@ -1,9 +1,13 @@
+import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef } from 'react'
 import { MenuItem } from '../hooks/useContextMenu'
+
+const logger = createLogger('components.ContextMenu')
 
 interface ContextMenuProps {
     items: MenuItem[]
     position: { x: number; y: number }
+
     onClose: () => void
     visible: boolean
 }
@@ -49,25 +53,25 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
                         className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
                         onClick={async (e) => {
                             const t0 = performance.now()
-                            console.log('[ContextMenu] 点击菜单项', { label: item.label, t0 })
+                            logger.info('[ContextMenu] 点击菜单项', { label: item.label, t0 })
 
                             e.preventDefault()
                             e.stopPropagation()
                             if (!item.disabled) {
                                 onClose()
                                 const t1 = performance.now()
-                                console.log('[ContextMenu] 菜单关闭, 等待 16ms', { 耗时: `${(t1 - t0).toFixed(2)}ms` })
+                                logger.info('[ContextMenu] 菜单关闭, 等待 16ms', { 耗时: `${(t1 - t0).toFixed(2)}ms` })
 
                                 // 菜单关闭后立即执行，16ms 足够一帧渲染
                                 await new Promise(resolve => setTimeout(resolve, 16))
 
                                 const t2 = performance.now()
-                                console.log('[ContextMenu] 16ms 等待结束, 执行 onClick', { 等待耗时: `${(t2 - t1).toFixed(2)}ms` })
+                                logger.info('[ContextMenu] 16ms 等待结束, 执行 onClick', { 等待耗时: `${(t2 - t1).toFixed(2)}ms` })
 
                                 await item.onClick()
 
                                 const t3 = performance.now()
-                                console.log('[ContextMenu] onClick 执行完成', { onClick耗时: `${(t3 - t2).toFixed(2)}ms`, 总耗时: `${(t3 - t0).toFixed(2)}ms` })
+                                logger.info('[ContextMenu] onClick 执行完成', { onClick耗时: `${(t3 - t2).toFixed(2)}ms`, 总耗时: `${(t3 - t0).toFixed(2)}ms` })
                             }
                         }}
                     >

@@ -1,5 +1,7 @@
+import { createLogger } from '@/core/logging'
 import { fal } from '@fal-ai/client'
-import { logError, logInfo } from '../utils/errorLogger'
+
+const logger = createLogger('utils.falUpload')
 
 /**
  * 将 data URI 转换为 Blob
@@ -9,6 +11,7 @@ import { logError, logInfo } from '../utils/errorLogger'
 function dataURItoBlob(dataUri: string): Blob {
   const arr = dataUri.split(',')
   const mimeMatch = arr[0].match(/:(.*?);/)
+
   const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg'
   const bstr = atob(arr[1])
   let n = bstr.length
@@ -30,7 +33,7 @@ function dataURItoBlob(dataUri: string): Blob {
 export async function uploadToFalCDN(image: string, apiKey: string): Promise<string> {
   // 1. 如果已经是 HTTP/HTTPS URL，直接返回
   if (image.startsWith('http://') || image.startsWith('https://')) {
-    logInfo('', '[falUpload] 图片已是 URL，跳过上传')
+    logger.info('', '[falUpload] 图片已是 URL，跳过上传')
     return image
   }
 
@@ -42,27 +45,27 @@ export async function uploadToFalCDN(image: string, apiKey: string): Promise<str
   // 2. 如果是 base64 data URI，转换为 Blob 后上传
   if (image.startsWith('data:')) {
     try {
-      logInfo('', '[falUpload] 检测到 base64 图片，开始上传到 fal CDN...')
+      logger.info('', '[falUpload] 检测到 base64 图片，开始上传到 fal CDN...')
       const blob = dataURItoBlob(image)
       const url = await fal.storage.upload(blob)
-      logInfo('[falUpload] 上传成功，获得 URL:', url)
+      logger.info('[falUpload] 上传成功，获得 URL:', url)
       return url
     } catch (error) {
-      logError('[falUpload] 上传失败:', error)
+      logger.error('[falUpload] 上传失败:', error)
       throw error
     }
   }
 
   // 3. 如果是纯 base64 字符串（没有 data: 前缀），添加前缀后上传
   try {
-    logInfo('', '[falUpload] 检测到纯 base64 字符串，添加前缀后上传...')
+    logger.info('', '[falUpload] 检测到纯 base64 字符串，添加前缀后上传...')
     const dataUri = `data:image/jpeg;base64,${image}`
     const blob = dataURItoBlob(dataUri)
     const url = await fal.storage.upload(blob)
-    logInfo('[falUpload] 上传成功，获得 URL:', url)
+    logger.info('[falUpload] 上传成功，获得 URL:', url)
     return url
   } catch (error) {
-    logError('[falUpload] 上传失败:', error)
+    logger.error('[falUpload] 上传失败:', error)
     throw error
   }
 }
@@ -81,16 +84,16 @@ export async function uploadMultipleToFalCDN(
     return []
   }
 
-  logInfo('', `[falUpload] 准备上传 ${images.length} 张图片到 fal CDN...`)
+  logger.info('', `[falUpload] 准备上传 ${images.length} 张图片到 fal CDN...`)
 
   // 并行上传所有图片
   const uploadedUrls = await Promise.all(
     images.map((img, index) => {
-      logInfo('', `[falUpload] 上传第 ${index + 1}/${images.length} 张图片...`)
+      logger.info('', `[falUpload] 上传第 ${index + 1}/${images.length} 张图片...`)
       return uploadToFalCDN(img, apiKey)
     })
   )
 
-  logInfo('', `[falUpload] 所有图片上传完成，共 ${uploadedUrls.length} 张`)
+  logger.info('', `[falUpload] 所有图片上传完成，共 ${uploadedUrls.length} 张`)
   return uploadedUrls
 }

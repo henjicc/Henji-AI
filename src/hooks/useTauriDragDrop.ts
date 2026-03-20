@@ -1,10 +1,13 @@
+import { createLogger } from '@/core/logging'
 import { useEffect, useState, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { inferMimeFromPath, isDesktop } from '../utils/save'
-import { logError } from '../utils/errorLogger'
+
+const logger = createLogger('hooks.useTauriDragDrop')
 
 type DragPosition = { x: number; y: number }
+
 type DragDropPayload = { paths: string[]; position: DragPosition }
 
 export function useTauriDragDrop(
@@ -59,11 +62,11 @@ export function useTauriDragDrop(
                     // 如果没有命中任何元素，或者命中的元素不在我们的容器内，忽略此次 Drop
                     if (!targetEl || !containerEl || !containerEl.contains(targetEl)) {
                         // 可选：记录日志用于调试
-                        // console.log('[DragDrop] Drop ignored - outside target area', { clientX, clientY })
+                        // logger.info('[DragDrop] Drop ignored - outside target area', { clientX, clientY })
                         return
                     }
                 } catch (err) {
-                    console.error('[DragDrop] Hit test failed:', err)
+                    logger.error('[DragDrop] Hit test failed:', err)
                     // 如果命中测试出错（例如获取窗口位置失败），为了安全起见，我们选择忽略或者允许？
                     // 考虑到用户体验，如果出错可能就不处理了，或者默认行为。
                     // 这里选择忽略，避免误触发。
@@ -81,7 +84,7 @@ export function useTauriDragDrop(
                             const file = new File([bytes], name, { type: mime })
                             files.push(file)
                         } catch (e) {
-                            logError('Failed to read dropped file:', { data: [p, e] })
+                            logger.error('Failed to read dropped file:', { data: [p, e] })
                         }
                     }
                     if (files.length > 0) {

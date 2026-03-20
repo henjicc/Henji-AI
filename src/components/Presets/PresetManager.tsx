@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.Presets.PresetManager')
 /**
  * PresetManager Component
  *
@@ -103,10 +106,10 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
       await applyPreset(presetId)  // 增加使用次数
 
       // 显示应用结果
-      console.log(`[PresetManager] Applied ${result.applied} params, ignored ${result.ignored} params`)
+      logger.info(`[PresetManager] Applied ${result.applied} params, ignored ${result.ignored} params`)
 
       if (result.ignored > 0) {
-        console.warn('[PresetManager] Ignored parameters:', result.ignoredParams)
+        logger.warn('[PresetManager] Ignored parameters:', result.ignoredParams)
       }
 
       onClose()
@@ -172,3 +175,4 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
     </div>
   )
 }
+

@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.linkage.effects.index')
 /**
  * 联动效果处理器
  *
@@ -155,7 +158,8 @@ function executeCustomEffect(
     linkage.handler(triggerValue, params, updateParam)
     return Object.keys(changes).length > 0 ? changes : null
   } catch (error) {
-    console.error('[LinkageEffect] Custom handler error:', error)
+    logger.error('[LinkageEffect] Custom handler error:', error)
     return null
   }
 }
+

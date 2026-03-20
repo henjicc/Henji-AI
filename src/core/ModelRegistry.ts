@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.ModelRegistry')
 /**
  * 模型注册中心
  *
@@ -109,7 +112,7 @@ export class ModelRegistry {
     // 4. 注册别名
     model.meta.aliases?.forEach((alias) => {
       if (this.models.has(alias)) {
-        console.warn(`Alias "${alias}" already exists, skipping for model ${model.meta.id}`)
+        logger.warn(`Alias "${alias}" already exists, skipping for model ${model.meta.id}`)
       } else {
         this.models.set(alias, model)
       }
@@ -144,7 +147,7 @@ export class ModelRegistry {
   unregister(modelId: string): void {
     const model = this.models.get(modelId)
     if (!model) {
-      console.warn(`Model not found: ${modelId}`)
+      logger.warn(`Model not found: ${modelId}`)
       return
     }
 
@@ -177,7 +180,7 @@ export class ModelRegistry {
    * @example
    * ```typescript
    * const count = registry.registerBatch([model1, model2, model3])
-   * console.log(`Successfully registered ${count} models`)
+   * logger.info(`Successfully registered ${count} models`)
    * ```
    */
   registerBatch(models: ModelDefinition[]): number {
@@ -188,7 +191,7 @@ export class ModelRegistry {
         this.register(model)
         successCount++
       } catch (error) {
-        console.error(`Failed to register model ${model.meta.id}:`, error)
+        logger.error(`Failed to register model ${model.meta.id}:`, error)
       }
     })
 
@@ -205,7 +208,7 @@ export class ModelRegistry {
    * ```typescript
    * const model = registry.getModel('nano-banana')
    * if (model) {
-   *   console.log(model.meta.name)
+   *   logger.info(model.meta.name)
    * }
    * ```
    */
@@ -233,7 +236,7 @@ export class ModelRegistry {
    * ```typescript
    * const schema = registry.getSchema('nano-banana')
    * schema.forEach(param => {
-   *   console.log(param.id, param.type, param.default)
+   *   logger.info(param.id, param.type, param.default)
    * })
    * ```
    */
@@ -340,13 +343,13 @@ export class ModelRegistry {
    *   numImages: 4,
    *   aspectRatio: '16:9'
    * })
-   * console.log(`Price: ¥${price.toFixed(2)}`)
+   * logger.info(`Price: ¥${price.toFixed(2)}`)
    * ```
    */
   calculatePrice(modelId: string, params: Record<string, any>): number {
     const model = this.models.get(modelId)
     if (!model) {
-      console.warn(`Model not found: ${modelId}`)
+      logger.warn(`Model not found: ${modelId}`)
       return 0
     }
 
@@ -366,7 +369,7 @@ export class ModelRegistry {
       // 3. 默认返回 0
       return 0
     } catch (error) {
-      console.error(`Price calculation failed for ${modelId}:`, error)
+      logger.error(`Price calculation failed for ${modelId}:`, error)
       return 0
     }
   }
@@ -389,7 +392,7 @@ export class ModelRegistry {
   async selectEndpoint(modelId: string, params: Record<string, any>): Promise<string | undefined> {
     const model = this.models.get(modelId)
     if (!model) {
-      console.warn(`Model not found: ${modelId}`)
+      logger.warn(`Model not found: ${modelId}`)
       return undefined
     }
 
@@ -398,7 +401,7 @@ export class ModelRegistry {
       const result = await selector.select(params, {})
       return result.endpoint
     } catch (error) {
-      console.error(`Endpoint selection failed for ${modelId}:`, error)
+      logger.error(`Endpoint selection failed for ${modelId}:`, error)
       return undefined
     }
   }
@@ -411,7 +414,7 @@ export class ModelRegistry {
    * @example
    * ```typescript
    * const allModels = registry.listAllModels()
-   * console.log(`Total models: ${allModels.length}`)
+   * logger.info(`Total models: ${allModels.length}`)
    * ```
    */
   listAllModels(): ModelDefinition[] {
@@ -436,7 +439,7 @@ export class ModelRegistry {
    * @example
    * ```typescript
    * const info = registry.getModelInfo('nano-banana')
-   * console.log(info)
+   * logger.info(info)
    * // {
    * //   id: 'nano-banana',
    * //   provider: 'fal',
@@ -478,7 +481,7 @@ export class ModelRegistry {
    * @example
    * ```typescript
    * const stats = registry.getStats()
-   * console.log(stats)
+   * logger.info(stats)
    * // {
    * //   totalModels: 50,
    * //   totalAliases: 75,
@@ -517,6 +520,7 @@ export class ModelRegistry {
    * @returns 标签及其使用次数数组
    */
   private getTopTags(limit: number): Array<{ tag: string; count: number }> {
+
     const tagCounts = Array.from(this.modelsByTag.entries()).map(([tag, ids]) => ({
       tag,
       count: ids.size

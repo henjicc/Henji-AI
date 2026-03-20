@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.params.ParamRenderer')
 /**
  * ParamRenderer - 参数自动渲染器
  *
@@ -176,7 +179,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
 
         return panelContent
       } else {
-        console.warn(`Panel "${compositeParam.panel}" not found in registry`)
+        logger.warn(`Panel "${compositeParam.panel}" not found in registry`)
       }
     }
 
@@ -238,3 +241,4 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
 })
 
 ParamRenderer.displayName = 'ParamRenderer'
+

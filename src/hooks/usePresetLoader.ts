@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('hooks.usePresetLoader')
 /**
  * usePresetLoader Hook
  *
@@ -34,7 +37,7 @@ export interface PresetApplyResult {
  *
  *   const handleApplyPreset = (preset: Preset) => {
  *     const result = applyPreset(preset)
- *     console.log(`Applied ${result.applied} params, ignored ${result.ignored}`)
+ *     logger.info(`Applied ${result.applied} params, ignored ${result.ignored}`)
  *   }
  *
  *   const handleSavePreset = () => {
@@ -53,7 +56,7 @@ export function usePresetLoader(currentModelId: string) {
   const applyPreset = useCallback((preset: Preset): PresetApplyResult => {
     // 检查预设是否兼容当前模型
     if (preset.modelId && preset.modelId !== currentModelId) {
-      console.warn(
+      logger.warn(
         `[PresetLoader] Preset is for model ${preset.modelId}, but current model is ${currentModelId}`
       )
     }
@@ -71,7 +74,7 @@ export function usePresetLoader(currentModelId: string) {
         validParams[key] = value
       } else {
         ignoredParams.push(key)
-        console.debug(`[PresetLoader] Ignoring invalid parameter: ${key}`)
+        logger.debug(`[PresetLoader] Ignoring invalid parameter: ${key}`)
       }
     }
 
@@ -105,3 +108,4 @@ export function usePresetLoader(currentModelId: string) {
     createPresetFromCurrent
   }
 }
+

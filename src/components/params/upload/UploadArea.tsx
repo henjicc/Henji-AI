@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.params.upload.UploadArea')
 /**
  * UploadArea 组件
  *
@@ -66,7 +69,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
     try {
       await onUpload(file)
     } catch (error) {
-      console.error('Upload failed:', error)
+      logger.error('Upload failed:', error)
       alert(t('uploadArea.uploadFailed'))
     } finally {
       setUploading(false)
@@ -116,3 +119,4 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
     </div>
   )
 }
+

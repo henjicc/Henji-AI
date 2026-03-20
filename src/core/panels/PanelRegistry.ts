@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.panels.PanelRegistry')
 /**
  * PanelRegistry - 面板注册中心
  *
@@ -54,7 +57,7 @@ class PanelRegistry {
 
     if (!Component) {
       if (import.meta.env.DEV) {
-        console.error(`Unknown panel type: ${config.type}. Available panels:`, this.listRegistered())
+        logger.error(`Unknown panel type: ${config.type}. Available panels:`, this.listRegistered())
       }
       return null
     }
@@ -90,3 +93,4 @@ class PanelRegistry {
  * 导出单例实例
  */
 export const panelRegistry = new PanelRegistry()
+

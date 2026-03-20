@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.imageConversion.dragThumbnails')
+
 /**
  * 生成缩略图并保存到临时文件
  * 用于拖拽时的图标显示
@@ -55,7 +59,7 @@ export async function generateThumbnail(imageUrl: string): Promise<string> {
 
     return filePath
   } catch (error) {
-    console.error('Failed to generate thumbnail:', error)
+    logger.error('Failed to generate thumbnail:', error)
     throw error
   }
 }
@@ -128,7 +132,7 @@ export async function generateVideoThumbnail(videoUrl: string): Promise<string> 
 
     return filePath
   } catch (error) {
-    console.error('Failed to generate video thumbnail:', error)
+    logger.error('Failed to generate video thumbnail:', error)
     throw error
   }
 }
@@ -212,4 +216,5 @@ export async function generateVideoPreviewDataUrl(videoUrl: string): Promise<str
     video.load()
   })
 }
+
 

@@ -1,13 +1,15 @@
+import { createLogger } from '@/core/logging'
 import { mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
 import Pica from 'pica'
 import * as path from '@tauri-apps/api/path'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { getUploadsPath } from '@/utils/dataPath'
-import { logError, logInfo } from '@/utils/errorLogger'
 import { inferMimeFromPath as inferMimeFromPathShared } from '@/utils/mime'
 import { fileToBlobSrc, fileToDataUrl, bytesToDataUrl } from './fileUrls'
 import { sha256Hex } from './hash'
+
+const logger = createLogger('utils.save.uploads')
 
 const uploadCache: Map<string, { bytes: Uint8Array; dataUrl: string; displaySrc: string; compressedHash: string }> = new Map()
 
@@ -51,7 +53,7 @@ export async function saveUploadImage(
     }
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
-    logInfo('[save] upload image persisted', full)
+    logger.info('[save] upload image persisted', full)
     return { fullPath: full, displaySrc, dataUrl }
   }
 
@@ -93,7 +95,7 @@ export async function saveUploadVideo(
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
 
-    logInfo('[save] upload video persisted', full)
+    logger.info('[save] upload video persisted', full)
     return { fullPath: full, displaySrc, dataUrl }
   }
 
@@ -133,9 +135,9 @@ export async function saveBase64ToUploads(
 
   if (!exists) {
     await writeFile(full, bytes)
-    logInfo('[save] base64 image persisted', full)
+    logger.info('[save] base64 image persisted', full)
   } else {
-    logInfo('[save] base64 image already exists (hash match)', full)
+    logger.info('[save] base64 image already exists (hash match)', full)
   }
 
   const displaySrc = convertFileSrc(full)
@@ -161,9 +163,9 @@ export async function saveBytesToUploads(
   } catch { }
   if (!exists) {
     await writeFile(full, bytes)
-    logInfo('[save] bytes persisted', full)
+    logger.info('[save] bytes persisted', full)
   } else {
-    logInfo('[save] bytes already exists (hash match)', full)
+    logger.info('[save] bytes already exists (hash match)', full)
   }
 
   const displaySrc = convertFileSrc(full)
@@ -175,7 +177,7 @@ export async function deleteUploads(paths: string[]): Promise<void> {
     try {
       await remove(p)
     } catch (e) {
-      logError('[save] delete upload failed', { data: [p, e] })
+      logger.error('[save] delete upload failed', { data: [p, e] })
     }
   }
 }

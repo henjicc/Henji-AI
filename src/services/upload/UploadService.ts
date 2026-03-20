@@ -1,5 +1,7 @@
-import { logInfo } from '../../utils/errorLogger'
+import { createLogger } from '@/core/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
+
+const logger = createLogger('services.upload.UploadService')
 
 export type UploadProviderType = 'fal' | 'kie' | 'bizyair'
 
@@ -21,12 +23,12 @@ export class UploadService {
 
   setProvider(type: UploadProviderType): void {
     useSettingsStore.getState().setUploadProvider(type)
-    logInfo('[UploadService]', `Provider set to ${type}`)
+    logger.info('[UploadService]', `Provider set to ${type}`)
   }
 
   setFallbackEnabled(enabled: boolean): void {
     useSettingsStore.getState().setUploadFallbackEnabled(enabled)
-    logInfo('[UploadService]', `Fallback enabled: ${enabled}`)
+    logger.info('[UploadService]', `Fallback enabled: ${enabled}`)
   }
 
   getCurrentProvider(): UploadProviderType {
@@ -45,3 +47,4 @@ export class UploadService {
     throw new Error('Upload execution moved to backend runtime')
   }
 }
+

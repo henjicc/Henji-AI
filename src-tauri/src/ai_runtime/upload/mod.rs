@@ -84,14 +84,15 @@ pub async fn preprocess_request_body(
     strategy: &UploadStrategy,
 ) -> AiResult<Value> {
     if should_trace_upload(provider_id, route) {
-        eprintln!(
-            "[ai_runtime][upload][trace] start provider={} route={} strategy.primary={:?} fallback={} img_url_before={} images_before={}",
-            provider_id,
-            route,
-            strategy.primary_provider,
-            strategy.fallback_enabled,
-            summarize_json_pointer(body, "/input/img_url"),
-            summarize_json_pointer(body, "/images")
+        tracing::debug!(
+            target: "ai_runtime.upload",
+            provider = %provider_id,
+            route = %route,
+            primary = ?strategy.primary_provider,
+            fallback = strategy.fallback_enabled,
+            img_url_before = %summarize_json_pointer(body, "/input/img_url"),
+            images_before = %summarize_json_pointer(body, "/images"),
+            "upload preprocess start"
         );
     }
 
@@ -99,12 +100,13 @@ pub async fn preprocess_request_body(
     preprocess_field_value(provider_id, route, strategy, MediaKind::Unknown, None, &mut next).await?;
 
     if should_trace_upload(provider_id, route) {
-        eprintln!(
-            "[ai_runtime][upload][trace] done provider={} route={} img_url_after={} images_after={}",
-            provider_id,
-            route,
-            summarize_json_pointer(&next, "/input/img_url"),
-            summarize_json_pointer(&next, "/images")
+        tracing::debug!(
+            target: "ai_runtime.upload",
+            provider = %provider_id,
+            route = %route,
+            img_url_after = %summarize_json_pointer(&next, "/input/img_url"),
+            images_after = %summarize_json_pointer(&next, "/images"),
+            "upload preprocess done"
         );
     }
 
@@ -183,12 +185,13 @@ async fn rewrite_media_source(
             MediaKind::Image => resolve_rewrite_mode(provider_id, route, field_name, false),
             MediaKind::Unknown => PpioMediaRewriteMode::DataUri,
         };
-        eprintln!(
-            "[ai_runtime][upload][trace] field={} kind={} rewrite_mode={} source={}",
-            field_name.unwrap_or("<unknown>"),
-            describe_source_kind(trimmed),
-            describe_rewrite_mode(rewrite_mode),
-            summarize_source(trimmed)
+        tracing::debug!(
+            target: "ai_runtime.upload",
+            field = %field_name.unwrap_or("<unknown>"),
+            source_kind = %describe_source_kind(trimmed),
+            rewrite_mode = %describe_rewrite_mode(rewrite_mode),
+            source = %summarize_source(trimmed),
+            "rewrite media source"
         );
     }
 
@@ -223,11 +226,12 @@ async fn rewrite_media_source(
         ) {
             PpioMediaRewriteMode::PublicUrl => {
                 if should_trace_upload(provider_id, route) {
-                    eprintln!(
-                        "[ai_runtime][upload][trace] public_url_upload filename={} mime={} bytes={}",
-                        prepared.filename,
-                        prepared.mime_type,
-                        prepared.bytes.len()
+                    tracing::debug!(
+                        target: "ai_runtime.upload",
+                        filename = %prepared.filename,
+                        mime = %prepared.mime_type,
+                        bytes = prepared.bytes.len(),
+                        "uploading media for public url"
                     );
                 }
                 upload_for_public_url(&prepared, strategy).await
@@ -262,11 +266,12 @@ async fn rewrite_media_source(
 async fn upload_for_public_url(prepared: &PreparedMediaBinary, strategy: &UploadStrategy) -> AiResult<String> {
     let providers = build_public_url_upload_candidates(strategy);
     let mut failures: Vec<String> = Vec::new();
-    eprintln!(
-        "[ai_runtime][upload][public_url] primary={:?} fallback={} candidates={}",
-        strategy.primary_provider,
-        strategy.fallback_enabled,
-        providers.join(",")
+    tracing::info!(
+        target: "ai_runtime.upload",
+        primary = ?strategy.primary_provider,
+        fallback = strategy.fallback_enabled,
+        candidates = %providers.join(","),
+        "public url upload candidates"
     );
 
     if providers.is_empty() && !strategy.fallback_enabled {
@@ -278,27 +283,30 @@ async fn upload_for_public_url(prepared: &PreparedMediaBinary, strategy: &Upload
     for provider in providers {
         match try_upload_with_provider(provider, prepared).await? {
             UploadAttempt::Success(url) => {
-                eprintln!(
-                    "[ai_runtime][upload][public_url] success provider={} filename={}",
-                    provider,
-                    prepared.filename
+                tracing::info!(
+                    target: "ai_runtime.upload",
+                    provider = %provider,
+                    filename = %prepared.filename,
+                    "public url upload success"
                 );
                 return Ok(url);
             }
             UploadAttempt::Skipped => {
-                eprintln!(
-                    "[ai_runtime][upload][public_url] skipped provider={} filename={}",
-                    provider,
-                    prepared.filename
+                tracing::warn!(
+                    target: "ai_runtime.upload",
+                    provider = %provider,
+                    filename = %prepared.filename,
+                    "public url upload skipped"
                 );
                 failures.push(format!("{} 未配置或不支持当前公网 URL 上传", display_upload_provider(provider)));
             }
             UploadAttempt::Failed(message) => {
-                eprintln!(
-                    "[ai_runtime][upload][public_url] failed provider={} filename={} error={}",
-                    provider,
-                    prepared.filename,
-                    message
+                tracing::error!(
+                    target: "ai_runtime.upload",
+                    provider = %provider,
+                    filename = %prepared.filename,
+                    error = %message,
+                    "public url upload failed"
                 );
                 failures.push(message);
             }

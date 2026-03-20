@@ -1,7 +1,9 @@
+import { createLogger } from '@/core/logging'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import * as path from '@tauri-apps/api/path'
-import { logError, logInfo } from '@/utils/errorLogger'
+
+const logger = createLogger('utils.save.downloadDialogs')
 
 function getFileExtension(filePath: string): string {
   const fileName = filePath.split(/\\|\//).pop() || ''
@@ -36,7 +38,7 @@ export async function downloadAudioFile(sourcePath: string, suggestedName?: stri
   const bytes = await readFile(sourcePath)
   await writeFile(finalTarget, bytes as any)
 
-  logInfo('[save] 音频文件已保存:', finalTarget)
+  logger.info('[save] 音频文件已保存:', finalTarget)
   return finalTarget
 }
 
@@ -73,13 +75,13 @@ export async function downloadMediaFile(sourcePath: string, suggestedName?: stri
   const bytes = await readFile(sourcePath)
   await writeFile(finalTarget, bytes as any)
 
-  logInfo('[save] 媒体文件已保存:', finalTarget)
+  logger.info('[save] 媒体文件已保存:', finalTarget)
   return finalTarget
 }
 
 export async function quickDownloadMediaFile(sourcePath: string, targetDir: string, suggestedName?: string): Promise<string> {
   try {
-    logInfo('[save] 快速下载开始:', { sourcePath, targetDir, suggestedName })
+    logger.info('[save] 快速下载开始:', { sourcePath, targetDir, suggestedName })
 
     if (!sourcePath) {
       throw new Error('源文件路径为空')
@@ -90,29 +92,30 @@ export async function quickDownloadMediaFile(sourcePath: string, targetDir: stri
     }
 
     const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
-    logInfo('[save] 目标文件名:', name)
+    logger.info('[save] 目标文件名:', name)
 
     const target = await path.join(targetDir, name)
-    logInfo('[save] 完整目标路径:', target)
+    logger.info('[save] 完整目标路径:', target)
 
     try {
       const bytes = await readFile(sourcePath)
-      logInfo('[save] 源文件读取成功，大小:', { data: [bytes.length, 'bytes'] })
+      logger.info('[save] 源文件读取成功，大小:', { data: [bytes.length, 'bytes'] })
 
       await writeFile(target, bytes as any)
-      logInfo('[save] 快速下载成功保存到:', target)
+      logger.info('[save] 快速下载成功保存到:', target)
 
       return target
     } catch (error) {
-      logError('[save] 文件操作失败:', error)
+      logger.error('[save] 文件操作失败:', error)
       if (error instanceof Error) {
         throw new Error(`文件保存失败: ${error.message}`)
       }
       throw new Error('文件保存失败')
     }
   } catch (error) {
-    logError('[save] 快速下载失败:', error)
+    logger.error('[save] 快速下载失败:', error)
     throw error
   }
 }
+
 

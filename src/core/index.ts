@@ -32,6 +32,9 @@ export * from './i18n'
 // 请求构建系统
 export * from './request'
 
+// 日志系统
+export * from './logging'
+
 // 节点系统
 export { NodeConverter, nodeConverter } from './NodeConverter'
 export { ToolNodeRegistry, toolNodeRegistry } from './ToolNodeRegistry'

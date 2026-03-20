@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('hooks.useDatabase')
 /**
  * Database Initialization Hook
  *
@@ -16,13 +19,14 @@ export function useDatabase() {
       .init()
       .then(() => {
         setIsReady(true)
-        console.log('[useDatabase] Database initialized successfully')
+        logger.info('[useDatabase] Database initialized successfully')
       })
       .catch((err) => {
         setError(err)
-        console.error('[useDatabase] Database initialization failed:', err)
+        logger.error('[useDatabase] Database initialization failed:', err)
       })
   }, [])
 
   return { isReady, error }
 }
+

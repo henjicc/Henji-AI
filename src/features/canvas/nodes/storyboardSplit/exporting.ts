@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import {
   embedStoryboardImageMetadata,
   mergeStoryboardImages,
@@ -12,6 +13,8 @@ import {
   reduceAspectRatio,
 } from '@/features/canvas/application/imageData';
 import { clamp } from './shared';
+
+const logger = createLogger('features.canvas.nodes.storyboardSplit.exporting')
 
 const EXPORT_MAX_DIMENSION = 4096;
 const EXPORT_TRACE_PREFIX = '[StoryboardExport]';
@@ -31,14 +34,14 @@ function exportTraceInfo(message: string, payload: unknown): void {
   if (!EXPORT_TRACE_ENABLED) {
     return;
   }
-  console.info(`${EXPORT_TRACE_PREFIX} ${message}`, payload);
+  logger.info(`${EXPORT_TRACE_PREFIX} ${message}`, payload);
 }
 
 function exportTraceWarn(message: string, payload: unknown): void {
   if (!EXPORT_TRACE_ENABLED) {
     return;
   }
-  console.warn(`${EXPORT_TRACE_PREFIX} ${message}`, payload);
+  logger.warn(`${EXPORT_TRACE_PREFIX} ${message}`, payload);
 }
 
 function trimTextToWidth(
@@ -321,7 +324,7 @@ export async function exportStoryboardImages({
       totalElapsedMs: Math.round(performance.now() - traceStart),
     });
   } catch (error) {
-    console.error(`${EXPORT_TRACE_PREFIX} failed`, {
+    logger.error(`${EXPORT_TRACE_PREFIX} failed`, {
       traceId,
       elapsedMs: Math.round(performance.now() - traceStart),
       error,

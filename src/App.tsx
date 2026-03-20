@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
@@ -8,6 +9,8 @@ import { getCustomModelService } from './services/customModels/CustomModelServic
 import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from './core/panels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
+
+const logger = createLogger('App')
 
 /**
  * 简化后的 App 组件
@@ -31,9 +34,9 @@ const App: React.FC = () => {
       // 1. 加载所有模型到 ModelRegistry
       try {
         const stats = await loadAllModels()
-        // console.log('[App] Models loaded:', stats)
+        // logger.info('[App] Models loaded:', stats)
       } catch (error) {
-        console.error('[App] Failed to load models:', error)
+        logger.error('[App] Failed to load models:', error)
       }
 
       // 2. 初始化数据库
@@ -47,7 +50,7 @@ const App: React.FC = () => {
         const customModelService = getCustomModelService(databaseService)
         await customModelService.loadEnabledModels()
       } catch (error) {
-        console.error('[App] Failed to load custom models:', error)
+        logger.error('[App] Failed to load custom models:', error)
       }
     }
 
@@ -85,4 +88,5 @@ const App: React.FC = () => {
 }
 
 export default App
+
 

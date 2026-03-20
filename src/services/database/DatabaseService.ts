@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('services.database.DatabaseService')
 /**
  * Database Service Implementation
  *
@@ -8,6 +11,7 @@ import Database from '@tauri-apps/plugin-sql'
 import { appLocalDataDir, join } from '@tauri-apps/api/path'
 import { exists, mkdir } from '@tauri-apps/plugin-fs'
 import type {
+
   DatabaseService as IDatabaseService,
   HistoryRecord,
   PresetRecord,
@@ -44,13 +48,13 @@ export class DatabaseService implements IDatabaseService {
       this.dbPath = `sqlite:${dbPath}`
 
       this.db = await Database.load(this.dbPath)
-      // console.log('[Database] Connected successfully to:', this.dbPath)
+      // logger.info('[Database] Connected successfully to:', this.dbPath)
 
       // 创建表结构
       await this.createTables()
-      // console.log('[Database] Tables initialized')
+      // logger.info('[Database] Tables initialized')
     } catch (error) {
-      console.error('[Database] Connection failed:', error)
+      logger.error('[Database] Connection failed:', error)
       throw new Error(`Database initialization failed: ${error}`)
     }
   }
@@ -615,3 +619,4 @@ export class DatabaseService implements IDatabaseService {
 
 // Singleton instance
 export const databaseService = new DatabaseService()
+

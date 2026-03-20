@@ -1,8 +1,10 @@
+import { createLogger } from '@/core/logging'
 import type { GenerationTask } from '../types'
-import { logError } from '@/utils/errorLogger'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { fileToBlobSrc, isDesktop, saveAudioFromUrl, saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
 import { joinMulti, splitMulti } from './multiFile'
+
+const logger = createLogger('workspaces.ConversationWorkspace.utils.mediaResult')
 
 export interface NormalizedMediaResult {
   url: string | undefined
@@ -77,8 +79,9 @@ export async function normalizeMediaResultForDesktop(
       normalized.url = await toDisplayUrlStringFromFilePath(normalized.filePath, task.type)
     }
   } catch (error) {
-    logError(logPrefix, error)
+    logger.error(logPrefix, error)
   }
 
   return normalized
 }
+

@@ -6,6 +6,7 @@
 mod clipboard_files;
 mod ai_runtime;
 mod image_commands;
+mod logging;
 mod modelscope;
 
 use tauri::Manager;
@@ -17,48 +18,62 @@ fn copy_image_to_clipboard(app: tauri::AppHandle, file_path: String) -> Result<(
     use std::time::Instant;
 
     let t0 = Instant::now();
-    println!("[复制图片 Rust] 开始, 文件: {}", file_path);
+    tracing::info!(target: "clipboard.image", file_path = %file_path, "copy_image_to_clipboard start");
 
     // 1. 直接从本地文件系统读取图片数据
     let image_data =
         std::fs::read(&file_path).map_err(|e| format!("Failed to read image file: {}", e))?;
     let t1 = Instant::now();
-    println!(
-        "[复制图片 Rust] 读取文件完成, 大小: {} bytes, 耗时: {:?}",
-        image_data.len(),
-        t1 - t0
+    tracing::debug!(
+        target: "clipboard.image",
+        size_bytes = image_data.len(),
+        elapsed_ms = (t1 - t0).as_millis(),
+        "read image file finished"
     );
 
     // 2. 使用 image crate 加载图片数据 (支持 JPEG, PNG, WEBP 等)
     let img = image::load_from_memory(&image_data)
         .map_err(|e| format!("Failed to parse image: {}", e))?;
     let t2 = Instant::now();
-    println!("[复制图片 Rust] 解析图片完成, 耗时: {:?}", t2 - t1);
+    tracing::debug!(
+        target: "clipboard.image",
+        elapsed_ms = (t2 - t1).as_millis(),
+        "decode image finished"
+    );
 
     // 3. 转换为 RGBA8 格式
     let rgba = img.into_rgba8();
     let (width, height) = rgba.dimensions();
     let t3 = Instant::now();
-    println!(
-        "[复制图片 Rust] 转换 RGBA8 完成, 尺寸: {}x{}, 耗时: {:?}",
-        width,
-        height,
-        t3 - t2
+    tracing::debug!(
+        target: "clipboard.image",
+        width = width,
+        height = height,
+        elapsed_ms = (t3 - t2).as_millis(),
+        "rgba conversion finished"
     );
 
     // 4. 构建 Tauri Image 对象
     let raw_data = rgba.into_raw();
     let tauri_image = tauri::image::Image::new(&raw_data, width, height);
     let t4 = Instant::now();
-    println!("[复制图片 Rust] 构建 Image 完成, 耗时: {:?}", t4 - t3);
+    tracing::debug!(
+        target: "clipboard.image",
+        elapsed_ms = (t4 - t3).as_millis(),
+        "build tauri image finished"
+    );
 
     // 5. 写入剪贴板
     app.clipboard()
         .write_image(&tauri_image)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
     let t5 = Instant::now();
-    println!("[复制图片 Rust] 写入剪贴板完成, 耗时: {:?}", t5 - t4);
-    println!("[复制图片 Rust] 总耗时: {:?}", t5 - t0);
+    tracing::info!(
+        target: "clipboard.image",
+        write_elapsed_ms = (t5 - t4).as_millis(),
+        total_elapsed_ms = (t5 - t0).as_millis(),
+        "copy_image_to_clipboard done"
+    );
 
     Ok(())
 }
@@ -110,16 +125,21 @@ pub fn run() {
             image_commands::io_commands::save_image_source_to_path,
             image_commands::io_commands::save_image_source_to_directory,
             image_commands::io_commands::save_image_source_to_app_debug_dir,
-            image_commands::io_commands::copy_image_source_to_clipboard
+            image_commands::io_commands::copy_image_source_to_clipboard,
+            logging::log_frontend_events
         ])
         .setup(|app| {
+            let app_handle = app.handle().clone();
+            logging::init(&app_handle)
+                .map_err(|error| format!("logging init failed: {}", error))?;
+
             let app_local = app
                 .path()
                 .app_local_data_dir()
                 .expect("get app local data dir");
             let media_dir = app_local.join("Henji-AI").join("Media");
             if let Err(e) = std::fs::create_dir_all(&media_dir) {
-                eprintln!("failed to create media dir: {}", e);
+                tracing::error!(target: "bootstrap", error = %e, "failed to create media dir");
             }
 
             if let Some(win) = app.get_webview_window("main") {

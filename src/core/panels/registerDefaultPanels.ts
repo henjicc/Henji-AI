@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.panels.registerDefaultPanels')
 /**
  * 注册默认面板
  *
@@ -32,6 +35,7 @@ export function registerDefaultPanels(): void {
 
   // 开发模式下输出注册信息
   if (import.meta.env.DEV) {
-    // console.log('[PanelRegistry] Registered panels:', panelRegistry.listRegistered())
+    // logger.info('[PanelRegistry] Registered panels:', panelRegistry.listRegistered())
   }
 }
+

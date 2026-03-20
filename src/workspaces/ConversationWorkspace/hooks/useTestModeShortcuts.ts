@@ -1,5 +1,7 @@
+import { createLogger } from '@/core/logging'
 import { useEffect } from 'react'
-import { logError, logInfo } from '@/utils/errorLogger'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTestModeShortcuts')
 
 export interface UseTestModeShortcutsParams {
   togglePanel: () => void
@@ -21,9 +23,9 @@ export function useTestModeShortcuts({ togglePanel }: UseTestModeShortcutsParams
         try {
           const { invoke } = await import('@tauri-apps/api/core')
           await invoke('toggle_devtools')
-          logInfo('[DevTools] 开发者工具已切换', {})
+          logger.info('[DevTools] 开发者工具已切换', {})
         } catch (error) {
-          logError('[DevTools] 打开开发者工具失败', error)
+          logger.error('[DevTools] 打开开发者工具失败', error)
         }
         return
       }
@@ -37,9 +39,9 @@ export function useTestModeShortcuts({ togglePanel }: UseTestModeShortcutsParams
 
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('toggle_devtools')
-        logInfo('[DevTools] 开发者工具已切换', {})
+        logger.info('[DevTools] 开发者工具已切换', {})
       } catch (error) {
-        logError('[DevTools] 打开开发者工具失败', error)
+        logger.error('[DevTools] 打开开发者工具失败', error)
       }
     }
 
@@ -47,3 +49,4 @@ export function useTestModeShortcuts({ togglePanel }: UseTestModeShortcutsParams
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [togglePanel])
 }
+

@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.debug.ExportPanel')
 /**
  * ExportPanel - 导出面板组件
  *
@@ -74,7 +77,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
       setCopySuccess(true)
       setTimeout(() => setCopySuccess(false), 2000)
     } catch (error) {
-      console.error('Failed to copy:', error)
+      logger.error('Failed to copy:', error)
     }
   }
 
@@ -154,3 +157,4 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
     </div>
   )
 }
+

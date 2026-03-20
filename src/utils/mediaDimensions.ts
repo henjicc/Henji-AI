@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.mediaDimensions')
+
 /**
  * 媒体尺寸和时长获取工具
  * 从实际文件中获取图片、视频、音频的真实尺寸和时长
@@ -6,8 +10,8 @@
 /**
  * 从图片 URL 获取尺寸
  */
-import { logError } from '../utils/errorLogger'
 export const getImageDimensions = (url: string): Promise<{ width: number; height: number }> => {
+
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
@@ -116,7 +120,7 @@ export const getMediaDimensions = async (
 
     return `${dimensions.width}x${dimensions.height}`
   } catch (error) {
-    logError('[mediaDimensions] Failed to get dimensions:', error)
+    logger.error('[mediaDimensions] Failed to get dimensions:', error)
     return null
   }
 }
@@ -155,7 +159,7 @@ export const getMediaDurationFormatted = async (
 
     return formatDuration(duration)
   } catch (error) {
-    logError('[mediaDimensions] Failed to get duration:', error)
+    logger.error('[mediaDimensions] Failed to get duration:', error)
     return null
   }
 }

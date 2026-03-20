@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('services.presets.migration')
 /**
  * 预设迁移工具
  *
@@ -42,12 +45,12 @@ export async function migratePresetsFromLocalStorage(): Promise<PresetMigrationR
     // 检查 localStorage 中的旧预设
     const oldPresetsJson = localStorage.getItem('presets')
     if (!oldPresetsJson) {
-      console.log('[PresetMigration] No presets found in localStorage')
+      logger.info('[PresetMigration] No presets found in localStorage')
       result.success = true
       return result
     }
 
-    console.log('[PresetMigration] Found presets in localStorage, starting migration...')
+    logger.info('[PresetMigration] Found presets in localStorage, starting migration...')
 
     const oldPresets: LegacyPreset[] = JSON.parse(oldPresetsJson)
 
@@ -72,15 +75,15 @@ export async function migratePresetsFromLocalStorage(): Promise<PresetMigrationR
     localStorage.removeItem('presets')
 
     result.success = true
-    console.log(`[PresetMigration] Migrated ${result.migratedCount} presets from localStorage`)
+    logger.info(`[PresetMigration] Migrated ${result.migratedCount} presets from localStorage`)
 
     if (result.errors.length > 0) {
-      console.warn('[PresetMigration] Errors during migration:', result.errors)
+      logger.warn('[PresetMigration] Errors during migration:', result.errors)
     }
 
     return result
   } catch (error: any) {
-    console.error('[PresetMigration] Migration failed:', error)
+    logger.error('[PresetMigration] Migration failed:', error)
     result.errors.push(error.message)
     return result
   }
@@ -94,3 +97,4 @@ export async function migratePresetsFromLocalStorage(): Promise<PresetMigrationR
 export function needsPresetMigration(): boolean {
   return localStorage.getItem('presets') !== null
 }
+

@@ -1,11 +1,13 @@
+import { createLogger } from '@/core/logging'
 import React, { useEffect } from 'react'
 import PanelTrigger from './PanelTrigger'
 import { ResolutionConfig } from '@/types/schema'
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
-import { logInfo, logWarning } from '@/utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiInput, UiOptionButton } from '@/components/ui'
+
+const logger = createLogger('components.ui.UniversalResolutionSelector')
 
 type SelectorOption = { value: unknown; label: string; disabled?: boolean }
 
@@ -171,7 +173,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
       if (finalRatio >= constraints.minRatio && finalRatio <= constraints.maxRatio) {
         onWidthChange(String(width))
         onHeightChange(String(height))
-        logInfo(`[UniversalResolutionSelector] ${constraints.name}即梦分辨率计算:`, {
+        logger.info(`[UniversalResolutionSelector] ${constraints.name}即梦分辨率计算:`, {
           提供商: provider,
           比例: `${ratio.width}:${ratio.height}`,
           质量模式: quality,
@@ -181,7 +183,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           利用率: `${((width * height / targetPixels) * 100).toFixed(2)}%`,
         })
       } else {
-        logWarning(
+        logger.warn(
           `[UniversalResolutionSelector] 宽高比 ${finalRatio.toFixed(4)} 超出 ${constraints.name} 允许范围 [${constraints.minRatio}, ${constraints.maxRatio}]`,
           {}
         )

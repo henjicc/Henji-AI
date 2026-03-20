@@ -1,6 +1,8 @@
+import { createLogger } from '@/core/logging'
 import { path } from '@tauri-apps/api'
 import { mkdir, readDir, copyFile, remove, exists, writeFile, readFile } from '@tauri-apps/plugin-fs'
-import { logError, logInfo } from '../utils/errorLogger'
+
+const logger = createLogger('utils.dataPath')
 
 // ==================== 核心路径管理 ====================
 
@@ -88,7 +90,7 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
     await mkdir(await path.join(rootPath, 'Thumbnails'), { recursive: true })
     await mkdir(await path.join(rootPath, 'Uploads'), { recursive: true })
   } catch (error) {
-    logError('初始化数据目录失败:', error)
+    logger.error('初始化数据目录失败:', error)
     throw new Error(`初始化数据目录失败: ${error}`)
   }
 }
@@ -132,7 +134,7 @@ export async function validateDirectory(dirPath: string): Promise<boolean> {
 
     return true
   } catch (error) {
-    logError('目录验证失败:', error)
+    logger.error('目录验证失败:', error)
     return false
   }
 }
@@ -153,7 +155,7 @@ export async function hasExistingData(dirPath: string): Promise<boolean> {
     const entries = await readDir(dirPath)
     return entries.length > 0
   } catch (error) {
-    logError('检查现有数据失败:', error)
+    logger.error('检查现有数据失败:', error)
     return false
   }
 }
@@ -191,7 +193,7 @@ async function collectFiles(dirPath: string, baseDir: string): Promise<string[]>
       }
     }
   } catch (error) {
-    logError('收集文件失败:', error)
+    logger.error('收集文件失败:', error)
   }
 
   return files
@@ -276,6 +278,7 @@ export async function migrateData(
 
     // 6. 逐个复制文件
     for (let i = 0; i < files.length; i++) {
+
       const relativeFilePath = files[i]
       const sourceFilePath = await path.join(oldPath, relativeFilePath)
       const targetFilePath = await path.join(newPath, relativeFilePath)
@@ -307,7 +310,7 @@ export async function migrateData(
           onProgress(i + 1, totalFiles, relativeFilePath)
         }
       } catch (error) {
-        logError(`复制文件失败: ${relativeFilePath}`, error)
+        logger.error(`复制文件失败: ${relativeFilePath}`, error)
         // 继续复制其他文件
       }
     }
@@ -333,7 +336,7 @@ export async function migrateData(
       await cleanupOldData(oldPath)
     }
   } catch (error) {
-    logError('数据迁移失败:', error)
+    logger.error('数据迁移失败:', error)
     // 尝试删除迁移标记
     try {
       await removeMigrationMarker(newPath)
@@ -353,10 +356,10 @@ export async function cleanupOldData(oldPath: string): Promise<void> {
     const oldExists = await exists(oldPath)
     if (oldExists) {
       await remove(oldPath, { recursive: true })
-      logInfo('旧数据已清理:', oldPath)
+      logger.info('旧数据已清理:', oldPath)
     }
   } catch (error) {
-    logError('清理旧数据失败:', error)
+    logger.error('清理旧数据失败:', error)
     // 不抛出错误，因为迁移已经成功
   }
 }

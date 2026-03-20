@@ -1,9 +1,12 @@
+import { createLogger } from '@/core/logging'
 import { embedStoryboardImageMetadata } from '@/commands/image'
 import { AUTO_REQUEST_ASPECT_RATIO, type StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
 import { canvasAiGateway } from '@/features/canvas/application/canvasServices'
 import { detectAspectRatio, parseAspectRatio, prepareNodeImage } from '@/features/canvas/application/imageData'
 import { sanitizeStoryboardPromptText, sanitizeStoryboardText } from '@/features/canvas/application/storyboardText'
 import { generateGridImageDataUrl, pickClosestAspectRatio } from './shared'
+
+const logger = createLogger('features.canvas.nodes.storyboardGen.generation')
 
 interface BuildStoryboardPromptParams {
   nodeData: StoryboardGenNodeData
@@ -130,7 +133,7 @@ export async function generateStoryboardImage({
     gridCols,
     frameNotes: metadataFrameNotes,
   }).catch((error) => {
-    console.warn('[StoryboardMetadata] embed failed on generation output', error)
+    logger.warn('[StoryboardMetadata] embed failed on generation output', error)
     return prepared.imageUrl
   })
   const previewWithMetadata = prepared.previewImageUrl === prepared.imageUrl
@@ -143,3 +146,4 @@ export async function generateStoryboardImage({
     aspectRatio: prepared.aspectRatio,
   }
 }
+

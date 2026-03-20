@@ -1,3 +1,4 @@
+import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef, useState } from 'react'
 import { readFile } from '@tauri-apps/plugin-fs'
 import { RefreshCw } from 'lucide-react'
@@ -5,12 +6,13 @@ import { useDragDrop } from '@/contexts/DragDropContext'
 import { useTauriDragDrop } from '@/hooks/useTauriDragDrop'
 import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
-import { logError } from '@/utils/errorLogger'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
 import { UI_UPLOADER_CARD_BORDER_CLASS, UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS } from '../styleTokens'
 import { useReorderDrag } from './useReorderDrag'
 import { useStackedExpand } from './useStackedExpand'
 import { useFilePickerExpandLock } from './useFilePickerExpandLock'
+
+const logger = createLogger('components.ui.fileUploader.StackedMediaUploader')
 
 type MediaType = 'image' | 'video'
 
@@ -177,7 +179,7 @@ export function StackedMediaUploader({
         }
         await handleFiles([file])
       } catch (error) {
-        logError('StackedMediaUploader convert image failed', error)
+        logger.error('StackedMediaUploader convert image failed', error)
       }
     }
 
@@ -189,7 +191,7 @@ export function StackedMediaUploader({
         const filename = dragData.filePath.split(/[\\/]/).pop() || `video-${Date.now()}.mp4`
         await handleFiles([new File([blob], filename, { type: mime })])
       } catch (error) {
-        logError('StackedMediaUploader convert video failed', error)
+        logger.error('StackedMediaUploader convert video failed', error)
       }
     }
     endDrag()
@@ -378,3 +380,4 @@ export function StackedMediaUploader({
     </div>
   )
 }
+

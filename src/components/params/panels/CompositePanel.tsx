@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.params.panels.CompositePanel')
 /**
  * CompositePanel - 通用可组合面板容器
  *
@@ -43,7 +46,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
               newValue[linkage.target] = updatedValue
             } catch (error) {
               if (import.meta.env.DEV) {
-                console.error(`Linkage error: ${linkage.source} -> ${linkage.target}`, error)
+                logger.error(`Linkage error: ${linkage.source} -> ${linkage.target}`, error)
               }
             }
           }
@@ -69,7 +72,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
     const Component = componentRegistry.get(componentConfig.type)
     if (!Component) {
       if (import.meta.env.DEV) {
-        console.warn(`Unknown component type: ${componentConfig.type}`)
+        logger.warn(`Unknown component type: ${componentConfig.type}`)
       }
       return null
     }
@@ -113,3 +116,4 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
     </div>
   )
 }
+

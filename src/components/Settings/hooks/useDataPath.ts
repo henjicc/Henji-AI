@@ -1,7 +1,9 @@
+import { createLogger } from '@/core/logging'
 import { useEffect, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { path } from '@tauri-apps/api'
 import {
+
   getDataRoot,
   getDefaultDataRoot,
   hasExistingData,
@@ -9,7 +11,8 @@ import {
   resetToDefaultDataRoot,
   setCustomDataRoot
 } from '../../../utils/dataPath'
-import { logError } from '../../../utils/errorLogger'
+
+const logger = createLogger('components.Settings.hooks.useDataPath')
 
 type AlertType = 'success' | 'error' | 'warning'
 
@@ -82,7 +85,7 @@ export function useDataPath(): UseDataPathResult {
         setCurrentPath(current)
         setDefaultPath(defaultRoot)
       } catch (error) {
-        logError('加载数据路径失败:', error)
+        logger.error('加载数据路径失败:', error)
       }
     }
     loadPaths()
@@ -130,7 +133,7 @@ export function useDataPath(): UseDataPathResult {
       window.dispatchEvent(new Event('dataPathChanged'))
       setAlertState('success', 'alerts.migrationSuccess')
     } catch (error) {
-      logError('数据迁移失败:', error)
+      logger.error('数据迁移失败:', error)
       const message = error instanceof Error ? error.message : 'UnknownError'
       setAlertState('error', 'alerts.migrationFailed', { message })
     } finally {
@@ -198,3 +201,4 @@ export function useDataPath(): UseDataPathResult {
     closeConflict
   }
 }
+

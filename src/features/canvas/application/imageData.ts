@@ -1,6 +1,10 @@
+import { createLogger } from '@/core/logging'
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 
+const logger = createLogger('features.canvas.application.imageData')
+
 import {
+
   loadImage,
   prepareNodeImageBinary,
   persistImageSource,
@@ -216,7 +220,7 @@ export async function prepareNodeImageFromFile(
     && (isLikelyLocalImagePath(normalizedPath) || normalizedPath.toLowerCase().startsWith('file://'));
   if (canUseLocalPath) {
     const prepared = await prepareNodeImage(normalizedPath, maxPreviewDimension);
-    console.info(
+    logger.info(
       `[upload-perf][imageData] prepareNodeImageFromFile path-mode name="${file.name}" size=${file.size}B elapsed=${Math.round(performance.now() - started)}ms`
     );
     return prepared;
@@ -231,7 +235,7 @@ export async function prepareNodeImageFromFile(
     const tauriStarted = performance.now();
     const prepared = await prepareNodeImageBinary(bytes, extension, safeMaxDimension);
     const tauriElapsed = Math.round(performance.now() - tauriStarted);
-    console.info(
+    logger.info(
       `[upload-perf][imageData] prepareNodeImageFromFile binary-mode name="${file.name}" size=${file.size}B readArrayBuffer=${readElapsed}ms tauriPrepare=${tauriElapsed}ms total=${Math.round(performance.now() - started)}ms`
     );
     return {
@@ -245,7 +249,7 @@ export async function prepareNodeImageFromFile(
   const source = await readFileAsDataUrl(file);
   const dataUrlElapsed = Math.round(performance.now() - dataUrlStarted);
   const prepared = await prepareNodeImage(source, maxPreviewDimension);
-  console.info(
+  logger.info(
     `[upload-perf][imageData] prepareNodeImageFromFile dataurl-fallback name="${file.name}" size=${file.size}B readDataUrl=${dataUrlElapsed}ms total=${Math.round(performance.now() - started)}ms`
   );
   return prepared;
@@ -323,7 +327,7 @@ export async function prepareNodeImage(
     try {
       const tauriStarted = performance.now();
       const prepared = await prepareNodeImageSource(imageUrl, safeMaxDimension);
-      console.info(
+      logger.info(
         `[upload-perf][imageData] prepareNodeImage tauri-source elapsed=${Math.round(performance.now() - tauriStarted)}ms total=${Math.round(performance.now() - started)}ms`
       );
       return {
@@ -346,7 +350,7 @@ export async function prepareNodeImage(
       ? persistedImagePath
       : await persistImageLocally(previewDataUrl);
 
-  console.info(
+  logger.info(
     `[upload-perf][imageData] prepareNodeImage browser-fallback total=${Math.round(performance.now() - started)}ms`
   );
   return {

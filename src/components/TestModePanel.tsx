@@ -12,7 +12,7 @@ import {
 } from '@/utils/testMode'
 import { ParamFlowViewer } from './debug/ParamFlowViewer'
 import { ExportPanel } from './debug/ExportPanel'
-import { ApiTraceViewer } from './debug/ApiTraceViewer'
+import { UnifiedLogViewer } from './debug/UnifiedLogViewer'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiPanel } from '@/components/ui'
@@ -280,43 +280,13 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           </div>
         )}
 
-        {/* 最后的请求参数 */}
-        {state.enabled && activeTab === 'options' && (state.lastTrace || state.lastParams) && (
+        {/* 统一日志查看器 */}
+        {state.enabled && activeTab === 'options' && (
           <div>
-            <h3 className="text-white font-medium mb-3">{t('testMode.lastParams.title')}</h3>
-            <div className="bg-black/50 rounded-lg p-4 border border-zinc-700/50 max-h-[300px] overflow-y-auto">
-              {state.lastTrace ? (
-                <ApiTraceViewer traceRecord={state.lastTrace} />
-              ) : (
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-400">{t('testMode.lastParams.labels.model')}</span>{' '}
-                    <span className="text-yellow-500">{String(state.lastParams?.model ?? '-')}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">{t('testMode.lastParams.labels.type')}</span>{' '}
-                    <span className="text-yellow-500">{String(state.lastParams?.type ?? '-')}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">{t('testMode.lastParams.labels.prompt')}</span>{' '}
-                    <span className="text-white">{String(state.lastParams?.input ?? '-')}</span>
-                  </div>
-                  <div className="pt-2 border-t border-zinc-700/50">
-                    <div className="text-gray-400 mb-2">{t('testMode.lastParams.labels.fullParams')}</div>
-                    <pre className="text-xs text-gray-300 whitespace-pre-wrap break-all">
-                      {JSON.stringify(state.lastParams, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
+            <h3 className="text-white font-medium mb-3">统一日志查看器</h3>
+            <div className="bg-black/50 rounded-lg p-4 border border-zinc-700/50">
+              <UnifiedLogViewer />
             </div>
-          </div>
-        )}
-
-        {/* 提示信息 */}
-        {state.enabled && !state.lastParams && !state.lastTrace && (
-          <div className="text-center text-gray-400 text-sm py-8">
-            {t('testMode.emptyHint')}
           </div>
         )}
       </UiPanel>

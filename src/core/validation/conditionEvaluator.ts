@@ -1,4 +1,7 @@
+import { createLogger } from '@/core/logging'
 import type { ConditionExpression, ConditionFunction } from '@/core/types'
+
+const logger = createLogger('core.validation.conditionEvaluator')
 
 export type ConditionInput = ConditionExpression | ConditionFunction | undefined
 
@@ -13,7 +16,7 @@ export function evaluateCondition(
     try {
       return Boolean(condition(params))
     } catch (error) {
-      console.error('[ConditionEvaluator] condition function error:', error)
+      logger.error('[ConditionEvaluator] condition function error:', error)
       return false
     }
   }
@@ -26,8 +29,9 @@ export function evaluateCondition(
     )
     return Boolean(fn(params, context))
   } catch (error) {
-    console.error('[ConditionEvaluator] condition expression error:', error)
-    console.error('[ConditionEvaluator] condition:', condition)
+    logger.error('[ConditionEvaluator] condition expression error:', error)
+    logger.error('[ConditionEvaluator] condition:', condition)
     return false
   }
 }
+

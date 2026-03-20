@@ -1,7 +1,9 @@
+import { createLogger } from '@/core/logging'
 import { useState } from 'react'
 import { saveUploadImage } from '@/utils/save'
 import { extractImagesFromClipboard } from '@/utils/imageConversion'
-import { logError } from '../../../utils/errorLogger'
+
+const logger = createLogger('components.MediaGenerator.hooks.useImageUpload')
 
 /**
  * 图片上传处理逻辑
@@ -69,7 +71,7 @@ export const useImageUpload = (
         // 不设置 filePath，因为还没有保存到 uploads 目录
       }
     } catch (error) {
-      logError('[useImageUpload] 粘贴图片失败', error)
+      logger.error('[useImageUpload] 粘贴图片失败', error)
     }
   }
 
@@ -121,3 +123,4 @@ export const useImageUpload = (
     handleImageFileDrop
   }
 }
+

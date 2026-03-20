@@ -1,6 +1,8 @@
+import { createLogger } from '@/core/logging'
 import { Preset, PresetSaveMode } from '../types/preset'
 import { readJsonFromAppData, writeJsonToAppData } from './save'
-import { logError } from '../utils/errorLogger'
+
+const logger = createLogger('utils.preset')
 
 const PRESETS_FILE = 'presets.json'
 
@@ -15,7 +17,7 @@ export async function loadPresets(): Promise<Preset[]> {
         const presets = await readJsonFromAppData<Preset[]>(PRESETS_FILE)
         return presets || []
     } catch (error) {
-        logError('加载预设失败:', error)
+        logger.error('加载预设失败:', error)
         return []
     }
 }
@@ -25,7 +27,7 @@ async function savePresets(presets: Preset[]): Promise<void> {
     try {
         await writeJsonToAppData(PRESETS_FILE, presets)
     } catch (error) {
-        logError('保存预设失败:', error)
+        logger.error('保存预设失败:', error)
         throw error
     }
 }
@@ -38,6 +40,7 @@ export async function createPreset(
     options?: {
         images?: string[]
         model?: { provider: string; modelId: string; type: 'image' | 'video' | 'audio' }
+
         params?: Preset['params']
     }
 ): Promise<Preset> {

@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.loaders.modelLoader')
 /**
  * 模型文件自动加载器
  *
@@ -34,7 +37,7 @@ interface LoadStats {
  * @returns 加载统计信息
  */
 export async function loadAllModels(): Promise<LoadStats> {
-  // console.log('[ModelLoader] 🚀 Loading models...')
+  // logger.info('[ModelLoader] 🚀 Loading models...')
 
   // 清空现有的注册表，防止重复注册（例如在 React StrictMode 下）
   registry.clear()
@@ -76,7 +79,7 @@ export async function loadAllModels(): Promise<LoadStats> {
 
       successCount++
     } catch (error) {
-      console.error(`[ModelLoader] ✗ Failed to load ${path}:`, error)
+      logger.error(`[ModelLoader] ✗ Failed to load ${path}:`, error)
       failedModels.push({ path, error })
       errorCount++
     }
@@ -86,17 +89,17 @@ export async function loadAllModels(): Promise<LoadStats> {
 
   // 输出加载摘要
   const total = successCount + errorCount
-  // console.log(
+  // logger.info(
   //   `[ModelLoader] 📊 Complete: ${successCount}/${total} loaded, ${errorCount} failed (${duration.toFixed(2)}ms)`
   // )
 
   // 如果有失败的模型，输出详细错误信息
   if (failedModels.length > 0 && import.meta.env.DEV) {
-    console.group('[ModelLoader] ❌ Failed Models Details:')
+    logger.group('[ModelLoader] ❌ Failed Models Details:')
     failedModels.forEach(({ path, error }) => {
-      console.error(`- ${path}:`, error.message || error)
+      logger.error(`- ${path}:`, error.message || error)
     })
-    console.groupEnd()
+    logger.groupEnd()
   }
 
   return {
@@ -121,8 +124,8 @@ export async function loadAllModels(): Promise<LoadStats> {
 export function listLoadedModels(): void {
   const models = registry.listAllModels()
 
-  console.log(`[ModelLoader] 📋 Total Models: ${models.length}`)
-    console.table(
+  logger.info(`[ModelLoader] 📋 Total Models: ${models.length}`)
+    logger.table(
       models.map((m) => ({
         ID: m.meta.id,
         Provider: m.meta.provider,
@@ -149,24 +152,24 @@ export function listLoadedModels(): void {
 export function getLoaderStats(): void {
   const stats = registry.getStats()
 
-  console.log('[ModelLoader] 📈 Registry Statistics:')
-  console.log('━'.repeat(50))
-  console.log(`Total Models:      ${stats.totalModels}`)
-  console.log(`Total Aliases:     ${stats.totalAliases}`)
-  console.log(`Total Entries:     ${stats.totalEntries}`)
-  console.log('━'.repeat(50))
-  console.log(`Image Models:      ${stats.imageModels}`)
-  console.log(`Video Models:      ${stats.videoModels}`)
-  console.log(`Audio Models:      ${stats.audioModels}`)
-  console.log('━'.repeat(50))
-  console.log('Providers:')
+  logger.info('[ModelLoader] 📈 Registry Statistics:')
+  logger.info('━'.repeat(50))
+  logger.info(`Total Models:      ${stats.totalModels}`)
+  logger.info(`Total Aliases:     ${stats.totalAliases}`)
+  logger.info(`Total Entries:     ${stats.totalEntries}`)
+  logger.info('━'.repeat(50))
+  logger.info(`Image Models:      ${stats.imageModels}`)
+  logger.info(`Video Models:      ${stats.videoModels}`)
+  logger.info(`Audio Models:      ${stats.audioModels}`)
+  logger.info('━'.repeat(50))
+  logger.info('Providers:')
   Object.entries(stats.providerCounts).forEach(([provider, count]) => {
-    console.log(`  - ${provider}: ${count}`)
+    logger.info(`  - ${provider}: ${count}`)
   })
-  console.log('━'.repeat(50))
-  console.log('Top Tags:')
+  logger.info('━'.repeat(50))
+  logger.info('Top Tags:')
   stats.topTags.forEach((item: any) => {
-    console.log(`  - ${item.tag}: ${item.count}`)
+    logger.info(`  - ${item.tag}: ${item.count}`)
   })
 }
 
@@ -184,11 +187,11 @@ export function getLoaderStats(): void {
  */
 export async function reloadModels(): Promise<void> {
   if (!import.meta.env.DEV) {
-    console.warn('[ModelLoader] reloadModels() is only available in development mode')
+    logger.warn('[ModelLoader] reloadModels() is only available in development mode')
     return
   }
 
-  console.log('[ModelLoader] 🔄 Reloading all models...')
+  logger.info('[ModelLoader] 🔄 Reloading all models...')
 
   // 清空注册中心
   registry.clear()
@@ -196,7 +199,7 @@ export async function reloadModels(): Promise<void> {
   // 重新加载
   await loadAllModels()
 
-  console.log('[ModelLoader] ✅ Reload complete')
+  logger.info('[ModelLoader] ✅ Reload complete')
 }
 
 // ========== 开发环境调试工具 ==========
@@ -207,17 +210,17 @@ if (import.meta.env.DEV) {
   ;(window as any).__getModelStats = getLoaderStats
   ;(window as any).__reloadModels = reloadModels
 
-  console.log('[ModelLoader] 🛠️  Debug tools available:')
-  console.log('  - window.__listModels()      - List all loaded models')
-  console.log('  - window.__getModelStats()   - Show registry statistics')
-  console.log('  - window.__reloadModels()    - Reload all models')
+  logger.info('[ModelLoader] 🛠️  Debug tools available:')
+  logger.info('  - window.__listModels()      - List all loaded models')
+  logger.info('  - window.__getModelStats()   - Show registry statistics')
+  logger.info('  - window.__reloadModels()    - Reload all models')
 }
 
 // ========== Vite HMR 支持 ==========
 
 if (import.meta.hot) {
   import.meta.hot.accept((newModule) => {
-    console.log('[HMR] 🔥 Model loader updated, reloading models...')
+    logger.info('[HMR] 🔥 Model loader updated, reloading models...')
     reloadModels()
   })
 }

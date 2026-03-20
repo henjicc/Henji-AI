@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.params.panels.composite.registerDefaultComponents')
 /**
  * 注册默认组件
  *
@@ -22,6 +25,7 @@ export function registerDefaultComponents(): void {
 
   // 开发模式下输出注册信息
   if (import.meta.env.DEV) {
-    // console.log('[ComponentRegistry] Registered components:', componentRegistry.listRegistered())
+    // logger.info('[ComponentRegistry] Registered components:', componentRegistry.listRegistered())
   }
 }
+

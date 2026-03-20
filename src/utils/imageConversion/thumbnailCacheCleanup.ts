@@ -1,3 +1,7 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.imageConversion.thumbnailCacheCleanup')
+
 /**
  * 删除媒体文件对应的缩略图缓存
  */
@@ -15,13 +19,14 @@ export async function deleteThumbnailCache(mediaPath: string): Promise<boolean> 
     const thumbExists = await exists(thumbPath)
     if (thumbExists) {
       await remove(thumbPath)
-      console.log('[缩略图缓存] 已删除:', thumbPath)
+      logger.info('[缩略图缓存] 已删除:', thumbPath)
       return true
     }
     return false
   } catch (error) {
-    console.error('[缩略图缓存] 删除失败:', error)
+    logger.error('[缩略图缓存] 删除失败:', error)
     return false
   }
 }
+
 

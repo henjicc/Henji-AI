@@ -1,10 +1,12 @@
+import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { loadEditState } from '@/utils/editStatePersistence'
-import { logError, logInfo } from '@/utils/errorLogger'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'
 import { isRecord, isStringArray } from '../utils/typeGuards'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskReplay')
 
 export interface UseTaskReplayParams {
   handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
@@ -40,7 +42,7 @@ async function restoreEditStatesFromFile(
       }
     }
   } catch (e) {
-    logError('[Workspace] 从文件恢复编辑状态失败', e)
+    logger.error('[Workspace] 从文件恢复编辑状态失败', e)
   }
 }
 
@@ -87,7 +89,7 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
 
     if (typeof options.editStateFile === 'string' && options.editStateFile.trim().length > 0 && images.length > 0) {
       await restoreEditStatesFromFile(options.editStateFile, images, imageEditStatesRef)
-      logInfo('[Workspace] 已从文件恢复编辑状态', { file: options.editStateFile, count: images.length })
+      logger.info('[Workspace] 已从文件恢复编辑状态', { file: options.editStateFile, count: images.length })
     } else if (options.imageEditStates && images.length > 0) {
       restoreEditStatesInline(options.imageEditStates, images, imageEditStatesRef)
     }
@@ -111,4 +113,5 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
 
   return { handleRegenerate, handleReedit }
 }
+
 

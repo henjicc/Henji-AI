@@ -1,4 +1,7 @@
+import { createLogger } from '@/core/logging'
 import { calculateProgress } from './progress'
+
+const logger = createLogger('utils.polling')
 
 /**
  * 通用轮询配置
@@ -6,6 +9,7 @@ import { calculateProgress } from './progress'
 export interface PollingOptions<T> {
     /** 检查函数：返回当前状态和可能的结果 */
     checkFn: () => Promise<{ status: string; result?: T }>
+
     /** 判断是否完成 */
     isComplete: (status: string) => boolean
     /** 判断是否失败 */
@@ -29,7 +33,7 @@ export interface PollingOptions<T> {
  *   checkFn: () => this.checkStatus(taskId),
  *   isComplete: (s) => s === 'COMPLETED',
  *   isFailed: (s) => s === 'FAILED',
- *   onProgress: (p) => logInfo(`Progress: ${p}%`, {}),
+ *   onProgress: (p) => logger.info(`Progress: ${p}%`, {}),
  *   interval: 3000,
  *   estimatedAttempts: 40
  * })

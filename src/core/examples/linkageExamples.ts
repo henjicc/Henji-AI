@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.examples.linkageExamples')
 /**
  * 示例：联动定义示例
  *
@@ -225,7 +228,7 @@ export const priorityExampleLinkages: Linkage[] = [
     effect: 'custom',
     priority: 0, // 覆盖默认优先级（custom 默认为 8）
     handler: (mode: string, allParams: any, updateParam: any) => {
-      console.log('模式切换前的准备工作')
+      logger.info('模式切换前的准备工作')
     },
     description: '在重置之前执行的自定义逻辑'
   },
@@ -250,8 +253,9 @@ export const debounceExampleLinkages: Linkage[] = [
     debounce: 300, // 300ms 防抖
     handler: (cfgScale: number, allParams: any, updateParam: any) => {
       // 复杂的参数计算...
-      console.log('CFG Scale 调整为:', cfgScale)
+      logger.info('CFG Scale 调整为:', cfgScale)
     },
     description: 'CFG 系数变化时的联动（防抖 300ms）'
   }
 ]
+

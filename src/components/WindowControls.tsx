@@ -1,9 +1,11 @@
+import { createLogger } from '@/core/logging'
 import React from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isDesktop, isDesktopAsync } from '../utils/save'
-import { logError } from '../utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiChipButton, UiIconButton } from '@/components/ui'
+
+const logger = createLogger('components.WindowControls')
 
 // CSS properties that are not in the default type definitions
 type WebkitAppRegion = 'drag' | 'no-drag'
@@ -91,7 +93,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
           setIsMaximized(maximized)
         }
       } catch (error) {
-        logError('[WindowControls] isMaximized failed', error)
+        logger.error('[WindowControls] isMaximized failed', error)
       }
     }
 
@@ -101,7 +103,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
     }).then((fn) => {
       unlisten = fn
     }).catch((error) => {
-      logError('[WindowControls] onResized listener failed', error)
+      logger.error('[WindowControls] onResized listener failed', error)
     })
 
     return () => {
@@ -116,18 +118,18 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
   const win = getCurrentWindow()
 
   const handleMinimize = async () => {
-    try { await win.minimize() } catch (e) { logError('[WindowControls] minimize failed', e) }
+    try { await win.minimize() } catch (e) { logger.error('[WindowControls] minimize failed', e) }
   }
   const handleToggleMaximize = async () => {
     try {
       await win.toggleMaximize()
       setIsMaximized(await win.isMaximized())
     } catch (e) {
-      logError('[WindowControls] toggleMaximize failed', e)
+      logger.error('[WindowControls] toggleMaximize failed', e)
     }
   }
   const handleClose = async () => {
-    try { await win.close() } catch (e) { console.error('[WindowControls] close failed', e) }
+    try { await win.close() } catch (e) { logger.error('[WindowControls] close failed', e) }
   }
   const handleOpenSettings = (): void => {
     onOpenSettings?.()
@@ -293,4 +295,5 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
 }
 
 export default WindowControls
+
 

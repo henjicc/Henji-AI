@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('core.linkage.LinkageEngine')
 /**
  * 联动引擎
  *
@@ -41,7 +44,7 @@ export class LinkageEngine {
   ): Record<string, any> {
     // 防止循环联动
     if (this.executionDepth >= this.maxDepth) {
-      console.warn(
+      logger.warn(
         `[LinkageEngine] Max execution depth (${this.maxDepth}) reached, stopping to prevent infinite loop`
       )
       return params
@@ -165,6 +168,7 @@ export class LinkageEngine {
     params: Record<string, any>,
     schema: ParamDef[]
   ): { min?: number; max?: number; step?: number } | null {
+
     const paramDef = schema.find((p) => p.id === paramId)
 
     if (!paramDef) {

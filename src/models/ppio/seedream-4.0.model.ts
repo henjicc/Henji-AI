@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('models.ppio.seedream-4.0.model')
 /**
  * Seedream 4.0 模型定义
  *
@@ -19,6 +22,7 @@ import { resolvePpioImageSources } from './mediaSources'
  * 从 base64 或 URL 获取图片尺寸
  */
 function getImageSize(src: string): Promise<{ width: number; height: number }> {
+
     return new Promise((resolve, reject) => {
         const img = new Image()
         img.onload = () => {
@@ -314,10 +318,10 @@ export const seedream40Model = defineModel({
                         const finalRatio = width / height
                         if (finalRatio >= constraints.minRatio && finalRatio <= constraints.maxRatio) {
                             requestData.size = `${width}x${height}`
-                            console.log(`[Seedream 4.0] 智能模式计算尺寸: ${sourceLabel} (${ratio.toFixed(2)}) -> ${width}x${height} (${quality})`)
+                            logger.info(`[Seedream 4.0] 智能模式计算尺寸: ${sourceLabel} (${ratio.toFixed(2)}) -> ${width}x${height} (${quality})`)
                         }
                     } catch (error) {
-                        console.error('[Seedream 4.0] 智能模式计算尺寸失败:', error)
+                        logger.error('[Seedream 4.0] 智能模式计算尺寸失败:', error)
                     }
                 }
                 // 如果不是智能模式

@@ -1,8 +1,11 @@
+import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
 import { Copy, Crop, Download, PenLine, RefreshCw, Scissors, Trash2, Unlink2 } from 'lucide-react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
+
+const logger = createLogger('features.canvas.ui.NodeActionToolbar')
 
 import {
   NODE_TOOL_TYPES,
@@ -170,7 +173,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     try {
       await copyImageSourceToClipboard(imageSource);
     } catch (error) {
-      console.error('Failed to copy image to clipboard', error);
+      logger.error('Failed to copy image to clipboard', error);
     }
   }, [imageSource]);
 
@@ -215,7 +218,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     try {
       await navigator.clipboard.writeText(storyboardText);
     } catch (error) {
-      console.error('Failed to copy storyboard text', error);
+      logger.error('Failed to copy storyboard text', error);
     }
   }, [storyboardText]);
 
@@ -234,7 +237,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       await saveImageSourceToPath(imageSource, selectedPath);
       closeDownloadMenu();
     } catch (error) {
-      console.error('Failed to save image with save-as', error);
+      logger.error('Failed to save image with save-as', error);
     }
   }, [closeDownloadMenu, imageSource, node.id]);
 
@@ -247,7 +250,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         await saveImageSourceToDirectory(imageSource, targetDir, `node-${node.id}`);
         closeDownloadMenu();
       } catch (error) {
-        console.error('Failed to save image to preset dir', error);
+        logger.error('Failed to save image to preset dir', error);
       }
     },
     [closeDownloadMenu, imageSource, node.id]

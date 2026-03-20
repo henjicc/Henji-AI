@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('scripts.migration.migrateHistory')
 /**
  * History Migration Script
  *
@@ -59,37 +62,38 @@ export async function migrateHistoryToDatabase(): Promise<MigrationResult> {
     // Step 1: Check if file exists
     const fileExists = await exists(historyPath)
     if (!fileExists) {
-      console.log('[Migration] History file does not exist, skipping migration')
+      logger.info('[Migration] History file does not exist, skipping migration')
       result.success = true
       return result
     }
 
     // Step 2: Backup original file
-    console.log('[Migration] Backing up history file...')
+    logger.info('[Migration] Backing up history file...')
     await copyFile(historyPath, backupPath)
     result.backupPath = backupPath
-    console.log(`[Migration] Backup complete: ${backupPath}`)
+    logger.info(`[Migration] Backup complete: ${backupPath}`)
 
     // Step 3: Read and parse
-    console.log('[Migration] Reading history file...')
+    logger.info('[Migration] Reading history file...')
     const content = await readTextFile(historyPath)
     result.originalSize = content.length
 
     const legacyData: LegacyHistoryItem[] = JSON.parse(content)
     result.totalRecords = legacyData.length
-    console.log(`[Migration] Found ${result.totalRecords} records`)
+    logger.info(`[Migration] Found ${result.totalRecords} records`)
 
     // Step 4: Initialize database
-    console.log('[Migration] Initializing database...')
+    logger.info('[Migration] Initializing database...')
     await databaseService.init()
 
     // Step 5: Clean and migrate data
-    console.log('[Migration] Starting data migration...')
+    logger.info('[Migration] Starting data migration...')
     for (let i = 0; i < legacyData.length; i++) {
+
       const legacy = legacyData[i]
 
       if (i % 100 === 0) {
-        console.log(`[Migration] Progress: ${i}/${result.totalRecords}`)
+        logger.info(`[Migration] Progress: ${i}/${result.totalRecords}`)
       }
 
       try {
@@ -109,7 +113,7 @@ export async function migrateHistoryToDatabase(): Promise<MigrationResult> {
     }
 
     // Step 6: Verify migration
-    console.log('[Migration] Verifying migration result...')
+    logger.info('[Migration] Verifying migration result...')
     const migratedCount = (
       await databaseService.getHistory({ limit: 1000000 })
     ).length
@@ -121,32 +125,32 @@ export async function migrateHistoryToDatabase(): Promise<MigrationResult> {
     }
 
     // Step 7: Clear old file (keep structure)
-    console.log('[Migration] Clearing old history file...')
+    logger.info('[Migration] Clearing old history file...')
     await writeTextFile(historyPath, JSON.stringify([]))
     result.newSize = 2  // "[]"
 
     result.success = true
-    console.log('[Migration] Migration complete!')
-    console.log(`  Total records: ${result.totalRecords}`)
-    console.log(`  Migrated: ${result.migratedRecords}`)
-    console.log(`  Skipped: ${result.skippedRecords}`)
-    console.log(`  Errors: ${result.errors.length}`)
-    console.log(`  File size: ${(result.originalSize / 1024 / 1024).toFixed(2)} MB -> ${(result.newSize / 1024).toFixed(2)} KB`)
-    console.log(`  Space saved: ${((1 - result.newSize / result.originalSize) * 100).toFixed(1)}%`)
+    logger.info('[Migration] Migration complete!')
+    logger.info(`  Total records: ${result.totalRecords}`)
+    logger.info(`  Migrated: ${result.migratedRecords}`)
+    logger.info(`  Skipped: ${result.skippedRecords}`)
+    logger.info(`  Errors: ${result.errors.length}`)
+    logger.info(`  File size: ${(result.originalSize / 1024 / 1024).toFixed(2)} MB -> ${(result.newSize / 1024).toFixed(2)} KB`)
+    logger.info(`  Space saved: ${((1 - result.newSize / result.originalSize) * 100).toFixed(1)}%`)
 
     return result
   } catch (error: any) {
-    console.error('[Migration] Migration failed:', error)
+    logger.error('[Migration] Migration failed:', error)
     result.errors.push(error.message)
 
     // Try to restore backup
     if (result.backupPath) {
-      console.log('[Migration] Attempting to restore from backup...')
+      logger.info('[Migration] Attempting to restore from backup...')
       try {
         await copyFile(backupPath, historyPath)
-        console.log('[Migration] Restore successful')
+        logger.info('[Migration] Restore successful')
       } catch (restoreError) {
-        console.error('[Migration] Restore failed:', restoreError)
+        logger.error('[Migration] Restore failed:', restoreError)
       }
     }
 

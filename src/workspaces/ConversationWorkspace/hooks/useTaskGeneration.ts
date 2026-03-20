@@ -1,9 +1,9 @@
+import { createLogger } from '@/core/logging'
 import { useCallback, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { GenerationService } from '@/core/services/GenerationService'
 import { registry } from '@/core/ModelRegistry'
 import { taskQueueManager } from '@/services/taskQueue'
-import { logError, logInfo } from '@/utils/errorLogger'
 import {
   dataUrlToBlob,
   ensureCompressedJpegBytesWithPica,
@@ -23,6 +23,8 @@ import { isRecord, isStringArray } from '../utils/typeGuards'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskGeneration')
 
 type GenerationProgressCallback = NonNullable<Parameters<GenerationService['generate']>[2]>
 type GenerationProgressStatus = Parameters<GenerationProgressCallback>[0]
@@ -178,6 +180,7 @@ export function useTaskGeneration({
           options.video = videoUrls[0]
         }
         ;(options as Record<string, unknown>).uploadedVideos = options.videos
+
       }
 
       updateTask(taskId, { status: 'generating' })
@@ -199,7 +202,7 @@ export function useTaskGeneration({
       if (serverTaskId) {
         updateTask(taskId, { serverTaskId })
       }
-      logInfo('[Workspace] 生成响应', { model: task.model, taskId: serverTaskId, metadata })
+      logger.info('[Workspace] 生成响应', { model: task.model, taskId: serverTaskId, metadata })
 
       if (resultObj['status'] === 'pending') {
         if (!serverTaskId) {
@@ -234,7 +237,7 @@ export function useTaskGeneration({
       const { url, filePath } = normalized
 
       if (!url) {
-        logError('[Workspace] 生成响应缺少 URL', { model: task.model, result: resultObj })
+        logger.error('[Workspace] 生成响应缺少 URL', { model: task.model, result: resultObj })
         throw new Error(messages.genericGenerateFailed)
       }
 
@@ -263,7 +266,7 @@ export function useTaskGeneration({
         },
       })
     } catch (error) {
-      logError('[Workspace] 生成失败', error)
+      logger.error('[Workspace] 生成失败', error)
       const errorMessage = maybeToUserMessage(error) || messages.genericGenerateFailed
       const serverTaskIdFromError = extractServerTaskIdFromErrorMessage(errorMessage)
       updateTask(taskId, {
@@ -334,7 +337,7 @@ export function useTaskGeneration({
           uploadedFilePaths[i] = saved.fullPath
           changed = true
         } catch (e) {
-          logError('[Workspace] 延迟保存图片失败', e)
+          logger.error('[Workspace] 延迟保存图片失败', e)
         }
       }
 
@@ -357,7 +360,7 @@ export function useTaskGeneration({
         const savedVideo = await saveUploadVideo(inlineVideo, 'persist')
         uploadedVideoFilePaths.push(savedVideo.fullPath)
       } catch (error) {
-        logError('[Workspace] 持久化上传视频失败', error)
+        logger.error('[Workspace] 持久化上传视频失败', error)
         notify('视频保存失败，请重试上传后再生成', 'error')
         return
       }
@@ -415,7 +418,7 @@ export function useTaskGeneration({
       : uploadedVideos
 
     if (model === 'ppio-wan-2.5-preview') {
-      logInfo('[Workspace] Wan 2.5 Preview 请求媒体输入', {
+      logger.info('[Workspace] Wan 2.5 Preview 请求媒体输入', {
         model,
         images: summarizeMediaSources(options.images),
         uploadedFilePaths: summarizeMediaSources(options.uploadedFilePaths),
@@ -441,9 +444,9 @@ export function useTaskGeneration({
           const editStateFile = await saveEditState(taskId, imageEditStates)
           options.editStateFile = editStateFile
           delete options.imageEditStates
-          logInfo('[Workspace] 已保存编辑状态到文件', { file: editStateFile })
+          logger.info('[Workspace] 已保存编辑状态到文件', { file: editStateFile })
         } catch (error) {
-          logError('[Workspace] 保存编辑状态文件失败', error)
+          logger.error('[Workspace] 保存编辑状态文件失败', error)
           options.imageEditStates = imageEditStates
         }
       } else {

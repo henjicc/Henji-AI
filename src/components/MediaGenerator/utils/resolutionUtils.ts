@@ -1,9 +1,12 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.MediaGenerator.utils.resolutionUtils')
+
 /**
  * 分辨率计算工具函数
  */
 
 // 预设分辨率选项 - 2K基础分辨率
-import { logInfo } from '../../../utils/errorLogger'
 export const baseResolutions: Record<string, string> = {
   '1:1': '2048x2048',
   '4:3': '2304x1728',
@@ -53,7 +56,7 @@ export const calculateAspectRatioFromImage = (imageDataUrl: string): Promise<str
         }
       }
 
-      logInfo('[resolutionUtils] 智能比例匹配:', {
+      logger.info('[resolutionUtils] 智能比例匹配:', {
         原图尺寸: `${width}x${height}`,
         实际比例: actualRatio.toFixed(4),
         匹配结果: closestRatio,
@@ -147,7 +150,7 @@ export const calculateSmartResolution = (imageDataUrl: string, quality: '2K' | '
         height = Math.floor(height * scale / 8) * 8
       }
 
-      logInfo('[resolutionUtils] 智能分辨率计算:', {
+      logger.info('[resolutionUtils] 智能分辨率计算:', {
         原图尺寸: `${originalWidth}x${originalHeight}`,
         宽高比: aspectRatio.toFixed(3),
         质量模式: quality,
@@ -260,7 +263,7 @@ export const calculatePPIOSeedreamSmartResolution = (imageDataUrl: string, quali
         height = Math.round(height * scale)
       }
 
-      logInfo('[resolutionUtils] 派欧云即梦智能分辨率计算:', {
+      logger.info('[resolutionUtils] 派欧云即梦智能分辨率计算:', {
         原图尺寸: `${originalWidth}x${originalHeight}`,
         原图宽高比: aspectRatio.toFixed(4),
         质量模式: quality,
@@ -378,7 +381,7 @@ export const calculateSeedreamSmartResolution = (imageDataUrl: string, quality: 
         height = Math.round(height * scale)
       }
 
-      logInfo('[resolutionUtils] 即梦智能分辨率计算:', {
+      logger.info('[resolutionUtils] 即梦智能分辨率计算:', {
         原图尺寸: `${originalWidth}x${originalHeight}`,
         原图宽高比: aspectRatio.toFixed(4),
         质量模式: quality,
@@ -396,3 +399,4 @@ export const calculateSeedreamSmartResolution = (imageDataUrl: string, quality: 
     img.src = imageDataUrl
   })
 }
+

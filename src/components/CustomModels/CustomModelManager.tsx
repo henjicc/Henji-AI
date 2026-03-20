@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.CustomModels.CustomModelManager')
 /**
  * 自定义模型管理器
  */
@@ -29,7 +32,7 @@ export function CustomModelManager() {
       const data = await service.getCustomModels()
       setModels(data)
     } catch (error) {
-      console.error('Failed to load custom models:', error)
+      logger.error('Failed to load custom models:', error)
     } finally {
       setLoading(false)
     }
@@ -48,7 +51,7 @@ export function CustomModelManager() {
       await loadModels()
       setShowAddDialog(false)
     } catch (error) {
-      console.error('Failed to add custom model:', error)
+      logger.error('Failed to add custom model:', error)
       alert(t('customModels.addFailed') + ': ' + (error as Error).message)
     }
   }
@@ -63,7 +66,7 @@ export function CustomModelManager() {
       }
       await loadModels()
     } catch (error) {
-      console.error('Failed to toggle model:', error)
+      logger.error('Failed to toggle model:', error)
     }
   }
 
@@ -77,7 +80,7 @@ export function CustomModelManager() {
       await service.deleteCustomModel(id)
       await loadModels()
     } catch (error) {
-      console.error('Failed to delete model:', error)
+      logger.error('Failed to delete model:', error)
     }
   }
 
@@ -155,3 +158,4 @@ export function CustomModelManager() {
     </div>
   )
 }
+

@@ -69,9 +69,14 @@ pub fn build_continue_polling_trace(
 }
 
 pub fn log_trace(trace: &AiRuntimeTrace) {
-    let content = serde_json::to_string_pretty(trace)
-        .unwrap_or_else(|_| "<trace_serialize_failed>".to_string());
-    eprintln!("[ai_runtime][trace][{}]\n{}", trace.phase, content);
+    let content =
+        serde_json::to_string(trace).unwrap_or_else(|_| "<trace_serialize_failed>".to_string());
+    tracing::info!(
+        target: "ai_runtime.trace",
+        phase = %trace.phase,
+        payload = %content,
+        "ai runtime trace"
+    );
 }
 
 fn sanitize_json_value(value: &Value, depth: usize) -> Value {

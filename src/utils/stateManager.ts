@@ -1,9 +1,11 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('utils.stateManager')
+
 /**
  * 通用状态管理器
  * 用于预设系统的自动化状态保存和恢复
  */
-
-import { logWarning } from '../utils/errorLogger'
 export interface StateSetter<T = any> {
     (value: T): void
 }
@@ -25,7 +27,7 @@ export function captureState(stateMap: StateMap): Record<string, any> {
         try {
             captured[key] = descriptor.get()
         } catch (error) {
-            logWarning(`Failed to capture state for "${key}":`, error)
+            logger.warn(`Failed to capture state for "${key}":`, error)
         }
     }
 
@@ -40,7 +42,7 @@ export function restoreState(stateMap: StateMap, savedState: Record<string, any>
         const descriptor = stateMap[key]
 
         if (!descriptor) {
-            logWarning(`No state descriptor found for "${key}", skipping...`, {})
+            logger.warn(`No state descriptor found for "${key}", skipping...`, {})
             continue
         }
 
@@ -50,7 +52,7 @@ export function restoreState(stateMap: StateMap, savedState: Record<string, any>
                 descriptor.set(value)
             }
         } catch (error) {
-            logWarning(`Failed to restore state for "${key}":`, error)
+            logger.warn(`Failed to restore state for "${key}":`, error)
         }
     }
 }
@@ -101,3 +103,4 @@ export function restoreCategorizedState(
         }
     }
 }
+

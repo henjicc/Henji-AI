@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.Migration.HistoryMigrationDialog')
 /**
  * History Migration Dialog Component
  *
@@ -22,7 +25,7 @@ export function HistoryMigrationDialog() {
       const migrationResult = await migrateHistoryToDatabase()
       setResult(migrationResult)
     } catch (error) {
-      console.error('Migration failed:', error)
+      logger.error('Migration failed:', error)
     } finally {
       setIsMigrating(false)
     }
@@ -122,3 +125,4 @@ export function HistoryMigrationDialog() {
     </div>
   )
 }
+

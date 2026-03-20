@@ -1,10 +1,13 @@
+import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { UiButton, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
 import { open } from '@tauri-apps/plugin-shell'
-import { logError } from '../../../utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
+
+const logger = createLogger('components.MediaGenerator.components.ModelscopeCustomModelManager')
+
 interface CustomModel {
   id: string
   name: string
@@ -17,6 +20,7 @@ interface ModelscopeCustomModelManagerProps {
   onModelsChange?: () => void
 }
 function parseModelType(raw: unknown): { imageGeneration: boolean; imageEditing: boolean } {
+
   if (typeof raw !== 'object' || raw === null) {
     return { imageGeneration: true, imageEditing: false }
   }
@@ -79,7 +83,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
         setModels(migratedModels)
       }
     } catch (e) {
-      logError('Failed to load custom models:', e)
+      logger.error('Failed to load custom models:', e)
     }
   }
   const saveModels = (newModels: CustomModel[]) => {
@@ -88,7 +92,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       setModels(newModels)
       onModelsChange?.()
     } catch (e) {
-      logError('Failed to save custom models:', e)
+      logger.error('Failed to save custom models:', e)
     }
   }
   const handleAdd = () => {
@@ -118,7 +122,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     try {
       await open('https://modelscope.cn/models?filter=inference_type&page=1&tabKey=task&tasks=hotTask:text-to-image-synthesis&type=tasks')
     } catch (error) {
-      logError('Failed to open model library:', error)
+      logger.error('Failed to open model library:', error)
     }
   }
   const handleDelete = (id: string) => {

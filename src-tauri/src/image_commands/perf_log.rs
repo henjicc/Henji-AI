@@ -30,12 +30,13 @@ impl PerfLog {
         let id = TRACE_ID.fetch_add(1, Ordering::Relaxed);
         let now = Instant::now();
         if LOG_ENABLED {
-            println!(
-                "{}[{}#{}] start {}",
-                LOG_PREFIX,
-                command,
-                id,
-                detail.as_ref()
+            tracing::debug!(
+                target: "image.perf",
+                command = %command,
+                trace_id = id,
+                detail = %detail.as_ref(),
+                "{} start",
+                LOG_PREFIX
             );
         }
         Self {
@@ -51,15 +52,16 @@ impl PerfLog {
         let stage_ms = now.duration_since(self.stage_started).as_millis();
         let total_ms = now.duration_since(self.started).as_millis();
         if LOG_ENABLED {
-            println!(
-                "{}[{}#{}] stage={} stage_ms={} total_ms={} {}",
-                LOG_PREFIX,
-                self.command,
-                self.id,
-                stage,
-                stage_ms,
-                total_ms,
-                detail.as_ref()
+            tracing::debug!(
+                target: "image.perf",
+                command = %self.command,
+                trace_id = self.id,
+                stage = %stage,
+                stage_ms = stage_ms,
+                total_ms = total_ms,
+                detail = %detail.as_ref(),
+                "{} stage",
+                LOG_PREFIX
             );
         }
         self.stage_started = now;
@@ -67,13 +69,14 @@ impl PerfLog {
 
     pub fn done(&self, detail: impl AsRef<str>) {
         if LOG_ENABLED {
-            println!(
-                "{}[{}#{}] done total_ms={} {}",
-                LOG_PREFIX,
-                self.command,
-                self.id,
-                self.started.elapsed().as_millis(),
-                detail.as_ref()
+            tracing::debug!(
+                target: "image.perf",
+                command = %self.command,
+                trace_id = self.id,
+                total_ms = self.started.elapsed().as_millis(),
+                detail = %detail.as_ref(),
+                "{} done",
+                LOG_PREFIX
             );
         }
     }

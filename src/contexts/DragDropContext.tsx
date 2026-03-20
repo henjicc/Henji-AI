@@ -1,4 +1,7 @@
+import { createLogger } from '@/core/logging'
 import React, { createContext, useContext, useState, ReactNode, useRef, useCallback } from 'react'
+
+const logger = createLogger('contexts.DragDropContext')
 
 interface DragData {
     type: 'image' | 'video'
@@ -14,6 +17,7 @@ interface DragContextValue {
     startDrag: (data: DragData, previewUrl: string) => void
     endDrag: () => void
     dragPosition: { x: number; y: number }
+
     previewUrl: string | null
 }
 
@@ -82,7 +86,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             // 启动原生拖放
             await nativeStartDrag({ item: [data.filePath], icon: iconPath })
         } catch (err) {
-            console.log('[DragDrop] Native drag cancelled or failed:', err)
+            logger.info('[DragDrop] Native drag cancelled or failed:', err)
         } finally {
             // 无论成功与否，重置状态
             setDragData(null)

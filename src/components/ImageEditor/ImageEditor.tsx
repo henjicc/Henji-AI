@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.ImageEditor.ImageEditor')
 /**
  * ImageEditor - 图片编辑器主组件
  * 基于 react-konva 实现
@@ -99,6 +102,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     })
     // ==================== 图片与布局 ====================
     const handleImageLoaded = useCallback((_: HTMLImageElement, size: { width: number; height: number }) => {
+
         setCropRect({
             x: size.width * 0.1,
             y: size.height * 0.1,
@@ -214,7 +218,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
             })
             onSave(dataUrl, editState)
         } catch (error) {
-            console.error('导出图片失败:', error)
+            logger.error('导出图片失败:', error)
         }
     }, [editState, exportToDataUrl, onSave, displaySize.width, stageSize.width])
 

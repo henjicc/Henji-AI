@@ -1,6 +1,9 @@
+import { createLogger } from '@/core/logging'
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import { appLocalDataDir, dirname, downloadDir, join } from '@tauri-apps/api/path';
 import { mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs';
+
+const logger = createLogger('commands.image')
 
 import {
   fileToDataUrl,
@@ -18,12 +21,12 @@ const IMAGE_CMD_LOG_ENABLED = false;
 
 function imageCmdInfo(message: string, payload: unknown): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
-  console.info(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
+  logger.info(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }
 
 function imageCmdWarn(message: string, payload: unknown): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
-  console.warn(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
+  logger.warn(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }
 
 function sourceKindForLog(source: string): 'data-url' | 'http' | 'blob' | 'local-path' | 'other' {

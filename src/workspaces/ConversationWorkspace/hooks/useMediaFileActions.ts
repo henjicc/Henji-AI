@@ -1,8 +1,10 @@
+import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { downloadMediaFile, quickDownloadMediaFile, resolveFilePath, isDesktop } from '@/utils/save'
-import { logError, logInfo } from '@/utils/errorLogger'
 import type { ToastNotification } from '../types'
+
+const logger = createLogger('workspaces.ConversationWorkspace.hooks.useMediaFileActions')
 
 export interface MediaFileActionMessages {
   downloadSuccess: string
@@ -43,7 +45,7 @@ export function useMediaFileActions({ notify, messages }: UseMediaFileActionsPar
       const quickPath = localStorage.getItem('quick_download_path') || ''
 
       const useQuick = enableQuick && (!buttonOnly || fromButton) && !!quickPath
-      logInfo('[Workspace] 下载设置', { enableQuick, buttonOnly, quickPath, useQuick })
+      logger.info('[Workspace] 下载设置', { enableQuick, buttonOnly, quickPath, useQuick })
 
       if (useQuick) {
         await quickDownloadMediaFile(sourcePath, quickPath)
@@ -57,7 +59,7 @@ export function useMediaFileActions({ notify, messages }: UseMediaFileActionsPar
         return
       }
       const reason = err instanceof Error ? err.message : String(err)
-      logError('[Workspace] 下载失败', err)
+      logger.error('[Workspace] 下载失败', err)
       notify(messages.downloadFailed(reason), 'error')
     }
   }, [messages, notify])
@@ -87,11 +89,12 @@ export function useMediaFileActions({ notify, messages }: UseMediaFileActionsPar
       notify(messages.copySuccess, 'success')
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
-      logError('[Workspace] 复制图片失败', err)
+      logger.error('[Workspace] 复制图片失败', err)
       notify(messages.copyFailed(reason), 'error')
     }
   }, [messages, notify])
 
   return { download, copyImageToClipboard }
 }
+
 

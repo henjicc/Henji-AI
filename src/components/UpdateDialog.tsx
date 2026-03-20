@@ -1,3 +1,6 @@
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('components.UpdateDialog')
 /**
  * 更新提示对话框组件
  * 当检测到新版本时显示，提供更新、忽略或取消选项
@@ -7,7 +10,6 @@ import React, { useState, useEffect } from 'react'
 import { open } from '@tauri-apps/plugin-shell'
 import { ReleaseInfo, formatReleaseDate } from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
-import { logError } from '../utils/errorLogger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton, UiPanel } from '@/components/ui'
 
@@ -38,7 +40,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
       await open(releaseInfo.htmlUrl)
       handleClose()
     } catch (error) {
-      logError('打开更新页面失败:', error)
+      logger.error('打开更新页面失败:', error)
     }
   }
 
@@ -224,6 +226,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
+
         }
         .custom-scrollbar::-webkit-scrollbar-track {
           background: rgba(39, 39, 42, 0.3);

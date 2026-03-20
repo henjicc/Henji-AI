@@ -1,6 +1,8 @@
+import { createLogger } from '@/core/logging'
 import { writeFile, readFile, mkdir, remove, exists } from '@tauri-apps/plugin-fs'
 import * as path from '@tauri-apps/api/path'
-import { logError, logInfo } from './errorLogger'
+
+const logger = createLogger('utils.editStatePersistence')
 
 const DIR_NAME = 'EditStates'
 const APP_DIR = 'Henji-AI'
@@ -34,10 +36,10 @@ export async function saveEditState(taskId: string, states: Record<string, any>)
         const encoder = new TextEncoder()
         await writeFile(filePath, encoder.encode(data))
 
-        logInfo('[EditState] Saved edit state to file', filePath)
+        logger.info('[EditState] Saved edit state to file', filePath)
         return `${taskId}.json`
     } catch (error) {
-        logError('[EditState] Failed to save edit state', error)
+        logger.error('[EditState] Failed to save edit state', error)
         throw error
     }
 }
@@ -54,7 +56,7 @@ export async function loadEditState(taskIdOrFilename: string): Promise<Record<st
 
         const fileExists = await exists(filePath)
         if (!fileExists) {
-            logInfo('[EditState] Edit state file not found', filePath)
+            logger.info('[EditState] Edit state file not found', filePath)
             return null
         }
 
@@ -64,7 +66,7 @@ export async function loadEditState(taskIdOrFilename: string): Promise<Record<st
 
         return JSON.parse(jsonStr)
     } catch (error) {
-        logError('[EditState] Failed to load edit state', error)
+        logger.error('[EditState] Failed to load edit state', error)
         return null
     }
 }
@@ -81,9 +83,10 @@ export async function deleteEditState(taskIdOrFilename: string): Promise<void> {
         const fileExists = await exists(filePath)
         if (fileExists) {
             await remove(filePath)
-            logInfo('[EditState] Deleted edit state file', filePath)
+            logger.info('[EditState] Deleted edit state file', filePath)
         }
     } catch (error) {
-        logError('[EditState] Failed to delete edit state', error)
+        logger.error('[EditState] Failed to delete edit state', error)
     }
 }
+

@@ -1,6 +1,9 @@
+import { createLogger } from '@/core/logging'
 import React, { useEffect, useState, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
+
+const logger = createLogger('contexts.GlobalContextMenuProvider')
 
 interface MenuPosition {
   x: number
@@ -125,7 +128,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             await pasteTextToInput(text)
           }
         } catch (err) {
-          console.error('Failed to paste:', err)
+          logger.error('Failed to paste:', err)
         }
       }
       return
@@ -139,7 +142,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         await pasteTextToInput(text)
       }
     } catch (err) {
-      console.error('Failed to paste:', err)
+      logger.error('Failed to paste:', err)
     }
   }, [targetElement, isPromptTextarea, hideMenu, pasteTextToInput])
 
