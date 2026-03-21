@@ -54,6 +54,7 @@ function parseHistoryTimestamp(value?: string | null): Date {
 }
 
 async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): Promise<GenerationTask> {
+  const createdAt = parseHistoryTimestamp(record.createdAt)
   const rawParams: unknown = record.params
   const safeParams: Record<string, unknown> = isRecord(rawParams) ? rawParams : {}
   const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
@@ -106,7 +107,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
         url: resolvedResultUrl,
         filePath: absoluteResultFilePath ?? undefined,
         prompt: record.prompt ?? '',
-        createdAt: parseHistoryTimestamp(record.createdAt),
+        createdAt,
       }
     : undefined
 
@@ -120,6 +121,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
 
   return {
     id: record.id,
+    createdAt,
     type: record.type,
     prompt: record.prompt ?? '',
     model: record.modelId,

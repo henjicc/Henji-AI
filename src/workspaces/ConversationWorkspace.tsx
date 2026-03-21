@@ -5,9 +5,14 @@ import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
 import TestModeIndicator from '@/components/TestModeIndicator'
 import TestModePanel from '@/components/TestModePanel'
+import { UiTaskHistoryFilterBar } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
-import { getModelDisplayName } from '@/utils/modelHelpers'
+import { getModelDisplayName, getModelInfo, getProviderDisplayName } from '@/utils/modelHelpers'
+import {
+  useConversationHistoryFilterStore,
+  type ConversationHistoryMediaType,
+} from '@/stores/conversationHistoryFilterStore.ts'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { FloatingInputPanel } from './ConversationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './ConversationWorkspace/components/NotificationToast'
@@ -28,6 +33,7 @@ import { useTestModeShortcuts } from './ConversationWorkspace/hooks/useTestModeS
 import { useToast } from './ConversationWorkspace/hooks/useToast'
 import { useUpdateCheck } from './ConversationWorkspace/hooks/useUpdateCheck'
 import { useAutoScrollOnResize } from './ConversationWorkspace/hooks/useAutoScrollOnResize'
+import { useTaskFilters } from './ConversationWorkspace/hooks/useTaskFilters'
 import { splitMulti } from './ConversationWorkspace/utils/multiFile'
 
 const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 1100
@@ -40,6 +46,126 @@ const ConversationWorkspace: React.FC = () => {
   const isInitialLoadRef = useRef(true)
   useLoadTaskHistory({ setTasks, setIsTasksLoaded, isInitialLoadRef })
   useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef })
+  const {
+    keyword: filterKeyword,
+    providerId: filterProviderId,
+    modelId: filterModelId,
+    mediaType: filterMediaType,
+    timePreset: filterTimePreset,
+    startDate: filterStartDate,
+    endDate: filterEndDate,
+    setKeyword: setFilterKeyword,
+    setProviderId: setFilterProviderId,
+    setModelId: setFilterModelId,
+    setMediaType: setFilterMediaType,
+    setTimePreset: setFilterTimePreset,
+    setStartDate: setFilterStartDate,
+    setEndDate: setFilterEndDate,
+    resetFilters: resetHistoryFilters,
+  } = useConversationHistoryFilterStore()
+  const { filteredTasks, matchedCount, hasActiveFilters } = useTaskFilters(tasks, {
+    keyword: filterKeyword,
+    providerId: filterProviderId,
+    modelId: filterModelId,
+    mediaType: filterMediaType,
+    timePreset: filterTimePreset,
+    startDate: filterStartDate,
+    endDate: filterEndDate,
+  })
+  const historyProviderOptions = useMemo(() => {
+    const providers = new Map<string, string>()
+    tasks.forEach((task) => {
+      if (!task.provider || providers.has(task.provider)) return
+      providers.set(task.provider, getProviderDisplayName(task.provider))
+    })
+    return Array.from(providers.entries())
+      .sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: 'base', numeric: true }))
+      .map(([value, label]) => ({ value, label }))
+  }, [tasks])
+  const historyModelOptions = useMemo(() => {
+    const models = new Map<string, { label: string; providerId: string }>()
+    tasks.forEach((task) => {
+      if (!task.provider || models.has(task.model)) return
+      models.set(task.model, {
+        label: getModelInfo(task.model)?.name ?? task.model,
+        providerId: task.provider,
+      })
+    })
+    return Array.from(models.entries())
+      .sort((a, b) => a[1].label.localeCompare(b[1].label, undefined, { sensitivity: 'base', numeric: true }))
+      .map(([value, payload]) => ({
+        value,
+        label: payload.label,
+        providerId: payload.providerId,
+      }))
+  }, [tasks])
+  const historyMediaTypeOptions = useMemo<ConversationHistoryMediaType[]>(() => {
+    const order: ConversationHistoryMediaType[] = ['image', 'video', 'audio']
+    const available = new Set<ConversationHistoryMediaType>()
+    tasks.forEach((task) => {
+      if (task.type === 'image' || task.type === 'video' || task.type === 'audio') {
+        available.add(task.type)
+      }
+    })
+    return order.filter((type) => available.has(type))
+  }, [tasks])
+  const mediaFilterOptions = useMemo<Array<{ label: string; value: ConversationHistoryMediaType }>>(() => {
+    const labelByType: Record<Exclude<ConversationHistoryMediaType, 'all'>, string> = {
+      image: t('ui:workspaceToolbar.filter.image'),
+      video: t('ui:workspaceToolbar.filter.video'),
+      audio: t('ui:workspaceToolbar.filter.audio'),
+    }
+    return [
+      { value: 'all', label: t('ui:workspaceToolbar.filter.all') },
+      ...historyMediaTypeOptions.map((value) => ({
+      value,
+      label: labelByType[value as Exclude<ConversationHistoryMediaType, 'all'>],
+      })),
+    ]
+  }, [historyMediaTypeOptions, t])
+  const providerFilterOptions = useMemo(() => [
+    { value: 'all', label: t('ui:workspaceFilters.provider.all') },
+    ...historyProviderOptions,
+  ], [historyProviderOptions, t])
+  const modelFilterOptions = useMemo(() => (
+    [
+      { value: 'all', label: t('ui:workspaceFilters.model.all') },
+      ...(filterProviderId === 'all'
+      ? historyModelOptions.map((option) => ({ value: option.value, label: option.label }))
+      : historyModelOptions
+        .filter((option) => option.providerId === filterProviderId)
+        .map((option) => ({ value: option.value, label: option.label }))),
+    ]
+  ), [filterProviderId, historyModelOptions, t])
+  const handleProviderFilterChange = useCallback((providerId: string): void => {
+    setFilterProviderId(providerId)
+    if (filterModelId === 'all') return
+    if (providerId === 'all') return
+    const modelVisible = historyModelOptions.some((option) => option.value === filterModelId && option.providerId === providerId)
+    if (!modelVisible) {
+      setFilterModelId('all')
+    }
+  }, [filterModelId, historyModelOptions, setFilterModelId, setFilterProviderId])
+  useEffect(() => {
+    if (filterProviderId !== 'all' && !historyProviderOptions.some((option) => option.value === filterProviderId)) {
+      setFilterProviderId('all')
+    }
+  }, [filterProviderId, historyProviderOptions, setFilterProviderId])
+  useEffect(() => {
+    if (filterModelId === 'all') return
+    const modelVisible = historyModelOptions.some((option) => (
+      option.value === filterModelId &&
+      (filterProviderId === 'all' || option.providerId === filterProviderId)
+    ))
+    if (!modelVisible) {
+      setFilterModelId('all')
+    }
+  }, [filterModelId, filterProviderId, historyModelOptions, setFilterModelId])
+  useEffect(() => {
+    if (filterMediaType !== 'all' && !historyMediaTypeOptions.includes(filterMediaType)) {
+      setFilterMediaType('all')
+    }
+  }, [filterMediaType, historyMediaTypeOptions, setFilterMediaType])
   const { notification, visible: notificationVisible, show: notify } = useToast()
   const mediaActionMessages = useMemo(() => {
     return {
@@ -242,6 +368,69 @@ const ConversationWorkspace: React.FC = () => {
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
   const [currentVideoPath, setCurrentVideoPath] = useState<string | undefined>(undefined)
+  const [isTopFilterVisible, setIsTopFilterVisible] = useState(false)
+  const [isTopFilterHovered, setIsTopFilterHovered] = useState(false)
+  const filterHideTimerRef = useRef<number | null>(null)
+  const hasActiveFiltersRef = useRef(hasActiveFilters)
+  const isTopFilterHoveredRef = useRef(isTopFilterHovered)
+
+  const clearFilterHideTimer = useCallback((): void => {
+    if (filterHideTimerRef.current === null) return
+    window.clearTimeout(filterHideTimerRef.current)
+    filterHideTimerRef.current = null
+  }, [])
+
+  const showTopFilterBar = useCallback((): void => {
+    clearFilterHideTimer()
+    setIsTopFilterVisible(true)
+  }, [clearFilterHideTimer])
+
+  const requestHideTopFilterBar = useCallback((): void => {
+    clearFilterHideTimer()
+    filterHideTimerRef.current = window.setTimeout(() => {
+      if (hasActiveFiltersRef.current || isTopFilterHoveredRef.current) {
+        filterHideTimerRef.current = null
+        return
+      }
+      setIsTopFilterVisible(false)
+      filterHideTimerRef.current = null
+    }, 220)
+  }, [clearFilterHideTimer])
+
+  const hideTopFilterBarWithDelay = useCallback((): void => {
+    setIsTopFilterHovered(false)
+    requestHideTopFilterBar()
+  }, [requestHideTopFilterBar])
+
+  useEffect(() => {
+    if (!hasActiveFilters) return
+    clearFilterHideTimer()
+    setIsTopFilterVisible(true)
+  }, [clearFilterHideTimer, hasActiveFilters])
+
+  useEffect(() => {
+    hasActiveFiltersRef.current = hasActiveFilters
+  }, [hasActiveFilters])
+
+  useEffect(() => {
+    isTopFilterHoveredRef.current = isTopFilterHovered
+  }, [isTopFilterHovered])
+
+  useEffect(() => {
+    if (hasActiveFilters) return
+    if (isTopFilterHovered) return
+    requestHideTopFilterBar()
+  }, [hasActiveFilters, isTopFilterHovered, requestHideTopFilterBar])
+
+  const handleCloseTopFilterBar = useCallback((): void => {
+    clearFilterHideTimer()
+    resetHistoryFilters()
+    setIsTopFilterVisible(false)
+  }, [clearFilterHideTimer, resetHistoryFilters])
+
+  useEffect(() => {
+    return () => clearFilterHideTimer()
+  }, [clearFilterHideTimer])
   const openVideoViewer = (url?: string, filePath?: string) => {
     const rawUrl = typeof url === 'string' ? url : ''
     const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
@@ -272,6 +461,55 @@ const ConversationWorkspace: React.FC = () => {
     <div className="h-full flex-1 bg-app text-white flex flex-col relative overflow-hidden">
       <NotificationToast notification={notification} visible={notificationVisible} />
       <main className="flex-1 flex flex-col relative z-10 pt-10">
+        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2">
+          <div
+            className="relative flex flex-col items-center pointer-events-auto"
+            onPointerEnter={() => {
+              setIsTopFilterHovered(true)
+              showTopFilterBar()
+            }}
+            onPointerLeave={hideTopFilterBarWithDelay}
+            onFocusCapture={() => {
+              showTopFilterBar()
+            }}
+            onBlurCapture={(event) => {
+              const nextFocusTarget = event.relatedTarget
+              if (nextFocusTarget instanceof Node && event.currentTarget.contains(nextFocusTarget)) return
+              if (hasActiveFilters) return
+              requestHideTopFilterBar()
+            }}
+          >
+            <div className="pointer-events-auto absolute -top-6 h-16 w-[980px] max-w-[98vw]" />
+            <div className={`pointer-events-none transition-[opacity,transform] duration-220 ease-out ${
+              (isTopFilterVisible || hasActiveFilters)
+                ? 'pointer-events-auto translate-y-0 opacity-100'
+                : '-translate-y-2 opacity-0'
+            }`}>
+              <UiTaskHistoryFilterBar
+                mode="always"
+                showCloseButton
+                keyword={filterKeyword}
+                providerId={filterProviderId}
+                modelId={filterModelId}
+                mediaType={filterMediaType}
+                timePreset={filterTimePreset}
+                startDate={filterStartDate}
+                endDate={filterEndDate}
+                providerOptions={providerFilterOptions}
+                modelOptions={modelFilterOptions}
+                mediaOptions={mediaFilterOptions}
+                onKeywordChange={setFilterKeyword}
+                onProviderChange={handleProviderFilterChange}
+                onModelChange={setFilterModelId}
+                onMediaTypeChange={setFilterMediaType}
+                onTimePresetChange={setFilterTimePreset}
+                onStartDateChange={setFilterStartDate}
+                onEndDateChange={setFilterEndDate}
+                onClose={handleCloseTopFilterBar}
+              />
+            </div>
+          </div>
+        </div>
         <div
           ref={listContainerRef}
           className="flex-1 overflow-y-auto p-4 app-scroll-container"
@@ -279,7 +517,10 @@ const ConversationWorkspace: React.FC = () => {
         >
           <div ref={contentRef}>
             <TaskList
-              tasks={tasks}
+              tasks={filteredTasks}
+              totalCount={tasks.length}
+              matchedCount={matchedCount}
+              hasActiveFilters={hasActiveFilters}
               taskProgress={taskProgress}
               showMenu={showMenu}
               onDownload={download}

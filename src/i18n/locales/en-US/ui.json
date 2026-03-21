@@ -321,6 +321,34 @@
       "list": "List view"
     }
   },
+  "workspaceFilters": {
+    "searchPlaceholder": "Search prompt / model / provider / error",
+    "clearSearch": "Clear search",
+    "expandSearch": "Expand search",
+    "collapseSearch": "Collapse search",
+    "reset": "Reset filters",
+    "close": "Clear and close filters",
+    "resultsCount": "Showing {{matched}} / {{total}}",
+    "emptyFiltered": "No matching results. Try clearing filters.",
+    "provider": {
+      "all": "All sources"
+    },
+    "model": {
+      "all": "All models"
+    },
+    "time": {
+      "all": "All time",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "last90Days": "Last 90 days",
+      "custom": "Custom range",
+      "datePlaceholder": "yyyy/mm/dd",
+      "clear": "Clear",
+      "today": "Today",
+      "startDate": "Start date",
+      "endDate": "End date"
+    }
+  },
   "testMode": {
     "indicatorTitle": "Click to open Test Panel (Ctrl+Alt+Shift+T)",
     "indicatorLabel": "Test Mode",

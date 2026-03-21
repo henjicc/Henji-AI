@@ -28,6 +28,7 @@ type DropdownProps<T extends string | number | boolean> = {
   portal?: boolean
   zIndex?: number
   minWidthStrategy?: 'options' | 'display'
+  panelWidthStrategy?: 'button' | 'options'
 }
 
 export default function Dropdown<T extends string | number | boolean>(props: DropdownProps<T>) {
@@ -45,16 +46,36 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     portal = true,
     zIndex = 1000,
     minWidthStrategy = 'options',
+    panelWidthStrategy = 'button',
   } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  const [minWidthPx, setMinWidthPx] = useState<number | null>(null)
-  const lastMinWidthRef = useRef<number | null>(null)
+  const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
+  const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
+  const lastButtonMinWidthRef = useRef<number | null>(null)
+  const lastPanelMinWidthRef = useRef<number | null>(null)
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
     return String(value) === String(optValue)
+  }
+  const getOptionLabels = (source?: Option<T>[]): string[] => {
+    return (source || []).map((option) => String(option.label))
+  }
+  const measureTextMinWidth = (targetButton: HTMLElement, labels: string[]): number | null => {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    const computedStyle = window.getComputedStyle(targetButton)
+    const font = `${computedStyle.fontStyle} ${computedStyle.fontVariant} ${computedStyle.fontWeight} ${computedStyle.fontSize} / ${computedStyle.lineHeight} ${computedStyle.fontFamily}`
+    ctx.font = font
+    const textWidth = Math.max(...labels.map((item) => ctx.measureText(item).width))
+    const paddingLeft = parseFloat(computedStyle.paddingLeft || '12')
+    const paddingRight = parseFloat(computedStyle.paddingRight || '12')
+    const arrowSpace = 24
+    const borderWidth = (parseFloat(computedStyle.borderLeftWidth || '1') + parseFloat(computedStyle.borderRightWidth || '1')) || 2
+    return Math.ceil(textWidth + paddingLeft + paddingRight + arrowSpace + borderWidth)
   }
 
   useEffect(() => {
@@ -76,29 +97,34 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const btn = ref.current.querySelector('[data-dropdown-button]') as HTMLElement | null
     if (!btn) return
     const computeMinWidth = () => {
-      if (!portal) return
-      const labels: string[] = minWidthStrategy === 'display'
-        ? [String(display ?? value ?? '')]
-        : (options || []).map(o => String((o as any).label ?? o))
-      if (!labels.length) labels.push(String(display ?? value ?? ''))
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      const cs = window.getComputedStyle(btn)
-      const font = `${cs.fontStyle} ${cs.fontVariant} ${cs.fontWeight} ${cs.fontSize} / ${cs.lineHeight} ${cs.fontFamily}`
-      ctx.font = font
-      const textWidth = Math.max(...labels.map(l => ctx.measureText(l).width))
-      const paddingLeft = parseFloat(cs.paddingLeft || '12')
-      const paddingRight = parseFloat(cs.paddingRight || '12')
-      const arrowSpace = 24
-      const borderWidth = (parseFloat(cs.borderLeftWidth || '1') + parseFloat(cs.borderRightWidth || '1')) || 2
-      const minW = Math.ceil(textWidth + paddingLeft + paddingRight + arrowSpace + borderWidth)
-      if (lastMinWidthRef.current === minW) return
-      lastMinWidthRef.current = minW
-      setMinWidthPx(minW)
+      const displayText = String(display ?? value ?? '')
+      const optionLabels = getOptionLabels(options)
+      const buttonLabels = minWidthStrategy === 'display'
+        ? [displayText]
+        : (optionLabels.length > 0 ? optionLabels : [displayText])
+      const nextButtonMinWidth = measureTextMinWidth(btn, buttonLabels)
+      if (nextButtonMinWidth !== null && lastButtonMinWidthRef.current !== nextButtonMinWidth) {
+        lastButtonMinWidthRef.current = nextButtonMinWidth
+        setButtonMinWidthPx(nextButtonMinWidth)
+      }
+
+      if (panelWidthStrategy !== 'options') {
+        if (lastPanelMinWidthRef.current !== null || panelMinWidthPx !== null) {
+          lastPanelMinWidthRef.current = null
+          setPanelMinWidthPx(null)
+        }
+        return
+      }
+
+      const panelLabels = optionLabels.length > 0 ? optionLabels : [displayText]
+      const nextPanelMinWidth = measureTextMinWidth(btn, panelLabels)
+      if (nextPanelMinWidth !== null && lastPanelMinWidthRef.current !== nextPanelMinWidth) {
+        lastPanelMinWidthRef.current = nextPanelMinWidth
+        setPanelMinWidthPx(nextPanelMinWidth)
+      }
     }
     computeMinWidth()
-  }, [options, display, value, portal, minWidthStrategy])
+  }, [display, minWidthStrategy, options, panelWidthStrategy, value])
 
   useEffect(() => {
     const updatePos = () => {
@@ -144,7 +170,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         style={{
           outline: 'none',
           boxShadow: 'none',
-          ...(minWidthPx ? { minWidth: `${minWidthPx}px` } : {})
+          ...(buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : {})
         }}
       >
         <span className="text-sm truncate">{display ?? String(value ?? '')}</span>
@@ -154,7 +180,15 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         portal && fixedPos ? (
           createPortal(
             <div className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
-              style={{ position: 'fixed', top: fixedPos.top, left: fixedPos.left, width: fixedPos.width, zIndex }}
+              style={{
+                position: 'fixed',
+                top: fixedPos.top,
+                left: fixedPos.left,
+                width: panelWidthStrategy === 'options' && panelMinWidthPx
+                  ? Math.max(fixedPos.width, panelMinWidthPx)
+                  : fixedPos.width,
+                zIndex
+              }}
               data-dropdown-portal="true"
             >
               {renderPanel ? (
@@ -188,7 +222,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           )
         ) : (
           <div
-            className={`absolute left-0 z-50 mt-1 w-full ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            className={`absolute left-0 z-50 mt-1 ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
           >
             {renderPanel ? (

@@ -21,6 +21,9 @@ function toAspectRatio(dimensions?: string): string {
 }
 export interface TaskListProps {
   tasks: GenerationTask[]
+  totalCount: number
+  matchedCount: number
+  hasActiveFilters: boolean
   taskProgress: Record<string, number>
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -35,6 +38,9 @@ export interface TaskListProps {
 }
 export function TaskList({
   tasks,
+  totalCount,
+  matchedCount,
+  hasActiveFilters,
   taskProgress,
   showMenu,
   onDownload,
@@ -70,23 +76,32 @@ export function TaskList({
     if (shouldIgnoreClick()) return
     onOpenVideoViewer(url, filePath)
   }
-  if (tasks.length === 0) {
-    return (
-      <div className="max-w-6xl mx-auto w-[90%] py-20 text-center text-zinc-500">
-        {t('history:empty')}
-      </div>
-    )
-  }
+
   return (
     <div className="max-w-6xl mx-auto w-[90%] space-y-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">{t('history:title')}</h2>
+      <div className="mb-4">
+        <div>
+          <h2 className="text-xl font-bold">{t('history:title')}</h2>
+          <p className="mt-1 text-xs text-zinc-400">
+            {t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
+          </p>
+        </div>
       </div>
-      {tasks.map((task) => {
+      {totalCount === 0 && (
+        <div className="py-20 text-center text-zinc-500">
+          {t('history:empty')}
+        </div>
+      )}
+      {tasks.length === 0 && hasActiveFilters && (
+        <div className="rounded-xl border border-border-dark bg-surface-dark px-6 py-12 text-center">
+          <p className="text-sm text-zinc-300">{t('ui:workspaceFilters.emptyFiltered')}</p>
+        </div>
+      )}
+      {tasks.length > 0 && tasks.map((task) => {
         const modelName = getModelDisplayName(task.model)
         const progressValue = taskProgress[task.id] ?? task.progress
         const typeLabel = task.type === 'image' ? t('ui:workspaceToolbar.filter.image') : task.type === 'video' ? t('ui:workspaceToolbar.filter.video') : t('ui:workspaceToolbar.filter.audio')
-        const createdAtLabel = task.result?.createdAt ? formatDate(task.result.createdAt) : ''
+        const createdAtLabel = formatDate(task.createdAt)
         const inputImages = task.images ?? []
         const inputVideos = task.videos ?? []
         const resultAspectRatio = toAspectRatio(task.dimensions)

@@ -321,6 +321,34 @@
       "list": "列表视图"
     }
   },
+  "workspaceFilters": {
+    "searchPlaceholder": "搜索提示词 / 模型 / 提供商 / 错误信息",
+    "clearSearch": "清空搜索",
+    "expandSearch": "展开搜索",
+    "collapseSearch": "收起搜索",
+    "reset": "清空筛选",
+    "close": "关闭并清空筛选",
+    "resultsCount": "显示 {{matched}} / {{total}} 条",
+    "emptyFiltered": "未找到匹配结果，可清空筛选后重试",
+    "provider": {
+      "all": "全部来源"
+    },
+    "model": {
+      "all": "全部模型"
+    },
+    "time": {
+      "all": "全部时间",
+      "last7Days": "最近一周",
+      "last30Days": "最近一个月",
+      "last90Days": "最近三个月",
+      "custom": "自定义时间",
+      "datePlaceholder": "yyyy/mm/dd",
+      "clear": "清除",
+      "today": "今天",
+      "startDate": "开始日期",
+      "endDate": "结束日期"
+    }
+  },
   "testMode": {
     "indicatorTitle": "点击打开测试面板 (Ctrl+Alt+Shift+T)",
     "indicatorLabel": "测试模式",

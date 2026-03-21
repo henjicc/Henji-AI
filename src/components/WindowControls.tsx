@@ -165,7 +165,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-[2147483647] flex h-10 items-center justify-between border-b border-zinc-700/50 bg-panel px-3 text-white"
+      className="fixed top-0 left-0 right-0 z-[2147483647] h-10 border-b border-zinc-700/50 bg-panel px-3 text-white"
       data-tauri-drag-region
       style={{ WebkitAppRegion: 'drag' }}
     >
@@ -173,7 +173,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
         <>
           {/* macOS: 左侧窗口控制按钮 */}
           <div
-            className="flex items-center gap-2"
+            className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-2"
             data-tauri-ignore-drag-region
             style={{ WebkitAppRegion: 'no-drag' }}
           >
@@ -221,22 +221,32 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'conversati
           </div>
 
           {/* macOS: 中间 Tab 栏 */}
-          <TabBar />
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            data-tauri-ignore-drag-region
+            style={{ WebkitAppRegion: 'no-drag' }}
+          >
+            <TabBar />
+          </div>
 
-          {/* macOS: 右侧占位 */}
-          <div className="w-14"></div>
         </>
       ) : (
         <>
           {/* Windows: 左侧标题 */}
-          <div className="text-sm text-zinc-300 shrink-0">{t('windowControls.appName')}</div>
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-300 shrink-0">{t('windowControls.appName')}</div>
 
           {/* Windows: 中间 Tab 栏 */}
-          <TabBar />
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            data-tauri-ignore-drag-region
+            style={{ WebkitAppRegion: 'no-drag' }}
+          >
+            <TabBar />
+          </div>
 
           {/* Windows: 右侧窗口控制按钮 */}
           <div
-            className="flex items-center gap-1 shrink-0"
+            className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 shrink-0"
             data-tauri-ignore-drag-region
             style={{ WebkitAppRegion: 'no-drag' }}
           >

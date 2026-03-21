@@ -455,6 +455,7 @@ export function useTaskGeneration({
     }
     const newTask: GenerationTask = {
       id: taskId,
+      createdAt: new Date(),
       type,
       prompt: input,
       model,

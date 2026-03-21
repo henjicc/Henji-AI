@@ -20,6 +20,7 @@ export interface GeneratorOptions extends Record<string, unknown> {
 
 export interface GenerationTask {
   id: string
+  createdAt: Date
   type: MediaType
   prompt: string
   model: string
