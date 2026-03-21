@@ -112,6 +112,12 @@
         "description": "PPIO Grok Imagine Image model with automatic switching between text-to-image and image editing endpoints"
       }
     },
+    "ppio-grok-imagine-video": {
+      "meta": {
+        "name": "Grok Imagine Video",
+        "description": "PPIO Grok Imagine Video model supporting text/image-to-video and video editing with automatic endpoint routing by mode and media input"
+      }
+    },
     "ppio-vidu-q1": {
       "meta": {
         "name": "Vidu Q1"

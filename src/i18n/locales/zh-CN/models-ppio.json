@@ -112,6 +112,12 @@
         "description": "派欧云 Grok Imagine 图片模型，支持文生图与图片编辑，并根据是否上传图片自动切换端点"
       }
     },
+    "ppio-grok-imagine-video": {
+      "meta": {
+        "name": "Grok Imagine 视频",
+        "description": "派欧云 Grok Imagine 视频模型，支持文/图生视频与视频编辑，并根据模式和素材自动切换端点"
+      }
+    },
     "ppio-vidu-q1": {
       "meta": {
         "name": "Vidu Q1"
