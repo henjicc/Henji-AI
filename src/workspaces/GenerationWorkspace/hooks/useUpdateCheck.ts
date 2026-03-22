@@ -4,7 +4,7 @@ import type { ReleaseInfo } from '@/services/updateChecker'
 import { checkForUpdates, getCurrentVersion } from '@/services/updateChecker'
 import { isVersionIgnored, shouldCheckForUpdates, updateLastCheckTime } from '@/utils/updateConfig'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useUpdateCheck')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useUpdateCheck')
 
 export interface UseUpdateCheckReturn {
   showUpdateDialog: boolean

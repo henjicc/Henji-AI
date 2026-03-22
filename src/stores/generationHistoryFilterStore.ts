@@ -1,28 +1,28 @@
 import { create } from 'zustand'
 
-export type ConversationHistoryMediaType = 'all' | 'image' | 'video' | 'audio'
-export type ConversationHistoryTimePreset = 'all' | '7d' | '30d' | '90d' | 'custom'
+export type GenerationHistoryMediaType = 'all' | 'image' | 'video' | 'audio'
+export type GenerationHistoryTimePreset = 'all' | '7d' | '30d' | '90d' | 'custom'
 
-export interface ConversationHistoryFilterState {
+export interface GenerationHistoryFilterState {
   keyword: string
   providerId: string
   modelId: string
-  mediaType: ConversationHistoryMediaType
-  timePreset: ConversationHistoryTimePreset
+  mediaType: GenerationHistoryMediaType
+  timePreset: GenerationHistoryTimePreset
   startDate: string
   endDate: string
   setKeyword: (keyword: string) => void
   setProviderId: (providerId: string) => void
   setModelId: (modelId: string) => void
-  setMediaType: (mediaType: ConversationHistoryMediaType) => void
-  setTimePreset: (timePreset: ConversationHistoryTimePreset) => void
+  setMediaType: (mediaType: GenerationHistoryMediaType) => void
+  setTimePreset: (timePreset: GenerationHistoryTimePreset) => void
   setStartDate: (startDate: string) => void
   setEndDate: (endDate: string) => void
   resetFilters: () => void
 }
 
 const DEFAULT_FILTER_STATE: Pick<
-  ConversationHistoryFilterState,
+  GenerationHistoryFilterState,
   'keyword' | 'providerId' | 'modelId' | 'mediaType' | 'timePreset' | 'startDate' | 'endDate'
 > = {
   keyword: '',
@@ -34,7 +34,7 @@ const DEFAULT_FILTER_STATE: Pick<
   endDate: '',
 }
 
-export const useConversationHistoryFilterStore = create<ConversationHistoryFilterState>((set) => ({
+export const useGenerationHistoryFilterStore = create<GenerationHistoryFilterState>((set) => ({
   ...DEFAULT_FILTER_STATE,
   setKeyword: (keyword) => set({ keyword }),
   setProviderId: (providerId) => set({ providerId }),

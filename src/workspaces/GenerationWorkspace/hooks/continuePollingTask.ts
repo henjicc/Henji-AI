@@ -7,7 +7,7 @@ import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.continuePollingTask')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.continuePollingTask')
 
 type ContinuePollingProgressCallback = NonNullable<Parameters<GenerationService['continuePolling']>[3]>
 

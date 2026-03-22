@@ -234,7 +234,7 @@
     }
   },
   "tabs": {
-    "conversation": "Conversation",
+    "generation": "Generation",
     "canvas": "Canvas",
     "tools": "Toolbox"
   },

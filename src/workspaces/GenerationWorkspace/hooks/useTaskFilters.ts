@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { getModelDisplayName } from '@/utils/modelHelpers'
-import type { ConversationHistoryFilterState } from '@/stores/conversationHistoryFilterStore.ts'
+import type { GenerationHistoryFilterState } from '@/stores/generationHistoryFilterStore.ts'
 import type { GenerationTask } from '../types'
 
 type TaskFilterState = Pick<
-  ConversationHistoryFilterState,
+  GenerationHistoryFilterState,
   'keyword' | 'providerId' | 'modelId' | 'mediaType' | 'timePreset' | 'startDate' | 'endDate'
 >
 

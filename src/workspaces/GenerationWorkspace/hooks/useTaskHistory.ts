@@ -11,7 +11,7 @@ import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskHistory')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskHistory')
 
 function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   if (status === 'completed') return 'success'

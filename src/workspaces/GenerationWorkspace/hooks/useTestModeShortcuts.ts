@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useEffect } from 'react'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTestModeShortcuts')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTestModeShortcuts')
 
 export interface UseTestModeShortcutsParams {
   togglePanel: () => void

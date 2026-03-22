@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import type {
-  ConversationHistoryMediaType,
-  ConversationHistoryTimePreset,
-} from '@/stores/conversationHistoryFilterStore.ts'
+  GenerationHistoryMediaType,
+  GenerationHistoryTimePreset,
+} from '@/stores/generationHistoryFilterStore.ts'
 import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton, UiInput } from './primitives'
 import Dropdown from './Dropdown'
@@ -20,18 +20,18 @@ export interface UiTaskHistoryFilterBarProps {
   keyword: string
   providerId: string
   modelId: string
-  mediaType: ConversationHistoryMediaType
-  timePreset: ConversationHistoryTimePreset
+  mediaType: GenerationHistoryMediaType
+  timePreset: GenerationHistoryTimePreset
   startDate: string
   endDate: string
   providerOptions: UiTaskHistoryModelOption[]
   modelOptions: UiTaskHistoryModelOption[]
-  mediaOptions?: Array<{ label: string; value: ConversationHistoryMediaType }>
+  mediaOptions?: Array<{ label: string; value: GenerationHistoryMediaType }>
   onKeywordChange: (keyword: string) => void
   onProviderChange: (providerId: string) => void
   onModelChange: (modelId: string) => void
-  onMediaTypeChange: (mediaType: ConversationHistoryMediaType) => void
-  onTimePresetChange: (timePreset: ConversationHistoryTimePreset) => void
+  onMediaTypeChange: (mediaType: GenerationHistoryMediaType) => void
+  onTimePresetChange: (timePreset: GenerationHistoryTimePreset) => void
   onStartDateChange: (startDate: string) => void
   onEndDateChange: (endDate: string) => void
   onClose?: () => void
@@ -68,14 +68,14 @@ export function UiTaskHistoryFilterBar({
   const iconAnchorRef = useRef<HTMLSpanElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [triggerShiftX, setTriggerShiftX] = useState<number>(0)
-  const timeOptions: Array<{ label: string; value: ConversationHistoryTimePreset }> = [
+  const timeOptions: Array<{ label: string; value: GenerationHistoryTimePreset }> = [
     { value: 'all', label: t('workspaceFilters.time.all') },
     { value: '7d', label: t('workspaceFilters.time.last7Days') },
     { value: '30d', label: t('workspaceFilters.time.last30Days') },
     { value: '90d', label: t('workspaceFilters.time.last90Days') },
     { value: 'custom', label: t('workspaceFilters.time.custom') },
   ]
-  const defaultMediaOptions: Array<{ label: string; value: ConversationHistoryMediaType }> = [
+  const defaultMediaOptions: Array<{ label: string; value: GenerationHistoryMediaType }> = [
     { value: 'all', label: t('workspaceToolbar.filter.all') },
     { value: 'image', label: t('workspaceToolbar.filter.image') },
     { value: 'video', label: t('workspaceToolbar.filter.video') },

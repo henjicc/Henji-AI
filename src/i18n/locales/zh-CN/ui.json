@@ -234,7 +234,7 @@
     }
   },
   "tabs": {
-    "conversation": "对话",
+    "generation": "生成",
     "canvas": "画布",
     "tools": "工具箱"
   },

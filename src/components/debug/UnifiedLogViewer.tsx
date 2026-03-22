@@ -103,7 +103,7 @@ function getLevelDisplay(level: LogLevel): { emoji: string; title: string } {
 
 function getDomainHint(domain: string): string {
   if (domain.includes('GenerationService')) return '生成服务'
-  if (domain.includes('workspaces.ConversationWorkspace')) return '对话工作区'
+  if (domain.includes('workspaces.GenerationWorkspace')) return '生成工作区'
   if (domain.includes('ai_runtime')) return '后端运行时'
   if (domain.includes('upload')) return '上传流程'
   if (domain.includes('canvas')) return '画布模块'

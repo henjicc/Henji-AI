@@ -10,35 +10,35 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { getModelDisplayName, getModelInfo, getProviderDisplayName } from '@/utils/modelHelpers'
 import {
-  useConversationHistoryFilterStore,
-  type ConversationHistoryMediaType,
-} from '@/stores/conversationHistoryFilterStore.ts'
+  useGenerationHistoryFilterStore,
+  type GenerationHistoryMediaType,
+} from '@/stores/generationHistoryFilterStore.ts'
 import type { ImageEditState } from '@/components/ImageEditor'
-import { FloatingInputPanel } from './ConversationWorkspace/components/FloatingInputPanel'
-import { NotificationToast } from './ConversationWorkspace/components/NotificationToast'
-import { ClearHistoryDialog } from './ConversationWorkspace/components/ClearHistoryDialog'
-import { ImageViewerModal } from './ConversationWorkspace/components/ImageViewerModal'
-import { VideoViewerModal } from './ConversationWorkspace/components/VideoViewerModal'
-import { TaskList } from './ConversationWorkspace/components/TaskList'
-import { useBottomPanel } from './ConversationWorkspace/hooks/useBottomPanel'
-import { useDataDirectoryInit } from './ConversationWorkspace/hooks/useDataDirectoryInit'
-import { useLoadTaskHistory, useSaveTaskHistory } from './ConversationWorkspace/hooks/useTaskHistory'
-import { useMediaFileActions } from './ConversationWorkspace/hooks/useMediaFileActions'
-import { useTaskCleanup } from './ConversationWorkspace/hooks/useTaskCleanup'
-import { useTaskGeneration } from './ConversationWorkspace/hooks/useTaskGeneration'
-import { useTaskReplay } from './ConversationWorkspace/hooks/useTaskReplay'
-import { useTaskState } from './ConversationWorkspace/hooks/useTaskState'
-import { useAutoResumePolling } from './ConversationWorkspace/hooks/useAutoResumePolling'
-import { useTestModeShortcuts } from './ConversationWorkspace/hooks/useTestModeShortcuts'
-import { useToast } from './ConversationWorkspace/hooks/useToast'
-import { useUpdateCheck } from './ConversationWorkspace/hooks/useUpdateCheck'
-import { useAutoScrollOnResize } from './ConversationWorkspace/hooks/useAutoScrollOnResize'
-import { useTaskFilters } from './ConversationWorkspace/hooks/useTaskFilters'
-import { splitMulti } from './ConversationWorkspace/utils/multiFile'
+import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
+import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
+import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
+import { ImageViewerModal } from './GenerationWorkspace/components/ImageViewerModal'
+import { VideoViewerModal } from './GenerationWorkspace/components/VideoViewerModal'
+import { TaskList } from './GenerationWorkspace/components/TaskList'
+import { useBottomPanel } from './GenerationWorkspace/hooks/useBottomPanel'
+import { useDataDirectoryInit } from './GenerationWorkspace/hooks/useDataDirectoryInit'
+import { useLoadTaskHistory, useSaveTaskHistory } from './GenerationWorkspace/hooks/useTaskHistory'
+import { useMediaFileActions } from './GenerationWorkspace/hooks/useMediaFileActions'
+import { useTaskCleanup } from './GenerationWorkspace/hooks/useTaskCleanup'
+import { useTaskGeneration } from './GenerationWorkspace/hooks/useTaskGeneration'
+import { useTaskReplay } from './GenerationWorkspace/hooks/useTaskReplay'
+import { useTaskState } from './GenerationWorkspace/hooks/useTaskState'
+import { useAutoResumePolling } from './GenerationWorkspace/hooks/useAutoResumePolling'
+import { useTestModeShortcuts } from './GenerationWorkspace/hooks/useTestModeShortcuts'
+import { useToast } from './GenerationWorkspace/hooks/useToast'
+import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
+import { useAutoScrollOnResize } from './GenerationWorkspace/hooks/useAutoScrollOnResize'
+import { useTaskFilters } from './GenerationWorkspace/hooks/useTaskFilters'
+import { splitMulti } from './GenerationWorkspace/utils/multiFile'
 
 const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 1100
 
-const ConversationWorkspace: React.FC = () => {
+const GenerationWorkspace: React.FC = () => {
   const { t } = useI18n()
   useDataDirectoryInit()
   const { tasks, setTasks, taskProgress, setTaskProgress, updateTask, updateProgress } = useTaskState()
@@ -62,7 +62,7 @@ const ConversationWorkspace: React.FC = () => {
     setStartDate: setFilterStartDate,
     setEndDate: setFilterEndDate,
     resetFilters: resetHistoryFilters,
-  } = useConversationHistoryFilterStore()
+  } = useGenerationHistoryFilterStore()
   const { filteredTasks, matchedCount, hasActiveFilters } = useTaskFilters(tasks, {
     keyword: filterKeyword,
     providerId: filterProviderId,
@@ -99,9 +99,9 @@ const ConversationWorkspace: React.FC = () => {
         providerId: payload.providerId,
       }))
   }, [tasks])
-  const historyMediaTypeOptions = useMemo<ConversationHistoryMediaType[]>(() => {
-    const order: ConversationHistoryMediaType[] = ['image', 'video', 'audio']
-    const available = new Set<ConversationHistoryMediaType>()
+  const historyMediaTypeOptions = useMemo<GenerationHistoryMediaType[]>(() => {
+    const order: GenerationHistoryMediaType[] = ['image', 'video', 'audio']
+    const available = new Set<GenerationHistoryMediaType>()
     tasks.forEach((task) => {
       if (task.type === 'image' || task.type === 'video' || task.type === 'audio') {
         available.add(task.type)
@@ -109,8 +109,8 @@ const ConversationWorkspace: React.FC = () => {
     })
     return order.filter((type) => available.has(type))
   }, [tasks])
-  const mediaFilterOptions = useMemo<Array<{ label: string; value: ConversationHistoryMediaType }>>(() => {
-    const labelByType: Record<Exclude<ConversationHistoryMediaType, 'all'>, string> = {
+  const mediaFilterOptions = useMemo<Array<{ label: string; value: GenerationHistoryMediaType }>>(() => {
+    const labelByType: Record<Exclude<GenerationHistoryMediaType, 'all'>, string> = {
       image: t('ui:workspaceToolbar.filter.image'),
       video: t('ui:workspaceToolbar.filter.video'),
       audio: t('ui:workspaceToolbar.filter.audio'),
@@ -119,7 +119,7 @@ const ConversationWorkspace: React.FC = () => {
       { value: 'all', label: t('ui:workspaceToolbar.filter.all') },
       ...historyMediaTypeOptions.map((value) => ({
       value,
-      label: labelByType[value as Exclude<ConversationHistoryMediaType, 'all'>],
+      label: labelByType[value as Exclude<GenerationHistoryMediaType, 'all'>],
       })),
     ]
   }, [historyMediaTypeOptions, t])
@@ -610,4 +610,4 @@ const ConversationWorkspace: React.FC = () => {
   )
 }
 
-export default ConversationWorkspace
+export default GenerationWorkspace

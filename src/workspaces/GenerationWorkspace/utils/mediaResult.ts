@@ -4,7 +4,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { fileToBlobSrc, isDesktop, saveAudioFromUrl, saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
 import { joinMulti, splitMulti } from './multiFile'
 
-const logger = createLogger('workspaces.ConversationWorkspace.utils.mediaResult')
+const logger = createLogger('workspaces.GenerationWorkspace.utils.mediaResult')
 
 export interface NormalizedMediaResult {
   url: string | undefined

@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { downloadMediaFile, quickDownloadMediaFile, resolveFilePath, isDesktop } from '@/utils/save'
 import type { ToastNotification } from '../types'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useMediaFileActions')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useMediaFileActions')
 
 export interface MediaFileActionMessages {
   downloadSuccess: string

@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { getDataRoot, initializeDataDirectory } from '@/utils/dataPath'
 import { isDesktop } from '@/utils/save'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useDataDirectoryInit')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useDataDirectoryInit')
 
 export function useDataDirectoryInit(): void {
   useEffect(() => {

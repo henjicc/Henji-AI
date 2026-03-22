@@ -1,6 +1,6 @@
 /**
- * 对话历史 Hook
- * 职责：管理对话历史记录
+ * 生成历史 Hook
+ * 职责：管理生成历史记录
  */
 
 import { useState, useCallback } from 'react'
@@ -17,7 +17,7 @@ export interface Message {
   }[]
 }
 
-export const useConversationHistory = () => {
+export const useGenerationHistory = () => {
   const [messages, setMessages] = useState<Message[]>([])
 
   const addMessage = useCallback((message: Omit<Message, 'id' | 'timestamp'>) => {

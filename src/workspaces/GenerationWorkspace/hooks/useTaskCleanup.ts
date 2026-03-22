@@ -8,7 +8,7 @@ import { deleteWaveformCacheForAudio, isDesktop } from '@/utils/save'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskCleanup')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskCleanup')
 
 export interface UseTaskCleanupParams {
   tasks: GenerationTask[]

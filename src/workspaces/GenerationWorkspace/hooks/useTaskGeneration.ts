@@ -24,7 +24,7 @@ import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } 
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskGeneration')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskGeneration')
 
 type GenerationProgressCallback = NonNullable<Parameters<GenerationService['generate']>[2]>
 type GenerationProgressStatus = Parameters<GenerationProgressCallback>[0]

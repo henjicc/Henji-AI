@@ -21,7 +21,7 @@ const logger = createLogger('App')
  */
 const App: React.FC = () => {
   useApplyRuntimeTheme()
-  const [activeTab, setActiveTab] = useState('conversation')
+  const [activeTab, setActiveTab] = useState('generation')
   const [isReady, setIsReady] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 

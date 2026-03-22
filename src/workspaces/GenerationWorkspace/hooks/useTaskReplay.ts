@@ -6,7 +6,7 @@ import { loadEditState } from '@/utils/editStatePersistence'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'
 import { isRecord, isStringArray } from '../utils/typeGuards'
 
-const logger = createLogger('workspaces.ConversationWorkspace.hooks.useTaskReplay')
+const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskReplay')
 
 export interface UseTaskReplayParams {
   handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
