@@ -9,6 +9,12 @@ import {
 import { VideoViewerControls } from './VideoViewerControls'
 
 type VideoFrameRequestCallback = (now: number, metadata: { mediaTime: number }) => void
+interface RenderedVideoRect {
+  left: number
+  top: number
+  width: number
+  height: number
+}
 
 export interface VideoViewerModalProps {
   open: boolean
@@ -23,6 +29,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [isVisible, setIsVisible] = useState(open)
   const [overlayOpacity, setOverlayOpacity] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const videoViewportRef = useRef<HTMLDivElement>(null)
   const progressBarRef = useRef<HTMLDivElement>(null)
   const progressFillRef = useRef<HTMLDivElement>(null)
   const controlsContainerRef = useRef<HTMLDivElement>(null)
@@ -45,6 +52,12 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false)
   const [isDraggingProgress, setIsDraggingProgress] = useState(false)
   const [autoPlayOnOpen, setAutoPlayOnOpen] = useState(false)
+  const [renderedVideoRect, setRenderedVideoRect] = useState<RenderedVideoRect>({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  })
   const controlsHideTimer = useRef<number | null>(null)
   const volumeIndicatorTimer = useRef<number | null>(null)
 
@@ -229,6 +242,51 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     showVolumeHud()
   }, [showVolumeHud])
 
+  const updateRenderedVideoRect = useCallback((): void => {
+    const viewport = videoViewportRef.current
+    const video = videoRef.current
+    if (!viewport) return
+
+    const viewportWidth = viewport.clientWidth
+    const viewportHeight = viewport.clientHeight
+    if (viewportWidth <= 0 || viewportHeight <= 0) return
+
+    const videoWidth = video?.videoWidth ?? 0
+    const videoHeight = video?.videoHeight ?? 0
+
+    if (videoWidth <= 0 || videoHeight <= 0) {
+      setRenderedVideoRect({
+        left: 0,
+        top: 0,
+        width: viewportWidth,
+        height: viewportHeight,
+      })
+      return
+    }
+
+    const viewportAspect = viewportWidth / viewportHeight
+    const videoAspect = videoWidth / videoHeight
+
+    if (viewportAspect > videoAspect) {
+      const renderedWidth = viewportHeight * videoAspect
+      setRenderedVideoRect({
+        left: (viewportWidth - renderedWidth) / 2,
+        top: 0,
+        width: renderedWidth,
+        height: viewportHeight,
+      })
+      return
+    }
+
+    const renderedHeight = viewportWidth / videoAspect
+    setRenderedVideoRect({
+      left: 0,
+      top: (viewportHeight - renderedHeight) / 2,
+      width: viewportWidth,
+      height: renderedHeight,
+    })
+  }, [])
+
   const togglePlay = () => {
     if (!videoRef.current) return
     if (isVideoPlaying) {
@@ -263,6 +321,53 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
     if (progressFillRef.current) progressFillRef.current.style.width = `${percent * 100}%`
   }, [videoDuration])
 
+  const handleViewportClick = useCallback((e: React.MouseEvent<HTMLDivElement>): void => {
+    const viewport = videoViewportRef.current
+    if (!viewport) return
+
+    const rect = viewport.getBoundingClientRect()
+    const relativeX = e.clientX - rect.left
+    const relativeY = e.clientY - rect.top
+
+    const isInsideRenderedVideo =
+      relativeX >= renderedVideoRect.left &&
+      relativeX <= renderedVideoRect.left + renderedVideoRect.width &&
+      relativeY >= renderedVideoRect.top &&
+      relativeY <= renderedVideoRect.top + renderedVideoRect.height
+
+    if (!isInsideRenderedVideo) {
+      onClose()
+    }
+  }, [onClose, renderedVideoRect])
+
+  useEffect(() => {
+    if (!isVisible) return
+    updateRenderedVideoRect()
+  }, [isVisible, videoUrl, updateRenderedVideoRect])
+
+  useEffect(() => {
+    if (!isVisible) return
+    const viewport = videoViewportRef.current
+    if (!viewport) return
+
+    const observer = new ResizeObserver(() => {
+      updateRenderedVideoRect()
+    })
+    observer.observe(viewport)
+
+    const handleWindowResize = (): void => {
+      updateRenderedVideoRect()
+    }
+    window.addEventListener('resize', handleWindowResize)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', handleWindowResize)
+    }
+  }, [isVisible, updateRenderedVideoRect])
+
+  const isOverlayControlsVisible = isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible
+
   if (!isVisible) return null
 
   return (
@@ -278,7 +383,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       }}
     >
       <div
-        className="relative max-w-6xl max-h-full flex items-center justify-center"
+        className="relative w-[92vw] h-[90vh] flex items-center justify-center"
         onMouseEnter={() => {
           setIsControlsVisible(true)
           scheduleHideControls()
@@ -298,7 +403,11 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         }}
         style={{ cursor: isVideoPlaying && !isSpeedMenuOpen && !isControlsVisible ? 'none' : 'default' }}
       >
-        <div className="relative">
+        <div
+          ref={videoViewportRef}
+          className="relative w-full h-full flex items-center justify-center"
+          onClick={handleViewportClick}
+        >
           <div
             className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
             style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
@@ -314,11 +423,12 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           <video
             ref={videoRef}
             src={videoUrl}
-            className="object-contain"
-            style={{ maxHeight: '90vh', maxWidth: '90vw', opacity: viewerOpacity * overlayOpacity, transition: 'opacity 500ms ease' }}
+            className="w-full h-full object-contain"
+            style={{ opacity: viewerOpacity * overlayOpacity, transition: 'opacity 500ms ease' }}
             onLoadedMetadata={() => {
               if (videoRef.current) {
                 setVideoDuration(videoRef.current.duration || 0)
+                updateRenderedVideoRect()
                 if (autoPlayOnOpen) {
                   videoRef.current.play().catch(() => {})
                   setAutoPlayOnOpen(false)
@@ -343,14 +453,25 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             }}
             controls={false}
           />
-          <UiIconButton
-            onClick={onClose}
-            className="absolute top-2 right-2 z-10 rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80"
-            style={{ pointerEvents: 'auto' }}
-            title={t('common:close')}
+          <div
+            className="absolute z-10 pointer-events-none"
+            style={{
+              left: renderedVideoRect.left,
+              top: renderedVideoRect.top,
+              width: renderedVideoRect.width,
+              height: renderedVideoRect.height,
+              opacity: isOverlayControlsVisible ? 1 : 0,
+              transition: 'opacity 500ms ease',
+            }}
           >
-            <CloseIcon />
-          </UiIconButton>
+            <UiIconButton
+              onClick={onClose}
+              className="absolute top-2 right-2 rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80 pointer-events-auto"
+              title={t('common:close')}
+            >
+              <CloseIcon />
+            </UiIconButton>
+          </div>
         </div>
 
         <VideoViewerControls
