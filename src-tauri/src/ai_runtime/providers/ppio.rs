@@ -229,20 +229,59 @@ fn extract_task_id(payload: &Value) -> Option<String> {
 fn extract_urls(payload: &Value) -> Vec<String> {
     let mut urls = Vec::new();
 
-    extract_string_array(payload.pointer("/images"), &mut urls);
-    extract_string_array(payload.pointer("/image_urls"), &mut urls);
-    extract_string_array(payload.pointer("/videos"), &mut urls);
-    extract_string_array(payload.pointer("/audios"), &mut urls);
+    for pointer in [
+        "/images",
+        "/image_urls",
+        "/videos",
+        "/audios",
+        "/task/output/images",
+        "/task/output/image_urls",
+        "/task/output/videos",
+        "/task/output/audios",
+        "/data/images",
+        "/data/image_urls",
+        "/data/videos",
+        "/data/audios",
+    ] {
+        extract_string_array(payload.pointer(pointer), &mut urls);
+    }
 
     if urls.is_empty() {
-        for pointer in ["/url", "/image_url", "/video_url", "/audio_url", "/output"] {
+        for pointer in [
+            "/url",
+            "/image_url",
+            "/video_url",
+            "/audio_url",
+            "/audio",
+            "/output",
+            "/task/output/url",
+            "/task/output/image_url",
+            "/task/output/video_url",
+            "/task/output/audio_url",
+            "/task/output/audio",
+            "/data/url",
+            "/data/image_url",
+            "/data/video_url",
+            "/data/audio_url",
+            "/data/audio",
+        ] {
             if let Some(url) = payload.pointer(pointer).and_then(Value::as_str) {
-                urls.push(url.to_string());
+                push_unique_url(&mut urls, url);
             }
         }
     }
 
     urls
+}
+
+fn push_unique_url(target: &mut Vec<String>, url: &str) {
+    if url.trim().is_empty() {
+        return;
+    }
+    if target.iter().any(|existing| existing == url) {
+        return;
+    }
+    target.push(url.to_string());
 }
 
 fn extract_string_array(value: Option<&Value>, target: &mut Vec<String>) {
@@ -252,13 +291,13 @@ fn extract_string_array(value: Option<&Value>, target: &mut Vec<String>) {
 
     for item in items {
         if let Some(url) = item.as_str() {
-            target.push(url.to_string());
+            push_unique_url(target, url);
             continue;
         }
 
         for key in ["url", "image_url", "video_url", "audio_url"] {
             if let Some(url) = item.get(key).and_then(Value::as_str) {
-                target.push(url.to_string());
+                push_unique_url(target, url);
                 break;
             }
         }

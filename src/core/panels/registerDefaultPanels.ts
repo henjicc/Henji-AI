@@ -12,6 +12,7 @@ import { ResolutionPanel } from '@/components/params/panels/ResolutionPanel'
 import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSelectorPanel'
 import { CompositePanel } from '@/components/params/panels/CompositePanel'
 import { ModelscopeCustomModelPanel } from '@/components/params/panels/ModelscopeCustomModelPanel'
+import { VoiceSelectorPanel } from '@/components/params/panels/VoiceSelectorPanel'
 import { registerDefaultComponents } from '@/components/params/panels/composite/registerDefaultComponents'
 
 /**
@@ -32,6 +33,9 @@ export function registerDefaultPanels(): void {
 
   // 注册 ModelScope 自定义模型面板
   panelRegistry.register('modelscope-custom-model', ModelscopeCustomModelPanel)
+
+  // 注册通用音色选择面板
+  panelRegistry.register('voice-selector', VoiceSelectorPanel)
 
   // 开发模式下输出注册信息
   if (import.meta.env.DEV) {

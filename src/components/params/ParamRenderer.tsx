@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
 import { panelRegistry } from '@/core/panels/PanelRegistry'
-import { getI18nText } from '@/core/types/I18nText'
+import { getI18nText, type I18nText } from '@/core/types/I18nText'
 import type { CompositePanelConfig } from '@/core/types/CompositePanel'
 import { isParamDisabled, isParamVisible } from './paramVisibility'
 
@@ -36,18 +36,43 @@ import Tooltip from '@/components/ui/Tooltip'
  * 格式化面板显示值
  * 用于 PanelTrigger 的 display 属性
  */
-function formatPanelDisplayValue(value: any, panel: string): string {
-  if (!value) return '未设置'
+function resolvePanelWidth(config: unknown, fallbackWidth: number): number {
+  if (!config || typeof config !== 'object') {
+    return fallbackWidth
+  }
+  const record = config as Record<string, unknown>
+  const width = typeof record.panelWidth === 'number' ? record.panelWidth : record.width
+  if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
+    return width
+  }
+  return fallbackWidth
+}
+
+function formatPanelDisplayValue(
+  value: unknown,
+  panel: string,
+  language: string,
+  config?: unknown
+): string {
+  if (value === undefined || value === null || value === '') return '未设置'
 
   // ResolutionPanel 的显示逻辑
   if (panel === 'resolution') {
-    if (value.aspectRatio === 'smart') return '智能'
-    if (value.aspectRatio) {
-      const quality = value.quality ? ` (${value.quality})` : ''
-      return `${formatAspectRatioDisplayLabel(String(value.aspectRatio), value.aspectRatio)}${quality}`
+    const record = typeof value === 'object' && value !== null
+      ? (value as Record<string, unknown>)
+      : null
+    if (!record) {
+      return '未设置'
     }
-    if (value.preset) return value.preset
-    if (value.width && value.height) return `${value.width}×${value.height}`
+    if (record.aspectRatio === 'smart') return '智能'
+    if (record.aspectRatio) {
+      const quality = typeof record.quality === 'string' ? ` (${record.quality})` : ''
+      return `${formatAspectRatioDisplayLabel(String(record.aspectRatio), String(record.aspectRatio))}${quality}`
+    }
+    if (typeof record.preset === 'string') return record.preset
+    if (typeof record.width === 'number' && typeof record.height === 'number') {
+      return `${record.width}×${record.height}`
+    }
   }
 
   if (panel === 'modelscope-custom-model') {
@@ -73,8 +98,48 @@ function formatPanelDisplayValue(value: any, panel: string): string {
     }
   }
 
+  if (panel === 'voice-selector' && typeof value === 'string') {
+    const configRecord = config && typeof config === 'object'
+      ? (config as Record<string, unknown>)
+      : null
+    const voices = configRecord?.voices
+    if (Array.isArray(voices)) {
+      const matched = voices.find((item) => {
+        if (!item || typeof item !== 'object') {
+          return false
+        }
+        const voice = item as Record<string, unknown>
+        return voice.id === value
+      })
+      if (matched && typeof matched === 'object') {
+        const matchedRecord = matched as Record<string, unknown>
+        const name = matchedRecord.name
+        if (typeof name === 'string' || (name && typeof name === 'object')) {
+          return getI18nText(name as I18nText, language)
+        }
+      }
+    }
+    return value
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? `${value.length}项` : '未设置'
+  }
+  if (typeof value === 'object') {
+    if (panel === 'composite') {
+      return '点击设置'
+    }
+    return '已配置'
+  }
+
   // 默认显示
-  return JSON.stringify(value)
+  return String(value)
 }
 
 function isCompositePanelConfig(value: unknown): value is CompositePanelConfig {
@@ -145,16 +210,18 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       const PanelComponent = panelRegistry.get(compositeParam.panel as any)
 
       if (PanelComponent) {
-        const panelWidth = compositeParam.panel === 'modelscope-custom-model' ? 520 : 320
+        const defaultPanelWidth = compositeParam.panel === 'modelscope-custom-model' ? 520 : 320
+        const panelWidth = resolvePanelWidth(compositeParam.config, defaultPanelWidth)
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
         const panelContent = (
           <PanelTrigger
             label={getI18nText(param.name, i18n.language) || param.id}
-            display={formatPanelDisplayValue(value, compositeParam.panel)}
+            display={formatPanelDisplayValue(value, compositeParam.panel, i18n.language, compositeParam.config)}
             className="w-auto min-w-[100px]"
             panelWidth={panelWidth}
             alignment="aboveCenter"
             closeOnPanelClick={false}
+            freezePositionOnOpen={compositeParam.panel === 'voice-selector'}
             renderPanel={() => (
               <PanelComponent
                 value={value}

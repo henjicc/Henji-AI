@@ -27,7 +27,7 @@ type DropdownProps<T extends string | number | boolean> = {
   panelClassName?: string
   portal?: boolean
   zIndex?: number
-  minWidthStrategy?: 'options' | 'display'
+  minWidthStrategy?: 'options' | 'display' | 'none'
   panelWidthStrategy?: 'button' | 'options'
 }
 
@@ -45,7 +45,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     panelClassName,
     portal = true,
     zIndex = 1000,
-    minWidthStrategy = 'options',
+    minWidthStrategy = 'display',
     panelWidthStrategy = 'button',
   } = props
   const [open, setOpen] = useState(false)
@@ -99,13 +99,20 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const computeMinWidth = () => {
       const displayText = String(display ?? value ?? '')
       const optionLabels = getOptionLabels(options)
-      const buttonLabels = minWidthStrategy === 'display'
-        ? [displayText]
-        : (optionLabels.length > 0 ? optionLabels : [displayText])
-      const nextButtonMinWidth = measureTextMinWidth(btn, buttonLabels)
-      if (nextButtonMinWidth !== null && lastButtonMinWidthRef.current !== nextButtonMinWidth) {
-        lastButtonMinWidthRef.current = nextButtonMinWidth
-        setButtonMinWidthPx(nextButtonMinWidth)
+      if (minWidthStrategy === 'none') {
+        if (lastButtonMinWidthRef.current !== null || buttonMinWidthPx !== null) {
+          lastButtonMinWidthRef.current = null
+          setButtonMinWidthPx(null)
+        }
+      } else {
+        const buttonLabels = minWidthStrategy === 'display'
+          ? [displayText]
+          : (optionLabels.length > 0 ? optionLabels : [displayText])
+        const nextButtonMinWidth = measureTextMinWidth(btn, buttonLabels)
+        if (nextButtonMinWidth !== null && lastButtonMinWidthRef.current !== nextButtonMinWidth) {
+          lastButtonMinWidthRef.current = nextButtonMinWidth
+          setButtonMinWidthPx(nextButtonMinWidth)
+        }
       }
 
       if (panelWidthStrategy !== 'options') {
@@ -212,7 +219,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                         setTimeout(() => { setOpen(false); setClosing(false) }, 200)
                       }}
                     >
-                      <span className="text-sm">{opt.label}</span>
+                      <span className="block truncate whitespace-nowrap text-sm">{opt.label}</span>
                     </UiOptionButton>
                   ))}
                 </div>
@@ -247,7 +254,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                       setTimeout(() => { setOpen(false); setClosing(false) }, 200)
                     }}
                   >
-                    <span className="text-sm">{opt.label}</span>
+                    <span className="block truncate whitespace-nowrap text-sm">{opt.label}</span>
                   </UiOptionButton>
                 ))}
               </div>

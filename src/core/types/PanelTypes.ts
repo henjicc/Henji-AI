@@ -50,6 +50,7 @@ export interface VoiceSelectorConfig {
   voices: Array<{
     id: string
     name: I18nText
+    description?: I18nText
     preview?: string
     tags?: string[]
   }>

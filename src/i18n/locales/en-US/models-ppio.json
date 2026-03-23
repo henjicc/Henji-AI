@@ -62,9 +62,9 @@
         "name": "Minimax Hailuo 2.3"
       }
     },
-    "ppio-minimax-speech-2.6": {
+    "ppio-minimax-speech": {
       "meta": {
-        "name": "Minimax Speech 2.6"
+        "name": "Minimax Speech 2.8"
       }
     },
     "ppio-pixverse-v4.5": {

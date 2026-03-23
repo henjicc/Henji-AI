@@ -36,19 +36,6 @@ function isSameValue(left: unknown, right: unknown): boolean {
   return String(left) === String(right)
 }
 
-function isDurationLikeParam(param: DropdownParamDef, language: string): boolean {
-  const searchText = [
-    param.id,
-    param.apiField,
-    getI18nText(param.name, language),
-    getI18nText(param.name, 'zh'),
-    getI18nText(param.name, 'en'),
-  ]
-    .filter(Boolean)
-    .join(' ')
-  return /(duration|video[_\s-]?length|时长|秒)/i.test(searchText)
-}
-
 export const DropdownInput: React.FC<DropdownInputProps> = ({
   param,
   value,
@@ -56,7 +43,6 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
   disabled = false
 }) => {
   const { i18n } = useTranslation()
-  const durationLike = isDurationLikeParam(param, i18n.language)
   const autoFixedRef = useRef<string | null>(null)
 
   // 获取显示名称（支持 i18n）
@@ -119,8 +105,9 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
         options={options}
         onSelect={onChange}
         disabled={disabled}
-        buttonClassName="w-full"
-        minWidthStrategy={durationLike ? 'display' : 'options'}
+        buttonClassName="w-auto"
+        minWidthStrategy="display"
+        panelWidthStrategy="options"
       />
     </div>
   )

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -116,6 +116,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const providers = getAvailableProviders()
   const currentProvider = providers.find(p => p.id === uiState.selectedProvider)
   const currentModel = getModelInfo(uiState.selectedModel)
+  const priceEstimateParams = useMemo(
+    () => ({
+      ...modelState.params,
+      prompt: uiState.input,
+      text: uiState.input,
+    }),
+    [modelState.params, uiState.input]
+  )
 
   useEffect(() => {
     if (maxImageCount === 0 && uiState.uploadedImages.length > 0) {
@@ -374,7 +382,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         <PriceEstimate
           providerId={uiState.selectedProvider}
           modelId={uiState.selectedModel}
-          params={modelState.params}
+          params={priceEstimateParams}
         />
       </div>
 
