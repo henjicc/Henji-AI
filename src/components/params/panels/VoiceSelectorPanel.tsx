@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiInput, UiOptionButton } from '@/components/ui'
+import { UiButton, UiInput, UiOptionButton } from '@/components/ui'
 import { getI18nText, type I18nText } from '@/core/types'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
+import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
 type VoiceGroup = 'all' | 'male' | 'female' | 'child' | 'other'
 
@@ -21,6 +22,7 @@ interface VoiceViewItem {
   id: string
   name: string
   description: string
+  isCustom: boolean
 }
 
 interface HoverScrollTextProps {
@@ -114,7 +116,55 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const [selectedGroup, setSelectedGroup] = useState<VoiceGroup>('all')
   const [keyword, setKeyword] = useState('')
   const [hoveredVoiceId, setHoveredVoiceId] = useState<string | null>(null)
-  const voices = config?.voices ?? []
+  const [customVoices, setCustomVoices] = useState<VoiceSelectorConfig['voices']>([])
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null)
+  const configuredVoices = config?.voices ?? []
+  const voiceLibraryScope = config?.voiceLibrary
+
+  useEffect(() => {
+    let cancelled = false
+    const loadCustomVoices = async (): Promise<void> => {
+      if (!voiceLibraryScope?.providerId) {
+        setCustomVoices([])
+        return
+      }
+      const records = await voiceLibraryService.listVoices({
+        providerId: voiceLibraryScope.providerId,
+        modelId: voiceLibraryScope.modelId,
+      })
+      if (cancelled) {
+        return
+      }
+      const mapped: VoiceSelectorConfig['voices'] = records.map((item) => ({
+        id: item.voiceId,
+        name: item.voiceName,
+        description: item.description,
+        tags: ['custom'],
+      }))
+      setCustomVoices(mapped)
+    }
+
+    loadCustomVoices().catch((error) => {
+      if (import.meta.env.DEV) {
+        console.warn('[VoiceSelectorPanel] load custom voices failed', error)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [voiceLibraryScope?.modelId, voiceLibraryScope?.providerId])
+
+  const voices = useMemo(() => {
+    const merged = new Map<string, VoiceSelectorConfig['voices'][number]>()
+    for (const voice of configuredVoices) {
+      merged.set(voice.id, voice)
+    }
+    for (const voice of customVoices) {
+      merged.set(voice.id, voice)
+    }
+    return Array.from(merged.values())
+  }, [configuredVoices, customVoices])
 
   const availableGroups = useMemo(() => {
     const discovered = new Set<VoiceGroup>()
@@ -144,16 +194,46 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
         return []
       }
       if (!normalizedKeyword) {
-        return [{ id: voice.id, name: voiceName, description: voiceDescription }]
+        return [{
+          id: voice.id,
+          name: voiceName,
+          description: voiceDescription,
+          isCustom: Array.isArray(voice.tags) && voice.tags.includes('custom'),
+        }]
       }
       const nameMatched = voiceName.toLowerCase().includes(normalizedKeyword)
       const descriptionMatched = voiceDescription.toLowerCase().includes(normalizedKeyword)
       if (!nameMatched && !descriptionMatched) {
         return []
       }
-      return [{ id: voice.id, name: voiceName, description: voiceDescription }]
+      return [{
+        id: voice.id,
+        name: voiceName,
+        description: voiceDescription,
+        isCustom: Array.isArray(voice.tags) && voice.tags.includes('custom'),
+      }]
     })
   }, [i18n.language, normalizedKeyword, selectedGroup, voices])
+
+  const handleDeleteCustomVoice = async (voiceId: string): Promise<void> => {
+    if (!voiceLibraryScope?.providerId || deletingVoiceId) {
+      return
+    }
+    setDeletingVoiceId(voiceId)
+    try {
+      await voiceLibraryService.deleteVoice(voiceId, {
+        providerId: voiceLibraryScope.providerId,
+        modelId: voiceLibraryScope.modelId,
+      })
+      setCustomVoices((prev) => prev.filter((item) => item.id !== voiceId))
+      if (value === voiceId) {
+        const fallback = configuredVoices[0]?.id ?? ''
+        onChange(fallback)
+      }
+    } finally {
+      setDeletingVoiceId(null)
+    }
+  }
 
   return (
     <div className="h-full min-h-[300px] max-h-[420px] w-full min-w-[520px] max-w-[720px] p-4">
@@ -190,29 +270,47 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
           {filteredVoices.map((voice) => {
             const active = value === voice.id
             const hasDescription = voice.description.length > 0
+            const canDelete = voice.isCustom && voiceLibraryScope?.allowDelete === true
             return (
-              <UiOptionButton
-                key={voice.id}
-                type="button"
-                variant="card"
-                active={active}
-                onClick={() => onChange(voice.id)}
-                onMouseEnter={() => setHoveredVoiceId(voice.id)}
-                onMouseLeave={() => setHoveredVoiceId(null)}
-                className={
-                  hasDescription
-                    ? 'h-auto min-h-[58px] w-full flex-col items-start justify-center gap-1 px-3 py-2'
-                    : 'h-[52px] w-full flex-col items-start justify-center px-3 py-2'
-                }
-              >
-                <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
-                {hasDescription && (
-                  <HoverScrollText
-                    text={voice.description}
-                    active={hoveredVoiceId === voice.id}
-                  />
+              <div key={voice.id} className="relative">
+                <UiOptionButton
+                  type="button"
+                  variant="card"
+                  active={active}
+                  onClick={() => onChange(voice.id)}
+                  onMouseEnter={() => setHoveredVoiceId(voice.id)}
+                  onMouseLeave={() => setHoveredVoiceId(null)}
+                  className={
+                    hasDescription
+                      ? 'h-auto min-h-[58px] w-full flex-col items-start justify-center gap-1 px-3 py-2'
+                      : 'h-[52px] w-full flex-col items-start justify-center px-3 py-2'
+                  }
+                >
+                  <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
+                  {hasDescription && (
+                    <HoverScrollText
+                      text={voice.description}
+                      active={hoveredVoiceId === voice.id}
+                    />
+                  )}
+                </UiOptionButton>
+                {canDelete && (
+                  <UiButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={deletingVoiceId === voice.id}
+                    className="absolute right-1 top-1 !h-6 !px-2 text-[11px]"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      void handleDeleteCustomVoice(voice.id)
+                    }}
+                  >
+                    删除
+                  </UiButton>
                 )}
-              </UiOptionButton>
+              </div>
             )
           })}
         </div>

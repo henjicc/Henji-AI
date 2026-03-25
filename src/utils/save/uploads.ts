@@ -104,6 +104,68 @@ export async function saveUploadVideo(
   return { fullPath: full, displaySrc, dataUrl }
 }
 
+function resolveAudioMimeAndExt(file: File): { mime: string; ext: string } {
+  const inferredMime = inferMimeFromPathShared(file.name, { fallback: 'audio/mpeg' })
+  const mime = (file.type && file.type.trim().length > 0) ? file.type : inferredMime
+  const normalized = mime.toLowerCase()
+
+  if (normalized.includes('wav')) {
+    return { mime, ext: 'wav' }
+  }
+  if (normalized.includes('flac')) {
+    return { mime, ext: 'flac' }
+  }
+  if (normalized.includes('ogg')) {
+    return { mime, ext: 'ogg' }
+  }
+  if (normalized.includes('m4a') || normalized.includes('mp4')) {
+    return { mime, ext: 'm4a' }
+  }
+  if (normalized.includes('pcm')) {
+    return { mime, ext: 'pcm' }
+  }
+
+  return { mime, ext: 'mp3' }
+}
+
+export async function saveUploadAudio(
+  file: File,
+  mode: 'memory' | 'persist' = 'persist'
+): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
+  const { mime, ext } = resolveAudioMimeAndExt(file)
+  const originalBuf = await file.arrayBuffer()
+  const bytes = new Uint8Array(originalBuf)
+  const hash = await sha256Hex(originalBuf)
+  const name = `${hash}.${ext}`
+
+  const uploadsPath = await getUploadsPath()
+  const full = await path.join(uploadsPath, name)
+
+  if (mode === 'persist') {
+    await mkdir(uploadsPath, { recursive: true })
+
+    let exists = false
+    try {
+      await readFile(full)
+      exists = true
+    } catch { }
+
+    if (!exists) {
+      await writeFile(full, bytes)
+    }
+
+    const displaySrc = await fileToBlobSrc(full, mime)
+    const dataUrl = await fileToDataUrl(full, mime)
+
+    logger.info('[save] upload audio persisted', full)
+    return { fullPath: full, displaySrc, dataUrl }
+  }
+
+  const dataUrl = bytesToDataUrl(bytes, mime)
+  const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
+  return { fullPath: full, displaySrc, dataUrl }
+}
+
 export async function saveBase64ToUploads(
   base64: string
 ): Promise<{ fullPath: string; displaySrc: string; relativePath: string }> {

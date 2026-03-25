@@ -31,6 +31,7 @@ import { CompositePanel } from './panels/CompositePanel'
 // 导入 UI 组件
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import Tooltip from '@/components/ui/Tooltip'
+import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
 /**
  * 格式化面板显示值
@@ -119,7 +120,21 @@ function formatPanelDisplayValue(
         }
       }
     }
+    const voiceLibrary = configRecord?.voiceLibrary
+    if (voiceLibrary && typeof voiceLibrary === 'object') {
+      const libraryRecord = voiceLibrary as Record<string, unknown>
+      const providerId = typeof libraryRecord.providerId === 'string' ? libraryRecord.providerId : undefined
+      const modelId = typeof libraryRecord.modelId === 'string' ? libraryRecord.modelId : undefined
+      const cachedName = voiceLibraryService.getCachedVoiceName(value, { providerId, modelId })
+      if (cachedName) {
+        return cachedName
+      }
+    }
     return value
+  }
+
+  if (panel === 'minimax-voice-clone') {
+    return '点击设置'
   }
 
   if (typeof value === 'string') {
@@ -132,7 +147,7 @@ function formatPanelDisplayValue(
     return value.length > 0 ? `${value.length}项` : '未设置'
   }
   if (typeof value === 'object') {
-    if (panel === 'composite') {
+    if (panel === 'composite' || panel === 'minimax-voice-clone') {
       return '点击设置'
     }
     return '已配置'
@@ -262,13 +277,26 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
     const compositeValue =
       value && typeof value === 'object' ? (value as Record<string, any>) : {}
 
-    return (
+    const compositePanel = (
       <CompositePanel
         config={compositeParam.config}
         value={compositeValue}
         onChange={(nextValue) => onChange(nextValue)}
       />
     )
+
+    if (param.tooltip) {
+      return (
+        <Tooltip
+          content={getI18nText(param.tooltip, i18n.language)}
+          delay={500}
+        >
+          {compositePanel}
+        </Tooltip>
+      )
+    }
+
+    return compositePanel
   }
 
   // 获取组件

@@ -35,6 +35,7 @@
     },
     "placeholder": {
       "audio": "输入要合成的文本",
+      "audioClonePreview": "输入用于试听合成的文本",
       "default": "描述想要生成的内容",
       "englishOnly": "描述想要生成的内容（仅支持英文提示词）"
     },

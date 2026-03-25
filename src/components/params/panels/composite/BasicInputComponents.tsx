@@ -43,6 +43,13 @@ interface RadioConfig {
   options: CompositeOption[]
 }
 
+interface FileInputConfig {
+  accept?: string[]
+  maxSizeMb?: number
+  buttonText?: I18nText
+  hint?: I18nText
+}
+
 function clampNumber(value: number, config: NumberInputConfig): number {
   let next = value
   if (typeof config.min === 'number') {
@@ -199,6 +206,130 @@ export const CompositeRadio: React.FC<CompositeComponentProps<RadioConfig>> = ({
           {option.label}
         </UiOptionButton>
       ))}
+    </div>
+  )
+}
+
+function resolveFileName(value: unknown): string {
+  if (typeof File !== 'undefined' && value instanceof File) {
+    return value.name
+  }
+  if (value && typeof value === 'object' && 'name' in value) {
+    const record = value as { name?: unknown }
+    return typeof record.name === 'string' ? record.name : ''
+  }
+  return ''
+}
+
+function validateFileByAccept(file: File, accept: string[]): boolean {
+  if (accept.length === 0) {
+    return true
+  }
+  const mime = file.type.toLowerCase()
+  const fileName = file.name.toLowerCase()
+  return accept.some((item) => {
+    const normalized = item.trim().toLowerCase()
+    if (!normalized) {
+      return false
+    }
+    if (normalized.startsWith('.')) {
+      return fileName.endsWith(normalized)
+    }
+    if (normalized.endsWith('/*')) {
+      const prefix = normalized.slice(0, -1)
+      return mime.startsWith(prefix)
+    }
+    return mime === normalized
+  })
+}
+
+export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfig>> = ({
+  config,
+  value,
+  onChange,
+  disabled = false,
+}) => {
+  const { i18n } = useTranslation()
+  const inputRef = React.useRef<HTMLInputElement | null>(null)
+  const [errorText, setErrorText] = React.useState('')
+  const selectedFileName = resolveFileName(value)
+  const acceptList = Array.isArray(config.accept) ? config.accept : []
+  const buttonText = config.buttonText
+    ? getI18nText(config.buttonText, i18n.language)
+    : '选择文件'
+  const hintText = config.hint ? getI18nText(config.hint, i18n.language) : ''
+
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <UiInput
+        ref={inputRef}
+        type="file"
+        accept={acceptList.join(',')}
+        className="hidden"
+        disabled={disabled}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (!file) {
+            return
+          }
+          if (!validateFileByAccept(file, acceptList)) {
+            setErrorText('文件类型不支持')
+            if (inputRef.current) {
+              inputRef.current.value = ''
+            }
+            return
+          }
+          if (typeof config.maxSizeMb === 'number' && config.maxSizeMb > 0) {
+            const maxSize = config.maxSizeMb * 1024 * 1024
+            if (file.size > maxSize) {
+              setErrorText(`文件大小不能超过 ${config.maxSizeMb}MB`)
+              if (inputRef.current) {
+                inputRef.current.value = ''
+              }
+              return
+            }
+          }
+          setErrorText('')
+          onChange(file)
+          if (inputRef.current) {
+            inputRef.current.value = ''
+          }
+        }}
+      />
+
+      <div className="flex items-center gap-2">
+        <UiOptionButton
+          type="button"
+          variant="flat"
+          className="!h-[38px] !px-3 !py-2 text-sm leading-none"
+          disabled={disabled}
+          onClick={() => inputRef.current?.click()}
+        >
+          {buttonText}
+        </UiOptionButton>
+        {selectedFileName && (
+          <UiOptionButton
+            type="button"
+            variant="flat"
+            className="!h-[38px] !px-3 !py-2 text-sm leading-none"
+            disabled={disabled}
+            onClick={() => {
+              setErrorText('')
+              onChange(null)
+            }}
+          >
+            清除
+          </UiOptionButton>
+        )}
+      </div>
+
+      {selectedFileName && (
+        <div className="truncate text-xs text-text-dark" title={selectedFileName}>
+          {selectedFileName}
+        </div>
+      )}
+      {hintText && <div className="text-xs text-text-muted">{hintText}</div>}
+      {errorText && <div className="text-xs text-red-400">{errorText}</div>}
     </div>
   )
 }

@@ -19,6 +19,7 @@ export type ComponentType =
   | 'dropdown'
   | 'switch'
   | 'radio'
+  | 'file-input'
 
 /**
  * 布局类型
@@ -76,6 +77,9 @@ export interface ComponentLinkage {
 export interface CompositePanelConfig {
   /** 布局类型 */
   layout: LayoutType
+
+  /** 面板内边距（像素，默认 16） */
+  padding?: number
 
   /** 组件间距（像素） */
   gap?: number

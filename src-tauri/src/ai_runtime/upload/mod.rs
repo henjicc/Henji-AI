@@ -40,6 +40,17 @@ const VIDEO_FIELD_HINTS: [&str; 8] = [
     "input_video",
 ];
 
+const AUDIO_FIELD_HINTS: [&str; 8] = [
+    "audio",
+    "audios",
+    "audio_url",
+    "audio_urls",
+    "prompt_audio_url",
+    "prompt_audio_urls",
+    "reference_audio_url",
+    "input_audio",
+];
+
 const UPLOAD_PROVIDER_PARAM: &str = "__upload_provider";
 const UPLOAD_FALLBACK_PARAM: &str = "__upload_fallback";
 const UPLOAD_PROVIDER_PRIORITY: [&str; 3] = ["bizyair", "kie", "fal"];
@@ -49,6 +60,7 @@ const PUBLIC_URL_UPLOAD_PROVIDERS: [&str; 2] = ["bizyair", "kie"];
 enum MediaKind {
     Image,
     Video,
+    Audio,
     Unknown,
 }
 
@@ -183,6 +195,7 @@ async fn rewrite_media_source(
         let rewrite_mode = match media_kind {
             MediaKind::Video => resolve_rewrite_mode(provider_id, route, field_name, true),
             MediaKind::Image => resolve_rewrite_mode(provider_id, route, field_name, false),
+            MediaKind::Audio => resolve_rewrite_mode(provider_id, route, field_name, false),
             MediaKind::Unknown => PpioMediaRewriteMode::DataUri,
         };
         tracing::debug!(
@@ -543,6 +556,13 @@ fn classify_media_key(key: &str) -> MediaKind {
         return MediaKind::Video;
     }
 
+    if AUDIO_FIELD_HINTS
+        .iter()
+        .any(|hint| normalized.contains(hint))
+    {
+        return MediaKind::Audio;
+    }
+
     MediaKind::Unknown
 }
 
@@ -682,10 +702,14 @@ fn infer_mime_from_path(path: &str, media_kind: MediaKind) -> String {
         "webm" => "video/webm".to_string(),
         "mov" => "video/quicktime".to_string(),
         "mp3" => "audio/mpeg".to_string(),
+        "m4a" => "audio/mp4".to_string(),
         "wav" => "audio/wav".to_string(),
+        "flac" => "audio/flac".to_string(),
+        "ogg" => "audio/ogg".to_string(),
         _ => match media_kind {
             MediaKind::Image => "image/jpeg".to_string(),
             MediaKind::Video => "video/mp4".to_string(),
+            MediaKind::Audio => "audio/mpeg".to_string(),
             MediaKind::Unknown => "application/octet-stream".to_string(),
         },
     }
@@ -698,10 +722,20 @@ fn default_filename(media_kind: MediaKind, mime_type: &str) -> String {
         "jpg"
     } else if mime_type.contains("webp") {
         "webp"
+    } else if mime_type.contains("audio/mp4") {
+        "m4a"
     } else if mime_type.contains("mp4") {
         "mp4"
     } else if mime_type.contains("webm") {
         "webm"
+    } else if mime_type.contains("mpeg") {
+        "mp3"
+    } else if mime_type.contains("wav") {
+        "wav"
+    } else if mime_type.contains("flac") {
+        "flac"
+    } else if mime_type.contains("ogg") {
+        "ogg"
     } else {
         "bin"
     };
@@ -709,6 +743,7 @@ fn default_filename(media_kind: MediaKind, mime_type: &str) -> String {
     let prefix = match media_kind {
         MediaKind::Image => "image",
         MediaKind::Video => "video",
+        MediaKind::Audio => "audio",
         MediaKind::Unknown => "file",
     };
 

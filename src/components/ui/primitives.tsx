@@ -263,7 +263,12 @@ export const UiRangeInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
     <input
       ref={ref}
       type="range"
-      className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-accent ${className}`}
+      className={`h-5 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
+      [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-zinc-600/80
+      [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-accent
+      [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-zinc-600/80
+      [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent
+      ${className}`}
       {...props}
     />
   )

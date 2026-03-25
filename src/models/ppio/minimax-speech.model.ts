@@ -61,6 +61,13 @@ const LANGUAGE_BOOST_OPTIONS = [
   { value: 'Afrikaans', label: { zh: '南非荷兰语', en: 'Afrikaans' } },
 ]
 
+const CLONE_PREVIEW_MODEL_OPTIONS = [
+  { value: 'speech-02-hd', label: 'speech-02-hd' },
+  { value: 'speech-02-turbo', label: 'speech-02-turbo' },
+  { value: 'speech-2.5-hd-preview', label: 'speech-2.5-hd-preview' },
+  { value: 'speech-2.5-turbo-preview', label: 'speech-2.5-turbo-preview' },
+]
+
 interface MinimaxVoiceCatalogItem {
   voice_id?: unknown
   description?: unknown
@@ -127,6 +134,11 @@ const MINIMAX_SELECTOR_VOICES = buildVoiceSelectorVoices(minimaxSpeechVoicesCata
 const VOICE_SELECTOR_CONFIG: VoiceSelectorConfig = {
   allowSearch: true,
   voices: MINIMAX_SELECTOR_VOICES,
+  voiceLibrary: {
+    providerId: 'ppio',
+    modelId: 'ppio-minimax-speech',
+    allowDelete: true,
+  },
 }
 
 const DEFAULT_VOICE_ID = MINIMAX_SELECTOR_VOICES[0]?.id ?? 'male-qn-qingse'
@@ -205,6 +217,12 @@ const ADVANCED_PANEL_CONFIG: CompositePanelConfig = {
   ],
 }
 
+const MINIMAX_VOICE_CLONE_PANEL_CONFIG = {
+  providerId: 'ppio',
+  modelId: 'ppio-minimax-speech',
+  previewModels: CLONE_PREVIEW_MODEL_OPTIONS,
+}
+
 export const minimaxSpeechModel = defineModel({
   meta: {
     id: 'ppio-minimax-speech',
@@ -213,7 +231,7 @@ export const minimaxSpeechModel = defineModel({
     i18nScope: 'models.defs.ppio-minimax-speech',
     name: { key: 'meta.name', fallback: 'Minimax Speech 2.8' },
     description: 'Minimax Speech 2.8 异步语音合成模型',
-    tags: ['audio', 'text-to-speech', 'voice-synthesis', 'provider-ppio'],
+    tags: ['audio', 'text-to-speech', 'voice-synthesis', 'voice-cloning', 'provider-ppio'],
     polling: {
       interval: 3000,
       maxAttempts: 120,
@@ -224,6 +242,7 @@ export const minimaxSpeechModel = defineModel({
     images: { max: 0 },
     videos: { max: 0 },
   },
+  requirements: [],
   params: [
     {
       id: 'minimaxAudioSpec',
@@ -241,7 +260,7 @@ export const minimaxSpeechModel = defineModel({
       id: 'minimaxVoiceId',
       type: 'composite',
       valueType: 'string',
-      order: 1,
+      order: 2,
       name: sharedFieldText('voiceId'),
       default: DEFAULT_VOICE_ID,
       panel: 'voice-selector',
@@ -253,7 +272,7 @@ export const minimaxSpeechModel = defineModel({
     {
       id: 'minimaxAudioEmotion',
       type: 'dropdown',
-      order: 2,
+      order: 3,
       name: sharedFieldText('emotion'),
       default: '',
       options: EMOTION_OPTIONS,
@@ -262,7 +281,7 @@ export const minimaxSpeechModel = defineModel({
     {
       id: 'minimaxLanguageBoost',
       type: 'dropdown',
-      order: 3,
+      order: 4,
       name: { zh: '语言增强', en: 'Language Boost' },
       default: 'auto',
       options: LANGUAGE_BOOST_OPTIONS,
@@ -291,11 +310,43 @@ export const minimaxSpeechModel = defineModel({
         width: 576,
       },
     } as CompositePanelDef,
+    {
+      id: 'minimaxVoiceClonePanel',
+      type: 'composite',
+      valueType: 'object',
+      order: 7,
+      name: { zh: '音色克隆', en: 'Voice Clone' },
+      default: {
+        voiceName: '',
+        cloneAudioFilePath: '',
+        cloneAudioFileName: '',
+        promptEnabled: false,
+        promptAudioFilePath: '',
+        promptAudioFileName: '',
+        promptText: '',
+        previewText: '',
+        previewModel: 'speech-2.5-turbo-preview',
+        accuracy: 0.7,
+        needNoiseReduction: false,
+        needVolumeNormalization: false,
+        lastPreviewAudioUrl: '',
+        lastPreviewAudioFilePath: '',
+      },
+      panel: 'minimax-voice-clone',
+      config: {
+        ...MINIMAX_VOICE_CLONE_PANEL_CONFIG,
+        width: 860,
+      },
+    } as CompositePanelDef,
   ],
   linkages: [],
   endpoints: {
     default: '/async/minimax-speech-2.8-hd',
     selector: (params) => {
+      const isVoiceCloneRequest = params.minimaxCloneOperation === 'clone' || params.minimaxMode === 'voice-clone'
+      if (isVoiceCloneRequest) {
+        return '/minimax-voice-cloning'
+      }
       const rawSpec = params.minimaxAudioSpec ?? params.spec
       const spec = rawSpec === 'turbo' ? 'turbo' : 'hd'
       return spec === 'turbo'
@@ -305,13 +356,7 @@ export const minimaxSpeechModel = defineModel({
   },
   request: {
     builder: (params) => {
-      const advanced = params.minimaxAdvancedSettings && typeof params.minimaxAdvancedSettings === 'object'
-        ? (params.minimaxAdvancedSettings as Record<string, unknown>)
-        : {}
-
-      const text = typeof params.text === 'string'
-        ? params.text
-        : (typeof params.prompt === 'string' ? params.prompt : '')
+      const isVoiceCloneRequest = params.minimaxCloneOperation === 'clone' || params.minimaxMode === 'voice-clone'
 
       const pickString = (...values: unknown[]): string | undefined => {
         for (const value of values) {
@@ -340,6 +385,84 @@ export const minimaxSpeechModel = defineModel({
         }
         return undefined
       }
+
+      const text = typeof params.text === 'string'
+        ? params.text
+        : (typeof params.prompt === 'string' ? params.prompt : '')
+
+      if (isVoiceCloneRequest) {
+        const clonePanel = params.minimaxVoiceClonePanel && typeof params.minimaxVoiceClonePanel === 'object'
+          ? (params.minimaxVoiceClonePanel as Record<string, unknown>)
+          : {}
+        const cloneAudioUrl = pickString(
+          clonePanel.cloneAudioFilePath,
+          params.minimaxCloneAudioFilePath,
+          params.minimaxCloneAudioUrl,
+          params.audio_url
+        )
+        if (!cloneAudioUrl) {
+          throw new Error('音色克隆需要提供复刻音频')
+        }
+
+        const requestData: Record<string, unknown> = {
+          audio_url: cloneAudioUrl,
+        }
+
+        const promptEnabled = pickBoolean(clonePanel.promptEnabled, params.minimaxClonePromptEnabled) === true
+        const promptAudioUrl = pickString(
+          clonePanel.promptAudioFilePath,
+          params.minimaxClonePromptAudioFilePath,
+          params.prompt_audio_url
+        )
+        const promptText = pickString(clonePanel.promptText, params.prompt_text)
+        const shouldAttachPrompt = promptEnabled || (promptAudioUrl !== undefined || promptText !== undefined)
+        if (shouldAttachPrompt) {
+          if (!promptAudioUrl || !promptText) {
+            throw new Error('启用音频 Prompt 时，需要同时填写示例音频和对应文本')
+          }
+          requestData.clone_prompt = {
+            prompt_audio_url: promptAudioUrl,
+            prompt_text: promptText,
+          }
+        }
+
+        const accuracy = pickNumber(clonePanel.accuracy, params.accuracy)
+        if (accuracy !== undefined) {
+          requestData.accuracy = Math.max(0, Math.min(1, accuracy))
+        }
+
+        const needNoiseReduction = pickBoolean(
+          clonePanel.needNoiseReduction,
+          params.minimaxCloneNeedNoiseReduction,
+          params.need_noise_reduction
+        )
+        if (needNoiseReduction !== undefined) {
+          requestData.need_noise_reduction = needNoiseReduction
+        }
+        const needVolumeNormalization = pickBoolean(
+          clonePanel.needVolumeNormalization,
+          params.minimaxCloneNeedVolumeNormalization,
+          params.need_volume_normalization
+        )
+        if (needVolumeNormalization !== undefined) {
+          requestData.need_volume_normalization = needVolumeNormalization
+        }
+
+        const previewText = pickString(text, clonePanel.previewText)
+        if (previewText) {
+          requestData.text = previewText
+          const previewModel = pickString(clonePanel.previewModel, params.model)
+          if (previewModel) {
+            requestData.model = previewModel
+          }
+        }
+
+        return requestData
+      }
+
+      const advanced = params.minimaxAdvancedSettings && typeof params.minimaxAdvancedSettings === 'object'
+        ? (params.minimaxAdvancedSettings as Record<string, unknown>)
+        : {}
 
       const voiceId = pickString(params.minimaxVoiceId, params.voice_id)
       const audioSpeed = pickNumber(advanced.audioSpeed, params.minimaxAudioSpeed, params.speed)

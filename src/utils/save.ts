@@ -8,6 +8,7 @@ export { fileToBlobSrc, fileToDataUrl } from './save/fileUrls'
 export { sha256Hex } from './save/hash'
 export {
   saveUploadImage,
+  saveUploadAudio,
   saveUploadVideo,
   saveBase64ToUploads,
   saveBytesToUploads,

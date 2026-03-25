@@ -8,6 +8,7 @@ import {
   dataUrlToBlob,
   ensureCompressedJpegBytesWithPica,
   isDesktop,
+  saveUploadAudio,
   saveBytesToUploads,
   saveBase64ToUploads,
   saveUploadVideo,
@@ -23,6 +24,7 @@ import { isRecord, isStringArray } from '../utils/typeGuards'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
+import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskGeneration')
 
@@ -132,6 +134,76 @@ function isLikelyVideoSource(value: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)
 }
 
+function normalizeNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function isMinimaxVoiceCloneMode(options: GeneratorOptions): boolean {
+  return options.minimaxMode === 'voice-clone'
+}
+
+function asMutableRecord(value: unknown): Record<string, unknown> {
+  if (isRecord(value)) {
+    return { ...value }
+  }
+  return {}
+}
+
+function extractVoiceIdFromMetadata(metadata: unknown): string | undefined {
+  if (!isRecord(metadata)) {
+    return undefined
+  }
+  const direct = normalizeNonEmptyString(metadata.voice_id)
+  if (direct) {
+    return direct
+  }
+  if (isRecord(metadata.data)) {
+    const nested = normalizeNonEmptyString(metadata.data.voice_id)
+    if (nested) {
+      return nested
+    }
+  }
+  if (isRecord(metadata.task) && isRecord(metadata.task.output)) {
+    const nested = normalizeNonEmptyString(metadata.task.output.voice_id)
+    if (nested) {
+      return nested
+    }
+  }
+  return undefined
+}
+
+async function persistClonedVoiceIfNeeded(
+  task: GenerationTask,
+  options: GeneratorOptions,
+  metadata: unknown
+): Promise<void> {
+  if (task.provider !== 'ppio' || !isMinimaxVoiceCloneMode(options)) {
+    return
+  }
+  const voiceId = extractVoiceIdFromMetadata(metadata)
+  if (!voiceId) {
+    return
+  }
+  const cloneSettings = asMutableRecord(options.minimaxCloneSettings)
+  const voiceName = normalizeNonEmptyString(options.minimaxCloneVoiceName)
+    ?? normalizeNonEmptyString(cloneSettings.voiceName)
+    ?? `克隆音色-${voiceId.slice(-6)}`
+  const description = normalizeNonEmptyString(cloneSettings.promptText)
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  await voiceLibraryService.upsertVoice({
+    voiceId,
+    voiceName,
+    description,
+    providerId: 'ppio',
+    modelId: task.model,
+    expiresAt,
+  })
+}
+
 export function useTaskGeneration({
   setTasks,
   updateTask,
@@ -203,6 +275,11 @@ export function useTaskGeneration({
         updateTask(taskId, { serverTaskId })
       }
       logger.info('[Workspace] 生成响应', { model: task.model, taskId: serverTaskId, metadata })
+      try {
+        await persistClonedVoiceIfNeeded(task, options, metadata)
+      } catch (error) {
+        logger.warn('[Workspace] 保存克隆音色失败', error)
+      }
 
       if (resultObj['status'] === 'pending') {
         if (!serverTaskId) {
@@ -389,6 +466,56 @@ export function useTaskGeneration({
       if (typeof options.video === 'string' && !isLikelyVideoSource(options.video)) {
         delete options.video
       }
+    }
+
+    if (isMinimaxVoiceCloneMode(options)) {
+      const cloneAudioInput = asMutableRecord(options.minimaxCloneAudioInput)
+      const cloneAudioFile = cloneAudioInput.cloneAudioFile
+      if (isFileValue(cloneAudioFile)) {
+        try {
+          const savedAudio = await saveUploadAudio(cloneAudioFile, 'persist')
+          options.minimaxCloneAudioFilePath = savedAudio.fullPath
+        } catch (error) {
+          logger.error('[Workspace] 持久化复刻音频失败', error)
+          notify('复刻音频保存失败，请重新上传后再试', 'error')
+          return
+        }
+      }
+      delete cloneAudioInput.cloneAudioFile
+      options.minimaxCloneAudioInput = cloneAudioInput
+
+      const cloneSettings = asMutableRecord(options.minimaxCloneSettings)
+      delete cloneSettings.cloneAudioUrl
+
+      const promptAudioFile = cloneSettings.promptAudioFile
+      if (isFileValue(promptAudioFile)) {
+        try {
+          const savedPromptAudio = await saveUploadAudio(promptAudioFile, 'persist')
+          options.minimaxClonePromptAudioFilePath = savedPromptAudio.fullPath
+        } catch (error) {
+          logger.error('[Workspace] 持久化示例音频失败', error)
+          notify('示例音频保存失败，请重新上传后再试', 'error')
+          return
+        }
+      }
+      delete cloneSettings.promptAudioFile
+      delete cloneSettings.promptAudioUrl
+
+      const cloneAudioPath = normalizeNonEmptyString(options.minimaxCloneAudioFilePath)
+      if (!cloneAudioPath) {
+        notify('音色克隆模式需要上传复刻音频文件', 'error')
+        return
+      }
+      options.minimaxCloneAudioFilePath = cloneAudioPath
+
+      const promptAudioPath = normalizeNonEmptyString(options.minimaxClonePromptAudioFilePath)
+      if (promptAudioPath) {
+        options.minimaxClonePromptAudioFilePath = promptAudioPath
+      } else {
+        delete options.minimaxClonePromptAudioFilePath
+      }
+
+      options.minimaxCloneSettings = cloneSettings
     }
 
     const hasAnyInput =

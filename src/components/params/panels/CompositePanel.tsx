@@ -100,15 +100,17 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
       return {
         display: 'grid',
         gridTemplateColumns: `repeat(${config.gridColumns || 2}, 1fr)`,
-        gap: `${config.gap || 16}px`
+        gap: `${config.gap || 16}px`,
+        padding: `${config.padding ?? 16}px`,
       }
     }
     return {
       display: 'flex',
       flexDirection: config.layout === 'vertical' ? 'column' as const : 'row' as const,
-      gap: `${config.gap || 16}px`
+      gap: `${config.gap || 16}px`,
+      padding: `${config.padding ?? 16}px`,
     }
-  }, [config.layout, config.gap, config.gridColumns])
+  }, [config.layout, config.gap, config.gridColumns, config.padding])
 
   return (
     <div className="composite-panel" style={layoutStyle}>

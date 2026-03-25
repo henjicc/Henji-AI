@@ -35,6 +35,7 @@
     },
     "placeholder": {
       "audio": "Enter text to synthesize",
+      "audioClonePreview": "Enter text for preview synthesis",
       "default": "Describe what you want to generate",
       "englishOnly": "Describe what you want to generate (English only)"
     },

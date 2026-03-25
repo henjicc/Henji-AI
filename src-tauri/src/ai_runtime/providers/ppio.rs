@@ -252,17 +252,20 @@ fn extract_urls(payload: &Value) -> Vec<String> {
             "/image_url",
             "/video_url",
             "/audio_url",
+            "/demo_audio_url",
             "/audio",
             "/output",
             "/task/output/url",
             "/task/output/image_url",
             "/task/output/video_url",
             "/task/output/audio_url",
+            "/task/output/demo_audio_url",
             "/task/output/audio",
             "/data/url",
             "/data/image_url",
             "/data/video_url",
             "/data/audio_url",
+            "/data/demo_audio_url",
             "/data/audio",
         ] {
             if let Some(url) = payload.pointer(pointer).and_then(Value::as_str) {
@@ -295,7 +298,7 @@ fn extract_string_array(value: Option<&Value>, target: &mut Vec<String>) {
             continue;
         }
 
-        for key in ["url", "image_url", "video_url", "audio_url"] {
+        for key in ["url", "image_url", "video_url", "audio_url", "demo_audio_url"] {
             if let Some(url) = item.get(key).and_then(Value::as_str) {
                 push_unique_url(target, url);
                 break;

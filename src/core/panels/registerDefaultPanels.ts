@@ -13,6 +13,7 @@ import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSele
 import { CompositePanel } from '@/components/params/panels/CompositePanel'
 import { ModelscopeCustomModelPanel } from '@/components/params/panels/ModelscopeCustomModelPanel'
 import { VoiceSelectorPanel } from '@/components/params/panels/VoiceSelectorPanel'
+import { MinimaxVoiceClonePanel } from '@/components/params/panels/MinimaxVoiceClonePanel'
 import { registerDefaultComponents } from '@/components/params/panels/composite/registerDefaultComponents'
 
 /**
@@ -36,6 +37,9 @@ export function registerDefaultPanels(): void {
 
   // 注册通用音色选择面板
   panelRegistry.register('voice-selector', VoiceSelectorPanel)
+
+  // 注册 MiniMax 音色克隆面板
+  panelRegistry.register('minimax-voice-clone', MinimaxVoiceClonePanel)
 
   // 开发模式下输出注册信息
   if (import.meta.env.DEV) {

@@ -14,6 +14,7 @@ import { CustomSizeInput } from '../ResolutionPanel/CustomSizeInput'
 import { PresetResolutionSelector } from '../ResolutionPanel/PresetResolutionSelector'
 import {
   CompositeDropdown,
+  CompositeFileInput,
   CompositeNumberInput,
   CompositeRadio,
   CompositeSwitch,
@@ -34,6 +35,7 @@ export function registerDefaultComponents(): void {
   componentRegistry.register('dropdown', CompositeDropdown)
   componentRegistry.register('switch', CompositeSwitch)
   componentRegistry.register('radio', CompositeRadio)
+  componentRegistry.register('file-input', CompositeFileInput)
 
   // 开发模式下输出注册信息
   if (import.meta.env.DEV) {

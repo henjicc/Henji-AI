@@ -14,6 +14,7 @@ export type PanelType =
   | 'model-selector'    // 模型选择面板
   | 'modelscope-custom-model' // ModelScope 自定义模型面板
   | 'voice-selector'    // 音色选择面板
+  | 'minimax-voice-clone' // MiniMax 音色克隆面板
   | 'style-gallery'     // 风格画廊面板
   | 'color-picker'      // 颜色选择器面板
   | 'composite'         // 组合面板
@@ -56,6 +57,23 @@ export interface VoiceSelectorConfig {
   }>
   showPreview?: boolean
   allowSearch?: boolean
+  voiceLibrary?: {
+    providerId: string
+    modelId?: string
+    allowDelete?: boolean
+  }
+}
+
+/**
+ * MiniMax 音色克隆面板配置
+ */
+export interface MinimaxVoiceClonePanelConfig {
+  providerId?: string
+  modelId?: string
+  previewModels?: Array<{
+    value: string
+    label: string
+  }>
 }
 
 /**
@@ -102,7 +120,7 @@ export interface SpecialPanelConfig {
   triggerDisplay?: (value: any) => string
 
   /** 面板特定配置 */
-  config: ResolutionPanelConfig | VoiceSelectorConfig | CompositePanelConfig | CustomPanelConfig
+  config: ResolutionPanelConfig | VoiceSelectorConfig | MinimaxVoiceClonePanelConfig | CompositePanelConfig | CustomPanelConfig
 
   /** 当前值 */
   value: any

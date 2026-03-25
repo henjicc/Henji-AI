@@ -1,31 +1,149 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { downloadAudioFile, readWaveformCacheForAudio, writeWaveformCacheForAudio } from '@/utils/save'
+import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
 import { UiIconButton, UiRangeInput } from '@/components/ui'
 import Waveform from './Waveform'
 import { useI18n } from '@/hooks/useI18n'
+import { readFile } from '@tauri-apps/plugin-fs'
+import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
 interface AudioPlayerProps {
   src: string
   filePath?: string
   className?: string
   onContextMenu?: (e: React.MouseEvent) => void
+  compact?: boolean
+  waveformWidth?: number
+  waveformHeight?: number
+  rightActions?: React.ReactNode
 }
 
-const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onContextMenu }) => {
+const SAFE_LOCAL_WAVEFORM_HOSTS = new Set(['localhost', '127.0.0.1', 'asset.localhost', 'tauri.localhost'])
+const WAVEFORM_ALGO_VERSION = '2026-03-25-v4'
+
+function isCrossOriginWaveformRestricted(source: string): boolean {
+  if (!source || typeof window === 'undefined') {
+    return false
+  }
+  try {
+    const parsed = new URL(source, window.location.href)
+    if (parsed.protocol === 'blob:' || parsed.protocol === 'data:' || parsed.protocol === 'file:') {
+      return false
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false
+    }
+    if (SAFE_LOCAL_WAVEFORM_HOSTS.has(parsed.hostname.toLowerCase())) {
+      return false
+    }
+    return parsed.origin !== window.location.origin
+  } catch {
+    return false
+  }
+}
+
+function buildFallbackWaveform(seed: string, bars = 256): number[] {
+  let state = 2166136261
+  for (let index = 0; index < seed.length; index += 1) {
+    state ^= seed.charCodeAt(index)
+    state = Math.imul(state, 16777619) >>> 0
+  }
+  const result: number[] = []
+  for (let index = 0; index < bars; index += 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    const noise = (state & 0xffff) / 0xffff
+    const envelope = Math.sin((index / Math.max(1, bars - 1)) * Math.PI)
+    const value = 0.12 + envelope * 0.46 + noise * 0.22
+    result.push(Math.max(0.06, Math.min(1, value)))
+  }
+  return result
+}
+
+function smoothWaveform(values: number[], radius = 2): number[] {
+  if (values.length <= 2 || radius <= 0) {
+    return values
+  }
+  const result: number[] = new Array(values.length)
+  for (let index = 0; index < values.length; index += 1) {
+    let sum = 0
+    let count = 0
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      const value = values[index + offset]
+      if (typeof value === 'number') {
+        sum += value
+        count += 1
+      }
+    }
+    result[index] = count > 0 ? sum / count : values[index]
+  }
+  return result
+}
+
+async function fetchAudioArrayBuffer(source: string, localFilePath?: string): Promise<ArrayBuffer> {
+  if (localFilePath) {
+    const bytes = await readFile(localFilePath)
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  }
+  if (isCrossOriginWaveformRestricted(source)) {
+    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+    const response = await tauriFetch(source, { method: 'GET' })
+    if (!response.ok) {
+      throw new Error(`waveform tauri fetch failed: ${response.status}`)
+    }
+    return response.arrayBuffer()
+  }
+  const response = await fetch(source, { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error(`waveform fetch failed: ${response.status}`)
+  }
+  return response.arrayBuffer()
+}
+
+const AudioPlayer: React.FC<AudioPlayerProps> = ({
+  src,
+  filePath,
+  className,
+  onContextMenu,
+  compact = false,
+  waveformWidth,
+  waveformHeight,
+  rightActions,
+}) => {
   const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false)
+  const [isAdjustingVolume, setIsAdjustingVolume] = useState(false)
+  const [showVolumeValueTip, setShowVolumeValueTip] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const [waveform, setWaveform] = useState<number[] | null>(null)
   const [waveDuration, setWaveDuration] = useState<number | null>(null)
-  const cacheKey = useMemo(() => src, [src])
+  const resolvedWaveformWidth = waveformWidth ?? (compact ? 300 : 576)
+  const resolvedWaveformHeight = waveformHeight ?? (compact ? 60 : 72)
+  const targetBars = useMemo(
+    () => Math.max(96, Math.min(320, Math.floor(resolvedWaveformWidth * (compact ? 0.72 : 0.62)))),
+    [resolvedWaveformWidth, compact]
+  )
+  const cacheKey = useMemo(
+    () => `${src}::${targetBars}::${compact ? 'compact' : 'default'}::${WAVEFORM_ALGO_VERSION}`,
+    [src, targetBars, compact]
+  )
   const waveCacheRef = useRef<Map<string, number[]>>(new Map())
+  const volumeContainerRef = useRef<HTMLDivElement | null>(null)
+  const volumeTipTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     const a = audioRef.current
     if (!a) return
+    a.pause()
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
+    try {
+      a.currentTime = 0
+    } catch { }
     const onLoaded = () => setDuration(a.duration || 0)
     const onTime = () => setCurrentTime(a.currentTime || 0)
     const onEnd = () => setIsPlaying(false)
@@ -66,6 +184,59 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
     a.volume = volume
   }, [volume])
 
+  useEffect(() => {
+    if (!showVolumeSlider) {
+      setIsAdjustingVolume(false)
+      setShowVolumeValueTip(false)
+      return
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!volumeContainerRef.current?.contains(event.target as Node)) {
+        setShowVolumeSlider(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowVolumeSlider(false)
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showVolumeSlider])
+
+  useEffect(() => () => {
+    if (volumeTipTimerRef.current) {
+      window.clearTimeout(volumeTipTimerRef.current)
+      volumeTipTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAdjustingVolume) {
+      return
+    }
+    const handlePointerUp = () => {
+      setIsAdjustingVolume(false)
+      if (volumeTipTimerRef.current) {
+        window.clearTimeout(volumeTipTimerRef.current)
+      }
+      volumeTipTimerRef.current = window.setTimeout(() => {
+        setShowVolumeValueTip(false)
+        volumeTipTimerRef.current = null
+      }, 700)
+    }
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+    }
+  }, [isAdjustingVolume])
+
   const togglePlay = async () => {
     const a = audioRef.current
     if (!a) return
@@ -89,78 +260,144 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
     return `${mm}:${ss.toString().padStart(2, '0')}`
   }
 
+  const applyVolume = (nextVolume: number): void => {
+    const clampedVolume = Math.max(0, Math.min(1, Number.isFinite(nextVolume) ? nextVolume : 1))
+    setVolume(clampedVolume)
+  }
+
+  const showVolumeTipTemporarily = (durationMs: number): void => {
+    setShowVolumeValueTip(true)
+    if (volumeTipTimerRef.current) {
+      window.clearTimeout(volumeTipTimerRef.current)
+    }
+    volumeTipTimerRef.current = window.setTimeout(() => {
+      setShowVolumeValueTip(false)
+      volumeTipTimerRef.current = null
+    }, durationMs)
+  }
+
   const onVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value)
-    setVolume(isNaN(v) ? 1 : v)
+    applyVolume(v)
+    if (!isAdjustingVolume) {
+      showVolumeTipTemporarily(700)
+    }
+  }
+
+  const onVolumeWheel = (event: React.WheelEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const direction = event.deltaY < 0 ? 1 : -1
+    const nextVolume = volume + direction * 0.05
+    applyVolume(nextVolume)
+    showVolumeTipTemporarily(700)
+  }
+
+  const handleDownload = async (): Promise<void> => {
+    if (isDownloading || !src) {
+      return
+    }
+    try {
+      setIsDownloading(true)
+      if (filePath) {
+        await downloadAudioFile(filePath)
+        return
+      }
+      const saved = await saveAudioFromUrl(src)
+      await downloadAudioFile(saved.fullPath)
+    } catch {
+      try {
+        const anchor = document.createElement('a')
+        anchor.href = src
+        anchor.download = `audio-${Date.now()}.mp3`
+        anchor.target = '_blank'
+        anchor.rel = 'noopener'
+        anchor.click()
+      } catch { }
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   useEffect(() => {
     let aborted = false
+    setWaveform(null)
+    setWaveDuration(null)
     const run = async () => {
-      if (filePath) {
-        const cached = await readWaveformCacheForAudio(filePath)
-        if (cached && cached.length) {
-          setWaveform(cached)
-          waveCacheRef.current.set(cacheKey, cached)
-          return
-        }
-      }
       if (waveCacheRef.current.has(cacheKey)) {
         setWaveform(waveCacheRef.current.get(cacheKey) || null)
         return
       }
       try {
-        const res = await fetch(src)
-        const buf = await res.arrayBuffer()
-        const Ctx: any = (window as any).AudioContext || (window as any).webkitAudioContext
-        if (!Ctx) { setWaveform(null); return }
+        const buf = await fetchAudioArrayBuffer(src, filePath)
+        const Ctx = window.AudioContext ?? ((window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
+        if (!Ctx) {
+          if (!aborted) {
+            setWaveform(buildFallbackWaveform(cacheKey))
+          }
+          return
+        }
         const ctx = new Ctx()
         const audioBuf = await ctx.decodeAudioData(buf)
         const ch0 = audioBuf.getChannelData(0)
         const ch1 = audioBuf.numberOfChannels > 1 ? audioBuf.getChannelData(1) : null
-        const merged = new Float32Array(ch0.length)
-        for (let i = 0; i < ch0.length; i++) merged[i] = ch1 ? (ch0[i] + ch1[i]) / 2 : ch0[i]
-        const bars = 256
-        const step = Math.floor(merged.length / bars) || 1
+        const bars = targetBars
+        const step = Math.floor(ch0.length / bars) || 1
         const arr: number[] = []
         for (let i = 0; i < bars; i++) {
-          let sum = 0
           let peak = 0
+          let sumSquares = 0
+          let count = 0
           const start = i * step
-          const end = Math.min(merged.length, start + step)
+          const end = Math.min(ch0.length, start + step)
           for (let j = start; j < end; j++) {
-            const v = Math.abs(merged[j])
-            sum += v * v
+            const v = ch1
+              ? (Math.abs(ch0[j]) + Math.abs(ch1[j])) * 0.5
+              : Math.abs(ch0[j])
+            sumSquares += v * v
+            count += 1
             if (v > peak) peak = v
           }
-          const rms = Math.sqrt(sum / Math.max(1, end - start))
-          const val = Math.max(rms, peak)
-          arr.push(val)
+          const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0
+          arr.push(Math.max(rms * 1.2, peak * 0.65))
         }
-        const max = Math.max(...arr, 1e-6)
-        const norm = arr.map(v => Math.max(0, Math.min(1, v / max)))
-        const smooth: number[] = []
-        const k = 0.5
-        for (let i = 0; i < norm.length; i++) smooth[i] = i === 0 ? norm[i] : k * norm[i] + (1 - k) * smooth[i - 1]
+        const sorted = [...arr].sort((a, b) => a - b)
+        const percentile = (ratio: number): number => {
+          if (sorted.length === 0) return 0
+          const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio)))
+          return sorted[index]
+        }
+        const low = percentile(0.1)
+        const high = percentile(0.98)
+        const range = Math.max(1e-6, high - low)
+        const norm = arr.map((v) => Math.max(0, Math.min(1, (v - low) / range)))
+        const expanded = norm.map((v) => Math.pow(v, compact ? 0.72 : 0.78))
+        const smooth = smoothWaveform(expanded, compact ? 1 : 2).map((v) => {
+          const floor = compact ? 0.014 : 0.004
+          return Math.max(floor, Math.min(1, v))
+        })
         if (!aborted) {
           waveCacheRef.current.set(cacheKey, smooth)
           setWaveform(smooth)
           setWaveDuration(audioBuf.duration || null)
-          if (filePath) {
-            try { await writeWaveformCacheForAudio(filePath, Array.from(smooth)) } catch { }
-          }
         }
       } catch {
-        setWaveform(null)
+        if (!aborted) {
+          const fallback = buildFallbackWaveform(cacheKey)
+          waveCacheRef.current.set(cacheKey, fallback)
+          setWaveform(fallback)
+        }
       }
     }
     run()
     return () => { aborted = true }
-  }, [cacheKey, src])
+  }, [cacheKey, src, filePath, targetBars, compact])
+  const volumePercent = Math.round(volume * 100)
+  const volumeSliderWidthClass = compact ? 'w-[6.75rem]' : 'w-32'
 
   return (
     <div
-      className={`w-[36rem] bg-panel/70 rounded-xl border border-zinc-700/50 p-4 outline-none ${className || ''}`}
+      className={`${compact ? 'w-full min-w-0' : 'w-[36rem]'} bg-panel/70 rounded-xl border border-zinc-700/50 p-4 outline-none ${className || ''}`}
       onContextMenu={onContextMenu}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -171,16 +408,16 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
         }
       }}
     >
-      <div className="mb-2 flex items-center justify-between text-xs text-zinc-300">
+      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-zinc-300`}>
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>
-      <div className="mb-3 h-[72px]">
+      <div className={`${compact ? 'mb-2 h-[48px]' : 'mb-3 h-[72px]'}`}>
         {waveform ? (
           <Waveform
             samples={waveform}
-            width={576}
-            height={72}
+            width={resolvedWaveformWidth}
+            height={resolvedWaveformHeight}
             progress={audioRef.current && audioRef.current.duration ? currentTime / audioRef.current.duration : (duration ? currentTime / duration : 0)}
             duration={audioRef.current && audioRef.current.duration ? audioRef.current.duration : (duration || 0)}
             onSeekStart={(r) => { if (audioRef.current) { const d = audioRef.current.duration || duration || 0; audioRef.current.currentTime = r * d } }}
@@ -199,34 +436,62 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, filePath, className, onC
           <div className="w-full h-full rounded-md bg-layer" />
         )}
       </div>
-      <div className="mt-3 flex items-center justify-between">
-        <div className="relative flex items-center">
-          <UiIconButton className="!h-8 !w-8 border-0 bg-transparent text-zinc-300 hover:opacity-70" title={t('ui:audioPlayer.volume')}>
-            <svg className="w-5 h-5" viewBox="0 0 1024 1024" fill="currentColor">
-              <path d="M468.992 169.536c29.312-22.528 64.128-40.768 101.312-25.088 36.864 15.616 48.64 53.12 53.76 90.048 5.248 37.824 5.248 89.92 5.248 154.688v245.568c0 64.768 0 116.864-5.184 154.752-5.12 36.864-16.96 74.368-53.76 89.984-37.248 15.744-72.064-2.56-101.376-25.088-30.016-23.04-68.032-61.888-112.832-107.584-23.04-23.552-38.336-34.944-53.76-41.28-15.616-6.4-34.496-9.152-67.456-9.152-28.544 0-54.08 0-73.408-2.048-20.224-2.112-39.04-6.656-56-18.24-32.192-22.016-44.544-54.208-49.28-83.84C52.864 570.24 53.248 545.984 53.568 526.464v-28.928c-0.32-19.52-0.64-43.776 2.816-65.92 4.672-29.568 17.024-61.76 49.28-83.776 16.896-11.52 35.712-16.128 55.936-18.24 19.328-1.984 44.8-1.984 73.344-1.984 33.024 0 51.904-2.752 67.456-9.152 15.488-6.4 30.72-17.792 53.76-41.28 44.8-45.696 82.88-84.608 112.896-107.648z"></path>
-              <path d="M699.52 350.08a42.688 42.688 0 0 1 59.776 8.064c32.256 42.24 51.392 95.872 51.392 153.856 0 57.92-19.136 111.552-51.392 153.856a42.688 42.688 0 1 1-67.84-51.712c21.056-27.648 33.92-63.104 33.92-102.144 0-39.04-12.864-74.496-33.92-102.144a42.688 42.688 0 0 1 8-59.776z"></path>
-              <path d="M884.8 269.824a42.688 42.688 0 1 0-62.912 57.6C868.736 378.688 896 442.88 896 512c0 69.12-27.264 133.312-74.112 184.512a42.688 42.688 0 0 0 62.912 57.6c59.904-65.344 96.512-149.632 96.512-242.112 0-92.48-36.608-176.768-96.512-242.176z"></path>
-            </svg>
+      <div className={`${compact ? 'mt-2' : 'mt-3'} flex items-center justify-between`}>
+        <div ref={volumeContainerRef} className="relative flex items-center">
+          <UiIconButton
+            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-zinc-300 hover:opacity-70`}
+            title={t('ui:audioPlayer.volume')}
+            onClick={() => setShowVolumeSlider((value) => !value)}
+          >
+            {volume <= 0 ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
           </UiIconButton>
-          <UiRangeInput min={0} max={1} step={0.01} value={volume} onChange={onVolume} className="absolute left-7 top-2 w-28 accent-accent" />
+          {showVolumeSlider && (
+            <div
+              className={`absolute left-[calc(100%+0.5rem)] top-1/2 z-20 -translate-y-1/2 ${volumeSliderWidthClass}`}
+              onWheelCapture={onVolumeWheel}
+            >
+              {showVolumeValueTip && (
+                <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-[11px] text-zinc-200">
+                  {volumePercent}%
+                </div>
+              )}
+              <UiRangeInput
+                min={0}
+                max={1}
+                step={0.01}
+                value={volume}
+                onChange={onVolume}
+                onPointerDown={() => {
+                  setIsAdjustingVolume(true)
+                  setShowVolumeValueTip(true)
+                  if (volumeTipTimerRef.current) {
+                    window.clearTimeout(volumeTipTimerRef.current)
+                    volumeTipTimerRef.current = null
+                  }
+                }}
+                className="w-full"
+              />
+            </div>
+          )}
         </div>
         <div className="flex items-center">
-          <UiIconButton onClick={togglePlay} className="!h-8 !w-8 border-0 bg-transparent text-zinc-300 hover:opacity-70" title={t('ui:audioPlayer.playPause')}>
+          <UiIconButton onClick={togglePlay} className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-zinc-300 hover:opacity-70`} title={t('ui:audioPlayer.playPause')}>
             {isPlaying ? (
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+              <Pause className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
             ) : (
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+              <Play className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
             )}
           </UiIconButton>
         </div>
-        <div>
+        <div className="flex items-center gap-1">
+          {rightActions}
           <UiIconButton
-            onClick={async () => { if (filePath) { try { await downloadAudioFile(filePath) } catch { } } }}
-            disabled={!filePath}
-            className={`!h-8 !w-8 border-0 bg-transparent ${filePath ? 'text-zinc-300 hover:opacity-70' : 'text-zinc-500 opacity-40 cursor-not-allowed'} transition-opacity`}
+            onClick={() => { void handleDownload() }}
+            disabled={isDownloading}
+            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent ${isDownloading ? 'text-zinc-500 opacity-40 cursor-not-allowed' : 'text-zinc-300 hover:opacity-70'} transition-opacity`}
             title={t('common:actions.download')}
           >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+            <Download className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
           </UiIconButton>
         </div>
       </div>
