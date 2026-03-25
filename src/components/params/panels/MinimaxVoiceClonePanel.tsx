@@ -255,8 +255,8 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
         throw new Error('克隆完成但未返回可用音色，请稍后重试')
       }
       const previewAudioUrl = extractPreviewAudioUrl(result)
-      let previewAudioFilePath = ''
-      if (previewAudioUrl) {
+      let previewAudioFilePath = normalizeString(result.filePath)
+      if (!previewAudioFilePath && previewAudioUrl) {
         try {
           const savedPreviewAudio = await saveAudioFromUrl(previewAudioUrl)
           previewAudioFilePath = savedPreviewAudio.fullPath

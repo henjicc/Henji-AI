@@ -115,27 +115,24 @@ export function extractVoiceId(metadata: unknown): string {
 }
 
 export function extractPreviewAudioUrl(result: GenerateResult): string {
-  const direct = normalizeString(result.url)
-  if (direct) return direct
-
   const metadata = result.metadata
-  if (!isRecord(metadata)) {
-    return ''
+  if (isRecord(metadata)) {
+    const candidates: unknown[] = [
+      metadata.demo_audio_url,
+      metadata.audio_url,
+      metadata.audio,
+      isRecord(metadata.data) ? metadata.data.demo_audio_url : undefined,
+      isRecord(metadata.data) ? metadata.data.audio_url : undefined,
+      isRecord(metadata.data) ? metadata.data.audio : undefined,
+      isRecord(metadata.task) && isRecord(metadata.task.output) ? metadata.task.output.demo_audio_url : undefined,
+      isRecord(metadata.task) && isRecord(metadata.task.output) ? metadata.task.output.audio_url : undefined,
+      isRecord(metadata.task) && isRecord(metadata.task.output) ? metadata.task.output.audio : undefined,
+    ]
+    for (const candidate of candidates) {
+      const normalized = normalizeString(candidate)
+      if (normalized) return normalized
+    }
   }
 
-  const candidates: unknown[] = [
-    metadata.audio,
-    metadata.demo_audio_url,
-    metadata.audio_url,
-    isRecord(metadata.data) ? metadata.data.audio : undefined,
-    isRecord(metadata.data) ? metadata.data.demo_audio_url : undefined,
-    isRecord(metadata.task) && isRecord(metadata.task.output) ? metadata.task.output.audio : undefined,
-    isRecord(metadata.task) && isRecord(metadata.task.output) ? metadata.task.output.demo_audio_url : undefined,
-  ]
-  for (const candidate of candidates) {
-    const normalized = normalizeString(candidate)
-    if (normalized) return normalized
-  }
-
-  return ''
+  return normalizeString(result.url)
 }
