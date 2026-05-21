@@ -2,6 +2,7 @@ import { defineModel, sharedFieldText } from '@/core'
 import type { CompositePanelDef } from '@/core/types/ParamDef'
 import type { CompositePanelConfig } from '@/core/types/CompositePanel'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
+import { buildVoiceFeatureTags } from '@/core/voice/voiceFeatureTags'
 import minimaxSpeechVoicesCatalog from './data/minimax-speech-voices.json'
 
 const EMOTION_OPTIONS = [
@@ -19,8 +20,8 @@ const EMOTION_OPTIONS = [
 
 const LANGUAGE_BOOST_OPTIONS = [
   { value: 'auto', label: { zh: '自动', en: 'Auto' } },
-  { value: 'Chinese', label: { zh: '中文', en: 'Chinese' } },
-  { value: 'Chinese,Yue', label: { zh: '中文（粤语）', en: 'Chinese (Cantonese)' } },
+  { value: 'Chinese', label: { zh: '中文 (普通话)', en: 'Chinese (Mandarin)' } },
+  { value: 'Chinese,Yue', label: { zh: '中文 (粤语)', en: 'Chinese (Cantonese)' } },
   { value: 'English', label: { zh: '英语', en: 'English' } },
   { value: 'Arabic', label: { zh: '阿拉伯语', en: 'Arabic' } },
   { value: 'Russian', label: { zh: '俄语', en: 'Russian' } },
@@ -123,6 +124,12 @@ function buildVoiceSelectorVoices(source: unknown): VoiceSelectorConfig['voices'
       id: voiceId,
       name: voiceName,
       description: description ?? undefined,
+      tags: buildVoiceFeatureTags({
+        voiceId,
+        voiceName,
+        description: description ?? undefined,
+        source: 'system',
+      }),
     })
   }
 

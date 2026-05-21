@@ -7,6 +7,7 @@ interface AlertDialogProps {
   message: string
   onClose: () => void
   type?: 'info' | 'warning' | 'error'
+  scope?: 'viewport' | 'container'
 }
 
 /**
@@ -18,7 +19,8 @@ export default function AlertDialog({
   title,
   message,
   onClose,
-  type = 'warning'
+  type = 'warning',
+  scope = 'viewport',
 }: AlertDialogProps) {
   const [opacity, setOpacity] = useState(0)
 
@@ -70,12 +72,18 @@ export default function AlertDialog({
   }
 
   const { icon, color } = getIconAndColor()
+  const rootClassName = scope === 'container'
+    ? 'absolute inset-0 z-50 flex items-center justify-center overflow-hidden rounded-[inherit]'
+    : 'fixed inset-0 z-50 flex items-center justify-center'
+  const backdropClassName = scope === 'container'
+    ? 'absolute inset-0 bg-black/70 backdrop-blur-sm'
+    : 'absolute inset-0 bg-black/70 backdrop-blur-sm'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={rootClassName}>
       {/* 背景遮罩 */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className={backdropClassName}
         style={{ opacity, transition: 'opacity 180ms ease' }}
         onClick={handleClose}
       />
@@ -96,7 +104,7 @@ export default function AlertDialog({
         </div>
 
         {/* 消息内容 */}
-        <div className="text-zinc-300 text-sm mt-2">{message}</div>
+        <div className="text-zinc-300 text-sm mt-2 whitespace-pre-line">{message}</div>
 
         {/* 确定按钮 */}
         <div className="mt-4 flex justify-end">

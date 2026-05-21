@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
-import { UiButton, UiIconButton, UiInput } from '@/components/ui'
+import { UiButton, UiInput } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import AlertDialog from '@/components/ui/AlertDialog'
-import { RotateCcw, Upload } from 'lucide-react'
 import { createLogger } from '@/core/logging'
 import { GenerationService } from '@/core/services/GenerationService'
 import type { MinimaxVoiceClonePanelConfig } from '@/core/types/PanelTypes'
@@ -13,6 +12,7 @@ import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService
 import { AudioPreviewCard } from './minimaxVoiceClone/AudioPreviewCard'
 import {
   AUDIO_ACCEPT,
+  DEFAULT_VALUE,
   DEFAULT_PREVIEW_MODELS,
   type MinimaxVoiceClonePanelValue,
   type StatusMessage,
@@ -28,6 +28,7 @@ import {
 import { useAudioPreviewSource } from './minimaxVoiceClone/useAudioPreviewSource'
 
 const logger = createLogger('components.params.panels.MinimaxVoiceClonePanel')
+let hasResetClonePanelOnSessionStart = false
 
 type CloneAlertState = {
   isOpen: boolean
@@ -84,6 +85,24 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   const promptPairValid = hasPromptAudio === hasPromptText
   const hasResultPreview = resultPreviewSrc.length > 0
 
+  const patchValue = (patch: Partial<MinimaxVoiceClonePanelValue>): void => {
+    onChange({ ...panelValueRef.current, ...patch })
+  }
+
+  useEffect(() => {
+    if (hasResetClonePanelOnSessionStart) {
+      return
+    }
+    hasResetClonePanelOnSessionStart = true
+    const shouldReset = Object.entries(DEFAULT_VALUE).some(([key, defaultValue]) => {
+      const currentValue = panelValue[key as keyof MinimaxVoiceClonePanelValue]
+      return currentValue !== defaultValue
+    })
+    if (shouldReset) {
+      patchValue(DEFAULT_VALUE)
+    }
+  }, [panelValue])
+
   useEffect(() => {
     panelValueRef.current = panelValue
   }, [panelValue])
@@ -125,10 +144,6 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
     }
   }, [panelValue.lastPreviewAudioUrl, panelValue.lastPreviewAudioFilePath])
 
-  const patchValue = (patch: Partial<MinimaxVoiceClonePanelValue>): void => {
-    onChange({ ...panelValueRef.current, ...patch })
-  }
-
   const showWarningDialog = (message: string): void => {
     setAlertState({
       isOpen: true,
@@ -138,20 +153,51 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
     })
   }
 
-  const getValidationError = (): string | null => {
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = []
+    if (!panelValue.voiceName.trim()) {
+      errors.push('请先填写音色名称。')
+    }
     if (!hasCloneAudio) {
-      return '请先上传复刻音频文件。'
+      errors.push('请先上传复刻音频文件。')
     }
     if (!hasPreviewText) {
-      return '请先填写试听文本。'
+      errors.push('请先填写试听文本。')
     }
     if (!promptPairValid) {
       if (hasPromptAudio) {
-        return '已上传 Prompt 音频，请补充对应文本。'
+        errors.push('已上传 Prompt 音频，请补充对应文本。')
+      } else {
+        errors.push('已填写 Prompt 文本，请上传对应示例音频。')
       }
-      return '已填写 Prompt 文本，请上传对应示例音频。'
     }
-    return null
+    return errors
+  }
+
+  const formatValidationMessage = (errors: string[]): string => {
+    if (errors.length <= 1) {
+      return errors[0] || '请先完善必填项。'
+    }
+    return `请先完成以下内容：\n${errors.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
+  }
+
+  const checkVoiceNameDuplicated = async (voiceName: string): Promise<'ok' | 'duplicated' | 'error'> => {
+    try {
+      const voices = await voiceLibraryService.listVoices({ providerId, modelId })
+      const normalized = voiceName.toLocaleLowerCase()
+      const duplicated = voices.some((item) => item.voiceName.trim().toLocaleLowerCase() === normalized)
+      return duplicated ? 'duplicated' : 'ok'
+    } catch (error) {
+      logger.error('[MinimaxVoiceClonePanel] 音色名称重名校验失败', error)
+      const message = error instanceof Error ? error.message : String(error)
+      setAlertState({
+        isOpen: true,
+        title: '校验失败',
+        message: message || '检查音色名称是否重复失败，请稍后重试。',
+        type: 'error',
+      })
+      return 'error'
+    }
   }
 
   const handleSelectAudioFile = async (
@@ -188,9 +234,23 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
 
   const runClone = async (): Promise<void> => {
     setStatusMessage(null)
-    const validationError = getValidationError()
-    if (validationError) {
-      showWarningDialog(validationError)
+    const validationErrors = getValidationErrors()
+    if (validationErrors.length > 0) {
+      showWarningDialog(formatValidationMessage(validationErrors))
+      return
+    }
+    const voiceName = panelValue.voiceName.trim()
+    const duplicateState = await checkVoiceNameDuplicated(voiceName)
+    if (duplicateState === 'error') {
+      return
+    }
+    if (duplicateState === 'duplicated') {
+      setAlertState({
+        isOpen: true,
+        title: '音色名称重复',
+        message: `音色名称“${voiceName}”已存在，请更换后再克隆。`,
+        type: 'warning',
+      })
       return
     }
     const previewText = panelValue.previewText.trim()
@@ -225,6 +285,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
 
       const submitPayload: MinimaxVoiceClonePanelValue = {
         ...panelValue,
+        voiceName,
         promptEnabled: hasPromptAudio && hasPromptText,
         cloneAudioFilePath,
         cloneAudioFileName,
@@ -264,11 +325,9 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
           logger.warn('[MinimaxVoiceClonePanel] 试听音频落地失败，回退远程链接播放', previewSaveError)
         }
       }
-      const savedVoiceName = submitPayload.voiceName || `克隆音色-${voiceId.slice(-6)}`
-
       await voiceLibraryService.upsertVoice({
         voiceId,
-        voiceName: savedVoiceName,
+        voiceName,
         description: submitPayload.promptText || undefined,
         providerId,
         modelId,
@@ -277,7 +336,6 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
 
       patchValue({
         ...submitPayload,
-        voiceName: savedVoiceName,
         lastPreviewAudioUrl: previewAudioUrl,
         lastPreviewAudioFilePath: previewAudioFilePath,
       })
@@ -292,16 +350,17 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   }
 
   return (
-    <div className="flex h-[820px] max-h-[96vh] min-h-[660px] w-full min-w-[760px] max-w-[960px] flex-col overflow-hidden p-4">
-      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-        <div className="space-y-3 pb-2">
+    <div className="relative flex h-[820px] max-h-[96vh] min-h-[660px] w-full min-w-[760px] max-w-[960px] flex-col overflow-hidden rounded-[inherit]">
+      <div className="flex h-full w-full flex-col p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="space-y-3 pb-2">
           <div className="grid grid-cols-[minmax(280px,1.45fr)_auto_auto_auto_minmax(240px,1fr)] items-end gap-3">
             <div className="min-w-0 space-y-2">
               <label className="block text-xs text-zinc-400">音色名称</label>
               <UiInput
                 value={panelValue.voiceName}
                 onChange={(event) => patchValue({ voiceName: event.target.value })}
-                placeholder="可选，便于后续识别"
+                placeholder="必填，用于保存到音色库"
                 maxLength={40}
                 className="h-[38px]"
               />
@@ -370,13 +429,16 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             emptyText="上传后可在此预览复刻音频"
             size="compact"
             playerRightActions={cloneAudioPreviewSrc ? (
-              <UiIconButton
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => cloneAudioInputRef.current?.click()}
-                className="!h-7 !w-7 border-0 bg-transparent text-zinc-300 hover:opacity-70"
+                className="!h-7 !px-1.5 border-0 bg-transparent text-accent hover:bg-transparent hover:underline"
                 title="重新上传音频"
               >
-                <Upload className="h-[18px] w-[18px]" />
-              </UiIconButton>
+                重新上传音频
+              </UiButton>
             ) : undefined}
             uploadButtonText={panelValue.cloneAudioFilePath || panelValue.cloneAudioFileName ? '重新上传音频' : '上传音频'}
             uploadHintText="支持拖放 mp3 / m4a / wav"
@@ -411,62 +473,69 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             emptyText="上传示例音频后可启用音频 Prompt（需与下方文本同时填写）"
             size="compact"
             playerRightActions={promptAudioPreviewSrc ? (
-              <UiIconButton
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => promptAudioInputRef.current?.click()}
-                className="!h-7 !w-7 border-0 bg-transparent text-zinc-300 hover:opacity-70"
+                className="!h-7 !px-1.5 border-0 bg-transparent text-accent hover:bg-transparent hover:underline"
                 title="重新上传示例音频"
               >
-                <Upload className="h-[18px] w-[18px]" />
-              </UiIconButton>
+                重新上传示例音频
+              </UiButton>
             ) : undefined}
             uploadButtonText={panelValue.promptAudioFilePath || panelValue.promptAudioFileName ? '重新上传示例音频' : '上传示例音频'}
             uploadHintText="支持拖放 mp3 / m4a / wav"
             onUploadClick={() => promptAudioInputRef.current?.click()}
             onFileDrop={(file) => { void handleSelectAudioFile(file, 'prompt') }}
           />
-          <div className="w-full space-y-2">
-            <label className="text-xs text-zinc-400">Prompt 对应文本（与示例音频一致）</label>
-            <UiInput
-              value={panelValue.promptText}
-              onChange={(event) => patchValue({ promptText: event.target.value })}
-              placeholder="可选；填写时需同时上传示例音频"
-              maxLength={400}
-              className="h-[38px] w-full"
-            />
+            <div className="w-full space-y-2">
+              <label className="text-xs text-zinc-400">Prompt 对应文本（与示例音频一致）</label>
+              <UiInput
+                value={panelValue.promptText}
+                onChange={(event) => patchValue({ promptText: event.target.value })}
+                placeholder="可选；填写时需同时上传示例音频"
+                maxLength={400}
+                className="h-[38px] w-full"
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-3 shrink-0 border-t border-border-dark pt-3">
-        <AudioPreviewCard
-          title="试听结果预览"
-          subtitle={hasResultPreview ? '克隆完成，已保存到音色库，可在“音色 ID”中选择使用' : undefined}
-          src={resultPreviewSrc}
-          filePath={resultPreviewFilePath || undefined}
-          emptyText="克隆完成后会在这里显示试听音频"
-          size="compact"
-          playerRightActions={hasResultPreview ? (
-            <UiIconButton
-              onClick={() => { void runClone() }}
-              disabled={isSubmitting}
-              className="!h-7 !w-7 border-0 bg-transparent text-zinc-300 hover:opacity-70 disabled:opacity-40"
-              title="重新克隆"
-            >
-              <RotateCcw className="h-[18px] w-[18px]" />
-            </UiIconButton>
-          ) : undefined}
-          contentAction={hasResultPreview ? undefined : (
-            <UiButton type="button" variant="primary" disabled={isSubmitting} onClick={() => void runClone()}>
-              {isSubmitting ? '克隆中...' : '开始克隆'}
-            </UiButton>
+        <div className="mt-3 shrink-0 border-t border-border-dark pt-3">
+          <AudioPreviewCard
+            title="试听结果预览"
+            subtitle={hasResultPreview ? '克隆完成，已保存到音色库，可在“音色 ID”中选择使用' : undefined}
+            src={resultPreviewSrc}
+            filePath={resultPreviewFilePath || undefined}
+            emptyText="克隆完成后会在这里显示试听音频"
+            size="compact"
+            playerRightActions={hasResultPreview ? (
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { void runClone() }}
+                disabled={isSubmitting}
+                className="!h-7 !px-1.5 border-0 bg-transparent text-accent hover:bg-transparent hover:underline disabled:opacity-40"
+                title="重新克隆"
+              >
+                重新克隆
+              </UiButton>
+            ) : undefined}
+            contentAction={hasResultPreview ? undefined : (
+              <UiButton type="button" variant="primary" disabled={isSubmitting} onClick={() => void runClone()}>
+                {isSubmitting ? '克隆中...' : '开始克隆'}
+              </UiButton>
+            )}
+          />
+
+          {statusMessage?.type === 'error' && (
+            <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              {statusMessage.text}
+            </div>
           )}
-        />
-
-        {statusMessage?.type === 'error' && (
-          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-            {statusMessage.text}
-          </div>
-        )}
+        </div>
       </div>
 
       <AlertDialog
@@ -474,6 +543,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
         title={alertState.title}
         message={alertState.message}
         type={alertState.type}
+        scope="container"
         onClose={() => setAlertState((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>

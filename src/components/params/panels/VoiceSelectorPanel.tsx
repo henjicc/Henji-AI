@@ -1,11 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiInput, UiOptionButton } from '@/components/ui'
+import {
+  buildVoiceFeatureTags,
+  resolveVoiceFeatureTags,
+  type VoiceAgeTag,
+  type VoiceGenderTag,
+  type VoiceSourceTag,
+} from '@/core/voice/voiceFeatureTags'
 import { getI18nText, type I18nText } from '@/core/types'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
-type VoiceGroup = 'all' | 'male' | 'female' | 'child' | 'other'
+type VoiceSourceFilter = 'all' | VoiceSourceTag
+type VoiceGenderFilter = 'all' | VoiceGenderTag
+type VoiceAgeFilter = 'all' | VoiceAgeTag
+type VoiceLanguageFilter = 'all' | string
 
 interface VoiceSelectorPanelProps {
   value: string
@@ -13,8 +23,8 @@ interface VoiceSelectorPanelProps {
   config?: VoiceSelectorConfig
 }
 
-interface VoiceGroupOption {
-  value: VoiceGroup
+interface FilterOption<TValue extends string> {
+  value: TValue
   label: string
 }
 
@@ -23,6 +33,10 @@ interface VoiceViewItem {
   name: string
   description: string
   isCustom: boolean
+  source?: VoiceSourceTag
+  gender?: VoiceGenderTag
+  age?: VoiceAgeTag
+  languages: string[]
 }
 
 interface HoverScrollTextProps {
@@ -30,23 +44,76 @@ interface HoverScrollTextProps {
   active: boolean
 }
 
-const DEFAULT_GROUPS: VoiceGroupOption[] = [
-  { value: 'all', label: '全部' },
-  { value: 'male', label: '男' },
-  { value: 'female', label: '女' },
-  { value: 'child', label: '童声' },
-  { value: 'other', label: '其他' },
+const SOURCE_FILTER_OPTIONS: Array<FilterOption<VoiceSourceFilter>> = [
+  { value: 'all', label: '全部来源' },
+  { value: 'system', label: '系统音色' },
+  { value: 'clone', label: '克隆音色' },
 ]
 
-function normalizeGroup(raw: string | undefined): VoiceGroup {
-  if (!raw) {
-    return 'other'
+const GENDER_FILTER_OPTIONS: Array<FilterOption<VoiceGenderFilter>> = [
+  { value: 'all', label: '全部性别' },
+  { value: 'male', label: '男声' },
+  { value: 'female', label: '女声' },
+]
+
+const AGE_FILTER_OPTIONS: Array<FilterOption<VoiceAgeFilter>> = [
+  { value: 'all', label: '全部年龄' },
+  { value: 'child', label: '童声' },
+  { value: 'youth', label: '青年' },
+  { value: 'mature', label: '成熟' },
+]
+
+const FILTER_BUTTON_CLASS = '!h-8 !px-3 !py-1 justify-center text-xs leading-tight whitespace-nowrap'
+
+const LANGUAGE_LABELS: Record<string, string> = {
+  zh: '中文 (普通话)',
+  yue: '中文 (粤语)',
+  en: '英语',
+  ja: '日语',
+  ko: '韩语',
+  fr: '法语',
+  de: '德语',
+  es: '西班牙语',
+  pt: '葡萄牙语',
+  ru: '俄语',
+  ar: '阿拉伯语',
+  it: '意大利语',
+  tr: '土耳其语',
+  vi: '越南语',
+  id: '印尼语',
+  nl: '荷兰语',
+  uk: '乌克兰语',
+  th: '泰语',
+  hi: '印地语',
+}
+
+const LANGUAGE_PRIORITY_ORDER = [
+  'zh',
+  'yue',
+  'ja',
+  'ko',
+  'en',
+  'es',
+  'fr',
+  'de',
+  'ru',
+  'pt',
+  'ar',
+  'it',
+  'tr',
+  'vi',
+  'id',
+  'nl',
+  'uk',
+  'th',
+  'hi',
+]
+
+function resolveLanguageLabel(code: string): string {
+  if (LANGUAGE_LABELS[code]) {
+    return LANGUAGE_LABELS[code]
   }
-  const lowered = raw.trim().toLowerCase()
-  if (lowered === 'male' || lowered === 'female' || lowered === 'child' || lowered === 'other') {
-    return lowered
-  }
-  return 'other'
+  return code.toUpperCase()
 }
 
 function resolveDescriptionText(description: unknown, language: string): string {
@@ -113,7 +180,10 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   config,
 }) => {
   const { i18n } = useTranslation()
-  const [selectedGroup, setSelectedGroup] = useState<VoiceGroup>('all')
+  const [selectedSource, setSelectedSource] = useState<VoiceSourceFilter>('all')
+  const [selectedGender, setSelectedGender] = useState<VoiceGenderFilter>('all')
+  const [selectedAge, setSelectedAge] = useState<VoiceAgeFilter>('all')
+  const [selectedLanguage, setSelectedLanguage] = useState<VoiceLanguageFilter>('all')
   const [keyword, setKeyword] = useState('')
   const [hoveredVoiceId, setHoveredVoiceId] = useState<string | null>(null)
   const [customVoices, setCustomVoices] = useState<VoiceSelectorConfig['voices']>([])
@@ -139,7 +209,12 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
         id: item.voiceId,
         name: item.voiceName,
         description: item.description,
-        tags: ['custom'],
+        tags: buildVoiceFeatureTags({
+          voiceId: item.voiceId,
+          voiceName: item.voiceName,
+          description: item.description,
+          source: 'clone',
+        }),
       }))
       setCustomVoices(mapped)
     }
@@ -166,54 +241,90 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
     return Array.from(merged.values())
   }, [configuredVoices, customVoices])
 
-  const availableGroups = useMemo(() => {
-    const discovered = new Set<VoiceGroup>()
-    for (const voice of voices) {
-      const firstTag = Array.isArray(voice.tags) ? voice.tags.find((item) => typeof item === 'string') : undefined
-      if (!firstTag) {
-        continue
+  const voiceItems = useMemo((): VoiceViewItem[] => {
+    return voices.map((voice) => {
+      const voiceName = getI18nText(voice.name, i18n.language)
+      const voiceDescription = resolveDescriptionText(voice.description, i18n.language)
+      const featureTags = resolveVoiceFeatureTags(voice.tags, {
+        voiceId: voice.id,
+        voiceName,
+        description: voiceDescription,
+      })
+      return {
+        id: voice.id,
+        name: voiceName,
+        description: voiceDescription,
+        isCustom: featureTags.source === 'clone',
+        source: featureTags.source,
+        gender: featureTags.gender,
+        age: featureTags.age,
+        languages: featureTags.languages,
       }
-      discovered.add(normalizeGroup(firstTag))
+    })
+  }, [i18n.language, voices])
+
+  const languageFilterOptions = useMemo((): Array<FilterOption<VoiceLanguageFilter>> => {
+    const discovered = new Set<string>()
+    for (const voice of voiceItems) {
+      for (const language of voice.languages) {
+        discovered.add(language)
+      }
     }
-    if (discovered.size === 0) {
-      return []
+    const options: Array<FilterOption<VoiceLanguageFilter>> = [{ value: 'all', label: '全部语言' }]
+    const sortedLanguages = Array.from(discovered).sort((left, right) => {
+      const leftIndex = LANGUAGE_PRIORITY_ORDER.indexOf(left)
+      const rightIndex = LANGUAGE_PRIORITY_ORDER.indexOf(right)
+      const leftPriority = leftIndex >= 0 ? leftIndex : Number.MAX_SAFE_INTEGER
+      const rightPriority = rightIndex >= 0 ? rightIndex : Number.MAX_SAFE_INTEGER
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority
+      }
+      return resolveLanguageLabel(left).localeCompare(resolveLanguageLabel(right), 'zh-Hans-CN')
+    })
+    for (const language of sortedLanguages) {
+      options.push({ value: language, label: resolveLanguageLabel(language) })
     }
-    return DEFAULT_GROUPS.filter((group) => group.value === 'all' || discovered.has(group.value))
-  }, [voices])
+    return options
+  }, [voiceItems])
+
+  useEffect(() => {
+    if (selectedLanguage === 'all') {
+      return
+    }
+    const languageExists = languageFilterOptions.some((item) => item.value === selectedLanguage)
+    if (!languageExists) {
+      setSelectedLanguage('all')
+    }
+  }, [languageFilterOptions, selectedLanguage])
 
   const normalizedKeyword = keyword.trim().toLowerCase()
 
   const filteredVoices = useMemo((): VoiceViewItem[] => {
-    return voices.flatMap((voice) => {
-      const voiceName = getI18nText(voice.name, i18n.language)
-      const voiceDescription = resolveDescriptionText(voice.description, i18n.language)
-      const firstTag = Array.isArray(voice.tags) ? voice.tags.find((item) => typeof item === 'string') : undefined
-      const group = normalizeGroup(firstTag)
-      const matchesGroup = selectedGroup === 'all' || group === selectedGroup
-      if (!matchesGroup) {
-        return []
+    return voiceItems.filter((voice) => {
+      if (selectedSource !== 'all' && voice.source !== selectedSource) {
+        return false
+      }
+      if (selectedGender !== 'all' && voice.gender !== selectedGender) {
+        return false
+      }
+      if (selectedAge !== 'all' && voice.age !== selectedAge) {
+        return false
+      }
+      if (selectedLanguage !== 'all' && !voice.languages.includes(selectedLanguage)) {
+        return false
       }
       if (!normalizedKeyword) {
-        return [{
-          id: voice.id,
-          name: voiceName,
-          description: voiceDescription,
-          isCustom: Array.isArray(voice.tags) && voice.tags.includes('custom'),
-        }]
+        return true
       }
-      const nameMatched = voiceName.toLowerCase().includes(normalizedKeyword)
-      const descriptionMatched = voiceDescription.toLowerCase().includes(normalizedKeyword)
-      if (!nameMatched && !descriptionMatched) {
-        return []
-      }
-      return [{
-        id: voice.id,
-        name: voiceName,
-        description: voiceDescription,
-        isCustom: Array.isArray(voice.tags) && voice.tags.includes('custom'),
-      }]
+      const nameMatched = voice.name.toLowerCase().includes(normalizedKeyword)
+      const descriptionMatched = voice.description.toLowerCase().includes(normalizedKeyword)
+      return nameMatched || descriptionMatched
     })
-  }, [i18n.language, normalizedKeyword, selectedGroup, voices])
+  }, [normalizedKeyword, selectedAge, selectedGender, selectedLanguage, selectedSource, voiceItems])
+
+  const handleWheelCapture = useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
+    event.stopPropagation()
+  }, [])
 
   const handleDeleteCustomVoice = async (voiceId: string): Promise<void> => {
     if (!voiceLibraryScope?.providerId || deletingVoiceId) {
@@ -236,26 +347,74 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   }
 
   return (
-    <div className="h-full min-h-[300px] max-h-[420px] w-full min-w-[520px] max-w-[720px] p-4">
-      {availableGroups.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {availableGroups.map((group) => (
+    <div
+      className="flex h-[460px] w-full min-w-[520px] max-w-[720px] flex-col overflow-hidden overscroll-contain p-4"
+      onWheelCapture={handleWheelCapture}
+    >
+      <div className="mb-3 shrink-0 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {SOURCE_FILTER_OPTIONS.map((option) => (
             <UiOptionButton
-              key={group.value}
+              key={option.value}
               type="button"
               variant="flat"
-              active={selectedGroup === group.value}
-              className="!h-8 !px-3 !py-1 text-xs"
-              onClick={() => setSelectedGroup(group.value)}
+              active={selectedSource === option.value}
+              className={FILTER_BUTTON_CLASS}
+              onClick={() => setSelectedSource(option.value)}
             >
-              {group.label}
+              {option.label}
             </UiOptionButton>
           ))}
         </div>
-      )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {GENDER_FILTER_OPTIONS.map((option) => (
+            <UiOptionButton
+              key={option.value}
+              type="button"
+              variant="flat"
+              active={selectedGender === option.value}
+              className={FILTER_BUTTON_CLASS}
+              onClick={() => setSelectedGender(option.value)}
+            >
+              {option.label}
+            </UiOptionButton>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {AGE_FILTER_OPTIONS.map((option) => (
+            <UiOptionButton
+              key={option.value}
+              type="button"
+              variant="flat"
+              active={selectedAge === option.value}
+              className={FILTER_BUTTON_CLASS}
+              onClick={() => setSelectedAge(option.value)}
+            >
+              {option.label}
+            </UiOptionButton>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {languageFilterOptions.map((option) => (
+            <UiOptionButton
+              key={option.value}
+              type="button"
+              variant="flat"
+              active={selectedLanguage === option.value}
+              className={FILTER_BUTTON_CLASS}
+              onClick={() => setSelectedLanguage(option.value)}
+            >
+              {option.label}
+            </UiOptionButton>
+          ))}
+        </div>
+      </div>
 
       {config?.allowSearch !== false && (
-        <div className="mb-3">
+        <div className="mb-3 shrink-0">
           <UiInput
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
@@ -265,61 +424,63 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
         </div>
       )}
 
-      <div className="max-h-[290px] overflow-y-auto">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-          {filteredVoices.map((voice) => {
-            const active = value === voice.id
-            const hasDescription = voice.description.length > 0
-            const canDelete = voice.isCustom && voiceLibraryScope?.allowDelete === true
-            return (
-              <div key={voice.id} className="relative">
-                <UiOptionButton
-                  type="button"
-                  variant="card"
-                  active={active}
-                  onClick={() => onChange(voice.id)}
-                  onMouseEnter={() => setHoveredVoiceId(voice.id)}
-                  onMouseLeave={() => setHoveredVoiceId(null)}
-                  className={
-                    hasDescription
-                      ? 'h-auto min-h-[58px] w-full flex-col items-start justify-center gap-1 px-3 py-2'
-                      : 'h-[52px] w-full flex-col items-start justify-center px-3 py-2'
-                  }
-                >
-                  <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
-                  {hasDescription && (
-                    <HoverScrollText
-                      text={voice.description}
-                      active={hoveredVoiceId === voice.id}
-                    />
-                  )}
-                </UiOptionButton>
-                {canDelete && (
-                  <UiButton
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="h-full overflow-y-auto overscroll-contain pr-1">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+            {filteredVoices.map((voice) => {
+              const active = value === voice.id
+              const hasDescription = voice.description.length > 0
+              const canDelete = voice.isCustom && voiceLibraryScope?.allowDelete === true
+              return (
+                <div key={voice.id} className="relative">
+                  <UiOptionButton
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={deletingVoiceId === voice.id}
-                    className="absolute right-1 top-1 !h-6 !px-2 text-[11px]"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      void handleDeleteCustomVoice(voice.id)
-                    }}
+                    variant="card"
+                    active={active}
+                    onClick={() => onChange(voice.id)}
+                    onMouseEnter={() => setHoveredVoiceId(voice.id)}
+                    onMouseLeave={() => setHoveredVoiceId(null)}
+                    className={
+                      hasDescription
+                        ? 'h-auto min-h-[58px] w-full flex-col items-start justify-center gap-1 px-3 py-2'
+                        : 'h-[52px] w-full flex-col items-start justify-center px-3 py-2'
+                    }
                   >
-                    删除
-                  </UiButton>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {filteredVoices.length === 0 && (
-          <div className="py-6 text-center text-xs text-text-muted">
-            未找到匹配音色
+                    <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
+                    {hasDescription && (
+                      <HoverScrollText
+                        text={voice.description}
+                        active={hoveredVoiceId === voice.id}
+                      />
+                    )}
+                  </UiOptionButton>
+                  {canDelete && (
+                    <UiButton
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={deletingVoiceId === voice.id}
+                      className="absolute right-1 top-1 !h-6 !px-2 text-[11px]"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        void handleDeleteCustomVoice(voice.id)
+                      }}
+                    >
+                      删除
+                    </UiButton>
+                  )}
+                </div>
+              )
+            })}
           </div>
-        )}
+
+          {filteredVoices.length === 0 && (
+            <div className="py-6 text-center text-xs text-text-muted">
+              未找到匹配音色
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
