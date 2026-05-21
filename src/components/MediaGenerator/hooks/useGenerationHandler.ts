@@ -100,7 +100,7 @@ export const useGenerationHandler = (
   uploadedVideoFiles: File[],
   uploadedFilePaths: string[],
   uploadedVideoFilePaths: string[],
-  onGenerate: (input: string, model: string, type: ModelType, options?: unknown) => void
+  onGenerate: (input: string, model: string, type: ModelType, options?: unknown) => void | Promise<void>
 ) => {
   const handleGenerate = useCallback(async () => {
     // 获取模型信息
@@ -140,7 +140,7 @@ export const useGenerationHandler = (
     })
 
     // 调用生成回调（将 @图N 规范化为 图N）
-    onGenerate(stripReferenceAtPrefix(input), selectedModel, modelType, options)
+    await onGenerate(stripReferenceAtPrefix(input), selectedModel, modelType, options)
   }, [
     selectedModel,
     input,

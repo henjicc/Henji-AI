@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -23,7 +23,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 
 interface MediaGeneratorProps {
-  onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: any) => void
+  onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: unknown) => void | Promise<void>
   isLoading: boolean
   onOpenClearHistory: () => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -53,6 +53,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 1. UI 状态管理
   const uiState = useUIState()
   const { t } = useTranslation(['models', 'ui'])
+  const [isSubmittingGenerate, setIsSubmittingGenerate] = useState(false)
 
   // 2. 模型参数管理（使用新系统）
   const modelState = useModelState(uiState.selectedModel, uiState)
@@ -195,7 +196,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
   // 9. 生成按钮处理（带验证）
   const handleGenerate = async () => {
-    if (isLoading) return
+    const isInputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
+    if (isInputBusy) return
 
     const requirementCheck = validateGenerationRequirements(
       uiState.selectedModel,
@@ -229,8 +231,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       return
     }
 
-    handleGenerateRequest()
+    setIsSubmittingGenerate(true)
+    try {
+      await handleGenerateRequest()
+    } finally {
+      setIsSubmittingGenerate(false)
+    }
   }
+  const inputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
 
   // 9. 预设加载处理
   const handleLoadPreset = (presetData: any) => {
@@ -347,7 +355,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         selectedModel={uiState.selectedModel}
         currentModel={currentModel}
         modelParams={modelState.params}
-        isLoading={isLoading}
+        isLoading={inputBusy}
         isGenerating={isGenerating}
         onGenerate={handleGenerate}
       />

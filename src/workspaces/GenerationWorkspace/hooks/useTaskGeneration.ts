@@ -601,6 +601,7 @@ export function useTaskGeneration({
 
     const started = taskQueueManager.enqueue({
       id: taskId,
+      providerId,
       execute: async () => {
         await executeTask(taskId, newTask)
       },

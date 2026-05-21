@@ -5,6 +5,7 @@
 
 export interface QueuedTask {
     id: string
+    providerId?: string
     execute: () => Promise<void>
     onStart?: () => void
     onComplete?: () => void
@@ -13,7 +14,7 @@ export interface QueuedTask {
 
 class TaskQueueManager {
     private queue: QueuedTask[] = []
-    private running: Set<string> = new Set()
+    private running: Map<string, string> = new Map()
     private maxConcurrency: number = 2
 
     constructor() {
@@ -49,7 +50,8 @@ class TaskQueueManager {
      */
     enqueue(task: QueuedTask): boolean {
         this.queue.push(task)
-        return this.processQueue()
+        this.processQueue()
+        return this.isRunning(task.id)
     }
 
     /**
@@ -59,11 +61,15 @@ class TaskQueueManager {
     private processQueue(): boolean {
         let started = false
 
-        while (this.running.size < this.maxConcurrency && this.queue.length > 0) {
-            const task = this.queue.shift()
+        while (this.queue.length > 0) {
+            const taskIndex = this.queue.findIndex((item) => this.hasAvailableSlot(item.providerId))
+            if (taskIndex < 0) break
+
+            const [task] = this.queue.splice(taskIndex, 1)
             if (!task) break
 
-            this.running.add(task.id)
+            const providerKey = this.resolveProviderKey(task.providerId)
+            this.running.set(task.id, providerKey)
             started = true
 
             // 通知任务开始
@@ -94,6 +100,22 @@ class TaskQueueManager {
         return started
     }
 
+    private resolveProviderKey(providerId: string | undefined): string {
+        const trimmed = providerId?.trim()
+        return trimmed && trimmed.length > 0 ? trimmed : '__unknown_provider__'
+    }
+
+    private getRunningCountForProvider(providerId: string | undefined): number {
+        const providerKey = this.resolveProviderKey(providerId)
+        let count = 0
+        for (const runningProvider of this.running.values()) {
+            if (runningProvider === providerKey) {
+                count += 1
+            }
+        }
+        return count
+    }
+
     /**
      * 获取正在运行的任务数量
      */
@@ -111,8 +133,8 @@ class TaskQueueManager {
     /**
      * 检查是否有可用的执行槽位
      */
-    hasAvailableSlot(): boolean {
-        return this.running.size < this.maxConcurrency
+    hasAvailableSlot(providerId?: string): boolean {
+        return this.getRunningCountForProvider(providerId) < this.maxConcurrency
     }
 
     /**
