@@ -6,7 +6,7 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run gen:model-manifest && vite",
     "gen:model-manifest": "node scripts/generate-model-manifest.cjs",
     "check:colors": "node scripts/check-color-tokens.cjs",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
@@ -16,11 +16,11 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:colors": "npm run check:colors",
     "lint:fix": "eslint src --ext ts,tsx --fix",
-    "tauri:dev": "call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri dev",
-    "tauri:build": "call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri build",
-    "tauri:build:ci": "tauri build",
-    "tauri:dev:mac": "tauri dev",
-    "tauri:build:mac": "tauri build",
+    "tauri:dev": "npm run gen:model-manifest && call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri dev",
+    "tauri:build": "npm run gen:model-manifest && call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri build",
+    "tauri:build:ci": "npm run gen:model-manifest && tauri build",
+    "tauri:dev:mac": "npm run gen:model-manifest && tauri dev",
+    "tauri:build:mac": "npm run gen:model-manifest && tauri build",
     "release": "node scripts/release.cjs"
   },
   "dependencies": {

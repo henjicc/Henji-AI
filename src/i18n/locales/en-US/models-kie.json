@@ -12,6 +12,12 @@
         "description": "KIE Grok Imagine Image text-to-image model"
       }
     },
+    "kie-gpt-image-2": {
+      "meta": {
+        "name": "GPT Image 2",
+        "description": "KIE GPT Image 2 image generation and editing model"
+      }
+    },
     "kie-hailuo-02": {
       "meta": {
         "name": "Hailuo 02",

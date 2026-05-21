@@ -12,6 +12,12 @@
         "description": "KIE Grok Imagine 图片生成模型"
       }
     },
+    "kie-gpt-image-2": {
+      "meta": {
+        "name": "GPT Image 2",
+        "description": "KIE GPT Image 2 图片生成与编辑模型"
+      }
+    },
     "kie-hailuo-02": {
       "meta": {
         "name": "海螺 02",
