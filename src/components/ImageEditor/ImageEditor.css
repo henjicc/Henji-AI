@@ -4,7 +4,7 @@
 
 /* 编辑器容器 - 背景由外层wrapper提供 */
 .image-editor-container {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: transparent;
   z-index: 50;
@@ -28,7 +28,8 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 8px 16px;
+  min-height: 44px;
+  padding: 4px 16px;
 }
 
 .toolbar-row-tools {
@@ -36,7 +37,8 @@
 }
 
 .toolbar-row-options {
-  padding: 6px 16px;
+  min-height: 44px;
+  padding: 4px 16px;
   background: rgba(0, 0, 0, 0.2);
 }
 
@@ -55,8 +57,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 8px;
   background: transparent;

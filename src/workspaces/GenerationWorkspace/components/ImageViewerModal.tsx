@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton } from '@/components/ui'
+import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion'
 import { ImageEditor } from '@/components/ImageEditor'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { useImageViewerTransform } from '../hooks/useImageViewerTransform'
+
+const VIEWER_CONTROL_CLASS = 'h-8 rounded-lg border border-border-dark bg-surface-dark/85 px-3 text-xs text-text-dark shadow-lg backdrop-blur-md'
+const VIEWER_BUTTON_CLASS = '!h-8 !rounded-lg border-border-dark bg-surface-dark/85 px-3 text-xs text-text-dark shadow-lg backdrop-blur-md hover:bg-layer'
+const VIEWER_ICON_BUTTON_CLASS = '!rounded-lg border-border-dark bg-surface-dark/85 text-text-dark shadow-lg backdrop-blur-md hover:bg-layer'
 
 export interface ImageViewerModalProps {
   open: boolean
@@ -129,7 +134,7 @@ export function ImageViewerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg"
+      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-50 overflow-hidden bg-black/90 backdrop-blur-lg`}
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 400ms ease',
@@ -215,7 +220,7 @@ export function ImageViewerModal({
               <div className="flex items-center gap-3">
                 <UiIconButton
                   onClick={() => onNavigate('prev')}
-                  className="rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80"
+                  className={VIEWER_ICON_BUTTON_CLASS}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -223,7 +228,7 @@ export function ImageViewerModal({
                 </UiIconButton>
                 <UiIconButton
                   onClick={() => onNavigate('next')}
-                  className="rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80"
+                  className={VIEWER_ICON_BUTTON_CLASS}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -234,13 +239,13 @@ export function ImageViewerModal({
 
             <div className="flex items-center gap-4">
               {imageList.length > 1 && (
-                <div className="bg-panel/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50">
+                <div className={`${VIEWER_CONTROL_CLASS} inline-flex items-center justify-center`}>
                   {currentIndex + 1} / {imageList.length}
                 </div>
               )}
               <div
                 ref={scaleDisplayRef}
-                className="bg-panel/90 backdrop-blur-xl px-4 py-2 rounded-full text-white text-sm border border-zinc-700/50"
+                className={`${VIEWER_CONTROL_CLASS} inline-flex items-center justify-center`}
               >
                 100%
               </div>
@@ -248,7 +253,7 @@ export function ImageViewerModal({
                 onClick={resetView}
                 variant="muted"
                 size="sm"
-                className="rounded-full px-4 backdrop-blur-xl"
+                className={VIEWER_BUTTON_CLASS}
               >
                 {t('common:actions.reset')}
               </UiButton>
@@ -256,7 +261,7 @@ export function ImageViewerModal({
                 onClick={onClose}
                 variant="muted"
                 size="sm"
-                className="rounded-full px-4 backdrop-blur-xl"
+                className={VIEWER_BUTTON_CLASS}
               >
                 {t('common:close')}
               </UiButton>
