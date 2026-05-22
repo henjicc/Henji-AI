@@ -65,12 +65,13 @@ function formatPanelDisplayValue(
     if (!record) {
       return '未设置'
     }
-    if (record.aspectRatio === 'smart') return '智能'
+    const quality = typeof record.quality === 'string' ? record.quality : ''
+    const joinQuality = (label: string): string => quality ? `${label} / ${quality}` : label
+    if (record.aspectRatio === 'smart') return joinQuality('智能')
     if (record.aspectRatio) {
-      const quality = typeof record.quality === 'string' ? ` (${record.quality})` : ''
-      return `${formatAspectRatioDisplayLabel(String(record.aspectRatio), String(record.aspectRatio))}${quality}`
+      return joinQuality(formatAspectRatioDisplayLabel(String(record.aspectRatio), String(record.aspectRatio)))
     }
-    if (typeof record.preset === 'string') return record.preset
+    if (typeof record.preset === 'string') return joinQuality(record.preset)
     if (typeof record.width === 'number' && typeof record.height === 'number') {
       return `${record.width}×${record.height}`
     }
@@ -225,7 +226,15 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       const PanelComponent = panelRegistry.get(compositeParam.panel as any)
 
       if (PanelComponent) {
-        const defaultPanelWidth = compositeParam.panel === 'modelscope-custom-model' ? 520 : 320
+        const defaultPanelWidth = (() => {
+          if (compositeParam.panel === 'modelscope-custom-model') {
+            return 520
+          }
+          if (compositeParam.panel === 'resolution') {
+            return 400
+          }
+          return 320
+        })()
         const panelWidth = resolvePanelWidth(compositeParam.config, defaultPanelWidth)
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
         const panelContent = (

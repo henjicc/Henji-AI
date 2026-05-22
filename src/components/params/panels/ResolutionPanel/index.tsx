@@ -30,7 +30,7 @@ export const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
   // Mode A: 比例 + 质量
   if (config.mode === 'aspect-quality' || config.mode === 'hybrid') {
     return (
-      <div className="resolution-panel">
+      <div className="p-4 flex flex-col gap-4">
         {config.aspectRatios && (
           <AspectRatioSelector
             value={value.aspectRatio || config.aspectRatios.default}
@@ -74,7 +74,7 @@ export const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
   // Mode B: 预设分辨率
   if (config.mode === 'preset' && config.presets) {
     return (
-      <div className="resolution-panel">
+      <div className="p-4 flex flex-col gap-4">
         <PresetResolutionSelector
           value={value.preset || config.presets.default}
           onChange={(preset) => onChange({ ...value, mode: config.mode, preset })}
@@ -87,7 +87,7 @@ export const ResolutionPanel: React.FC<ResolutionPanelProps> = ({
   // Mode C: 纯自定义
   if (config.mode === 'custom' && config.customSize) {
     return (
-      <div className="resolution-panel">
+      <div className="p-4 flex flex-col gap-4">
         <CustomSizeInput
           value={{
             width: value.width || 1280,

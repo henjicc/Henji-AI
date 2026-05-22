@@ -40,9 +40,11 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
   }, [options, availableFor, availableForMap])
 
   return (
-    <div className="quality-tier-selector">
-      <label className="param-label">{t('resolutionPanel.qualityLabel')}</label>
-      <div className="quality-tier-grid">
+    <div className="flex flex-col gap-2">
+      <label className="block text-xs text-zinc-400">
+        {t('resolutionPanel.resolution', { defaultValue: '分辨率' })}
+      </label>
+      <div className="flex flex-wrap justify-start gap-2">
         {filteredOptions.map((option) => {
           const label = getI18nText(option.label, i18n.language)
           const description = option.description
@@ -51,14 +53,18 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
 
           return (
             <UiOptionButton
+              type="button"
               active={value === option.value}
               key={option.value}
               onClick={() => onChange(option.value)}
-              className={`quality-tier-option ${value === option.value ? 'selected' : ''}`}
+              className={`w-[78px] px-2 py-1.5 text-sm justify-center ${
+                value === option.value ? '!bg-accent !border-accent !text-white' : ''
+              }`}
+              style={{ height: description ? '52px' : '42px' }}
             >
-              <span className="quality-tier-label">{label}</span>
+              <span className="font-medium leading-none">{label}</span>
               {description && (
-                <span className="quality-tier-description">{description}</span>
+                <span className="text-[11px] leading-none opacity-80">{description}</span>
               )}
             </UiOptionButton>
           )

@@ -38,21 +38,29 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
   }
 
   return (
-    <div className="aspect-ratio-selector">
-      <label className="param-label">{t('resolutionPanel.aspectRatioLabel')}</label>
-      <div className="aspect-ratio-grid">
+    <div className="flex flex-col gap-2">
+      <label className="block text-xs text-zinc-400">
+        {t('resolutionPanel.aspectRatio', { defaultValue: '比例' })}
+      </label>
+      <div className="flex flex-wrap justify-start gap-2">
         {smartMatchEnabled && (
           <UiOptionButton
+            type="button"
             active={value === 'smart'}
             onClick={() => onChange('smart')}
-            className={`aspect-ratio-option ${value === 'smart' ? 'selected' : ''}`}
+            className={`w-[78px] px-2 py-2 text-xs flex-col justify-center gap-2 ${
+              value === 'smart' ? '!bg-accent !border-accent !text-white' : ''
+            }`}
+            style={{ height: '92px' }}
           >
-            <div className="aspect-ratio-icon">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <div className="h-8 flex items-center justify-center">
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M13 2L3 14h8l-1 8 11-14h-8l1-6z" />
               </svg>
             </div>
-            <span className="aspect-ratio-label">{t('resolutionPanel.smart')}</span>
+            <span className="font-medium leading-none">
+              {t('resolutionPanel.smart', { defaultValue: '智能' })}
+            </span>
           </UiOptionButton>
         )}
 
@@ -67,15 +75,19 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
 
             return (
               <UiOptionButton
+                type="button"
                 active={value === option.value}
                 key={option.value}
                 onClick={() => onChange(option.value)}
-                className={`aspect-ratio-option ${value === option.value ? 'selected' : ''}`}
+                className={`w-[78px] px-2 py-2 text-xs flex-col justify-center gap-2 ${
+                  value === option.value ? '!bg-accent !border-accent !text-white' : ''
+                }`}
+                style={{ height: '92px' }}
               >
                 {visualize && (
-                  <div className="aspect-ratio-icon">
+                  <div className="h-8 flex items-center justify-center">
                     <div
-                      className="aspect-ratio-box"
+                      className="border-2 border-current"
                       style={{
                         width: `${iconSize.width}px`,
                         height: `${iconSize.height}px`
@@ -83,7 +95,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
                     />
                   </div>
                 )}
-                <span className="aspect-ratio-label">{label}</span>
+                <span className="font-medium leading-none">{label}</span>
               </UiOptionButton>
             )
           })}

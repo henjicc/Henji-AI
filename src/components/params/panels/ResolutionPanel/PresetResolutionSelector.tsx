@@ -22,22 +22,28 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
   const { t, i18n } = useTranslation('ui')
 
   return (
-    <div className="preset-resolution-selector">
-      <label className="param-label">{t('resolutionPanel.qualityLabel')}</label>
-      <div className="preset-resolution-grid">
+    <div className="flex flex-col gap-2">
+      <label className="block text-xs text-zinc-400">
+        {t('resolutionPanel.resolution', { defaultValue: '分辨率' })}
+      </label>
+      <div className="flex flex-wrap justify-start gap-2">
         {options.map((option) => {
           const label = getI18nText(option.label, i18n.language)
 
           return (
             <UiOptionButton
+              type="button"
               active={value === option.value}
               key={option.value}
               onClick={() => onChange(option.value)}
-              className={`preset-resolution-option ${value === option.value ? 'selected' : ''}`}
+              className={`w-[120px] px-2 py-2 text-sm flex-col justify-center gap-1 ${
+                value === option.value ? '!bg-accent !border-accent !text-white' : ''
+              }`}
+              style={{ minHeight: '52px' }}
             >
-              <span className="preset-resolution-label">{label}</span>
+              <span className="font-medium leading-none">{label}</span>
               {option.aspectRatio && (
-                <span className="preset-resolution-ratio">({option.aspectRatio})</span>
+                <span className="text-[11px] leading-none opacity-80">({option.aspectRatio})</span>
               )}
             </UiOptionButton>
           )
