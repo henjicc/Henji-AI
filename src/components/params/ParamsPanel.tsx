@@ -10,6 +10,7 @@ import { LinkageEngine } from '@/core/linkage'
 import { useModelParams } from '@/hooks/useModelParams'
 import { ParamRenderer } from './ParamRenderer'
 import { isParamDisabled, isParamVisible } from './paramVisibility'
+import type { ParamDef } from '@/core/types'
 import './ParamsPanel.css'
 
 interface ParamsPanelProps {
@@ -74,6 +75,19 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
       [linkageEngine, params, sortedSchema]
     )
 
+    const renderSchema = useMemo(() => {
+      return visibleSchema.map((param): ParamDef => {
+        if (param.type !== 'dropdown' && param.type !== 'radio') {
+          return param
+        }
+        const options = getFilteredOptions(param.id)
+        if (!options.length || options === param.options) {
+          return param
+        }
+        return { ...param, options } as ParamDef
+      })
+    }, [getFilteredOptions, visibleSchema])
+
     // 加载状态
     if (!schema || schema.length === 0) {
       return (
@@ -85,7 +99,7 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
 
     return (
       <div className={`params-panel ${className || ''}`}>
-        {visibleSchema.map(paramDef => (
+        {renderSchema.map(paramDef => (
           <ParamRenderer
             key={paramDef.id}
             param={paramDef}

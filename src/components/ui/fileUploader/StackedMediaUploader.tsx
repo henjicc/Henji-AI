@@ -8,6 +8,7 @@ import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
 import { UI_UPLOADER_CARD_BORDER_CLASS, UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS } from '../styleTokens'
+import Tooltip from '../Tooltip'
 import { useReorderDrag } from './useReorderDrag'
 import { useStackedExpand } from './useStackedExpand'
 import { useFilePickerExpandLock } from './useFilePickerExpandLock'
@@ -217,7 +218,7 @@ export function StackedMediaUploader({
     ? (files.length > 0 ? 0 : 40)
     : 40
 
-  return (
+  const uploaderContent = (
     <div
       ref={elementRef}
       className="relative shrink-0 transition-[width] duration-250 ease-out"
@@ -235,14 +236,6 @@ export function StackedMediaUploader({
       onMouseUp={() => void handleCustomDrop()}
     >
       <div className={`relative min-h-[82px] rounded-2xl bg-zinc-900/28 p-1.5 transition-colors ${isDragging ? 'bg-zinc-800/55' : ''}`}>
-        {hintText && (
-          <div
-            className={`line-clamp-2 max-w-[220px] text-[11px] leading-4 text-zinc-500 transition-all duration-220 ease-out ${expanded ? 'mb-1.5 max-h-10 opacity-100' : 'mb-0 max-h-0 opacity-0'
-              }`}
-          >
-            {hintText}
-          </div>
-        )}
         <div className="relative h-[66px] overflow-visible">
           {files.map((file, index) => {
             const isVideo = fileTypes ? fileTypes[index] === 'video' : false
@@ -379,5 +372,18 @@ export function StackedMediaUploader({
       />
     </div>
   )
-}
 
+  if (!hintText) {
+    return uploaderContent
+  }
+
+  return (
+    <Tooltip
+      content={<span className="block text-zinc-300">{hintText}</span>}
+      delay={250}
+      className="bg-zinc-950/95 border-zinc-600/70 shadow-2xl"
+    >
+      {uploaderContent}
+    </Tooltip>
+  )
+}

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { ReferenceTextarea, StackedMediaUploader, UiIconButton } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
-import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { hasTag } from '@/core/tags'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 export interface FileOrderItem {
@@ -146,22 +145,9 @@ const InputArea: React.FC<InputAreaProps> = ({
     onVideoReplace,
     onVideoClick
   })
-  const requirementCheck = validateGenerationRequirements(
-    selectedModel,
-    modelParams,
-    {
-      prompt: input,
-      imagesCount: uploadedImages.length,
-      videosCount: uploadedVideos.length
-    }
-  )
   const isGenerateDisabled = () => {
     if (isLoading) return true
-    if (currentModel?.type === 'audio' && !input.trim()) return true
-    if (currentModel?.type !== 'audio' && !input.trim() && uploadedImages.length === 0 && uploadedVideos.length === 0) {
-      return true
-    }
-    return !requirementCheck.ok
+    return false
   }
   const generateDisabled = isGenerateDisabled()
   const getVideoDuration = (file: File): Promise<number> => {
@@ -267,8 +253,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   }))
 
   return (
-    <>
-      <div className="relative">
+    <div className="relative rounded-2xl">
         {shouldShowUpload && (
           <div className="pointer-events-auto absolute left-2 top-2 z-20">
             <StackedMediaUploader
@@ -372,7 +357,6 @@ const InputArea: React.FC<InputAreaProps> = ({
             )}
           </UiIconButton>
         </div>
-      </div>
 
       {/* Alert Dialog */}
       <AlertDialog
@@ -380,9 +364,10 @@ const InputArea: React.FC<InputAreaProps> = ({
         title={alertDialog.title}
         message={alertDialog.message}
         type={alertDialog.type}
+        scope="container"
         onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
       />
-    </>
+    </div>
   )
 }
 export default InputArea

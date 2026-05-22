@@ -100,15 +100,31 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     [linkageEngine, params, runtimeValues]
   )
 
+  const filteredParams = useMemo(() => {
+    if (!linkageEngine) {
+      return visibleParams
+    }
+    return visibleParams.map((param): ParamDef => {
+      if (param.type !== 'dropdown' && param.type !== 'radio') {
+        return param
+      }
+      const options = linkageEngine.getFilteredOptions(param.id, runtimeValues, params)
+      if (!options.length || options === param.options) {
+        return param
+      }
+      return { ...param, options } as ParamDef
+    })
+  }, [linkageEngine, params, runtimeValues, visibleParams])
+
   const specialPanelSpec = useMemo(() => {
     if (modelDef.meta.provider === 'modelscope') {
       return null
     }
-    return analyzeRatioResolutionParams(visibleParams, uploadedImages)
-  }, [modelDef.meta.provider, visibleParams, uploadedImages])
+    return analyzeRatioResolutionParams(filteredParams, uploadedImages)
+  }, [modelDef.meta.provider, filteredParams, uploadedImages])
 
   const consumedParamIds = new Set(specialPanelSpec?.consumedParamIds || [])
-  const renderParams = visibleParams.filter((param) => !consumedParamIds.has(param.id))
+  const renderParams = filteredParams.filter((param) => !consumedParamIds.has(param.id))
   const modeParams = useMemo(
     () => renderParams.filter(isPrimaryModeParam),
     [renderParams]

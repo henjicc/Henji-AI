@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 
 type TooltipProps = {
     children: React.ReactElement
-    content: string
+    content: React.ReactNode
     delay?: number // Hover delay in milliseconds
     className?: string
 }
@@ -71,7 +71,7 @@ export default function Tooltip({ children, content, delay = 500, className }: T
 
     const tooltipContent = (
         <span
-            className={`fixed z-[9999] -translate-x-1/2 -translate-y-full w-[280px] bg-zinc-800/90 border border-zinc-700/50 rounded-lg shadow-lg text-xs text-white p-3 pointer-events-none ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
+            className={`fixed z-[9999] -translate-x-1/2 -translate-y-full w-max max-w-[min(320px,calc(100vw-32px))] whitespace-normal text-left leading-5 bg-zinc-800/90 border border-zinc-700/50 rounded-lg shadow-lg text-xs text-white p-3 pointer-events-none ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
                 } ${className || ''}`}
             style={{
                 top: coords.top,

@@ -266,7 +266,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   }
 
   return (
-    <div className="w-full">
+    <div className="relative w-full rounded-[inherit]">
       {/* 顶部参数行：模型选择器 + 参数面板 */}
       <div className="flex flex-wrap items-end gap-3 mb-2.5 px-1">
         {/* 模型选择器 */}
@@ -400,6 +400,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         title={uiState.alertDialog.title}
         message={uiState.alertDialog.message}
         type={uiState.alertDialog.type}
+        scope="container"
         onClose={() => uiState.setAlertDialog({ ...uiState.alertDialog, isOpen: false })}
       />
     </div>

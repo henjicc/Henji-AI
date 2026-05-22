@@ -28,6 +28,12 @@ pub fn resolve_ppio_media_rewrite_mode(
         "/async/kling-v2.6-pro-motion-control" if normalized == "image" => {
             PpioMediaRewriteMode::PublicUrl
         }
+        "/async/kling-v3.0-4k-i2v" if normalized == "image" || normalized == "end_image" => {
+            PpioMediaRewriteMode::PublicUrl
+        }
+        "/async/kling-v3.0-motion-control" if normalized == "image" => {
+            PpioMediaRewriteMode::PublicUrl
+        }
         _ => PpioMediaRewriteMode::DataUri,
     }
 }

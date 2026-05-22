@@ -91,6 +91,7 @@ export function FloatingInputPanel({
         </div>
 
         <div
+          className="relative rounded-[inherit]"
           style={{
             opacity: !isCollapsed && !isCollapsing ? 1 : 0,
             transition: 'opacity 0.4s ease 0.15s',
