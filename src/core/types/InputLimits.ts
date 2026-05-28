@@ -22,12 +22,14 @@ export interface InputLimitRule {
   when?: InputCondition
   images?: InputCountLimit
   videos?: InputCountLimit
+  audios?: InputCountLimit
   videoConstraints?: VideoConstraints
 }
 
 export interface InputLimitsConfig {
   images?: InputCountLimit
   videos?: InputCountLimit
+  audios?: InputCountLimit
   rules?: InputLimitRule[]
 }
 

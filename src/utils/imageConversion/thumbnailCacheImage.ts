@@ -118,4 +118,3 @@ export async function getOrCreateImageThumbnail(
 
   return { filePath: generatedPath, dataUrl }
 }
-

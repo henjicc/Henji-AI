@@ -6,8 +6,10 @@ interface UseMixedFileOrderParams {
   needsVideoOnly: boolean
   uploadedImages: string[]
   uploadedVideos: string[]
+  uploadedAudios: string[]
   maxImageCount: number
   maxVideoCount: number
+  maxAudioCount: number
   fileOrder?: FileOrderItem[]
   onFileOrderChange?: (order: FileOrderItem[]) => void
   onImageRemove: (index: number) => void
@@ -17,6 +19,9 @@ interface UseMixedFileOrderParams {
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
   onVideoClick?: (videoUrl: string) => void
+  onAudioRemove?: (index: number) => void
+  onAudioReplace?: (index: number, file: File) => void
+  onAudioClick?: (audioUrl: string) => void
 }
 
 interface UseMixedFileOrderReturn {
@@ -43,8 +48,10 @@ export function useMixedFileOrder({
   needsVideoOnly,
   uploadedImages,
   uploadedVideos,
+  uploadedAudios,
   maxImageCount,
   maxVideoCount,
+  maxAudioCount,
   fileOrder,
   onFileOrderChange,
   onImageRemove,
@@ -53,7 +60,10 @@ export function useMixedFileOrder({
   onImageClick,
   onVideoRemove,
   onVideoReplace,
-  onVideoClick
+  onVideoClick,
+  onAudioRemove,
+  onAudioReplace,
+  onAudioClick
 }: UseMixedFileOrderParams): UseMixedFileOrderReturn {
   const [localFileOrder, setLocalFileOrder] = useState<FileOrderItem[]>([])
 
@@ -71,6 +81,7 @@ export function useMixedFileOrder({
     const newOrder: FileOrderItem[] = []
     const existingVideoIndices = new Set<number>()
     const existingImageIndices = new Set<number>()
+    const existingAudioIndices = new Set<number>()
 
     currentFileOrder.forEach(item => {
       if (item.type === 'video' && item.index < uploadedVideos.length) {
@@ -79,6 +90,9 @@ export function useMixedFileOrder({
       } else if (item.type === 'image' && item.index < uploadedImages.length) {
         newOrder.push(item)
         existingImageIndices.add(item.index)
+      } else if (item.type === 'audio' && item.index < uploadedAudios.length) {
+        newOrder.push(item)
+        existingAudioIndices.add(item.index)
       }
     })
 
@@ -94,10 +108,16 @@ export function useMixedFileOrder({
       }
     }
 
+    for (let i = 0; i < uploadedAudios.length; i++) {
+      if (!existingAudioIndices.has(i)) {
+        newOrder.push({ type: 'audio', index: i })
+      }
+    }
+
     if (!isSameOrder(currentFileOrder, newOrder)) {
       setCurrentFileOrder(newOrder)
     }
-  }, [needsVideoUpload, uploadedVideos.length, uploadedImages.length, currentFileOrder, setCurrentFileOrder])
+  }, [needsVideoUpload, uploadedAudios.length, uploadedVideos.length, uploadedImages.length, currentFileOrder, setCurrentFileOrder])
 
   const handleMixedFileRemove = (index: number): void => {
     if (!needsVideoUpload || currentFileOrder.length === 0) {
@@ -115,6 +135,11 @@ export function useMixedFileOrder({
 
     if (item.type === 'image') {
       onImageRemove(item.index)
+      return
+    }
+
+    if (item.type === 'audio' && onAudioRemove) {
+      onAudioRemove(item.index)
     }
   }
 
@@ -134,6 +159,11 @@ export function useMixedFileOrder({
 
     if (item.type === 'image') {
       onImageReplace(item.index, file)
+      return
+    }
+
+    if (item.type === 'audio' && onAudioReplace) {
+      onAudioReplace(item.index, file)
     }
   }
 
@@ -167,6 +197,11 @@ export function useMixedFileOrder({
       return
     }
 
+    if (item.type === 'audio') {
+      onAudioClick?.(fileUrl)
+      return
+    }
+
     if (item.type === 'image') {
       const allImages = currentFileOrder
         .filter(f => f.type === 'image')
@@ -177,43 +212,48 @@ export function useMixedFileOrder({
 
   const mixedFiles = useMemo(() => {
     if (needsVideoUpload && currentFileOrder.length > 0) {
-      return currentFileOrder.map(item =>
-        item.type === 'video' ? uploadedVideos[item.index] : uploadedImages[item.index]
-      )
+      return currentFileOrder.map(item => {
+        if (item.type === 'video') return uploadedVideos[item.index]
+        if (item.type === 'audio') return uploadedAudios[item.index]
+        return uploadedImages[item.index]
+      })
     }
 
     if (needsVideoUpload) {
-      return needsVideoOnly ? uploadedVideos : [...uploadedVideos, ...uploadedImages]
+      return needsVideoOnly ? [...uploadedVideos, ...uploadedAudios] : [...uploadedVideos, ...uploadedImages, ...uploadedAudios]
     }
 
-    return uploadedImages
-  }, [currentFileOrder, needsVideoOnly, needsVideoUpload, uploadedImages, uploadedVideos])
+    return [...uploadedImages, ...uploadedAudios]
+  }, [currentFileOrder, needsVideoOnly, needsVideoUpload, uploadedAudios, uploadedImages, uploadedVideos])
 
   const mixedMaxCount = needsVideoUpload
-    ? (needsVideoOnly ? maxVideoCount : maxVideoCount + maxImageCount)
-    : maxImageCount
+    ? (needsVideoOnly ? maxVideoCount + maxAudioCount : maxVideoCount + maxImageCount + maxAudioCount)
+    : maxImageCount + maxAudioCount
 
   const shouldHideUploadButton = useMemo(() => {
     if (needsVideoUpload && !needsVideoOnly) {
       const currentVideoCount = uploadedVideos.length
       const currentImageCount = uploadedImages.length
-      return currentVideoCount >= maxVideoCount && currentImageCount >= maxImageCount
+      const currentAudioCount = uploadedAudios.length
+      return currentVideoCount >= maxVideoCount && currentImageCount >= maxImageCount && currentAudioCount >= maxAudioCount
     }
 
-    if (needsVideoOnly && uploadedVideos.length >= maxVideoCount) {
+    if (needsVideoOnly && uploadedVideos.length >= maxVideoCount && uploadedAudios.length >= maxAudioCount) {
       return true
     }
 
-    if (!needsVideoUpload && uploadedImages.length >= maxImageCount) {
+    if (!needsVideoUpload && uploadedImages.length >= maxImageCount && uploadedAudios.length >= maxAudioCount) {
       return true
     }
 
     return false
   }, [
     maxImageCount,
+    maxAudioCount,
     maxVideoCount,
     needsVideoOnly,
     needsVideoUpload,
+    uploadedAudios.length,
     uploadedImages.length,
     uploadedVideos.length
   ])

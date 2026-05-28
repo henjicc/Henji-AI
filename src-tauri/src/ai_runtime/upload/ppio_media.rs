@@ -22,6 +22,10 @@ pub fn resolve_ppio_media_rewrite_mode(
         return PpioMediaRewriteMode::PublicUrl;
     }
 
+    if normalized == "reference_voice" {
+        return PpioMediaRewriteMode::PublicUrl;
+    }
+
     match route {
         "/async/kling-2.5-turbo-i2v" if normalized == "image" => PpioMediaRewriteMode::RawBase64,
         "/async/pixverse-v4.5-i2v" if normalized == "image" => PpioMediaRewriteMode::RawBase64,

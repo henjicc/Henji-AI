@@ -13,6 +13,7 @@ import {
   saveBase64ToUploads,
   saveUploadVideo,
 } from '@/utils/save'
+import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
 import type { ImageEditState } from '@/components/ImageEditor'
@@ -242,6 +243,7 @@ export function useTaskGeneration({
       const options: GeneratorOptions = { ...(task.options ?? {}) }
       if (task.uploadedFilePaths) options.uploadedFilePaths = task.uploadedFilePaths
       if (task.uploadedVideoFilePaths) options.uploadedVideoFilePaths = task.uploadedVideoFilePaths
+      if (task.uploadedAudioFilePaths) options.uploadedAudioFilePaths = task.uploadedAudioFilePaths
       if (task.images) options.images = task.images
       if (task.uploadedVideoFilePaths && task.uploadedVideoFilePaths.length > 0) {
         const videoUrls = task.uploadedVideoFilePaths.map(toVideoDisplayUrl)
@@ -253,6 +255,11 @@ export function useTaskGeneration({
         }
         ;(options as Record<string, unknown>).uploadedVideos = options.videos
 
+      }
+      if (task.uploadedAudioFilePaths && task.uploadedAudioFilePaths.length > 0) {
+        const audioUrls = task.uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p))
+        options.audios = await Promise.all(audioUrls)
+        ;(options as Record<string, unknown>).uploadedAudios = options.audios
       }
 
       updateTask(taskId, { status: 'generating' })
@@ -430,6 +437,9 @@ export function useTaskGeneration({
     const uploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths)
       ? [...options.uploadedVideoFilePaths]
       : []
+    const uploadedAudioFilePaths = isStringArray(options.uploadedAudioFilePaths)
+      ? [...options.uploadedAudioFilePaths]
+      : []
     const inlineVideo = options.video
 
     if (isFileValue(inlineVideo) && uploadedVideoFilePaths.length === 0) {
@@ -451,6 +461,13 @@ export function useTaskGeneration({
       options.video = videoSourceUrls[0]
     }
 
+    if (uploadedAudioFilePaths.length > 0) {
+      const audioSourceUrls = await Promise.all(uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p)))
+      options.uploadedAudioFilePaths = uploadedAudioFilePaths
+      options.audios = audioSourceUrls
+      ;(options as Record<string, unknown>).uploadedAudios = audioSourceUrls
+    }
+
     const sanitizedVideos = isStringArray(options.videos)
       ? options.videos.filter(isLikelyVideoSource)
       : []
@@ -466,6 +483,14 @@ export function useTaskGeneration({
       if (typeof options.video === 'string' && !isLikelyVideoSource(options.video)) {
         delete options.video
       }
+    }
+
+    if (!isStringArray(options.audios) || options.audios.length === 0) {
+      delete options.audios
+      delete (options as Record<string, unknown>).uploadedAudios
+    } else {
+      options.audios = options.audios.filter((item) => typeof item === 'string' && item.trim().length > 0)
+      ;(options as Record<string, unknown>).uploadedAudios = options.audios
     }
 
     if (isMinimaxVoiceCloneMode(options)) {
@@ -539,6 +564,7 @@ export function useTaskGeneration({
 
     // 视频缩略图：优先使用视频文件 URL，避免 <video> 无法渲染 base64 缩略图第一帧
     const taskUploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths : undefined
+    const taskUploadedAudioFilePaths = isStringArray(options.uploadedAudioFilePaths) ? options.uploadedAudioFilePaths : undefined
     const uploadedVideos = isStringArray(options.videos) ? options.videos : undefined
     const videoUrls = taskUploadedVideoFilePaths?.length
       ? taskUploadedVideoFilePaths.map(toVideoDisplayUrl)
@@ -591,9 +617,10 @@ export function useTaskGeneration({
       progress: 0,
       images: isStringArray(options.images) ? options.images : undefined,
       videos: videoUrls,
-      uploadedFilePaths: isStringArray(options.uploadedFilePaths) ? options.uploadedFilePaths : undefined,
-      uploadedVideoFilePaths: taskUploadedVideoFilePaths,
-      options,
+        uploadedFilePaths: isStringArray(options.uploadedFilePaths) ? options.uploadedFilePaths : undefined,
+        uploadedVideoFilePaths: taskUploadedVideoFilePaths,
+        uploadedAudioFilePaths: taskUploadedAudioFilePaths,
+        options,
     }
 
     // enqueue 前先入列表，保证 UI 立即可见（最新在底部）

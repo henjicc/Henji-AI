@@ -11,6 +11,8 @@ export interface GeneratorOptions extends Record<string, unknown> {
   uploadedFilePaths?: string[]
   videos?: string[]
   uploadedVideoFilePaths?: string[]
+  audios?: string[]
+  uploadedAudioFilePaths?: string[]
 
   editStateFile?: string
 
@@ -35,6 +37,7 @@ export interface GenerationTask {
   videos?: string[]
   uploadedFilePaths?: string[]
   uploadedVideoFilePaths?: string[]
+  uploadedAudioFilePaths?: string[]
   serverTaskId?: string
 
   dimensions?: string

@@ -101,6 +101,16 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       }
     }
 
+    if (target.uploadedAudioFilePaths?.length) {
+      for (const filePath of target.uploadedAudioFilePaths) {
+        const usedByOthers = tasks.some((t) => t.id !== taskId && t.uploadedAudioFilePaths?.includes(filePath))
+        if (usedByOthers) continue
+        await removeFileSafe(filePath)
+        await deleteWaveformCacheForAudio(filePath)
+        await deleteThumbnailCacheSafe(filePath)
+      }
+    }
+
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     clearTaskProgress?.(taskId)
   }, [clearTaskProgress, setTasks, tasks])
@@ -121,6 +131,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
 
     const editStateFiles = new Set<string>()
     const resultFiles = new Set<string>()
+    const resultAudioPaths = new Set<string>()
     const audioPaths: string[] = []
     const uploadedImages = new Set<string>()
     const uploadedVideos = new Set<string>()
@@ -133,12 +144,13 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
         const paths = splitMulti(t.result.filePath)
         for (const p of paths) {
           resultFiles.add(p)
-          if (t.result.type === 'audio') audioPaths.push(p)
+          if (t.result.type === 'audio') resultAudioPaths.add(p)
         }
       }
 
       t.uploadedFilePaths?.forEach((p) => uploadedImages.add(p))
       t.uploadedVideoFilePaths?.forEach((p) => uploadedVideos.add(p))
+      t.uploadedAudioFilePaths?.forEach((p) => audioPaths.push(p))
     }
 
     for (const f of editStateFiles) {
@@ -150,7 +162,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       await deleteThumbnailCacheSafe(f)
     }
 
-    for (const p of audioPaths) {
+    for (const p of resultAudioPaths) {
       try {
         await deleteWaveformCacheForAudio(p)
       } catch (e) {
@@ -172,6 +184,14 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       await deleteThumbnailCacheSafe(filePath)
     }
 
+    for (const filePath of audioPaths) {
+      const usedByRemaining = remainingTasks.some((t) => t.uploadedAudioFilePaths?.includes(filePath))
+      if (usedByRemaining) continue
+      await removeFileSafe(filePath)
+      await deleteWaveformCacheForAudio(filePath)
+      await deleteThumbnailCacheSafe(filePath)
+    }
+
     logger.info('[Workspace] 已清理失败任务', { count: failedTasks.length })
     setTasks(remainingTasks)
     failedTasks.forEach((t) => clearTaskProgress?.(t.id))
@@ -189,6 +209,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     const presets = await loadPresets()
     const editStateFiles = new Set<string>()
     const resultFiles = new Set<string>()
+    const resultAudioPaths = new Set<string>()
     const audioPaths: string[] = []
     const uploadedImages = new Set<string>()
     const uploadedVideos = new Set<string>()
@@ -201,12 +222,13 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
         const paths = splitMulti(t.result.filePath)
         for (const p of paths) {
           resultFiles.add(p)
-          if (t.result.type === 'audio') audioPaths.push(p)
+          if (t.result.type === 'audio') resultAudioPaths.add(p)
         }
       }
 
       t.uploadedFilePaths?.forEach((p) => uploadedImages.add(p))
       t.uploadedVideoFilePaths?.forEach((p) => uploadedVideos.add(p))
+      t.uploadedAudioFilePaths?.forEach((p) => audioPaths.push(p))
     }
 
     for (const f of editStateFiles) {
@@ -218,7 +240,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       await deleteThumbnailCacheSafe(f)
     }
 
-    for (const p of audioPaths) {
+    for (const p of resultAudioPaths) {
       try {
         await deleteWaveformCacheForAudio(p)
       } catch (e) {
@@ -237,6 +259,12 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
 
     for (const filePath of uploadedVideos) {
       await removeFileSafe(filePath)
+      await deleteThumbnailCacheSafe(filePath)
+    }
+
+    for (const filePath of audioPaths) {
+      await removeFileSafe(filePath)
+      await deleteWaveformCacheForAudio(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 

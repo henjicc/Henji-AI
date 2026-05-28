@@ -150,6 +150,8 @@ fn preprocess_field_value<'a>(
                 Ok(())
             }
             Value::Object(obj) => {
+                preprocess_ppio_wan27_reference_media_object(provider_id, route, strategy, obj).await?;
+
                 for (key, nested_value) in obj.iter_mut() {
                     let next_kind = inherit_media_kind(media_kind, key);
                     preprocess_field_value(
@@ -169,7 +171,55 @@ fn preprocess_field_value<'a>(
     })
 }
 
+async fn preprocess_ppio_wan27_reference_media_object(
+    provider_id: &str,
+    route: &str,
+    strategy: &UploadStrategy,
+    obj: &mut Map<String, Value>,
+) -> AiResult<()> {
+    if provider_id != "ppio" || route != "/async/wan2.7-r2v" {
+        return Ok(());
+    }
+
+    let media_kind = obj
+        .get("type")
+        .and_then(Value::as_str)
+        .map(|value| match value {
+            "reference_video" => MediaKind::Video,
+            "reference_image" | "first_frame" => MediaKind::Image,
+            _ => MediaKind::Unknown,
+        })
+        .unwrap_or(MediaKind::Unknown);
+
+    if !matches!(media_kind, MediaKind::Unknown) {
+        if let Some(Value::String(source)) = obj.get_mut("url") {
+            let next = rewrite_media_source(provider_id, route, strategy, media_kind, Some("url"), source)
+                .await?;
+            *source = next;
+        }
+    }
+
+    if let Some(Value::String(source)) = obj.get_mut("reference_voice") {
+        let next = rewrite_media_source(
+            provider_id,
+            route,
+            strategy,
+            MediaKind::Audio,
+            Some("reference_voice"),
+            source,
+        )
+        .await?;
+        *source = next;
+    }
+
+    Ok(())
+}
+
 fn inherit_media_kind(current: MediaKind, key: &str) -> MediaKind {
+    if matches!(current, MediaKind::Unknown) && key.eq_ignore_ascii_case("url") {
+        return MediaKind::Unknown;
+    }
+
     let nested = classify_media_key(key);
     if matches!(nested, MediaKind::Unknown) {
         current
@@ -456,6 +506,9 @@ fn should_trace_upload(provider_id: &str, route: &str) -> bool {
             "/async/wan-2.5-i2v-preview"
                 | "/async/wan2.6-i2v"
                 | "/async/wan2.6-v2v"
+                | "/async/wan2.7-i2v"
+                | "/async/wan2.7-r2v"
+                | "/async/wan2.7-videoedit"
                 | "/async/kling-2.5-turbo-i2v"
                 | "/async/kling-v2.6-pro-i2v"
                 | "/async/kling-v2.6-pro-motion-control"

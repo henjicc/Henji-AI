@@ -19,6 +19,7 @@ interface AudioPlayerProps {
 
 const SAFE_LOCAL_WAVEFORM_HOSTS = new Set(['localhost', '127.0.0.1', 'asset.localhost', 'tauri.localhost'])
 const WAVEFORM_ALGO_VERSION = '2026-03-25-v4'
+const waveformMemoryCache = new Map<string, number[]>()
 
 function isCrossOriginWaveformRestricted(source: string): boolean {
   if (!source || typeof window === 'undefined') {
@@ -126,11 +127,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     () => Math.max(96, Math.min(320, Math.floor(resolvedWaveformWidth * (compact ? 0.72 : 0.62)))),
     [resolvedWaveformWidth, compact]
   )
+  const cacheSourceKey = useMemo(() => filePath?.trim() || src, [filePath, src])
   const cacheKey = useMemo(
-    () => `${src}::${targetBars}::${compact ? 'compact' : 'default'}::${WAVEFORM_ALGO_VERSION}`,
-    [src, targetBars, compact]
+    () => `${cacheSourceKey}::${targetBars}::${compact ? 'compact' : 'default'}::${WAVEFORM_ALGO_VERSION}`,
+    [cacheSourceKey, targetBars, compact]
   )
-  const waveCacheRef = useRef<Map<string, number[]>>(new Map())
   const volumeContainerRef = useRef<HTMLDivElement | null>(null)
   const volumeTipTimerRef = useRef<number | null>(null)
 
@@ -321,19 +322,26 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   useEffect(() => {
     let aborted = false
-    setWaveform(null)
-    setWaveDuration(null)
     const run = async () => {
-      if (waveCacheRef.current.has(cacheKey)) {
-        setWaveform(waveCacheRef.current.get(cacheKey) || null)
+      const cachedWaveform = waveformMemoryCache.get(cacheKey)
+      if (cachedWaveform) {
+        if (!aborted) {
+          setWaveform(cachedWaveform)
+          setWaveDuration((prev) => prev || duration || null)
+        }
         return
+      }
+      if (!aborted) {
+        setWaveDuration(null)
       }
       try {
         const buf = await fetchAudioArrayBuffer(src, filePath)
         const Ctx = window.AudioContext ?? ((window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
         if (!Ctx) {
           if (!aborted) {
-            setWaveform(buildFallbackWaveform(cacheKey))
+            const fallback = buildFallbackWaveform(cacheKey)
+            waveformMemoryCache.set(cacheKey, fallback)
+            setWaveform(fallback)
           }
           return
         }
@@ -377,14 +385,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           return Math.max(floor, Math.min(1, v))
         })
         if (!aborted) {
-          waveCacheRef.current.set(cacheKey, smooth)
+          waveformMemoryCache.set(cacheKey, smooth)
           setWaveform(smooth)
           setWaveDuration(audioBuf.duration || null)
         }
       } catch {
         if (!aborted) {
           const fallback = buildFallbackWaveform(cacheKey)
-          waveCacheRef.current.set(cacheKey, fallback)
+          waveformMemoryCache.set(cacheKey, fallback)
           setWaveform(fallback)
         }
       }

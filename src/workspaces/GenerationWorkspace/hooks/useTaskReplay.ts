@@ -70,6 +70,7 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
 
     const uploadedFilePaths = task.uploadedFilePaths?.filter((p) => p && p.trim().length > 0) ?? []
     const uploadedVideoFilePaths = task.uploadedVideoFilePaths?.filter((p) => p && p.trim().length > 0) ?? []
+    const uploadedAudioFilePaths = task.uploadedAudioFilePaths?.filter((p) => p && p.trim().length > 0) ?? []
 
     if (uploadedFilePaths.length > 0) {
       options.uploadedFilePaths = uploadedFilePaths
@@ -82,6 +83,13 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
       options.uploadedVideoFilePaths = uploadedVideoFilePaths
       if (!('video' in options)) {
         options.video = convertFileSrc(uploadedVideoFilePaths[0])
+      }
+    }
+
+    if (uploadedAudioFilePaths.length > 0) {
+      options.uploadedAudioFilePaths = uploadedAudioFilePaths
+      if (!isStringArray(options.audios) || options.audios.length === 0) {
+        options.audios = uploadedAudioFilePaths.map((p) => convertFileSrc(p))
       }
     }
 
@@ -103,6 +111,7 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
       images: task.images,
       uploadedFilePaths: task.uploadedFilePaths,
       uploadedVideoFilePaths: task.uploadedVideoFilePaths,
+      uploadedAudioFilePaths: task.uploadedAudioFilePaths,
       model: task.model,
       provider: task.provider,
       options: task.options,

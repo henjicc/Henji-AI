@@ -6,7 +6,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { hasTag } from '@/core/tags'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 export interface FileOrderItem {
-  type: 'video' | 'image'
+  type: 'video' | 'image' | 'audio'
   index: number
 }
 interface InputAreaProps {
@@ -31,6 +31,11 @@ interface InputAreaProps {
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
   onVideoClick?: (videoUrl: string) => void
+  uploadedAudios?: string[]
+  onAudioUpload?: (files: File[]) => void
+  onAudioRemove?: (index: number) => void
+  onAudioReplace?: (index: number, file: File) => void
+  onAudioClick?: (audioUrl: string) => void
   fileOrder?: FileOrderItem[]
   onFileOrderChange?: (order: FileOrderItem[]) => void
   onGenerate: () => void
@@ -61,6 +66,11 @@ const InputArea: React.FC<InputAreaProps> = ({
   onVideoRemove,
   onVideoReplace,
   onVideoClick,
+  uploadedAudios = [],
+  onAudioUpload,
+  onAudioRemove,
+  onAudioReplace,
+  onAudioClick,
   fileOrder,
   onFileOrderChange,
   onGenerate
@@ -89,11 +99,13 @@ const InputArea: React.FC<InputAreaProps> = ({
   const minImageCount = inputLimits.images.min
   const maxVideoCount = inputLimits.videos.max
   const minVideoCount = inputLimits.videos.min
+  const maxAudioCount = inputLimits.audios.max
   const videoConstraints = inputLimits.videoConstraints
   const needsVideoUpload = maxVideoCount > 0
   const needsVideoOnly = needsVideoUpload && maxImageCount === 0
   const isMultiple = maxImageCount > 1
-  const shouldShowUpload = currentModel?.type !== 'audio' && (maxImageCount > 0 || needsVideoUpload)
+  const needsAudioUpload = maxAudioCount > 0 && Boolean(onAudioUpload)
+  const shouldShowUpload = currentModel?.type !== 'audio' && (maxImageCount > 0 || needsVideoUpload || needsAudioUpload)
   const isEnglishPromptOnly = hasTag(selectedModel, 'english-prompt-only')
   const formatLimitText = (min: number, max: number, unit: string) => {
     if (max <= 0) return ''
@@ -133,8 +145,10 @@ const InputArea: React.FC<InputAreaProps> = ({
     needsVideoOnly,
     uploadedImages,
     uploadedVideos,
+    uploadedAudios,
     maxImageCount,
     maxVideoCount,
+    maxAudioCount,
     fileOrder,
     onFileOrderChange,
     onImageRemove,
@@ -143,7 +157,10 @@ const InputArea: React.FC<InputAreaProps> = ({
     onImageClick,
     onVideoRemove,
     onVideoReplace,
-    onVideoClick
+    onVideoClick,
+    onAudioRemove,
+    onAudioReplace,
+    onAudioClick
   })
   const isGenerateDisabled = () => {
     if (isLoading) return true
@@ -169,6 +186,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   const handleMixedFileUpload = async (files: File[]) => {
     const videoFiles = files.filter(f => f.type.startsWith('video/'))
     const imageFiles = files.filter(f => f.type.startsWith('image/'))
+    const audioFiles = files.filter(f => f.type.startsWith('audio/'))
     const currentVideoCount = uploadedVideos.length
     const currentImageCount = uploadedImages.length
     if (videoFiles.length > 0 && onVideoUpload && currentVideoCount < maxVideoCount) {
@@ -240,6 +258,9 @@ const InputArea: React.FC<InputAreaProps> = ({
         )
       }
     }
+    if (audioFiles.length > 0 && onAudioUpload && uploadedAudios.length < maxAudioCount) {
+      onAudioUpload([audioFiles[0]])
+    }
   }
   const promptMinHeightClass = 'min-h-[146px]'
   const promptLeftPaddingClass =
@@ -258,16 +279,20 @@ const InputArea: React.FC<InputAreaProps> = ({
           <div className="pointer-events-auto absolute left-2 top-2 z-20">
             <StackedMediaUploader
               files={mixedFiles}
-              onUpload={needsVideoUpload ? handleMixedFileUpload : onImageUpload}
-              onRemove={needsVideoUpload ? handleMixedFileRemove : onImageRemove}
-              onReplace={needsVideoUpload ? handleMixedFileReplace : onImageReplace}
-              onReorder={needsVideoUpload ? handleMixedFileReorder : onImageReorder}
-              onFileClick={needsVideoUpload ? handleMixedFileClick : onImageClick}
-              accept={needsVideoOnly ? "video/*" : (needsVideoUpload ? "video/*,image/*" : "image/*")}
-              multiple={needsVideoOnly ? false : (needsVideoUpload ? true : isMultiple)}
+              onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
+              onRemove={(needsVideoUpload || needsAudioUpload) ? handleMixedFileRemove : onImageRemove}
+              onReplace={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReplace : onImageReplace}
+              onReorder={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReorder : onImageReorder}
+              onFileClick={(needsVideoUpload || needsAudioUpload) ? handleMixedFileClick : onImageClick}
+              accept={needsVideoOnly
+                ? (needsAudioUpload ? "video/*,audio/*" : "video/*")
+                : (needsVideoUpload
+                  ? (needsAudioUpload ? "video/*,image/*,audio/*" : "video/*,image/*")
+                  : (needsAudioUpload ? "image/*,audio/*" : "image/*"))}
+              multiple={needsVideoOnly ? needsAudioUpload : ((needsVideoUpload || needsAudioUpload) ? true : isMultiple)}
               maxCount={mixedMaxCount}
               hideUploadButton={shouldHideUploadButton}
-              fileTypes={needsVideoUpload && currentFileOrder.length > 0
+              fileTypes={(needsVideoUpload || needsAudioUpload) && currentFileOrder.length > 0
                 ? currentFileOrder.map(item => item.type)
                 : undefined}
               onDragStateChange={onDragStateChange}

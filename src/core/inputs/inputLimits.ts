@@ -5,6 +5,7 @@ import { evaluateCondition } from '@/core/validation/conditionEvaluator'
 export interface ResolvedInputLimits {
   images: { min: number; max: number }
   videos: { min: number; max: number }
+  audios: { min: number; max: number }
   videoConstraints?: VideoConstraints
 }
 
@@ -16,6 +17,7 @@ export interface InputLimitContext {
 
 const DEFAULT_IMAGE_MAX = 6
 const DEFAULT_VIDEO_MAX = 0
+const DEFAULT_AUDIO_MAX = 0
 
 const normalizeLimit = (limit: InputCountLimit | undefined, fallbackMax: number): { min: number; max: number } => {
   if (!limit) return { min: 0, max: fallbackMax }
@@ -69,6 +71,7 @@ export function resolveInputLimits(
 
   let images = normalizeLimit(config.images, DEFAULT_IMAGE_MAX)
   let videos = normalizeLimit(config.videos, DEFAULT_VIDEO_MAX)
+  let audios = normalizeLimit(config.audios, DEFAULT_AUDIO_MAX)
   let videoConstraints: VideoConstraints | undefined
 
   const rules = resolveRules(config.rules, normalizedParams, context)
@@ -77,10 +80,11 @@ export function resolveInputLimits(
     if (!matches) continue
     images = mergeLimit(images, rule.images)
     videos = mergeLimit(videos, rule.videos)
+    audios = mergeLimit(audios, rule.audios)
     if (rule.videoConstraints) {
       videoConstraints = rule.videoConstraints
     }
   }
 
-  return { images, videos, videoConstraints }
+  return { images, videos, audios, videoConstraints }
 }

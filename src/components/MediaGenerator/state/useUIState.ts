@@ -21,6 +21,8 @@ export const useUIState = () => {
   const [uploadedVideos, setUploadedVideos] = useState<string[]>([])
   const [uploadedVideoFiles, setUploadedVideoFiles] = useState<File[]>([])
   const [uploadedVideoFilePaths, setUploadedVideoFilePaths] = useState<string[]>([])
+  const [uploadedAudios, setUploadedAudios] = useState<string[]>([])
+  const [uploadedAudioFilePaths, setUploadedAudioFilePaths] = useState<string[]>([])
   const [fileOrder, setFileOrder] = useState<FileOrderItem[]>([])
   const [uploadedVideoDuration, setUploadedVideoDuration] = useState(0)
 
@@ -76,6 +78,10 @@ export const useUIState = () => {
     setUploadedVideoFiles,
     uploadedVideoFilePaths,
     setUploadedVideoFilePaths,
+    uploadedAudios,
+    setUploadedAudios,
+    uploadedAudioFilePaths,
+    setUploadedAudioFilePaths,
     fileOrder,
     setFileOrder,
     uploadedVideoDuration,

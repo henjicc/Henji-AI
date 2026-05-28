@@ -19,6 +19,7 @@ import { NotificationToast } from './GenerationWorkspace/components/Notification
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
 import { ImageViewerModal } from './GenerationWorkspace/components/ImageViewerModal'
 import { VideoViewerModal } from './GenerationWorkspace/components/VideoViewerModal'
+import { AudioViewerModal } from './GenerationWorkspace/components/AudioViewerModal'
 import { TaskList } from './GenerationWorkspace/components/TaskList'
 import { useBottomPanel } from './GenerationWorkspace/hooks/useBottomPanel'
 import { useDataDirectoryInit } from './GenerationWorkspace/hooks/useDataDirectoryInit'
@@ -368,6 +369,9 @@ const GenerationWorkspace: React.FC = () => {
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
   const [currentVideoPath, setCurrentVideoPath] = useState<string | undefined>(undefined)
+  const [isAudioViewerOpen, setIsAudioViewerOpen] = useState(false)
+  const [currentAudioUrl, setCurrentAudioUrl] = useState('')
+  const [currentAudioPath, setCurrentAudioPath] = useState<string | undefined>(undefined)
   const [isTopFilterVisible, setIsTopFilterVisible] = useState(false)
   const [isTopFilterHovered, setIsTopFilterHovered] = useState(false)
   const filterHideTimerRef = useRef<number | null>(null)
@@ -445,6 +449,15 @@ const GenerationWorkspace: React.FC = () => {
     setIsVideoViewerOpen(false)
     setCurrentVideoPath(undefined)
   }
+  const openAudioViewer = (url?: string, filePath?: string) => {
+    setCurrentAudioUrl(url || (filePath ? convertFileSrc(filePath.replace(/\\/g, '/')) : ''))
+    setCurrentAudioPath(filePath)
+    setIsAudioViewerOpen(true)
+  }
+  const closeAudioViewer = () => {
+    setIsAudioViewerOpen(false)
+    setCurrentAudioPath(undefined)
+  }
   useEffect(() => {
     const handleOpenVideoViewer = (event: Event) => {
       const e = event as CustomEvent<{ url?: string; videoUrl?: string; filePath?: string }>
@@ -453,6 +466,15 @@ const GenerationWorkspace: React.FC = () => {
     }
     window.addEventListener('open-video-viewer', handleOpenVideoViewer as EventListener)
     return () => window.removeEventListener('open-video-viewer', handleOpenVideoViewer as EventListener)
+  }, [])
+  useEffect(() => {
+    const handleOpenAudioViewer = (event: Event) => {
+      const e = event as CustomEvent<{ url?: string; audioUrl?: string; filePath?: string }>
+      const url = typeof e.detail.url === 'string' ? e.detail.url : e.detail.audioUrl
+      openAudioViewer(url, e.detail.filePath)
+    }
+    window.addEventListener('open-audio-viewer', handleOpenAudioViewer as EventListener)
+    return () => window.removeEventListener('open-audio-viewer', handleOpenAudioViewer as EventListener)
   }, [])
   const handleDownloadFromViewer = async (filePath: string) => {
     await download(filePath, true)
@@ -595,6 +617,12 @@ const GenerationWorkspace: React.FC = () => {
         filePath={currentVideoPath}
         onClose={closeVideoViewer}
         onDownload={(filePath) => void handleDownloadFromViewer(filePath)}
+      />
+      <AudioViewerModal
+        open={isAudioViewerOpen}
+        audioUrl={currentAudioUrl}
+        filePath={currentAudioPath}
+        onClose={closeAudioViewer}
       />
       <ContextMenu items={menuItems} position={menuPosition} onClose={hideMenu} visible={menuVisible} />
       {showUpdateDialog && releaseInfo && (

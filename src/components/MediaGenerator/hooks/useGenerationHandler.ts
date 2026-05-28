@@ -18,9 +18,11 @@ export const useGenerationHandler = (
   modelState: ModelState,
   uploadedImages: string[],
   uploadedVideos: string[],
+  uploadedAudios: string[],
   uploadedVideoFiles: File[],
   uploadedFilePaths: string[],
   uploadedVideoFilePaths: string[],
+  uploadedAudioFilePaths: string[],
   onGenerate: (input: string, model: string, type: ModelType, options?: unknown) => void | Promise<void>
 ) => {
   const handleGenerate = useCallback(async () => {
@@ -42,8 +44,10 @@ export const useGenerationHandler = (
       ...modelState.params,  // 传递所有模型参数（包括 maxImages 等）
       images: uploadedImages,
       videos: uploadedVideos,
+      audios: uploadedAudios,
       uploadedFilePaths,
       uploadedVideoFilePaths,
+      uploadedAudioFilePaths,
       // 仅用于需要参考视频的模型
       video: uploadedVideoFiles[0]
     }
@@ -55,8 +59,10 @@ export const useGenerationHandler = (
       modelType,
       imagesCount: Array.isArray(options.images) ? options.images.length : 0,
       videosCount: Array.isArray(options.videos) ? options.videos.length : 0,
+      audiosCount: Array.isArray(options.audios) ? options.audios.length : 0,
       uploadedFilePathsCount: Array.isArray(options.uploadedFilePaths) ? options.uploadedFilePaths.length : 0,
       uploadedVideoFilePathsCount: Array.isArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths.length : 0,
+      uploadedAudioFilePathsCount: Array.isArray(options.uploadedAudioFilePaths) ? options.uploadedAudioFilePaths.length : 0,
       hasInlineVideoFile: options.video instanceof File
     })
 
@@ -68,9 +74,11 @@ export const useGenerationHandler = (
     modelState.params,
     uploadedImages,
     uploadedVideos,
+    uploadedAudios,
     uploadedVideoFiles,
     uploadedFilePaths,
     uploadedVideoFilePaths,
+    uploadedAudioFilePaths,
     onGenerate
   ])
 

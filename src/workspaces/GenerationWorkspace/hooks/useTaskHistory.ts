@@ -63,9 +63,11 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
 
   const uploadedFilePathsRaw = safeParams['uploadedFilePaths']
   const uploadedVideoFilePathsRaw = safeParams['uploadedVideoFilePaths']
+  const uploadedAudioFilePathsRaw = safeParams['uploadedAudioFilePaths']
 
   const uploadedFilePathsRel = isStringArray(uploadedFilePathsRaw) ? uploadedFilePathsRaw : undefined
   const uploadedVideoFilePathsRel = isStringArray(uploadedVideoFilePathsRaw) ? uploadedVideoFilePathsRaw : undefined
+  const uploadedAudioFilePathsRel = isStringArray(uploadedAudioFilePathsRaw) ? uploadedAudioFilePathsRaw : undefined
 
   const uploadedFilePathsAbs = uploadedFilePathsRel
     ? await convertPathArray(uploadedFilePathsRel, dataRoot, false)
@@ -75,12 +77,20 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     ? await convertPathArray(uploadedVideoFilePathsRel, dataRoot, false)
     : undefined
 
+  const uploadedAudioFilePathsAbs = uploadedAudioFilePathsRel
+    ? await convertPathArray(uploadedAudioFilePathsRel, dataRoot, false)
+    : undefined
+
   const images = uploadedFilePathsAbs
     ? await Promise.all(uploadedFilePathsAbs.map((p) => toDisplayUrl(p, 'image')))
     : undefined
 
   const videos = uploadedVideoFilePathsAbs
     ? await Promise.all(uploadedVideoFilePathsAbs.map((p) => toDisplayUrl(p, 'video')))
+    : undefined
+
+  const audios = uploadedAudioFilePathsAbs
+    ? await Promise.all(uploadedAudioFilePathsAbs.map((p) => toDisplayUrl(p, 'audio')))
     : undefined
 
   const absoluteResultFilePath = record.filePath
@@ -115,6 +125,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     ...paramsForTaskOptions,
     ...(uploadedFilePathsAbs ? { uploadedFilePaths: uploadedFilePathsAbs } : {}),
     ...(uploadedVideoFilePathsAbs ? { uploadedVideoFilePaths: uploadedVideoFilePathsAbs } : {}),
+    ...(uploadedAudioFilePathsAbs ? { uploadedAudioFilePaths: uploadedAudioFilePathsAbs } : {}),
   }
 
   const normalizedStatus = normalizeHistoryStatus(record.status)
@@ -135,6 +146,7 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     videos,
     uploadedFilePaths: uploadedFilePathsAbs,
     uploadedVideoFilePaths: uploadedVideoFilePathsAbs,
+    uploadedAudioFilePaths: uploadedAudioFilePathsAbs,
     serverTaskId: record.taskId ?? undefined,
     options,
   }
@@ -261,6 +273,9 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
           }
           if (task.uploadedVideoFilePaths?.length) {
             optionsCopy['uploadedVideoFilePaths'] = await convertPathArray(task.uploadedVideoFilePaths, dataRoot, true)
+          }
+          if (task.uploadedAudioFilePaths?.length) {
+            optionsCopy['uploadedAudioFilePaths'] = await convertPathArray(task.uploadedAudioFilePaths, dataRoot, true)
           }
           if (task.result?.url) {
             optionsCopy['__resultUrl'] = task.result.url

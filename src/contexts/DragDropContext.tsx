@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, ReactNode, useRef, useCallb
 const logger = createLogger('contexts.DragDropContext')
 
 interface DragData {
-    type: 'image' | 'video'
+    type: 'image' | 'video' | 'audio'
     imageUrl: string  // 图片或视频的预览URL
     filePath?: string  // 原始文件路径 (仅 Tauri 环境，用于直接读取本地文件)
     thumbnailPath?: string  // 缩略图临时文件路径 (用于原生拖放图标)

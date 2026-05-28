@@ -10,6 +10,7 @@ import { useModelVisibility } from './hooks/useModelVisibility'
 import { useGenerationHandler } from './hooks/useGenerationHandler'
 import { useImageUpload } from './hooks/useImageUpload'
 import { useVideoUpload } from './hooks/useVideoUpload'
+import { useAudioUpload } from './hooks/useAudioUpload'
 import { useGlobalPasteImage } from './hooks/useGlobalPasteImage'
 import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
@@ -64,6 +65,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     { imagesCount: uiState.uploadedImages.length, videosCount: uiState.uploadedVideos.length }
   )
   const maxImageCount = inputLimits.images.max
+  const maxVideoCount = inputLimits.videos.max
+  const maxAudioCount = inputLimits.audios.max
   const videoValidationOptions = inputLimits.videoConstraints
     ? {
       minDuration: inputLimits.videoConstraints.minDurationSec,
@@ -100,6 +103,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uiState.setUploadedVideoDuration
   )
 
+  const audioUpload = useAudioUpload(
+    uiState.setUploadedAudios,
+    uiState.setUploadedAudioFilePaths,
+    uiState.showAlert
+  )
+
   // 5. 生成请求处理
   const { handleGenerate: handleGenerateRequest } = useGenerationHandler(
     uiState.selectedModel,
@@ -107,9 +116,11 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     modelState,
     uiState.uploadedImages,
     uiState.uploadedVideos,
+    uiState.uploadedAudios,
     uiState.uploadedVideoFiles,
     uiState.uploadedFilePaths,
     uiState.uploadedVideoFilePaths,
+    uiState.uploadedAudioFilePaths,
     onGenerate
   )
 
@@ -130,22 +141,30 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     if (maxImageCount === 0 && uiState.uploadedImages.length > 0) {
       uiState.setUploadedImages([])
       uiState.setUploadedFilePaths([])
+      uiState.setFileOrder(prev => prev.filter(item => item.type !== 'image'))
       return
     }
 
     if (uiState.uploadedImages.length > maxImageCount) {
       uiState.setUploadedImages(prev => prev.slice(0, maxImageCount))
       uiState.setUploadedFilePaths(prev => prev.slice(0, maxImageCount))
+      uiState.setFileOrder(prev => prev.filter(item => item.type !== 'image' || item.index < maxImageCount))
     }
-  }, [maxImageCount, uiState.uploadedImages.length, uiState.setUploadedImages, uiState.setUploadedFilePaths])
+  }, [
+    maxImageCount,
+    uiState.uploadedImages.length,
+    uiState.setFileOrder,
+    uiState.setUploadedFilePaths,
+    uiState.setUploadedImages
+  ])
 
   useEffect(() => {
-    const maxVideoCount = inputLimits.videos.max
     if (maxVideoCount === 0 && uiState.uploadedVideos.length > 0) {
       uiState.setUploadedVideos([])
       uiState.setUploadedVideoFiles([])
       uiState.setUploadedVideoFilePaths([])
       uiState.setUploadedVideoDuration(0)
+      uiState.setFileOrder(prev => prev.filter(item => item.type !== 'video'))
       return
     }
 
@@ -153,17 +172,40 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uiState.setUploadedVideos(prev => prev.slice(0, maxVideoCount))
       uiState.setUploadedVideoFiles(prev => prev.slice(0, maxVideoCount))
       uiState.setUploadedVideoFilePaths(prev => prev.slice(0, maxVideoCount))
+      uiState.setFileOrder(prev => prev.filter(item => item.type !== 'video' || item.index < maxVideoCount))
       if (maxVideoCount === 0) {
         uiState.setUploadedVideoDuration(0)
       }
     }
   }, [
-    inputLimits.videos.max,
+    maxVideoCount,
     uiState.uploadedVideos.length,
+    uiState.setFileOrder,
     uiState.setUploadedVideos,
     uiState.setUploadedVideoFiles,
     uiState.setUploadedVideoFilePaths,
     uiState.setUploadedVideoDuration
+  ])
+
+  useEffect(() => {
+    if (maxAudioCount === 0 && uiState.uploadedAudios.length > 0) {
+      uiState.setUploadedAudios([])
+      uiState.setUploadedAudioFilePaths([])
+      uiState.setFileOrder(prev => prev.filter(item => item.type !== 'audio'))
+      return
+    }
+
+    if (uiState.uploadedAudios.length > maxAudioCount) {
+      uiState.setUploadedAudios(prev => prev.slice(0, maxAudioCount))
+      uiState.setUploadedAudioFilePaths(prev => prev.slice(0, maxAudioCount))
+      uiState.setFileOrder(prev => prev.filter(item => item.type !== 'audio' || item.index < maxAudioCount))
+    }
+  }, [
+    maxAudioCount,
+    uiState.uploadedAudios.length,
+    uiState.setFileOrder,
+    uiState.setUploadedAudioFilePaths,
+    uiState.setUploadedAudios
   ])
 
   // 6. 暴露 setter 给父组件
@@ -220,7 +262,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
     const hasAnyInput = uiState.input.trim().length > 0 ||
       uiState.uploadedImages.length > 0 ||
-      uiState.uploadedVideos.length > 0
+      uiState.uploadedVideos.length > 0 ||
+      uiState.uploadedAudios.length > 0
 
     if (!hasAnyInput) {
       uiState.showAlert(
@@ -320,6 +363,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         setInput={uiState.setInput}
         uploadedImages={uiState.uploadedImages}
         uploadedVideos={uiState.uploadedVideos}
+        uploadedAudios={uiState.uploadedAudios}
         fileOrder={uiState.fileOrder}
         onFileOrderChange={uiState.setFileOrder}
         onImageUpload={(files) => imageUpload.handleImageFileUpload(
@@ -327,8 +371,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           maxImageCount
         )}
         onVideoUpload={videoUpload.handleVideoUpload}
+        onAudioUpload={audioUpload.handleAudioUpload}
         onImageRemove={imageUpload.removeImage}
         onVideoRemove={videoUpload.handleVideoRemove}
+        onAudioRemove={audioUpload.handleAudioRemove}
         onImageReplace={imageUpload.handleImageReplace}
         onImageReorder={imageUpload.handleImageReorder}
         onImageClick={onImageClick}
@@ -342,6 +388,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         )}
         onDragStateChange={imageUpload.setIsDraggingImage}
         onVideoReplace={videoUpload.handleVideoReplace}
+        onAudioReplace={audioUpload.handleAudioReplace}
         onVideoClick={(videoUrl: string) => {
           const index = uiState.uploadedVideos.indexOf(videoUrl)
           const videoFile = index >= 0 ? uiState.uploadedVideoFiles[index] : undefined
@@ -351,6 +398,13 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               detail: { videoUrl: videoObjectUrl }
             }))
           }
+        }}
+        onAudioClick={(audioUrl: string) => {
+          const index = uiState.uploadedAudios.indexOf(audioUrl)
+          const audioPath = index >= 0 ? uiState.uploadedAudioFilePaths[index] : undefined
+          window.dispatchEvent(new CustomEvent('open-audio-viewer', {
+            detail: { filePath: audioPath }
+          }))
         }}
         selectedModel={uiState.selectedModel}
         currentModel={currentModel}

@@ -150,6 +150,12 @@
         "name": "Wan 2.6",
         "description": "PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes"
       }
+    },
+    "ppio-wan-2.7": {
+      "meta": {
+        "name": "Want 2.7",
+        "description": "PPIO Want 2.7 video generation model supporting text-to-video, image-to-video, reference-to-video, and video editing"
+      }
     }
   }
 }
