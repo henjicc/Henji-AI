@@ -16,32 +16,25 @@ const logger = createLogger('models.ppio.seedream-4.0.model')
 
 import { defineModel } from '@/core'
 import type { CompositePanelDef } from '@/core/types'
+import {
+    calculateSeedreamSizeFromRatio,
+    getImageSize,
+    normalizeSeedreamCustomSize,
+    normalizeSeedreamSizeString,
+    resolveSeedreamRatio,
+    type SeedreamResolutionValue,
+} from '@/models/shared/seedreamResolution'
 import { resolvePpioImageSources } from './mediaSources'
 
-/**
- * 从 base64 或 URL 获取图片尺寸
- */
-function getImageSize(src: string): Promise<{ width: number; height: number }> {
-
-    return new Promise((resolve, reject) => {
-        const img = new Image()
-        img.onload = () => {
-            resolve({ width: img.width, height: img.height })
-        }
-        img.onerror = () => {
-            reject(new Error('Failed to load image'))
-        }
-        img.src = src
-    })
+const SEEDREAM_40_CONSTRAINTS = {
+    minSide: 15,
+    maxSide: 4096,
+    minAspectRatio: 1 / 16,
+    maxAspectRatio: 16,
+    maxPixels: 16777216,
 }
 
-interface ResolutionValue {
-    mode: string
-    aspectRatio: string
-    quality: string
-    width?: number
-    height?: number
-}
+type ResolutionValue = SeedreamResolutionValue & { mode?: string }
 
 export const seedream40Model = defineModel({
     meta: {
@@ -142,78 +135,20 @@ export const seedream40Model = defineModel({
                 return Boolean(triggerValue && triggerValue.aspectRatio && triggerValue.aspectRatio !== 'smart')
             },
             value: (triggerValue: ResolutionValue) => {
-                const { aspectRatio, quality } = triggerValue
-
-                // 解析宽高比
-                const [w, h] = aspectRatio.split(':').map(Number)
-                if (isNaN(w) || isNaN(h)) return triggerValue
-
-                const ratio = w / h
-
-                // 根据质量确定目标像素
-                const targetPixels = quality === '4K' ? 16777216 : 4194304 // 4K: 4096*4096, 2K: 2048*2048
-
-                // 派欧云约束
-                const constraints = {
-                    minRatio: 1 / 16,
-                    maxRatio: 16,
-                    absoluteMaxPixels: 16777216,
-                    minSize: 15
-                }
-
-                // 计算理想尺寸
-                const targetHeight = Math.sqrt(targetPixels / ratio)
-                const targetWidth = targetHeight * ratio
-
-                let width = Math.round(targetWidth)
-                let height = Math.round(targetHeight)
-
-                // 确保不小于目标像素数
-                let currentPixels = width * height
-                while (currentPixels < targetPixels && currentPixels < constraints.absoluteMaxPixels) {
-                    const withExtraWidth = (width + 1) * height
-                    const withExtraHeight = width * (height + 1)
-
-                    if (withExtraWidth <= constraints.absoluteMaxPixels && withExtraHeight <= constraints.absoluteMaxPixels) {
-                        if (Math.abs(withExtraWidth - targetPixels) < Math.abs(withExtraHeight - targetPixels)) {
-                            width += 1
-                            currentPixels = withExtraWidth
-                        } else {
-                            height += 1
-                            currentPixels = withExtraHeight
-                        }
-                    } else if (withExtraWidth <= constraints.absoluteMaxPixels) {
-                        width += 1
-                        currentPixels = withExtraWidth
-                    } else if (withExtraHeight <= constraints.absoluteMaxPixels) {
-                        height += 1
-                        currentPixels = withExtraHeight
-                    } else {
-                        break
-                    }
-                }
-
-                // 确保不超过最大允许像素
-                if (currentPixels > constraints.absoluteMaxPixels) {
-                    const scale = Math.sqrt(constraints.absoluteMaxPixels / currentPixels)
-                    width = Math.round(width * scale)
-                    height = Math.round(height * scale)
-                }
-
-                // 确保最小尺寸
-                if (width < constraints.minSize) width = constraints.minSize
-                if (height < constraints.minSize) height = constraints.minSize
-
-                // 验证宽高比是否在范围内
-                const finalRatio = width / height
-                if (finalRatio < constraints.minRatio || finalRatio > constraints.maxRatio) {
+                if (!triggerValue.aspectRatio || triggerValue.aspectRatio === 'smart') {
                     return triggerValue
                 }
 
+                const size = calculateSeedreamSizeFromRatio(
+                    resolveSeedreamRatio(triggerValue.aspectRatio, null),
+                    triggerValue.quality === '4K' ? '4K' : '2K',
+                    SEEDREAM_40_CONSTRAINTS
+                )
+
                 return {
                     ...triggerValue,
-                    width,
-                    height
+                    width: size.width,
+                    height: size.height
                 }
             }
         }
@@ -242,7 +177,7 @@ export const seedream40Model = defineModel({
 
             // 处理分辨率
             if (params.resolution) {
-                const resolution = params.resolution
+                const resolution = params.resolution as ResolutionValue
 
                 // 智能模式：有图按首图比例，无图按 1:1
                 if (resolution.aspectRatio === 'smart') {
@@ -260,66 +195,14 @@ export const seedream40Model = defineModel({
                             ratio = imageSize.width / imageSize.height
                             sourceLabel = `${imageSize.width}x${imageSize.height}`
                         }
-                        const quality = resolution.quality || '2K'
-                        const targetPixels = quality === '4K' ? 16777216 : 4194304
-
-                        // 派欧云约束
-                        const constraints = {
-                            minRatio: 1 / 16,
-                            maxRatio: 16,
-                            absoluteMaxPixels: 16777216,
-                            minSize: 15
-                        }
-
-                        // 计算理想尺寸
-                        const targetHeight = Math.sqrt(targetPixels / ratio)
-                        const targetWidth = targetHeight * ratio
-
-                        let width = Math.round(targetWidth)
-                        let height = Math.round(targetHeight)
-
-                        // 确保不小于目标像素数
-                        let currentPixels = width * height
-                        while (currentPixels < targetPixels && currentPixels < constraints.absoluteMaxPixels) {
-                            const withExtraWidth = (width + 1) * height
-                            const withExtraHeight = width * (height + 1)
-
-                            if (withExtraWidth <= constraints.absoluteMaxPixels && withExtraHeight <= constraints.absoluteMaxPixels) {
-                                if (Math.abs(withExtraWidth - targetPixels) < Math.abs(withExtraHeight - targetPixels)) {
-                                    width += 1
-                                    currentPixels = withExtraWidth
-                                } else {
-                                    height += 1
-                                    currentPixels = withExtraHeight
-                                }
-                            } else if (withExtraWidth <= constraints.absoluteMaxPixels) {
-                                width += 1
-                                currentPixels = withExtraWidth
-                            } else if (withExtraHeight <= constraints.absoluteMaxPixels) {
-                                height += 1
-                                currentPixels = withExtraHeight
-                            } else {
-                                break
-                            }
-                        }
-
-                        // 确保不超过最大允许像素
-                        if (currentPixels > constraints.absoluteMaxPixels) {
-                            const scale = Math.sqrt(constraints.absoluteMaxPixels / currentPixels)
-                            width = Math.round(width * scale)
-                            height = Math.round(height * scale)
-                        }
-
-                        // 确保最小尺寸
-                        if (width < constraints.minSize) width = constraints.minSize
-                        if (height < constraints.minSize) height = constraints.minSize
-
-                        // 验证宽高比是否在范围内
-                        const finalRatio = width / height
-                        if (finalRatio >= constraints.minRatio && finalRatio <= constraints.maxRatio) {
-                            requestData.size = `${width}x${height}`
-                            logger.info(`[Seedream 4.0] 智能模式计算尺寸: ${sourceLabel} (${ratio.toFixed(2)}) -> ${width}x${height} (${quality})`)
-                        }
+                        const quality = resolution.quality === '4K' ? '4K' : '2K'
+                        const size = calculateSeedreamSizeFromRatio(
+                            resolveSeedreamRatio('smart', ratio),
+                            quality,
+                            SEEDREAM_40_CONSTRAINTS
+                        )
+                        requestData.size = `${size.width}x${size.height}`
+                        logger.info(`[Seedream 4.0] 智能模式计算尺寸: ${sourceLabel} (${ratio.toFixed(2)}) -> ${size.width}x${size.height} (${quality})`)
                     } catch (error) {
                         logger.error('[Seedream 4.0] 智能模式计算尺寸失败:', error)
                     }
@@ -328,17 +211,28 @@ export const seedream40Model = defineModel({
                 else if (resolution.aspectRatio !== 'smart') {
                     // 优先使用 resolution 中的 width/height
                     if (resolution.width && resolution.height) {
-                        requestData.size = `${resolution.width}x${resolution.height}`
+                        const size = normalizeSeedreamCustomSize(
+                            resolution.width,
+                            resolution.height,
+                            SEEDREAM_40_CONSTRAINTS
+                        )
+                        requestData.size = `${size.width}x${size.height}`
                     }
                     // 如果 resolution 中没有 width/height，但是有直接传入的 size，使用它
                     else if (params.size) {
-                        requestData.size = params.size
+                        const normalizedSize = normalizeSeedreamSizeString(params.size, SEEDREAM_40_CONSTRAINTS)
+                        if (normalizedSize) {
+                            requestData.size = normalizedSize
+                        }
                     }
                 }
             }
             // 如果没有 resolution 参数，但是有直接传入的 size，使用它
             else if (params.size) {
-                requestData.size = params.size
+                const normalizedSize = normalizeSeedreamSizeString(params.size, SEEDREAM_40_CONSTRAINTS)
+                if (normalizedSize) {
+                    requestData.size = normalizedSize
+                }
             }
 
             // 处理图片上传

@@ -37,6 +37,15 @@ const CUSTOM_BUILDER_OVERRIDES = {
         width = Math.max(1, Math.round(width * scale))
         height = Math.max(1, Math.round(height * scale))
       }
+      while (width * height > 16777216) {
+        if (width >= height && width > 15) {
+          width -= 1
+        } else if (height > 15) {
+          height -= 1
+        } else {
+          break
+        }
+      }
       return { width, height }
     }
     const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
@@ -99,6 +108,15 @@ const CUSTOM_BUILDER_OVERRIDES = {
         width = Math.max(1, Math.round(width * scale))
         height = Math.max(1, Math.round(height * scale))
       }
+      while (width * height > 16777216) {
+        if (width >= height && width > 15) {
+          width -= 1
+        } else if (height > 15) {
+          height -= 1
+        } else {
+          break
+        }
+      }
       return { width, height }
     }
     const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
@@ -133,6 +151,160 @@ const CUSTOM_BUILDER_OVERRIDES = {
       requestData.sequential_image_generation_options = { max_images: maxImages }
     } else {
       requestData.sequential_image_generation = 'disabled'
+    }
+    if (params.optimizePrompt === true) {
+      requestData.optimize_prompt_options = { mode: 'standard' }
+    }
+    return requestData
+  }`,
+  'ppio-seedream-5.0-lite': `(params) => {
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+    const normalizeSide = (value, min, max) => {
+      const numeric = Number(value)
+      if (!Number.isFinite(numeric) || numeric <= 0) return min
+      return clamp(Math.round(numeric), min, max)
+    }
+    const parseRatio = (raw) => {
+      const pair = String(raw || '').split(':').map(Number)
+      return pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : null
+    }
+    const scaleSize = (width, height, scale) => ({
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale))
+    })
+    const enforceMaxPixels = (width, height, minSide, maxPixels) => {
+      let nextWidth = width
+      let nextHeight = height
+      while (nextWidth * nextHeight > maxPixels) {
+        if (nextWidth >= nextHeight && nextWidth > minSide) {
+          nextWidth -= 1
+          continue
+        }
+        if (nextHeight > minSide) {
+          nextHeight -= 1
+          continue
+        }
+        if (nextWidth > 1) {
+          nextWidth -= 1
+          continue
+        }
+        if (nextHeight > 1) {
+          nextHeight -= 1
+          continue
+        }
+        break
+      }
+      return { width: nextWidth, height: nextHeight }
+    }
+    const normalizeRatioSize = (ratio, targetPixels) => {
+      const minPixels = 3686400
+      const maxPixels = 10404496
+      const minSide = 256
+      const maxSide = 12900
+      const normalizedRatio = clamp(ratio, 1 / 16, 16)
+      const normalizedPixels = clamp(targetPixels, minPixels, maxPixels)
+      let h = Math.sqrt(normalizedPixels / normalizedRatio)
+      let w = h * normalizedRatio
+      let width = normalizeSide(w, minSide, maxSide)
+      let height = normalizeSide(h, minSide, maxSide)
+      let pixels = width * height
+      if (pixels > maxPixels) {
+        const scaled = scaleSize(width, height, Math.sqrt(maxPixels / pixels))
+        width = normalizeSide(scaled.width, minSide, maxSide)
+        height = normalizeSide(scaled.height, minSide, maxSide)
+        pixels = width * height
+      }
+      if (pixels < minPixels) {
+        const scaled = scaleSize(width, height, Math.sqrt(minPixels / Math.max(1, pixels)))
+        width = normalizeSide(scaled.width, minSide, maxSide)
+        height = normalizeSide(scaled.height, minSide, maxSide)
+        pixels = width * height
+      }
+      if (pixels > maxPixels) {
+        const scaled = scaleSize(width, height, Math.sqrt(maxPixels / pixels))
+        width = normalizeSide(scaled.width, minSide, maxSide)
+        height = normalizeSide(scaled.height, minSide, maxSide)
+      }
+      return enforceMaxPixels(width, height, minSide, maxPixels)
+    }
+    const normalizeCustomSize = (width, height) => {
+      const minSide = 256
+      const maxSide = 12900
+      const minAspectRatio = 1 / 16
+      const maxAspectRatio = 16
+      const maxPixels = 10404496
+      let nextWidth = normalizeSide(width, minSide, maxSide)
+      let nextHeight = normalizeSide(height, minSide, maxSide)
+      const ratio = nextWidth / Math.max(1, nextHeight)
+      if (ratio < minAspectRatio) {
+        nextHeight = Math.max(1, Math.floor(nextWidth / minAspectRatio))
+      } else if (ratio > maxAspectRatio) {
+        nextWidth = Math.max(1, Math.floor(nextHeight * maxAspectRatio))
+      }
+      nextWidth = normalizeSide(nextWidth, minSide, maxSide)
+      nextHeight = normalizeSide(nextHeight, minSide, maxSide)
+      const pixels = nextWidth * nextHeight
+      if (pixels <= maxPixels) {
+        return { width: nextWidth, height: nextHeight }
+      }
+      const scaled = scaleSize(nextWidth, nextHeight, Math.sqrt(maxPixels / pixels))
+      return enforceMaxPixels(
+        normalizeSide(scaled.width, minSide, maxSide),
+        normalizeSide(scaled.height, minSide, maxSide),
+        minSide,
+        maxPixels
+      )
+    }
+    const parseSizeString = (raw) => {
+      const match = String(raw || '').trim().match(/^(\\d+)\\s*[xX*]\\s*(\\d+)$/)
+      if (!match) return null
+      const width = Number(match[1])
+      const height = Number(match[2])
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return null
+      }
+      return { width, height }
+    }
+    const requestImages = resolvePpioImageSources(params)
+    const rawMaxImages = Number.isFinite(Number(params.maxImages))
+      ? Math.trunc(Number(params.maxImages))
+      : (Number.isFinite(Number(params.max_images)) ? Math.trunc(Number(params.max_images)) : 1)
+    const maxGeneratedImages = clamp(rawMaxImages, 1, Math.max(1, 15 - requestImages.length))
+    const resolution = params.resolution && typeof params.resolution === 'object' ? params.resolution : null
+    const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+      ? params.__firstImageRatio
+      : 1
+    let sizeText = '2048x2048'
+    if (resolution) {
+      const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
+      if (!isSmart && resolution.width && resolution.height) {
+        const size = normalizeCustomSize(resolution.width, resolution.height)
+        sizeText = size.width + 'x' + size.height
+      } else {
+        const quality = resolution.quality === '4K' ? '4K' : '2K'
+        const target = quality === '4K' ? 10404496 : 4194304
+        const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+        const size = normalizeRatioSize(ratio, target)
+        sizeText = size.width + 'x' + size.height
+      }
+    } else if (params.size) {
+      const parsed = parseSizeString(params.size)
+      if (parsed) {
+        const size = normalizeCustomSize(parsed.width, parsed.height)
+        sizeText = size.width + 'x' + size.height
+      }
+    }
+    const requestData = {
+      prompt: typeof params.prompt === 'string' ? params.prompt : '',
+      size: sizeText,
+      watermark: false,
+      sequential_image_generation: maxGeneratedImages > 1 ? 'auto' : 'disabled'
+    }
+    if (requestImages.length > 0) {
+      requestData.image = requestImages
+    }
+    if (maxGeneratedImages > 1) {
+      requestData.sequential_image_generation_options = { max_images: maxGeneratedImages }
     }
     if (params.optimizePrompt === true) {
       requestData.optimize_prompt_options = { mode: 'standard' }

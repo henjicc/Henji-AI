@@ -1,5 +1,6 @@
 import { defineModel, sharedFieldText, sharedOptionText, sharedText } from '@/core'
 import type { CompositePanelDef } from '@/core/types'
+import { normalizeSeedreamSizeString } from '@/models/shared/seedreamResolution'
 import { resolvePpioImageSources } from './mediaSources'
 
 const MIN_ASPECT_RATIO = 1 / 16
@@ -7,7 +8,6 @@ const MAX_ASPECT_RATIO = 16
 const MIN_PIXELS = 3686400
 const MAX_PIXELS = 10404496
 const DEFAULT_SIZE = '2048x2048'
-const MAX_TOTAL_IMAGES = 15
 
 const QUALITY_TARGET_PIXELS = {
   '2K': 2048 * 2048,
@@ -15,6 +15,14 @@ const QUALITY_TARGET_PIXELS = {
 } as const
 
 const SUPPORTED_ASPECT_RATIOS = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16'] as const
+const SEEDREAM_50_CONSTRAINTS = {
+  minSide: 256,
+  maxSide: 12900,
+  minAspectRatio: MIN_ASPECT_RATIO,
+  maxAspectRatio: MAX_ASPECT_RATIO,
+  minPixels: MIN_PIXELS,
+  maxPixels: MAX_PIXELS,
+}
 
 type ResolutionQuality = keyof typeof QUALITY_TARGET_PIXELS
 type ModelParams = Record<string, unknown>
@@ -120,34 +128,6 @@ function resolveResolutionValue(value: unknown): ResolutionValue | undefined {
     width: toPositiveNumber(record.width) ?? undefined,
     height: toPositiveNumber(record.height) ?? undefined
   }
-}
-
-function resolveRequestSize(params: ModelParams): string {
-  const resolution = resolveResolutionValue(params.resolution)
-  if (!resolution) {
-    const size = typeof params.size === 'string' ? params.size.trim() : ''
-    return size.length > 0 ? size : DEFAULT_SIZE
-  }
-
-  const isSmartAspect = !resolution.aspectRatio || resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto'
-  if (!isSmartAspect && resolution.width && resolution.height) {
-    const normalized = normalizeSizeByRatioAndPixels(
-      resolution.width / resolution.height,
-      resolution.width * resolution.height
-    )
-    return `${normalized.width}x${normalized.height}`
-  }
-
-  const quality = normalizeQuality(resolution.quality)
-  const targetPixels = QUALITY_TARGET_PIXELS[quality]
-
-  const smartRatioHint = toPositiveNumber(params.__firstImageRatio) ?? 1
-  const ratio = resolution.aspectRatio && resolution.aspectRatio !== 'smart'
-    ? (parseAspectRatio(resolution.aspectRatio) ?? 1)
-    : smartRatioHint
-
-  const size = normalizeSizeByRatioAndPixels(ratio, targetPixels)
-  return `${size.width}x${size.height}`
 }
 
 export const seedream50LiteModel = defineModel({
@@ -321,8 +301,11 @@ export const seedream50LiteModel = defineModel({
           : undefined
 
         if (!resolutionRecord) {
-          const size = typeof params.size === 'string' ? params.size.trim() : ''
-          return size.length > 0 ? size : '2048x2048'
+          const size = normalizeSeedreamSizeString(
+            typeof params.size === 'string' ? params.size.trim() : undefined,
+            SEEDREAM_50_CONSTRAINTS
+          )
+          return size ?? '2048x2048'
         }
 
         const aspectRatioRaw = typeof resolutionRecord.aspectRatio === 'string' ? resolutionRecord.aspectRatio : 'smart'

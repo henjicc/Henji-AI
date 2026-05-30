@@ -1,5 +1,8 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
+import { createLogger } from '@/core/logging'
 import type { LlmChatRequest, LlmStreamEvent } from '@/core/llm/types'
+
+const logger = createLogger('commands.llmRuntime')
 
 export interface LlmProviderKeyStatusDto {
   providerId: string
@@ -38,8 +41,35 @@ export async function llmChatStream(
 ): Promise<void> {
   ensureDesktopRuntime()
   const channel = new Channel<LlmStreamEvent>()
-  channel.onmessage = onEvent
-  await invoke('llm_chat_stream', { request, onEvent: channel })
+  channel.onmessage = (event) => {
+    if (event.type === 'Error') {
+      logger.error('[LlmRuntimeCmd] LLM 请求失败', event.data, {
+        event: 'llm_runtime.chat_stream.failed',
+        requestId: request.requestId,
+        providerId: request.providerId,
+        modelId: request.modelId,
+        context: {
+          request,
+          streamError: event.data,
+        },
+      })
+    }
+    onEvent(event)
+  }
+  try {
+    await invoke('llm_chat_stream', { request, onEvent: channel })
+  } catch (error) {
+    logger.error('[LlmRuntimeCmd] LLM 请求调用失败', error, {
+      event: 'llm_runtime.chat_stream.invoke_failed',
+      requestId: request.requestId,
+      providerId: request.providerId,
+      modelId: request.modelId,
+      context: {
+        request,
+      },
+    })
+    throw error
+  }
 }
 
 export async function llmCancelTask(taskId: string): Promise<void> {

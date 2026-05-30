@@ -1,4 +1,4 @@
-use crate::ai_runtime::{key_store, task_registry};
+use crate::ai_runtime::{key_store, task_registry, upload};
 use crate::llm_runtime::ppio;
 use crate::llm_runtime::types::{
     LlmChatMessageDto, LlmChatRequestDto, LlmInputAudioValueDto, LlmMessageContentDto,
@@ -12,10 +12,23 @@ use genai::chat::{
 use genai::resolver::{AuthData, AuthResolver, Endpoint, ServiceTargetResolver};
 use genai::{Client, ModelIden, ServiceTarget};
 use serde_json::json;
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Emitter;
 use tauri::ipc::Channel;
 
 const PPIO_PROVIDER_ID: &str = "ppio";
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LlmRuntimeRequestPreviewEvent {
+    request_id: String,
+    model_id: String,
+    provider_id: String,
+    method: String,
+    route: String,
+    request_body: serde_json::Value,
+}
 
 #[tauri::command]
 pub async fn llm_set_provider_api_key(provider_id: String, api_key: String) -> Result<(), String> {
@@ -52,6 +65,7 @@ pub async fn llm_get_provider_key_status(
 
 #[tauri::command]
 pub async fn llm_chat_stream(
+    app: tauri::AppHandle,
     request: LlmChatRequestDto,
     on_event: Channel<LlmStreamEventDto>,
 ) -> Result<(), String> {
@@ -67,6 +81,20 @@ pub async fn llm_chat_stream(
         )
     })?;
     let input_chars = request.messages.iter().map(count_message_chars).sum();
+
+    let request = preprocess_llm_request(request).await?;
+    if is_ppio_request(&request) {
+        let preview_body = ppio::build_payload(&request)?;
+        let preview_event = LlmRuntimeRequestPreviewEvent {
+            request_id: request_id.clone(),
+            model_id: request.model_id.clone(),
+            provider_id: request.provider_id.clone(),
+            method: "POST".to_string(),
+            route: ppio::resolve_chat_endpoint(request.base_url.as_deref()),
+            request_body: preview_body,
+        };
+        let _ = app.emit("henji://llm-runtime-request-preview", &preview_event);
+    }
 
     let stream_result = if is_ppio_request(&request) {
         ppio::stream_chat(&request, &key, &request_id, &on_event)
@@ -296,6 +324,60 @@ fn is_ppio_request(request: &LlmChatRequestDto) -> bool {
         .provider_id
         .trim()
         .eq_ignore_ascii_case(PPIO_PROVIDER_ID)
+}
+
+async fn preprocess_llm_request(request: LlmChatRequestDto) -> Result<LlmChatRequestDto, String> {
+    let LlmChatRequestDto {
+        request_id,
+        provider_id,
+        model_id,
+        adapter,
+        base_url,
+        reasoning,
+        messages,
+        capabilities,
+        tools,
+        policy,
+        memory,
+        metadata,
+    } = request;
+
+    let metadata_map: serde_json::Map<String, serde_json::Value> = metadata
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    let strategy = upload::resolve_upload_strategy(&metadata_map);
+    let body = serde_json::json!({
+        "messages": messages,
+    });
+    let processed = upload::preprocess_request_body(
+        provider_id.trim(),
+        "/v1/chat/completions",
+        &body,
+        &strategy,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    let messages_value = processed
+        .get("messages")
+        .cloned()
+        .ok_or_else(|| "LLM preprocess missing messages".to_string())?;
+    let messages = serde_json::from_value(messages_value).map_err(|error| error.to_string())?;
+
+    Ok(LlmChatRequestDto {
+        request_id,
+        provider_id,
+        model_id,
+        adapter,
+        base_url,
+        reasoning,
+        messages,
+        capabilities,
+        tools,
+        policy,
+        memory,
+        metadata,
+    })
 }
 
 fn to_chat_message(message: &LlmChatMessageDto) -> Result<ChatMessage, String> {

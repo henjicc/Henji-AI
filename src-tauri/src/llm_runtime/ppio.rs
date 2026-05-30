@@ -76,7 +76,7 @@ pub async fn stream_chat(
     })
 }
 
-fn build_payload(request: &LlmChatRequestDto) -> Result<Value, String> {
+pub(crate) fn build_payload(request: &LlmChatRequestDto) -> Result<Value, String> {
     let messages = request
         .messages
         .iter()
@@ -150,7 +150,7 @@ fn serialize_part(part: &LlmMessageContentPartDto) -> Value {
     }
 }
 
-fn resolve_chat_endpoint(base_url: Option<&str>) -> String {
+pub(crate) fn resolve_chat_endpoint(base_url: Option<&str>) -> String {
     let normalized = base_url
         .and_then(|value| {
             let trimmed = value.trim().trim_end_matches('/');

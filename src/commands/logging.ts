@@ -12,6 +12,15 @@ export interface RuntimeRequestPreviewDto {
   requestBody: unknown
 }
 
+export interface LlmRuntimeRequestPreviewDto {
+  requestId: string
+  modelId: string
+  providerId: string
+  method: string
+  route: string
+  requestBody: unknown
+}
+
 export async function logFrontendEvents(events: LogEventBridgeDto[]): Promise<void> {
   if (!isTauri() || events.length === 0) {
     return
@@ -30,6 +39,18 @@ export async function listenRuntimeRequestPreview(
   }
 
   return listen<RuntimeRequestPreviewDto>('henji://runtime-request-preview', (event) => {
+    handler(event.payload)
+  })
+}
+
+export async function listenLlmRuntimeRequestPreview(
+  handler: (payload: LlmRuntimeRequestPreviewDto) => void
+): Promise<() => void> {
+  if (!isTauri()) {
+    return () => undefined
+  }
+
+  return listen<LlmRuntimeRequestPreviewDto>('henji://llm-runtime-request-preview', (event) => {
     handler(event.payload)
   })
 }

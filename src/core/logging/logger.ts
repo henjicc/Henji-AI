@@ -1,10 +1,10 @@
 import { enqueueFrontendLogForBridge, flushFrontendLogBridge } from './bridge'
-import { getLogConfig, isDomainEnabled, refreshLogConfigByRuntime, shouldLogLevel } from './config'
+import { isDomainEnabled, refreshLogConfigByRuntime, shouldLogLevel } from './config'
 import { sanitizeLogPayload } from './sanitize'
 import { appendLogEvent } from './store'
 import type { LogCallMeta, LogEvent, LogEventBridgeDto, LogLevel } from './types'
 import { isTauri } from '@tauri-apps/api/core'
-import { listenRuntimeRequestPreview } from '@/commands/logging'
+import { listenLlmRuntimeRequestPreview, listenRuntimeRequestPreview } from '@/commands/logging'
 
 export interface Logger {
   trace: (...args: unknown[]) => void
@@ -50,6 +50,7 @@ const CONSOLE_EVENT_LABELS: Record<string, string> = {
 
 let loggerConfigInitialized = false
 let runtimePreviewUnlisten: (() => void) | null = null
+let llmRuntimePreviewUnlisten: (() => void) | null = null
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -734,11 +735,32 @@ export function initLoggerConfig(): void {
     }).catch(() => {
       runtimePreviewUnlisten = null
     })
+
+    void listenLlmRuntimeRequestPreview((payload) => {
+      const runtimePreviewLogger = createLogger('commands.llmRuntime')
+      runtimePreviewLogger.info('LLM 实际请求参数(JSON)', {
+        event: 'llm_runtime.chat_stream.request_json',
+        requestId: payload.requestId,
+        modelId: payload.modelId,
+        providerId: payload.providerId,
+        context: {
+          method: payload.method,
+          route: payload.route,
+          requestBody: payload.requestBody,
+        },
+      })
+    }).then((unlisten) => {
+      llmRuntimePreviewUnlisten = unlisten
+    }).catch(() => {
+      llmRuntimePreviewUnlisten = null
+    })
   }
 
   window.addEventListener('beforeunload', () => {
     runtimePreviewUnlisten?.()
     runtimePreviewUnlisten = null
+    llmRuntimePreviewUnlisten?.()
+    llmRuntimePreviewUnlisten = null
     void flushFrontendLogBridge()
   })
   loggerConfigInitialized = true

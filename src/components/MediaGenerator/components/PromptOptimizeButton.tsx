@@ -5,8 +5,6 @@ import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiButton } from '@/components/ui'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
-  buildPromptOptimizationUserMessage,
-  getDefaultPromptProfile,
   renderPromptOptimizationTemplate,
   type PromptOptimizationTargetModel,
 } from '@/core/llm/promptOptimization'
@@ -16,36 +14,23 @@ import {
   type PromptOptimizationButtonBehavior,
 } from '@/core/llm/promptOptimizationBehavior'
 import type {
-  LlmChatMessage,
   LlmConfigState,
-  LlmMessageContentPart,
   PromptOptimizationProfile,
 } from '@/core/llm/types'
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm'
+import { UploadService } from '@/services/upload/UploadService'
 import { PromptOptimizationProfilesPanel } from './PromptOptimizationProfilesPanel'
 import { PromptOptimizationSelectorPanel } from './PromptOptimizationSelectorPanel'
-
+import {
+  buildPromptOptimizationUserMessageWithAttachments,
+  resolvePromptOptimizationProfile,
+} from './promptOptimizeRequest'
 const logger = createLogger('components.MediaGenerator.PromptOptimizeButton')
 const PANEL_SWITCH_ANIMATION_MS = 220
 
 function createPromptOptimizationRequestId(): string {
   return `prompt-optimizer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function resolveSelectedProfile(
-  config: LlmConfigState | null,
-  selectedProfileId: string
-): PromptOptimizationProfile | null {
-  if (!config) return null
-  const enabledProfiles = config.promptProfiles.filter(profile => profile.enabled)
-  return enabledProfiles.find(profile => profile.id === selectedProfileId)
-    ?? (config.selectedPromptProfileId
-      ? enabledProfiles.find(profile => profile.id === config.selectedPromptProfileId)
-      : null)
-    ?? getDefaultPromptProfile(config)
-    ?? enabledProfiles[0]
-    ?? null
 }
 
 interface PromptOptimizeButtonProps {
@@ -90,7 +75,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   }, [config])
 
   const selectedProfile = useMemo(() => {
-    return resolveSelectedProfile(config, selectedProfileId)
+    return resolvePromptOptimizationProfile(config, selectedProfileId)
   }, [config, selectedProfileId])
 
   const loadConfig = useCallback(async (): Promise<void> => {
@@ -98,11 +83,11 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       const nextConfig = await llmConfigService.getConfig()
       setConfig(nextConfig)
       setSelectedProfileId((previousSelectedProfileId) => {
-        const profile = resolveSelectedProfile(nextConfig, previousSelectedProfileId)
+        const profile = resolvePromptOptimizationProfile(nextConfig, previousSelectedProfileId)
         return profile?.id ?? ''
       })
     } catch (error) {
-      logger.error('[PromptOptimizeButton] load config failed', error)
+      logger.error('[PromptOptimize] 配置加载失败', error)
     }
   }, [])
 
@@ -145,7 +130,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     if (!requestId) return
     cancelledRequestIdRef.current = requestId
     void llmCancelTask(requestId).catch(error => {
-      logger.error('[PromptOptimizeButton] cancel optimization failed', error)
+      logger.error('[PromptOptimize] 取消优化失败', error)
     })
     finishStreaming()
   }, [finishStreaming])
@@ -171,60 +156,6 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     })
   }, [])
 
-  const buildUserMessage = useCallback(async (
-    currentPrompt: string,
-    profile: PromptOptimizationProfile
-  ): Promise<LlmChatMessage> => {
-    const templateContext = {
-      prompt: currentPrompt,
-      imageCount: uploadedImages.length,
-      videoCount: uploadedVideos.length,
-      targetModel,
-    }
-    const baseText = buildPromptOptimizationUserMessage(profile, templateContext)
-    const shouldAttachImages = profile.capabilities.image === true && uploadedImages.length > 0
-    const shouldAttachVideos = profile.capabilities.video === true && uploadedVideoFiles.length > 0
-
-    if (!shouldAttachImages && !shouldAttachVideos) {
-      return {
-        role: 'user',
-        content: baseText,
-      }
-    }
-
-    const content: LlmMessageContentPart[] = [
-      { type: 'text', text: baseText },
-    ]
-
-    if (shouldAttachImages) {
-      uploadedImages.forEach((url) => {
-        if (!url.trim()) return
-        content.push({
-          type: 'image_url',
-          imageUrl: { url },
-        })
-      })
-    }
-
-    if (shouldAttachVideos) {
-      const videoUrls = await Promise.all(
-        uploadedVideoFiles.map(async (file) => fileToDataUrl(file))
-      )
-      videoUrls.forEach((url) => {
-        if (!url.trim()) return
-        content.push({
-          type: 'video_url',
-          videoUrl: { url },
-        })
-      })
-    }
-
-    return {
-      role: 'user',
-      content,
-    }
-  }, [fileToDataUrl, targetModel, uploadedImages, uploadedVideoFiles, uploadedVideos.length])
-
   const rememberSelectedProfile = useCallback(async (profileId: string): Promise<void> => {
     setSelectedProfileId(profileId)
     if (!config || config.selectedPromptProfileId === profileId) {
@@ -239,7 +170,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     try {
       await llmConfigService.saveConfig(nextConfig)
     } catch (error) {
-      logger.error('[PromptOptimizeButton] persist selected profile failed', error)
+      logger.error('[PromptOptimize] 保存所选配置失败', error)
     }
   }, [config])
 
@@ -252,13 +183,14 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       return false
     }
 
-    const profile = profileOverride ?? selectedProfile ?? resolveSelectedProfile(config, selectedProfileId)
+    const profile = profileOverride ?? selectedProfile ?? resolvePromptOptimizationProfile(config, selectedProfileId)
     if (!profile) {
       onAlert('未配置优化器', '请右键优化按钮创建提示词优化配置。', 'warning')
       return false
     }
 
     const provider = config?.providers.find(item => item.providerId === profile.providerId) ?? null
+    const uploadService = UploadService.getInstance()
     setStreaming(true)
     setOutput('')
     const requestId = createPromptOptimizationRequestId()
@@ -275,7 +207,15 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         videoCount: uploadedVideos.length,
         targetModel,
       }
-      const userMessage = await buildUserMessage(currentPrompt, profile)
+      const userMessage = await buildPromptOptimizationUserMessageWithAttachments(
+        currentPrompt,
+        profile,
+        uploadedImages,
+        uploadedVideos,
+        uploadedVideoFiles,
+        targetModel,
+        fileToDataUrl
+      )
       await llmChatStream({
         requestId,
         providerId: profile.providerId,
@@ -297,6 +237,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           source: 'prompt-optimizer',
           imageCount: uploadedImages.length,
           videoCount: uploadedVideos.length,
+          __upload_provider: uploadService.getCurrentProvider(),
+          __upload_fallback: uploadService.isFallbackEnabled(),
         },
       }, (event) => {
         if (cancelledRequestIdRef.current === requestId || activeRequestIdRef.current !== requestId) {
@@ -339,8 +281,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       return false
     }
   }, [
-    buildUserMessage,
     config,
+    fileToDataUrl,
     finishStreaming,
     onAlert,
     onOptimized,
@@ -349,8 +291,9 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     selectedProfile,
     selectedProfileId,
     targetModel,
-    uploadedImages.length,
-    uploadedVideos.length,
+    uploadedImages,
+    uploadedVideoFiles,
+    uploadedVideos,
   ])
 
   const openSelectorPanel = useCallback((openPanel: () => void): void => {

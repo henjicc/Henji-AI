@@ -27,6 +27,7 @@ pub fn resolve_ppio_media_rewrite_mode(
     }
 
     match route {
+        "/v1/chat/completions" if normalized == "url" => PpioMediaRewriteMode::PublicUrl,
         "/async/kling-2.5-turbo-i2v" if normalized == "image" => PpioMediaRewriteMode::RawBase64,
         "/async/pixverse-v4.5-i2v" if normalized == "image" => PpioMediaRewriteMode::RawBase64,
         "/async/kling-v2.6-pro-motion-control" if normalized == "image" => {
