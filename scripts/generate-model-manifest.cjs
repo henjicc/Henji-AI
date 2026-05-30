@@ -1,6 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const ts = require('typescript')
+const vm = require('vm')
 
 const ROOT = process.cwd()
 const MODELS_DIR = path.join(ROOT, 'src', 'models')
@@ -789,6 +790,33 @@ function compileFunctionExpression(expr) {
   return functionCode.trim()
 }
 
+function evaluateStaticExpression(expr) {
+  if (!expr) return undefined
+
+  const wrapped = `const __value = ${expr};`
+  const result = ts.transpileModule(wrapped, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2018,
+      module: ts.ModuleKind.CommonJS,
+      removeComments: false,
+    },
+  })
+
+  const sandbox = {
+    module: { exports: undefined },
+    exports: {},
+  }
+
+  try {
+    vm.runInNewContext(`${result.outputText}\nmodule.exports = __value;`, sandbox, {
+      timeout: 1000,
+    })
+    return sandbox.module.exports
+  } catch {
+    return undefined
+  }
+}
+
 function parseEndpointConfig(modelText, constMap) {
   const endpointExpr = extractValueExpression(modelText, 'endpoints')
   if (!endpointExpr) return undefined
@@ -843,6 +871,14 @@ function parseRequestConfig(modelText, modelId) {
   return { builderJs }
 }
 
+function parseRuntimeConstraints(modelText) {
+  const runtimeConstraintsExpr = extractValueExpression(modelText, 'runtimeConstraints')
+  const runtimeConstraints = evaluateStaticExpression(runtimeConstraintsExpr)
+  return runtimeConstraints && typeof runtimeConstraints === 'object'
+    ? runtimeConstraints
+    : undefined
+}
+
 function parseModel(filePath) {
   const text = fs.readFileSync(filePath, 'utf8')
   const metaBlock = extractObjectLiteral(text, 'meta')
@@ -858,6 +894,7 @@ function parseModel(filePath) {
   const polling = parsePolling(metaBlock)
   const endpoints = parseEndpointConfig(text, constMap)
   const request = parseRequestConfig(text, modelId)
+  const runtimeConstraints = parseRuntimeConstraints(text)
 
   return {
     modelId,
@@ -866,6 +903,7 @@ function parseModel(filePath) {
     polling,
     endpoints,
     request,
+    runtimeConstraints,
   }
 }
 

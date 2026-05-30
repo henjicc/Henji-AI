@@ -65,6 +65,15 @@ export type {
   RequirementCount
 } from './GenerationRequirements'
 
+// 运行时约束
+export type {
+  RuntimeConstraintValue,
+  RuntimeNumberFieldConstraint,
+  RuntimeEnumFieldConstraint,
+  RuntimeImageSizeFieldConstraint,
+  RuntimeConstraints
+} from './RuntimeConstraints'
+
 // 参数定义
 export type {
   ParamDef,

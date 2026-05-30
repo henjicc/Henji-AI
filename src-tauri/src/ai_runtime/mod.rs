@@ -7,6 +7,7 @@ pub mod model_manifest;
 pub mod polling;
 pub mod providers;
 pub mod request_builder_dsl;
+pub mod request_normalizer;
 pub mod task_registry;
 pub mod trace;
 pub mod types;

@@ -14,6 +14,7 @@ import type { ParamDef } from './ParamDef'
 import type { Linkage } from './Linkage'
 import type { InputLimits } from './InputLimits'
 import type { GenerationRequirement } from './GenerationRequirements'
+import type { RuntimeConstraints } from './RuntimeConstraints'
 
 /**
  * 模型类型
@@ -344,6 +345,14 @@ export interface ModelDefinition {
    * Input limits for uploads (optional)
    */
   inputLimits?: InputLimits
+
+  /**
+   * Runtime constraints applied after request builder output.
+   *
+   * Used by generated manifest + Rust runtime as a final safety net to
+   * normalize request bodies before provider submission.
+   */
+  runtimeConstraints?: RuntimeConstraints
 
   /**
    * 端点配置

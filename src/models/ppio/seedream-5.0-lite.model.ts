@@ -7,12 +7,6 @@ const MIN_ASPECT_RATIO = 1 / 16
 const MAX_ASPECT_RATIO = 16
 const MIN_PIXELS = 3686400
 const MAX_PIXELS = 10404496
-const DEFAULT_SIZE = '2048x2048'
-
-const QUALITY_TARGET_PIXELS = {
-  '2K': 2048 * 2048,
-  '4K': MAX_PIXELS
-} as const
 
 const SUPPORTED_ASPECT_RATIOS = ['21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16'] as const
 const SEEDREAM_50_CONSTRAINTS = {
@@ -24,84 +18,8 @@ const SEEDREAM_50_CONSTRAINTS = {
   maxPixels: MAX_PIXELS,
 }
 
-type ResolutionQuality = keyof typeof QUALITY_TARGET_PIXELS
-type ModelParams = Record<string, unknown>
-
-interface ResolutionValue {
-  aspectRatio?: string
-  quality?: string
-  width?: number
-  height?: number
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
-}
-
-function parseAspectRatio(aspectRatio: string): number | null {
-  const [widthRaw, heightRaw] = aspectRatio.split(':')
-  const width = Number(widthRaw)
-  const height = Number(heightRaw)
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return null
-  }
-  return width / height
-}
-
-function normalizeQuality(value: string | undefined): ResolutionQuality {
-  return value === '4K' ? '4K' : '2K'
-}
-
-function normalizeSizeByRatioAndPixels(ratio: number, targetPixels: number): { width: number; height: number } {
-  const normalizedRatio = clamp(ratio, MIN_ASPECT_RATIO, MAX_ASPECT_RATIO)
-  const normalizedPixels = clamp(targetPixels, MIN_PIXELS, MAX_PIXELS)
-
-  let height = Math.sqrt(normalizedPixels / normalizedRatio)
-  let width = height * normalizedRatio
-
-  width = Math.max(1, Math.round(width))
-  height = Math.max(1, Math.round(height))
-
-  let pixelCount = width * height
-  if (pixelCount < MIN_PIXELS) {
-    const scale = Math.sqrt(MIN_PIXELS / pixelCount)
-    width = Math.max(1, Math.ceil(width * scale))
-    height = Math.max(1, Math.ceil(height * scale))
-  } else if (pixelCount > MAX_PIXELS) {
-    const scale = Math.sqrt(MAX_PIXELS / pixelCount)
-    width = Math.max(1, Math.floor(width * scale))
-    height = Math.max(1, Math.floor(height * scale))
-  }
-
-  pixelCount = width * height
-  if (pixelCount < MIN_PIXELS) {
-    if (width >= height) {
-      width += Math.ceil((MIN_PIXELS - pixelCount) / Math.max(1, height))
-    } else {
-      height += Math.ceil((MIN_PIXELS - pixelCount) / Math.max(1, width))
-    }
-  } else if (pixelCount > MAX_PIXELS) {
-    if (width >= height) {
-      width = Math.max(1, width - Math.ceil((pixelCount - MAX_PIXELS) / Math.max(1, height)))
-    } else {
-      height = Math.max(1, height - Math.ceil((pixelCount - MAX_PIXELS) / Math.max(1, width)))
-    }
-  }
-
-  return { width, height }
-}
-
-function toPositiveNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value
-  }
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed
-    }
-  }
-  return null
 }
 
 function toInteger(value: unknown): number | null {
@@ -115,19 +33,6 @@ function toInteger(value: unknown): number | null {
     }
   }
   return null
-}
-
-function resolveResolutionValue(value: unknown): ResolutionValue | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-  const record = value as Record<string, unknown>
-  return {
-    aspectRatio: typeof record.aspectRatio === 'string' ? record.aspectRatio : undefined,
-    quality: typeof record.quality === 'string' ? record.quality : undefined,
-    width: toPositiveNumber(record.width) ?? undefined,
-    height: toPositiveNumber(record.height) ?? undefined
-  }
 }
 
 export const seedream50LiteModel = defineModel({
@@ -158,6 +63,18 @@ export const seedream50LiteModel = defineModel({
   inputLimits: {
     images: { max: 14 },
     videos: { max: 0 }
+  },
+  runtimeConstraints: {
+    imageSizeFields: [
+      {
+        field: 'size',
+        format: 'string',
+        minPixels: 3686400,
+        maxPixels: 10404496,
+        minAspectRatio: 1 / 16,
+        maxAspectRatio: 16
+      }
+    ]
   },
   params: [
     {

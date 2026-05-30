@@ -124,6 +124,19 @@ export const seedream40Model = defineModel({
         }
     ],
 
+    runtimeConstraints: {
+        imageSizeFields: [
+            {
+                field: 'size',
+                format: 'string',
+                minPixels: 3686400,
+                maxPixels: 16777216,
+                minAspectRatio: 1 / 16,
+                maxAspectRatio: 16
+            }
+        ]
+    },
+
     linkages: [
         // 当分辨率的 aspectRatio 或 quality 变化时，自动计算 width 和 height
         {

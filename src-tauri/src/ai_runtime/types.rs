@@ -74,6 +74,8 @@ pub struct ModelManifestItem {
     pub endpoints: Option<EndpointConfigDsl>,
     #[serde(default)]
     pub request: Option<RequestConfigDsl>,
+    #[serde(default)]
+    pub runtime_constraints: Option<RuntimeConstraintsDsl>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -146,6 +148,64 @@ pub struct RequestConfigDsl {
     pub remove_empty: Vec<String>,
     #[serde(default)]
     pub builder_js: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConstraintsDsl {
+    #[serde(default)]
+    pub number_fields: Vec<RuntimeNumberFieldConstraintDsl>,
+    #[serde(default)]
+    pub enum_fields: Vec<RuntimeEnumFieldConstraintDsl>,
+    #[serde(default)]
+    pub image_size_fields: Vec<RuntimeImageSizeFieldConstraintDsl>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeNumberFieldConstraintDsl {
+    pub field: String,
+    #[serde(default)]
+    pub min: Option<f64>,
+    #[serde(default)]
+    pub max: Option<f64>,
+    #[serde(default)]
+    pub integer: Option<bool>,
+    #[serde(default)]
+    pub fallback: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeEnumFieldConstraintDsl {
+    pub field: String,
+    #[serde(default)]
+    pub allowed: Vec<Value>,
+    #[serde(default)]
+    pub fallback: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeImageSizeFieldConstraintDsl {
+    pub field: String,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub width_key: Option<String>,
+    #[serde(default)]
+    pub height_key: Option<String>,
+    #[serde(default)]
+    pub min_side: Option<f64>,
+    #[serde(default)]
+    pub max_side: Option<f64>,
+    #[serde(default)]
+    pub min_pixels: Option<f64>,
+    pub max_pixels: f64,
+    #[serde(default)]
+    pub min_aspect_ratio: Option<f64>,
+    #[serde(default)]
+    pub max_aspect_ratio: Option<f64>,
 }
 
 #[derive(Debug, Clone)]

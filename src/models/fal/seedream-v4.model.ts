@@ -66,6 +66,19 @@ export const seedreamV4Model = defineModel({
     description: 'Bytedance Seedream V4 图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image'],
   },
+  runtimeConstraints: {
+    imageSizeFields: [
+      {
+        field: 'image_size',
+        format: 'object',
+        widthKey: 'width',
+        heightKey: 'height',
+        minSide: 1024,
+        maxSide: 4096,
+        maxPixels: 16777216,
+      },
+    ],
+  },
   params: [
     {
       id: 'falSeedreamV4Resolution',

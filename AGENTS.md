@@ -22,6 +22,23 @@ npm run tauri:dev:mac       # 运行 Tauri 开发模式（macOS）
 
 **注意**: 项目使用 `@/` 作为 `src/` 的路径别名
 
+**Windows / MSVC 注意**:
+
+- 在 Windows 下执行 `cargo test`、`cargo build`、`tauri dev`、`tauri build` 等 Rust/Tauri 命令时，必须先进入 VS Build Tools 的开发者命令环境，再设置 `CC=cl.exe` 与 `CXX=cl.exe`
+- 推荐复用 `npm run tauri:dev` / `npm run tauri:build` 中的做法，不要直接在普通 PowerShell 环境里裸跑 `cargo`
+- 如需单独运行 Rust 测试，可参考：
+
+```powershell
+$vsDevCmd = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat'
+cmd.exe /c "call `"$vsDevCmd`" -arch=amd64 && set CC=cl.exe && set CXX=cl.exe && cargo test --manifest-path src-tauri\Cargo.toml"
+```
+
+**Manifest 注意**:
+
+- `src-tauri/resources/model-manifest.json` 是自动生成产物，不是手写主源
+- 它会在 `npm run gen:model-manifest`、`npm run dev`、`npm run build`、`npm run tauri:dev`、`npm run tauri:build` 这类脚本链路中刷新
+- 单纯“退出并重新打开应用”不会重新生成 manifest；修改模型定义、请求构建或运行时约束后，必须重新跑上述脚本之一
+
 ## 核心架构原则
 
 **关键：解耦是本项目架构的基础，始终优先考虑关注点分离**

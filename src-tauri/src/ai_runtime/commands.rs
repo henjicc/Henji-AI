@@ -4,6 +4,7 @@ use crate::ai_runtime::media_store;
 use crate::ai_runtime::model_manifest::{get_manifest_store, reload_manifest_store};
 use crate::ai_runtime::providers::{self, ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::request_builder_dsl;
+use crate::ai_runtime::request_normalizer;
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::trace;
 use crate::ai_runtime::types::{
@@ -100,6 +101,12 @@ pub async fn ai_generate(
 
     let built_request = request_builder_dsl::build_request(&request.params, maybe_model.as_ref())
         .map_err(|e| e.to_string())?;
+    let normalized_body = request_normalizer::normalize_request_body(
+        &built_request.body,
+        maybe_model
+            .as_ref()
+            .and_then(|model| model.runtime_constraints.as_ref()),
+    );
 
     if built_request.route.trim().is_empty() {
         return Err("[invalid_route] Request route is empty".to_string());
@@ -110,7 +117,7 @@ pub async fn ai_generate(
         upload::preprocess_request_body(
             &provider_id,
             &built_request.route,
-            &built_request.body,
+            &normalized_body,
             &upload_strategy,
         )
             .await
