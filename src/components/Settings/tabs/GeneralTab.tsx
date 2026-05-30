@@ -6,6 +6,7 @@ import DataPathSection from '../sections/DataPathSection'
 import ConcurrencySection from '../sections/ConcurrencySection'
 import DisplaySection from '../sections/DisplaySection'
 import DownloadSection from '../sections/DownloadSection'
+import PromptOptimizationSection from '../sections/PromptOptimizationSection'
 import UpdateSection from '../sections/UpdateSection'
 
 interface GeneralTabProps {
@@ -59,6 +60,10 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
             }
             onChangeUsdToCnyRate={(value) => updateSetting('usdToCnyRate', value)}
             onToggleAutoFocus={(value) => updateSetting('enableAutoFocusModelSearch', value)}
+          />
+          <PromptOptimizationSection
+            behavior={settings.promptOptimizationButtonBehavior}
+            onChangeBehavior={(value) => updateSetting('promptOptimizationButtonBehavior', value)}
           />
         </section>
       )}

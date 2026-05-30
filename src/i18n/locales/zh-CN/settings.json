@@ -168,6 +168,15 @@
       "autoFocusLabel": "模型面板自动聚焦搜索框",
       "autoFocusHint": "打开模型选择面板时自动聚焦到搜索输入框"
     },
+    "promptOptimization": {
+      "title": "提示词优化",
+      "label": "优化按钮行为",
+      "hint": "默认先弹出配置列表，减少误触；也可以切换回点击按钮后直接执行默认优化。",
+      "options": {
+        "selectProfile": "点击后先选择优化配置",
+        "directOptimize": "点击后直接优化"
+      }
+    },
     "download": {
       "title": "下载设置",
       "enableLabel": "启用快速下载",

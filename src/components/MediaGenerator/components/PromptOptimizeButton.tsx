@@ -10,15 +10,42 @@ import {
   renderPromptOptimizationTemplate,
   type PromptOptimizationTargetModel,
 } from '@/core/llm/promptOptimization'
-import type { LlmConfigState, LlmChatMessage, LlmMessageContentPart } from '@/core/llm/types'
+import {
+  PROMPT_OPTIMIZATION_BUTTON_BEHAVIOR_CHANGED_EVENT,
+  readPromptOptimizationButtonBehavior,
+  type PromptOptimizationButtonBehavior,
+} from '@/core/llm/promptOptimizationBehavior'
+import type {
+  LlmChatMessage,
+  LlmConfigState,
+  LlmMessageContentPart,
+  PromptOptimizationProfile,
+} from '@/core/llm/types'
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm'
 import { PromptOptimizationProfilesPanel } from './PromptOptimizationProfilesPanel'
+import { PromptOptimizationSelectorPanel } from './PromptOptimizationSelectorPanel'
 
 const logger = createLogger('components.MediaGenerator.PromptOptimizeButton')
+const PANEL_SWITCH_ANIMATION_MS = 220
 
 function createPromptOptimizationRequestId(): string {
   return `prompt-optimizer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function resolveSelectedProfile(
+  config: LlmConfigState | null,
+  selectedProfileId: string
+): PromptOptimizationProfile | null {
+  if (!config) return null
+  const enabledProfiles = config.promptProfiles.filter(profile => profile.enabled)
+  return enabledProfiles.find(profile => profile.id === selectedProfileId)
+    ?? (config.selectedPromptProfileId
+      ? enabledProfiles.find(profile => profile.id === config.selectedPromptProfileId)
+      : null)
+    ?? getDefaultPromptProfile(config)
+    ?? enabledProfiles[0]
+    ?? null
 }
 
 interface PromptOptimizeButtonProps {
@@ -48,48 +75,40 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   const [streaming, setStreaming] = useState(false)
   const [output, setOutput] = useState('')
   const [selectedProfileId, setSelectedProfileId] = useState<string>('')
+  const [panelMode, setPanelMode] = useState<'selector' | 'editor'>('selector')
+  const [buttonBehavior, setButtonBehavior] = useState<PromptOptimizationButtonBehavior>(
+    readPromptOptimizationButtonBehavior()
+  )
   const activeRequestIdRef = useRef<string | null>(null)
   const cancelledRequestIdRef = useRef<string | null>(null)
+  const closePanelRef = useRef<() => void>(() => undefined)
+  const openPanelRef = useRef<() => void>(() => undefined)
+  const panelSwitchTimerRef = useRef<number | null>(null)
+
+  const enabledProfiles = useMemo(() => {
+    return config?.promptProfiles.filter(profile => profile.enabled) ?? []
+  }, [config])
 
   const selectedProfile = useMemo(() => {
-    if (!config) return null
-    return config.promptProfiles.find(profile => profile.id === selectedProfileId)
-      ?? (config.selectedPromptProfileId
-        ? config.promptProfiles.find(profile => profile.id === config.selectedPromptProfileId)
-        : null)
-      ?? getDefaultPromptProfile(config)
+    return resolveSelectedProfile(config, selectedProfileId)
   }, [config, selectedProfileId])
 
-  const selectedProvider = useMemo(() => {
-    if (!config || !selectedProfile) return null
-    return config.providers.find(provider => provider.providerId === selectedProfile.providerId) ?? null
-  }, [config, selectedProfile])
-
-  const loadConfig = async (): Promise<void> => {
+  const loadConfig = useCallback(async (): Promise<void> => {
     try {
       const nextConfig = await llmConfigService.getConfig()
       setConfig(nextConfig)
-      setSelectedProfileId(previousSelectedProfileId => {
-        if (nextConfig.promptProfiles.some(profile => profile.id === previousSelectedProfileId)) {
-          return previousSelectedProfileId
-        }
-        if (
-          nextConfig.selectedPromptProfileId
-          && nextConfig.promptProfiles.some(profile => profile.id === nextConfig.selectedPromptProfileId)
-        ) {
-          return nextConfig.selectedPromptProfileId
-        }
-        const profile = getDefaultPromptProfile(nextConfig)
+      setSelectedProfileId((previousSelectedProfileId) => {
+        const profile = resolveSelectedProfile(nextConfig, previousSelectedProfileId)
         return profile?.id ?? ''
       })
     } catch (error) {
       logger.error('[PromptOptimizeButton] load config failed', error)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void loadConfig()
-  }, [])
+  }, [loadConfig])
 
   useEffect(() => {
     const reload = (): void => {
@@ -97,6 +116,22 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     }
     window.addEventListener(LLM_CONFIG_CHANGED_EVENT, reload)
     return () => window.removeEventListener(LLM_CONFIG_CHANGED_EVENT, reload)
+  }, [loadConfig])
+
+  useEffect(() => {
+    const syncBehavior = (): void => {
+      setButtonBehavior(readPromptOptimizationButtonBehavior())
+    }
+    window.addEventListener(PROMPT_OPTIMIZATION_BUTTON_BEHAVIOR_CHANGED_EVENT, syncBehavior)
+    return () => window.removeEventListener(PROMPT_OPTIMIZATION_BUTTON_BEHAVIOR_CHANGED_EVENT, syncBehavior)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (panelSwitchTimerRef.current !== null) {
+        window.clearTimeout(panelSwitchTimerRef.current)
+      }
+    }
   }, [])
 
   const finishStreaming = useCallback((): void => {
@@ -137,18 +172,18 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   }, [])
 
   const buildUserMessage = useCallback(async (
-    currentPrompt: string
+    currentPrompt: string,
+    profile: PromptOptimizationProfile
   ): Promise<LlmChatMessage> => {
-    const profile = selectedProfile ?? (config ? getDefaultPromptProfile(config) : null)
     const templateContext = {
       prompt: currentPrompt,
       imageCount: uploadedImages.length,
       videoCount: uploadedVideos.length,
       targetModel,
     }
-    const baseText = buildPromptOptimizationUserMessage(profile!, templateContext)
-    const shouldAttachImages = profile?.capabilities.image === true && uploadedImages.length > 0
-    const shouldAttachVideos = profile?.capabilities.video === true && uploadedVideoFiles.length > 0
+    const baseText = buildPromptOptimizationUserMessage(profile, templateContext)
+    const shouldAttachImages = profile.capabilities.image === true && uploadedImages.length > 0
+    const shouldAttachVideos = profile.capabilities.video === true && uploadedVideoFiles.length > 0
 
     if (!shouldAttachImages && !shouldAttachVideos) {
       return {
@@ -188,20 +223,42 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       role: 'user',
       content,
     }
-  }, [config, fileToDataUrl, selectedProfile, targetModel, uploadedImages, uploadedVideoFiles, uploadedVideos.length])
+  }, [fileToDataUrl, targetModel, uploadedImages, uploadedVideoFiles, uploadedVideos.length])
 
-  const runOptimize = async (): Promise<void> => {
+  const rememberSelectedProfile = useCallback(async (profileId: string): Promise<void> => {
+    setSelectedProfileId(profileId)
+    if (!config || config.selectedPromptProfileId === profileId) {
+      return
+    }
+
+    const nextConfig = {
+      ...config,
+      selectedPromptProfileId: profileId,
+    }
+    setConfig(nextConfig)
+    try {
+      await llmConfigService.saveConfig(nextConfig)
+    } catch (error) {
+      logger.error('[PromptOptimizeButton] persist selected profile failed', error)
+    }
+  }, [config])
+
+  const runOptimize = useCallback(async (
+    profileOverride?: PromptOptimizationProfile
+  ): Promise<boolean> => {
     const currentPrompt = prompt.trim()
     if (!currentPrompt) {
       onAlert('缺少提示词', '请输入提示词后再优化。', 'warning')
-      return
-    }
-    const profile = selectedProfile ?? (config ? getDefaultPromptProfile(config) : null)
-    if (!profile) {
-      onAlert('未配置优化器', '请右键优化按钮创建提示词优化配置。', 'warning')
-      return
+      return false
     }
 
+    const profile = profileOverride ?? selectedProfile ?? resolveSelectedProfile(config, selectedProfileId)
+    if (!profile) {
+      onAlert('未配置优化器', '请右键优化按钮创建提示词优化配置。', 'warning')
+      return false
+    }
+
+    const provider = config?.providers.find(item => item.providerId === profile.providerId) ?? null
     setStreaming(true)
     setOutput('')
     const requestId = createPromptOptimizationRequestId()
@@ -210,6 +267,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     let nextOutput = ''
     let nextReasoning = ''
     onStreamPreviewChange?.({ active: true, reasoning: '', content: '' })
+
     try {
       const templateContext = {
         prompt: currentPrompt,
@@ -217,14 +275,14 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         videoCount: uploadedVideos.length,
         targetModel,
       }
-      const userMessage = await buildUserMessage(currentPrompt)
+      const userMessage = await buildUserMessage(currentPrompt, profile)
       await llmChatStream({
         requestId,
         providerId: profile.providerId,
         modelId: profile.modelId,
-        adapter: selectedProvider?.adapter ?? profile.providerId,
-        baseUrl: selectedProvider?.baseUrl,
-        reasoning: selectedProvider?.reasoning,
+        adapter: provider?.adapter ?? profile.providerId,
+        baseUrl: provider?.baseUrl,
+        reasoning: provider?.reasoning,
         messages: [
           { role: 'system', content: renderPromptOptimizationTemplate(profile.systemPrompt, templateContext) },
           userMessage,
@@ -244,13 +302,18 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         if (cancelledRequestIdRef.current === requestId || activeRequestIdRef.current !== requestId) {
           return
         }
+
         if (event.type === 'Token') {
           nextOutput += event.data
           setOutput(nextOutput)
           onStreamPreviewChange?.({ active: true, reasoning: '', content: nextOutput })
         } else if (event.type === 'ReasoningToken') {
           nextReasoning += event.data
-          onStreamPreviewChange?.({ active: true, reasoning: nextOutput ? '' : nextReasoning, content: nextOutput })
+          onStreamPreviewChange?.({
+            active: true,
+            reasoning: nextOutput ? '' : nextReasoning,
+            content: nextOutput,
+          })
         } else if (event.type === 'Done') {
           const trimmed = nextOutput.trim()
           if (trimmed) {
@@ -264,67 +327,133 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           finishStreaming()
         }
       })
+      return true
     } catch (error) {
       if (cancelledRequestIdRef.current === requestId) {
         cancelledRequestIdRef.current = null
-        return
+        return false
       }
       const message = error instanceof Error ? error.message : String(error)
       onAlert('提示词优化失败', message, 'error')
       finishStreaming()
+      return false
     }
-  }
+  }, [
+    buildUserMessage,
+    config,
+    finishStreaming,
+    onAlert,
+    onOptimized,
+    onStreamPreviewChange,
+    prompt,
+    selectedProfile,
+    selectedProfileId,
+    targetModel,
+    uploadedImages.length,
+    uploadedVideos.length,
+  ])
+
+  const openSelectorPanel = useCallback((openPanel: () => void): void => {
+    void loadConfig()
+    setPanelMode('selector')
+    openPanel()
+  }, [loadConfig])
+
+  const openEditorPanel = useCallback((openPanel?: () => void): void => {
+    void loadConfig()
+    setPanelMode('editor')
+    openPanel?.()
+  }, [loadConfig])
+
+  const switchToEditorPanel = useCallback((): void => {
+    if (panelSwitchTimerRef.current !== null) {
+      window.clearTimeout(panelSwitchTimerRef.current)
+    }
+    closePanelRef.current()
+    panelSwitchTimerRef.current = window.setTimeout(() => {
+      setPanelMode('editor')
+      void loadConfig()
+      openPanelRef.current()
+      panelSwitchTimerRef.current = null
+    }, PANEL_SWITCH_ANIMATION_MS)
+  }, [loadConfig])
 
   return (
     <PanelTrigger
       display={streaming ? '优化中' : '优化'}
       disabled={disabled || streaming}
       className="w-auto"
-      panelWidth={820}
+      panelWidth={panelMode === 'selector' ? 360 : 820}
       alignment="aboveCenter"
       stableHeight
+      stableHeightKey={panelMode}
       closeOnPanelClick={false}
       renderPanel={() => (
-        <div className="flex max-h-[min(760px,calc(100vh-96px))] flex-col p-1">
-          <PromptOptimizationProfilesPanel
-            config={config}
-            selectedProfileId={selectedProfileId}
-            onSelectedProfileIdChange={setSelectedProfileId}
-            onConfigChange={setConfig}
-          />
-          {streaming && output ? (
-            <div className="mx-4 mb-4 max-h-28 overflow-y-auto rounded-lg border border-border-dark bg-app p-3 text-xs leading-5 text-text-muted">
-              {output}
+        panelMode === 'selector'
+          ? (
+            <PromptOptimizationSelectorPanel
+              profiles={enabledProfiles}
+              selectedProfileId={selectedProfile?.id ?? ''}
+              optimizing={streaming}
+              onOpenEditor={switchToEditorPanel}
+              onSelectProfile={(profileId) => {
+                const profile = enabledProfiles.find(item => item.id === profileId)
+                if (!profile) return
+                closePanelRef.current()
+                void rememberSelectedProfile(profileId)
+                void runOptimize(profile)
+              }}
+            />
+            )
+          : (
+            <div className="flex max-h-[min(760px,calc(100vh-96px))] flex-col p-1">
+              <PromptOptimizationProfilesPanel
+                config={config}
+                selectedProfileId={selectedProfileId}
+                onSelectedProfileIdChange={setSelectedProfileId}
+                onConfigChange={setConfig}
+              />
+              {streaming && output ? (
+                <div className="mx-4 mb-4 max-h-28 overflow-y-auto rounded-lg border border-border-dark bg-app p-3 text-xs leading-5 text-text-muted">
+                  {output}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+            )
       )}
     >
-      {({ openPanel }) => (
-        <UiButton
-          type="button"
-          variant="muted"
-          onClick={() => {
-            if (streaming) return
-            void runOptimize()
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            if (streaming) return
-            void loadConfig()
-            openPanel()
-          }}
-          disabled={disabled}
-          aria-disabled={disabled || streaming}
-          title="左键优化，右键管理配置"
-          className={`prompt-optimize-button h-9 px-4 ${streaming ? 'is-streaming' : ''}`}
-          data-panel-trigger-button
-        >
-          <Sparkles size={16} className="prompt-optimize-button__icon mr-2" />
-          <span className="prompt-optimize-button__label">{streaming ? '优化中' : '优化'}</span>
-        </UiButton>
-      )}
+      {({ openPanel, closePanel }) => {
+        closePanelRef.current = closePanel
+        openPanelRef.current = openPanel
+        return (
+          <UiButton
+            type="button"
+            variant="muted"
+            onClick={() => {
+              if (streaming) return
+              if (buttonBehavior === 'select-profile') {
+                openSelectorPanel(openPanel)
+                return
+              }
+              void runOptimize()
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              if (streaming) return
+              openEditorPanel(openPanel)
+            }}
+            disabled={disabled}
+            aria-disabled={disabled || streaming}
+            title={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
+            className={`prompt-optimize-button h-9 px-4 ${streaming ? 'is-streaming' : ''}`}
+            data-panel-trigger-button
+          >
+            <Sparkles size={16} className="prompt-optimize-button__icon mr-2" />
+            <span className="prompt-optimize-button__label">{streaming ? '优化中' : '优化'}</span>
+          </UiButton>
+        )
+      }}
     </PanelTrigger>
   )
 }

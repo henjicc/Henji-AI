@@ -168,6 +168,15 @@
       "autoFocusLabel": "Auto-focus model search",
       "autoFocusHint": "Focus the search box when opening the model selector"
     },
+    "promptOptimization": {
+      "title": "Prompt Optimization",
+      "label": "Optimize button behavior",
+      "hint": "Default to showing a profile picker first to reduce accidental clicks, or switch back to immediate optimization.",
+      "options": {
+        "selectProfile": "Pick a profile before optimizing",
+        "directOptimize": "Optimize immediately on click"
+      }
+    },
     "download": {
       "title": "Download",
       "enableLabel": "Enable quick download",

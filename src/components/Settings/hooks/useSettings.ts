@@ -10,6 +10,12 @@ import {
   readPriceEstimateDisplaySettings,
   type PriceEstimateCurrencyMode,
 } from '@/core/pricing/priceDisplay'
+import {
+  normalizePromptOptimizationButtonBehavior,
+  readPromptOptimizationButtonBehavior,
+  writePromptOptimizationButtonBehavior,
+  type PromptOptimizationButtonBehavior,
+} from '@/core/llm/promptOptimizationBehavior'
 
 interface Settings {
   maxHistoryCount: number
@@ -24,6 +30,7 @@ interface Settings {
   quickDownloadPath: string
   enableAutoFocusModelSearch: boolean
   maxConcurrentTasks: number
+  promptOptimizationButtonBehavior: PromptOptimizationButtonBehavior
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -38,7 +45,8 @@ const DEFAULT_SETTINGS: Settings = {
   quickDownloadButtonOnly: true,
   quickDownloadPath: '',
   enableAutoFocusModelSearch: true,
-  maxConcurrentTasks: 2
+  maxConcurrentTasks: 2,
+  promptOptimizationButtonBehavior: 'select-profile',
 }
 
 type SettingsKey = keyof Settings
@@ -79,7 +87,8 @@ export function useSettings(): UseSettingsResult {
         quickDownloadButtonOnly: localStorage.getItem('quick_download_button_only') !== 'false',
         quickDownloadPath: localStorage.getItem('quick_download_path') || '',
         enableAutoFocusModelSearch: localStorage.getItem('enable_auto_focus_model_search') !== 'false',
-        maxConcurrentTasks: parseInt(localStorage.getItem('max_concurrent_tasks') || '2', 10)
+        maxConcurrentTasks: parseInt(localStorage.getItem('max_concurrent_tasks') || '2', 10),
+        promptOptimizationButtonBehavior: readPromptOptimizationButtonBehavior(),
       }
       setSettings(loaded)
     }
@@ -92,8 +101,14 @@ export function useSettings(): UseSettingsResult {
       ? normalizePriceEstimateCurrencyMode(value)
       : key === 'usdToCnyRate'
         ? normalizeUsdToCnyRate(value)
+        : key === 'promptOptimizationButtonBehavior'
+          ? normalizePromptOptimizationButtonBehavior(value)
         : value
     setSettings(prev => ({ ...prev, [key]: nextValue }))
+    if (key === 'promptOptimizationButtonBehavior') {
+      writePromptOptimizationButtonBehavior(nextValue)
+      return
+    }
     const storageKey = key === 'showPriceEstimate'
       ? SHOW_PRICE_ESTIMATE_STORAGE_KEY
       : key === 'priceEstimateCurrencyMode'

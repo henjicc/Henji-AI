@@ -17,6 +17,7 @@ type PanelTriggerProps = {
   closeOnPanelClick?: boolean | ((target: Node) => boolean)
   renderPanel: () => React.ReactNode
   stableHeight?: boolean
+  stableHeightKey?: string | number
   freezePositionOnOpen?: boolean
   children?: (controls: PanelTriggerControls) => React.ReactNode
 }
@@ -43,6 +44,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     closeOnPanelClick = true,
     renderPanel,
     stableHeight,
+    stableHeightKey,
     freezePositionOnOpen = false,
     children,
   } = props
@@ -54,6 +56,10 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const [ready, setReady] = useState(false)
   const anchorRectRef = useRef<DOMRect | null>(null)
   const maxHeightRef = useRef<number>(0)
+
+  useEffect(() => {
+    maxHeightRef.current = 0
+  }, [stableHeightKey])
 
   const computePanelPosition = useCallback((): void => {
     if (!ref.current) return
