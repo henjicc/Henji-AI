@@ -361,6 +361,13 @@ body,
 
 .prompt-optimize-preview__stream {
   animation: promptOptimizeStreamRise 520ms ease-out both;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.prompt-optimize-preview__stream::-webkit-scrollbar {
+  display: none;
 }
 
 .prompt-optimize-preview__reasoning {
@@ -371,6 +378,12 @@ body,
 .prompt-optimize-preview__content {
   display: inline;
   text-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.12);
+}
+
+.prompt-optimize-preview__glyph {
+  display: inline;
+  animation: promptOptimizeGlyphIn 180ms ease-out both;
+  will-change: opacity, transform;
 }
 
 @keyframes promptOptimizePreviewIn {
@@ -405,6 +418,18 @@ body,
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes promptOptimizeGlyphIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.18em);
   }
 
   to {

@@ -5,7 +5,9 @@ import { ReferenceTextarea, StackedMediaUploader, UiIconButton } from '@/compone
 import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { hasTag } from '@/core/tags'
+import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
+import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimizationPreviewPlayback'
 export interface FileOrderItem {
   type: 'video' | 'image' | 'audio'
   index: number
@@ -189,13 +191,16 @@ const InputArea: React.FC<InputAreaProps> = ({
   }
   const generateDisabled = isGenerateDisabled()
   const isPromptOptimizing = promptOptimizationPreview?.active ?? false
-  const [renderPromptOptimizationPreview, setRenderPromptOptimizationPreview] = useState(false)
-  const [isPromptOptimizationPreviewClosing, setIsPromptOptimizationPreviewClosing] = useState(false)
-  const [displayedPromptOptimizationPreview, setDisplayedPromptOptimizationPreview] = useState({
-    reasoning: '',
-    content: '',
-  })
   const promptOptimizationScrollRef = useRef<HTMLDivElement>(null)
+  const promptOptimizationScrollFrameRef = useRef<number | null>(null)
+  const promptOptimizationScrollTargetRef = useRef(0)
+  const {
+    closing: isPromptOptimizationPreviewClosing,
+    contentGlyphs: displayedPromptOptimizationContentGlyphs,
+    hasContent: hasOptimizationContent,
+    reasoningGlyphs: displayedPromptOptimizationReasoningGlyphs,
+    visible: renderPromptOptimizationPreview,
+  } = usePromptOptimizationPreviewPlayback(promptOptimizationPreview)
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file)
@@ -301,48 +306,50 @@ const InputArea: React.FC<InputAreaProps> = ({
     label: `图${index + 1}`,
     thumbnailSrc: imageUrl
   }))
-  const hasOptimizationContent = Boolean(
-    displayedPromptOptimizationPreview.reasoning || displayedPromptOptimizationPreview.content
-  )
 
   useEffect(() => {
-    if (promptOptimizationPreview?.active) {
-      setDisplayedPromptOptimizationPreview({
-        reasoning: promptOptimizationPreview.reasoning,
-        content: promptOptimizationPreview.content,
-      })
-      setRenderPromptOptimizationPreview(true)
-      setIsPromptOptimizationPreviewClosing(false)
+    if (!renderPromptOptimizationPreview) {
+      if (promptOptimizationScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(promptOptimizationScrollFrameRef.current)
+        promptOptimizationScrollFrameRef.current = null
+      }
       return
     }
 
-    if (!renderPromptOptimizationPreview) return
-    setIsPromptOptimizationPreviewClosing(true)
-    const timer = window.setTimeout(() => {
-      setRenderPromptOptimizationPreview(false)
-      setIsPromptOptimizationPreviewClosing(false)
-      setDisplayedPromptOptimizationPreview({ reasoning: '', content: '' })
-    }, 220)
-    return () => window.clearTimeout(timer)
-  }, [
-    promptOptimizationPreview?.active,
-    promptOptimizationPreview?.content,
-    promptOptimizationPreview?.reasoning,
-    renderPromptOptimizationPreview
-  ])
-
-  useEffect(() => {
-    if (!renderPromptOptimizationPreview) return
     const container = promptOptimizationScrollRef.current
     if (!container) return
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    })
+
+    promptOptimizationScrollTargetRef.current = Math.max(0, container.scrollHeight - container.clientHeight)
+
+    const smoothScroll = (): void => {
+      const currentTop = container.scrollTop
+      const targetTop = promptOptimizationScrollTargetRef.current
+      const delta = targetTop - currentTop
+
+      if (Math.abs(delta) < 0.5) {
+        container.scrollTop = targetTop
+        promptOptimizationScrollFrameRef.current = null
+        return
+      }
+
+      container.scrollTop = currentTop + delta * 0.18
+      promptOptimizationScrollFrameRef.current = window.requestAnimationFrame(smoothScroll)
+    }
+
+    if (promptOptimizationScrollFrameRef.current === null) {
+      promptOptimizationScrollFrameRef.current = window.requestAnimationFrame(smoothScroll)
+    }
+
+    return () => {
+      if (promptOptimizationScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(promptOptimizationScrollFrameRef.current)
+        promptOptimizationScrollFrameRef.current = null
+      }
+    }
   }, [
     renderPromptOptimizationPreview,
-    displayedPromptOptimizationPreview.content,
-    displayedPromptOptimizationPreview.reasoning
+    displayedPromptOptimizationContentGlyphs.length,
+    displayedPromptOptimizationReasoningGlyphs.length
   ])
 
   return (
@@ -435,22 +442,24 @@ const InputArea: React.FC<InputAreaProps> = ({
           disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
         />
         {renderPromptOptimizationPreview ? (
-          <div className={`prompt-optimize-preview absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/72 backdrop-blur-md ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
+          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/72 backdrop-blur-md ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
             <div
               ref={promptOptimizationScrollRef}
-              className="ui-scrollbar prompt-optimize-preview__stream h-full overflow-y-auto px-4 py-3 pr-14 text-sm leading-6"
+              className="prompt-optimize-preview__stream h-full overflow-y-scroll px-4 py-3 pr-14 text-sm leading-6"
             >
-              {displayedPromptOptimizationPreview.reasoning ? (
-                <span className="prompt-optimize-preview__reasoning whitespace-pre-wrap break-words text-text-muted">
-                  {displayedPromptOptimizationPreview.reasoning}
-                </span>
+              {displayedPromptOptimizationReasoningGlyphs.length > 0 ? (
+                <PromptOptimizationPreviewText
+                  className="prompt-optimize-preview__reasoning whitespace-pre-wrap break-words text-text-muted"
+                  glyphs={displayedPromptOptimizationReasoningGlyphs}
+                />
               ) : null}
-              {displayedPromptOptimizationPreview.reasoning && displayedPromptOptimizationPreview.content ? '\n\n' : null}
-              {displayedPromptOptimizationPreview.content ? (
-                <span className="prompt-optimize-preview__content whitespace-pre-wrap break-words text-text-dark">
-                  {displayedPromptOptimizationPreview.content}
-                </span>
+              {displayedPromptOptimizationReasoningGlyphs.length > 0 && displayedPromptOptimizationContentGlyphs.length > 0 ? '\n\n' : null}
+              {displayedPromptOptimizationContentGlyphs.length > 0 ? (
+                <PromptOptimizationPreviewText
+                  className="prompt-optimize-preview__content whitespace-pre-wrap break-words text-text-dark"
+                  glyphs={displayedPromptOptimizationContentGlyphs}
+                />
               ) : null}
               {!hasOptimizationContent ? (
                 <span className="prompt-optimize-preview__placeholder text-text-muted">
