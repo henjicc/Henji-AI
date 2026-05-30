@@ -1,14 +1,17 @@
 import {
   type ChangeEvent,
+  forwardRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type TextareaHTMLAttributes,
   useCallback,
   useEffect,
   useMemo,
+  useImperativeHandle,
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   insertReferenceToken,
   normalizeReferenceTokenSpacing,
@@ -34,9 +37,19 @@ interface RenderPickerItemParams {
   index: number;
   active: boolean;
 }
+export interface ReferenceTextareaHandle {
+  focus: () => void;
+  replaceValueWithUndo: (nextValue: string) => boolean;
+}
 interface ReferenceTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'className' | 'onKeyDown'> {
   value: string;
   onChange: (nextValue: string) => void;
+  undoTriggerValue?: string | null;
+  undoReplacementValue?: string | null;
+  onUndoReplacement?: () => void;
+  redoTriggerValue?: string | null;
+  redoReplacementValue?: string | null;
+  onRedoReplacement?: () => void;
   references: ReferenceItem[];
   className?: string;
   textareaClassName?: string;
@@ -48,15 +61,26 @@ interface ReferenceTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAre
   pickerActiveItemClassName?: string;
   pickerOffsetY?: number;
   pickerAnchorScale?: number;
+  pickerPortal?: boolean;
+  triggerKey?: string;
+  tokenPrefix?: string;
+  literalTokens?: string[];
+  renderHighlightedValue?: (value: string) => ReactNode;
   submitShortcut?: SubmitShortcut;
   onSubmit?: () => void;
   onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   getReferenceToken?: (item: ReferenceItem, index: number) => string;
   renderPickerItem?: (params: RenderPickerItemParams) => ReactNode;
 }
-export function ReferenceTextarea({
+export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTextareaProps>(function ReferenceTextarea({
   value,
   onChange,
+  undoTriggerValue = null,
+  undoReplacementValue = null,
+  onUndoReplacement,
+  redoTriggerValue = null,
+  redoReplacementValue = null,
+  onRedoReplacement,
   references,
   className = '',
   textareaClassName = '',
@@ -68,6 +92,11 @@ export function ReferenceTextarea({
   pickerActiveItemClassName = '',
   pickerOffsetY = DEFAULT_PICKER_OFFSET_Y,
   pickerAnchorScale = 1,
+  pickerPortal = false,
+  triggerKey = '@',
+  tokenPrefix = '@',
+  literalTokens,
+  renderHighlightedValue,
   submitShortcut = 'none',
   onSubmit,
   onKeyDown,
@@ -77,8 +106,9 @@ export function ReferenceTextarea({
   onScroll,
   onFocus,
   ...textareaProps
-}: ReferenceTextareaProps): JSX.Element {
+}, ref): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +117,10 @@ export function ReferenceTextarea({
   const [pickerActiveIndex, setPickerActiveIndex] = useState(0);
   const [pickerAnchor, setPickerAnchor] = useState<PickerAnchor>(PICKER_FALLBACK_ANCHOR);
 
-  const highlightedText = useMemo(() => renderHighlightedText(value), [value]);
+  const highlightedText = useMemo(
+    () => renderHighlightedValue ? renderHighlightedValue(value) : renderHighlightedText(value),
+    [renderHighlightedValue, value]
+  );
   const referenceLabels = useMemo(
     () => references.map((item) => item.label),
     [references]
@@ -100,13 +133,45 @@ export function ReferenceTextarea({
   }, []);
 
   const syncHighlightScroll = useCallback(() => {
-    if (!textareaRef.current || !highlightRef.current) {
+    const textarea = textareaRef.current;
+    const highlight = highlightRef.current;
+    if (!textarea || !highlight) {
       return;
     }
 
-    highlightRef.current.scrollTop = textareaRef.current.scrollTop;
-    highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    highlight.scrollTop = textarea.scrollTop;
+    highlight.scrollLeft = textarea.scrollLeft;
   }, []);
+
+  const replaceValueWithUndo = useCallback((nextValue: string): boolean => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return false;
+    }
+
+    textarea.focus();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    const commandSupported = typeof document !== 'undefined' && typeof document.execCommand === 'function';
+    if (!commandSupported) {
+      onChange(nextValue);
+      return false;
+    }
+
+    const executed = document.execCommand('insertText', false, nextValue);
+    if (!executed) {
+      onChange(nextValue);
+    }
+    requestAnimationFrame(syncHighlightScroll);
+    return executed;
+  }, [onChange, syncHighlightScroll]);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      textareaRef.current?.focus();
+    },
+    replaceValueWithUndo,
+  }), [replaceValueWithUndo]);
 
   const resolveToken = useCallback((item: ReferenceItem, index: number): string => {
     if (getReferenceToken) {
@@ -151,7 +216,8 @@ export function ReferenceTextarea({
 
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
-      if (rootRef.current?.contains(event.target as globalThis.Node)) {
+      const target = event.target as globalThis.Node
+      if (rootRef.current?.contains(target) || pickerRef.current?.contains(target)) {
         return;
       }
       closePicker();
@@ -164,6 +230,44 @@ export function ReferenceTextarea({
   }, [closePicker]);
 
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    const hasModifier = event.ctrlKey || event.metaKey;
+    const isUndoShortcut = hasModifier && !event.shiftKey && !event.altKey && (event.key === 'z' || event.key === 'Z');
+    const isRedoShortcut = hasModifier && !event.altKey && (
+      event.key === 'y'
+      || event.key === 'Y'
+      || (event.shiftKey && (event.key === 'z' || event.key === 'Z'))
+    );
+
+    if (isUndoShortcut && undoTriggerValue !== null && undoReplacementValue !== null && value === undoTriggerValue && value === textareaRef.current?.value) {
+      event.preventDefault();
+      onChange(undoReplacementValue);
+      onUndoReplacement?.();
+
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) {
+          return;
+        }
+        textareaRef.current.setSelectionRange(undoReplacementValue.length, undoReplacementValue.length);
+        syncHighlightScroll();
+      });
+      return;
+    }
+
+    if (isRedoShortcut && redoTriggerValue !== null && redoReplacementValue !== null && value === redoTriggerValue && value === textareaRef.current?.value) {
+      event.preventDefault();
+      onChange(redoReplacementValue);
+      onRedoReplacement?.();
+
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) {
+          return;
+        }
+        textareaRef.current.setSelectionRange(redoReplacementValue.length, redoReplacementValue.length);
+        syncHighlightScroll();
+      });
+      return;
+    }
+
     if (event.key === 'Backspace' || event.key === 'Delete') {
       const selectionStart = event.currentTarget.selectionStart ?? value.length;
       const selectionEnd = event.currentTarget.selectionEnd ?? selectionStart;
@@ -173,7 +277,9 @@ export function ReferenceTextarea({
         selectionStart,
         selectionEnd,
         deleteDirection,
-        referenceLabels
+        referenceLabels,
+        tokenPrefix,
+        literalTokens
       );
 
       if (deleteRange) {
@@ -216,7 +322,7 @@ export function ReferenceTextarea({
       }
     }
 
-    if (event.key === '@' && !disabled && references.length > 0) {
+    if (event.key === triggerKey && !disabled && references.length > 0) {
       event.preventDefault();
       const cursor = event.currentTarget.selectionStart ?? value.length;
       setPickerAnchor(resolvePickerAnchor(rootRef.current, event.currentTarget, cursor, pickerOffsetY, pickerAnchorScale));
@@ -237,7 +343,6 @@ export function ReferenceTextarea({
       return;
     }
 
-    const hasModifier = event.ctrlKey || event.metaKey;
     if (
       submitShortcut === 'enter'
       && event.key === 'Enter'
@@ -260,16 +365,25 @@ export function ReferenceTextarea({
     insertReference,
     onChange,
     onKeyDown,
+    onRedoReplacement,
+    onUndoReplacement,
     onSubmit,
     pickerActiveIndex,
     pickerAnchorScale,
     pickerOffsetY,
+    redoTriggerValue,
+    redoReplacementValue,
     references.length,
     referenceLabels,
+    tokenPrefix,
+    triggerKey,
+    literalTokens,
     showPicker,
     submitShortcut,
     syncHighlightScroll,
     value,
+    undoTriggerValue,
+    undoReplacementValue,
   ]);
 
   const resolveDefaultPickerItem = (item: ReferenceItem, index: number): ReactNode => {
@@ -285,11 +399,11 @@ export function ReferenceTextarea({
   };
 
   const rootClassName = `relative isolate ${className}`.trim();
-  const textareaMergedClassName = `relative z-10 ${textareaClassName}`.trim();
+  const textareaMergedClassName = `relative z-10 block ${textareaClassName}`.trim();
   const handleTextareaChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>): void => {
     const rawText = event.currentTarget.value;
     const cursor = event.currentTarget.selectionStart ?? rawText.length;
-    const normalized = normalizeReferenceTokenSpacing(rawText, cursor, referenceLabels);
+    const normalized = normalizeReferenceTokenSpacing(rawText, cursor, referenceLabels, tokenPrefix, literalTokens);
     onChange(normalized.nextText);
 
     if (!normalized.changed) {
@@ -304,7 +418,50 @@ export function ReferenceTextarea({
       textareaRef.current.setSelectionRange(normalized.nextCursor, normalized.nextCursor);
       syncHighlightScroll();
     });
-  }, [onChange, referenceLabels, syncHighlightScroll]);
+  }, [literalTokens, onChange, referenceLabels, syncHighlightScroll, tokenPrefix]);
+
+  const pickerNode = showPicker && references.length > 0 ? (
+    <div
+      ref={pickerRef}
+      className={`nowheel ${pickerPortal ? 'fixed z-[1000]' : 'absolute z-30'} w-[140px] overflow-hidden rounded-xl border border-border-dark bg-surface-dark shadow-xl ${pickerClassName}`}
+      style={{
+        left: pickerPortal
+          ? (rootRef.current?.getBoundingClientRect().left ?? 0) + pickerAnchor.left
+          : pickerAnchor.left,
+        top: pickerPortal
+          ? (rootRef.current?.getBoundingClientRect().top ?? 0) + pickerAnchor.top
+          : pickerAnchor.top,
+      }}
+      onMouseDown={(event) => event.stopPropagation()}
+      onWheelCapture={(event) => event.stopPropagation()}
+    >
+      <div
+      className={`ui-scrollbar nowheel max-h-[200px] overflow-y-auto ${pickerListClassName}`}
+        onWheelCapture={(event) => event.stopPropagation()}
+      >
+        {references.map((item, index) => {
+          const active = pickerActiveIndex === index;
+          return (
+            <UiOptionButton
+              key={item.id}
+              type="button"
+              active={active}
+              onClick={(event) => {
+                event.stopPropagation();
+                insertReference(index);
+              }}
+              onMouseEnter={() => setPickerActiveIndex(index)}
+              className={`w-full rounded-none border-x-0 border-b-0 items-center gap-2 px-2 py-2 text-left text-sm ${pickerItemClassName} ${active ? pickerActiveItemClassName : ''}`}
+            >
+              {renderPickerItem
+                ? renderPickerItem({ item, index, active })
+                : resolveDefaultPickerItem(item, index)}
+            </UiOptionButton>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div ref={rootRef} className={rootClassName}>
@@ -338,40 +495,9 @@ export function ReferenceTextarea({
         {...textareaProps}
       />
 
-      {showPicker && references.length > 0 && (
-        <div
-          className={`nowheel absolute z-30 w-[140px] overflow-hidden rounded-xl border border-[rgba(255,255,255,0.16)] bg-surface-dark shadow-xl ${pickerClassName}`}
-          style={{ left: pickerAnchor.left, top: pickerAnchor.top }}
-          onMouseDown={(event) => event.stopPropagation()}
-          onWheelCapture={(event) => event.stopPropagation()}
-        >
-          <div
-            className={`ui-scrollbar nowheel max-h-[200px] overflow-y-auto ${pickerListClassName}`}
-            onWheelCapture={(event) => event.stopPropagation()}
-          >
-            {references.map((item, index) => {
-              const active = pickerActiveIndex === index;
-              return (
-                <UiOptionButton
-                  key={item.id}
-                  type="button"
-                  active={active}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    insertReference(index);
-                  }}
-                  onMouseEnter={() => setPickerActiveIndex(index)}
-                  className={`w-full rounded-none border-x-0 border-b-0 items-center gap-2 px-2 py-2 text-left text-sm ${pickerItemClassName} ${active ? pickerActiveItemClassName : ''}`}
-                >
-                  {renderPickerItem
-                    ? renderPickerItem({ item, index, active })
-                    : resolveDefaultPickerItem(item, index)}
-                </UiOptionButton>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {pickerPortal && pickerNode ? createPortal(pickerNode, document.body) : pickerNode}
     </div>
   );
-}
+});
+
+ReferenceTextarea.displayName = 'ReferenceTextarea';

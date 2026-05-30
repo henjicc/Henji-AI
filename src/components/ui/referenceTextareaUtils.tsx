@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 const IMAGE_REFERENCE_TOKEN_REGEX = /@图\d+/g
+const TEMPLATE_VARIABLE_TOKEN_REGEX = /\{\{[a-zA-Z0-9_.-]+\}\}/g
 
 export interface PickerAnchor {
   left: number
@@ -66,14 +67,14 @@ export function resolvePickerAnchor(
   }
 }
 
-export function renderHighlightedText(text: string): ReactNode {
+export function renderHighlightedText(text: string, tokenRegex: RegExp = IMAGE_REFERENCE_TOKEN_REGEX): ReactNode {
   if (!text) {
     return ' '
   }
   const segments: ReactNode[] = []
   let lastIndex = 0
-  IMAGE_REFERENCE_TOKEN_REGEX.lastIndex = 0
-  let match = IMAGE_REFERENCE_TOKEN_REGEX.exec(text)
+  tokenRegex.lastIndex = 0
+  let match = tokenRegex.exec(text)
   while (match) {
     const matchStart = match.index
     const matchText = match[0]
@@ -90,10 +91,14 @@ export function renderHighlightedText(text: string): ReactNode {
       </span>
     )
     lastIndex = matchStart + matchText.length
-    match = IMAGE_REFERENCE_TOKEN_REGEX.exec(text)
+    match = tokenRegex.exec(text)
   }
   if (lastIndex < text.length) {
     segments.push(<span key={`plain-${lastIndex}`}>{text.slice(lastIndex)}</span>)
   }
   return segments
+}
+
+export function renderHighlightedTemplateText(text: string): ReactNode {
+  return renderHighlightedText(text, TEMPLATE_VARIABLE_TOKEN_REGEX)
 }

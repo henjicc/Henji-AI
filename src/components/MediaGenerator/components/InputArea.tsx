@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { ReferenceTextarea, StackedMediaUploader, UiIconButton } from '@/components/ui'
+import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { hasTag } from '@/core/tags'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
@@ -12,6 +13,12 @@ export interface FileOrderItem {
 interface InputAreaProps {
   input: string
   setInput: (value: string) => void
+  promptUndoTriggerValue?: string | null
+  promptUndoReplacementValue?: string | null
+  onUndoPromptReplacement?: () => void
+  promptRedoTriggerValue?: string | null
+  promptRedoReplacementValue?: string | null
+  onRedoPromptReplacement?: () => void
   currentModel: any
   selectedModel: string
   modelParams: Record<string, unknown>
@@ -38,6 +45,12 @@ interface InputAreaProps {
   onAudioClick?: (audioUrl: string) => void
   fileOrder?: FileOrderItem[]
   onFileOrderChange?: (order: FileOrderItem[]) => void
+  promptOptimizationPreview?: {
+    active: boolean
+    reasoning: string
+    content: string
+  }
+  promptTextareaRef?: React.RefObject<ReferenceTextareaHandle>
   onGenerate: () => void
 }
 /**
@@ -47,6 +60,12 @@ interface InputAreaProps {
 const InputArea: React.FC<InputAreaProps> = ({
   input,
   setInput,
+  promptUndoTriggerValue,
+  promptUndoReplacementValue,
+  onUndoPromptReplacement,
+  promptRedoTriggerValue,
+  promptRedoReplacementValue,
+  onRedoPromptReplacement,
   currentModel,
   selectedModel,
   modelParams,
@@ -73,6 +92,8 @@ const InputArea: React.FC<InputAreaProps> = ({
   onAudioClick,
   fileOrder,
   onFileOrderChange,
+  promptOptimizationPreview,
+  promptTextareaRef,
   onGenerate
 }) => {
   const { t } = useTranslation('ui')
@@ -167,6 +188,14 @@ const InputArea: React.FC<InputAreaProps> = ({
     return false
   }
   const generateDisabled = isGenerateDisabled()
+  const isPromptOptimizing = promptOptimizationPreview?.active ?? false
+  const [renderPromptOptimizationPreview, setRenderPromptOptimizationPreview] = useState(false)
+  const [isPromptOptimizationPreviewClosing, setIsPromptOptimizationPreviewClosing] = useState(false)
+  const [displayedPromptOptimizationPreview, setDisplayedPromptOptimizationPreview] = useState({
+    reasoning: '',
+    content: '',
+  })
+  const promptOptimizationScrollRef = useRef<HTMLDivElement>(null)
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file)
@@ -272,6 +301,49 @@ const InputArea: React.FC<InputAreaProps> = ({
     label: `图${index + 1}`,
     thumbnailSrc: imageUrl
   }))
+  const hasOptimizationContent = Boolean(
+    displayedPromptOptimizationPreview.reasoning || displayedPromptOptimizationPreview.content
+  )
+
+  useEffect(() => {
+    if (promptOptimizationPreview?.active) {
+      setDisplayedPromptOptimizationPreview({
+        reasoning: promptOptimizationPreview.reasoning,
+        content: promptOptimizationPreview.content,
+      })
+      setRenderPromptOptimizationPreview(true)
+      setIsPromptOptimizationPreviewClosing(false)
+      return
+    }
+
+    if (!renderPromptOptimizationPreview) return
+    setIsPromptOptimizationPreviewClosing(true)
+    const timer = window.setTimeout(() => {
+      setRenderPromptOptimizationPreview(false)
+      setIsPromptOptimizationPreviewClosing(false)
+      setDisplayedPromptOptimizationPreview({ reasoning: '', content: '' })
+    }, 220)
+    return () => window.clearTimeout(timer)
+  }, [
+    promptOptimizationPreview?.active,
+    promptOptimizationPreview?.content,
+    promptOptimizationPreview?.reasoning,
+    renderPromptOptimizationPreview
+  ])
+
+  useEffect(() => {
+    if (!renderPromptOptimizationPreview) return
+    const container = promptOptimizationScrollRef.current
+    if (!container) return
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth'
+    })
+  }, [
+    renderPromptOptimizationPreview,
+    displayedPromptOptimizationPreview.content,
+    displayedPromptOptimizationPreview.reasoning
+  ])
 
   return (
     <div className="relative rounded-2xl">
@@ -305,8 +377,15 @@ const InputArea: React.FC<InputAreaProps> = ({
         {/* 文本输入框 */}
         <div className="relative">
           <ReferenceTextarea
+          ref={promptTextareaRef}
           value={input}
           onChange={setInput}
+          undoTriggerValue={promptUndoTriggerValue}
+          undoReplacementValue={promptUndoReplacementValue}
+          onUndoReplacement={onUndoPromptReplacement}
+          redoTriggerValue={promptRedoTriggerValue}
+          redoReplacementValue={promptRedoReplacementValue}
+          onRedoReplacement={onRedoPromptReplacement}
           references={promptReferences}
           onPaste={onPaste}
           onDrop={(e) => {
@@ -353,13 +432,39 @@ const InputArea: React.FC<InputAreaProps> = ({
               <span>{item.label}</span>
             </>
           )}
-          disabled={isLoading}
+          disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
         />
+        {renderPromptOptimizationPreview ? (
+          <div className={`prompt-optimize-preview absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/72 backdrop-blur-md ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
+            <div
+              ref={promptOptimizationScrollRef}
+              className="ui-scrollbar prompt-optimize-preview__stream h-full overflow-y-auto px-4 py-3 pr-14 text-sm leading-6"
+            >
+              {displayedPromptOptimizationPreview.reasoning ? (
+                <span className="prompt-optimize-preview__reasoning whitespace-pre-wrap break-words text-text-muted">
+                  {displayedPromptOptimizationPreview.reasoning}
+                </span>
+              ) : null}
+              {displayedPromptOptimizationPreview.reasoning && displayedPromptOptimizationPreview.content ? '\n\n' : null}
+              {displayedPromptOptimizationPreview.content ? (
+                <span className="prompt-optimize-preview__content whitespace-pre-wrap break-words text-text-dark">
+                  {displayedPromptOptimizationPreview.content}
+                </span>
+              ) : null}
+              {!hasOptimizationContent ? (
+                <span className="prompt-optimize-preview__placeholder text-text-muted">
+                  模型正在处理提示词...
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {/* 生成按钮 */}
         <UiIconButton
           type="button"
           onClick={onGenerate}
-          disabled={generateDisabled}
+          disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
           className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-all duration-250 ${generateDisabled
             ? '!border-zinc-700/25 !bg-zinc-800/65 !text-zinc-500'

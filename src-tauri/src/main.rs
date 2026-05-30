@@ -6,6 +6,7 @@
 mod clipboard_files;
 mod ai_runtime;
 mod image_commands;
+mod llm_runtime;
 mod logging;
 mod modelscope;
 
@@ -105,6 +106,12 @@ pub fn run() {
             ai_runtime::commands::ai_generate,
             ai_runtime::commands::ai_continue_polling,
             ai_runtime::commands::ai_cancel_task,
+            llm_runtime::commands::llm_set_provider_api_key,
+            llm_runtime::commands::llm_remove_provider_api_key,
+            llm_runtime::commands::llm_get_provider_api_key,
+            llm_runtime::commands::llm_get_provider_key_status,
+            llm_runtime::commands::llm_chat_stream,
+            llm_runtime::commands::llm_cancel_task,
             modelscope::modelscope_submit_task,
             modelscope::modelscope_check_status,
             toggle_devtools,

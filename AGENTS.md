@@ -72,6 +72,8 @@ npm run tauri:dev:mac       # 运行 Tauri 开发模式（macOS）
 - **统一入口**：业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
 - **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
 - **禁止回退**：禁止在业务组件重新引入原生控件并单独写一套样式
+- **通用优先**：能复用现有通用组件时，优先复用现成的 `Ui*`、`Dropdown`、`PanelTrigger` 等组件，不要随手新写“看起来差不多”的组件
+- **新增门槛**：只有在现有通用组件确实覆盖不了需求时，才考虑新增组件；动手前先告诉用户原因和替代方案，等用户确认后再创建
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 - **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
@@ -297,11 +299,17 @@ window.__reloadModels()        // 重新加载所有模型
 
 ## 重构后回归检查
 
-每次涉及 UI / 画布 / 模型参数重构后，至少执行：
+每次涉及 UI / 画布 / 模型参数重构后，优先执行快速检查，`npm run build` 只在需要验证完整类型链路、最终产物或发布前再跑：
 
 ```bash
-npm run build
+npm run gen:model-manifest
+npm run check:colors
+npm run check:model-i18n
+npm run check:rust:logging
+npm run lint
 ```
+
+`npm run build` 很费时间，不要无必要地频繁执行。
 
 ```powershell
 # 原生控件检查（命中应仅在 primitives.tsx）
@@ -321,7 +329,7 @@ powershell -Command "$files = Get-ChildItem -Path src -Recurse -Include *.ts,*.t
 
 期望结果：
 
-- `npm run build` 通过
+- 快速检查优先通过；`npm run build` 仅在确有需要时执行
 - 原生控件命中仅存在于 `src/components/ui/primitives.tsx`
 - 新增改动不引入新的颜色硬编码
 - 不新增 `any`（允许存量，禁止增量）
@@ -332,7 +340,8 @@ powershell -Command "$files = Get-ChildItem -Path src -Recurse -Include *.ts,*.t
 **模型未显示：**
 - 检查文件命名：必须以 `.model.ts` 结尾
 - 检查文件位置：必须在 `src/models/` 中
-- 运行 `npm run build` 检查 manifest 生成与 TypeScript 错误
+- 先跑 `npm run gen:model-manifest` 和 `npm run lint`
+- 需要确认类型和产物时，再跑 `npm run build`
 
 **联动不工作：**
 - 验证 `trigger` 和 `target` 参数 ID

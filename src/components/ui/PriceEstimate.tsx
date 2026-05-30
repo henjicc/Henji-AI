@@ -1,5 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { registry } from '@/core/ModelRegistry'
+import { useI18n } from '@/hooks/useI18n'
+import {
+    formatPriceEstimate,
+    PRICE_SETTING_CHANGED_EVENT,
+    readPriceEstimateDisplaySettings,
+} from '@/core/pricing/priceDisplay'
 
 interface PriceEstimateProps {
     providerId: string
@@ -9,6 +15,7 @@ interface PriceEstimateProps {
 
 const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
     const model = useMemo(() => registry.getModel(modelId), [modelId])
+    const { t, i18n } = useI18n('ui')
 
     // 计算价格
     const price = useMemo(() => {
@@ -17,40 +24,38 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
     }, [model, modelId, params])
 
     // 检查用户是否开启价格显示
-    const [showPrice, setShowPrice] = useState(() => {
-        return localStorage.getItem('show_price_estimate') !== 'false'
-    })
+    const [priceSettings, setPriceSettings] = useState(() => readPriceEstimateDisplaySettings())
 
     // 监听 storage 变化
     useEffect(() => {
         const handleStorageChange = () => {
-            setShowPrice(localStorage.getItem('show_price_estimate') !== 'false')
+            setPriceSettings(readPriceEstimateDisplaySettings())
         }
 
         // 监听 storage 事件（跨标签页）
         window.addEventListener('storage', handleStorageChange)
 
         // 自定义事件监听（同一页面内）
-        window.addEventListener('priceSettingChanged', handleStorageChange)
+        window.addEventListener(PRICE_SETTING_CHANGED_EVENT, handleStorageChange)
 
         return () => {
             window.removeEventListener('storage', handleStorageChange)
-            window.removeEventListener('priceSettingChanged', handleStorageChange)
+            window.removeEventListener(PRICE_SETTING_CHANGED_EVENT, handleStorageChange)
         }
     }, [])
 
     // 如果不显示、无配置或价格为null，则不渲染
-    if (!showPrice || !model || price === null) {
+    if (!priceSettings.showPriceEstimate || !model || price === null) {
         return null
     }
 
-    // 格式化价格显示
-    const formatPrice = (value: number): string => value.toFixed(2)
-
-    // 生成价格显示文本
-    const currency = model.pricing.currency || '¥'
-
-    const priceDisplay = `${currency}${formatPrice(price)}`
+    const priceDisplay = formatPriceEstimate({
+        amount: price,
+        sourceCurrencySymbol: model.pricing.currency,
+        displayCurrencyMode: priceSettings.currencyMode,
+        language: i18n.language,
+        usdToCnyRate: priceSettings.usdToCnyRate,
+    }).display
 
     return (
         <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-700/50 backdrop-blur-sm">
@@ -68,7 +73,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
                 />
             </svg>
             <span className="whitespace-nowrap">
-                预估: <span className="text-zinc-300">{priceDisplay}</span>
+                {t('priceEstimate.label')}: <span className="text-zinc-300">{priceDisplay}</span>
             </span>
         </div>
     )

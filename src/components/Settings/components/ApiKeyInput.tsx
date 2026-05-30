@@ -11,6 +11,7 @@ interface ApiKeyInputProps {
   placeholder: string
   showLabel: string
   hideLabel: string
+  hint?: string
 }
 
 const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
@@ -21,7 +22,8 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   onToggleVisibility,
   placeholder,
   showLabel,
-  hideLabel
+  hideLabel,
+  hint,
 }) => {
   const toggleLabel = visible ? hideLabel : showLabel
   return (
@@ -46,6 +48,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </UiButton>
       </div>
+      {hint ? <div className="mt-2 text-xs text-text-muted">{hint}</div> : null}
     </div>
   )
 }

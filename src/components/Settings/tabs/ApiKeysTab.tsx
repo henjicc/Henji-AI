@@ -5,6 +5,7 @@ import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
 import SectionCard from '../components/SectionCard'
 import UploadSection from '../sections/UploadSection'
+import LlmSettingsSection from '../sections/LlmSettingsSection'
 import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { useExternalLink } from '../hooks/useExternalLink'
 import { ExternalLink } from 'lucide-react'
@@ -97,6 +98,12 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
       {currentSectionId === 'api-upload' && (
         <section className="space-y-5">
           <UploadSection />
+        </section>
+      )}
+
+      {currentSectionId === 'api-llm' && (
+        <section className="space-y-5">
+          <LlmSettingsSection />
         </section>
       )}
     </div>

@@ -43,7 +43,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     ],
     api: [
       { id: 'api-keys', label: '平台密钥' },
-      { id: 'api-upload', label: '上传策略' }
+      { id: 'api-upload', label: '上传策略' },
+      { id: 'api-llm', label: '大语言模型' }
     ],
     interface: [
       { id: 'interface-layout', label: '布局行为' },

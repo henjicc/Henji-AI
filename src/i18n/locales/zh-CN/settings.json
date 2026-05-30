@@ -155,7 +155,16 @@
     "display": {
       "title": "显示设置",
       "priceLabel": "显示价格估算",
-      "priceHint": "在生成面板显示预估费用",
+      "priceHint": "在生成面板显示预估费用，并按语言或手动设置统一币种",
+      "currencyModeLabel": "价格显示币种",
+      "currencyModeHint": "跟随语言时，中文统一显示人民币，英文统一显示美元",
+      "exchangeRateLabel": "美元兑人民币汇率",
+      "exchangeRateHint": "用于美元和人民币价格换算，默认 1 美元 ≈ 6.77 人民币",
+      "currencyOptions": {
+        "auto": "跟随语言",
+        "cny": "人民币 (CNY)",
+        "usd": "美元 (USD)"
+      },
       "autoFocusLabel": "模型面板自动聚焦搜索框",
       "autoFocusHint": "打开模型选择面板时自动聚焦到搜索输入框"
     },

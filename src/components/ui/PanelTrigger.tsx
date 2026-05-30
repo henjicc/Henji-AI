@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
@@ -18,9 +18,17 @@ type PanelTriggerProps = {
   renderPanel: () => React.ReactNode
   stableHeight?: boolean
   freezePositionOnOpen?: boolean
+  children?: (controls: PanelTriggerControls) => React.ReactNode
 }
 
-export default function PanelTrigger(props: PanelTriggerProps) {
+type PanelTriggerControls = {
+  open: boolean
+  openPanel: () => void
+  closePanel: () => void
+  togglePanel: () => void
+}
+
+export default function PanelTrigger(props: PanelTriggerProps): React.ReactElement {
   const {
     label,
     display,
@@ -36,6 +44,7 @@ export default function PanelTrigger(props: PanelTriggerProps) {
     renderPanel,
     stableHeight,
     freezePositionOnOpen = false,
+    children,
   } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -46,37 +55,95 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   const anchorRectRef = useRef<DOMRect | null>(null)
   const maxHeightRef = useRef<number>(0)
 
+  const computePanelPosition = useCallback((): void => {
+    if (!ref.current) return
+    const btn = ref.current.querySelector('[data-panel-trigger-button]') as HTMLElement | null
+    const target = btn || ref.current
+    const rect = target.getBoundingClientRect()
+    anchorRectRef.current = rect
 
+    const viewportW = window.innerWidth
+    const viewportH = window.innerHeight
+    const margin = 8
+    const titleBarHeight = 40
+    const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
+    let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
+    left = Math.max(margin, Math.min(left, viewportW - w - margin))
+    const gap = 45
+
+    if (alignment === 'aboveCenter') {
+      const bottom = viewportH - rect.top + gap
+      const maxHeight = rect.top - margin - gap - titleBarHeight
+      setReady(false)
+      setPos({ bottom, left, width: w, maxHeight })
+      return
+    }
+
+    const top = rect.bottom + 4
+    const maxHeight = viewportH - top - margin
+    setReady(false)
+    setPos({ top, left, width: w, maxHeight })
+  }, [alignment, panelWidth])
+
+  const closePanel = useCallback((): void => {
+    setClosing(true)
+    window.setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+  }, [])
+
+  const openPanel = useCallback((): void => {
+    if (disabled) return
+    computePanelPosition()
+    setOpen(true)
+  }, [computePanelPosition, disabled])
+
+  const togglePanel = useCallback((): void => {
+    if (disabled) return
+    if (open) {
+      closePanel()
+      return
+    }
+    openPanel()
+  }, [closePanel, disabled, open, openPanel])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as Node
+      const targetElement = target instanceof Element ? target : target.parentElement
       const inTrigger = !!ref.current && ref.current.contains(target)
       const inPanel = !!panelRef.current && panelRef.current.contains(target)
+      const inPortaledPanelControl = !!targetElement?.closest('[data-dropdown-portal="true"]')
       if (inTrigger) return
+      if (inPortaledPanelControl) return
       if (inPanel) {
         if (open) {
           if (typeof closeOnPanelClick === 'function') {
             const shouldClose = closeOnPanelClick(target)
             if (shouldClose) {
-              setClosing(true)
-              setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+              closePanel()
             }
           } else if (closeOnPanelClick === true) {
-            setClosing(true)
-            setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+            closePanel()
           }
         }
         return
       }
       if (open) {
-        setClosing(true)
-        setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+        closePanel()
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open, closeOnPanelClick])
+  }, [closePanel, open, closeOnPanelClick])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      closePanel()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [closePanel, open])
 
   useEffect(() => {
     const updateAnchor = () => {
@@ -221,51 +288,19 @@ export default function PanelTrigger(props: PanelTriggerProps) {
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
-      <UiButton
-        type="button"
-        disabled={disabled}
-        variant="muted"
-        onClick={() => {
-          if (disabled) return
-          if (open) {
-            setClosing(true)
-            setTimeout(() => { setOpen(false); setClosing(false) }, 200)
-          } else {
-            if (ref.current) {
-              const btn = ref.current.querySelector('[data-panel-trigger-button]') as HTMLElement | null
-              const target = btn || ref.current
-              const rect = target.getBoundingClientRect()
-              anchorRectRef.current = rect
-              const viewportW = window.innerWidth
-              const viewportH = window.innerHeight
-              const margin = 8
-              const titleBarHeight = 40 // Tauri 标题栏高度
-              const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-              let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-              left = Math.max(margin, Math.min(left, viewportW - w - margin))
-              const gap = 45
-
-              if (alignment === 'aboveCenter') {
-                const bottom = viewportH - rect.top + gap
-                const maxHeight = rect.top - margin - gap - titleBarHeight
-                setReady(false)
-                setPos({ bottom, left, width: w, maxHeight })
-              } else {
-                const top = rect.bottom + 4
-                const maxHeight = viewportH - top - margin
-                setReady(false)
-                setPos({ top, left, width: w, maxHeight })
-              }
-            }
-            setOpen(true)
-          }
-        }}
-        data-panel-trigger-button
-        className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
-      >
-        <span className="text-sm truncate">{display ?? ''}</span>
-        <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-      </UiButton>
+      {children ? children({ open, openPanel, closePanel, togglePanel }) : (
+        <UiButton
+          type="button"
+          disabled={disabled}
+          variant="muted"
+          onClick={togglePanel}
+          data-panel-trigger-button
+          className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
+        >
+          <span className="text-sm truncate">{display ?? ''}</span>
+          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+        </UiButton>
+      )}
       {(open || closing) && pos && createPortal(
         <div
           ref={panelRef}

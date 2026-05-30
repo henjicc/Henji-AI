@@ -155,7 +155,16 @@
     "display": {
       "title": "Display",
       "priceLabel": "Show price estimate",
-      "priceHint": "Show estimated cost in the generation panel",
+      "priceHint": "Show estimated cost in the generation panel and unify the display currency automatically or manually",
+      "currencyModeLabel": "Price display currency",
+      "currencyModeHint": "When following language, Chinese uses CNY and English uses USD",
+      "exchangeRateLabel": "USD to CNY exchange rate",
+      "exchangeRateHint": "Used for converting between USD and CNY prices. Default: 1 USD ≈ 6.77 CNY",
+      "currencyOptions": {
+        "auto": "Follow language",
+        "cny": "Chinese Yuan (CNY)",
+        "usd": "US Dollar (USD)"
+      },
       "autoFocusLabel": "Auto-focus model search",
       "autoFocusHint": "Focus the search box when opening the model selector"
     },

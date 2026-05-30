@@ -7,6 +7,9 @@
   "delete": "Delete",
   "upload": "Upload",
   "retry": "Poll Again",
+  "priceEstimate": {
+    "label": "Estimate"
+  },
   "actions": {
     "clearHistory": "Clear History",
     "settings": "Settings"

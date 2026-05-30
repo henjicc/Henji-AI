@@ -56,6 +56,11 @@ interface UiCheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
   onCheckedChange?: (checked: boolean) => void;
 }
 
+interface UiSwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
+  checked: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+}
+
 interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
 
 interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -315,6 +320,37 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
 );
 
 UiCheckbox.displayName = 'UiCheckbox';
+
+export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
+  ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => (
+    <button
+      ref={ref}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+        checked
+          ? 'border-brand-500 bg-brand-600'
+          : 'border-border-dark bg-surface-dark hover:border-text-muted/60'
+      } ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          onCheckedChange?.(!checked);
+        }
+      }}
+      {...props}
+    >
+      <span
+        className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+);
+
+UiSwitch.displayName = 'UiSwitch';
 
 export function UiSelect({ className = '', children, ...props }: UiSelectProps) {
   return (

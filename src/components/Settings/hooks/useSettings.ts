@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react'
+import {
+  DEFAULT_USD_TO_CNY_RATE,
+  PRICE_ESTIMATE_CURRENCY_MODE_STORAGE_KEY,
+  PRICE_SETTING_CHANGED_EVENT,
+  SHOW_PRICE_ESTIMATE_STORAGE_KEY,
+  USD_TO_CNY_RATE_STORAGE_KEY,
+  normalizePriceEstimateCurrencyMode,
+  normalizeUsdToCnyRate,
+  readPriceEstimateDisplaySettings,
+  type PriceEstimateCurrencyMode,
+} from '@/core/pricing/priceDisplay'
 
 interface Settings {
   maxHistoryCount: number
   showPriceEstimate: boolean
+  priceEstimateCurrencyMode: PriceEstimateCurrencyMode
+  usdToCnyRate: number
   enableAutoCollapse: boolean
   collapseDelay: number
   collapseOnScrollOnly: boolean
@@ -16,6 +29,8 @@ interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   maxHistoryCount: 50,
   showPriceEstimate: true,
+  priceEstimateCurrencyMode: 'auto',
+  usdToCnyRate: DEFAULT_USD_TO_CNY_RATE,
   enableAutoCollapse: true,
   collapseDelay: 500,
   collapseOnScrollOnly: true,
@@ -39,15 +54,24 @@ const COLLAPSE_SETTING_KEYS: SettingsKey[] = [
   'collapseOnScrollOnly'
 ]
 
+const PRICE_SETTING_KEYS: SettingsKey[] = [
+  'showPriceEstimate',
+  'priceEstimateCurrencyMode',
+  'usdToCnyRate',
+]
+
 export function useSettings(): UseSettingsResult {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   // 加载设置
   useEffect(() => {
     const loadSettings = () => {
+      const priceSettings = readPriceEstimateDisplaySettings()
       const loaded: Settings = {
         maxHistoryCount: parseInt(localStorage.getItem('max_history_count') || '50', 10),
-        showPriceEstimate: localStorage.getItem('show_price_estimate') !== 'false',
+        showPriceEstimate: priceSettings.showPriceEstimate,
+        priceEstimateCurrencyMode: priceSettings.currencyMode,
+        usdToCnyRate: priceSettings.usdToCnyRate,
         enableAutoCollapse: localStorage.getItem('enable_auto_collapse') !== 'false',
         collapseDelay: parseInt(localStorage.getItem('collapse_delay') || '500', 10),
         collapseOnScrollOnly: localStorage.getItem('collapse_on_scroll_only') !== 'false',
@@ -64,13 +88,25 @@ export function useSettings(): UseSettingsResult {
 
   // 更新单个设置
   const updateSetting = <K extends SettingsKey>(key: K, value: Settings[K]) => {
-    setSettings(prev => ({ ...prev, [key]: value }))
-    localStorage.setItem(
-      key.replace(/([A-Z])/g, '_$1').toLowerCase(),
-      String(value)
-    )
+    const nextValue = key === 'priceEstimateCurrencyMode'
+      ? normalizePriceEstimateCurrencyMode(value)
+      : key === 'usdToCnyRate'
+        ? normalizeUsdToCnyRate(value)
+        : value
+    setSettings(prev => ({ ...prev, [key]: nextValue }))
+    const storageKey = key === 'showPriceEstimate'
+      ? SHOW_PRICE_ESTIMATE_STORAGE_KEY
+      : key === 'priceEstimateCurrencyMode'
+        ? PRICE_ESTIMATE_CURRENCY_MODE_STORAGE_KEY
+        : key === 'usdToCnyRate'
+          ? USD_TO_CNY_RATE_STORAGE_KEY
+          : key.replace(/([A-Z])/g, '_$1').toLowerCase()
+    localStorage.setItem(storageKey, String(nextValue))
     if (COLLAPSE_SETTING_KEYS.includes(key)) {
       window.dispatchEvent(new Event('collapseSettingChanged'))
+    }
+    if (PRICE_SETTING_KEYS.includes(key)) {
+      window.dispatchEvent(new Event(PRICE_SETTING_CHANGED_EVENT))
     }
   }
 

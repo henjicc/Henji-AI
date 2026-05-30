@@ -223,6 +223,196 @@ body,
   animation: pulseScale 1s ease-in-out infinite;
 }
 
+@keyframes promptOptimizeSweep {
+  0% {
+    transform: translateX(-135%) skewX(-18deg);
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 0.85;
+  }
+
+  54% {
+    opacity: 0.7;
+  }
+
+  100% {
+    transform: translateX(145%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes promptOptimizeAura {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgb(var(--accent-rgb) / 0.44) inset,
+      0 0 18px rgb(var(--accent-rgb) / 0.24),
+      0 0 34px rgb(var(--brand-500-rgb) / 0.18);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 1px rgb(var(--brand-300-rgb) / 0.72) inset,
+      0 0 24px rgb(var(--accent-rgb) / 0.42),
+      0 0 52px rgb(var(--brand-500-rgb) / 0.32);
+  }
+}
+
+@keyframes promptOptimizeSpark {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.86;
+  }
+
+  50% {
+    transform: rotate(12deg) scale(1.14);
+    opacity: 1;
+  }
+}
+
+.prompt-optimize-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: rgb(var(--accent-rgb) / 0.42) !important;
+  background:
+    linear-gradient(135deg, rgb(var(--brand-700-rgb) / 0.34), rgb(var(--surface-rgb) / 0.86) 42%, rgb(var(--brand-600-rgb) / 0.3)) !important;
+  color: rgb(var(--text-rgb) / 0.96) !important;
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.18) inset,
+    0 0 16px rgb(var(--accent-rgb) / 0.14);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease;
+}
+
+.prompt-optimize-button::before {
+  content: '';
+  position: absolute;
+  inset: -42% auto -42% -36%;
+  z-index: -1;
+  width: 42%;
+  transform: translateX(-120%) skewX(-18deg);
+  background:
+    linear-gradient(90deg, transparent, rgb(var(--brand-300-rgb) / 0.58), rgb(var(--text-rgb) / 0.58), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.prompt-optimize-button::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -2;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 18% 18%, rgb(var(--brand-300-rgb) / 0.34), transparent 32%),
+    linear-gradient(135deg, rgb(var(--brand-600-rgb) / 0.28), transparent 58%);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.prompt-optimize-button:hover:not(:disabled) {
+  border-color: rgb(var(--brand-300-rgb) / 0.78) !important;
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.3) inset,
+    0 0 22px rgb(var(--accent-rgb) / 0.24);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.prompt-optimize-button.is-streaming {
+  cursor: progress;
+  animation: promptOptimizeAura 1.6s ease-in-out infinite;
+}
+
+.prompt-optimize-button.is-streaming::before {
+  animation: promptOptimizeSweep 1.45s ease-in-out infinite;
+}
+
+.prompt-optimize-button.is-streaming .prompt-optimize-button__icon {
+  animation: promptOptimizeSpark 1.1s ease-in-out infinite;
+  color: rgb(var(--brand-300-rgb));
+  filter: drop-shadow(0 0 8px rgb(var(--accent-rgb) / 0.62));
+}
+
+.prompt-optimize-button__label,
+.prompt-optimize-button__icon {
+  position: relative;
+  z-index: 1;
+}
+
+.prompt-optimize-preview {
+  animation: promptOptimizePreviewIn 180ms ease-out both;
+  box-shadow:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.14) inset,
+    0 0 36px rgb(var(--accent-rgb) / 0.18);
+}
+
+.prompt-optimize-preview.is-closing {
+  animation: promptOptimizePreviewOut 220ms ease-in both;
+  pointer-events: none;
+}
+
+.prompt-optimize-preview__stream {
+  animation: promptOptimizeStreamRise 520ms ease-out both;
+}
+
+.prompt-optimize-preview__reasoning {
+  display: inline;
+  opacity: 0.72;
+}
+
+.prompt-optimize-preview__content {
+  display: inline;
+  text-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.12);
+}
+
+@keyframes promptOptimizePreviewIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.992);
+    backdrop-filter: blur(0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    backdrop-filter: blur(12px);
+  }
+}
+
+@keyframes promptOptimizePreviewOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    backdrop-filter: blur(12px);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.996);
+    backdrop-filter: blur(0);
+  }
+}
+
+@keyframes promptOptimizeStreamRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* 图片滑入动画 - 简单流畅的淡入效果 */
 @keyframes imageSlideIn {
   from {

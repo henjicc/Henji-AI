@@ -50,8 +50,14 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
           />
           <DisplaySection
             showPriceEstimate={settings.showPriceEstimate}
+            priceEstimateCurrencyMode={settings.priceEstimateCurrencyMode}
+            usdToCnyRate={settings.usdToCnyRate}
             enableAutoFocusModelSearch={settings.enableAutoFocusModelSearch}
             onToggleShowPrice={(value) => updateSetting('showPriceEstimate', value)}
+            onChangePriceEstimateCurrencyMode={(value) =>
+              updateSetting('priceEstimateCurrencyMode', value)
+            }
+            onChangeUsdToCnyRate={(value) => updateSetting('usdToCnyRate', value)}
             onToggleAutoFocus={(value) => updateSetting('enableAutoFocusModelSearch', value)}
           />
         </section>

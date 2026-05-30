@@ -23,34 +23,30 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function createReferenceTokenRegex(referenceLabels?: string[]): RegExp {
-  if (!referenceLabels || referenceLabels.length === 0) {
-    return IMAGE_REFERENCE_TOKEN_REGEX;
-  }
-
-  const labels = Array.from(
-    new Set(
-      referenceLabels
-        .map((label) => label.trim())
-        .filter((label) => label.length > 0)
-    )
+function createTokenRegex(referenceLabels?: string[], tokenPrefix = '@', literalTokens?: string[]): RegExp {
+  const referenceTokens = (referenceLabels ?? [])
+    .map((label) => label.trim())
+    .filter((label) => label.length > 0)
+    .map((label) => `${tokenPrefix}${label}`);
+  const tokens = [...(literalTokens ?? []), ...referenceTokens];
+  const values = Array.from(
+    new Set(tokens.map((token) => token.trim()).filter((token) => token.length > 0))
   ).sort((a, b) => b.length - a.length);
 
-  if (labels.length === 0) {
+  if (values.length === 0) {
     return IMAGE_REFERENCE_TOKEN_REGEX;
   }
 
-  const alternation = labels.map((label) => escapeRegExp(label)).join('|');
-  return new RegExp(`@(?:${alternation})`, 'g');
+  return new RegExp(values.map((token) => escapeRegExp(token)).join('|'), 'g');
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function findTokenRanges(text: string, referenceLabels?: string[]): TokenRange[] {
+function findTokenRanges(text: string, referenceLabels?: string[], tokenPrefix = '@', literalTokens?: string[]): TokenRange[] {
   const ranges: TokenRange[] = [];
-  const tokenRegex = createReferenceTokenRegex(referenceLabels);
+  const tokenRegex = createTokenRegex(referenceLabels, tokenPrefix, literalTokens);
   tokenRegex.lastIndex = 0;
   let match = tokenRegex.exec(text);
   while (match) {
@@ -100,7 +96,9 @@ export function insertReferenceToken(
 export function normalizeReferenceTokenSpacing(
   text: string,
   cursor: number,
-  referenceLabels?: string[]
+  referenceLabels?: string[],
+  tokenPrefix = '@',
+  literalTokens?: string[]
 ): NormalizedTextResult {
   const safeCursor = clamp(cursor, 0, text.length);
   const segments: string[] = [];
@@ -110,7 +108,7 @@ export function normalizeReferenceTokenSpacing(
   let previousTokenEnd = -1;
   let previousAddedTrailingSpace = false;
 
-  const tokenRegex = createReferenceTokenRegex(referenceLabels);
+  const tokenRegex = createTokenRegex(referenceLabels, tokenPrefix, literalTokens);
   tokenRegex.lastIndex = 0;
   let match = tokenRegex.exec(text);
   while (match) {
@@ -167,13 +165,15 @@ export function resolveReferenceAwareDeleteRange(
   selectionStart: number,
   selectionEnd: number,
   direction: DeleteDirection,
-  referenceLabels?: string[]
+  referenceLabels?: string[],
+  tokenPrefix = '@',
+  literalTokens?: string[]
 ): TextRange | null {
   const safeStart = clamp(selectionStart, 0, text.length);
   const safeEnd = clamp(selectionEnd, 0, text.length);
   const selectionMin = Math.min(safeStart, safeEnd);
   const selectionMax = Math.max(safeStart, safeEnd);
-  const tokenRanges = findTokenRanges(text, referenceLabels);
+  const tokenRanges = findTokenRanges(text, referenceLabels, tokenPrefix, literalTokens);
 
   if (selectionMin !== selectionMax) {
     let expandedStart = selectionMin;

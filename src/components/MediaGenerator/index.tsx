@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -17,11 +17,13 @@ import { PresetManager } from './preset/PresetManager'
 import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
+import { PromptOptimizeButton } from './components/PromptOptimizeButton'
 import AlertDialog from '../ui/AlertDialog'
 import PanelTrigger from '../ui/PanelTrigger'
 import { UiButton } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
+import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: unknown) => void | Promise<void>
@@ -35,6 +37,13 @@ interface MediaGeneratorProps {
   onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onStateChange?: (state: { modelId: string; prompt: string }) => void
 }
+
+interface PromptOptimizationHistoryEntry {
+  before: string
+  after: string
+}
+
+const MAX_PROMPT_OPTIMIZATION_HISTORY = 20
 
 /**
  * MediaGenerator 主组件 - 重构版
@@ -55,6 +64,24 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const uiState = useUIState()
   const { t } = useTranslation(['models', 'ui'])
   const [isSubmittingGenerate, setIsSubmittingGenerate] = useState(false)
+  const [promptOptimizationPreview, setPromptOptimizationPreview] = useState({
+    active: false,
+    reasoning: '',
+    content: '',
+  })
+  const [promptOptimizationHistory, setPromptOptimizationHistory] = useState<PromptOptimizationHistoryEntry[]>([])
+  const [promptOptimizationHistoryCursor, setPromptOptimizationHistoryCursor] = useState(0)
+  const promptTextareaRef = useRef<ReferenceTextareaHandle>(null)
+  const promptUndoEntry = (
+    promptOptimizationHistoryCursor > 0
+      ? promptOptimizationHistory[promptOptimizationHistoryCursor - 1]
+      : null
+  ) ?? null
+  const promptRedoEntry = (
+    promptOptimizationHistoryCursor < promptOptimizationHistory.length
+      ? promptOptimizationHistory[promptOptimizationHistoryCursor]
+      : null
+  ) ?? null
 
   // 2. 模型参数管理（使用新系统）
   const modelState = useModelState(uiState.selectedModel, uiState)
@@ -284,7 +311,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const inputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
 
   // 9. 预设加载处理
-  const handleLoadPreset = (presetData: any) => {
+  const handleLoadPreset = (presetData: Record<string, unknown>) => {
     const params = PresetManager.loadPreset(presetData, uiState.selectedModel)
     Object.entries(params).forEach(([key, value]) => {
       modelState.setParam(key, value)
@@ -318,7 +345,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           display={`${currentProvider?.name}：${currentModel?.name || t('models:selectModel')}`}
           className="w-auto min-w-[180px] flex-shrink-0"
           panelWidth={1100}
-          panelClassName="border-zinc-500/70 bg-zinc-900/98 shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+          panelClassName="border-border-dark bg-surface-dark shadow-xl"
           alignment="aboveCenter"
           stableHeight={true}
           closeOnPanelClick={(t) => {
@@ -361,6 +388,18 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       <InputArea
         input={uiState.input}
         setInput={uiState.setInput}
+        promptUndoTriggerValue={promptUndoEntry?.after ?? null}
+        promptUndoReplacementValue={promptUndoEntry?.before ?? null}
+        onUndoPromptReplacement={() => {
+          setPromptOptimizationHistoryCursor((current) => Math.max(0, current - 1))
+        }}
+        promptRedoTriggerValue={promptRedoEntry?.before ?? null}
+        promptRedoReplacementValue={promptRedoEntry?.after ?? null}
+        onRedoPromptReplacement={() => {
+          setPromptOptimizationHistoryCursor((current) =>
+            Math.min(promptOptimizationHistory.length, current + 1)
+          )
+        }}
         uploadedImages={uiState.uploadedImages}
         uploadedVideos={uiState.uploadedVideos}
         uploadedAudios={uiState.uploadedAudios}
@@ -411,8 +450,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         modelParams={modelState.params}
         isLoading={inputBusy}
         isGenerating={isGenerating}
-        onGenerate={handleGenerate}
-      />
+      promptOptimizationPreview={promptOptimizationPreview}
+      promptTextareaRef={promptTextareaRef}
+      onGenerate={handleGenerate}
+    />
 
       {/* 底部工具栏：按钮 + 价格估算 */}
       <div className="mt-2.5 flex items-center justify-between border-t border-zinc-800/70 px-1 pt-2.5">
@@ -437,6 +478,35 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
               input: uiState.input
             })}
             onLoadPreset={handleLoadPreset}
+          />
+
+          <PromptOptimizeButton
+            prompt={uiState.input}
+            uploadedImages={uiState.uploadedImages}
+            uploadedVideos={uiState.uploadedVideos}
+            uploadedVideoFiles={uiState.uploadedVideoFiles}
+            targetModel={{
+              providerId: uiState.selectedProvider,
+              providerName: currentProvider?.name,
+              modelId: uiState.selectedModel,
+              modelName: currentModel?.name,
+              modelType: currentModel?.type,
+              modelFunctions: currentModel?.functions,
+              modelDescription: currentModel?.description,
+            }}
+            disabled={inputBusy}
+            onOptimized={(value) => {
+              const before = uiState.input
+              if (before !== value) {
+                const appliedHistory = promptOptimizationHistory.slice(0, promptOptimizationHistoryCursor)
+                const nextHistory = [...appliedHistory, { before, after: value }].slice(-MAX_PROMPT_OPTIMIZATION_HISTORY)
+                setPromptOptimizationHistory(nextHistory)
+                setPromptOptimizationHistoryCursor(nextHistory.length)
+              }
+              uiState.setInput(value)
+            }}
+            onStreamPreviewChange={setPromptOptimizationPreview}
+            onAlert={uiState.showAlert}
           />
         </div>
 
