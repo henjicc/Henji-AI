@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { resolveKieImageSources } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -97,7 +98,7 @@ export const kieSeedanceV3Model = defineModel({
   endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolveKieImageSources(params)
       const prompt = params.prompt || ''
       const version = params.kieSeedanceV3Version || params.version || 'lite'
       const fastMode = params.kieSeedanceV3FastMode !== undefined

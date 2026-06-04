@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
+import { resolveKieImageSources, resolveKiePrimaryVideoSource } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -147,7 +148,7 @@ export const kieKlingV26Model = defineModel({
   endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolveKieImageSources(params)
       const prompt = params.prompt || ''
       const mode = params.kieKlingV26Mode || params.mode || 'text-image-to-video'
       const duration = params.kieKlingV26Duration || params.duration || '5'
@@ -155,7 +156,7 @@ export const kieKlingV26Model = defineModel({
       const resolution = params.kieKlingV26Resolution || params.resolution || '720p'
       const enableAudio = params.kieKlingV26EnableAudio ?? params.enable_audio ?? false
       const characterOrientation = params.kieKlingV26CharacterOrientation || params.character_orientation || 'video'
-      const videoUrl = params.video
+      const videoUrl = resolveKiePrimaryVideoSource(params)
 
       if (mode === 'motion-control') {
         if (images.length === 0) {

@@ -199,6 +199,26 @@ function resolvePpioPrimaryVideoSource(params) {
     : undefined;
 }
 
+function resolveKieImageSources(params) {
+  const preferred = filterMediaSources(params.uploadedFilePaths);
+  return preferred.length > 0 ? preferred : filterMediaSources(params.images);
+}
+
+function resolveKieVideoSources(params) {
+  const preferred = filterMediaSources(params.uploadedVideoFilePaths);
+  return preferred.length > 0 ? preferred : filterMediaSources(params.videos);
+}
+
+function resolveKiePrimaryVideoSource(params) {
+  const preferred = resolveKieVideoSources(params);
+  if (preferred.length > 0) {
+    return preferred[0];
+  }
+  return typeof params.video === "string" && params.video.trim().length > 0
+    ? params.video
+    : undefined;
+}
+
 function resolveUploadedImageSources(params) {
   return resolvePpioImageSources(params);
 }

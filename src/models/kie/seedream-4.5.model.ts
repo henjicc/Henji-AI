@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { resolveKieImageSources } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -78,7 +79,7 @@ export const kieSeedream45Model = defineModel({
         return 'basic'
       }
 
-      const images = params.images || []
+      const images = resolveKieImageSources(params)
       const prompt = params.prompt || ''
       const aspectRatio = params.kieSeedreamAspectRatio || params.aspect_ratio
       const quality = params.kieSeedreamQuality || params.quality

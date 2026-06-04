@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { resolveKieImageSources } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -95,7 +96,7 @@ export const kieHailuo23Model = defineModel({
   endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolveKieImageSources(params)
       const prompt = params.prompt || ''
       const mode = params.kieHailuo23Mode || params.mode || 'standard'
       const duration = params.kieHailuo23Duration || params.duration || 6

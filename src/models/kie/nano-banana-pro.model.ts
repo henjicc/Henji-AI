@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { resolveKieImageSources } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -62,7 +63,7 @@ export const kieNanoBananaProModel = defineModel({
   endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const images = resolveKieImageSources(params)
       const prompt = params.prompt || ''
       const aspectRatio = params.kieNanoBananaAspectRatio || params.aspect_ratio
       const resolution = params.kieNanoBananaResolution || params.resolution
