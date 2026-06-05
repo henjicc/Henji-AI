@@ -305,8 +305,20 @@ async fn rewrite_media_source(
 
         // KIE / ModelScope expect a hosted URL.
         "kie" | "modelscope" => {
+            // Try KIE's own upload service first (e.g. https://kieai.redpandaai.co/api/file-stream-upload).
+            // If it fails (e.g. network/TLS error), fall through to the generic BizyAir upload.
             if let Some(kie_key) = key_store::get_provider_api_key("kie")? {
-                return kie::upload_to_kie(&kie_key, &prepared.bytes, &prepared.filename).await;
+                match kie::upload_to_kie(&kie_key, &prepared.bytes, &prepared.filename).await {
+                    Ok(url) => return Ok(url),
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "ai_runtime.upload",
+                            provider = "kie",
+                            error = %err,
+                            "KIE upload failed, falling back to generic upload service"
+                        );
+                    }
+                }
             }
 
             if let Some(bizyair_key) = key_store::get_provider_api_key("bizyair")? {
