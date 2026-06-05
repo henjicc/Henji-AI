@@ -49,11 +49,11 @@ export function FloatingInputPanel({
       <div
         className="relative cursor-pointer overflow-hidden rounded-[24px] border border-border-dark bg-app shadow-2xl"
         style={{
-          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
           minHeight: isCollapsed || isCollapsing ? '52px' : 'auto',
           opacity: 1,
-          padding: isCollapsed || isCollapsing ? '12px 22px' : '12px',
+          padding: '12px',
           overflow: isCollapsed && !isCollapsing ? 'visible' : 'hidden',
         }}
         onClick={() => {
@@ -66,7 +66,7 @@ export function FloatingInputPanel({
             top: isCollapsed || isCollapsing ? '12px' : '-60px',
             opacity: isCollapsed || isCollapsing ? 1 : 0,
             transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), top 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-            padding: '0 22px',
+            padding: isCollapsed || isCollapsing ? '0 32px' : '0 22px',
           }}
         >
           <div className="flex items-center justify-between gap-4">
