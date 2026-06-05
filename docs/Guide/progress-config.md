@@ -1,125 +1,92 @@
-# 进度条配置说明（meta.progress）
+# 进度条配置说明（当前框架）
 
-本说明用于新架构下的进度条配置。进度条的速度与联动规则全部由模型的 `meta.progress` 控制，UI 不再写模型特定逻辑。
+当前项目的进度条默认时间**不再建议**通过模型里的 `meta.progress.baseDurationMs`、`baseAttempts` 这类字段手动配置。
 
-## 配置位置
+现在统一走这套顺序：
 
-在模型定义文件中：
+1. 后端学习到的本机样本
+2. 打包内置的 `progress-seeds.json`
+3. 模型自身的轮询信息（仅 `meta.polling`）
+4. 通用类型兜底
+
+## 当前原则
+
+- 不再为单个模型手动写自定义默认耗时
+- 不再通过 `meta.progress` 给某个模型单独指定基础秒数
+- 进度条预计时间由后端统一计算
+- 生成页和画布页共用同一套估时逻辑
+
+## 仍然保留的模型配置
+
+### `meta.polling`
+
+异步模型仍然应该保留 `meta.polling`，因为后端需要它来决定轮询间隔和最大轮询次数。
 
 ```ts
-export const xxxModel = defineModel({
-  meta: {
-    // ...
-    progress: { /* 见下方配置 */ }
-  },
-  // ...
-})
-```
-
-## 两种模式
-
-### 1) 同步模型：time
-
-用于同步请求（没有轮询的模型），通过“预计耗时”驱动进度。
-
-```ts
-progress: {
-  mode: 'time',
-  baseDurationMs: 20000,
-  perUnitMs: 15000,
-  scaleWith: 'maxImages',
-  maxDurationMs: 180000
+polling: {
+  interval: 3000,
+  maxAttempts: 120,
+  expectedAttempts: 20
 }
 ```
 
 说明：
-- `baseDurationMs`：基础耗时（毫秒）。
-- `perUnitMs`：联动参数每增加 1 单位时的额外耗时。
-- `scaleWith`：联动参数 ID（如数量参数）。
-- `minDurationMs` / `maxDurationMs`：上下限夹紧（可选）。
-- `tickMs`：进度更新间隔（可选，默认 300ms）。
-- `curve`：曲线配置（可选，见下文）。
 
-### 2) 异步模型：polling
+- `interval`：真实轮询间隔
+- `maxAttempts`：真实最大轮询次数
+- `expectedAttempts`：当没有学习样本和种子时，可作为后端估时参考
 
-用于异步轮询模型，通过“预计轮询次数 + 轮询间隔”估算耗时驱动进度。
+### `meta.progress`
 
-```ts
-progress: {
-  mode: 'polling',
-  baseAttempts: 28,
-  perUnitAttempts: 2,
-  scaleWith: 'ppioWan25VideoDuration',
-  minDurationMs: 40000,
-  maxDurationMs: 180000
-}
+`meta.progress` 仍然被代码兼容读取，但**新模型和现有模型都不应再继续新增或维护它作为默认耗时来源**。
+
+也就是说：
+
+- 存量可以逐步移除
+- 新增模型不要再写 `baseDurationMs` / `baseAttempts`
+
+## 默认估时的通用兜底
+
+当模型既没有学习样本，也没有种子时，后端会按类型走通用估时：
+
+- `image`：基础 60s
+- `video`：基础 120s
+- `audio`：基础 10s
+
+其中：
+
+- 图片会按张数做简单放大
+- 视频会按时长做简单放大
+- 音频会按文本长度做简单放大
+
+## 开发期种子导出
+
+如果你本机已经积累了一些样本，可以导出本地默认值：
+
+```bash
+npm run progress:export-seeds
 ```
 
-说明：
-- `baseAttempts`：基础预计轮询次数。
-- `perUnitAttempts`：联动参数每增加 1 单位时，额外增加的轮询次数。
-- `scaleWith`：联动参数 ID（如时长、数量）。
-- `intervalMs`：轮询间隔覆盖值（可选，默认取 `meta.polling.interval`）。
-- `minDurationMs` / `maxDurationMs`：最终耗时的上下限夹紧（可选）。
-- `tickMs`：进度更新间隔（可选，默认 300ms）。
-- `curve`：曲线配置（可选，见下文）。
+导出文件位置：
 
-## 曲线配置（curve）
-
-默认曲线：先快后慢，并持续前进，避免卡住。
-
-```ts
-progress: {
-  // ...
-  curve: {
-    slowStart: 80,
-    slowEnd: 95,
-    cap: 99,
-    tailFactor: 1.2
-  }
-}
+```text
+dev-data/progress-seeds.local.json
 ```
 
-说明：
-- `slowStart`：开始减速的进度点（默认 80）。
-- `slowEnd`：减速阶段结束的进度点（默认 95）。
-- `cap`：完成前允许达到的最高进度（默认 99）。
-- `tailFactor`：尾段趋近速度因子（越大越慢）。
+后续执行以下命令时，会自动把这个本地文件合并进最终打包资源：
 
-## 联动规则（scaleWith）
+- `npm run dev`
+- `npm run build`
+- `npm run tauri:dev`
+- `npm run tauri:build`
 
-- 支持数值或数组：
-  - 数值：直接作为数量
-  - 数组：使用数组长度
-- 不存在或无法解析时，默认按 1 处理
-- 公式（默认）：`base + perUnit * (n - 1)`
+## 建议
 
-## 运行行为
-
-- 进度会按 `tickMs` 持续更新，即使时间估算已超过预期，也会缓慢向 `cap` 逼近，确保始终在动。
-- 请求完成时，会快速动画到 100% 并展示结果。
-
-## 示例：Seedream 4.0
-
-```ts
-progress: {
-  mode: 'time',
-  baseDurationMs: 20000,
-  perUnitMs: 15000,
-  scaleWith: 'maxImages',
-  maxDurationMs: 180000
-}
-```
-
-## 示例：Wan 2.5 Preview
-
-```ts
-progress: {
-  mode: 'polling',
-  baseAttempts: 28,
-  perUnitAttempts: 2,
-  scaleWith: 'ppioWan25VideoDuration',
-  minDurationMs: 40000,
-  maxDurationMs: 180000
-}
-```
+- 如果你觉得某个模型的默认时间不合理，优先通过真实生成样本和种子修正
+- 不要重新回到“每个模型手写一个秒数”的旧模式
+- 如果确实需要排查来源，先看日志里的：
+  - `本轮预计时间`
+  - `本轮实际时间`
+  - `预计来源`
+  - `最近全局样本`
+  - `最近时段样本`

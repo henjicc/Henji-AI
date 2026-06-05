@@ -10,6 +10,7 @@ import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { canvasAiGateway, graphImageResolver } from '@/features/canvas/application/canvasServices';
 import { detectAspectRatio, parseAspectRatio, prepareNodeImage } from '@/features/canvas/application/imageData';
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
+import { GenerationService } from '@/core/services/GenerationService';
 import { getImageModel, getDefaultImageModelId, listImageModels } from '@/features/canvas/models';
 import { NODE_CONTROL_CHIP_CLASS, NODE_CONTROL_ICON_CLASS, NODE_CONTROL_MODEL_CHIP_CLASS, NODE_CONTROL_PARAMS_CHIP_CLASS, NODE_CONTROL_PRIMARY_BUTTON_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { ModelParamsControls } from '@/features/canvas/ui/ModelParamsControls';
@@ -187,7 +188,25 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       return;
     }
 
-    const generationDurationMs = selectedModel.expectedDurationMs ?? 60000;
+    const estimateParams: Record<string, unknown> = {
+      prompt,
+      text: prompt,
+      size: selectedResolution.value,
+      aspect_ratio: selectedAspectRatio.value,
+      requestAspectRatio: selectedAspectRatio.value,
+      ...(incomingImages.length > 0
+        ? {
+          images: incomingImages,
+          uploadedFilePaths: incomingImages,
+        }
+        : {}),
+      ...(data.extraParams ?? {}),
+    };
+    const estimate = await GenerationService.getInstance().getProgressEstimate(
+      requestResolution.requestModel,
+      estimateParams
+    );
+    const generationDurationMs = estimate?.durationMs ?? selectedModel.expectedDurationMs;
     const generationStartedAt = Date.now();
     const resultNodeTitle = buildAiResultNodeTitle(prompt, t('node.imageEdit.resultTitle'));
     setError(null);

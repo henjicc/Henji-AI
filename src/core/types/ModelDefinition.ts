@@ -54,6 +54,26 @@ export interface ProgressCurveConfig {
   tailFactor?: number
 }
 
+export interface ProgressLearningFieldSegment {
+  kind: 'field'
+  field: string
+}
+
+export interface ProgressLearningTextLengthSegment {
+  kind: 'textLength'
+  field: 'prompt' | 'text'
+  buckets: number[]
+}
+
+export type ProgressLearningSegment =
+  | ProgressLearningFieldSegment
+  | ProgressLearningTextLengthSegment
+
+export interface ProgressLearningConfig {
+  segments?: ProgressLearningSegment[]
+  enableTimeBuckets?: boolean
+}
+
 /**
  * Progress config for sync models
  */
@@ -236,6 +256,11 @@ export interface ModelMeta {
    * Progress estimate config (optional)
    */
   progress?: ProgressConfig
+
+  /**
+   * Runtime progress learning config (optional)
+   */
+  progressLearning?: ProgressLearningConfig
 
   /**
    * 模型别名（可选）

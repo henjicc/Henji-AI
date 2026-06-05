@@ -7,6 +7,12 @@ export interface ProgressSpec {
   curve: Required<ProgressCurveConfig>
 }
 
+interface ResolvedProgressShape {
+  durationMs: number
+  tickMs: number
+  curve: Required<ProgressCurveConfig>
+}
+
 export interface ProgressTracker {
   start: () => void
   stop: () => void
@@ -146,7 +152,7 @@ const resolveCurve = (curve?: ProgressCurveConfig): Required<ProgressCurveConfig
 const resolveExpectedDurationMs = (
   model: ModelDefinition,
   params: Record<string, unknown>
-): { durationMs: number; tickMs: number; curve: Required<ProgressCurveConfig> } | null => {
+): ResolvedProgressShape | null => {
   const progress = model.meta.progress
   const mode: ProgressConfig['mode'] = progress?.mode ?? 'time'
   const typeDefaults = DEFAULT_DURATION_BY_TYPE[model.meta.type]
@@ -229,13 +235,16 @@ const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
 
 export const resolveProgressSpec = (
   model: ModelDefinition,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  expectedDurationOverrideMs?: number
 ): ProgressSpec | null => {
   const resolved = resolveExpectedDurationMs(model, params)
   if (!resolved) return null
 
   return {
-    expectedDurationMs: resolved.durationMs,
+    expectedDurationMs: expectedDurationOverrideMs && Number.isFinite(expectedDurationOverrideMs) && expectedDurationOverrideMs > 0
+      ? expectedDurationOverrideMs
+      : resolved.durationMs,
     tickMs: resolved.tickMs,
     curve: resolved.curve
   }

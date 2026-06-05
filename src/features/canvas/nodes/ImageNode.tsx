@@ -50,7 +50,9 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   const generationStartedAt =
     typeof data.generationStartedAt === 'number' ? data.generationStartedAt : null;
   const generationDurationMs =
-    typeof data.generationDurationMs === 'number' ? data.generationDurationMs : 60000;
+    typeof data.generationDurationMs === 'number' && data.generationDurationMs > 0
+      ? data.generationDurationMs
+      : null;
   const resolvedAspectRatio = data.aspectRatio || DEFAULT_ASPECT_RATIO;
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
     minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
@@ -89,7 +91,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
     }
 
     const startedAt = generationStartedAt ?? Date.now();
-    const duration = Math.max(1000, generationDurationMs);
+    const duration = Math.max(1000, generationDurationMs ?? 1000);
     const elapsed = Math.max(0, now - startedAt);
 
     return Math.min(elapsed / duration, 0.96);

@@ -19,10 +19,14 @@ import {
   aiCancelTask,
   aiContinuePolling,
   aiGenerate,
+  aiGetProgressEstimate,
   aiGetProviderKeyStatus,
+  aiRecordProgressSample,
+  type AiRecordProgressSampleResponseDto,
   aiRemoveProviderApiKey,
   aiSetProviderApiKey,
   type AiGenerateResponseDto,
+  type AiProgressEstimateDto,
   type ProviderKeyStatusDto,
 } from '@/commands/aiRuntime'
 
@@ -30,6 +34,17 @@ import {
  * Backward-compatible type kept for API stability.
  */
 export type ProviderFactory = never
+
+export interface GenerationExecutionOptions {
+  progressSource?: 'generation' | 'canvas'
+}
+
+interface PendingProgressSampleContext {
+  startedAtMs: number
+  params: Record<string, unknown>
+  source: 'generation' | 'canvas'
+  estimate: AiProgressEstimateDto | null
+}
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
@@ -399,9 +414,11 @@ export class GenerationService {
   private static instance: GenerationService | null = null
 
   private keyStatusCache: Map<string, boolean>
+  private pendingProgressSamples: Map<string, PendingProgressSampleContext>
 
   private constructor() {
     this.keyStatusCache = new Map()
+    this.pendingProgressSamples = new Map()
   }
 
   static getInstance(): GenerationService {
@@ -414,10 +431,14 @@ export class GenerationService {
   async generate(
     modelId: string,
     params: Record<string, any>,
-    onProgress?: (status: ProgressStatus) => void
+    onProgress?: (status: ProgressStatus) => void,
+    options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
     const requestId = createRequestId(modelId)
+    const sourceParams = params as Record<string, unknown>
+    const progressSource = options.progressSource ?? 'generation'
+    const startedAtMs = Date.now()
 
     try {
       const model = registry.getModel(modelId)
@@ -425,13 +446,18 @@ export class GenerationService {
         throw new Error(`Model not found: ${modelId}`)
       }
 
-      const progressSpec = onProgress ? resolveProgressSpec(model, params as Record<string, unknown>) : null
+      const estimate = await this.getProgressEstimate(modelId, sourceParams).catch((error) => {
+        logger.warn('[GenerationService] 获取进度估算失败，回退本地默认', error)
+        return null
+      })
+      const progressSpec = onProgress
+        ? resolveProgressSpec(model, sourceParams, estimate?.durationMs)
+        : null
       progressTracker = onProgress && progressSpec
         ? createProgressTracker(progressSpec, onProgress)
         : null
       progressTracker?.start()
 
-      const sourceParams = params as Record<string, unknown>
       const normalized = await normalizeSmartAspectParams(model, sourceParams)
       const runtimeParams = attachUploadRuntimeParams(normalized.params)
       const preflightSummary = buildGeneratePreflightSummary(sourceParams, runtimeParams, normalized.report)
@@ -442,6 +468,7 @@ export class GenerationService {
         providerId: model.meta.provider,
         context: {
           preflight: preflightSummary,
+          progressEstimate: estimate,
         },
       })
 
@@ -453,6 +480,14 @@ export class GenerationService {
       recordRuntimeTrace(modelId, params, response.trace)
 
       if (response.status === 'pending') {
+        if (response.taskId) {
+          this.pendingProgressSamples.set(response.taskId, {
+            startedAtMs,
+            params: sourceParams,
+            source: progressSource,
+            estimate,
+          })
+        }
         logger.info('[GenerationService] 生成进入轮询', {
           event: 'generation.generate.pending',
           requestId,
@@ -487,14 +522,17 @@ export class GenerationService {
         throw new Error(`Generation ${response.status}${formatFailedMetadata(response.metadata)}`)
       }
 
+      const recorded = await this.recordProgressSample(modelId, sourceParams, startedAtMs, Date.now(), progressSource)
       logger.info('[GenerationService] 生成完成', {
         event: 'generation.generate.completed',
         requestId,
         taskId: response.taskId,
         modelId,
+        providerId: model.meta.provider,
         context: {
           hasUrl: Boolean(response.url),
           hasFilePath: Boolean(response.filePath),
+          progressTiming: this.buildProgressTimingContext(estimate, recorded),
         },
       })
       progressTracker?.complete()
@@ -524,39 +562,49 @@ export class GenerationService {
   async generateImage(
     modelId: string,
     params: Record<string, any>,
-    onProgress?: (status: ProgressStatus) => void
+    onProgress?: (status: ProgressStatus) => void,
+    options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
-    return this.generate(modelId, params, onProgress)
+    return this.generate(modelId, params, onProgress, options)
   }
 
   async generateVideo(
     modelId: string,
     params: Record<string, any>,
-    onProgress?: (status: ProgressStatus) => void
+    onProgress?: (status: ProgressStatus) => void,
+    options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
-    return this.generate(modelId, params, onProgress)
+    return this.generate(modelId, params, onProgress, options)
   }
 
   async generateAudio(
     modelId: string,
     params: Record<string, any>,
-    onProgress?: (status: ProgressStatus) => void
+    onProgress?: (status: ProgressStatus) => void,
+    options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
-    return this.generate(modelId, params, onProgress)
+    return this.generate(modelId, params, onProgress, options)
   }
 
   async continuePolling(
     modelId: string,
     taskId: string,
     params: Record<string, unknown> = {},
-    onProgress?: (status: ProgressStatus) => void
+    onProgress?: (status: ProgressStatus) => void,
+    options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
     const requestId = createRequestId(`${modelId}-continue`)
 
     try {
       const model = registry.getModel(modelId)
-      const progressSpec = model && onProgress ? resolveProgressSpec(model, params) : null
+      const estimate = model
+        ? await this.getProgressEstimate(modelId, params).catch((error) => {
+          logger.warn('[GenerationService] 获取继续轮询进度估算失败，回退本地默认', error)
+          return null
+        })
+        : null
+      const progressSpec = model && onProgress ? resolveProgressSpec(model, params, estimate?.durationMs) : null
       progressTracker = onProgress && progressSpec
         ? createProgressTracker(progressSpec, onProgress)
         : null
@@ -590,14 +638,32 @@ export class GenerationService {
         throw new Error(`Continue polling ${response.status}${formatFailedMetadata(response.metadata)}`)
       }
 
+      const pendingSample = this.pendingProgressSamples.get(taskId)
+      const progressSource = pendingSample?.source ?? options.progressSource ?? 'generation'
+      let recorded = null
+      if (pendingSample) {
+        recorded = await this.recordProgressSample(
+          modelId,
+          pendingSample.params,
+          pendingSample.startedAtMs,
+          Date.now(),
+          progressSource
+        )
+        this.pendingProgressSamples.delete(taskId)
+      }
       logger.info('[GenerationService] 继续轮询完成', {
         event: 'generation.continue_polling.completed',
         requestId,
         taskId: response.taskId || taskId,
         modelId,
+        providerId: model?.meta.provider,
         context: {
           hasUrl: Boolean(response.url),
           hasFilePath: Boolean(response.filePath),
+          progressTiming: this.buildProgressTimingContext(
+            pendingSample?.estimate ?? estimate,
+            recorded
+          ),
         },
       })
       progressTracker?.complete()
@@ -662,6 +728,7 @@ export class GenerationService {
     })
     try {
       await aiCancelTask(taskId)
+      this.pendingProgressSamples.delete(taskId)
       logger.info('[GenerationService] 取消任务完成', {
         event: 'generation.cancel.completed',
         taskId,
@@ -689,6 +756,57 @@ export class GenerationService {
     // No-op: provider execution moved to backend runtime.
   }
 
+  async getProgressEstimate(
+    modelId: string,
+    params: Record<string, unknown>
+  ): Promise<AiProgressEstimateDto | null> {
+    try {
+      return await aiGetProgressEstimate({
+        modelId,
+        params,
+      })
+    } catch (error) {
+      logger.warn('[GenerationService] 读取后端进度估算失败', error, {
+        event: 'generation.progress_estimate.failed',
+        modelId,
+      })
+      return null
+    }
+  }
+
+  private async recordProgressSample(
+    modelId: string,
+    params: Record<string, unknown>,
+    startedAtMs: number,
+    finishedAtMs: number,
+    source: 'generation' | 'canvas'
+  ): Promise<AiRecordProgressSampleResponseDto | null> {
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs) || finishedAtMs <= startedAtMs) {
+      return null
+    }
+
+    try {
+      return await aiRecordProgressSample({
+        modelId,
+        params,
+        startedAtMs,
+        finishedAtMs,
+        source,
+      })
+    } catch (error) {
+      logger.warn('[GenerationService] 记录进度样本失败', error, {
+        event: 'generation.progress_sample.failed',
+        modelId,
+        context: {
+          startedAtMs,
+          finishedAtMs,
+          source,
+        },
+      })
+      return null
+    }
+  }
+
   private syncKeyStatusCache(statusList: ProviderKeyStatusDto[]): void {
     this.keyStatusCache.clear()
     statusList.forEach((item) => {
@@ -698,6 +816,25 @@ export class GenerationService {
 
   static reset(): void {
     GenerationService.instance = null
+  }
+
+  private buildProgressTimingContext(
+    estimate: AiProgressEstimateDto | null,
+    recorded: AiRecordProgressSampleResponseDto | null
+  ): Record<string, unknown> {
+    return {
+      estimatedDurationMs: estimate?.durationMs,
+      estimatedSource: estimate?.source,
+      actualDurationMs: recorded?.actualDurationMs,
+      timeBucket: recorded?.estimate.timeBucket ?? estimate?.timeBucket,
+      globalSampleCount: recorded?.estimate.globalSampleCount ?? estimate?.globalSampleCount,
+      bucketSampleCount: recorded?.estimate.bucketSampleCount ?? estimate?.bucketSampleCount,
+      defaultDurationMs: recorded?.estimate.defaultDurationMs ?? estimate?.defaultDurationMs,
+      globalEstimateMs: recorded?.estimate.globalEstimateMs ?? estimate?.globalEstimateMs,
+      bucketEstimateMs: recorded?.estimate.bucketEstimateMs ?? estimate?.bucketEstimateMs,
+      recentGlobalDurationsMs: recorded?.estimate.recentGlobalDurationsMs ?? estimate?.recentGlobalDurationsMs,
+      recentBucketDurationsMs: recorded?.estimate.recentBucketDurationsMs ?? estimate?.recentBucketDurationsMs,
+    }
   }
 }
 

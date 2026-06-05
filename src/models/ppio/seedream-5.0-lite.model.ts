@@ -51,13 +51,6 @@ export const seedream50LiteModel = defineModel({
       interval: 3000,
       maxAttempts: 120,
       expectedAttempts: 20
-    },
-    progress: {
-      mode: 'time',
-      baseDurationMs: 20000,
-      perUnitMs: 12000,
-      scaleWith: 'maxImages',
-      maxDurationMs: 180000
     }
   },
   inputLimits: {

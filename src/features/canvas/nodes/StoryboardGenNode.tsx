@@ -37,6 +37,7 @@ import {
   buildStoryboardPrompt,
   generateStoryboardImage,
 } from '@/features/canvas/nodes/storyboardGen/generation'
+import { GenerationService } from '@/core/services/GenerationService'
 import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor'
 import { StoryboardParamsBar } from '@/features/canvas/nodes/storyboardGen/StoryboardParamsBar'
 
@@ -223,7 +224,25 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       return
     }
 
-    const generationDurationMs = selectedModel.expectedDurationMs ?? 60000
+    const estimateParams: Record<string, unknown> = {
+      prompt,
+      text: prompt,
+      size: selectedResolution.value,
+      aspect_ratio: selectedAspectRatio.value,
+      requestAspectRatio: selectedAspectRatio.value,
+      ...(incomingImages.length > 0
+        ? {
+          images: incomingImages,
+          uploadedFilePaths: incomingImages,
+        }
+        : {}),
+      ...(nodeData.extraParams ?? {}),
+    }
+    const estimate = await GenerationService.getInstance().getProgressEstimate(
+      requestResolution.requestModel,
+      estimateParams
+    )
+    const generationDurationMs = estimate?.durationMs ?? selectedModel.expectedDurationMs
     const generationStartedAt = Date.now()
     const newNodePosition = findNodePosition(
       id,

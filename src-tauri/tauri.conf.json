@@ -39,7 +39,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "resources/model-manifest.json"
+      "resources/model-manifest.json",
+      "resources/progress-seeds.json"
     ],
     "icon": [
       "icons/32x32.png",

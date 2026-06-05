@@ -408,6 +408,14 @@ function formatSmartAspectReason(reason: string | undefined): string {
   return '自动处理'
 }
 
+function formatDurationMsLabel(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+  const seconds = Math.max(0.1, value / 1000)
+  return `${seconds.toFixed(seconds >= 10 ? 1 : 2)}s`
+}
+
 function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | null {
   const context = isRecord(event.context) ? event.context : {}
   const preflight = isRecord(context['preflight']) ? context['preflight'] : null
@@ -509,6 +517,38 @@ function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | nu
     lines.push(`📤 上传策略: ${provider} | fallback ${fallbackEnabled ? '开启' : '关闭'}`)
   }
 
+  const progressEstimate = isRecord(context['progressEstimate']) ? context['progressEstimate'] : null
+  if (progressEstimate) {
+    const durationLabel = formatDurationMsLabel(getNumberValue(progressEstimate['durationMs']))
+    const source = getStringValue(progressEstimate['source']) || 'unknown'
+    const globalCount = getNumberValue(progressEstimate['globalSampleCount']) ?? 0
+    const bucketCount = getNumberValue(progressEstimate['bucketSampleCount']) ?? 0
+    const recentGlobal = Array.isArray(progressEstimate['recentGlobalDurationsMs'])
+      ? progressEstimate['recentGlobalDurationsMs']
+        .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+        .slice(0, 8)
+        .map((item) => formatDurationMsLabel(item))
+        .filter((item): item is string => Boolean(item))
+      : []
+    const recentBucket = Array.isArray(progressEstimate['recentBucketDurationsMs'])
+      ? progressEstimate['recentBucketDurationsMs']
+        .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+        .slice(0, 8)
+        .map((item) => formatDurationMsLabel(item))
+        .filter((item): item is string => Boolean(item))
+      : []
+
+    if (durationLabel) {
+      lines.push(`⏱️ 本轮预计: ${durationLabel} | 来源=${source} | 全局样本=${globalCount} | 时段样本=${bucketCount}`)
+    }
+    if (recentGlobal.length > 0) {
+      lines.push(`📚 最近全局样本: ${recentGlobal.join('、')}`)
+    }
+    if (recentBucket.length > 0) {
+      lines.push(`🕒 最近时段样本: ${recentBucket.join('、')}`)
+    }
+  }
+
   if (lines.length === 0) {
     return null
   }
@@ -540,6 +580,48 @@ function buildConsoleHead(event: LogEvent): string {
 function buildConsoleDetail(event: LogEvent): Record<string, unknown> | null {
   if (event.event === 'generation.generate.start') {
     return buildGenerateStartDetail(event)
+  }
+
+  if (event.event === 'generation.generate.completed' || event.event === 'generation.continue_polling.completed') {
+    const context = isRecord(event.context) ? event.context : {}
+    const progressTiming = isRecord(context['progressTiming']) ? context['progressTiming'] : null
+    if (!progressTiming) {
+      return null
+    }
+
+    const estimatedLabel = formatDurationMsLabel(getNumberValue(progressTiming['estimatedDurationMs']))
+    const actualLabel = formatDurationMsLabel(getNumberValue(progressTiming['actualDurationMs']))
+    const globalEstimateLabel = formatDurationMsLabel(getNumberValue(progressTiming['globalEstimateMs']))
+    const bucketEstimateLabel = formatDurationMsLabel(getNumberValue(progressTiming['bucketEstimateMs']))
+    const defaultLabel = formatDurationMsLabel(getNumberValue(progressTiming['defaultDurationMs']))
+    const recentGlobal = Array.isArray(progressTiming['recentGlobalDurationsMs'])
+      ? progressTiming['recentGlobalDurationsMs']
+        .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+        .slice(0, 10)
+        .map((item) => formatDurationMsLabel(item))
+        .filter((item): item is string => Boolean(item))
+      : []
+    const recentBucket = Array.isArray(progressTiming['recentBucketDurationsMs'])
+      ? progressTiming['recentBucketDurationsMs']
+        .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+        .slice(0, 10)
+        .map((item) => formatDurationMsLabel(item))
+        .filter((item): item is string => Boolean(item))
+      : []
+
+    return {
+      '本轮预计时间': estimatedLabel,
+      '本轮实际时间': actualLabel,
+      '预计来源': getStringValue(progressTiming['estimatedSource']) || '-',
+      '默认时间': defaultLabel,
+      '全局估算时间': globalEstimateLabel,
+      '当前时段估算时间': bucketEstimateLabel,
+      '当前时段': getStringValue(progressTiming['timeBucket']) || '-',
+      '全局样本数': getNumberValue(progressTiming['globalSampleCount']) ?? 0,
+      '时段样本数': getNumberValue(progressTiming['bucketSampleCount']) ?? 0,
+      '最近全局样本': recentGlobal.length > 0 ? recentGlobal.join('、') : '无',
+      '最近时段样本': recentBucket.length > 0 ? recentBucket.join('、') : '无',
+    }
   }
 
   if (event.event === 'generation.runtime.request_json') {

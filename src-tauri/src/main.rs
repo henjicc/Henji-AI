@@ -3,12 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-mod clipboard_files;
-mod ai_runtime;
-mod image_commands;
-mod llm_runtime;
-mod logging;
-mod modelscope;
+use henji_ai::{ai_runtime, clipboard_files, image_commands, llm_runtime, logging, modelscope};
 
 use tauri::Manager;
 
@@ -103,6 +98,8 @@ pub fn run() {
             ai_runtime::commands::ai_get_provider_api_key,
             ai_runtime::commands::ai_get_provider_key_status,
             ai_runtime::commands::ai_reload_model_manifest,
+            ai_runtime::commands::ai_get_progress_estimate,
+            ai_runtime::commands::ai_record_progress_sample,
             ai_runtime::commands::ai_generate,
             ai_runtime::commands::ai_continue_polling,
             ai_runtime::commands::ai_cancel_task,

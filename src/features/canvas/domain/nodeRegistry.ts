@@ -100,7 +100,7 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
     extraParams: {},
     isGenerating: false,
     generationStartedAt: null,
-    generationDurationMs: 60000,
+    generationDurationMs: undefined,
   }),
 };
 
@@ -247,7 +247,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
     aspectRatio: DEFAULT_ASPECT_RATIO,
     isGenerating: false,
     generationStartedAt: null,
-    generationDurationMs: 60000,
+    generationDurationMs: undefined,
   }),
 };
 

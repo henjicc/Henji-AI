@@ -2,14 +2,16 @@ use crate::ai_runtime::errors::AiRuntimeError;
 use crate::ai_runtime::key_store;
 use crate::ai_runtime::media_store;
 use crate::ai_runtime::model_manifest::{get_manifest_store, reload_manifest_store};
+use crate::ai_runtime::progress_learning;
 use crate::ai_runtime::providers::{self, ProviderContinuePollingInput, ProviderExecutionInput};
 use crate::ai_runtime::request_builder_dsl;
 use crate::ai_runtime::request_normalizer;
 use crate::ai_runtime::task_registry;
 use crate::ai_runtime::trace;
 use crate::ai_runtime::types::{
-    AiContinuePollingRequestDto, AiGenerateRequestDto, AiGenerateResponseDto, GenerateStatus,
-    ProviderKeyStatusDto,
+    AiContinuePollingRequestDto, AiGenerateRequestDto, AiGenerateResponseDto,
+    AiGetProgressEstimateRequestDto, AiProgressEstimateDto, AiRecordProgressSampleRequestDto,
+    AiRecordProgressSampleResponseDto, GenerateStatus, ProviderKeyStatusDto,
 };
 use crate::ai_runtime::upload;
 use serde::Serialize;
@@ -64,6 +66,29 @@ pub async fn ai_get_provider_key_status() -> Result<Vec<ProviderKeyStatusDto>, S
 #[tauri::command]
 pub async fn ai_reload_model_manifest() -> Result<usize, String> {
     Ok(reload_manifest_store())
+}
+
+#[tauri::command]
+pub async fn ai_get_progress_estimate(
+    app: tauri::AppHandle,
+    request: AiGetProgressEstimateRequestDto,
+) -> Result<AiProgressEstimateDto, String> {
+    progress_learning::get_progress_estimate(&app, &request.model_id, &request.params)
+}
+
+#[tauri::command]
+pub async fn ai_record_progress_sample(
+    app: tauri::AppHandle,
+    request: AiRecordProgressSampleRequestDto,
+) -> Result<AiRecordProgressSampleResponseDto, String> {
+    progress_learning::record_progress_sample(
+        &app,
+        &request.model_id,
+        &request.params,
+        request.started_at_ms,
+        request.finished_at_ms,
+        &request.source,
+    )
 }
 
 #[tauri::command]

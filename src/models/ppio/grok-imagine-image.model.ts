@@ -30,11 +30,6 @@ export const grokImagineImageModel = defineModel({
       interval: 3000,
       maxAttempts: 120,
       expectedAttempts: 20
-    },
-    progress: {
-      mode: 'time',
-      baseDurationMs: 12000,
-      maxDurationMs: 60000
     }
   },
   inputLimits: {

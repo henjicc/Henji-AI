@@ -117,7 +117,11 @@ export type {
   ProgressConfig,
   ProgressTimeConfig,
   ProgressPollingConfig,
-  ProgressCurveConfig
+  ProgressCurveConfig,
+  ProgressLearningConfig,
+  ProgressLearningSegment,
+  ProgressLearningFieldSegment,
+  ProgressLearningTextLengthSegment
 } from './ModelDefinition'
 
 // 面板类型

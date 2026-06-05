@@ -720,10 +720,32 @@ function parsePolling(metaBlock) {
   const maxAttemptsRaw = matchFirst(pollingBlock, /maxAttempts\s*:\s*(\d+)/)
   if (!intervalRaw || !maxAttemptsRaw) return undefined
 
-  return {
+  const expectedAttemptsRaw = matchFirst(pollingBlock, /expectedAttempts\s*:\s*(\d+)/)
+
+  const result = {
     interval: Number(intervalRaw),
     maxAttempts: Number(maxAttemptsRaw),
   }
+  if (expectedAttemptsRaw) {
+    result.expectedAttempts = Number(expectedAttemptsRaw)
+  }
+  return result
+}
+
+function parseProgressConfig(metaBlock) {
+  const progressExpr = extractValueExpression(metaBlock, 'progress')
+  const progress = evaluateStaticExpression(progressExpr)
+  return progress && typeof progress === 'object'
+    ? progress
+    : undefined
+}
+
+function parseProgressLearning(metaBlock) {
+  const progressLearningExpr = extractValueExpression(metaBlock, 'progressLearning')
+  const progressLearning = evaluateStaticExpression(progressLearningExpr)
+  return progressLearning && typeof progressLearning === 'object'
+    ? progressLearning
+    : undefined
 }
 
 function parseStringLiteral(expr) {
@@ -892,6 +914,8 @@ function parseModel(filePath) {
 
   const constMap = parseConstStringMap(text)
   const polling = parsePolling(metaBlock)
+  const progress = parseProgressConfig(metaBlock)
+  const progressLearning = parseProgressLearning(metaBlock)
   const endpoints = parseEndpointConfig(text, constMap)
   const request = parseRequestConfig(text, modelId)
   const runtimeConstraints = parseRuntimeConstraints(text)
@@ -901,6 +925,8 @@ function parseModel(filePath) {
     providerId,
     modelType,
     polling,
+    progress,
+    progressLearning,
     endpoints,
     request,
     runtimeConstraints,

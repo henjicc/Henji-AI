@@ -137,6 +137,16 @@ npm run tauri:build:mac
 
 构建产物位于 `src-tauri/target/release/bundle/`
 
+### 进度预测种子导出
+
+开发时如果想把本机学习到的进度预测结果打进安装包，可以先导出本地种子文件：
+
+```bash
+npm run progress:export-seeds
+```
+
+导出的文件默认位于 `dev-data/progress-seeds.local.json`。后续执行 `npm run dev`、`npm run build`、`npm run tauri:dev`、`npm run tauri:build` 时，会自动把这个本地文件合并到 `src-tauri/resources/progress-seeds.json`，并作为打包默认值参与构建。
+
 ## 架构说明
 
 ### Provider 架构（新系统）

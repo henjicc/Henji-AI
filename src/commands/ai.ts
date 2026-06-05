@@ -87,13 +87,13 @@ export async function generateImage(request: GenerateRequest): Promise<string> {
     params.uploadedFilePaths = request.reference_images;
   }
 
-  let result = await generationService.generate(modelId, params);
+  let result = await generationService.generate(modelId, params, undefined, { progressSource: 'canvas' });
   if (result.status === 'pending') {
     const taskId = result.taskId ?? extractTaskIdFromMetadata(result.metadata)
     if (!taskId) {
       throw new Error('异步任务缺少 taskId，无法继续轮询')
     }
-    result = await generationService.continuePolling(modelId, taskId, params)
+    result = await generationService.continuePolling(modelId, taskId, params, undefined, { progressSource: 'canvas' })
   }
 
   const firstUrl = pickFirstValue(result.url);

@@ -58,14 +58,6 @@ export const wan25PreviewModel = defineModel({
     name: { key: 'meta.name', fallback: 'Wan 2.5 Preview' },
     description: '万象 2.5 预览版视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video'],
-    progress: {
-      mode: 'polling',
-      baseAttempts: 28,
-      perUnitAttempts: 2,
-      scaleWith: 'ppioWan25VideoDuration',
-      minDurationMs: 40000,
-      maxDurationMs: 180000
-    }
   },
   inputLimits: {
     images: { max: 1 },

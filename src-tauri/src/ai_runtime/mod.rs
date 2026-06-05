@@ -5,6 +5,7 @@ pub mod key_store;
 pub mod media_store;
 pub mod model_manifest;
 pub mod polling;
+pub mod progress_learning;
 pub mod providers;
 pub mod request_builder_dsl;
 pub mod request_normalizer;

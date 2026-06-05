@@ -193,6 +193,50 @@ function validateMeta(model: ModelDefinition): void {
       }
     }
   }
+
+  if (meta.progressLearning) {
+    const { segments, enableTimeBuckets } = meta.progressLearning
+
+    if (enableTimeBuckets !== undefined && typeof enableTimeBuckets !== 'boolean') {
+      throw new ModelValidationError('Model meta.progressLearning.enableTimeBuckets must be a boolean')
+    }
+
+    if (segments !== undefined) {
+      if (!Array.isArray(segments)) {
+        throw new ModelValidationError('Model meta.progressLearning.segments must be an array')
+      }
+
+      segments.forEach((segment, index) => {
+        if (!segment || typeof segment !== 'object') {
+          throw new ModelValidationError(`Model meta.progressLearning.segments[${index}] must be an object`)
+        }
+
+        if (segment.kind === 'field') {
+          if (typeof segment.field !== 'string' || segment.field.trim().length === 0) {
+            throw new ModelValidationError(`Model meta.progressLearning.segments[${index}].field must be a non-empty string`)
+          }
+          return
+        }
+
+        if (segment.kind === 'textLength') {
+          if (segment.field !== 'prompt' && segment.field !== 'text') {
+            throw new ModelValidationError(`Model meta.progressLearning.segments[${index}].field must be prompt or text`)
+          }
+          if (!Array.isArray(segment.buckets) || segment.buckets.length === 0) {
+            throw new ModelValidationError(`Model meta.progressLearning.segments[${index}].buckets must be a non-empty array`)
+          }
+          segment.buckets.forEach((bucket, bucketIndex) => {
+            if (typeof bucket !== 'number' || !Number.isFinite(bucket) || bucket <= 0) {
+              throw new ModelValidationError(`Model meta.progressLearning.segments[${index}].buckets[${bucketIndex}] must be a positive number`)
+            }
+          })
+          return
+        }
+
+        throw new ModelValidationError(`Model meta.progressLearning.segments[${index}].kind must be field or textLength`)
+      })
+    }
+  }
 }
 
 /**

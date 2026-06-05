@@ -30,12 +30,7 @@ export const nanoBanana2Model = defineModel({
       key: 'meta.description',
       fallback: 'PPIO Nano Banana 2 image generation and editing model with automatic endpoint switching'
     },
-    tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-ppio'],
-    progress: {
-      mode: 'time',
-      baseDurationMs: 12000,
-      maxDurationMs: 60000
-    }
+    tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-ppio']
   },
   inputLimits: {
     images: { max: 14 },

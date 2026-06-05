@@ -97,7 +97,7 @@ export async function handleImageGenerateOperation(
       if (typeof status.progress === 'number') {
         ctx.updateNodeData(nodeId, (prev) => ({ ...prev, progress: status.progress }))
       }
-    })
+    }, { progressSource: 'canvas' })
     const firstUrl = pickFirst(result.url)
     const firstPath = pickFirst(result.filePath)
     if (!firstUrl) throw new Error('生成结果缺少 URL')
@@ -185,7 +185,7 @@ export async function handleStoryboardGenerateOperation(
           ...prev,
           progress: Math.round(((index + step) / frames.length) * 100),
         }))
-      })
+      }, { progressSource: 'canvas' })
 
       const firstUrl = pickFirst(result.url)
       const firstPath = pickFirst(result.filePath)

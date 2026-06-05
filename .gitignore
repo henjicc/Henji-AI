@@ -114,4 +114,6 @@ jspm_packages/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/resources/model-manifest.json
+src-tauri/resources/progress-seeds.json
+dev-data/
 nul

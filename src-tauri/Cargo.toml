@@ -7,6 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/henjicc/Henji-AI"
 edition = "2021"
 rust-version = "1.70"
+default-run = "henji-ai"
 
 [dependencies]
 tauri = { version = "2.0.0", features = ["macos-private-api", "protocol-asset", "devtools", "image-png"] }
@@ -28,6 +29,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-appender = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+dirs = "5.0"
 
 base64 = "0.21"
 hmac = "0.12"
@@ -41,6 +43,7 @@ md5 = "0.7"
 png = "0.17"
 urlencoding = "2"
 tauri-plugin-drag = "2.1.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

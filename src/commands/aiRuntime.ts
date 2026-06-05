@@ -18,6 +18,19 @@ export interface AiContinuePollingRequestDto {
   params?: Record<string, unknown>
 }
 
+export interface AiGetProgressEstimateRequestDto {
+  modelId: string
+  params?: Record<string, unknown>
+}
+
+export interface AiRecordProgressSampleRequestDto {
+  modelId: string
+  params?: Record<string, unknown>
+  startedAtMs: number
+  finishedAtMs: number
+  source: 'generation' | 'canvas'
+}
+
 export interface AiGenerateResponseDto {
   status: 'completed' | 'pending' | 'failed'
   url: string
@@ -25,6 +38,25 @@ export interface AiGenerateResponseDto {
   taskId?: string
   metadata?: Record<string, unknown>
   trace?: AiRuntimeTrace
+}
+
+export interface AiProgressEstimateDto {
+  durationMs: number
+  source: 'time-bucket' | 'global' | 'seed' | 'meta' | 'default'
+  profileKey: string
+  timeBucket: 'night' | 'day' | 'evening'
+  globalSampleCount: number
+  bucketSampleCount: number
+  defaultDurationMs: number
+  globalEstimateMs: number
+  bucketEstimateMs?: number
+  recentGlobalDurationsMs: number[]
+  recentBucketDurationsMs: number[]
+}
+
+export interface AiRecordProgressSampleResponseDto {
+  actualDurationMs: number
+  estimate: AiProgressEstimateDto
 }
 
 function ensureDesktopRuntime(): void {
@@ -71,4 +103,18 @@ export async function aiCancelTask(taskId: string): Promise<void> {
 export async function aiReloadModelManifest(): Promise<number> {
   ensureDesktopRuntime()
   return await invoke<number>('ai_reload_model_manifest')
+}
+
+export async function aiGetProgressEstimate(
+  request: AiGetProgressEstimateRequestDto
+): Promise<AiProgressEstimateDto> {
+  ensureDesktopRuntime()
+  return await invoke<AiProgressEstimateDto>('ai_get_progress_estimate', { request })
+}
+
+export async function aiRecordProgressSample(
+  request: AiRecordProgressSampleRequestDto
+): Promise<AiRecordProgressSampleResponseDto> {
+  ensureDesktopRuntime()
+  return await invoke<AiRecordProgressSampleResponseDto>('ai_record_progress_sample', { request })
 }
