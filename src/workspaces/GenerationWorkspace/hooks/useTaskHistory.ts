@@ -23,12 +23,22 @@ async function toTauriUrl(fullPath: string): Promise<string> {
   return convertFileSrc(fullPath.replace(/\\/g, '/'))
 }
 
-async function toDisplayUrl(fullPath: string, _kind: 'image' | 'audio' | 'video'): Promise<string> {
-  // Use Tauri asset protocol for all media types — unlike fileToBlobSrc
-  // (which reads the entire file into JS heap via readFile + createObjectURL),
-  // convertFileSrc creates a URL that the browser loads lazily, eliminating
-  // the memory pressure from loading many high-resolution images at once.
-  return toTauriUrl(fullPath)
+async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video'): Promise<string> {
+  // For images, try to use cached thumbnail first
+  if (kind === 'image') {
+    try {
+      const { getHistoryThumbnailCachePath } = await import('@/utils/historyThumbnail')
+      const { exists } = await import('@tauri-apps/plugin-fs')
+      const cachePath = await getHistoryThumbnailCachePath(fullPath)
+      if (await exists(cachePath)) {
+        return convertFileSrc(cachePath.replace(/\\/g, '/'))
+      }
+    } catch {
+      // Fall through to full URL
+    }
+  }
+  // For non-image or when thumbnail is unavailable, use the original file
+  return convertFileSrc(fullPath.replace(/\\/g, '/'))
 }
 
 async function toDisplayUrlString(
@@ -296,6 +306,25 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
         }
 
         logger.info('[Workspace] 历史记录保存完成', { count: tasksToSave.length })
+
+        // Generate thumbnails for image results in background
+        ;(async () => {
+          try {
+            const { getOrCreateHistoryThumbnail } = await import('@/utils/historyThumbnail')
+            for (const task of tasksToSave) {
+              if (task.type === 'image' && task.result?.filePath) {
+                // Split multi-file paths and generate thumbnail for each file
+                const { splitMulti } = await import('../utils/multiFile')
+                const filePaths = splitMulti(task.result.filePath)
+                for (const fp of filePaths) {
+                  getOrCreateHistoryThumbnail(fp).catch(() => {/* silent */})
+                }
+              }
+            }
+          } catch {
+            // silent
+          }
+        })()
       } catch (error) {
         logger.error('[Workspace] 保存历史记录失败:', error)
       }

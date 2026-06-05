@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react"
+﻿import React from "react"
 import { convertFileSrc } from "@tauri-apps/api/core"
 import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
@@ -12,15 +12,6 @@ import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
 import { CopyIcon, DownloadIcon, UsePromptIcon } from "./TaskActionIcons"
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
-
-const DEFAULT_RESULT_ASPECT_RATIO = "1 / 1"
-
-function toAspectRatio(dimensions?: string): string {
-  const normalized = dimensions?.trim().toLowerCase()
-  if (!normalized) return DEFAULT_RESULT_ASPECT_RATIO
-  const matched = normalized.match(/^(\d+(?:\.\d+)?)\s*[:x]\s*(\d+(?:\.\d+)?)$/)
-  return matched ? `${matched[1]} / ${matched[2]}` : DEFAULT_RESULT_ASPECT_RATIO
-}
 
 export interface TaskCardProps {
   task: GenerationTask
@@ -53,7 +44,6 @@ const TaskCard = React.memo(function TaskCard({
 }: TaskCardProps): JSX.Element {
   const { t, i18n } = useI18n()
   const { startImageDrag, startVideoDrag, shouldIgnoreClick, markContextMenu } = useHistoryDrag()
-  const [dynamicDimensions, setDynamicDimensions] = useState<string | undefined>(undefined)
 
   const formatDate = (value?: Date): string => {
     if (!value) return ""
@@ -71,7 +61,11 @@ const TaskCard = React.memo(function TaskCard({
 
   const handleImageClick = (url: string, list: string[], filePaths: string[]) => {
     if (shouldIgnoreClick()) return
-    onOpenImageViewer(url, list, filePaths)
+    // Use full-resolution URLs for the viewer (thumbnail URLs are for display only)
+    const fullUrls = filePaths.length > 0
+      ? filePaths.map(fp => convertFileSrc(fp.replace(/\\\\/g, '/')))
+      : list
+    onOpenImageViewer(fullUrls[0], fullUrls, filePaths)
   }
 
   const handleVideoClick = (url: string, filePath?: string) => {
@@ -88,7 +82,6 @@ const TaskCard = React.memo(function TaskCard({
   const createdAtLabel = formatDate(task.createdAt)
   const inputImages = task.images ?? []
   const inputVideos = task.videos ?? []
-  const resultAspectRatio = toAspectRatio(task.dimensions ?? dynamicDimensions)
 
   const renderResult = () => {
     if (task.status === "queued") {
@@ -156,8 +149,7 @@ const TaskCard = React.memo(function TaskCard({
             return (
               <div
                 key={`${task.id}-img-${index}`}
-                className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center"
-                style={{ aspectRatio: resultAspectRatio }}
+                className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50"
                 onClick={() => handleImageClick(url, urls, filePaths)}
                 onContextMenu={(e) =>
                   showMenu(e, [
@@ -190,15 +182,10 @@ const TaskCard = React.memo(function TaskCard({
                   alt={t("ui:viewer.imageAlt")}
                   loading="lazy"
                   decoding="async"
-                  className="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing select-none"
+                  className="w-full h-auto block cursor-grab active:cursor-grabbing select-none"
                   draggable={false}
-                  onLoad={(e) => {
-                    const img = e.currentTarget
-                    if (img.naturalWidth && img.naturalHeight && !task.dimensions) {
-                      setDynamicDimensions(`${img.naturalWidth}x${img.naturalHeight}`)
-                    }
-                  }}
-                />
+                  
+               />
               </div>
             )
           })}
@@ -213,8 +200,7 @@ const TaskCard = React.memo(function TaskCard({
       const videoUrl = filePath ? convertFileSrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
       return (
         <div
-          className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 flex items-center justify-center cursor-pointer"
-          style={{ aspectRatio: resultAspectRatio }}
+          className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 cursor-pointer"
           onClick={() => handleVideoClick(videoUrl, filePath)}
           onContextMenu={(e) =>
             showMenu(e, [
@@ -235,7 +221,7 @@ const TaskCard = React.memo(function TaskCard({
           }}
           onContextMenuCapture={() => markContextMenu()}
         >
-          <video src={videoUrl} className="max-w-full max-h-full object-contain" draggable={false} muted preload="metadata" />
+          <video src={videoUrl} className="w-full h-auto block" draggable={false} muted preload="metadata" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="h-10 w-10 rounded-full bg-zinc-900/60 backdrop-blur-sm flex items-center justify-center text-white">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
@@ -264,7 +250,7 @@ const TaskCard = React.memo(function TaskCard({
               },
             ])
           }
-        />
+       />
       )
     }
 
@@ -285,7 +271,7 @@ const TaskCard = React.memo(function TaskCard({
           onStartImageDrag={startImageDrag}
           onStartVideoDrag={startVideoDrag}
           shouldIgnoreClick={shouldIgnoreClick}
-        />
+       />
         <div className="min-w-0 flex-1 relative">
           <div className="pr-48">
             <TaskPrompt prompt={task.prompt} />
