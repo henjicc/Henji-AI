@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import MediaGenerator from '@/components/MediaGenerator'
 import ContextMenu from '@/components/ContextMenu'
@@ -42,7 +42,7 @@ const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 1100
 const GenerationWorkspace: React.FC = () => {
   const { t } = useI18n()
   useDataDirectoryInit()
-  const { tasks, setTasks, taskProgress, setTaskProgress, updateTask, updateProgress } = useTaskState()
+  const { tasks, setTasks, updateTask, updateProgress } = useTaskState()
   const [isTasksLoaded, setIsTasksLoaded] = useState(false)
   const isInitialLoadRef = useRef(true)
   useLoadTaskHistory({ setTasks, setIsTasksLoaded, isInitialLoadRef })
@@ -182,18 +182,10 @@ const GenerationWorkspace: React.FC = () => {
     notify,
     messages: mediaActionMessages,
   })
-  const clearTaskProgress = useCallback((taskId: string): void => {
-    setTaskProgress((prev) => {
-      if (!(taskId in prev)) return prev
-      const next = { ...prev }
-      delete next[taskId]
-      return next
-    })
-  }, [setTaskProgress])
+
   const { deleteTask, clearFailedTasks, clearAllTasks } = useTaskCleanup({
     tasks,
     setTasks,
-    clearTaskProgress,
   })
   const imageEditStatesRef = useRef<Map<string, ImageEditState>>(new Map())
   const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
@@ -543,7 +535,6 @@ const GenerationWorkspace: React.FC = () => {
               totalCount={tasks.length}
               matchedCount={matchedCount}
               hasActiveFilters={hasActiveFilters}
-              taskProgress={taskProgress}
               showMenu={showMenu}
               onDownload={download}
               onCopyImage={copyImageToClipboard}

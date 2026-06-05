@@ -1,12 +1,11 @@
-import { createLogger } from '@/core/logging'
+﻿import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
-import { formatDuration, getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
-import { fileToBlobSrc, isDesktop } from '@/utils/save'
+import { isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
 import { joinMulti, splitMulti } from '../utils/multiFile'
 import { isRecord, isStringArray } from '../utils/typeGuards'
@@ -24,13 +23,12 @@ async function toTauriUrl(fullPath: string): Promise<string> {
   return convertFileSrc(fullPath.replace(/\\/g, '/'))
 }
 
-async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video'): Promise<string> {
-  if (kind === 'video') return toTauriUrl(fullPath)
-  try {
-    return await fileToBlobSrc(fullPath)
-  } catch {
-    return toTauriUrl(fullPath)
-  }
+async function toDisplayUrl(fullPath: string, _kind: 'image' | 'audio' | 'video'): Promise<string> {
+  // Use Tauri asset protocol for all media types — unlike fileToBlobSrc
+  // (which reads the entire file into JS heap via readFile + createObjectURL),
+  // convertFileSrc creates a URL that the browser loads lazily, eliminating
+  // the memory pressure from loading many high-resolution images at once.
+  return toTauriUrl(fullPath)
 }
 
 async function toDisplayUrlString(
@@ -58,8 +56,10 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
   const rawParams: unknown = record.params
   const safeParams: Record<string, unknown> = isRecord(rawParams) ? rawParams : {}
   const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
+  const dimensionsFromParams = typeof safeParams['__dimensions'] === 'string' ? safeParams['__dimensions'] : undefined
   const paramsForTaskOptions: Record<string, unknown> = { ...safeParams }
   delete paramsForTaskOptions['__resultUrl']
+  delete paramsForTaskOptions['__dimensions']
 
   const uploadedFilePathsRaw = safeParams['uploadedFilePaths']
   const uploadedVideoFilePathsRaw = safeParams['uploadedVideoFilePaths']
@@ -89,29 +89,21 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     ? await Promise.all(uploadedVideoFilePathsAbs.map((p) => toDisplayUrl(p, 'video')))
     : undefined
 
-  const audios = uploadedAudioFilePathsAbs
-    ? await Promise.all(uploadedAudioFilePathsAbs.map((p) => toDisplayUrl(p, 'audio')))
-    : undefined
-
   const absoluteResultFilePath = record.filePath
     ? await convertPathString(record.filePath, dataRoot, false)
     : null
 
-  const firstResultPath = absoluteResultFilePath ? splitMulti(absoluteResultFilePath)[0] : null
-
-  const [dimensionsFromFile, durationFromFile] = firstResultPath
-    ? await Promise.all([
-      getMediaDimensions(firstResultPath, record.type),
-      getMediaDurationFormatted(firstResultPath, record.type),
-    ])
-    : [null, null]
+  // Dimensions and duration are no longer pre-computed during initial load.
+  // Loading media dimensions requires decoding every image, which blocks
+  // the main thread when many high-resolution records exist.
+  // They can be lazily computed when the user opens the viewer.
 
   const resolvedResultUrl = absoluteResultFilePath
     ? await toDisplayUrlString(absoluteResultFilePath, record.type)
     : resultUrlFromParams
 
   const result = resolvedResultUrl
-      ? {
+    ? {
         id: record.id,
         type: record.type,
         url: resolvedResultUrl,
@@ -140,8 +132,8 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     status: normalizedStatus,
     result,
     error: record.errorMessage ?? undefined,
-    dimensions: dimensionsFromFile ?? undefined,
-    duration: durationFromFile ?? (record.duration != null ? formatDuration(record.duration) : undefined),
+    dimensions: dimensionsFromParams ?? undefined,
+    duration: undefined,
     images,
     videos,
     uploadedFilePaths: uploadedFilePathsAbs,

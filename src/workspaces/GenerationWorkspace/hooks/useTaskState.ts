@@ -1,4 +1,4 @@
-import type React from 'react'
+﻿import type React from 'react'
 import { useCallback, useState } from 'react'
 import type { GenerationTask } from '../types'
 
@@ -20,7 +20,7 @@ export function useTaskState(): UseTaskStateReturn {
   }, [])
 
   const updateProgress = useCallback((taskId: string, progress: number): void => {
-    setTaskProgress((prev) => ({ ...prev, [taskId]: progress }))
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, progress } : t)))
   }, [])
 
   return { tasks, setTasks, taskProgress, setTaskProgress, updateTask, updateProgress }
