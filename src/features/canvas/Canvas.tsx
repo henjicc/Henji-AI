@@ -25,9 +25,9 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import {
   type CanvasEdge,
   type CanvasNode,
-  type CanvasNodeType,
   CANVAS_NODE_TYPES,
 } from '@/features/canvas/domain/canvasNodes';
+import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -245,6 +245,11 @@ export function Canvas() {
   const handleConnect = useCallback(
     (connection: Connection) => {
       if (!canNodeBeManualConnectionSource(connection.source, nodes)) {
+        return;
+      }
+      const sourceNode = nodes.find((node) => node.id === connection.source);
+      const targetNode = nodes.find((node) => node.id === connection.target);
+      if (!sourceNode || !targetNode || !isConnectionCompatible(sourceNode.type, targetNode.type)) {
         return;
       }
       connectNodes(connection);

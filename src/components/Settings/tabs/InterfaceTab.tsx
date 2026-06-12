@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import React from 'react'
 import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
+import CanvasSection from '../sections/CanvasSection'
 import ThemeSection from '../sections/ThemeSection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
@@ -85,6 +86,12 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
             onChangeDelay={(value) => updateSetting('collapseDelay', value)}
             onToggleScrollOnly={(value) => updateSetting('collapseOnScrollOnly', value)}
           />
+        </section>
+      )}
+
+      {currentSectionId === 'interface-canvas' && (
+        <section className="space-y-5">
+          <CanvasSection />
         </section>
       )}
 

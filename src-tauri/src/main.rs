@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use henji_ai::{ai_runtime, clipboard_files, image_commands, llm_runtime, logging, modelscope};
+use henji_ai::{ai_runtime, clipboard_files, image_commands, llm_runtime, logging, modelscope, project_package};
 
 use tauri::Manager;
 
@@ -130,6 +130,9 @@ pub fn run() {
             image_commands::io_commands::save_image_source_to_directory,
             image_commands::io_commands::save_image_source_to_app_debug_dir,
             image_commands::io_commands::copy_image_source_to_clipboard,
+            image_commands::info_commands::read_image_info,
+            project_package::commands::export_project_package,
+            project_package::commands::import_project_package,
             logging::log_frontend_events
         ])
         .setup(|app| {

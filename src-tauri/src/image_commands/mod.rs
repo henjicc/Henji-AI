@@ -1,3 +1,4 @@
+pub mod info_commands;
 pub mod io_commands;
 pub mod merge_commands;
 pub mod metadata_commands;

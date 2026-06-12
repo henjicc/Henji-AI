@@ -3,24 +3,27 @@ import { Handle, Position, useUpdateNodeInternals, useViewport } from '@xyflow/r
 import { Sparkles } from 'lucide-react'
 
 import {
-  AUTO_REQUEST_ASPECT_RATIO,
   CANVAS_NODE_TYPES,
   DEFAULT_ASPECT_RATIO,
   EXPORT_RESULT_NODE_DEFAULT_WIDTH,
   EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
-  type ImageSize,
   type StoryboardGenNodeData,
 } from '@/features/canvas/domain/canvasNodes'
 import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay'
-import { graphImageResolver } from '@/features/canvas/application/canvasServices'
-import { getDefaultImageModelId, getImageModel, listImageModels } from '@/features/canvas/models'
+import { getDefaultModelId } from '@/features/canvas/domain/defaultModels'
+import {
+  areStringListsEqual,
+  collectInputMediaUrls,
+} from '@/features/canvas/application/graphMediaResolver'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams'
+import { registry } from '@/core/ModelRegistry'
+import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
 import {
-  type AspectRatioChoice,
-  AUTO_ASPECT_RATIO_OPTION,
   STORYBOARD_GEN_HEADER_ADJUST,
   STORYBOARD_GEN_ICON_ADJUST,
   STORYBOARD_GEN_TITLE_ADJUST,
@@ -53,9 +56,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const { zoom } = useViewport()
   const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
-  const nodes = useCanvasStore((state) => state.nodes)
-  const edges = useCanvasStore((state) => state.edges)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
+  const setNodeGenerationProgress = useCanvasStore((state) => state.setNodeGenerationProgress)
   const addNode = useCanvasStore((state) => state.addNode)
   const addEdge = useCanvasStore((state) => state.addEdge)
   const findNodePosition = useCanvasStore((state) => state.findNodePosition)
@@ -72,15 +74,16 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     buildFrameDescriptionDrafts(nodeData.frames)
   )
   const frameDescriptionDraftsRef = useRef(frameDescriptionDrafts)
-  const imageModels = useMemo(() => listImageModels(), [])
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.storyboardGen, nodeData),
     [nodeData]
   )
 
-  const incomingImages = useMemo(
-    () => graphImageResolver.collectInputImages(id, nodes, edges),
-    [id, nodes, edges]
+  // 内容相等比较的细粒度订阅：仅在上游图片实际变化时重渲染
+  const incomingImages = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => collectInputMediaUrls(id, state.nodes, state.edges, 'image'),
+    areStringListsEqual
   )
   const incomingImageItems = useMemo(
     () =>
@@ -92,47 +95,57 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     [incomingImages]
   )
 
-  const selectedModel = useMemo(() => {
-    const modelId = nodeData.model ?? getDefaultImageModelId()
-    return getImageModel(modelId)
-  }, [nodeData.model])
-  const providerKeyConfigured = providerKeyStatus[selectedModel.providerId] === true
-
-  const selectedResolution = useMemo((): AspectRatioChoice => {
-    const found = nodeData.size
-      ? selectedModel.resolutions.find((item) => item.value === nodeData.size)
-      : undefined
-    return found
-      ?? selectedModel.resolutions.find((item) => item.value === selectedModel.defaultResolution)
-      ?? selectedModel.resolutions[0]
-  }, [nodeData.size, selectedModel])
-
-  const aspectRatioOptions = useMemo<AspectRatioChoice[]>(
-    () => [AUTO_ASPECT_RATIO_OPTION, ...selectedModel.aspectRatios],
-    [selectedModel.aspectRatios]
-  )
-  const selectedAspectRatio = useMemo((): AspectRatioChoice => {
-    const found = nodeData.requestAspectRatio
-      ? aspectRatioOptions.find((item) => item.value === nodeData.requestAspectRatio)
-      : undefined
-    return found ?? AUTO_ASPECT_RATIO_OPTION
-  }, [aspectRatioOptions, nodeData.requestAspectRatio])
-
-  const frameAspectRatioValue = useMemo(() => {
-    if (selectedAspectRatio.value === AUTO_REQUEST_ASPECT_RATIO) {
-      return nodeData.aspectRatio || DEFAULT_ASPECT_RATIO
+  const selectedModelId = useMemo(() => {
+    const stored = typeof nodeData.modelId === 'string' ? nodeData.modelId.trim() : ''
+    if (stored && registry.getModel(stored)) {
+      return stored
     }
-    return selectedAspectRatio.value || DEFAULT_ASPECT_RATIO
-  }, [nodeData.aspectRatio, selectedAspectRatio.value])
+    return getDefaultModelId('image')
+  }, [nodeData.modelId])
+  const selectedModel = useMemo(() => registry.getModel(selectedModelId), [selectedModelId])
+  const providerKeyConfigured = selectedModel
+    ? providerKeyStatus[selectedModel.meta.provider] === true
+    : false
+
+  const handleParamsChange = useCallback((nextParams: Record<string, unknown>) => {
+    updateNodeData(id, { params: nextParams })
+  }, [id, updateNodeData])
+
+  const { schema: modelParamSchema, values: modelParamValues } = useNodeModelParams({
+    modelId: selectedModelId,
+    storedParams: nodeData.params,
+    onParamsChange: handleParamsChange,
+  })
+
+  const handleModelChange = useCallback((nextModelId: string) => {
+    updateNodeData(id, { modelId: nextModelId, params: {} })
+  }, [id, updateNodeData])
+
+  const ratioSpec = useMemo(
+    () => analyzeRatioResolutionParams(modelParamSchema, incomingImages),
+    [incomingImages, modelParamSchema]
+  )
+
+  // 栅格布局所需的具体宽高比：取 schema 宽高比参数当前值，smart/缺失时回退已检测比例
+  const frameAspectRatioValue = useMemo(() => {
+    const aspectParamId = ratioSpec?.aspectParam?.id
+    const value = aspectParamId ? modelParamValues[aspectParamId] : undefined
+    if (typeof value === 'string' && /^\d+\s*:\s*\d+$/.test(value.trim())) {
+      return value.trim()
+    }
+    return nodeData.aspectRatio || DEFAULT_ASPECT_RATIO
+  }, [modelParamValues, nodeData.aspectRatio, ratioSpec])
+
+  // 栅格参考图绘制分辨率：取 schema 分辨率参数当前值，缺失时使用 2K
+  const gridResolutionValue = useMemo(() => {
+    const resolutionParamId = ratioSpec?.resolutionParam?.id
+    const value = resolutionParamId ? modelParamValues[resolutionParamId] : undefined
+    return typeof value === 'string' && value ? value : '2K'
+  }, [modelParamValues, ratioSpec])
 
   const baseFrameLayout = useMemo(
     () => computeStoryboardBaseFrameLayout(frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows),
     [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows]
-  )
-  const requestResolution = selectedModel.resolveRequest({ referenceImageCount: incomingImages.length })
-  const supportedAspectRatioValues = useMemo(
-    () => selectedModel.aspectRatios.map((item) => item.value),
-    [selectedModel.aspectRatios]
   )
   const totalFrames = useMemo(
     () => (nodeData.gridRows ?? 1) * (nodeData.gridCols ?? 1),
@@ -169,20 +182,10 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   }, [id, resolvedNodeHeight, resolvedNodeWidth, updateNodeInternals])
 
   useEffect(() => {
-    const patch: Partial<StoryboardGenNodeData> = {}
-    if (nodeData.model !== selectedModel.id) {
-      patch.model = selectedModel.id
+    if (nodeData.modelId !== selectedModelId) {
+      updateNodeData(id, { modelId: selectedModelId })
     }
-    if (nodeData.size !== selectedResolution.value) {
-      patch.size = selectedResolution.value as ImageSize
-    }
-    if (nodeData.requestAspectRatio !== selectedAspectRatio.value) {
-      patch.requestAspectRatio = selectedAspectRatio.value
-    }
-    if (Object.keys(patch).length > 0) {
-      updateNodeData(id, patch)
-    }
-  }, [id, nodeData.model, nodeData.requestAspectRatio, nodeData.size, selectedAspectRatio.value, selectedModel.id, selectedResolution.value, updateNodeData])
+  }, [id, nodeData.modelId, selectedModelId, updateNodeData])
 
   useEffect(() => {
     if (nodeData.frames.length === totalFrames) {
@@ -224,25 +227,25 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       return
     }
 
-    const estimateParams: Record<string, unknown> = {
+    const generationParams: Record<string, unknown> = {
+      ...modelParamValues,
       prompt,
       text: prompt,
-      size: selectedResolution.value,
-      aspect_ratio: selectedAspectRatio.value,
-      requestAspectRatio: selectedAspectRatio.value,
+    }
+    const estimateParams: Record<string, unknown> = {
+      ...generationParams,
       ...(incomingImages.length > 0
         ? {
           images: incomingImages,
           uploadedFilePaths: incomingImages,
         }
         : {}),
-      ...(nodeData.extraParams ?? {}),
     }
     const estimate = await GenerationService.getInstance().getProgressEstimate(
-      requestResolution.requestModel,
+      selectedModelId,
       estimateParams
     )
-    const generationDurationMs = estimate?.durationMs ?? selectedModel.expectedDurationMs
+    const generationDurationMs = estimate?.durationMs ?? 60_000
     const generationStartedAt = Date.now()
     const newNodePosition = findNodePosition(
       id,
@@ -256,9 +259,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       displayName: EXPORT_RESULT_DISPLAY_NAME.storyboardGenOutput,
       resultKind: 'storyboardGenOutput',
       prompt: '',
-      model: selectedModel.id,
-      size: selectedResolution.value as ImageSize,
-      requestAspectRatio: selectedAspectRatio.value,
+      modelId: selectedModelId,
+      params: { ...modelParamValues },
     })
 
     addEdge(id, newNodeId)
@@ -267,20 +269,17 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
     try {
       const generated = await generateStoryboardImage({
-        prompt,
-        providerId: selectedModel.providerId,
-        selectedAspectRatio: selectedAspectRatio.value,
+        modelId: selectedModelId,
+        params: generationParams,
         incomingImages,
-        supportedAspectRatioValues,
         frameAspectRatioValue,
         gridRows: nodeData.gridRows,
         gridCols: nodeData.gridCols,
-        selectedResolution: selectedResolution.value,
-        requestModel: requestResolution.requestModel,
-        extraParams: nodeData.extraParams,
+        gridImageResolution: gridResolutionValue,
         frames: nodeData.frames,
         frameDescriptionDrafts: frameDescriptionDraftsRef.current,
         ignoreAtTagWhenCopyingAndGenerating,
+        onProgress: (progress) => setNodeGenerationProgress(newNodeId, progress),
       })
 
       updateNodeData(newNodeId, {
@@ -293,8 +292,10 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : '生成失败')
       updateNodeData(newNodeId, { isGenerating: false, generationStartedAt: null })
+    } finally {
+      setNodeGenerationProgress(newNodeId, null)
     }
-  }, [addEdge, addNode, buildPrompt, findNodePosition, frameAspectRatioValue, id, ignoreAtTagWhenCopyingAndGenerating, incomingImages, nodeData.extraParams, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, requestResolution.requestModel, selectedAspectRatio.value, selectedModel.expectedDurationMs, selectedModel.id, selectedModel.providerId, selectedResolution.value, setSelectedNode, supportedAspectRatioValues, updateNodeData])
+  }, [addEdge, addNode, buildPrompt, findNodePosition, frameAspectRatioValue, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, incomingImages, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, selectedModelId, setNodeGenerationProgress, setSelectedNode, updateNodeData])
 
   const handleRowChange = useCallback((delta: number): void => {
     const nextRows = Math.max(1, Math.min(9, nodeData.gridRows + delta))
@@ -365,14 +366,13 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
       <StoryboardParamsBar
         frameLayout={frameLayout}
-        imageModels={imageModels}
-        selectedModel={selectedModel}
-        selectedResolution={selectedResolution}
-        selectedAspectRatio={selectedAspectRatio}
-        aspectRatioOptions={aspectRatioOptions}
-        onModelChange={(modelId) => updateNodeData(id, { model: modelId })}
-        onResolutionChange={(resolution) => updateNodeData(id, { size: resolution })}
-        onAspectRatioChange={(aspectRatio) => updateNodeData(id, { requestAspectRatio: aspectRatio })}
+        modelId={selectedModelId}
+        providerId={selectedModel?.meta.provider ?? ''}
+        storedParams={nodeData.params}
+        mergedParams={modelParamValues}
+        incomingImages={incomingImages}
+        onModelChange={handleModelChange}
+        onParamsChange={handleParamsChange}
         onGenerate={handleGenerate}
       />
 

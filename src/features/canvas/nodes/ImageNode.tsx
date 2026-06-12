@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 import { Handle, Position, useViewport, type NodeProps } from '@xyflow/react';
 import { Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +24,7 @@ import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 type ImageNodeProps = NodeProps & {
@@ -44,15 +45,8 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const { zoom } = useViewport();
-  const [now, setNow] = useState(() => Date.now());
   const isExportResultNode = type === CANVAS_NODE_TYPES.exportImage;
-  const isGenerating = typeof data.isGenerating === 'boolean' ? data.isGenerating : false;
-  const generationStartedAt =
-    typeof data.generationStartedAt === 'number' ? data.generationStartedAt : null;
-  const generationDurationMs =
-    typeof data.generationDurationMs === 'number' && data.generationDurationMs > 0
-      ? data.generationDurationMs
-      : null;
+  const { isGenerating, progress: displayProgress } = useGenerationProgressDisplay(id, data);
   const resolvedAspectRatio = data.aspectRatio || DEFAULT_ASPECT_RATIO;
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
     minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
@@ -70,32 +64,6 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
     () => resolveNodeDisplayName(type as CanvasNodeType, data),
     [data, type]
   );
-
-  useEffect(() => {
-    if (!isGenerating) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 120);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [isGenerating]);
-
-  const simulatedProgress = useMemo(() => {
-    if (!isGenerating) {
-      return 0;
-    }
-
-    const startedAt = generationStartedAt ?? Date.now();
-    const duration = Math.max(1000, generationDurationMs ?? 1000);
-    const elapsed = Math.max(0, now - startedAt);
-
-    return Math.min(elapsed / duration, 0.96);
-  }, [generationDurationMs, generationStartedAt, isGenerating, now]);
 
   const imageSource = useMemo(() => {
     const preferOriginal = shouldUseOriginalImageByZoom(zoom);
@@ -161,7 +129,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
               className="absolute left-0 top-0 h-full bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] transition-[width] duration-100 ease-linear"
-              style={{ width: `${simulatedProgress * 100}%` }}
+              style={{ width: `${displayProgress * 100}%` }}
             />
           </div>
         )}

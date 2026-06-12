@@ -67,7 +67,8 @@
   "modelParams": {
     "autoAspectRatio": "自动",
     "quality": "画质",
-    "aspectRatio": "比例"
+    "aspectRatio": "比例",
+    "title": "参数"
   },
   "node": {
     "menu": {
@@ -75,7 +76,11 @@
       "aiImageGeneration": "AI 图片",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
-      "textAnnotation": "文本注释"
+      "textAnnotation": "文本注释",
+      "videoGen": "AI 视频",
+      "audioGen": "AI 音频",
+      "uploadVideo": "上传视频",
+      "uploadAudio": "上传音频"
     },
     "imageNode": {
       "title": "图片节点",
@@ -111,13 +116,41 @@
     "textAnnotation": {
       "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
       "empty": "空注释"
+    },
+    "videoGen": {
+      "promptRequired": "请输入提示词",
+      "resultTitle": "结果视频",
+      "promptPlaceholder": "描述你想要生成的视频内容，可连接图片作为首帧或参考"
+    },
+    "audioGen": {
+      "promptRequired": "请输入提示词",
+      "resultTitle": "结果音频",
+      "promptPlaceholder": "描述你想要生成的音频内容，可连接视频进行配音"
+    },
+    "videoNode": {
+      "uploadHint": "点击或拖拽上传视频",
+      "waitingResult": "等待输出结果视频"
+    },
+    "audioNode": {
+      "uploadHint": "点击或拖拽上传音频",
+      "waitingResult": "等待输出结果音频",
+      "play": "播放",
+      "pause": "暂停"
     }
   },
   "viewer": {
     "imageAlt": "图片",
     "prev": "上一张",
     "next": "下一张",
-    "reset": "重置视图"
+    "reset": "重置视图",
+    "toggleInfo": "显示/隐藏图片信息（Tab）",
+    "infoLoading": "正在读取图片信息…",
+    "infoUnavailable": "图片信息不可用",
+    "resolution": "分辨率",
+    "fileSize": "文件大小",
+    "aspectRatio": "宽高比",
+    "createdAt": "创建时间",
+    "unknown": "未知"
   },
   "split": {
     "title": "切割",
@@ -138,6 +171,11 @@
     "title": "项目管理",
     "newProject": "新建项目",
     "newProjectTitle": "新建项目",
+    "exportPackage": "导出项目包",
+    "importPackage": "导入项目",
+    "importing": "导入中…",
+    "exportFailed": "项目导出失败",
+    "importFailed": "项目导入失败",
     "open": "打开项目",
     "save": "保存项目",
     "name": "项目名称",

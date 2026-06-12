@@ -11,9 +11,11 @@ interface PriceEstimateProps {
     providerId: string
     modelId: string
     params: Record<string, unknown>
+    /** panel=对话模式面板样式（默认）；badge=画布节点紧凑徽标 */
+    variant?: 'panel' | 'badge'
 }
 
-const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
+const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant = 'panel' }) => {
     const model = useMemo(() => registry.getModel(modelId), [modelId])
     const { t, i18n } = useI18n('ui')
 
@@ -57,8 +59,19 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
         usdToCnyRate: priceSettings.usdToCnyRate,
     }).display
 
+    if (variant === 'badge') {
+        return (
+            <span
+                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-border-dark/60 bg-bg-dark/65 px-1.5 py-1 text-[10px] leading-none text-text-muted"
+                title={`${t('priceEstimate.label')}: ${priceDisplay}`}
+            >
+                {priceDisplay}
+            </span>
+        )
+    }
+
     return (
-        <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-700/50 backdrop-blur-sm">
+        <div className="flex items-center gap-1.5 text-xs text-text-muted bg-surface-dark/50 px-3 py-1.5 rounded-lg border border-border-dark/50 backdrop-blur-sm">
             <svg
                 className="w-3.5 h-3.5 flex-shrink-0"
                 fill="none"
@@ -73,7 +86,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params }) => {
                 />
             </svg>
             <span className="whitespace-nowrap">
-                {t('priceEstimate.label')}: <span className="text-zinc-300">{priceDisplay}</span>
+                {t('priceEstimate.label')}: <span className="text-text-dark/85">{priceDisplay}</span>
             </span>
         </div>
     )

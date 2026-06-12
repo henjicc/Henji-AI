@@ -67,7 +67,8 @@
   "modelParams": {
     "autoAspectRatio": "Auto",
     "quality": "Quality",
-    "aspectRatio": "Aspect Ratio"
+    "aspectRatio": "Aspect Ratio",
+    "title": "Params"
   },
   "node": {
     "menu": {
@@ -75,7 +76,11 @@
       "aiImageGeneration": "AI Image",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
-      "textAnnotation": "Text Annotation"
+      "textAnnotation": "Text Annotation",
+      "videoGen": "AI Video",
+      "audioGen": "AI Audio",
+      "uploadVideo": "Upload Video",
+      "uploadAudio": "Upload Audio"
     },
     "imageNode": {
       "title": "Image Node",
@@ -111,10 +116,38 @@
     "textAnnotation": {
       "placeholder": "Write Markdown text. It will render when unselected.",
       "empty": "Empty note"
+    },
+    "videoGen": {
+      "promptRequired": "Please enter a prompt",
+      "resultTitle": "Result Video",
+      "promptPlaceholder": "Describe the video you want. Connect an image as first frame or reference."
+    },
+    "audioGen": {
+      "promptRequired": "Please enter a prompt",
+      "resultTitle": "Result Audio",
+      "promptPlaceholder": "Describe the audio you want. Connect a video for dubbing."
+    },
+    "videoNode": {
+      "uploadHint": "Click or drag to upload video",
+      "waitingResult": "Waiting for output video"
+    },
+    "audioNode": {
+      "uploadHint": "Click or drag to upload audio",
+      "waitingResult": "Waiting for output audio",
+      "play": "Play",
+      "pause": "Pause"
     }
   },
   "viewer": {
     "imageAlt": "Image",
+    "toggleInfo": "Show/Hide image info (Tab)",
+    "infoLoading": "Loading image info…",
+    "infoUnavailable": "Image info unavailable",
+    "resolution": "Resolution",
+    "fileSize": "File Size",
+    "aspectRatio": "Aspect Ratio",
+    "createdAt": "Created",
+    "unknown": "Unknown",
     "prev": "Previous",
     "next": "Next",
     "reset": "Reset View"
@@ -138,6 +171,11 @@
     "title": "Projects",
     "newProject": "New Project",
     "newProjectTitle": "New Project",
+    "exportPackage": "Export Package",
+    "importPackage": "Import Project",
+    "importing": "Importing…",
+    "exportFailed": "Failed to export project",
+    "importFailed": "Failed to import project",
     "open": "Open Project",
     "save": "Save Project",
     "name": "Project Name",

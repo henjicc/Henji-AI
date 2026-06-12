@@ -2,7 +2,7 @@ import type { CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import type { PreviewConnectionVisual } from '@/features/canvas/canvasUtils'
 import { NodeSelectionMenu } from '@/features/canvas/NodeSelectionMenu'
 import { CanvasEmptyHint } from '@/features/canvas/ui/CanvasEmptyHint'
-import { ImageViewerModal } from '@/features/canvas/ui/ImageViewerModal'
+import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
 
 interface CanvasOverlaysProps {
   nodesCount: number

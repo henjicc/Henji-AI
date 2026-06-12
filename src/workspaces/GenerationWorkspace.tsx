@@ -17,9 +17,9 @@ import type { ImageEditState } from '@/components/ImageEditor'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
-import { ImageViewerModal } from './GenerationWorkspace/components/ImageViewerModal'
-import { VideoViewerModal } from './GenerationWorkspace/components/VideoViewerModal'
-import { AudioViewerModal } from './GenerationWorkspace/components/AudioViewerModal'
+import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
+import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
+import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal'
 import { TaskList } from './GenerationWorkspace/components/TaskList'
 import { useBottomPanel } from './GenerationWorkspace/hooks/useBottomPanel'
 import { useDataDirectoryInit } from './GenerationWorkspace/hooks/useDataDirectoryInit'
@@ -599,7 +599,6 @@ const GenerationWorkspace: React.FC = () => {
         onEnterEditor={() => setIsEditorMode(true)}
         onExitEditor={() => setIsEditorMode(false)}
         onSaveEdit={handleSaveImageEdit}
-        onDownload={(filePath) => void handleDownloadFromViewer(filePath)}
         onContextMenu={handleImageViewerContextMenu}
       />
       <VideoViewerModal

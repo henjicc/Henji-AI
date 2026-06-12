@@ -26,6 +26,10 @@ interface SettingsState {
   uploadFallbackEnabled: boolean;
   downloadPresetPaths: string[];
   useUploadFilenameAsNodeTitle: boolean;
+  /** 图片查看器是否显示图片信息面板 */
+  enableImageViewerInfoPanel: boolean;
+  /** 图片信息面板折叠状态（Tab 键切换） */
+  imageViewerInfoPanelCollapsed: boolean;
   storyboardGenKeepStyleConsistent: boolean;
   storyboardGenDisableTextInImage: boolean;
   ignoreAtTagWhenCopyingAndGenerating: boolean;
@@ -40,6 +44,8 @@ interface SettingsState {
   setUploadFallbackEnabled: (enabled: boolean) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
+  setEnableImageViewerInfoPanel: (enabled: boolean) => void;
+  setImageViewerInfoPanelCollapsed: (collapsed: boolean) => void;
   setStoryboardGenKeepStyleConsistent: (enabled: boolean) => void;
   setStoryboardGenDisableTextInImage: (enabled: boolean) => void;
   setIgnoreAtTagWhenCopyingAndGenerating: (enabled: boolean) => void;
@@ -150,6 +156,8 @@ export const useSettingsStore = create<SettingsState>()(
       uploadFallbackEnabled: true,
       downloadPresetPaths: [],
       useUploadFilenameAsNodeTitle: true,
+      enableImageViewerInfoPanel: true,
+      imageViewerInfoPanelCollapsed: true,
       storyboardGenKeepStyleConsistent: true,
       storyboardGenDisableTextInImage: true,
       ignoreAtTagWhenCopyingAndGenerating: true,
@@ -189,6 +197,9 @@ export const useSettingsStore = create<SettingsState>()(
         set({ downloadPresetPaths: uniquePaths });
       },
       setUseUploadFilenameAsNodeTitle: (enabled) => set({ useUploadFilenameAsNodeTitle: enabled }),
+      setEnableImageViewerInfoPanel: (enabled) => set({ enableImageViewerInfoPanel: enabled }),
+      setImageViewerInfoPanelCollapsed: (collapsed) =>
+        set({ imageViewerInfoPanelCollapsed: collapsed }),
       setStoryboardGenKeepStyleConsistent: (enabled) =>
         set({ storyboardGenKeepStyleConsistent: enabled }),
       setStoryboardGenDisableTextInImage: (enabled) =>

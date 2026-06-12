@@ -1,11 +1,13 @@
 import type { HandleType, Viewport } from '@xyflow/react'
 import {
-  CANVAS_NODE_TYPES,
   type CanvasNode,
   type CanvasNodeType,
   DEFAULT_NODE_WIDTH,
 } from '@/features/canvas/domain/canvasNodes'
-import { getConnectMenuNodeTypes } from '@/features/canvas/domain/nodeRegistry'
+import {
+  canNodeTypeStartManualConnection,
+  getConnectMenuNodeTypes,
+} from '@/features/canvas/domain/nodeRegistry'
 
 export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
 export const ALT_DRAG_COPY_Z_INDEX = 2000
@@ -129,12 +131,15 @@ export function resolveClipboardImageFile(event: ClipboardEvent): File | null {
   return null
 }
 
-export function resolveAllowedNodeTypes(handleType: HandleType): CanvasNodeType[] {
-  return getConnectMenuNodeTypes(handleType)
+export function resolveAllowedNodeTypes(
+  handleType: HandleType,
+  fromNodeType?: CanvasNodeType
+): CanvasNodeType[] {
+  return getConnectMenuNodeTypes(handleType, fromNodeType)
 }
 
 export function canNodeTypeBeManualConnectionSource(type: CanvasNodeType): boolean {
-  return type === CANVAS_NODE_TYPES.upload || type === CANVAS_NODE_TYPES.exportImage
+  return canNodeTypeStartManualConnection(type)
 }
 
 export function canNodeBeManualConnectionSource(

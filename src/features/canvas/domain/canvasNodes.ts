@@ -8,6 +8,12 @@ export const CANVAS_NODE_TYPES = {
   group: 'groupNode',
   storyboardSplit: 'storyboardNode',
   storyboardGen: 'storyboardGenNode',
+  videoGen: 'videoGenNode',
+  audioGen: 'audioGenNode',
+  exportVideo: 'exportVideoNode',
+  exportAudio: 'exportAudioNode',
+  videoUpload: 'videoUploadNode',
+  audioUpload: 'audioUploadNode',
 } as const;
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES];
@@ -71,9 +77,17 @@ export interface TextAnnotationNodeData extends NodeDisplayData {
 
 export interface ImageEditNodeData extends NodeImageData {
   prompt: string;
-  model: string;
-  size: ImageSize;
+  /** 核心 ModelRegistry 中的模型 ID */
+  modelId?: string;
+  /** schema 驱动的模型参数（与默认值合并后使用） */
+  params?: Record<string, unknown>;
+  /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
+  model?: string;
+  /** @deprecated 旧版字段 */
+  size?: ImageSize;
+  /** @deprecated 旧版字段 */
   requestAspectRatio?: string;
+  /** @deprecated 旧版字段 */
   extraParams?: Record<string, unknown>;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
@@ -124,13 +138,58 @@ export interface StoryboardGenNodeData {
   gridRows: number;
   gridCols: number;
   frames: StoryboardGenFrameItem[];
-  model: string;
-  size: ImageSize;
-  requestAspectRatio: string;
+  /** 核心 ModelRegistry 中的模型 ID */
+  modelId?: string;
+  /** schema 驱动的模型参数（与默认值合并后使用） */
+  params?: Record<string, unknown>;
+  /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
+  model?: string;
+  /** @deprecated 旧版字段 */
+  size?: ImageSize;
+  /** @deprecated 旧版字段 */
+  requestAspectRatio?: string;
+  /** @deprecated 旧版字段 */
   extraParams?: Record<string, unknown>;
   imageUrl: string | null;
   previewImageUrl?: string | null;
   aspectRatio: string;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
+  [key: string]: unknown;
+}
+
+export interface MediaGenNodeData extends NodeDisplayData {
+  prompt: string;
+  modelId?: string;
+  params?: Record<string, unknown>;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
+  [key: string]: unknown;
+}
+
+export type VideoGenNodeData = MediaGenNodeData;
+export type AudioGenNodeData = MediaGenNodeData;
+
+export interface VideoMediaNodeData extends NodeDisplayData {
+  videoUrl: string | null;
+  /** 视频首帧 poster（本地路径），节点展示与缩略图共用 */
+  previewImageUrl?: string | null;
+  aspectRatio: string;
+  durationSec?: number | null;
+  sourceFileName?: string | null;
+  isSizeManuallyAdjusted?: boolean;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
+  [key: string]: unknown;
+}
+
+export interface AudioMediaNodeData extends NodeDisplayData {
+  audioUrl: string | null;
+  durationSec?: number | null;
+  sourceFileName?: string | null;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
@@ -144,7 +203,10 @@ export type CanvasNodeData =
   | GroupNodeData
   | ImageEditNodeData
   | StoryboardSplitNodeData
-  | StoryboardGenNodeData;
+  | StoryboardGenNodeData
+  | MediaGenNodeData
+  | VideoMediaNodeData
+  | AudioMediaNodeData;
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
 export type CanvasEdge = Edge;
@@ -215,6 +277,18 @@ export function isStoryboardGenNode(
   node: CanvasNode | null | undefined
 ): node is Node<StoryboardGenNodeData, typeof CANVAS_NODE_TYPES.storyboardGen> {
   return node?.type === CANVAS_NODE_TYPES.storyboardGen;
+}
+
+export function isVideoMediaNode(
+  node: CanvasNode | null | undefined
+): node is Node<VideoMediaNodeData, typeof CANVAS_NODE_TYPES.exportVideo | typeof CANVAS_NODE_TYPES.videoUpload> {
+  return node?.type === CANVAS_NODE_TYPES.exportVideo || node?.type === CANVAS_NODE_TYPES.videoUpload;
+}
+
+export function isAudioMediaNode(
+  node: CanvasNode | null | undefined
+): node is Node<AudioMediaNodeData, typeof CANVAS_NODE_TYPES.exportAudio | typeof CANVAS_NODE_TYPES.audioUpload> {
+  return node?.type === CANVAS_NODE_TYPES.exportAudio || node?.type === CANVAS_NODE_TYPES.audioUpload;
 }
 
 export function nodeHasImage(node: CanvasNode | null | undefined): boolean {

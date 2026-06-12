@@ -7,7 +7,11 @@ import type {
   ReactFlowInstance
 } from '@xyflow/react'
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
-import { nodeHasSourceHandle, nodeHasTargetHandle } from '@/features/canvas/domain/nodeRegistry'
+import {
+  isConnectionCompatible,
+  nodeHasSourceHandle,
+  nodeHasTargetHandle,
+} from '@/features/canvas/domain/nodeRegistry'
 import {
   canNodeBeManualConnectionSource,
   canNodeTypeBeManualConnectionSource,
@@ -189,7 +193,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
           targetNode &&
           canNodeTypeBeManualConnectionSource(sourceNode.type) &&
           nodeHasSourceHandle(sourceNode.type) &&
-          nodeHasTargetHandle(targetNode.type)
+          nodeHasTargetHandle(targetNode.type) &&
+          isConnectionCompatible(sourceNode.type, targetNode.type)
         ) {
           connectNodes({
             source: sourceNode.id,
@@ -204,7 +209,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
         }
       }
 
-      const allowedTypes = resolveAllowedNodeTypes(pendingConnectStart.handleType)
+      const fromNode = nodes.find((node) => node.id === pendingConnectStart.nodeId)
+      const allowedTypes = resolveAllowedNodeTypes(pendingConnectStart.handleType, fromNode?.type)
       if (allowedTypes.length === 0) {
         setPendingConnectStart(null)
         setPreviewConnectionVisual(null)

@@ -1,10 +1,10 @@
 import { createLogger } from '@/core/logging'
 import { embedStoryboardImageMetadata } from '@/commands/image'
-import { AUTO_REQUEST_ASPECT_RATIO, type StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
-import { canvasAiGateway } from '@/features/canvas/application/canvasServices'
-import { detectAspectRatio, parseAspectRatio, prepareNodeImage } from '@/features/canvas/application/imageData'
+import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
+import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
+import { prepareNodeImage } from '@/features/canvas/application/imageData'
 import { sanitizeStoryboardPromptText, sanitizeStoryboardText } from '@/features/canvas/application/storyboardText'
-import { generateGridImageDataUrl, pickClosestAspectRatio } from './shared'
+import { generateGridImageDataUrl } from './shared'
 
 const logger = createLogger('features.canvas.nodes.storyboardGen.generation')
 
@@ -16,20 +16,19 @@ interface BuildStoryboardPromptParams {
 }
 
 interface GenerateStoryboardImageParams {
-  prompt: string
-  providerId: string
-  selectedAspectRatio: string
+  modelId: string
+  /** schema 参数 + prompt/text 协议键（智能宽高比由 GenerationService 解析） */
+  params: Record<string, unknown>
   incomingImages: string[]
-  supportedAspectRatioValues: string[]
   frameAspectRatioValue: string
   gridRows: number
   gridCols: number
-  selectedResolution: string
-  requestModel: string
-  extraParams: StoryboardGenNodeData['extraParams']
+  /** 栅格参考图绘制分辨率（如 '2K'） */
+  gridImageResolution: string
   frames: StoryboardGenNodeData['frames']
   frameDescriptionDrafts: Record<string, string>
   ignoreAtTagWhenCopyingAndGenerating: boolean
+  onProgress?: (progress: number) => void
 }
 
 export interface GeneratedStoryboardImage {
@@ -71,57 +70,34 @@ export function buildStoryboardPrompt({
 }
 
 export async function generateStoryboardImage({
-  prompt,
-  providerId: _providerId,
-  selectedAspectRatio,
+  modelId,
+  params,
   incomingImages,
-  supportedAspectRatioValues,
   frameAspectRatioValue,
   gridRows,
   gridCols,
-  selectedResolution,
-  requestModel,
-  extraParams,
+  gridImageResolution,
   frames,
   frameDescriptionDrafts,
   ignoreAtTagWhenCopyingAndGenerating,
+  onProgress,
 }: GenerateStoryboardImageParams): Promise<GeneratedStoryboardImage> {
-  let resolvedRequestAspectRatio = selectedAspectRatio
-  if (resolvedRequestAspectRatio === AUTO_REQUEST_ASPECT_RATIO) {
-    if (incomingImages.length > 0) {
-      try {
-        const sourceAspectRatio = await detectAspectRatio(incomingImages[0])
-        const sourceAspectRatioValue = parseAspectRatio(sourceAspectRatio)
-        resolvedRequestAspectRatio = pickClosestAspectRatio(
-          sourceAspectRatioValue,
-          supportedAspectRatioValues
-        )
-      } catch {
-        resolvedRequestAspectRatio = pickClosestAspectRatio(1, supportedAspectRatioValues)
-      }
-    } else {
-      resolvedRequestAspectRatio = pickClosestAspectRatio(1, supportedAspectRatioValues)
-    }
-  }
-
   const gridImageDataUrl = generateGridImageDataUrl(
     frameAspectRatioValue,
     gridRows,
     gridCols,
-    selectedResolution
+    gridImageResolution
   )
   const allReferenceImages = [...incomingImages, gridImageDataUrl]
 
-  const resultUrl = await canvasAiGateway.generateImage({
-    prompt,
-    model: requestModel,
-    size: selectedResolution,
-    aspectRatio: resolvedRequestAspectRatio,
+  const generated = await runCanvasGeneration({
+    modelId,
+    params,
     referenceImages: allReferenceImages,
-    extraParams,
+    onProgress,
   })
 
-  const prepared = await prepareNodeImage(resultUrl)
+  const prepared = await prepareNodeImage(generated.primary)
   const metadataFrameNotes = frames
     .slice(0, gridRows * gridCols)
     .map((frame) => {

@@ -168,6 +168,15 @@
       "autoFocusLabel": "Auto-focus model search",
       "autoFocusHint": "Focus the search box when opening the model selector"
     },
+    "canvas": {
+      "title": "Canvas Behavior",
+      "imageViewerInfoLabel": "Show image info in viewer",
+      "imageViewerInfoHint": "Show resolution, file size and more when zooming images. Press Tab to collapse.",
+      "uploadFilenameTitleLabel": "Use filename as upload node title",
+      "storyboardKeepStyleLabel": "Keep storyboard style consistent with references",
+      "storyboardNoTextLabel": "Disable text in storyboard images",
+      "ignoreAtTagLabel": "Ignore @image tags when copying and generating"
+    },
     "promptOptimization": {
       "title": "Prompt Optimization",
       "label": "Optimize button behavior",

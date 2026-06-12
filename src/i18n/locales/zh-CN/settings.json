@@ -168,6 +168,15 @@
       "autoFocusLabel": "模型面板自动聚焦搜索框",
       "autoFocusHint": "打开模型选择面板时自动聚焦到搜索输入框"
     },
+    "canvas": {
+      "title": "画布行为",
+      "imageViewerInfoLabel": "图片查看器显示图片信息",
+      "imageViewerInfoHint": "放大查看图片时显示分辨率、文件大小等信息，可用 Tab 键快速折叠",
+      "uploadFilenameTitleLabel": "上传节点使用文件名作为标题",
+      "storyboardKeepStyleLabel": "分镜生成保持与参考图风格一致",
+      "storyboardNoTextLabel": "分镜生成禁止生成描述文字",
+      "ignoreAtTagLabel": "复制与生成时忽略 @图 标记"
+    },
     "promptOptimization": {
       "title": "提示词优化",
       "label": "优化按钮行为",

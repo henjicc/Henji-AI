@@ -44,6 +44,8 @@ png = "0.17"
 urlencoding = "2"
 tauri-plugin-drag = "2.1.0"
 rusqlite = { version = "0.31", features = ["bundled"] }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

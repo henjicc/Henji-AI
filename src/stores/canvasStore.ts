@@ -33,6 +33,7 @@ import {
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry';
 import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
+import { migrateGenerationNodeData } from '@/features/canvas/domain/nodeMigrations';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { canvasNodeFactory } from '@/features/canvas/application/canvasServices';
 import {
@@ -72,6 +73,8 @@ interface CanvasState {
   activeToolDialog: ActiveToolDialog | null;
   history: CanvasHistoryState;
   dragHistorySnapshot: CanvasHistorySnapshot | null;
+  /** 瞬态生成进度（nodeId -> 0~1）；不进节点 data，不参与历史快照与持久化 */
+  nodeGenerationProgress: Record<string, number>;
   currentViewport: Viewport;
   canvasViewportSize: { width: number; height: number };
   imageViewer: {
@@ -121,6 +124,7 @@ interface CanvasState {
   ) => string | null;
 
   updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;
+  setNodeGenerationProgress: (nodeId: string, progress: number | null) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateStoryboardFrame: (
     nodeId: string,
@@ -237,6 +241,13 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
           ...(rawExportOptions ?? {}),
           fontSize: Math.max(1, Math.min(20, Math.round(normalizedFontSize))),
         };
+      }
+
+      if (
+        node.type === CANVAS_NODE_TYPES.imageEdit
+        || node.type === CANVAS_NODE_TYPES.storyboardGen
+      ) {
+        migrateGenerationNodeData(mergedData as Record<string, unknown>);
       }
 
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
@@ -544,6 +555,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeToolDialog: null,
   history: { past: [], future: [] },
   dragHistorySnapshot: null,
+  nodeGenerationProgress: {},
   currentViewport: { x: 0, y: 0, zoom: 1 },
   canvasViewportSize: { width: 0, height: 0 },
   imageViewer: {
@@ -683,6 +695,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activeToolDialog: null,
       history: normalizeHistory(history),
       dragHistorySnapshot: null,
+      nodeGenerationProgress: {},
     });
   },
 
@@ -1117,6 +1130,31 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
+  setNodeGenerationProgress: (nodeId, progress) => {
+    set((state) => {
+      const current = state.nodeGenerationProgress[nodeId];
+      if (progress === null) {
+        if (current === undefined) {
+          return {};
+        }
+        const next = { ...state.nodeGenerationProgress };
+        delete next[nodeId];
+        return { nodeGenerationProgress: next };
+      }
+
+      const clamped = Math.min(1, Math.max(0, progress));
+      if (current !== undefined && Math.abs(current - clamped) < 0.001) {
+        return {};
+      }
+      return {
+        nodeGenerationProgress: {
+          ...state.nodeGenerationProgress,
+          [nodeId]: clamped,
+        },
+      };
+    });
+  },
+
   updateNodePosition: (nodeId, position) => {
     set((state) => {
       let changed = false;
@@ -1266,10 +1304,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const nextEdges = state.edges.filter(
         (edge) => !deleteSet.has(edge.source) && !deleteSet.has(edge.target)
       );
+      let nextGenerationProgress = state.nodeGenerationProgress;
+      if (Object.keys(nextGenerationProgress).some((nodeId) => deleteSet.has(nodeId))) {
+        nextGenerationProgress = Object.fromEntries(
+          Object.entries(nextGenerationProgress).filter(([nodeId]) => !deleteSet.has(nodeId))
+        );
+      }
 
       return {
         nodes: nextNodes,
         edges: nextEdges,
+        nodeGenerationProgress: nextGenerationProgress,
         selectedNodeId:
           state.selectedNodeId && deleteSet.has(state.selectedNodeId) ? null : state.selectedNodeId,
         activeToolDialog:
@@ -1580,6 +1625,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           future: [],
         },
         dragHistorySnapshot: null,
+        nodeGenerationProgress: {},
       };
     });
   },

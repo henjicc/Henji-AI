@@ -4,7 +4,6 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import {
   ALT_DRAG_COPY_Z_INDEX,
-  canNodeTypeBeManualConnectionSource,
   cloneNodeData,
   getNodeSize,
   hasRectCollision,

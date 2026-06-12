@@ -126,6 +126,13 @@ function mapNodeImageReferences(
       nextData.previewImageUrl =
         mapImageUrl(nextData.previewImageUrl as string | null | undefined) ?? null;
     }
+    // 视频/音频节点的媒体路径同样进池去重
+    if ('videoUrl' in nextData) {
+      nextData.videoUrl = mapImageUrl(nextData.videoUrl as string | null | undefined) ?? null;
+    }
+    if ('audioUrl' in nextData) {
+      nextData.audioUrl = mapImageUrl(nextData.audioUrl as string | null | undefined) ?? null;
+    }
 
     if (Array.isArray(nextData.frames)) {
       nextData.frames = nextData.frames.map((frame) => {
@@ -349,6 +356,16 @@ function fromProjectRecord(record: ProjectRecord): Project {
     viewport: decodedProject.viewport ?? DEFAULT_VIEWPORT,
     history: decodedProject.history ?? createEmptyHistory(),
   };
+}
+
+/** 解码项目记录为运行时 Project（供项目包导出等服务使用） */
+export function decodeProjectRecord(record: ProjectRecord): Project {
+  return fromProjectRecord(record);
+}
+
+/** 编码运行时 Project 为持久化记录（供项目包导入等服务使用） */
+export function encodeProjectAsRecord(project: Project): ProjectRecord {
+  return toProjectRecord(project);
 }
 
 interface PersistProjectOptions {

@@ -826,6 +826,21 @@ export async function cropImageSource(
   return canvas.toDataURL('image/png');
 }
 
+export interface ImageInfoResult {
+  source: string;
+  fileName: string | null;
+  extension: string;
+  width: number;
+  height: number;
+  fileSizeBytes: number;
+  createdAt: number | null;
+  modifiedAt: number | null;
+}
+
+export async function readImageInfo(source: string): Promise<ImageInfoResult> {
+  return await invoke<ImageInfoResult>('read_image_info', { source });
+}
+
 export async function loadImage(filePath: string): Promise<string> {
   try {
     return await invoke<string>('load_image', { filePath });
