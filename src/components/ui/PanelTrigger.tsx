@@ -9,6 +9,7 @@ type PanelTriggerProps = {
   disabled?: boolean
   className?: string
   buttonClassName?: string
+  buttonLabelClassName?: string
   panelClassName?: string
   zIndex?: number
   panelWidth?: number
@@ -36,6 +37,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     disabled,
     className,
     buttonClassName,
+    buttonLabelClassName,
     panelClassName,
     zIndex = 1000,
     panelWidth,
@@ -303,7 +305,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           data-panel-trigger-button
           className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
         >
-          <span className="text-sm truncate">{display ?? ''}</span>
+          <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{display ?? ''}</span>
           <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </UiButton>
       )}

@@ -15,7 +15,12 @@ import {
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
 import { paramPortId } from '@/features/canvas/domain/socketTypes';
-import { NODE_ROW_CARD_CLASS, NODE_ROW_HOVER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import {
+  NODE_ROW_CLASS,
+  NODE_ROW_CONTROL_SLOT_CLASS,
+  NODE_ROW_HOVER_CLASS,
+  NODE_ROW_LABEL_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
 import { NodeParamControl } from './NodeParamControl';
 
 interface NodeParamRowsProps {
@@ -88,7 +93,7 @@ export const NodeParamRows = memo(({
         return (
           <div
             key={param.id}
-            className={`relative flex items-center justify-between gap-2 px-3 py-1.5 ${NODE_ROW_CARD_CLASS} ${
+            className={`${NODE_ROW_CLASS} ${
               isConnected ? '' : NODE_ROW_HOVER_CLASS
             }`}
             style={isConnected ? { backgroundColor: getSocketTintColor(socketType) } : undefined}
@@ -100,13 +105,15 @@ export const NodeParamRows = memo(({
               style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
               className="!h-2.5 !w-2.5 !border !border-surface-dark"
             />
-            <span className="shrink-0 text-xs text-text-muted">{label}</span>
-            <NodeParamControl
-              param={param}
-              value={mergedValues[param.id]}
-              onChange={(next) => setParam(param.id, next)}
-              disabled={isConnected}
-            />
+            <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
+            <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
+              <NodeParamControl
+                param={param}
+                value={mergedValues[param.id]}
+                onChange={(next) => setParam(param.id, next)}
+                disabled={isConnected}
+              />
+            </div>
           </div>
         );
       })}

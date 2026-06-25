@@ -17,7 +17,7 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:colors": "npm run check:colors",
     "lint:fix": "eslint src --ext ts,tsx --fix",
-    "tauri:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri dev",
+    "tauri:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223&& set CC=cl.exe&& set CXX=cl.exe&& tauri dev",
     "tauri:build": "npm run gen:progress-seeds && npm run gen:model-manifest && call \"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\Tools\\VsDevCmd.bat\" -arch=amd64 && set CC=cl.exe&& set CXX=cl.exe&& tauri build",
     "tauri:build:ci": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri build",
     "tauri:dev:mac": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri dev",

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import type {
@@ -14,7 +15,7 @@ import { getI18nText } from '@/core/types/I18nText';
 import { panelRegistry } from '@/core/panels/PanelRegistry';
 import Dropdown from '@/components/ui/Dropdown';
 import PanelTrigger from '@/components/ui/PanelTrigger';
-import { UiInput, UiSwitch } from '@/components/ui';
+import { UiIconButton, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
 
 interface NodeParamControlProps {
@@ -25,7 +26,8 @@ interface NodeParamControlProps {
 }
 
 /** 紧凑右对齐控件按钮的通用底座样式 */
-const COMPACT_TRIGGER_CLASS = '!h-7 !w-auto !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs';
+const COMPACT_TRIGGER_CLASS = '!h-7 !w-auto !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs !font-normal';
+const COMPACT_TRIGGER_LABEL_CLASS = 'text-xs leading-none';
 
 function resolvePrecision(step: number | undefined): number {
   if (typeof step !== 'number' || !Number.isFinite(step)) {
@@ -62,6 +64,9 @@ function CompactNumberControl({
     : clampNumber(typeof param.default === 'number' ? param.default : (param.min ?? 0), param);
   const [draft, setDraft] = useState(() => String(safeValue));
   const [focused, setFocused] = useState(false);
+  const step = typeof param.step === 'number' && Number.isFinite(param.step) && param.step > 0
+    ? param.step
+    : 1;
 
   useEffect(() => {
     if (!focused) {
@@ -69,31 +74,79 @@ function CompactNumberControl({
     }
   }, [focused, safeValue]);
 
+  const commitDraft = () => {
+    setFocused(false);
+    const parsed = Number.parseFloat(draft);
+    const next = Number.isFinite(parsed) ? clampNumber(parsed, param) : safeValue;
+    setDraft(String(next));
+    onChange(next);
+  };
+
+  const stepBy = (direction: 1 | -1) => {
+    const parsed = Number.parseFloat(draft);
+    const base = Number.isFinite(parsed) ? parsed : safeValue;
+    const next = clampNumber(base + direction * step, param);
+    setDraft(String(next));
+    onChange(next);
+  };
+
   return (
-    <UiInput
-      type="number"
-      value={draft}
-      min={param.min}
-      max={param.max}
-      step={param.step || 1}
-      onFocus={() => setFocused(true)}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        setFocused(false);
-        const parsed = Number.parseFloat(draft);
-        const next = Number.isFinite(parsed) ? clampNumber(parsed, param) : safeValue;
-        setDraft(String(next));
-        onChange(next);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.currentTarget.blur();
-        }
-      }}
+    <div
+      className="nodrag nowheel flex h-7 w-[72px] overflow-hidden rounded-md border border-border-dark bg-surface-dark"
       onMouseDown={(event) => event.stopPropagation()}
-      disabled={disabled}
-      className="h-7 w-20 px-2 text-xs"
-    />
+    >
+      <UiInput
+        type="text"
+        inputMode="decimal"
+        value={draft}
+        onFocus={() => setFocused(true)}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur();
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            stepBy(1);
+          }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            stepBy(-1);
+          }
+        }}
+        disabled={disabled}
+        className="!h-full !min-h-0 w-11 min-w-0 rounded-none !border-0 !bg-transparent px-2 text-right text-xs leading-none"
+      />
+      <div className="flex w-5 shrink-0 flex-col border-l border-border-dark">
+        <UiIconButton
+          type="button"
+          showBorder={false}
+          disabled={disabled}
+          tabIndex={-1}
+          onClick={(event) => {
+            event.stopPropagation();
+            stepBy(1);
+          }}
+          className="!h-3.5 !w-5 !rounded-none !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-layer hover:!text-text-dark"
+        >
+          <ChevronUp className="h-3 w-3" />
+        </UiIconButton>
+        <UiIconButton
+          type="button"
+          showBorder={false}
+          disabled={disabled}
+          tabIndex={-1}
+          onClick={(event) => {
+            event.stopPropagation();
+            stepBy(-1);
+          }}
+          className="!h-3.5 !w-5 !rounded-none !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-layer hover:!text-text-dark"
+        >
+          <ChevronDown className="h-3 w-3" />
+        </UiIconButton>
+      </div>
+    </div>
   );
 }
 
@@ -125,15 +178,20 @@ function CompactDropdownControl({
   const isUnset = value === undefined || value === null || value === '';
   const effectiveValue = !isUnset ? value : param.default;
   const selected = options.find((option) => isSameOptionValue(option.value, effectiveValue));
+  const fallback = options.find((option) => isSameOptionValue(option.value, param.default))
+    ?? options.find((option) => !option.disabled);
+  const displayOption = selected ?? fallback;
 
   return (
     <Dropdown
-      value={selected ? selected.value : ''}
-      display={selected?.label}
+      value={displayOption ? displayOption.value : ''}
+      display={displayOption?.label}
       options={options}
       onSelect={onChange}
       disabled={disabled}
       buttonClassName={COMPACT_TRIGGER_CLASS}
+      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      optionLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
       minWidthStrategy="display"
       panelWidthStrategy="options"
     />
@@ -182,6 +240,7 @@ function CompactPanelControl({
       display={display}
       disabled={disabled}
       buttonClassName={COMPACT_TRIGGER_CLASS}
+      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
       panelWidth={panelWidth}
       alignment="aboveCenter"
       closeOnPanelClick={false}

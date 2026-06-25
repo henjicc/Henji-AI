@@ -10,7 +10,12 @@ import {
   collectInputMediaUrls,
 } from '@/features/canvas/application/graphMediaResolver';
 import { getSocketColor, getSocketTintColor, mediaPortId, type RowMediaKind } from '@/features/canvas/domain/socketTypes';
-import { NODE_ROW_CARD_CLASS, NODE_ROW_HOVER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import {
+  NODE_ROW_CLASS,
+  NODE_ROW_CONTROL_SLOT_CLASS,
+  NODE_ROW_HOVER_CLASS,
+  NODE_ROW_LABEL_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
 import { saveUploadAudio, saveUploadVideo } from '@/utils/save';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -101,7 +106,7 @@ export function MediaInputRow({
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-2 px-3 py-1.5 ${NODE_ROW_CARD_CLASS} ${
+      className={`${NODE_ROW_CLASS} ${
         isConnected ? '' : NODE_ROW_HOVER_CLASS
       }`}
       style={isConnected ? { backgroundColor: getSocketTintColor(mediaKind.toUpperCase()) } : undefined}
@@ -113,8 +118,8 @@ export function MediaInputRow({
         style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
         className="!h-2.5 !w-2.5 !border !border-surface-dark"
       />
-      <span className="shrink-0 text-xs text-text-muted">{label}</span>
-      <div className="nodrag nowheel flex flex-1 items-center justify-end gap-1.5 overflow-x-auto">
+      <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
+      <div className={`nodrag nowheel gap-1.5 overflow-x-auto ${NODE_ROW_CONTROL_SLOT_CLASS}`}>
         {displayUrls.map((url, index) => (
           <div key={`${url}-${index}`} className="group relative shrink-0">
             {mediaKind === 'image' ? (

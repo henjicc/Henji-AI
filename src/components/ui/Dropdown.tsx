@@ -24,6 +24,8 @@ type DropdownProps<T extends string | number | boolean> = {
   disabled?: boolean
   className?: string
   buttonClassName?: string
+  buttonLabelClassName?: string
+  optionLabelClassName?: string
   panelClassName?: string
   portal?: boolean
   zIndex?: number
@@ -42,6 +44,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     disabled,
     className,
     buttonClassName,
+    buttonLabelClassName,
+    optionLabelClassName,
     panelClassName,
     portal = true,
     zIndex = 1000,
@@ -182,7 +186,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           ...(buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : {})
         }}
       >
-        <span className="text-sm truncate">{display ?? String(value ?? '')}</span>
+        <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{display ?? String(value ?? '')}</span>
         <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
       </UiButton>
       {(open || closing) && (
@@ -221,7 +225,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                         setTimeout(() => { setOpen(false); setClosing(false) }, 200)
                       }}
                     >
-                      <span className="block truncate whitespace-nowrap text-sm">{opt.label}</span>
+                      <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-sm'}`}>{opt.label}</span>
                     </UiOptionButton>
                   ))}
                 </div>
@@ -256,7 +260,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                       setTimeout(() => { setOpen(false); setClosing(false) }, 200)
                     }}
                   >
-                    <span className="block truncate whitespace-nowrap text-sm">{opt.label}</span>
+                    <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-sm'}`}>{opt.label}</span>
                   </UiOptionButton>
                 ))}
               </div>

@@ -3,6 +3,12 @@
 使用中文回复，每次回复开头都添加"💡"
 除非用户要求，否则禁止创建文档，禁止在处理完问题后创建总结文档
 
+## 协作约定
+
+- 允许 Codex 在完成一组相关改动、验证通过或需要保存阶段性成果时自主提交 commit
+- commit 信息使用中文，简洁说明本次改动目的
+- 提交前优先检查工作区，避免把无关文件、临时截图、日志或自动生成但非必要的产物误提交
+
 ## 项目概述
 
 Henji-AI（痕迹AI）是基于 Tauri 的桌面应用，聚合多个 AI 提供商（PPIO、Fal、ModelScope、KIE）生成图像、视频和音频
@@ -26,12 +32,21 @@ npm run tauri:dev:mac       # 运行 Tauri 开发模式（macOS）
 
 - 在 Windows 下执行 `cargo test`、`cargo build`、`tauri dev`、`tauri build` 等 Rust/Tauri 命令时，必须先进入 VS Build Tools 的开发者命令环境，再设置 `CC=cl.exe` 与 `CXX=cl.exe`
 - 推荐复用 `npm run tauri:dev` / `npm run tauri:build` 中的做法，不要直接在普通 PowerShell 环境里裸跑 `cargo`
+- Windows 的 `npm run tauri:dev` 默认会设置 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`，用于打开 WebView2 CDP 调试端口
 - 如需单独运行 Rust 测试，可参考：
 
 ```powershell
 $vsDevCmd = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat'
 cmd.exe /c "call `"$vsDevCmd`" -arch=amd64 && set CC=cl.exe && set CXX=cl.exe && cargo test --manifest-path src-tauri\Cargo.toml"
 ```
+
+**Tauri / WebView2 调试注意**:
+
+- Tauri UI 验收应优先看真实 Tauri WebView，不要把裸浏览器打开的 Vite 页面当作最终视觉依据
+- 自定义标题栏、窗口按钮、设置入口、对话/画布/工具箱切换等能力依赖 Tauri 容器，裸浏览器页面可能缺失或表现不同
+- 运行 `npm run tauri:dev` 后，可通过 `http://127.0.0.1:9223/json/version` 和 `http://127.0.0.1:9223/json` 检查 CDP 是否开启
+- 使用 Playwright/CDP 连接真实 WebView 时，选择 title 为 `痕迹AI`、url 为 `http://localhost:3000/` 的 page target；忽略 DevTools 自身 target
+- 如果 9223 不通，先确认应用是在设置环境变量之后启动的；已打开的 WebView 不会因为后设置环境变量而自动启用 CDP
 
 **Manifest 注意**:
 

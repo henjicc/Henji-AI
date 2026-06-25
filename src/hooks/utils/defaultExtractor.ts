@@ -66,17 +66,18 @@ function getSmartOptionValue(
  * // { prompt: '', quality: 'standard', size: 1024 }
  * ```
  */
-export function extractDefaults(schema: ParamDef[]): Record<string, any> {
-  const defaults: Record<string, any> = {}
+export function extractDefaults(schema: ParamDef[]): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {}
 
   for (const param of schema) {
+    if (param.default !== undefined) {
+      defaults[param.id] = param.default
+      continue
+    }
     if (isChoiceParam(param) && isAspectLikeParam(param)) {
       const smartValue = getSmartOptionValue(param)
       defaults[param.id] = smartValue ?? 'smart'
       continue
-    }
-    if (param.default !== undefined) {
-      defaults[param.id] = param.default
     }
   }
 
@@ -90,7 +91,7 @@ export function extractDefaults(schema: ParamDef[]): Record<string, any> {
  * @param value - 参数值
  * @returns 是否有效
  */
-export function validateParamValue(paramDef: ParamDef, value: any): boolean {
+export function validateParamValue(paramDef: ParamDef, value: unknown): boolean {
   // 基础类型检查
   if (paramDef.valueType === 'string' && typeof value !== 'string') {
     return false
@@ -106,6 +107,9 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
 
   // 数值范围检查
   if (paramDef.type === 'number') {
+    if (typeof value !== 'number') {
+      return false
+    }
     if ('min' in paramDef && paramDef.min !== undefined && value < paramDef.min) {
       return false
     }
@@ -118,7 +122,7 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
   if (paramDef.type === 'dropdown' || paramDef.type === 'radio') {
     if ('options' in paramDef && paramDef.options) {
       const validValues = paramDef.options.map((opt) => opt.value)
-      if (validValues.includes(value)) {
+      if (validValues.some((validValue) => validValue === value)) {
         return true
       }
 
@@ -126,7 +130,7 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
         return true
       }
 
-      if (!validValues.includes(value)) {
+      if (!validValues.some((validValue) => validValue === value)) {
         return false
       }
     }

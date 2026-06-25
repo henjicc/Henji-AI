@@ -1,8 +1,8 @@
-export const NODE_CONTROL_CHIP_CLASS = '!h-7 !rounded-lg !px-2.5 !text-[11px] !gap-1.5';
+export const NODE_CONTROL_CHIP_CLASS = '!h-7 !rounded-md !px-2.5 !text-xs !font-normal !gap-1.5';
 
-export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-[170px] !justify-start';
+export const NODE_CONTROL_MODEL_CHIP_CLASS = '!max-w-[260px] !justify-start';
 
-export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!w-[92px] !justify-start';
+export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!max-w-[120px] !justify-start';
 
 export const NODE_CONTROL_PRIMARY_BUTTON_CLASS =
   '!h-7 !rounded-lg !px-2.5 !text-[11px] !gap-1.5 border border-transparent';
@@ -16,6 +16,13 @@ export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
  */
 export const NODE_ROW_CARD_CLASS =
   'rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 transition-colors';
+
+export const NODE_ROW_CLASS =
+  `relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
+
+export const NODE_ROW_LABEL_CLASS = 'w-[64px] shrink-0 text-left text-xs text-text-muted';
+
+export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center justify-end';
 
 /** 未连线行的悬停提示（连线行改用插槽色底色，不叠加该 hover） */
 export const NODE_ROW_HOVER_CLASS = 'hover:bg-white/[0.06]';

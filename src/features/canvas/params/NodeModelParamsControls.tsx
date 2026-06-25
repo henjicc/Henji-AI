@@ -64,8 +64,8 @@ export const NodeModelParamsControls = memo(({
   onParamsChange,
   incomingImages = [],
   chipClassName = '',
-  modelChipClassName = 'w-[220px] justify-start',
-  paramsChipClassName = 'w-[120px] justify-start',
+  modelChipClassName = 'max-w-[260px] justify-start',
+  paramsChipClassName = 'max-w-[120px] justify-start',
   showParamsChip = true,
 }: NodeModelParamsControlsProps) => {
   const { t, i18n } = useTranslation();
@@ -190,9 +190,9 @@ export const NodeModelParamsControls = memo(({
           }}
         >
           <Sparkles className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 truncate text-[10px] font-medium leading-none">{selectedModelName}</span>
+          <span className="min-w-0 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
-            <span className="shrink-0 text-[10px] leading-none text-text-muted/80">
+            <span className="shrink-0 text-xs leading-none text-text-muted/80">
               {getProviderDisplayName(selectedModel.meta.provider)}
             </span>
           )}
@@ -217,13 +217,13 @@ export const NodeModelParamsControls = memo(({
             <SlidersHorizontal className="h-2.5 w-2.5 shrink-0" />
             {paramsSummary.length > 0 ? (
               <>
-                <span className="truncate text-[10px] leading-none">{paramsSummary[0]}</span>
+                <span className="truncate text-xs leading-none">{paramsSummary[0]}</span>
                 {paramsSummary[1] && (
-                  <span className="text-[10px] leading-none text-text-muted/80">· {paramsSummary[1]}</span>
+                  <span className="text-xs leading-none text-text-muted/80">· {paramsSummary[1]}</span>
                 )}
               </>
             ) : (
-              <span className="truncate text-[10px] leading-none">{t('modelParams.title')}</span>
+              <span className="truncate text-xs leading-none">{t('modelParams.title')}</span>
             )}
           </UiChipButton>
         </div>

@@ -10,8 +10,10 @@ import { NodeModelParamsControls } from './NodeModelParamsControls';
 import {
   NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_MODEL_CHIP_CLASS,
-  NODE_ROW_CARD_CLASS,
+  NODE_ROW_CLASS,
+  NODE_ROW_CONTROL_SLOT_CLASS,
   NODE_ROW_HOVER_CLASS,
+  NODE_ROW_LABEL_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 
 interface ModelInputRowProps {
@@ -48,7 +50,7 @@ export function ModelInputRow({
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-2 px-3 py-1.5 ${NODE_ROW_CARD_CLASS} ${
+      className={`${NODE_ROW_CLASS} ${
         overrideModelId ? '' : NODE_ROW_HOVER_CLASS
       }`}
       style={overrideModelId ? { backgroundColor: getSocketTintColor('MODEL') } : undefined}
@@ -60,27 +62,29 @@ export function ModelInputRow({
         style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
         className="!h-2.5 !w-2.5 !border !border-surface-dark"
       />
-      <span className="shrink-0 text-xs text-text-muted">{t('node.modelRow.label')}</span>
-      {overrideModelId ? (
-        <span
-          className="min-w-0 truncate text-xs text-text-dark"
-          title={t('node.modelRow.linked')}
-        >
-          {overrideModel ? getI18nText(overrideModel.meta.name, i18n.language) : overrideModelId}
-        </span>
-      ) : (
-        <NodeModelParamsControls
-          mediaType={mediaType}
-          modelId={modelId}
-          storedParams={storedParams}
-          onModelChange={onModelChange}
-          onParamsChange={onParamsChange}
-          incomingImages={incomingImages}
-          chipClassName={NODE_CONTROL_CHIP_CLASS}
-          modelChipClassName={`${NODE_CONTROL_MODEL_CHIP_CLASS} !h-7 !w-[180px]`}
-          showParamsChip={false}
-        />
-      )}
+      <span className={NODE_ROW_LABEL_CLASS}>{t('node.modelRow.label')}</span>
+      <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
+        {overrideModelId ? (
+          <span
+            className="min-w-0 truncate text-xs text-text-dark"
+            title={t('node.modelRow.linked')}
+          >
+            {overrideModel ? getI18nText(overrideModel.meta.name, i18n.language) : overrideModelId}
+          </span>
+        ) : (
+          <NodeModelParamsControls
+            mediaType={mediaType}
+            modelId={modelId}
+            storedParams={storedParams}
+            onModelChange={onModelChange}
+            onParamsChange={onParamsChange}
+            incomingImages={incomingImages}
+            chipClassName={NODE_CONTROL_CHIP_CLASS}
+            modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
+            showParamsChip={false}
+          />
+        )}
+      </div>
     </div>
   );
 }
