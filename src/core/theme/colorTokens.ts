@@ -9,6 +9,26 @@ export const CANVAS_TEXT_HEX = '#FAFAFA';
 export const CANVAS_GRID_HEX = '#262626';
 export const CANVAS_GRID_ALT_HEX = '#404040';
 
+/**
+ * 画布插槽（端口）类型颜色映射。
+ * 仅在此处集中维护 hex；端口组件通过 getSocketColor 取色，不写颜色字面量。
+ */
+export const SOCKET_TYPE_COLOR_HEX: Record<string, string> = {
+  STRING: '#22C55E',
+  TEXT: '#22C55E',
+  NUMBER: '#3B82F6',
+  INT: '#3B82F6',
+  FLOAT: '#0EA5E9',
+  BOOLEAN: '#A855F7',
+  ENUM: '#F59E0B',
+  IMAGE: '#14B8A6',
+  VIDEO: '#EF4444',
+  AUDIO: '#EC4899',
+  MODEL: '#FACC15',
+  OBJECT: '#A3A3A3',
+};
+export const SOCKET_TYPE_COLOR_FALLBACK_HEX = '#A3A3A3';
+
 export const STORYBOARD_BG_HEX = '#171717';
 export const STORYBOARD_CELL_BG_HEX = '#262626';
 export const STORYBOARD_NOTE_BG_HEX = '#0A0A0A';

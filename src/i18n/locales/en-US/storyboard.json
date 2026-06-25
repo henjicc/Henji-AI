@@ -80,7 +80,24 @@
       "videoGen": "AI Video",
       "audioGen": "AI Audio",
       "uploadVideo": "Upload Video",
-      "uploadAudio": "Upload Audio"
+      "uploadAudio": "Upload Audio",
+      "intSource": "Integer",
+      "floatSource": "Float",
+      "stringSource": "Text",
+      "booleanSource": "Boolean",
+      "imageModelSelector": "Image Model Selector",
+      "videoModelSelector": "Video Model Selector",
+      "audioModelSelector": "Audio Model Selector"
+    },
+    "mediaRow": {
+      "image": "Image",
+      "video": "Video",
+      "audio": "Audio",
+      "upload": "Upload"
+    },
+    "modelRow": {
+      "label": "Model",
+      "linked": "Set by model selector"
     },
     "imageNode": {
       "title": "Image Node",

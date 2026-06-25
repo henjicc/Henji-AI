@@ -6,6 +6,7 @@
 
 import { I18nText } from './I18nText'
 import { ComponentType, ValueType } from './ComponentTypes'
+import type { SocketType } from './SocketType'
 import type { ApiConfig, ApiTransform } from './ApiMapping'
 import { VisibleCondition, DisabledCondition, SmartMatchConfig } from './ConditionTypes'
 import type {
@@ -106,6 +107,14 @@ export interface BaseParamDef {
    * 控制参数是否禁用
    */
   disabled?: DisabledCondition
+
+  /**
+   * 画布插槽类型覆盖（可选）
+   *
+   * 缺省时由 deriveSocketType 从 type/valueType 自动推导；
+   * 仅在需要特殊连接语义（如细化 INT/FLOAT）时显式声明。
+   */
+  socketType?: SocketType
 }
 
 // ========== 基础组件参数 ==========

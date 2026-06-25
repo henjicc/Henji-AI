@@ -14,39 +14,52 @@ import {
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
+import {
+  MODEL_PARAM_ID,
+  PROMPT_PARAM_ID,
+  getSocketColor,
+  getSocketTintColor,
+  promptPortId,
+  type RowMediaKind,
+} from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
   areMediaOutputListsEqual,
   collectInputMedia,
 } from '@/features/canvas/application/graphMediaResolver';
+import {
+  areStringSetsEqual,
+  areValueOverridesEqual,
+  collectInputValues,
+  getConnectedParamIds,
+} from '@/features/canvas/application/graphValueResolver';
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
-import { NodeModelParamsControls } from '@/features/canvas/params/NodeModelParamsControls';
+import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
 import { registry } from '@/core/ModelRegistry';
 import { GenerationService } from '@/core/services/GenerationService';
-import {
-  NODE_CONTROL_CHIP_CLASS,
-  NODE_CONTROL_ICON_CLASS,
-  NODE_CONTROL_MODEL_CHIP_CLASS,
-  NODE_CONTROL_PARAMS_CHIP_CLASS,
-  NODE_CONTROL_PRIMARY_BUTTON_CLASS,
-} from '@/features/canvas/ui/nodeControlStyles';
-import { ReferenceTextarea, UiButton } from '@/components/ui';
+import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import { ReferenceTextarea } from '@/components/ui';
 import PriceEstimate from '@/components/ui/PriceEstimate';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
 const DEFAULT_GENERATION_DURATION_MS = 60_000;
 const RESULT_TITLE_MAX_CHARS = 10;
+/** prompt/text 由 ReferenceTextarea 单独渲染，不进入逐行参数区 */
+const PROMPT_PARAM_IDS = ['prompt', 'text'];
+const ROW_MEDIA_KINDS: RowMediaKind[] = ['image', 'video', 'audio'];
 
 export interface GenerationNodeShellData {
   displayName?: string;
   prompt: string;
   modelId?: string;
   params?: Record<string, unknown>;
+  /** 媒体行未连线时的本地内联上传值 */
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
   [key: string]: unknown;
 }
 
@@ -85,8 +98,9 @@ function buildResultNodeTitle(prompt: string, fallbackTitle: string): string {
 }
 
 /**
- * 生成类节点通用壳：标题 + 提示词输入（@引用）+ 模型/参数条 + 生成按钮 + 端口。
- * 生成行为由 nodeRegistry 中该节点类型的 generation/ports 声明驱动。
+ * 生成类节点通用壳：标题 + 提示词输入（@引用）+ 逐行输入区（媒体/参数/模型）+ 端口。
+ * 生成行为由 nodeRegistry 中该节点类型的 generation/ports 声明驱动；
+ * 生成动作由顶部工具条触发（见 NodeActionToolbar），通过 canvasEventBus 'generation/run' 事件转发到此处。
  */
 export const GenerationNodeShell = memo(({
   id,
@@ -130,6 +144,10 @@ export const GenerationNodeShell = memo(({
     () => definition.ports?.target?.accepts ?? [],
     [definition]
   );
+  const acceptedMediaKinds = useMemo(
+    () => ROW_MEDIA_KINDS.filter((kind) => acceptedKinds.includes(kind)),
+    [acceptedKinds]
+  );
 
   // 内容相等比较的细粒度订阅：仅在上游媒体实际变化时重渲染，避免全画布节点联动刷新
   const incomingMedia = useStoreWithEqualityFn(
@@ -151,15 +169,56 @@ export const GenerationNodeShell = memo(({
     [incomingMedia]
   );
 
+  const mediaInputs = useMemo(() => data.mediaInputs ?? {}, [data.mediaInputs]);
+  // 生效媒体 = 已连线则用上游，否则用节点上的本地内联上传（与各媒体行内部的双态逻辑一致）
+  const effectiveImages = useMemo(
+    () => (incomingImages.length > 0 ? incomingImages : (mediaInputs.image ?? [])),
+    [incomingImages, mediaInputs]
+  );
+  const effectiveVideos = useMemo(
+    () => (incomingVideos.length > 0 ? incomingVideos : (mediaInputs.video ?? [])),
+    [incomingVideos, mediaInputs]
+  );
+  const effectiveAudios = useMemo(
+    () => (incomingAudios.length > 0 ? incomingAudios : (mediaInputs.audio ?? [])),
+    [incomingAudios, mediaInputs]
+  );
+
+  const handleMediaInputChange = useCallback((kind: RowMediaKind, next: string[]) => {
+    updateNodeData(id, { mediaInputs: { ...mediaInputs, [kind]: next } });
+  }, [id, mediaInputs, updateNodeData]);
+
   const incomingImageItems = useMemo(
     () =>
-      incomingImages.map((imageUrl, index) => ({
+      effectiveImages.map((imageUrl, index) => ({
         id: `image-ref-${index}`,
         label: `图${index + 1}`,
         thumbnailSrc: imageUrl,
       })),
-    [incomingImages]
+    [effectiveImages]
   );
+
+  // 模型端口覆盖：连上模型选择器节点后，节点内选择只读，生效模型以连线为准
+  const connectedParamIds = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => getConnectedParamIds(id, state.edges),
+    areStringSetsEqual
+  );
+  const injectedValues = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => collectInputValues(id, state.nodes, state.edges),
+    areValueOverridesEqual
+  );
+  const isModelOverridden = connectedParamIds.has(MODEL_PARAM_ID);
+  const overrideModelId = isModelOverridden && typeof injectedValues[MODEL_PARAM_ID] === 'string'
+    ? injectedValues[MODEL_PARAM_ID] as string
+    : null;
+
+  // 提示词端口覆盖：连上字符串/文本源节点后，提示词框只读展示该值
+  const isPromptOverridden = connectedParamIds.has(PROMPT_PARAM_ID);
+  const promptOverrideValue = isPromptOverridden && typeof injectedValues[PROMPT_PARAM_ID] === 'string'
+    ? injectedValues[PROMPT_PARAM_ID] as string
+    : null;
 
   const selectedModelId = useMemo(() => {
     const stored = typeof data.modelId === 'string' ? data.modelId.trim() : '';
@@ -168,17 +227,18 @@ export const GenerationNodeShell = memo(({
     }
     return getDefaultModelId(modelType);
   }, [data.modelId, modelType]);
-  const selectedModel = useMemo(() => registry.getModel(selectedModelId), [selectedModelId]);
-  const providerKeyConfigured = selectedModel
-    ? providerKeyStatus[selectedModel.meta.provider] === true
+  const effectiveModelId = overrideModelId ?? selectedModelId;
+  const effectiveModel = useMemo(() => registry.getModel(effectiveModelId), [effectiveModelId]);
+  const providerKeyConfigured = effectiveModel
+    ? providerKeyStatus[effectiveModel.meta.provider] === true
     : false;
 
   const handleParamsChange = useCallback((nextParams: Record<string, unknown>) => {
     updateNodeData(id, { params: nextParams });
   }, [id, updateNodeData]);
 
-  const { values: modelParamValues } = useNodeModelParams({
-    modelId: selectedModelId,
+  const { schema, values: modelParamValues, setParam } = useNodeModelParams({
+    modelId: effectiveModelId,
     storedParams: data.params,
     onParamsChange: handleParamsChange,
   });
@@ -215,7 +275,7 @@ export const GenerationNodeShell = memo(({
   }, [data.modelId, id, selectedModelId, updateNodeData]);
 
   const handleGenerate = useCallback(async () => {
-    const prompt = stripReferenceAtPrefix(promptDraft).trim();
+    const prompt = stripReferenceAtPrefix(promptOverrideValue ?? promptDraft).trim();
     if (!prompt) {
       setError(t(promptRequiredKey));
       return;
@@ -226,22 +286,26 @@ export const GenerationNodeShell = memo(({
       return;
     }
 
+    // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
+    const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState();
+    const injectedParamValues = collectInputValues(id, graphNodes, graphEdges);
     const generationParams: Record<string, unknown> = {
       ...modelParamValues,
+      ...injectedParamValues,
       prompt,
       text: prompt,
     };
     const estimateParams: Record<string, unknown> = {
       ...generationParams,
-      ...(incomingImages.length > 0
-        ? { images: incomingImages, uploadedFilePaths: incomingImages }
+      ...(effectiveImages.length > 0
+        ? { images: effectiveImages, uploadedFilePaths: effectiveImages }
         : {}),
-      ...(incomingVideos.length > 0
-        ? { videos: incomingVideos, uploadedVideoFilePaths: incomingVideos }
+      ...(effectiveVideos.length > 0
+        ? { videos: effectiveVideos, uploadedVideoFilePaths: effectiveVideos }
         : {}),
     };
     const estimate = await GenerationService.getInstance().getProgressEstimate(
-      selectedModelId,
+      effectiveModelId,
       estimateParams
     );
     const generationDurationMs = estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS;
@@ -269,13 +333,13 @@ export const GenerationNodeShell = memo(({
 
     try {
       const result = await runCanvasGeneration({
-        modelId: selectedModelId,
+        modelId: effectiveModelId,
         mediaType: modelType,
         params: generationParams,
         upstream: {
-          images: incomingImages,
-          videos: incomingVideos,
-          audios: incomingAudios,
+          images: effectiveImages,
+          videos: effectiveVideos,
+          audios: effectiveAudios,
         },
         onProgress: (progress) => setNodeGenerationProgress(newNodeId, progress),
       });
@@ -295,17 +359,24 @@ export const GenerationNodeShell = memo(({
     } finally {
       setNodeGenerationProgress(newNodeId, null);
     }
-  }, [addEdge, addNode, apiKeyRequiredKey, findNodePosition, id, incomingAudios, incomingImages, incomingVideos, modelParamValues, modelType, promptDraft, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, selectedModelId, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+
+  useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
+    if (nodeId !== id) {
+      return;
+    }
+    void handleGenerate();
+  }), [handleGenerate, id]);
 
   return (
     <div
       className={`
-        group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
+        group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected
           ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
           : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
       `}
-      style={{ width: `${resolvedWidth}px`, height: `${resolvedHeight}px` }}
+      style={{ width: `${resolvedWidth}px`, minHeight: `${resolvedHeight}px` }}
       onClick={() => setSelectedNode(id)}
     >
       <NodeHeader
@@ -314,76 +385,74 @@ export const GenerationNodeShell = memo(({
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
-      />
-
-      <div className="relative min-h-0 flex-1 rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 p-2">
-        <ReferenceTextarea
-          value={promptDraft}
-          onChange={(nextValue) => {
-            setPromptDraft(nextValue);
-            commitPromptDraft(nextValue);
-          }}
-          references={incomingImageItems}
-          onMouseDown={(event) => event.stopPropagation()}
-          placeholder={t(promptPlaceholderKey)}
-          submitShortcut="mod-enter"
-          onSubmit={() => {
-            void handleGenerate();
-          }}
-          className="relative h-full min-h-0"
-          highlightLayerClassName="text-sm leading-6 text-text-dark"
-          highlightContentClassName="px-1 py-0.5"
-          textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words"
-          pickerClassName="w-[120px]"
-          pickerListClassName="max-h-[180px]"
-        />
-      </div>
-
-      <div className="mt-2 flex shrink-0 items-center gap-1">
-        <NodeModelParamsControls
-          mediaType={modelType}
-          modelId={selectedModelId}
-          storedParams={data.params}
-          onModelChange={handleModelChange}
-          onParamsChange={handleParamsChange}
-          incomingImages={incomingImages}
-          chipClassName={NODE_CONTROL_CHIP_CLASS}
-          modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
-          paramsChipClassName={NODE_CONTROL_PARAMS_CHIP_CLASS}
-        />
-
-        <div className="ml-auto" />
-
-        {selectedModel && (
+        rightSlot={effectiveModel && (
           <PriceEstimate
-            providerId={selectedModel.meta.provider}
-            modelId={selectedModelId}
+            providerId={effectiveModel.meta.provider}
+            modelId={effectiveModelId}
             params={modelParamValues}
             variant="badge"
           />
         )}
+      />
 
-        <UiButton
-          onClick={(event) => {
-            event.stopPropagation();
-            void handleGenerate();
-          }}
-          variant="primary"
-          className={`shrink-0 ${NODE_CONTROL_PRIMARY_BUTTON_CLASS}`}
+      <div className="relative -mx-2 min-h-[100px] flex-1">
+        <Handle
+          type="target"
+          id={promptPortId()}
+          position={Position.Left}
+          style={{ background: getSocketColor('STRING'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+          className="!h-2.5 !w-2.5 !border !border-surface-dark"
+        />
+        <div
+          className="mx-2 h-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 p-2 transition-colors"
+          style={promptOverrideValue ? { backgroundColor: getSocketTintColor('STRING') } : undefined}
         >
-          <Sparkles className={NODE_CONTROL_ICON_CLASS} strokeWidth={2.8} />
-          {t('canvas.generate')}
-        </UiButton>
+          <ReferenceTextarea
+            value={promptOverrideValue ?? promptDraft}
+            onChange={(nextValue) => {
+              setPromptDraft(nextValue);
+              commitPromptDraft(nextValue);
+            }}
+            disabled={Boolean(promptOverrideValue)}
+            references={incomingImageItems}
+            onMouseDown={(event) => event.stopPropagation()}
+            placeholder={t(promptPlaceholderKey)}
+            submitShortcut="mod-enter"
+            onSubmit={() => {
+              void handleGenerate();
+            }}
+            className="relative h-full min-h-0"
+            highlightLayerClassName="text-sm leading-6 text-text-dark"
+            highlightContentClassName="px-1 py-0.5"
+            textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words disabled:cursor-default"
+            pickerClassName="w-[120px]"
+            pickerListClassName="max-h-[180px]"
+          />
+        </div>
+      </div>
+
+      <div className="-mx-2 mt-2">
+        <NodeInputRows
+          nodeId={id}
+          modelId={effectiveModelId}
+          mediaType={modelType}
+          acceptedMediaKinds={acceptedMediaKinds}
+          schema={schema}
+          values={modelParamValues}
+          setParam={setParam}
+          excludeParamIds={PROMPT_PARAM_IDS}
+          mediaInputs={mediaInputs}
+          onMediaInputChange={handleMediaInputChange}
+          overrideModelId={overrideModelId}
+          storedParams={data.params}
+          onModelChange={handleModelChange}
+          onParamsChange={handleParamsChange}
+          incomingImages={effectiveImages}
+        />
       </div>
 
       {error && <div className="mt-1 shrink-0 text-xs text-red-400">{error}</div>}
 
-      <Handle
-        type="target"
-        id="target"
-        position={Position.Left}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
-      />
       <Handle
         type="source"
         id="source"

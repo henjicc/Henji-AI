@@ -57,6 +57,7 @@ export const videoGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarGenerate: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -65,6 +66,7 @@ export const videoGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
       fromSource: true,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'video', role: 'generator' },
   ports: {
@@ -87,6 +89,7 @@ export const audioGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarGenerate: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -95,6 +98,7 @@ export const audioGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
       fromSource: true,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'audio', role: 'generator' },
   ports: {

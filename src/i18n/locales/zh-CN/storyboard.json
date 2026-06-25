@@ -80,7 +80,24 @@
       "videoGen": "AI 视频",
       "audioGen": "AI 音频",
       "uploadVideo": "上传视频",
-      "uploadAudio": "上传音频"
+      "uploadAudio": "上传音频",
+      "intSource": "整数",
+      "floatSource": "浮点数",
+      "stringSource": "文本",
+      "booleanSource": "开关",
+      "imageModelSelector": "图片模型选择器",
+      "videoModelSelector": "视频模型选择器",
+      "audioModelSelector": "音频模型选择器"
+    },
+    "mediaRow": {
+      "image": "图片",
+      "video": "视频",
+      "audio": "音频",
+      "upload": "上传"
+    },
+    "modelRow": {
+      "label": "模型",
+      "linked": "由模型选择器指定"
     },
     "imageNode": {
       "title": "图片节点",

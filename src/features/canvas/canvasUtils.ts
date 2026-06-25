@@ -15,6 +15,8 @@ export const ALT_DRAG_COPY_Z_INDEX = 2000
 export interface PendingConnectStart {
   nodeId: string
   handleType: HandleType
+  /** 起拖的具体 handle id（如 'source'/'target'/'param:__image'），用于完成连接时定位对端端口 */
+  handleId?: string | null
   start?: {
     x: number
     y: number

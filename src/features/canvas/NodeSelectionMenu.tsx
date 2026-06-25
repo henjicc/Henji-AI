@@ -1,6 +1,6 @@
-import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Image, Upload, Sparkles, LayoutGrid, Type, Video, AudioLines } from 'lucide-react';
+import { Image, Upload, Sparkles, LayoutGrid, Type, Video, AudioLines, Hash, ToggleLeft } from 'lucide-react';
 import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
 import {
   UiOptionButton,
@@ -25,6 +25,8 @@ const iconMap: Record<MenuIconKey, typeof Upload> = {
   text: Type,
   video: Video,
   audio: AudioLines,
+  number: Hash,
+  toggle: ToggleLeft,
 };
 
 export function NodeSelectionMenu({
@@ -36,6 +38,7 @@ export function NodeSelectionMenu({
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [maxHeight, setMaxHeight] = useState<number | null>(null);
 
   const allowedTypeSet = useMemo(
     () => (allowedTypes ? new Set(allowedTypes) : null),
@@ -70,6 +73,20 @@ export function NodeSelectionMenu({
     });
   }, []);
 
+  // 按面板实际渲染位置与窗口可视高度计算可用高度，避免菜单顶出窗口（顶出部分改为内部滚动）
+  useLayoutEffect(() => {
+    const node = menuRef.current;
+    if (!node) {
+      return;
+    }
+    const margin = 16;
+    const minHeight = 160;
+    const maxAllowed = 480;
+    const top = node.getBoundingClientRect().top;
+    const available = window.innerHeight - top - margin;
+    setMaxHeight(Math.max(minHeight, Math.min(maxAllowed, available)));
+  }, [position]);
+
   const handleClose = useCallback(() => {
     setIsVisible(false);
     setTimeout(onClose, UI_POPOVER_TRANSITION_MS);
@@ -94,19 +111,18 @@ export function NodeSelectionMenu({
     <UiPanel
       ref={menuRef}
       className={`
-        absolute z-50 min-w-[220px] overflow-hidden p-1
+        ui-scrollbar absolute z-50 w-[240px] overflow-y-auto overflow-x-hidden p-1
         transition-opacity duration-150
         ${isVisible ? 'opacity-100' : 'opacity-0'}
       `}
-      style={{ left: position.x, top: position.y }}
+      style={{ left: position.x, top: position.y, maxHeight: maxHeight ?? undefined }}
     >
-      {menuItems.map((item, index) => {
+      {menuItems.map((item) => {
         const Icon = iconMap[item.menuIcon] ?? Image;
         return (
           <UiOptionButton
             key={item.type}
-            className="w-full gap-3 px-4 py-3"
-            style={{ transitionDelay: isVisible ? `${index * 30}ms` : '0ms' }}
+            className="w-full gap-3 rounded-lg !border-transparent !bg-transparent px-3 py-2.5 !transition-none hover:!border-transparent hover:!bg-layer"
             onClick={() => {
               handleClose();
               setTimeout(() => onSelect(item.type), UI_POPOVER_TRANSITION_MS + 10);

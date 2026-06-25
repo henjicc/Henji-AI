@@ -31,6 +31,10 @@ export type {
 // 组件类型
 export type { ComponentType, ValueType } from './ComponentTypes'
 
+// 插槽类型系统
+export type { SocketType } from './SocketType'
+export { deriveSocketType, isSocketCompatible, getSocketColor } from './SocketType'
+
 // API 映射
 export type {
   ApiFieldMapping,

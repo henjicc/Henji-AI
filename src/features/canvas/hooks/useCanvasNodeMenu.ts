@@ -8,10 +8,12 @@ import type {
 } from '@xyflow/react'
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import {
+  getNodeDefinition,
   isConnectionCompatible,
   nodeHasSourceHandle,
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry'
+import { resolveMediaTargetHandle, type RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import {
   canNodeBeManualConnectionSource,
   canNodeTypeBeManualConnectionSource,
@@ -21,6 +23,12 @@ import {
   type PendingConnectStart,
   type PreviewConnectionVisual
 } from '@/features/canvas/canvasUtils'
+
+/** 节点输出端口产出的媒体类型（仅 image/video/audio，text 不走媒体行） */
+function resolveEmittedMediaKind(nodeType: CanvasNodeType): RowMediaKind | null {
+  const emits = getNodeDefinition(nodeType).ports?.source?.emits
+  return emits === 'image' || emits === 'video' || emits === 'audio' ? emits : null
+}
 
 interface UseCanvasNodeMenuParams {
   wrapperRef: React.RefObject<HTMLDivElement>
@@ -91,24 +99,29 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
     const newNodeId = addNode(type, flowPosition)
     if (pendingConnectStart) {
       if (pendingConnectStart.handleType === 'source') {
+        // 从某节点的输出端口拖出 → 新节点作为目标，按其发出的媒体类型定位目标端口
+        const fromNode = nodes.find((node) => node.id === pendingConnectStart.nodeId)
+        const emittedKind = fromNode ? resolveEmittedMediaKind(fromNode.type) : null
+        const targetHandle = emittedKind ? resolveMediaTargetHandle(type, emittedKind) : 'target'
         connectNodes({
           source: pendingConnectStart.nodeId,
           target: newNodeId,
           sourceHandle: 'source',
-          targetHandle: 'target',
+          targetHandle,
         })
       } else {
+        // 从某个输入端口拖出 → 新节点作为来源，对端端口沿用起拖时的具体 handle id
         connectNodes({
           source: newNodeId,
           target: pendingConnectStart.nodeId,
           sourceHandle: 'source',
-          targetHandle: 'target',
+          targetHandle: pendingConnectStart.handleId ?? 'target',
         })
       }
     }
     scheduleCanvasPersist(0)
     clearMenu()
-  }, [addNode, clearMenu, connectNodes, flowPosition, pendingConnectStart, scheduleCanvasPersist])
+  }, [addNode, clearMenu, connectNodes, flowPosition, nodes, pendingConnectStart, scheduleCanvasPersist])
 
   const handleConnectStart = useCallback(
     (event: MouseEvent | TouchEvent, params: OnConnectStartParams) => {
@@ -149,6 +162,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       setPendingConnectStart({
         nodeId: params.nodeId,
         handleType: params.handleType as HandleType,
+        handleId: params.handleId,
         start,
       })
     },
@@ -196,11 +210,19 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
           nodeHasTargetHandle(targetNode.type) &&
           isConnectionCompatible(sourceNode.type, targetNode.type)
         ) {
+          // 从目标端口起拖：直接沿用起拖时的具体 handle id（精确到行）；
+          // 从源端口起拖：目标节点的落点行由源节点发出的媒体类型反推
+          const targetHandle = pendingConnectStart.handleType === 'target'
+            ? (pendingConnectStart.handleId ?? 'target')
+            : (() => {
+              const emittedKind = resolveEmittedMediaKind(sourceNode.type)
+              return emittedKind ? resolveMediaTargetHandle(targetNode.type, emittedKind) : 'target'
+            })()
           connectNodes({
             source: sourceNode.id,
             target: targetNode.id,
             sourceHandle: 'source',
-            targetHandle: 'target',
+            targetHandle,
           })
           scheduleCanvasPersist(0)
           setPendingConnectStart(null)

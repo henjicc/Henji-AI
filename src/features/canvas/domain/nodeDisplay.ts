@@ -19,6 +19,13 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.exportAudio]: '结果音频',
   [CANVAS_NODE_TYPES.videoUpload]: '上传视频',
   [CANVAS_NODE_TYPES.audioUpload]: '上传音频',
+  [CANVAS_NODE_TYPES.intSource]: '整数',
+  [CANVAS_NODE_TYPES.floatSource]: '浮点数',
+  [CANVAS_NODE_TYPES.stringSource]: '文本',
+  [CANVAS_NODE_TYPES.booleanSource]: '开关',
+  [CANVAS_NODE_TYPES.imageModelSelector]: '图片模型选择器',
+  [CANVAS_NODE_TYPES.videoModelSelector]: '视频模型选择器',
+  [CANVAS_NODE_TYPES.audioModelSelector]: '音频模型选择器',
 };
 
 export const EXPORT_RESULT_DISPLAY_NAME: Record<ExportImageNodeResultKind, string> = {

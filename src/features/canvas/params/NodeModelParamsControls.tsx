@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Check, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { registry } from '@/core/ModelRegistry';
@@ -25,6 +25,8 @@ interface NodeModelParamsControlsProps {
   chipClassName?: string;
   modelChipClassName?: string;
   paramsChipClassName?: string;
+  /** 是否显示参数浮层 chip（逐行渲染模式下置 false，仅保留模型选择） */
+  showParamsChip?: boolean;
 }
 
 interface PanelAnchor {
@@ -64,6 +66,7 @@ export const NodeModelParamsControls = memo(({
   chipClassName = '',
   modelChipClassName = 'w-[220px] justify-start',
   paramsChipClassName = 'w-[120px] justify-start',
+  showParamsChip = true,
 }: NodeModelParamsControlsProps) => {
   const { t, i18n } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -112,7 +115,7 @@ export const NodeModelParamsControls = memo(({
     return parts;
   }, [i18n.language, incomingImages, schema, values]);
 
-  const hasConfigurableParams = schema.length > 0;
+  const hasConfigurableParams = showParamsChip && schema.length > 0;
 
   useEffect(() => {
     const animationDurationMs = 200;
@@ -244,23 +247,26 @@ export const NodeModelParamsControls = memo(({
                   <UiOptionButton
                     key={model.meta.id}
                     active={active}
-                    className="w-full items-start gap-3 rounded-xl px-3 py-2"
+                    className={`w-full items-start gap-3 rounded-lg px-3 py-2 ${
+                      active ? '' : '!border-transparent !bg-transparent hover:!border-transparent hover:!bg-layer'
+                    }`}
                     onClick={(event) => {
                       event.stopPropagation();
                       onModelChange(model.meta.id);
                       setOpenPanel(null);
                     }}
                   >
-                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-bg-dark text-text-muted">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted ${active ? 'bg-white/15 text-white' : 'bg-bg-dark'}`}>
                       <Sparkles className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-text-dark">{displayName}</div>
-                      <div className="truncate text-xs text-text-muted">
+                      <div className={`truncate text-sm ${active ? 'text-white' : 'text-text-dark'}`}>{displayName}</div>
+                      <div className={`truncate text-xs ${active ? 'text-white/70' : 'text-text-muted'}`}>
                         {getProviderDisplayName(model.meta.provider)}
                         {model.meta.description ? ` · ${model.meta.description}` : ''}
                       </div>
                     </div>
+                    {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />}
                   </UiOptionButton>
                 );
               })}

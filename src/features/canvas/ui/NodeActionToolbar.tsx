@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Copy, Crop, Download, PenLine, RefreshCw, Scissors, Trash2, Unlink2 } from 'lucide-react';
+import { Copy, Crop, Download, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2 } from 'lucide-react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 
@@ -19,6 +19,7 @@ import {
   type NodeToolType,
 } from '@/features/canvas/domain/canvasNodes';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { getNodeToolPlugins } from '@/features/canvas/tools';
 import type { ToolIconKey } from '@/features/canvas/tools';
 import { UiChipButton, UiPanel } from '@/components/ui';
@@ -59,6 +60,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const isStoryboardGen = isStoryboardGenNode(node);
   const isStoryboardSplit = isStoryboardSplitNode(node);
   const canCopyStoryboardText = isStoryboardGen || isStoryboardSplit;
+  const canTriggerGeneration = Boolean(getNodeDefinition(node.type).capabilities.toolbarGenerate);
   const tools = useMemo(() => getNodeToolPlugins(node), [node]);
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
@@ -266,6 +268,19 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       className={NODE_TOOLBAR_CLASS}
     >
       <UiPanel className="flex items-center gap-1 rounded-full p-1">
+        {canTriggerGeneration && (
+          <UiChipButton
+            key="node-generate"
+            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs border-accent/45 bg-accent/15 text-accent hover:bg-accent/25`}
+            onClick={(event) => {
+              event.stopPropagation();
+              canvasEventBus.publish('generation/run', { nodeId: node.id });
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {t('canvas.generate')}
+          </UiChipButton>
+        )}
         {!isImageEdit && tools.map((tool) => {
           const Icon = toolIconMap[tool.icon] ?? Crop;
 

@@ -64,6 +64,9 @@ export interface CanvasEventMap {
     nodeId: string;
     file: File;
   };
+  'generation/run': {
+    nodeId: string;
+  };
 }
 
 export interface CanvasEventBus {

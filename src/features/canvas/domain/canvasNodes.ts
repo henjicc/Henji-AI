@@ -14,7 +14,22 @@ export const CANVAS_NODE_TYPES = {
   exportAudio: 'exportAudioNode',
   videoUpload: 'videoUploadNode',
   audioUpload: 'audioUploadNode',
+  intSource: 'intSourceNode',
+  floatSource: 'floatSourceNode',
+  stringSource: 'stringSourceNode',
+  booleanSource: 'booleanSourceNode',
+  imageModelSelector: 'imageModelSelectorNode',
+  videoModelSelector: 'videoModelSelectorNode',
+  audioModelSelector: 'audioModelSelectorNode',
 } as const;
+
+/** 数值/源节点类型集合（单一类型化输出，喂下游参数端口） */
+export const VALUE_SOURCE_NODE_TYPES = [
+  'intSourceNode',
+  'floatSourceNode',
+  'stringSourceNode',
+  'booleanSourceNode',
+] as const;
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES];
 
@@ -196,6 +211,19 @@ export interface AudioMediaNodeData extends NodeDisplayData {
   [key: string]: unknown;
 }
 
+/**
+ * 数值/源节点数据：单一标量值，通过 getValueOutput 喂给下游参数端口。
+ * value 的具体类型（number/string/boolean）由节点类型对应的插槽类型决定。
+ */
+export interface ValueSourceNodeData extends NodeDisplayData {
+  value: number | string | boolean;
+}
+
+/** 模型选择器节点数据：按媒体类型选定一个模型，输出 MODEL 值供下游节点的模型端口覆盖 */
+export interface ModelSelectorNodeData extends NodeDisplayData {
+  modelId: string;
+}
+
 export type CanvasNodeData =
   | UploadImageNodeData
   | ExportImageNodeData
@@ -206,7 +234,9 @@ export type CanvasNodeData =
   | StoryboardGenNodeData
   | MediaGenNodeData
   | VideoMediaNodeData
-  | AudioMediaNodeData;
+  | AudioMediaNodeData
+  | ValueSourceNodeData
+  | ModelSelectorNodeData;
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
 export type CanvasEdge = Edge;
@@ -289,6 +319,10 @@ export function isAudioMediaNode(
   node: CanvasNode | null | undefined
 ): node is Node<AudioMediaNodeData, typeof CANVAS_NODE_TYPES.exportAudio | typeof CANVAS_NODE_TYPES.audioUpload> {
   return node?.type === CANVAS_NODE_TYPES.exportAudio || node?.type === CANVAS_NODE_TYPES.audioUpload;
+}
+
+export function isValueSourceNodeType(type: CanvasNodeType | string | undefined | null): boolean {
+  return (VALUE_SOURCE_NODE_TYPES as readonly string[]).includes(type as string);
 }
 
 export function nodeHasImage(node: CanvasNode | null | undefined): boolean {

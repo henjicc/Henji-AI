@@ -28,6 +28,8 @@ import {
   CANVAS_NODE_TYPES,
 } from '@/features/canvas/domain/canvasNodes';
 import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
+import { isParamPortId } from '@/features/canvas/domain/socketTypes';
+import { isParamConnectionCompatible } from '@/features/canvas/application/graphValueResolver';
 import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -249,7 +251,14 @@ export function Canvas() {
       }
       const sourceNode = nodes.find((node) => node.id === connection.source);
       const targetNode = nodes.find((node) => node.id === connection.target);
-      if (!sourceNode || !targetNode || !isConnectionCompatible(sourceNode.type, targetNode.type)) {
+      if (!sourceNode || !targetNode) {
+        return;
+      }
+      // 参数端口连线走插槽类型兼容；整节点媒体连线走媒体端口兼容
+      const compatible = isParamPortId(connection.targetHandle)
+        ? isParamConnectionCompatible(sourceNode, targetNode, connection.targetHandle)
+        : isConnectionCompatible(sourceNode.type, targetNode.type);
+      if (!compatible) {
         return;
       }
       connectNodes(connection);

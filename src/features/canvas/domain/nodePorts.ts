@@ -6,6 +6,8 @@
  * - 上游输出按 InputInjectionRule 注入下游生成参数（与对话模式协议键一致）
  */
 
+import type { SocketType } from '@/core/types/SocketType';
+
 export type MediaKind = 'image' | 'video' | 'audio' | 'text';
 
 export interface NodePorts {
@@ -31,6 +33,15 @@ export interface NodeMediaOutput {
   kind: MediaKind;
   url: string;
   previewUrl?: string | null;
+}
+
+/**
+ * 节点产出的标量值输出（数值/源节点 → 下游参数端口）。
+ * 借鉴 ComfyUI 的 primitive 节点：一个源节点可 fan-out 给多个参数端口。
+ */
+export interface NodeValueOutput {
+  socketType: SocketType;
+  value: unknown;
 }
 
 /**

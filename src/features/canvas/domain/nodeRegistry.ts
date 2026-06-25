@@ -22,11 +22,23 @@ import {
   videoUploadNodeDefinition,
 } from './mediaNodeDefinitions';
 import {
+  booleanSourceNodeDefinition,
+  floatSourceNodeDefinition,
+  intSourceNodeDefinition,
+  stringSourceNodeDefinition,
+} from './valueNodeDefinitions';
+import {
+  audioModelSelectorNodeDefinition,
+  imageModelSelectorNodeDefinition,
+  videoModelSelectorNodeDefinition,
+} from './modelSelectorDefinitions';
+import {
   arePortsCompatible,
   type MediaKind,
   type NodeGenerationSpec,
   type NodeMediaOutput,
   type NodePorts,
+  type NodeValueOutput,
 } from './nodePorts';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 
@@ -43,11 +55,16 @@ import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
  * 行为差异一律通过本注册表的声明字段表达。
  */
 
-export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'video' | 'audio';
+export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'video' | 'audio' | 'number' | 'toggle';
 
 export interface CanvasNodeCapabilities {
   toolbar: boolean;
   promptInput: boolean;
+  /**
+   * 是否在选中节点时的顶部工具条显示"生成"按钮（默认 false）。
+   * 仅逐行模式（GenerationNodeShell）节点声明为 true；节点内不再渲染生成按钮。
+   */
+  toolbarGenerate?: boolean;
 }
 
 export interface CanvasNodeConnectivity {
@@ -59,6 +76,13 @@ export interface CanvasNodeConnectivity {
   };
   /** 是否允许从该节点的输出端口手动拖出连线（默认 false） */
   manualSource?: boolean;
+  /**
+   * 目标端口形态：
+   * - 'rows'（逐行模式）：节点按媒体/模型/参数维度拥有多个独立类型化端口，由 NodeInputRows 渲染，
+   *   端口 id 形如 `param:__image`/`param:__model`/`param:<paramId>`
+   * - 缺省/'legacy'：单一 target handle，id 固定为 'target'（旧节点形态，如上传/导出/分镜节点）
+   */
+  targetHandleMode?: 'legacy' | 'rows';
 }
 
 export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeData> {
@@ -79,6 +103,8 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   generation?: NodeGenerationSpec;
   /** 提取该节点对下游的媒体输出（参数为宽类型以保证注册表协变，内部自行收窄） */
   getOutputs?: (data: CanvasNodeData) => NodeMediaOutput[];
+  /** 提取该节点对下游参数端口的标量值输出（数值/源节点专用） */
+  getValueOutput?: (data: CanvasNodeData) => NodeValueOutput | null;
   createDefaultData: () => TData;
 }
 
@@ -138,6 +164,7 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarGenerate: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -146,6 +173,7 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
       fromSource: true,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'image', role: 'generator' },
   ports: {
@@ -356,10 +384,32 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.exportAudio]: exportAudioNodeDefinition,
   [CANVAS_NODE_TYPES.videoUpload]: videoUploadNodeDefinition,
   [CANVAS_NODE_TYPES.audioUpload]: audioUploadNodeDefinition,
+  [CANVAS_NODE_TYPES.intSource]: intSourceNodeDefinition,
+  [CANVAS_NODE_TYPES.floatSource]: floatSourceNodeDefinition,
+  [CANVAS_NODE_TYPES.stringSource]: stringSourceNodeDefinition,
+  [CANVAS_NODE_TYPES.booleanSource]: booleanSourceNodeDefinition,
+  [CANVAS_NODE_TYPES.imageModelSelector]: imageModelSelectorNodeDefinition,
+  [CANVAS_NODE_TYPES.videoModelSelector]: videoModelSelectorNodeDefinition,
+  [CANVAS_NODE_TYPES.audioModelSelector]: audioModelSelectorNodeDefinition,
 };
 
 export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {
   return canvasNodeDefinitions[type];
+}
+
+/**
+ * 运行时注册一个画布节点定义（第三方扩展接口的落点）。
+ *
+ * 内置节点在本模块静态注册；第三方扩展通过 CanvasExtension 在运行时调用本函数，
+ * 之后该节点与内置节点走完全一致的渲染/连接/生成链路。
+ */
+export function registerCanvasNode(definition: CanvasNodeDefinition): void {
+  (canvasNodeDefinitions as Record<string, CanvasNodeDefinition>)[definition.type] = definition;
+}
+
+/** 按类型取节点定义（不存在返回 undefined，区别于 getNodeDefinition 的非空契约） */
+export function getCanvasNodeDefinition(type: CanvasNodeType | string): CanvasNodeDefinition | undefined {
+  return (canvasNodeDefinitions as Record<string, CanvasNodeDefinition>)[type];
 }
 
 export function getMenuNodeDefinitions(): CanvasNodeDefinition[] {
@@ -423,4 +473,13 @@ export function getNodeMediaOutputs(
 ): ReturnType<NonNullable<CanvasNodeDefinition['getOutputs']>> {
   const definition = canvasNodeDefinitions[type];
   return definition?.getOutputs?.(data) ?? [];
+}
+
+/** 提取节点对下游参数端口的标量值输出（无则返回 null） */
+export function getNodeValueOutput(
+  type: CanvasNodeType,
+  data: CanvasNodeData
+): NodeValueOutput | null {
+  const definition = canvasNodeDefinitions[type];
+  return definition?.getValueOutput?.(data) ?? null;
 }
