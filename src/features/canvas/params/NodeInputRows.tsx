@@ -5,6 +5,7 @@ import type { ParamDef } from '@/core/types';
 import { resolveInputLimits } from '@/core/inputs/inputLimits';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes';
+import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { MediaInputRow } from './MediaInputRow';
 import { ModelInputRow } from './ModelInputRow';
 import { NodeParamRows } from './NodeParamRows';
@@ -36,7 +37,8 @@ interface NodeInputRowsProps {
 }
 
 /**
- * 节点逐行输入编排：媒体行 → 标量参数行 → 模型行。
+ * 节点逐行输入编排：模型行 → 媒体行 → 标量参数行（参数顺序沿用各自 schema 的 order，
+ * "模式"一类的首要参数通常 order 较小，紧随模型行之后自然呈现）。
  * 提示词不在此渲染（由 GenerationNodeShell 的大输入框单独承载，仅暴露一个端口）。
  * 行的可见性与顺序完全由节点声明（accepts/schema）与模型 inputLimits 推导，无节点类型特判。
  */
@@ -69,7 +71,17 @@ export function NodeInputRows({
   );
 
   return (
-    <div className="divide-y divide-[rgba(255,255,255,0.06)]">
+    <div className={`flex flex-col ${NODE_ROW_GAP_CLASS}`}>
+      <ModelInputRow
+        mediaType={mediaType}
+        modelId={modelId}
+        overrideModelId={overrideModelId}
+        storedParams={storedParams}
+        onModelChange={onModelChange}
+        onParamsChange={onParamsChange}
+        incomingImages={incomingImages}
+      />
+
       {mediaRows.map(({ kind, max }) => (
         <MediaInputRow
           key={kind}
@@ -88,16 +100,6 @@ export function NodeInputRows({
         values={values}
         setParam={setParam}
         excludeParamIds={excludeParamIds}
-      />
-
-      <ModelInputRow
-        mediaType={mediaType}
-        modelId={modelId}
-        overrideModelId={overrideModelId}
-        storedParams={storedParams}
-        onModelChange={onModelChange}
-        onParamsChange={onParamsChange}
-        incomingImages={incomingImages}
       />
     </div>
   );

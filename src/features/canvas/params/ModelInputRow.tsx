@@ -10,6 +10,8 @@ import { NodeModelParamsControls } from './NodeModelParamsControls';
 import {
   NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_MODEL_CHIP_CLASS,
+  NODE_ROW_CARD_CLASS,
+  NODE_ROW_HOVER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 
 interface ModelInputRowProps {
@@ -46,8 +48,8 @@ export function ModelInputRow({
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-2 px-3 py-1.5 transition-colors ${
-        overrideModelId ? '' : 'hover:bg-white/[0.03]'
+      className={`relative flex items-center justify-between gap-2 px-3 py-1.5 ${NODE_ROW_CARD_CLASS} ${
+        overrideModelId ? '' : NODE_ROW_HOVER_CLASS
       }`}
       style={overrideModelId ? { backgroundColor: getSocketTintColor('MODEL') } : undefined}
     >

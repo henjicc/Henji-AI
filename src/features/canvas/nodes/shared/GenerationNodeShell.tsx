@@ -24,6 +24,7 @@ import {
 } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import { NODE_ROW_CARD_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import {
   areMediaOutputListsEqual,
   collectInputMedia,
@@ -82,8 +83,6 @@ export interface GenerationNodeShellProps {
   minHeight?: number;
   maxWidth?: number;
   maxHeight?: number;
-  defaultWidth?: number;
-  defaultHeight?: number;
 }
 
 function buildResultNodeTitle(prompt: string, fallbackTitle: string): string {
@@ -115,12 +114,10 @@ export const GenerationNodeShell = memo(({
   apiKeyRequiredKey,
   resultTitleKey,
   resultNodeExtraData,
-  minWidth = 420,
-  minHeight = 280,
+  minWidth = 320,
+  minHeight = 160,
   maxWidth = 1400,
   maxHeight = 1000,
-  defaultWidth = 520,
-  defaultHeight = 320,
 }: GenerationNodeShellProps) => {
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
@@ -252,8 +249,14 @@ export const GenerationNodeShell = memo(({
     [data, nodeType]
   );
 
-  const resolvedWidth = Math.max(minWidth, Math.round(width ?? defaultWidth));
-  const resolvedHeight = Math.max(minHeight, Math.round(height ?? defaultHeight));
+  // 未手动拖拽过尺寸时 width/height 为 undefined（react-flow 仅在手动 resize 后才写入），
+  // 此时按内容自适应宽度（CSS max-content），不再回退到一个固定像素默认值；
+  // 手动调整过后则严格使用用户拖拽出的尺寸（仍受 min/max 约束）。
+  const hasManualWidth = typeof width === 'number' && Number.isFinite(width);
+  const resolvedWidth = hasManualWidth ? Math.max(minWidth, Math.round(width)) : null;
+  const resolvedHeight = typeof height === 'number' && Number.isFinite(height)
+    ? Math.max(minHeight, Math.round(height))
+    : minHeight;
 
   useEffect(() => {
     const externalPrompt = data.prompt ?? '';
@@ -376,7 +379,12 @@ export const GenerationNodeShell = memo(({
           ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
           : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
       `}
-      style={{ width: `${resolvedWidth}px`, minHeight: `${resolvedHeight}px` }}
+      style={{
+        width: resolvedWidth !== null ? `${resolvedWidth}px` : 'max-content',
+        minWidth: `${minWidth}px`,
+        maxWidth: `${maxWidth}px`,
+        minHeight: `${resolvedHeight}px`,
+      }}
       onClick={() => setSelectedNode(id)}
     >
       <NodeHeader
@@ -395,43 +403,43 @@ export const GenerationNodeShell = memo(({
         )}
       />
 
-      <div className="relative -mx-2 min-h-[100px] flex-1">
-        <Handle
-          type="target"
-          id={promptPortId()}
-          position={Position.Left}
-          style={{ background: getSocketColor('STRING'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-          className="!h-2.5 !w-2.5 !border !border-surface-dark"
-        />
-        <div
-          className="mx-2 h-full rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 p-2 transition-colors"
-          style={promptOverrideValue ? { backgroundColor: getSocketTintColor('STRING') } : undefined}
-        >
-          <ReferenceTextarea
-            value={promptOverrideValue ?? promptDraft}
-            onChange={(nextValue) => {
-              setPromptDraft(nextValue);
-              commitPromptDraft(nextValue);
-            }}
-            disabled={Boolean(promptOverrideValue)}
-            references={incomingImageItems}
-            onMouseDown={(event) => event.stopPropagation()}
-            placeholder={t(promptPlaceholderKey)}
-            submitShortcut="mod-enter"
-            onSubmit={() => {
-              void handleGenerate();
-            }}
-            className="relative h-full min-h-0"
-            highlightLayerClassName="text-sm leading-6 text-text-dark"
-            highlightContentClassName="px-1 py-0.5"
-            textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words disabled:cursor-default"
-            pickerClassName="w-[120px]"
-            pickerListClassName="max-h-[180px]"
+      <div className="relative flex flex-col gap-1.5">
+        <div className="relative min-h-[100px]">
+          <Handle
+            type="target"
+            id={promptPortId()}
+            position={Position.Left}
+            style={{ background: getSocketColor('STRING'), left: 0, top: 20, transform: 'translateX(-50%)' }}
+            className="!h-2.5 !w-2.5 !border !border-surface-dark"
           />
+          <div
+            className={`h-full p-2 ${NODE_ROW_CARD_CLASS}`}
+            style={promptOverrideValue ? { backgroundColor: getSocketTintColor('STRING') } : undefined}
+          >
+            <ReferenceTextarea
+              value={promptOverrideValue ?? promptDraft}
+              onChange={(nextValue) => {
+                setPromptDraft(nextValue);
+                commitPromptDraft(nextValue);
+              }}
+              disabled={Boolean(promptOverrideValue)}
+              references={incomingImageItems}
+              onMouseDown={(event) => event.stopPropagation()}
+              placeholder={t(promptPlaceholderKey)}
+              submitShortcut="mod-enter"
+              onSubmit={() => {
+                void handleGenerate();
+              }}
+              className="relative h-full min-h-0"
+              highlightLayerClassName="text-sm leading-6 text-text-dark"
+              highlightContentClassName="px-1 py-0.5"
+              textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words disabled:cursor-default"
+              pickerClassName="w-[120px]"
+              pickerListClassName="max-h-[180px]"
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="-mx-2 mt-2">
         <NodeInputRows
           nodeId={id}
           modelId={effectiveModelId}

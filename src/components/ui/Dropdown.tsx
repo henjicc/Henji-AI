@@ -88,8 +88,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         }
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    // 捕获阶段监听：画布内多处控件会在冒泡阶段 stopPropagation（避免触发节点拖拽），
+    // 用捕获阶段确保点击节点内其它空白处也能正常关闭下拉
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
   }, [open])
 
   useLayoutEffect(() => {

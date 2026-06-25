@@ -10,6 +10,7 @@ import {
   collectInputMediaUrls,
 } from '@/features/canvas/application/graphMediaResolver';
 import { getSocketColor, getSocketTintColor, mediaPortId, type RowMediaKind } from '@/features/canvas/domain/socketTypes';
+import { NODE_ROW_CARD_CLASS, NODE_ROW_HOVER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { saveUploadAudio, saveUploadVideo } from '@/utils/save';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -100,8 +101,8 @@ export function MediaInputRow({
 
   return (
     <div
-      className={`relative flex items-center justify-between gap-2 px-3 py-1.5 transition-colors ${
-        isConnected ? '' : 'hover:bg-white/[0.03]'
+      className={`relative flex items-center justify-between gap-2 px-3 py-1.5 ${NODE_ROW_CARD_CLASS} ${
+        isConnected ? '' : NODE_ROW_HOVER_CLASS
       }`}
       style={isConnected ? { backgroundColor: getSocketTintColor(mediaKind.toUpperCase()) } : undefined}
     >

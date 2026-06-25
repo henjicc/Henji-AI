@@ -41,7 +41,10 @@ export const NODE_HEADER_TONE_CLASS = 'text-white/55';
 export const NODE_HEADER_TITLE_CLASS = 'text-[14px] font-normal';
 export const NODE_HEADER_META_CLASS = 'text-xs text-text-muted';
 export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-7 left-1 right-1 z-10';
-const NODE_HEADER_TITLE_MAX_WIDTH_CLASS = 'max-w-[60%]';
+// 标题不再用 max-w-[60%] 限宽：百分比宽度作用在"宽度由内容撑出"的祖先链上时
+// 解析不稳定（浏览器常把它解析成一个很小的值），改用逐层 min-w-0 + flex-1 的
+// flex 分配方式，宽度始终由实际可用空间精确推算，不依赖任何百分比。
+const NODE_HEADER_TITLE_FLEX_CLASS = 'min-w-0 flex-1';
 // 纯透明度遮罩，颜色值无意义，使用关键字避免颜色字面量
 const NODE_HEADER_TITLE_FADE_STYLE: CSSProperties = {
   WebkitMaskImage: 'linear-gradient(to right, black 0%, black 82%, transparent 100%)',
@@ -146,8 +149,8 @@ export function NodeHeader({
           <span
             title={titleText}
             className={joinClasses(
-              'block min-w-0 overflow-hidden whitespace-nowrap cursor-grab select-none active:cursor-grabbing',
-              NODE_HEADER_TITLE_MAX_WIDTH_CLASS,
+              'block overflow-hidden whitespace-nowrap cursor-grab select-none active:cursor-grabbing',
+              NODE_HEADER_TITLE_FLEX_CLASS,
               NODE_HEADER_TITLE_CLASS,
               tone,
               titleClassName
@@ -197,8 +200,8 @@ export function NodeHeader({
         size="sm"
         className={joinClasses(
           '!h-auto !min-h-0 !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
-          'block min-w-0 overflow-hidden whitespace-nowrap cursor-grab select-none text-left active:cursor-grabbing',
-          NODE_HEADER_TITLE_MAX_WIDTH_CLASS,
+          '!justify-start overflow-hidden whitespace-nowrap cursor-grab select-none text-left active:cursor-grabbing',
+          NODE_HEADER_TITLE_FLEX_CLASS,
           NODE_HEADER_TITLE_CLASS,
           tone,
           titleClassName
@@ -236,13 +239,13 @@ export function NodeHeader({
         <div className={joinClasses('flex w-full items-center gap-1', titleRowClassName)}>
           {icon ? (
             <span
-              className={joinClasses('inline-flex items-center justify-center', tone, iconClassName)}
+              className={joinClasses('inline-flex shrink-0 items-center justify-center', tone, iconClassName)}
               style={composeTransformStyle(iconAdjust)}
             >
               {icon}
             </span>
           ) : null}
-          <div className="flex items-baseline gap-2" style={composeTransformStyle(titleAdjust)}>
+          <div className="flex min-w-0 flex-1 items-baseline gap-2" style={composeTransformStyle(titleAdjust)}>
             {resolvedTitle}
             {resolvedMeta}
           </div>

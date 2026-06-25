@@ -15,6 +15,7 @@ import {
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
 import { paramPortId } from '@/features/canvas/domain/socketTypes';
+import { NODE_ROW_CARD_CLASS, NODE_ROW_HOVER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { NodeParamControl } from './NodeParamControl';
 
 interface NodeParamRowsProps {
@@ -32,10 +33,10 @@ interface NodeParamRowsProps {
 
 /**
  * ComfyUI 风格逐行参数渲染：每个参数一行（标签居左、紧凑控件居右），
- * 行左侧带类型化输入端口（`param:<id>`），端口圆点精确压在节点外边框上。
+ * 行外壳为统一卡片样式（NODE_ROW_CARD_CLASS），左侧端口圆点贴齐行容器边缘。
  *
  * - 端口未连线：内联编辑（NodeParamControl，复用底层 primitive）
- * - 端口已连线：控件进入只读态，显示上游注入值（widget ↔ input 双态）
+ * - 端口已连线：控件进入只读态，卡片底色换成插槽颜色提示（widget ↔ input 双态）
  * - 可见性沿用 isParamVisible；行为差异全部由 schema 驱动，无模型/节点特判
  */
 export const NodeParamRows = memo(({
@@ -87,8 +88,8 @@ export const NodeParamRows = memo(({
         return (
           <div
             key={param.id}
-            className={`relative flex items-center justify-between gap-2 px-3 py-1.5 transition-colors ${
-              isConnected ? '' : 'hover:bg-white/[0.03]'
+            className={`relative flex items-center justify-between gap-2 px-3 py-1.5 ${NODE_ROW_CARD_CLASS} ${
+              isConnected ? '' : NODE_ROW_HOVER_CLASS
             }`}
             style={isConnected ? { backgroundColor: getSocketTintColor(socketType) } : undefined}
           >
