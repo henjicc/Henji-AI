@@ -52,7 +52,8 @@ async function submit(input: ProviderExecutionInput, endpoint: string, cleanInpu
 
 async function pollByStatusUrl(input: ProviderContinuePollingInput, statusUrl: string): Promise<JsonValue> {
   const interval = input.polling?.interval ?? 3000
-  for (;;) {
+  const maxAttempts = input.polling?.maxAttempts ?? 120
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     ensureNotCancelled(input.requestId)
     await waitIntervalMs(interval, input.signal)
     const response = await fetch(statusUrl, {
@@ -74,6 +75,7 @@ async function pollByStatusUrl(input: ProviderContinuePollingInput, statusUrl: s
       throw new AiRuntimeError('provider_task_failed', 'Fal task failed')
     }
   }
+  throw new AiRuntimeError('provider_task_timeout', `Fal task polling timed out after ${maxAttempts} attempts`)
 }
 
 function stripSyncMode(value: JsonValue): JsonValue {

@@ -44,7 +44,8 @@ async function sendJson(input: ProviderExecutionInput, endpoint: string): Promis
 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
   const interval = input.polling?.interval ?? 3000
-  for (;;) {
+  const maxAttempts = input.polling?.maxAttempts ?? 120
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     ensureNotCancelled(input.requestId)
     await waitIntervalMs(interval, input.signal)
     const response = await fetch(`${PPIO_BASE_URL}/async/task-result?task_id=${encodeURIComponent(input.taskId)}`, {
@@ -58,6 +59,7 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
       throw new AiRuntimeError('provider_task_failed', extractTaskFailureReason(payload))
     }
   }
+  throw new AiRuntimeError('provider_task_timeout', `PPIO task polling timed out after ${maxAttempts} attempts`)
 }
 
 function extractTaskId(payload: JsonValue): string | undefined {

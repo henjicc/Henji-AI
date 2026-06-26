@@ -39,7 +39,8 @@ async function submitTask(input: ProviderExecutionInput, endpoint: string): Prom
 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
   const interval = input.polling?.interval ?? 3000
-  for (;;) {
+  const maxAttempts = input.polling?.maxAttempts ?? 120
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     ensureNotCancelled(input.requestId)
     await waitIntervalMs(interval, input.signal)
     const response = await fetch(`${MODELSCOPE_BASE_URL}/v1/tasks/${encodeURIComponent(input.taskId)}`, {
@@ -55,6 +56,7 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     if (state === 'SUCCEED') return payload
     if (state === 'FAILED') throw new AiRuntimeError('provider_task_failed', 'ModelScope task failed')
   }
+  throw new AiRuntimeError('provider_task_timeout', `ModelScope task polling timed out after ${maxAttempts} attempts`)
 }
 
 function extractUrls(payload: JsonValue): string[] {
