@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerDbIpc } from './ipc/db'
 import { registerKeystoreIpc } from './ipc/keystore'
 import { registerLoggingIpc } from './ipc/logging'
@@ -14,6 +15,7 @@ registerMediaProtocolScheme()
 
 app.whenReady().then(() => {
   registerMediaProtocolHandler()
+  registerAiRuntimeIpc()
   registerDbIpc()
   registerKeystoreIpc()
   registerLoggingIpc()

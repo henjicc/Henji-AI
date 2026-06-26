@@ -46,6 +46,59 @@ export interface HenjiProviderKeyStatus {
   configured: boolean
 }
 
+export interface HenjiAiGenerateRequest {
+  modelId: string
+  params: Record<string, unknown>
+  requestId?: string
+}
+
+export interface HenjiAiContinuePollingRequest {
+  modelId: string
+  taskId: string
+  params?: Record<string, unknown>
+}
+
+export interface HenjiAiGetProgressEstimateRequest {
+  modelId: string
+  params?: Record<string, unknown>
+}
+
+export interface HenjiAiRecordProgressSampleRequest {
+  modelId: string
+  params?: Record<string, unknown>
+  startedAtMs: number
+  finishedAtMs: number
+  source: 'generation' | 'canvas'
+}
+
+export interface HenjiAiGenerateResponse {
+  status: 'completed' | 'pending' | 'failed'
+  url: string
+  filePath?: string
+  taskId?: string
+  metadata?: unknown
+  trace?: unknown
+}
+
+export interface HenjiAiProgressEstimate {
+  durationMs: number
+  source: 'time-bucket' | 'global' | 'seed' | 'meta' | 'default'
+  profileKey: string
+  timeBucket: 'night' | 'day' | 'evening'
+  globalSampleCount: number
+  bucketSampleCount: number
+  defaultDurationMs: number
+  globalEstimateMs: number
+  bucketEstimateMs?: number
+  recentGlobalDurationsMs: number[]
+  recentBucketDurationsMs: number[]
+}
+
+export interface HenjiAiRecordProgressSampleResponse {
+  actualDurationMs: number
+  estimate: HenjiAiProgressEstimate
+}
+
 export interface HenjiKeystoreApi {
   setKey(namespace: string, providerId: string, apiKey: string): Promise<void>
   removeKey(namespace: string, providerId: string): Promise<void>
@@ -58,6 +111,12 @@ export interface HenjiAiApi {
   removeProviderApiKey(providerId: string): Promise<void>
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(): Promise<HenjiProviderKeyStatus[]>
+  generate(request: HenjiAiGenerateRequest): Promise<HenjiAiGenerateResponse>
+  continuePolling(request: HenjiAiContinuePollingRequest): Promise<HenjiAiGenerateResponse>
+  cancelTask(taskId: string): Promise<void>
+  reloadModelManifest(): Promise<number>
+  getProgressEstimate(request: HenjiAiGetProgressEstimateRequest): Promise<HenjiAiProgressEstimate>
+  recordProgressSample(request: HenjiAiRecordProgressSampleRequest): Promise<HenjiAiRecordProgressSampleResponse>
 }
 
 export interface HenjiLlmApi {

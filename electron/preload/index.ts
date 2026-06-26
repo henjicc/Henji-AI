@@ -91,7 +91,13 @@ const aiApi: HenjiAiApi = {
   setProviderApiKey: (providerId, apiKey) => nativeInvoke('ai:setProviderApiKey', { providerId, apiKey }),
   removeProviderApiKey: (providerId) => nativeInvoke('ai:removeProviderApiKey', { providerId }),
   getProviderApiKey: (providerId) => nativeInvoke('ai:getProviderApiKey', { providerId }),
-  getProviderKeyStatus: () => nativeInvoke('ai:getProviderKeyStatus'),
+  getProviderKeyStatus: () => nativeInvoke('ai:getRuntimeProviderKeyStatus'),
+  generate: (request) => nativeInvoke('ai:generate', request),
+  continuePolling: (request) => nativeInvoke('ai:continuePolling', request),
+  cancelTask: (taskId) => nativeInvoke('ai:cancelTask', { taskId }),
+  reloadModelManifest: () => nativeInvoke('ai:reloadModelManifest'),
+  getProgressEstimate: (request) => nativeInvoke('ai:getProgressEstimate', request),
+  recordProgressSample: (request) => nativeInvoke('ai:recordProgressSample', request),
 }
 
 const llmApi: HenjiLlmApi = {

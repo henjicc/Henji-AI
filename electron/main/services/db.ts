@@ -110,7 +110,7 @@ function initializeSchema(conn: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS progress_samples (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       model_id TEXT NOT NULL,
       provider_id TEXT NOT NULL,
       media_type TEXT NOT NULL,
@@ -120,7 +120,7 @@ function initializeSchema(conn: Database.Database): void {
       started_at_ms INTEGER NOT NULL,
       finished_at_ms INTEGER NOT NULL,
       source TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE INDEX IF NOT EXISTS idx_progress_samples_lookup

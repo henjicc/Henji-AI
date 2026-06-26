@@ -1,4 +1,3 @@
-import { PlatformNotImplementedError } from '@/platform/types'
 import type { AiRuntimePlatform } from '@/platform/contracts/aiRuntime'
 
 const DOMAIN = 'aiRuntime'
@@ -25,23 +24,23 @@ export function createElectronAiRuntime(): AiRuntimePlatform {
     getProviderKeyStatus: async () => {
       return await getNativeAi().getProviderKeyStatus()
     },
-    generate: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'generate')
+    generate: async (request) => {
+      return await getNativeAi().generate(request)
     },
-    continuePolling: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'continuePolling')
+    continuePolling: async (request) => {
+      return await getNativeAi().continuePolling(request)
     },
-    cancelTask: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'cancelTask')
+    cancelTask: async (taskId) => {
+      await getNativeAi().cancelTask(taskId)
     },
-    reloadModelManifest: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'reloadModelManifest')
+    reloadModelManifest: async () => {
+      return await getNativeAi().reloadModelManifest()
     },
-    getProgressEstimate: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'getProgressEstimate')
+    getProgressEstimate: async (request) => {
+      return await getNativeAi().getProgressEstimate(request)
     },
-    recordProgressSample: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'recordProgressSample')
+    recordProgressSample: async (request) => {
+      return await getNativeAi().recordProgressSample(request)
     },
   }
 }
