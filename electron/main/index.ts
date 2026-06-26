@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
+import { registerClipboardIpc } from './ipc/clipboard'
 import { registerDbIpc } from './ipc/db'
+import { registerImageIpc } from './ipc/image'
 import { registerKeystoreIpc } from './ipc/keystore'
 import { registerLlmRuntimeIpc } from './ipc/llm-runtime'
 import { registerLoggingIpc } from './ipc/logging'
@@ -17,7 +19,9 @@ registerMediaProtocolScheme()
 app.whenReady().then(() => {
   registerMediaProtocolHandler()
   registerAiRuntimeIpc()
+  registerClipboardIpc()
   registerDbIpc()
+  registerImageIpc()
   registerKeystoreIpc()
   registerLlmRuntimeIpc()
   registerLoggingIpc()

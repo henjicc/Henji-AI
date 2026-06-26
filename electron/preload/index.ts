@@ -3,10 +3,12 @@ import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
+  HenjiClipboardApi,
   HenjiDbApi,
   HenjiDialogApi,
   HenjiFsApi,
   HenjiHttpApi,
+  HenjiImageApi,
   HenjiKeystoreApi,
   HenjiLlmApi,
   HenjiLlmStreamEventPayload,
@@ -188,6 +190,36 @@ const mediaApi: HenjiMediaApi = {
   allowRoot: (rootPath) => nativeInvoke('media:allowRoot', { rootPath }),
 }
 
+const clipboardApi: HenjiClipboardApi = {
+  readClipboardFiles: () => nativeInvoke('clipboard:readFiles'),
+  readText: () => nativeInvoke('clipboard:readText'),
+  writeImageFromPath: (filePath) => nativeInvoke('clipboard:writeImageFromPath', { filePath }),
+  writeImageFromSource: (source) => nativeInvoke('clipboard:writeImageFromSource', { source }),
+}
+
+const imageApi: HenjiImageApi = {
+  splitImage: (imageBase64, rows, cols, lineThickness) =>
+    nativeInvoke('image:splitImage', { imageBase64, rows, cols, lineThickness }),
+  splitImageSource: (source, rows, cols, lineThickness) =>
+    nativeInvoke('image:splitImageSource', { source, rows, cols, lineThickness }),
+  prepareNodeImageSource: (source, maxPreviewDimension) =>
+    nativeInvoke('image:prepareNodeImageSource', { source, maxPreviewDimension }),
+  prepareNodeImageBinary: (bytes, extension, maxPreviewDimension) =>
+    nativeInvoke('image:prepareNodeImageBinary', { bytes, extension, maxPreviewDimension }),
+  cropImageSource: (payload) => nativeInvoke('image:cropImageSource', payload),
+  mergeStoryboardImages: (payload) => nativeInvoke('image:mergeStoryboardImages', payload),
+  readStoryboardImageMetadata: (source) => nativeInvoke('image:readStoryboardImageMetadata', { source }),
+  embedStoryboardImageMetadata: (source, metadata) => nativeInvoke('image:embedStoryboardImageMetadata', { source, metadata }),
+  loadImage: (filePath) => nativeInvoke('image:loadImage', { filePath }),
+  persistImageSource: (source) => nativeInvoke('image:persistImageSource', { source }),
+  persistImageBinary: (bytes, extension) => nativeInvoke('image:persistImageBinary', { bytes, extension }),
+  saveImageSourceToDownloads: (source, suggestedFileName) => nativeInvoke('image:saveImageSourceToDownloads', { source, suggestedFileName }),
+  saveImageSourceToPath: (source, targetPath) => nativeInvoke('image:saveImageSourceToPath', { source, targetPath }),
+  saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => nativeInvoke('image:saveImageSourceToDirectory', { source, targetDir, suggestedFileName }),
+  saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => nativeInvoke('image:saveImageSourceToAppDebugDir', { source, category, suggestedFileName }),
+  readImageInfo: (source) => nativeInvoke('image:readImageInfo', { source }),
+}
+
 const loggingApi: HenjiLoggingApi = {
   logFrontendEvents: (events) => nativeInvoke('logging:frontendEvents', { events }),
   onRuntimeRequestPreview: (handler) => {
@@ -221,7 +253,8 @@ const api: HenjiNativeApi = {
   paths: pathsApi,
   http: httpApi,
   media: mediaApi,
-  clipboard: {},
+  image: imageApi,
+  clipboard: clipboardApi,
   drag: {},
   projectPackage: {},
   logging: loggingApi,

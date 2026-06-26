@@ -1,21 +1,20 @@
-import { PlatformNotImplementedError } from '@/platform/types'
 import type { ClipboardPlatform } from '@/platform/contracts/clipboard'
 
 const DOMAIN = 'clipboard'
 
+function getNativeClipboard(): NonNullable<typeof window.henjiNative>['clipboard'] {
+  const native = window.henjiNative
+  if (!native?.clipboard) {
+    throw new Error(`[platform:${DOMAIN}] henjiNative.clipboard is not available`)
+  }
+  return native.clipboard
+}
+
 export function createElectronClipboard(): ClipboardPlatform {
   return {
-    readClipboardFiles: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'readClipboardFiles')
-    },
-    readText: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'readText')
-    },
-    writeImageFromPath: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'writeImageFromPath')
-    },
-    writeImageFromSource: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'writeImageFromSource')
-    },
+    readClipboardFiles: () => getNativeClipboard().readClipboardFiles(),
+    readText: () => getNativeClipboard().readText(),
+    writeImageFromPath: (filePath) => getNativeClipboard().writeImageFromPath(filePath),
+    writeImageFromSource: (source) => getNativeClipboard().writeImageFromSource(source),
   }
 }
