@@ -1,125 +1,14 @@
-const { _electron: electron, chromium } = require('playwright')
-const electronExecutablePath = require('electron')
-const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
-const process = require('node:process')
+const { launchElectronApp: launchElectronAppBase, waitForApp, assert } = require('./lib/electronLaunch.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.cjs')
 const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8Dwn4GBgYGJAQoAHxcCArzxVaIAAAAASUVORK5CYII='
 
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message)
-  }
-}
-
-async function waitForApp(page) {
-  await page.waitForFunction(() => Boolean(window.henjiNative), null, { timeout: 30000 })
-  await page.waitForSelector('button', { timeout: 30000 })
-  await page.waitForTimeout(300)
-}
-
-function getCdpPort() {
-  return 43000 + Math.floor(Math.random() * 10000)
-}
-
-function createElectronEnv(extra = {}) {
-  const env = {
-    ...process.env,
-    ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
-    ...extra,
-  }
-  delete env.ELECTRON_RUN_AS_NODE
-  return env
-}
-
-async function waitForCdp(port) {
-  const startedAt = Date.now()
-  let lastError = null
-  while (Date.now() - startedAt < 30000) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`)
-      if (response.ok) {
-        return
-      }
-    } catch (error) {
-      lastError = error
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error(`Electron CDP endpoint did not open: ${lastError?.message || 'timeout'}`)
-}
-
-async function firstApplicationPage(browser) {
-  const deadline = Date.now() + 30000
-  while (Date.now() < deadline) {
-    for (const context of browser.contexts()) {
-      for (const page of context.pages()) {
-        const url = page.url()
-        if (!url.startsWith('devtools://')) {
-          return page
-        }
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error('No Electron application page found over CDP')
-}
-
 async function launchElectronApp() {
-  if (process.env.HENJI_SMOKE_USE_ELECTRON_API === '1') {
-    const app = await electron.launch({
-      executablePath: electronExecutablePath,
-      args: [MAIN_ENTRY],
-      cwd: ROOT,
-      env: createElectronEnv(),
-    })
-    return {
-      mode: 'electron-api',
-      page: await app.firstWindow({ timeout: 30000 }),
-      close: async () => {
-        await app.close()
-      },
-    }
-  }
-
-  const port = getCdpPort()
-  const child = spawn(
-    electronExecutablePath,
-    [MAIN_ENTRY],
-    {
-      cwd: ROOT,
-      env: createElectronEnv({
-        HENJI_ELECTRON_REMOTE_DEBUGGING_PORT: String(port),
-      }),
-      stdio: 'ignore',
-      windowsHide: true,
-    }
-  )
-
-  let browser = null
-  try {
-    await waitForCdp(port)
-    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-    const page = await firstApplicationPage(browser)
-    return {
-      mode: 'cdp',
-      page,
-      close: async () => {
-        await browser.close()
-        child.kill()
-      },
-    }
-  } catch (error) {
-    if (browser) {
-      await browser.close().catch(() => undefined)
-    }
-    child.kill()
-    throw error
-  }
+  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT })
 }
 
 async function checkNativeBridge(page) {

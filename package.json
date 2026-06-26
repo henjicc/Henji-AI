@@ -30,6 +30,10 @@
     "electron:dist": "npm run electron:build && electron-builder",
     "electron:publish": "npm run electron:build && electron-builder --publish always",
     "electron:smoke": "node scripts/electron-phase4-smoke.cjs",
+    "electron:canvas-stress": "node scripts/electron-phase4-canvas-stress.cjs",
+    "electron:dpi-check": "node scripts/electron-phase4-dpi-check.cjs",
+    "tauri:canvas-stress": "node scripts/tauri-phase4-canvas-stress.cjs",
+    "electron:updater-e2e": "node scripts/electron-phase4-updater-e2e.cjs",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "progress:export-seeds": "node scripts/export-progress-seeds.cjs",
     "release": "node scripts/release.cjs"

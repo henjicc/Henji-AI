@@ -121,6 +121,9 @@ function configureUpdater(): void {
 
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  if (process.env['HENJI_UPDATER_ALLOW_DEV'] === '1') {
+    autoUpdater.forceDevUpdateConfig = true
+  }
 
   autoUpdater.on('checking-for-update', () => {
     setStatus('checking', makeBaseStatus('checking'))
