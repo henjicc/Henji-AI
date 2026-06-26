@@ -1,23 +1,18 @@
 import { createLogger } from '@/core/logging'
 import React from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { isDesktop, isDesktopAsync } from '../utils/save'
 import { useI18n } from '@/hooks/useI18n'
 import { UiChipButton, UiIconButton } from '@/components/ui'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 const logger = createLogger('components.WindowControls')
 
-// CSS properties that are not in the default type definitions
-type WebkitAppRegion = 'drag' | 'no-drag'
-
-// Extend the CSSProperties interface
-declare global {
-  namespace React {
-    interface CSSProperties {
-      WebkitAppRegion?: WebkitAppRegion
-    }
-  }
+type AppRegionStyle = React.CSSProperties & {
+  WebkitAppRegion: 'drag' | 'no-drag'
 }
+
+const dragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'drag' }
+const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
+
 
 // Tab 配置
 interface TabConfig {
@@ -34,7 +29,7 @@ interface WindowControlsProps {
 
 const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', onTabChange, onOpenSettings }) => {
   const { t } = useI18n('ui')
-  const [isTauri, setIsTauri] = React.useState<boolean>(false)
+  const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
   const tabs: TabConfig[] = [
@@ -69,11 +64,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   ]
 
   React.useEffect(() => {
-    const ok = isDesktop()
-    if (ok) setIsTauri(true)
-    else {
-      isDesktopAsync().then(v => { if (v) setIsTauri(true) })
-    }
+    setIsDesktopShell(isDesktopRuntime())
     // Simple macOS detection
     if (navigator.userAgent.includes('Mac')) {
       setIsMacOS(true)
@@ -81,8 +72,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   }, [])
 
   React.useEffect(() => {
-    if (!isTauri) return
-    const win = getCurrentWindow()
+    if (!isDesktopShell) return
+    const win = getPlatform().window
     let unlisten: (() => void) | null = null
     let isDisposed = false
 
@@ -98,12 +89,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
     }
 
     void syncMaximizeState()
-    void win.onResized(() => {
+    unlisten = win.onResized(() => {
       void syncMaximizeState()
-    }).then((fn) => {
-      unlisten = fn
-    }).catch((error) => {
-      logger.error('[WindowControls] onResized listener failed', error)
     })
 
     return () => {
@@ -112,10 +99,10 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         unlisten()
       }
     }
-  }, [isTauri])
+  }, [isDesktopShell])
 
-  if (!isTauri) return null
-  const win = getCurrentWindow()
+  if (!isDesktopShell) return null
+  const win = getPlatform().window
 
   const handleMinimize = async () => {
     try { await win.minimize() } catch (e) { logger.error('[WindowControls] minimize failed', e) }
@@ -140,7 +127,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
     <div
       className="flex items-center gap-0.5 bg-black/20 rounded-lg p-0.5"
       data-tauri-ignore-drag-region
-      style={{ WebkitAppRegion: 'no-drag' }}
+      style={noDragRegionStyle}
     >
       {tabs.map((tab) => (
         <UiChipButton
@@ -167,7 +154,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
     <div
       className="fixed top-0 left-0 right-0 z-[2147483647] h-10 border-b border-zinc-700/50 bg-panel px-3 text-white"
       data-tauri-drag-region
-      style={{ WebkitAppRegion: 'drag' }}
+      style={dragRegionStyle}
     >
       {isMacOS ? (
         <>
@@ -175,7 +162,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-2"
             data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
           >
             <UiIconButton
               type="button"
@@ -224,7 +211,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
           >
             <TabBar />
           </div>
@@ -239,7 +226,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
           >
             <TabBar />
           </div>
@@ -248,7 +235,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 shrink-0"
             data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
           >
             <UiIconButton
               type="button"

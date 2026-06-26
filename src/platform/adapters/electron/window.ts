@@ -1,27 +1,51 @@
-import { PlatformNotImplementedError } from '@/platform/types'
 import type { WindowPlatform } from '@/platform/contracts/window'
 
 const DOMAIN = 'window'
 
+interface ElectronWindowState {
+  isMaximized: boolean
+}
+
+interface ElectronWindowApi {
+  minimize(): Promise<void>
+  toggleMaximize(): Promise<void>
+  close(): Promise<void>
+  isMaximized(): Promise<boolean>
+  onStateChanged(handler: (state: ElectronWindowState) => void): () => void
+  toggleDevTools(): Promise<void>
+}
+
+interface ElectronNativeApi {
+  window?: ElectronWindowApi
+}
+
+function getWindowApi(): ElectronWindowApi {
+  const native = window.henjiNative as ElectronNativeApi | undefined
+  if (!native?.window) {
+    throw new Error(`[platform:${DOMAIN}] henjiNative.window is not available`)
+  }
+  return native.window
+}
+
 export function createElectronWindow(): WindowPlatform {
   return {
-    minimize: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'minimize')
+    async minimize() {
+      await getWindowApi().minimize()
     },
-    toggleMaximize: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'toggleMaximize')
+    async toggleMaximize() {
+      await getWindowApi().toggleMaximize()
     },
-    close: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'close')
+    async close() {
+      await getWindowApi().close()
     },
-    isMaximized: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'isMaximized')
+    async isMaximized() {
+      return await getWindowApi().isMaximized()
     },
-    onResized: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'onResized')
+    onResized(handler) {
+      return getWindowApi().onStateChanged(() => handler())
     },
-    toggleDevTools: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'toggleDevTools')
+    async toggleDevTools() {
+      await getWindowApi().toggleDevTools()
     },
   }
 }
