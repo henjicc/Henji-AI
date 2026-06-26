@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import {
   appLocalDataDir,
   basename,
@@ -33,10 +34,11 @@ export async function getDefaultDataRoot(): Promise<string> {
  */
 export async function getDataRoot(): Promise<string> {
   const customPath = localStorage.getItem('custom_data_directory')
-  if (customPath && customPath.trim()) {
-    return customPath
+  const root = customPath && customPath.trim() ? customPath : await getDefaultDataRoot()
+  if (isDesktopRuntime()) {
+    await getPlatform().media.allowRoot(root)
   }
-  return await getDefaultDataRoot()
+  return root
 }
 
 /**
@@ -93,6 +95,10 @@ export async function getPresetsFilePath(): Promise<string> {
  */
 export async function initializeDataDirectory(rootPath: string): Promise<void> {
   try {
+    if (isDesktopRuntime()) {
+      await getPlatform().media.allowRoot(rootPath)
+    }
+
     // 创建根目录
     await mkdir(rootPath, { recursive: true })
 

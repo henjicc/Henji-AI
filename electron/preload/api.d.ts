@@ -136,6 +136,10 @@ export interface HenjiHttpApi {
   fetch(request: HenjiNativeFetchRequest): Promise<HenjiNativeFetchResponse>
 }
 
+export interface HenjiMediaApi {
+  allowRoot(rootPath: string): Promise<void>
+}
+
 export interface HenjiLogEventBridgeDto {
   timestamp: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -176,7 +180,7 @@ export interface HenjiNativeApi {
   shell: HenjiShellApi
   paths: HenjiPathsApi
   http: HenjiHttpApi
-  media: Record<string, never>
+  media: HenjiMediaApi
   clipboard: Record<string, never>
   drag: Record<string, never>
   projectPackage: Record<string, never>

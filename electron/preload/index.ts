@@ -10,6 +10,7 @@ import type {
   HenjiKeystoreApi,
   HenjiLlmApi,
   HenjiLoggingApi,
+  HenjiMediaApi,
   HenjiIpcErrorEnvelope,
   HenjiNativeApi,
   HenjiNativeFetchRequest,
@@ -135,6 +136,10 @@ const httpApi: HenjiHttpApi = {
   },
 }
 
+const mediaApi: HenjiMediaApi = {
+  allowRoot: (rootPath) => nativeInvoke('media:allowRoot', { rootPath }),
+}
+
 const loggingApi: HenjiLoggingApi = {
   logFrontendEvents: (events) => nativeInvoke('logging:frontendEvents', { events }),
   onRuntimeRequestPreview: (handler) => {
@@ -167,7 +172,7 @@ const api: HenjiNativeApi = {
   shell: shellApi,
   paths: pathsApi,
   http: httpApi,
-  media: {},
+  media: mediaApi,
   clipboard: {},
   drag: {},
   projectPackage: {},

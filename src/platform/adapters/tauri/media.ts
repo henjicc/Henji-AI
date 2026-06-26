@@ -5,6 +5,9 @@ import type { MediaPlatform } from '@/platform/contracts/media'
 
 export function createTauriMedia(): MediaPlatform {
   return {
+    async allowRoot(): Promise<void> {
+      // Tauri convertFileSrc is governed by Tauri's asset protocol scope.
+    },
     toDisplaySrc(localPath: string) {
       return convertFileSrc(localPath)
     },

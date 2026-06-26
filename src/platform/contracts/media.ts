@@ -4,6 +4,7 @@
  * protocol.handle 自定义协议替代（决定见 01-迁移方案 第四节）。
  */
 export interface MediaPlatform {
+  allowRoot(rootPath: string): Promise<void>
   toDisplaySrc(localPath: string): string
   readLocalFileAsBlob(localPath: string, mimeHint?: string): Promise<Blob>
   readLocalFileAsDataUrl(localPath: string, mimeHint?: string): Promise<string>
