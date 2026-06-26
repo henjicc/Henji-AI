@@ -25,6 +25,7 @@
     "tauri:build:mac": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri build",
     "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && electron-vite dev",
     "electron:build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && tsc -p tsconfig.electron.json && electron-vite build",
+    "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "progress:export-seeds": "node scripts/export-progress-seeds.cjs",
     "release": "node scripts/release.cjs"
   },
@@ -42,6 +43,7 @@
     "@xyflow/react": "^12.10.1",
     "ali-oss": "^6.23.0",
     "axios": "^1.6.0",
+    "better-sqlite3": "^12.5.0",
     "i18next": "^23.7.0",
     "i18next-browser-languagedetector": "^7.2.0",
     "konva": "^10.2.0",
@@ -63,6 +65,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "@tauri-apps/cli": "^2.0.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/pica": "^9.0.5",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",

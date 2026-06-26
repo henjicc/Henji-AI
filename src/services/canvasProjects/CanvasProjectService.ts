@@ -66,7 +66,6 @@ function rowToRecord(row: CanvasProjectRow): CanvasProjectRecord {
 export class CanvasProjectService {
   private static instance: CanvasProjectService | null = null
   private db: DbPlatform | null = null
-  private dbPath: string | null = null
   private initializing: Promise<void> | null = null
 
   static getInstance(): CanvasProjectService {
@@ -82,9 +81,6 @@ export class CanvasProjectService {
 
     this.initializing = (async () => {
       const platform = getPlatform()
-      const appDataDir = await platform.system.paths.appLocalDataDir()
-      const dbPath = await platform.system.paths.join(appDataDir, 'Henji-AI', 'henji.db')
-      this.dbPath = `sqlite:${dbPath}`
       this.db = platform.db
       await this.createTables()
     })()

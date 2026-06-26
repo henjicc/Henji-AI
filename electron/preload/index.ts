@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
+  HenjiDbApi,
   HenjiIpcErrorEnvelope,
   HenjiNativeApi,
   HenjiWindowApi,
@@ -62,10 +63,15 @@ const diagnosticsApi: HenjiDiagnosticsApi = {
   },
 }
 
+const dbApi: HenjiDbApi = {
+  execute: (sql, params) => nativeInvoke('db:execute', { sql, params }),
+  select: (sql, params) => nativeInvoke('db:select', { sql, params }),
+}
+
 const api: HenjiNativeApi = {
   ai: {},
   llm: {},
-  db: {},
+  db: dbApi,
   keystore: {},
   fs: {},
   dialog: {},

@@ -66,7 +66,6 @@ interface CustomModelRow {
 
 export class DatabaseService implements IDatabaseService {
   private db: DbPlatform | null = null
-  private dbPath: string | null = null
 
   /**
    * Initialize database connection
@@ -76,12 +75,8 @@ export class DatabaseService implements IDatabaseService {
 
     try {
       const platform = getPlatform()
-      const appDataDir = await platform.system.paths.appLocalDataDir()
-      const dbPath = await platform.system.paths.join(appDataDir, 'Henji-AI', 'henji.db')
-      this.dbPath = `sqlite:${dbPath}`
-
       this.db = platform.db
-      // logger.info('[Database] Connected successfully to:', this.dbPath)
+      // logger.info('[Database] Connected successfully')
 
       // 创建表结构
       await this.createTables()

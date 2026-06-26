@@ -29,10 +29,22 @@ export interface HenjiDiagnosticsApi {
   streamEcho(message: string, onEvent: (event: HenjiDiagnosticsStreamEvent) => void): Promise<() => Promise<void>>
 }
 
+export type HenjiSqlBindValue = string | number | boolean | null | Uint8Array
+
+export interface HenjiSqlExecuteResult {
+  rowsAffected: number
+  lastInsertId?: number
+}
+
+export interface HenjiDbApi {
+  execute(sql: string, params?: HenjiSqlBindValue[]): Promise<HenjiSqlExecuteResult>
+  select<T = unknown>(sql: string, params?: HenjiSqlBindValue[]): Promise<T[]>
+}
+
 export interface HenjiNativeApi {
   ai: Record<string, never>
   llm: Record<string, never>
-  db: Record<string, never>
+  db: HenjiDbApi
   keystore: Record<string, never>
   fs: Record<string, never>
   dialog: Record<string, never>
