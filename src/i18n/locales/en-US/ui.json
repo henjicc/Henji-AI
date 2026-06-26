@@ -259,7 +259,9 @@
     "actions": {
       "skip": "Skip this version",
       "remindLater": "Remind me later",
-      "updateNow": "Update now"
+      "updateNow": "Update now",
+      "downloading": "Downloading",
+      "installNow": "Restart to install"
     }
   },
   "viewer": {

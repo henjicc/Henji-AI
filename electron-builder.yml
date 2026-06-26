@@ -1,0 +1,49 @@
+appId: com.henji.ai
+productName: 痕迹AI
+copyright: Copyright © 2026 Henji AI
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: src-tauri/resources/model-manifest.json
+    to: resources/model-manifest.json
+  - from: src-tauri/resources/progress-seeds.json
+    to: resources/progress-seeds.json
+asarUnpack:
+  - node_modules/better-sqlite3/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/@napi-rs/**
+win:
+  icon: src-tauri/icons/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: msi
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+msi:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+mac:
+  icon: src-tauri/icons/icon.icns
+  category: public.app-category.graphics-design
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+publish:
+  provider: github
+  owner: henjicc
+  repo: Henji-AI
+  releaseType: release

@@ -11,6 +11,7 @@ import { createElectronDragDrop } from './dragDrop'
 import { createElectronProjectPackage } from './projectPackage'
 import { createElectronWindow } from './window'
 import { createElectronLogging } from './logging'
+import { createElectronUpdater } from './updater'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -26,5 +27,6 @@ export function createElectronPlatform(): PlatformRuntime {
     projectPackage: createElectronProjectPackage(),
     window: createElectronWindow(),
     logging: createElectronLogging(),
+    updater: createElectronUpdater(),
   }
 }

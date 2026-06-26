@@ -11,6 +11,7 @@ import { createTauriDragDrop } from './dragDrop'
 import { createTauriProjectPackage } from './projectPackage'
 import { createTauriWindow } from './window'
 import { createTauriLogging } from './logging'
+import { createTauriUpdater } from './updater'
 
 export function createTauriPlatform(): PlatformRuntime {
   return {
@@ -26,5 +27,6 @@ export function createTauriPlatform(): PlatformRuntime {
     projectPackage: createTauriProjectPackage(),
     window: createTauriWindow(),
     logging: createTauriLogging(),
+    updater: createTauriUpdater(),
   }
 }

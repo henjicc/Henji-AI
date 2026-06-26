@@ -22,6 +22,8 @@ import type {
   HenjiProjectPackageApi,
   HenjiRuntimeRequestPreviewPayload,
   HenjiShellApi,
+  HenjiUpdaterApi,
+  HenjiUpdaterEvent,
   HenjiWindowApi,
   HenjiWindowStatePayload,
 } from './api'
@@ -254,6 +256,22 @@ const loggingApi: HenjiLoggingApi = {
   },
 }
 
+const updaterApi: HenjiUpdaterApi = {
+  getStatus: () => nativeInvoke('updater:getStatus'),
+  checkForUpdates: () => nativeInvoke('updater:checkForUpdates'),
+  downloadUpdate: () => nativeInvoke('updater:downloadUpdate'),
+  quitAndInstall: () => nativeInvoke('updater:quitAndInstall'),
+  onEvent: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiUpdaterEvent): void => {
+      handler(payload)
+    }
+    ipcRenderer.on('updater:event', listener)
+    return () => {
+      ipcRenderer.removeListener('updater:event', listener)
+    }
+  },
+}
+
 const api: HenjiNativeApi = {
   ai: aiApi,
   llm: llmApi,
@@ -270,6 +288,7 @@ const api: HenjiNativeApi = {
   drag: dragApi,
   projectPackage: projectPackageApi,
   logging: loggingApi,
+  updater: updaterApi,
   modelscope: {},
   window: windowApi,
   diagnostics: diagnosticsApi,

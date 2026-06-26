@@ -259,7 +259,9 @@
     "actions": {
       "skip": "跳过此版本",
       "remindLater": "稍后提醒",
-      "updateNow": "立即更新"
+      "updateNow": "立即更新",
+      "downloading": "下载中",
+      "installNow": "重启安装"
     }
   },
   "viewer": {

@@ -400,6 +400,56 @@ export interface HenjiLoggingApi {
   onLlmRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
 }
 
+export type HenjiUpdaterStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface HenjiUpdaterReleaseInfo {
+  version: string
+  name: string
+  body: string
+  publishedAt: string
+  htmlUrl: string
+}
+
+export interface HenjiUpdaterProgressInfo {
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
+}
+
+export interface HenjiUpdaterCheckResult {
+  status: HenjiUpdaterStatus
+  hasUpdate: boolean
+  currentVersion: string
+  latestVersion?: string
+  releaseInfo?: HenjiUpdaterReleaseInfo
+  progress?: HenjiUpdaterProgressInfo
+  errorMessage?: string
+}
+
+export type HenjiUpdaterEvent =
+  | { type: 'checking'; result: HenjiUpdaterCheckResult }
+  | { type: 'available'; result: HenjiUpdaterCheckResult }
+  | { type: 'not-available'; result: HenjiUpdaterCheckResult }
+  | { type: 'download-progress'; result: HenjiUpdaterCheckResult }
+  | { type: 'downloaded'; result: HenjiUpdaterCheckResult }
+  | { type: 'error'; result: HenjiUpdaterCheckResult }
+
+export interface HenjiUpdaterApi {
+  getStatus(): Promise<HenjiUpdaterCheckResult>
+  checkForUpdates(): Promise<HenjiUpdaterCheckResult>
+  downloadUpdate(): Promise<HenjiUpdaterCheckResult>
+  quitAndInstall(): Promise<void>
+  onEvent(handler: (event: HenjiUpdaterEvent) => void): () => void
+}
+
 export interface HenjiNativeApi {
   ai: HenjiAiApi
   llm: HenjiLlmApi
@@ -416,6 +466,7 @@ export interface HenjiNativeApi {
   drag: HenjiDragApi
   projectPackage: HenjiProjectPackageApi
   logging: HenjiLoggingApi
+  updater: HenjiUpdaterApi
   modelscope: Record<string, never>
   window: HenjiWindowApi
   diagnostics: HenjiDiagnosticsApi

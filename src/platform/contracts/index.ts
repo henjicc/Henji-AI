@@ -10,6 +10,7 @@ import type { DragDropPlatform } from './dragDrop'
 import type { ProjectPackagePlatform } from './projectPackage'
 import type { WindowPlatform } from './window'
 import type { LoggingPlatform } from './logging'
+import type { UpdaterPlatform } from './updater'
 
 export interface PlatformRuntime {
   aiRuntime: AiRuntimePlatform
@@ -24,6 +25,7 @@ export interface PlatformRuntime {
   projectPackage: ProjectPackagePlatform
   window: WindowPlatform
   logging: LoggingPlatform
+  updater: UpdaterPlatform
 }
 
 export type {
@@ -39,6 +41,7 @@ export type {
   ProjectPackagePlatform,
   WindowPlatform,
   LoggingPlatform,
+  UpdaterPlatform,
 }
 export * from './aiRuntime'
 export * from './llmRuntime'
@@ -52,3 +55,4 @@ export * from './dragDrop'
 export * from './projectPackage'
 export * from './window'
 export * from './logging'
+export * from './updater'

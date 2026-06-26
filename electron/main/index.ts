@@ -12,8 +12,10 @@ import { registerPingIpc } from './ipc/registry'
 import { registerProjectPackageIpc } from './ipc/project-package'
 import { registerStreamIpc } from './ipc/stream'
 import { registerSystemIpc } from './ipc/system'
+import { registerUpdaterIpc } from './ipc/updater'
 import { registerWindowIpc } from './ipc/window'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme } from './protocol'
+import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
 
 registerMediaProtocolScheme()
@@ -38,7 +40,9 @@ app.whenReady().then(() => {
   registerProjectPackageIpc()
   registerStreamIpc()
   registerSystemIpc()
+  registerUpdaterIpc()
   registerWindowIpc()
+  initializeUpdater()
   createWindow()
 
   app.on('activate', () => {
