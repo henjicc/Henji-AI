@@ -10,6 +10,7 @@ import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { useExternalLink } from '../hooks/useExternalLink'
 import { ExternalLink } from 'lucide-react'
 import type { ProviderLink } from '@/core/config/providers'
+import { detectShell } from '@/platform/runtime'
 
 interface ApiKeysTabProps {
   sectionId?: string
@@ -57,9 +58,16 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
   const { openExternal } = useExternalLink()
   const { keys, visibility, updateKey, toggleVisibility } = useApiKeys()
   const currentSectionId = sectionId ?? 'api-keys'
+  const showKeyMigrationHint = detectShell() === 'electron'
 
   return (
     <div className="p-4 space-y-5">
+      {showKeyMigrationHint ? (
+        <p className="rounded-lg border border-border-dark bg-layer px-3 py-2 text-sm leading-6 text-text-muted">
+          {t('apiKeys.migrationHint')}
+        </p>
+      ) : null}
+
       {currentSectionId === 'api-keys' && (
         <section className="space-y-5">
           {API_KEY_PROVIDERS.map(provider => {

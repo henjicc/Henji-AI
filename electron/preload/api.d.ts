@@ -41,11 +41,37 @@ export interface HenjiDbApi {
   select<T = unknown>(sql: string, params?: HenjiSqlBindValue[]): Promise<T[]>
 }
 
+export interface HenjiProviderKeyStatus {
+  providerId: string
+  configured: boolean
+}
+
+export interface HenjiKeystoreApi {
+  setKey(namespace: string, providerId: string, apiKey: string): Promise<void>
+  removeKey(namespace: string, providerId: string): Promise<void>
+  getKey(namespace: string, providerId: string): Promise<string | null>
+  hasKey(namespace: string, providerId: string): Promise<boolean>
+}
+
+export interface HenjiAiApi {
+  setProviderApiKey(providerId: string, apiKey: string): Promise<void>
+  removeProviderApiKey(providerId: string): Promise<void>
+  getProviderApiKey(providerId: string): Promise<string | null>
+  getProviderKeyStatus(): Promise<HenjiProviderKeyStatus[]>
+}
+
+export interface HenjiLlmApi {
+  setProviderApiKey(providerId: string, apiKey: string): Promise<void>
+  removeProviderApiKey(providerId: string): Promise<void>
+  getProviderApiKey(providerId: string): Promise<string | null>
+  getProviderKeyStatus(providerIds: string[]): Promise<HenjiProviderKeyStatus[]>
+}
+
 export interface HenjiNativeApi {
-  ai: Record<string, never>
-  llm: Record<string, never>
+  ai: HenjiAiApi
+  llm: HenjiLlmApi
   db: HenjiDbApi
-  keystore: Record<string, never>
+  keystore: HenjiKeystoreApi
   fs: Record<string, never>
   dialog: Record<string, never>
   media: Record<string, never>

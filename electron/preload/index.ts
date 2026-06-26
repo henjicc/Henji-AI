@@ -2,7 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
+  HenjiAiApi,
   HenjiDbApi,
+  HenjiKeystoreApi,
+  HenjiLlmApi,
   HenjiIpcErrorEnvelope,
   HenjiNativeApi,
   HenjiWindowApi,
@@ -68,11 +71,32 @@ const dbApi: HenjiDbApi = {
   select: (sql, params) => nativeInvoke('db:select', { sql, params }),
 }
 
+const keystoreApi: HenjiKeystoreApi = {
+  setKey: (namespace, providerId, apiKey) => nativeInvoke('keystore:set', { namespace, providerId, apiKey }),
+  removeKey: (namespace, providerId) => nativeInvoke('keystore:remove', { namespace, providerId }),
+  getKey: (namespace, providerId) => nativeInvoke('keystore:get', { namespace, providerId }),
+  hasKey: (namespace, providerId) => nativeInvoke('keystore:has', { namespace, providerId }),
+}
+
+const aiApi: HenjiAiApi = {
+  setProviderApiKey: (providerId, apiKey) => nativeInvoke('ai:setProviderApiKey', { providerId, apiKey }),
+  removeProviderApiKey: (providerId) => nativeInvoke('ai:removeProviderApiKey', { providerId }),
+  getProviderApiKey: (providerId) => nativeInvoke('ai:getProviderApiKey', { providerId }),
+  getProviderKeyStatus: () => nativeInvoke('ai:getProviderKeyStatus'),
+}
+
+const llmApi: HenjiLlmApi = {
+  setProviderApiKey: (providerId, apiKey) => nativeInvoke('llm:setProviderApiKey', { providerId, apiKey }),
+  removeProviderApiKey: (providerId) => nativeInvoke('llm:removeProviderApiKey', { providerId }),
+  getProviderApiKey: (providerId) => nativeInvoke('llm:getProviderApiKey', { providerId }),
+  getProviderKeyStatus: (providerIds) => nativeInvoke('llm:getProviderKeyStatus', { providerIds }),
+}
+
 const api: HenjiNativeApi = {
-  ai: {},
-  llm: {},
+  ai: aiApi,
+  llm: llmApi,
   db: dbApi,
-  keystore: {},
+  keystore: keystoreApi,
   fs: {},
   dialog: {},
   media: {},

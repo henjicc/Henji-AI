@@ -3,19 +3,27 @@ import type { AiRuntimePlatform } from '@/platform/contracts/aiRuntime'
 
 const DOMAIN = 'aiRuntime'
 
+function getNativeAi(): NonNullable<typeof window.henjiNative>['ai'] {
+  const native = window.henjiNative
+  if (!native?.ai) {
+    throw new Error(`[platform:${DOMAIN}] henjiNative.ai is not available`)
+  }
+  return native.ai
+}
+
 export function createElectronAiRuntime(): AiRuntimePlatform {
   return {
-    setProviderApiKey: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'setProviderApiKey')
+    setProviderApiKey: async (providerId, apiKey) => {
+      await getNativeAi().setProviderApiKey(providerId, apiKey)
     },
-    removeProviderApiKey: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'removeProviderApiKey')
+    removeProviderApiKey: async (providerId) => {
+      await getNativeAi().removeProviderApiKey(providerId)
     },
-    getProviderApiKey: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'getProviderApiKey')
+    getProviderApiKey: async (providerId) => {
+      return await getNativeAi().getProviderApiKey(providerId)
     },
-    getProviderKeyStatus: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'getProviderKeyStatus')
+    getProviderKeyStatus: async () => {
+      return await getNativeAi().getProviderKeyStatus()
     },
     generate: () => {
       throw new PlatformNotImplementedError(DOMAIN, 'generate')

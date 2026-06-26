@@ -3,19 +3,27 @@ import type { LlmRuntimePlatform } from '@/platform/contracts/llmRuntime'
 
 const DOMAIN = 'llmRuntime'
 
+function getNativeLlm(): NonNullable<typeof window.henjiNative>['llm'] {
+  const native = window.henjiNative
+  if (!native?.llm) {
+    throw new Error(`[platform:${DOMAIN}] henjiNative.llm is not available`)
+  }
+  return native.llm
+}
+
 export function createElectronLlmRuntime(): LlmRuntimePlatform {
   return {
-    setProviderApiKey: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'setProviderApiKey')
+    setProviderApiKey: async (providerId, apiKey) => {
+      await getNativeLlm().setProviderApiKey(providerId, apiKey)
     },
-    removeProviderApiKey: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'removeProviderApiKey')
+    removeProviderApiKey: async (providerId) => {
+      await getNativeLlm().removeProviderApiKey(providerId)
     },
-    getProviderApiKey: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'getProviderApiKey')
+    getProviderApiKey: async (providerId) => {
+      return await getNativeLlm().getProviderApiKey(providerId)
     },
-    getProviderKeyStatus: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'getProviderKeyStatus')
+    getProviderKeyStatus: async (providerIds) => {
+      return await getNativeLlm().getProviderKeyStatus(providerIds)
     },
     chatStream: () => {
       throw new PlatformNotImplementedError(DOMAIN, 'chatStream')
