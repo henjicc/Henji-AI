@@ -64,7 +64,7 @@ export async function generate(
       throw new AiRuntimeError('invalid_route', 'Request route is empty')
     }
 
-    const preprocessedBody = await preprocessRequestBody(providerId, builtRequest.route, normalizedBody)
+    const preprocessedBody = await preprocessRequestBody(providerId, builtRequest.route, normalizedBody, request.params)
     emitPreview(webContents, {
       requestId,
       modelId: request.modelId,
