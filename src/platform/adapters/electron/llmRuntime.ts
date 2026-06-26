@@ -1,4 +1,3 @@
-import { PlatformNotImplementedError } from '@/platform/types'
 import type { LlmRuntimePlatform } from '@/platform/contracts/llmRuntime'
 
 const DOMAIN = 'llmRuntime'
@@ -25,11 +24,11 @@ export function createElectronLlmRuntime(): LlmRuntimePlatform {
     getProviderKeyStatus: async (providerIds) => {
       return await getNativeLlm().getProviderKeyStatus(providerIds)
     },
-    chatStream: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'chatStream')
+    chatStream: async (request, onEvent) => {
+      await getNativeLlm().chatStream(request, onEvent)
     },
-    cancelTask: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'cancelTask')
+    cancelTask: async (taskId) => {
+      await getNativeLlm().cancelTask(taskId)
     },
   }
 }

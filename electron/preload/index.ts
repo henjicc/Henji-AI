@@ -9,6 +9,7 @@ import type {
   HenjiHttpApi,
   HenjiKeystoreApi,
   HenjiLlmApi,
+  HenjiLlmStreamEventPayload,
   HenjiLoggingApi,
   HenjiMediaApi,
   HenjiIpcErrorEnvelope,
@@ -105,6 +106,47 @@ const llmApi: HenjiLlmApi = {
   removeProviderApiKey: (providerId) => nativeInvoke('llm:removeProviderApiKey', { providerId }),
   getProviderApiKey: (providerId) => nativeInvoke('llm:getProviderApiKey', { providerId }),
   getProviderKeyStatus: (providerIds) => nativeInvoke('llm:getProviderKeyStatus', { providerIds }),
+  async chatStream(request, onEvent) {
+    const streamId = createStreamId()
+    let terminalReceived = false
+    let resolveTerminal: () => void = () => undefined
+    const terminalEvent = new Promise<void>((resolve) => {
+      resolveTerminal = resolve
+    })
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiLlmStreamEventPayload): void => {
+      if (payload.streamId === streamId) {
+        onEvent(payload.event)
+        if (payload.event.type === 'Done' || payload.event.type === 'Error') {
+          terminalReceived = true
+          resolveTerminal()
+        }
+      }
+    }
+    ipcRenderer.on('llm:chatStream:event', listener)
+    try {
+      await nativeInvoke('llm:chatStream', { streamId, request })
+      if (!terminalReceived) {
+        await terminalEvent
+      }
+    } catch (error) {
+      if (!terminalReceived) {
+        await waitForOptionalTerminalEvent(terminalEvent)
+      }
+      throw error
+    } finally {
+      ipcRenderer.removeListener('llm:chatStream:event', listener)
+    }
+  },
+  cancelTask: (taskId) => nativeInvoke('llm:cancelTask', { taskId }),
+}
+
+async function waitForOptionalTerminalEvent(terminalEvent: Promise<void>): Promise<void> {
+  await Promise.race([
+    terminalEvent,
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, 250)
+    }),
+  ])
 }
 
 const fsApi: HenjiFsApi = {

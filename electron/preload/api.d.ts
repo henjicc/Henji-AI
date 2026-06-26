@@ -124,6 +124,61 @@ export interface HenjiLlmApi {
   removeProviderApiKey(providerId: string): Promise<void>
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(providerIds: string[]): Promise<HenjiProviderKeyStatus[]>
+  chatStream(request: HenjiLlmChatRequest, onEvent: (event: HenjiLlmStreamEvent) => void): Promise<void>
+  cancelTask(taskId: string): Promise<void>
+}
+
+export type HenjiLlmRole = 'system' | 'user' | 'assistant'
+
+export interface HenjiLlmContentPart {
+  type: string
+  text?: string
+  imageUrl?: unknown
+  videoUrl?: unknown
+  inputAudio?: unknown
+  [key: string]: unknown
+}
+
+export interface HenjiLlmChatMessage {
+  role: HenjiLlmRole
+  content?: string | HenjiLlmContentPart[] | null
+  name?: string
+  [key: string]: unknown
+}
+
+export interface HenjiLlmChatRequest {
+  requestId?: string
+  providerId: string
+  modelId: string
+  adapter?: string
+  baseUrl?: string
+  reasoning?: boolean
+  messages: HenjiLlmChatMessage[]
+  capabilities?: Record<string, unknown>
+  tools?: unknown
+  policy?: Record<string, unknown>
+  memory?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}
+
+export interface HenjiLlmTrace {
+  providerId: string
+  modelId: string
+  startedAtMs: number
+  elapsedMs: number
+  inputChars: number
+  outputChars: number
+}
+
+export type HenjiLlmStreamEvent =
+  | { type: 'Token'; data: string }
+  | { type: 'ReasoningToken'; data: string }
+  | { type: 'Done'; data: HenjiLlmTrace }
+  | { type: 'Error'; data: string }
+
+export interface HenjiLlmStreamEventPayload {
+  streamId: string
+  event: HenjiLlmStreamEvent
 }
 
 export interface HenjiFsDirEntry {
