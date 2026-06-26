@@ -7,6 +7,7 @@ docs/GITHUB_ACTIONS_GUIDE.md
 docs/Storyboard-Copilot
 docs/rust-genai
 docs/ref
+release/
 # Dependencies
 node_modules/
 npm-debug.log*

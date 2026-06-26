@@ -29,9 +29,9 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  artifactName: henji-ai-setup-${version}.${ext}
 msi:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: henji-ai-${version}-${arch}.${ext}
 mac:
   icon: src-tauri/icons/icon.icns
   category: public.app-category.graphics-design
