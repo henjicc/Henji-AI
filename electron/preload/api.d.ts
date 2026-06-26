@@ -67,18 +67,120 @@ export interface HenjiLlmApi {
   getProviderKeyStatus(providerIds: string[]): Promise<HenjiProviderKeyStatus[]>
 }
 
+export interface HenjiFsDirEntry {
+  name: string
+  isDirectory: boolean
+}
+
+export interface HenjiDialogFilter {
+  name: string
+  extensions: string[]
+}
+
+export interface HenjiDialogSaveOptions {
+  defaultPath?: string
+  filters?: HenjiDialogFilter[]
+}
+
+export interface HenjiDialogOpenOptions {
+  directory?: boolean
+  multiple?: boolean
+  defaultPath?: string
+  filters?: HenjiDialogFilter[]
+}
+
+export interface HenjiFsApi {
+  readFile(path: string): Promise<Uint8Array>
+  readTextFile(path: string): Promise<string>
+  writeFile(path: string, data: Uint8Array): Promise<void>
+  writeTextFile(path: string, data: string): Promise<void>
+  exists(path: string): Promise<boolean>
+  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>
+  readDir(path: string): Promise<HenjiFsDirEntry[]>
+  copyFile(src: string, dest: string): Promise<void>
+  remove(path: string, options?: { recursive?: boolean }): Promise<void>
+}
+
+export interface HenjiDialogApi {
+  save(options?: HenjiDialogSaveOptions): Promise<string | null>
+  open(options?: HenjiDialogOpenOptions): Promise<string | string[] | null>
+}
+
+export interface HenjiShellApi {
+  openExternal(url: string): Promise<void>
+}
+
+export interface HenjiPathsApi {
+  appLocalDataDir(): Promise<string>
+  downloadDir(): Promise<string>
+  join(...parts: string[]): Promise<string>
+  dirname(path: string): Promise<string>
+  tempDir(): Promise<string>
+}
+
+export interface HenjiNativeFetchRequest {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: string | Uint8Array
+}
+
+export interface HenjiNativeFetchResponse {
+  status: number
+  statusText: string
+  headers: Array<[string, string]>
+  body: Uint8Array
+}
+
+export interface HenjiHttpApi {
+  fetch(request: HenjiNativeFetchRequest): Promise<HenjiNativeFetchResponse>
+}
+
+export interface HenjiLogEventBridgeDto {
+  timestamp: string
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
+  domain: string
+  event: string
+  message: string
+  requestId?: string
+  taskId?: string
+  modelId?: string
+  providerId?: string
+  context?: unknown
+  error?: unknown
+}
+
+export interface HenjiRuntimeRequestPreviewPayload {
+  requestId: string
+  taskId?: string
+  modelId: string
+  providerId: string
+  method: string
+  route: string
+  requestBody: unknown
+}
+
+export interface HenjiLoggingApi {
+  logFrontendEvents(events: HenjiLogEventBridgeDto[]): Promise<void>
+  onRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
+  onLlmRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
+}
+
 export interface HenjiNativeApi {
   ai: HenjiAiApi
   llm: HenjiLlmApi
   db: HenjiDbApi
   keystore: HenjiKeystoreApi
-  fs: Record<string, never>
-  dialog: Record<string, never>
+  fs: HenjiFsApi
+  dialog: HenjiDialogApi
+  shell: HenjiShellApi
+  paths: HenjiPathsApi
+  http: HenjiHttpApi
   media: Record<string, never>
   clipboard: Record<string, never>
   drag: Record<string, never>
   projectPackage: Record<string, never>
-  logging: Record<string, never>
+  logging: HenjiLoggingApi
   modelscope: Record<string, never>
   window: HenjiWindowApi
   diagnostics: HenjiDiagnosticsApi

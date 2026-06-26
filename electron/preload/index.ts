@@ -4,10 +4,18 @@ import type {
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
   HenjiDbApi,
+  HenjiDialogApi,
+  HenjiFsApi,
+  HenjiHttpApi,
   HenjiKeystoreApi,
   HenjiLlmApi,
+  HenjiLoggingApi,
   HenjiIpcErrorEnvelope,
   HenjiNativeApi,
+  HenjiNativeFetchRequest,
+  HenjiPathsApi,
+  HenjiRuntimeRequestPreviewPayload,
+  HenjiShellApi,
   HenjiWindowApi,
   HenjiWindowStatePayload,
 } from './api'
@@ -92,18 +100,78 @@ const llmApi: HenjiLlmApi = {
   getProviderKeyStatus: (providerIds) => nativeInvoke('llm:getProviderKeyStatus', { providerIds }),
 }
 
+const fsApi: HenjiFsApi = {
+  readFile: (path) => nativeInvoke('fs:readFile', { path }),
+  readTextFile: (path) => nativeInvoke('fs:readTextFile', { path }),
+  writeFile: (path, data) => nativeInvoke('fs:writeFile', { path, data }),
+  writeTextFile: (path, data) => nativeInvoke('fs:writeTextFile', { path, data }),
+  exists: (path) => nativeInvoke('fs:exists', { path }),
+  mkdir: (path, options) => nativeInvoke('fs:mkdir', { path, recursive: options?.recursive }),
+  readDir: (path) => nativeInvoke('fs:readDir', { path }),
+  copyFile: (src, dest) => nativeInvoke('fs:copyFile', { src, dest }),
+  remove: (path, options) => nativeInvoke('fs:remove', { path, recursive: options?.recursive }),
+}
+
+const dialogApi: HenjiDialogApi = {
+  save: (options) => nativeInvoke('dialog:save', options),
+  open: (options) => nativeInvoke('dialog:open', options),
+}
+
+const shellApi: HenjiShellApi = {
+  openExternal: (url) => nativeInvoke('shell:openExternal', { url }),
+}
+
+const pathsApi: HenjiPathsApi = {
+  appLocalDataDir: () => nativeInvoke('paths:appLocalDataDir'),
+  downloadDir: () => nativeInvoke('paths:downloadDir'),
+  join: (...parts) => nativeInvoke('paths:join', { parts }),
+  dirname: (path) => nativeInvoke('paths:dirname', { path }),
+  tempDir: () => nativeInvoke('paths:tempDir'),
+}
+
+const httpApi: HenjiHttpApi = {
+  async fetch(request: HenjiNativeFetchRequest) {
+    return await nativeInvoke('http:fetch', request)
+  },
+}
+
+const loggingApi: HenjiLoggingApi = {
+  logFrontendEvents: (events) => nativeInvoke('logging:frontendEvents', { events }),
+  onRuntimeRequestPreview: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiRuntimeRequestPreviewPayload): void => {
+      handler(payload)
+    }
+    ipcRenderer.on('henji://runtime-request-preview', listener)
+    return () => {
+      ipcRenderer.removeListener('henji://runtime-request-preview', listener)
+    }
+  },
+  onLlmRuntimeRequestPreview: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiRuntimeRequestPreviewPayload): void => {
+      handler(payload)
+    }
+    ipcRenderer.on('henji://llm-runtime-request-preview', listener)
+    return () => {
+      ipcRenderer.removeListener('henji://llm-runtime-request-preview', listener)
+    }
+  },
+}
+
 const api: HenjiNativeApi = {
   ai: aiApi,
   llm: llmApi,
   db: dbApi,
   keystore: keystoreApi,
-  fs: {},
-  dialog: {},
+  fs: fsApi,
+  dialog: dialogApi,
+  shell: shellApi,
+  paths: pathsApi,
+  http: httpApi,
   media: {},
   clipboard: {},
   drag: {},
   projectPackage: {},
-  logging: {},
+  logging: loggingApi,
   modelscope: {},
   window: windowApi,
   diagnostics: diagnosticsApi,

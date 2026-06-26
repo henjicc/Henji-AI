@@ -1,4 +1,3 @@
-import { PlatformNotImplementedError } from '@/platform/types'
 import type {
   DialogPlatform,
   FsPlatform,
@@ -10,81 +9,128 @@ import type {
 
 const DOMAIN = 'system'
 
+function getNative(): NonNullable<typeof window.henjiNative> {
+  const native = window.henjiNative
+  if (!native) {
+    throw new Error(`[platform:${DOMAIN}] henjiNative is not available`)
+  }
+  return native
+}
+
 function createFs(): FsPlatform {
   return {
-    readFile: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.readFile')
+    readFile: async (path) => {
+      return await getNative().fs.readFile(path)
     },
-    readTextFile: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.readTextFile')
+    readTextFile: async (path) => {
+      return await getNative().fs.readTextFile(path)
     },
-    writeFile: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.writeFile')
+    writeFile: async (path, data) => {
+      await getNative().fs.writeFile(path, data)
     },
-    writeTextFile: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.writeTextFile')
+    writeTextFile: async (path, data) => {
+      await getNative().fs.writeTextFile(path, data)
     },
-    exists: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.exists')
+    exists: async (path) => {
+      return await getNative().fs.exists(path)
     },
-    mkdir: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.mkdir')
+    mkdir: async (path, options) => {
+      await getNative().fs.mkdir(path, options)
     },
-    readDir: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.readDir')
+    readDir: async (path) => {
+      return await getNative().fs.readDir(path)
     },
-    copyFile: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.copyFile')
+    copyFile: async (src, dest) => {
+      await getNative().fs.copyFile(src, dest)
     },
-    remove: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'fs.remove')
+    remove: async (path, options) => {
+      await getNative().fs.remove(path, options)
     },
   }
 }
 
 function createDialog(): DialogPlatform {
   return {
-    save: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'dialog.save')
+    save: async (options) => {
+      return await getNative().dialog.save(options)
     },
-    open: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'dialog.open')
+    open: async (options) => {
+      return await getNative().dialog.open(options)
     },
   }
 }
 
 function createShell(): ShellPlatform {
   return {
-    openExternal: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'shell.openExternal')
+    openExternal: async (url) => {
+      await getNative().shell.openExternal(url)
     },
   }
 }
 
 function createPaths(): PathsPlatform {
   return {
-    appLocalDataDir: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'paths.appLocalDataDir')
+    appLocalDataDir: async () => {
+      return await getNative().paths.appLocalDataDir()
     },
-    downloadDir: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'paths.downloadDir')
+    downloadDir: async () => {
+      return await getNative().paths.downloadDir()
     },
-    join: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'paths.join')
+    join: async (...parts) => {
+      return await getNative().paths.join(...parts)
     },
-    dirname: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'paths.dirname')
+    dirname: async (path) => {
+      return await getNative().paths.dirname(path)
     },
-    tempDir: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'paths.tempDir')
+    tempDir: async () => {
+      return await getNative().paths.tempDir()
     },
   }
 }
 
+function normalizeFetchHeaders(headers: HeadersInit | undefined): Record<string, string> | undefined {
+  if (!headers) {
+    return undefined
+  }
+  return Object.fromEntries(new Headers(headers).entries())
+}
+
+async function normalizeFetchBody(body: BodyInit | null | undefined): Promise<string | Uint8Array | undefined> {
+  if (!body) {
+    return undefined
+  }
+  if (typeof body === 'string') {
+    return body
+  }
+  if (body instanceof URLSearchParams) {
+    return body.toString()
+  }
+  if (body instanceof Uint8Array) {
+    return body
+  }
+  if (body instanceof ArrayBuffer) {
+    return new Uint8Array(body)
+  }
+  if (body instanceof Blob) {
+    return new Uint8Array(await body.arrayBuffer())
+  }
+  throw new Error('Unsupported native fetch body type')
+}
+
 function createHttp(): HttpPlatform {
   return {
-    fetch: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'http.fetch')
+    fetch: async (url, init) => {
+      const result = await getNative().http.fetch({
+        url,
+        method: init?.method,
+        headers: normalizeFetchHeaders(init?.headers),
+        body: await normalizeFetchBody(init?.body),
+      })
+      return new Response(result.body, {
+        status: result.status,
+        statusText: result.statusText,
+        headers: result.headers,
+      })
     },
   }
 }
