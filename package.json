@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.1",
   "description": "一个聚合多家AI供应商，一站式生成图片、视频和音频的客户端",
+  "main": "out/main/index.cjs",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
@@ -22,6 +23,8 @@
     "tauri:build:ci": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri build",
     "tauri:dev:mac": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri dev",
     "tauri:build:mac": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri build",
+    "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && electron-vite dev",
+    "electron:build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && tsc -p tsconfig.electron.json && electron-vite build",
     "progress:export-seeds": "node scripts/export-progress-seeds.cjs",
     "release": "node scripts/release.cjs"
   },
@@ -58,6 +61,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@tauri-apps/cli": "^2.0.0",
     "@types/pica": "^9.0.5",
     "@types/react": "^18.2.15",
@@ -66,9 +70,13 @@
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.0.3",
     "autoprefixer": "^10.4.16",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^3.1.0",
     "eslint": "^8.45.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.3",
+    "playwright": "^1.61.1",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.0.2",

@@ -17,6 +17,7 @@ yarn-error.log*
 dist/
 build/
 .vite/
+out/
 *.tgz
 *.tar.gz
 
