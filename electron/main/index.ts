@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerDbIpc } from './ipc/db'
+import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
 import { registerKeystoreIpc } from './ipc/keystore'
 import { registerLlmRuntimeIpc } from './ipc/llm-runtime'
@@ -21,6 +22,7 @@ app.whenReady().then(() => {
   registerAiRuntimeIpc()
   registerClipboardIpc()
   registerDbIpc()
+  registerDragIpc()
   registerImageIpc()
   registerKeystoreIpc()
   registerLlmRuntimeIpc()

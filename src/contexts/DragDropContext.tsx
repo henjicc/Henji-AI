@@ -1,4 +1,6 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
+import { getPlatform } from '@/platform/runtime'
 import React, { createContext, useContext, useState, ReactNode, useRef, useCallback } from 'react'
 
 const logger = createLogger('contexts.DragDropContext')
@@ -74,8 +76,6 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
         nativeDragTriggeredRef.current = true
 
         try {
-            const { startDrag: nativeStartDrag } = await import('@crabnebula/tauri-plugin-drag')
-
             // 使用缩略图作为图标，如果没有则使用原文件
             const iconPath = data.thumbnailPath || data.filePath
 
@@ -84,7 +84,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             setPreviewUrl(null)
 
             // 启动原生拖放
-            await nativeStartDrag({ item: [data.filePath], icon: iconPath })
+            await getPlatform().dragDrop.startNativeFileDrag(data.filePath, iconPath)
         } catch (err) {
             logger.info('[DragDrop] Native drag cancelled or failed:', err)
         } finally {

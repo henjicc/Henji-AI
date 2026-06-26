@@ -6,6 +6,7 @@ import type {
   HenjiClipboardApi,
   HenjiDbApi,
   HenjiDialogApi,
+  HenjiDragApi,
   HenjiFsApi,
   HenjiHttpApi,
   HenjiImageApi,
@@ -197,6 +198,10 @@ const clipboardApi: HenjiClipboardApi = {
   writeImageFromSource: (source) => nativeInvoke('clipboard:writeImageFromSource', { source }),
 }
 
+const dragApi: HenjiDragApi = {
+  startNativeFileDrag: (filePath, iconPath) => nativeInvoke('drag:startNativeFileDrag', { filePath, iconPath }),
+}
+
 const imageApi: HenjiImageApi = {
   splitImage: (imageBase64, rows, cols, lineThickness) =>
     nativeInvoke('image:splitImage', { imageBase64, rows, cols, lineThickness }),
@@ -255,7 +260,7 @@ const api: HenjiNativeApi = {
   media: mediaApi,
   image: imageApi,
   clipboard: clipboardApi,
-  drag: {},
+  drag: dragApi,
   projectPackage: {},
   logging: loggingApi,
   modelscope: {},

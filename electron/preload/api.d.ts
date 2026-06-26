@@ -351,6 +351,10 @@ export interface HenjiClipboardApi {
   writeImageFromSource(source: string): Promise<void>
 }
 
+export interface HenjiDragApi {
+  startNativeFileDrag(filePath: string, iconPath?: string): Promise<void>
+}
+
 export interface HenjiLogEventBridgeDto {
   timestamp: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -394,7 +398,7 @@ export interface HenjiNativeApi {
   media: HenjiMediaApi
   image: HenjiImageApi
   clipboard: HenjiClipboardApi
-  drag: Record<string, never>
+  drag: HenjiDragApi
   projectPackage: Record<string, never>
   logging: HenjiLoggingApi
   modelscope: Record<string, never>
