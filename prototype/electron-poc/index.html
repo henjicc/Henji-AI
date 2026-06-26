@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>痕迹AI Electron 原型验证</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: rgba(20, 20, 24, 0.92);
+      color: #eee;
+      -webkit-app-region: drag;
+    }
+    .titlebar {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: rgba(0, 0, 0, 0.4);
+      font-size: 13px;
+    }
+    .content {
+      -webkit-app-region: no-drag;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    section {
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    h3 { margin: 0 0 8px; font-size: 14px; }
+    img, video { max-width: 100%; border-radius: 4px; }
+    pre {
+      background: #111;
+      padding: 8px;
+      border-radius: 4px;
+      overflow: auto;
+      max-height: 160px;
+      font-size: 12px;
+    }
+    button {
+      margin-top: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    [draggable="true"] { cursor: grab; }
+  </style>
+</head>
+<body>
+  <div class="titlebar">痕迹AI · Electron 原型验证（无边框 + 透明窗口测试）</div>
+  <div class="content">
+    <section>
+      <h3>1. protocol.handle 图片加载</h3>
+      <img src="henji-media://localhost/sample-image.png" alt="sample" />
+    </section>
+
+    <section>
+      <h3>2. protocol.handle 视频加载 + Range（反复播放测试）</h3>
+      <video src="henji-media://localhost/sample-video.mp4" controls></video>
+      <p>多次点击播放/拖动进度条，确认无 FFmpegDecodeError。</p>
+    </section>
+
+    <section>
+      <h3>3. better-sqlite3 打开真实 henji.db 副本</h3>
+      <button id="btn-db">查询数据库</button>
+      <pre id="out-db">（点击按钮）</pre>
+    </section>
+
+    <section>
+      <h3>4. webContents.startDrag 原生拖出</h3>
+      <p draggable="true" id="drag-item">🖼️ 拖动这段文字到桌面/外部应用</p>
+      <pre id="out-drag">（拖动上方元素触发）</pre>
+    </section>
+
+    <section>
+      <h3>5. 保存对话框</h3>
+      <button id="btn-dialog">打开保存对话框</button>
+      <pre id="out-dialog">（点击按钮）</pre>
+    </section>
+  </div>
+
+  <script>
+    async function runAutoTest() {
+      const results = { startedAt: new Date().toISOString() }
+
+      async function checkpoint(stepName) {
+        results.lastStep = stepName
+        try {
+          await window.henjiNative.writeLog(results)
+        } catch (e) {
+          // ignore checkpoint write failure, keep test running
+        }
+      }
+
+      try {
+        results.db = await window.henjiNative.testDb()
+      } catch (error) {
+        results.db = { ok: false, error: error.message }
+      }
+      await checkpoint('after-db')
+
+      const img = document.querySelector('img')
+      results.image = await new Promise((resolve) => {
+        if (img.complete && img.naturalWidth > 0) {
+          resolve({ ok: true, width: img.naturalWidth, height: img.naturalHeight })
+          return
+        }
+        img.addEventListener('load', () =>
+          resolve({ ok: true, width: img.naturalWidth, height: img.naturalHeight })
+        )
+        img.addEventListener('error', () => resolve({ ok: false, error: 'image load failed' }))
+      })
+      await checkpoint('after-image')
+
+      const video = document.querySelector('video')
+      results.video = await new Promise((resolve) => {
+        if (video.readyState >= 1 && video.duration > 0) {
+          resolve({ ok: true, duration: video.duration, width: video.videoWidth, height: video.videoHeight })
+          return
+        }
+        video.addEventListener('loadedmetadata', () =>
+          resolve({ ok: true, duration: video.duration, width: video.videoWidth, height: video.videoHeight })
+        )
+        video.addEventListener('error', () => resolve({ ok: false, error: 'video load failed' }))
+      })
+      await checkpoint('after-video-metadata')
+
+      // 模拟二次播放 + Range 拖动：播放 0.3s 后跳转到中段，再跳回开头重新播放
+      results.videoReplay = await new Promise((resolve) => {
+        let stage = 0
+        video.addEventListener('error', () => resolve({ ok: false, stage, error: 'video error during replay test' }))
+        video.play().then(() => {
+          stage = 'playing-1'
+          setTimeout(() => {
+            stage = 1
+            video.currentTime = Math.max(0, video.duration / 2)
+            setTimeout(() => {
+              stage = 2
+              video.currentTime = 0
+              video.play().then(() => {
+                stage = 'playing-2'
+                setTimeout(() => resolve({ ok: true, stage: 3 }), 300)
+              }).catch((error) => resolve({ ok: false, stage, error: error.message }))
+            }, 300)
+          }, 300)
+        }).catch((error) => resolve({ ok: false, stage: 'play-1-rejected', error: error.message }))
+      })
+      await checkpoint('after-video-replay')
+
+      results.finishedAt = new Date().toISOString()
+      await window.henjiNative.writeLog(results)
+      document.getElementById('out-db').textContent = JSON.stringify(results, null, 2)
+    }
+
+    runAutoTest().catch((error) => {
+      document.getElementById('out-db').textContent = 'AUTO_TEST_FATAL: ' + error.message
+    })
+
+    document.getElementById('btn-db').addEventListener('click', async () => {
+      const out = document.getElementById('out-db')
+      out.textContent = '查询中...'
+      try {
+        const result = await window.henjiNative.testDb()
+        out.textContent = JSON.stringify(result, null, 2)
+      } catch (error) {
+        out.textContent = 'ERROR: ' + error.message
+      }
+    })
+
+    document.getElementById('drag-item').addEventListener('dragstart', async (event) => {
+      event.preventDefault()
+      const out = document.getElementById('out-drag')
+      try {
+        const result = await window.henjiNative.startDrag('sample-image.png')
+        out.textContent = JSON.stringify(result, null, 2)
+      } catch (error) {
+        out.textContent = 'ERROR: ' + error.message
+      }
+    })
+
+    document.getElementById('btn-dialog').addEventListener('click', async () => {
+      const out = document.getElementById('out-dialog')
+      try {
+        const result = await window.henjiNative.saveDialog()
+        out.textContent = JSON.stringify(result, null, 2)
+      } catch (error) {
+        out.textContent = 'ERROR: ' + error.message
+      }
+    })
+  </script>
+</body>
+</html>
