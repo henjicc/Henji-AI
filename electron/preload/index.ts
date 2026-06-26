@@ -19,6 +19,7 @@ import type {
   HenjiNativeApi,
   HenjiNativeFetchRequest,
   HenjiPathsApi,
+  HenjiProjectPackageApi,
   HenjiRuntimeRequestPreviewPayload,
   HenjiShellApi,
   HenjiWindowApi,
@@ -202,6 +203,12 @@ const dragApi: HenjiDragApi = {
   startNativeFileDrag: (filePath, iconPath) => nativeInvoke('drag:startNativeFileDrag', { filePath, iconPath }),
 }
 
+const projectPackageApi: HenjiProjectPackageApi = {
+  exportProjectPackage: (manifestJson, mediaFiles, targetPath) =>
+    nativeInvoke('projectPackage:export', { manifestJson, mediaFiles, targetPath }),
+  importProjectPackage: (zipPath) => nativeInvoke('projectPackage:import', { zipPath }),
+}
+
 const imageApi: HenjiImageApi = {
   splitImage: (imageBase64, rows, cols, lineThickness) =>
     nativeInvoke('image:splitImage', { imageBase64, rows, cols, lineThickness }),
@@ -261,7 +268,7 @@ const api: HenjiNativeApi = {
   image: imageApi,
   clipboard: clipboardApi,
   drag: dragApi,
-  projectPackage: {},
+  projectPackage: projectPackageApi,
   logging: loggingApi,
   modelscope: {},
   window: windowApi,

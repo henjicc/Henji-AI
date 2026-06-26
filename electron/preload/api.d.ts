@@ -355,6 +355,21 @@ export interface HenjiDragApi {
   startNativeFileDrag(filePath: string, iconPath?: string): Promise<void>
 }
 
+export interface HenjiPackageMediaFile {
+  srcPath: string
+  packagePath: string
+}
+
+export interface HenjiImportedProjectPackage {
+  manifestJson: string
+  pathMap: Record<string, string>
+}
+
+export interface HenjiProjectPackageApi {
+  exportProjectPackage(manifestJson: string, mediaFiles: HenjiPackageMediaFile[], targetPath: string): Promise<void>
+  importProjectPackage(zipPath: string): Promise<HenjiImportedProjectPackage>
+}
+
 export interface HenjiLogEventBridgeDto {
   timestamp: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -399,7 +414,7 @@ export interface HenjiNativeApi {
   image: HenjiImageApi
   clipboard: HenjiClipboardApi
   drag: HenjiDragApi
-  projectPackage: Record<string, never>
+  projectPackage: HenjiProjectPackageApi
   logging: HenjiLoggingApi
   modelscope: Record<string, never>
   window: HenjiWindowApi
