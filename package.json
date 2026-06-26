@@ -25,6 +25,7 @@
     "tauri:build:mac": "npm run gen:progress-seeds && npm run gen:model-manifest && tauri build",
     "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && electron-vite dev",
     "electron:build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && tsc -p tsconfig.electron.json && electron-vite build",
+    "electron:smoke": "node scripts/electron-phase4-smoke.cjs",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "progress:export-seeds": "node scripts/export-progress-seeds.cjs",
     "release": "node scripts/release.cjs"

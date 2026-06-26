@@ -18,6 +18,11 @@ import { createWindow } from './window'
 
 registerMediaProtocolScheme()
 
+const remoteDebuggingPort = process.env['HENJI_ELECTRON_REMOTE_DEBUGGING_PORT']
+if (remoteDebuggingPort) {
+  app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
+}
+
 app.whenReady().then(() => {
   registerMediaProtocolHandler()
   registerAiRuntimeIpc()
