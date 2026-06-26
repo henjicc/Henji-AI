@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { toDisplaySrc } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.mediaDimensions')
 
@@ -109,8 +110,7 @@ export const getMediaDimensions = async (
       mediaUrl = url
     } else if (url.startsWith('file://') || url.startsWith('/') || url.match(/^[A-Z]:\\/)) {
       // 本地文件路径，需要转换
-      const { convertFileSrc } = await import('@tauri-apps/api/core')
-      mediaUrl = convertFileSrc(url)
+      mediaUrl = toDisplaySrc(url)
     }
 
     // 根据类型获取尺寸
@@ -148,8 +148,7 @@ export const getMediaDurationFormatted = async (
       mediaUrl = url
     } else if (url.startsWith('file://') || url.startsWith('/') || url.match(/^[A-Z]:\\/)) {
       // 本地文件路径，需要转换
-      const { convertFileSrc } = await import('@tauri-apps/api/core')
-      mediaUrl = convertFileSrc(url)
+      mediaUrl = toDisplaySrc(url)
     }
 
     // 根据类型获取时长

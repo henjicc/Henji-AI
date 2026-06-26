@@ -1,6 +1,5 @@
-import Database from '@tauri-apps/plugin-sql'
-import { appLocalDataDir, join } from '@tauri-apps/api/path'
-import { exists, mkdir } from '@tauri-apps/plugin-fs'
+import { getPlatform } from '@/platform'
+import type { DbPlatform } from '@/platform/contracts/db'
 import type {
   CanvasProjectRecord,
   CanvasProjectSnapshot,
@@ -66,7 +65,7 @@ function rowToRecord(row: CanvasProjectRow): CanvasProjectRecord {
 
 export class CanvasProjectService {
   private static instance: CanvasProjectService | null = null
-  private db: Database | null = null
+  private db: DbPlatform | null = null
   private dbPath: string | null = null
   private initializing: Promise<void> | null = null
 
@@ -82,16 +81,11 @@ export class CanvasProjectService {
     if (this.initializing) return this.initializing
 
     this.initializing = (async () => {
-      const appDataDir = await appLocalDataDir()
-      const henjiDir = await join(appDataDir, 'Henji-AI')
-      const dirExists = await exists(henjiDir)
-      if (!dirExists) {
-        await mkdir(henjiDir, { recursive: true })
-      }
-
-      const dbPath = await join(henjiDir, 'henji.db')
+      const platform = getPlatform()
+      const appDataDir = await platform.system.paths.appLocalDataDir()
+      const dbPath = await platform.system.paths.join(appDataDir, 'Henji-AI', 'henji.db')
       this.dbPath = `sqlite:${dbPath}`
-      this.db = await Database.load(this.dbPath)
+      this.db = platform.db
       await this.createTables()
     })()
 
@@ -102,7 +96,7 @@ export class CanvasProjectService {
     }
   }
 
-  private ensureDb(): Database {
+  private ensureDb(): DbPlatform {
     if (!this.db) {
       throw new Error('CanvasProjectService not initialized. Please call init() first.')
     }
@@ -131,7 +125,7 @@ export class CanvasProjectService {
   async listProjects(): Promise<CanvasProjectSummary[]> {
     await this.init()
     const db = this.ensureDb()
-    const rows = await db.select<CanvasProjectRow[]>(
+    const rows = await db.select<CanvasProjectRow>(
       `SELECT id, name, node_count, nodes_json, edges_json, viewport_json, created_at, updated_at
        FROM canvas_projects
        ORDER BY updated_at DESC`
@@ -171,7 +165,7 @@ export class CanvasProjectService {
   async getProject(projectId: string): Promise<CanvasProjectRecord | null> {
     await this.init()
     const db = this.ensureDb()
-    const rows = await db.select<CanvasProjectRow[]>(
+    const rows = await db.select<CanvasProjectRow>(
       `SELECT id, name, node_count, nodes_json, edges_json, viewport_json, created_at, updated_at
        FROM canvas_projects
        WHERE id = ?

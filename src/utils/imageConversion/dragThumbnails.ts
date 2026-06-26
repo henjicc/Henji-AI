@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { join, tempDir, writeFile } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.imageConversion.dragThumbnails')
 
@@ -8,9 +9,6 @@ const logger = createLogger('utils.imageConversion.dragThumbnails')
  */
 export async function generateThumbnail(imageUrl: string): Promise<string> {
   try {
-    const { writeFile } = await import('@tauri-apps/plugin-fs')
-    const { tempDir, join } = await import('@tauri-apps/api/path')
-
     const img = new Image()
     img.crossOrigin = 'anonymous'
     await new Promise((resolve, reject) => {
@@ -70,9 +68,6 @@ export async function generateThumbnail(imageUrl: string): Promise<string> {
  */
 export async function generateVideoThumbnail(videoUrl: string): Promise<string> {
   try {
-    const { writeFile } = await import('@tauri-apps/plugin-fs')
-    const { tempDir, join } = await import('@tauri-apps/api/path')
-
     const video = document.createElement('video')
     video.crossOrigin = 'anonymous'
     video.muted = true

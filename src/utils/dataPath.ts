@@ -1,6 +1,18 @@
 import { createLogger } from '@/core/logging'
-import { path } from '@tauri-apps/api'
-import { mkdir, readDir, copyFile, remove, exists, writeFile, readFile } from '@tauri-apps/plugin-fs'
+import {
+  appLocalDataDir,
+  basename,
+  copyFile,
+  dirname,
+  exists,
+  extname,
+  join,
+  mkdir,
+  readDir,
+  readFile,
+  remove,
+  writeFile,
+} from '@/platform/desktopApi'
 
 const logger = createLogger('utils.dataPath')
 
@@ -11,8 +23,8 @@ const logger = createLogger('utils.dataPath')
  * @returns 默认数据目录路径（AppLocalData/Henji-AI）
  */
 export async function getDefaultDataRoot(): Promise<string> {
-  const appLocalDataDir = await path.appLocalDataDir()
-  return await path.join(appLocalDataDir, 'Henji-AI')
+  const appDataDir = await appLocalDataDir()
+  return await join(appDataDir, 'Henji-AI')
 }
 
 /**
@@ -32,7 +44,7 @@ export async function getDataRoot(): Promise<string> {
  */
 export async function getMediaPath(): Promise<string> {
   const root = await getDataRoot()
-  return await path.join(root, 'Media')
+  return await join(root, 'Media')
 }
 
 /**
@@ -40,7 +52,7 @@ export async function getMediaPath(): Promise<string> {
  */
 export async function getWaveformsPath(): Promise<string> {
   const root = await getDataRoot()
-  return await path.join(root, 'Waveforms')
+  return await join(root, 'Waveforms')
 }
 
 /**
@@ -48,7 +60,7 @@ export async function getWaveformsPath(): Promise<string> {
  */
 export async function getThumbnailsPath(): Promise<string> {
   const root = await getDataRoot()
-  return await path.join(root, 'Thumbnails')
+  return await join(root, 'Thumbnails')
 }
 
 /**
@@ -56,7 +68,7 @@ export async function getThumbnailsPath(): Promise<string> {
  */
 export async function getUploadsPath(): Promise<string> {
   const root = await getDataRoot()
-  return await path.join(root, 'Uploads')
+  return await join(root, 'Uploads')
 }
 
 /**
@@ -64,7 +76,7 @@ export async function getUploadsPath(): Promise<string> {
  */
 export async function getHistoryFilePath(): Promise<string> {
   const root = await getDataRoot()
-  return await path.join(root, 'history.json')
+  return await join(root, 'history.json')
 }
 
 /**
@@ -72,7 +84,7 @@ export async function getHistoryFilePath(): Promise<string> {
  */
 export async function getPresetsFilePath(): Promise<string> {
   const root = await getDataRoot()
-  return await path.join(root, 'presets.json')
+  return await join(root, 'presets.json')
 }
 
 /**
@@ -85,10 +97,10 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
     await mkdir(rootPath, { recursive: true })
 
     // 创建子目录
-    await mkdir(await path.join(rootPath, 'Media'), { recursive: true })
-    await mkdir(await path.join(rootPath, 'Waveforms'), { recursive: true })
-    await mkdir(await path.join(rootPath, 'Thumbnails'), { recursive: true })
-    await mkdir(await path.join(rootPath, 'Uploads'), { recursive: true })
+    await mkdir(await join(rootPath, 'Media'), { recursive: true })
+    await mkdir(await join(rootPath, 'Waveforms'), { recursive: true })
+    await mkdir(await join(rootPath, 'Thumbnails'), { recursive: true })
+    await mkdir(await join(rootPath, 'Uploads'), { recursive: true })
   } catch (error) {
     logger.error('初始化数据目录失败:', error)
     throw new Error(`初始化数据目录失败: ${error}`)
@@ -123,7 +135,7 @@ export async function validateDirectory(dirPath: string): Promise<boolean> {
     await mkdir(dirPath, { recursive: true })
 
     // 尝试创建测试文件
-    const testFilePath = await path.join(dirPath, '.henji_write_test')
+    const testFilePath = await join(dirPath, '.henji_write_test')
     await writeFile(testFilePath, new Uint8Array([1, 2, 3]))
 
     // 尝试读取测试文件
@@ -180,7 +192,7 @@ async function collectFiles(dirPath: string, baseDir: string): Promise<string[]>
     const entries = await readDir(dirPath)
 
     for (const entry of entries) {
-      const fullPath = await path.join(dirPath, entry.name)
+      const fullPath = await join(dirPath, entry.name)
 
       if (entry.isDirectory) {
         // 递归收集子目录中的文件
@@ -188,7 +200,7 @@ async function collectFiles(dirPath: string, baseDir: string): Promise<string[]>
         files.push(...subFiles)
       } else {
         // 计算相对路径
-        const relativePath = fullPath.replace(baseDir, '').replace(/^[\/\\]/, '')
+        const relativePath = fullPath.replace(baseDir, '').replace(/^[/\\]/, '')
         files.push(relativePath)
       }
     }
@@ -204,7 +216,7 @@ async function collectFiles(dirPath: string, baseDir: string): Promise<string[]>
  * @param dirPath 目录路径
  */
 async function createMigrationMarker(dirPath: string): Promise<void> {
-  const markerPath = await path.join(dirPath, '.migration_in_progress')
+  const markerPath = await join(dirPath, '.migration_in_progress')
   await writeFile(markerPath, new TextEncoder().encode(new Date().toISOString()))
 }
 
@@ -213,7 +225,7 @@ async function createMigrationMarker(dirPath: string): Promise<void> {
  * @param dirPath 目录路径
  */
 async function removeMigrationMarker(dirPath: string): Promise<void> {
-  const markerPath = await path.join(dirPath, '.migration_in_progress')
+  const markerPath = await join(dirPath, '.migration_in_progress')
   try {
     await remove(markerPath)
   } catch (error) {
@@ -227,7 +239,7 @@ async function removeMigrationMarker(dirPath: string): Promise<void> {
  * @returns 是否有未完成的迁移
  */
 export async function hasPendingMigration(dirPath: string): Promise<boolean> {
-  const markerPath = await path.join(dirPath, '.migration_in_progress')
+  const markerPath = await join(dirPath, '.migration_in_progress')
   return await exists(markerPath)
 }
 
@@ -280,12 +292,12 @@ export async function migrateData(
     for (let i = 0; i < files.length; i++) {
 
       const relativeFilePath = files[i]
-      const sourceFilePath = await path.join(oldPath, relativeFilePath)
-      const targetFilePath = await path.join(newPath, relativeFilePath)
+      const sourceFilePath = await join(oldPath, relativeFilePath)
+      const targetFilePath = await join(newPath, relativeFilePath)
 
       try {
         // 确保目标目录存在
-        const targetDir = await path.dirname(targetFilePath)
+        const targetDir = await dirname(targetFilePath)
         await mkdir(targetDir, { recursive: true })
 
         // 处理文件名冲突（仅在合并模式下）
@@ -295,10 +307,10 @@ export async function migrateData(
           if (targetExists) {
             // 添加时间戳后缀
             const timestamp = Date.now()
-            const ext = await path.extname(targetFilePath)
-            const basename = await path.basename(targetFilePath, ext)
-            const dirname = await path.dirname(targetFilePath)
-            finalTargetPath = await path.join(dirname, `${basename}_${timestamp}${ext}`)
+            const ext = extname(targetFilePath)
+            const baseName = basename(targetFilePath, ext)
+            const targetParent = await dirname(targetFilePath)
+            finalTargetPath = await join(targetParent, `${baseName}_${timestamp}${ext}`)
           }
         }
 
@@ -318,8 +330,8 @@ export async function migrateData(
     // 7. 验证迁移完整性（检查关键文件）
     const criticalFiles = ['history.json', 'presets.json']
     for (const file of criticalFiles) {
-      const oldFilePath = await path.join(oldPath, file)
-      const newFilePath = await path.join(newPath, file)
+      const oldFilePath = await join(oldPath, file)
+      const newFilePath = await join(newPath, file)
       const oldExists = await exists(oldFilePath)
       const newExists = await exists(newFilePath)
 
@@ -374,7 +386,7 @@ export async function cleanupOldData(oldPath: string): Promise<void> {
 export function isAbsolutePath(filePath: string): boolean {
   // Windows: C:\ 或 D:\ 等
   // Unix/Mac: / 开头
-  return /^[a-zA-Z]:[\\\/]/.test(filePath) || filePath.startsWith('/')
+  return /^[a-zA-Z]:[\\/]/.test(filePath) || filePath.startsWith('/')
 }
 
 /**
@@ -422,7 +434,7 @@ export async function toAbsolutePath(relativePath: string, dataRoot: string): Pr
   }
 
   // 拼接为绝对路径
-  return await path.join(dataRoot, relativePath)
+  return await join(dataRoot, relativePath)
 }
 
 /**

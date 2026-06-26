@@ -1,4 +1,4 @@
-import * as path from '@tauri-apps/api/path'
+import { join } from '@/platform/desktopApi'
 import { getDataRoot } from '@/utils/dataPath'
 
 /**
@@ -14,13 +14,12 @@ export async function resolveFilePath(filePath: string): Promise<string> {
   }
 
   const isAbsolute =
-    /^[a-zA-Z]:[\\\/]/.test(filePath) || // Windows: C:\, D:\
+    /^[a-zA-Z]:[\\/]/.test(filePath) || // Windows: C:\, D:\
     /^\//.test(filePath) ||              // Unix: /
     /^\\\\/.test(filePath)               // Windows UNC: \\server\share
 
   if (isAbsolute) return filePath
 
   const dataRoot = await getDataRoot()
-  return await path.join(dataRoot, filePath)
+  return await join(dataRoot, filePath)
 }
-

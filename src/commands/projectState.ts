@@ -1,6 +1,5 @@
-import Database from '@tauri-apps/plugin-sql';
-import { appLocalDataDir, join } from '@tauri-apps/api/path';
-import { exists, mkdir } from '@tauri-apps/plugin-fs';
+import { getPlatform } from '@/platform';
+import type { DbPlatform } from '@/platform/contracts/db';
 
 export interface ProjectSummaryRecord {
   id: string;
@@ -34,7 +33,7 @@ interface ProjectRow {
   history_json: string;
 }
 
-let db: Database | null = null;
+let db: DbPlatform | null = null;
 let initTask: Promise<void> | null = null;
 
 function normalizeTimestamp(value: number | string | null | undefined): number {
@@ -65,21 +64,14 @@ function toProjectRecord(record: ProjectRow): ProjectRecord {
   };
 }
 
-async function ensureDb(): Promise<Database> {
+async function ensureDb(): Promise<DbPlatform> {
   if (db) {
     return db;
   }
 
   if (!initTask) {
     initTask = (async () => {
-      const appDataDir = await appLocalDataDir();
-      const appDir = await join(appDataDir, 'Henji-AI');
-      if (!(await exists(appDir))) {
-        await mkdir(appDir, { recursive: true });
-      }
-
-      const dbPath = await join(appDir, 'henji.db');
-      db = await Database.load(`sqlite:${dbPath}`);
+      db = getPlatform().db;
       await db.execute(`
         CREATE TABLE IF NOT EXISTS storyboard_projects (
           id TEXT PRIMARY KEY,
@@ -110,7 +102,7 @@ async function ensureDb(): Promise<Database> {
 
 export async function listProjectSummaries(): Promise<ProjectSummaryRecord[]> {
   const conn = await ensureDb();
-  const rows = await conn.select<ProjectRow[]>(
+  const rows = await conn.select<ProjectRow>(
     `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json
      FROM storyboard_projects
      ORDER BY updated_at DESC`
@@ -120,7 +112,7 @@ export async function listProjectSummaries(): Promise<ProjectSummaryRecord[]> {
 
 export async function getProjectRecord(projectId: string): Promise<ProjectRecord | null> {
   const conn = await ensureDb();
-  const rows = await conn.select<ProjectRow[]>(
+  const rows = await conn.select<ProjectRow>(
     `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json
      FROM storyboard_projects
      WHERE id = ?

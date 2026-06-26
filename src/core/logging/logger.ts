@@ -3,8 +3,8 @@ import { isDomainEnabled, refreshLogConfigByRuntime, shouldLogLevel } from './co
 import { sanitizeLogPayload } from './sanitize'
 import { appendLogEvent } from './store'
 import type { LogCallMeta, LogEvent, LogEventBridgeDto, LogLevel } from './types'
-import { isTauri } from '@tauri-apps/api/core'
 import { listenLlmRuntimeRequestPreview, listenRuntimeRequestPreview } from '@/commands/logging'
+import { isDesktopRuntime } from '@/platform/runtime'
 
 export interface Logger {
   trace: (...args: unknown[]) => void
@@ -797,7 +797,7 @@ export function initLoggerConfig(): void {
     return
   }
 
-  if (isTauri()) {
+  if (isDesktopRuntime()) {
     void listenRuntimeRequestPreview((payload) => {
       const runtimePreviewLogger = createLogger('core.services.GenerationService')
       runtimePreviewLogger.info('最终请求参数(JSON)', {

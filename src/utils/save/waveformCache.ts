@@ -1,6 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
-import * as path from '@tauri-apps/api/path'
+import { join, mkdir, readFile, remove, writeFile } from '@/platform/desktopApi'
 import { getWaveformsPath } from '@/utils/dataPath'
 import { sha256HexString } from './hash'
 
@@ -10,7 +9,7 @@ async function waveformCachePaths(audioFullPath: string): Promise<{ full: string
   const hash = await sha256HexString(audioFullPath)
   const name = `${hash}.json`
   const waveformsPath = await getWaveformsPath()
-  const full = await path.join(waveformsPath, name)
+  const full = await join(waveformsPath, name)
   return { full }
 }
 
@@ -18,7 +17,7 @@ export async function readWaveformCacheForAudio(audioFullPath: string): Promise<
   try {
     const { full } = await waveformCachePaths(audioFullPath)
     const bytes = await readFile(full)
-    const text = new TextDecoder().decode(bytes as any)
+    const text = new TextDecoder().decode(bytes)
     const data = JSON.parse(text)
     if (Array.isArray(data)) return data as number[]
     if (Array.isArray(data?.samples)) return data.samples as number[]

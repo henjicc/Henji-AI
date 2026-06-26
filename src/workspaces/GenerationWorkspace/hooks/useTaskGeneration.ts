@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import { GenerationService } from '@/core/services/GenerationService'
 import { registry } from '@/core/ModelRegistry'
 import { taskQueueManager } from '@/services/taskQueue'

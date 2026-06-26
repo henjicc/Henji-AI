@@ -1,5 +1,5 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import MediaGenerator from '@/components/MediaGenerator'
 import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'

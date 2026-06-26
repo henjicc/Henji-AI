@@ -3,7 +3,7 @@ import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
 import { UiIconButton, UiRangeInput } from '@/components/ui'
 import Waveform from './Waveform'
 import { useI18n } from '@/hooks/useI18n'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { nativeFetch, readFile } from '@/platform/desktopApi'
 import { Download, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
 interface AudioPlayerProps {
@@ -85,10 +85,9 @@ async function fetchAudioArrayBuffer(source: string, localFilePath?: string): Pr
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
   }
   if (isCrossOriginWaveformRestricted(source)) {
-    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-    const response = await tauriFetch(source, { method: 'GET' })
+    const response = await nativeFetch(source, { method: 'GET' })
     if (!response.ok) {
-      throw new Error(`waveform tauri fetch failed: ${response.status}`)
+      throw new Error(`waveform native fetch failed: ${response.status}`)
     }
     return response.arrayBuffer()
   }
@@ -144,7 +143,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     setDuration(0)
     try {
       a.currentTime = 0
-    } catch { }
+    } catch {
+      // Ignore media reset failures from unloaded audio elements.
+    }
     const onLoaded = () => setDuration(a.duration || 0)
     const onTime = () => setCurrentTime(a.currentTime || 0)
     const onEnd = () => setIsPlaying(false)
@@ -314,7 +315,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         anchor.target = '_blank'
         anchor.rel = 'noopener'
         anchor.click()
-      } catch { }
+      } catch {
+        // Browser download fallback is best-effort only.
+      }
     } finally {
       setIsDownloading(false)
     }
@@ -399,7 +402,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
     run()
     return () => { aborted = true }
-  }, [cacheKey, src, filePath, targetBars, compact])
+  }, [cacheKey, src, filePath, targetBars, compact, duration])
   const volumePercent = Math.round(volume * 100)
   const volumeSliderWidthClass = compact ? 'w-[6.75rem]' : 'w-32'
 

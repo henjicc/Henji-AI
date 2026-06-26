@@ -4,7 +4,7 @@
  * 提供文件处理、URL处理、API密钥管理等通用工具函数
  */
 
-import { readFile } from '@tauri-apps/plugin-fs'
+import { readFile } from '@/platform/desktopApi'
 import { ProviderError, ProviderErrorCode } from './errors'
 
 /**

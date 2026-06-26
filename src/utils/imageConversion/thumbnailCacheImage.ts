@@ -1,7 +1,7 @@
+import { exists, mkdir, readFile, toDisplaySrc, writeFile } from '@/platform/desktopApi'
 import { getImageThumbnailCachePath } from './thumbnailCachePaths'
 
 export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl: string): Promise<string> {
-  const { writeFile, mkdir, exists } = await import('@tauri-apps/plugin-fs')
   const { getThumbnailsPath } = await import('@/utils/dataPath')
 
   const cachePath = await getImageThumbnailCachePath(imagePath)
@@ -88,9 +88,6 @@ export async function getOrCreateImageThumbnail(
   imagePath: string,
   imageUrl?: string
 ): Promise<{ filePath: string; dataUrl: string }> {
-  const { exists, readFile } = await import('@tauri-apps/plugin-fs')
-  const { convertFileSrc } = await import('@tauri-apps/api/core')
-
   const cachePath = await getImageThumbnailCachePath(imagePath)
   const cacheExists = await exists(cachePath)
 
@@ -105,7 +102,7 @@ export async function getOrCreateImageThumbnail(
     return { filePath: cachePath, dataUrl }
   }
 
-  const url = imageUrl || convertFileSrc(imagePath)
+  const url = imageUrl || toDisplaySrc(imagePath)
   const generatedPath = await generateAndCacheImageThumbnail(imagePath, url)
 
   const bytes = await readFile(generatedPath)

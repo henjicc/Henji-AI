@@ -9,10 +9,10 @@ export function createElectronDragDrop(): DragDropPlatform {
       throw new PlatformNotImplementedError(DOMAIN, 'startNativeFileDrag')
     },
     onFilesDropped: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'onFilesDropped')
+      return () => {}
     },
     onDragStateChange: () => {
-      throw new PlatformNotImplementedError(DOMAIN, 'onDragStateChange')
+      return () => {}
     },
   }
 }

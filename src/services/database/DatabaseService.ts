@@ -7,9 +7,8 @@ const logger = createLogger('services.database.DatabaseService')
  * Provides type-safe access to SQLite database
  */
 
-import Database from '@tauri-apps/plugin-sql'
-import { appLocalDataDir, join } from '@tauri-apps/api/path'
-import { exists, mkdir } from '@tauri-apps/plugin-fs'
+import { getPlatform } from '@/platform'
+import type { DbPlatform, SqlBindValue } from '@/platform/contracts/db'
 import type {
 
   DatabaseService as IDatabaseService,
@@ -21,8 +20,52 @@ import type {
   PresetQueryOptions,
 } from './types'
 
+interface HistoryRow {
+  id: string
+  provider_id: string
+  model_id: string
+  type: HistoryRecord['type']
+  prompt: string | null
+  params: string | null
+  file_path: string | null
+  task_id: string | null
+  status: HistoryRecord['status']
+  error_message: string | null
+  cost: number | null
+  duration: number | null
+  created_at: string
+  updated_at: string
+}
+
+interface PresetRow {
+  id: string
+  name: string
+  description: string | null
+  model_id: string | null
+  params: string | null
+  is_favorite: number
+  use_count: number
+  created_at: string
+  updated_at: string
+}
+
+interface SettingValueRow {
+  value: string
+}
+
+interface CustomModelRow {
+  id: string
+  name: string
+  provider_id: string
+  base_model: string | null
+  config: string | null
+  is_enabled: number
+  created_at: string
+  updated_at: string
+}
+
 export class DatabaseService implements IDatabaseService {
-  private db: Database | null = null
+  private db: DbPlatform | null = null
   private dbPath: string | null = null
 
   /**
@@ -32,22 +75,12 @@ export class DatabaseService implements IDatabaseService {
     if (this.db) return
 
     try {
-      // 获取应用数据目录
-      const appDataDir = await appLocalDataDir()
-      // 使用 join 确保路径正确
-      const henjiDir = await join(appDataDir, 'Henji-AI')
-
-      // 确保 Henji-AI 目录存在
-      const dirExists = await exists(henjiDir)
-      if (!dirExists) {
-        await mkdir(henjiDir, { recursive: true })
-      }
-
-      // 设置数据库路径
-      const dbPath = await join(henjiDir, 'henji.db')
+      const platform = getPlatform()
+      const appDataDir = await platform.system.paths.appLocalDataDir()
+      const dbPath = await platform.system.paths.join(appDataDir, 'Henji-AI', 'henji.db')
       this.dbPath = `sqlite:${dbPath}`
 
-      this.db = await Database.load(this.dbPath)
+      this.db = platform.db
       // logger.info('[Database] Connected successfully to:', this.dbPath)
 
       // 创建表结构
@@ -129,7 +162,7 @@ export class DatabaseService implements IDatabaseService {
   /**
    * Ensure database is connected
    */
-  private ensureConnected(): Database {
+  private ensureConnected(): DbPlatform {
     if (!this.db) {
       throw new Error('Database not initialized. Please call init() first.')
     }
@@ -169,7 +202,7 @@ export class DatabaseService implements IDatabaseService {
     const db = this.ensureConnected()
 
     let sql = 'SELECT * FROM history WHERE 1=1'
-    const params: any[] = []
+    const params: SqlBindValue[] = []
 
     if (options.providerId) {
       sql += ' AND provider_id = ?'
@@ -208,14 +241,14 @@ export class DatabaseService implements IDatabaseService {
       params.push(options.offset)
     }
 
-    const rows = await db.select<any[]>(sql, params)
+    const rows = await db.select<HistoryRow>(sql, params)
     return rows.map(this.mapHistoryRow)
   }
 
   async getHistoryById(id: string): Promise<HistoryRecord | null> {
     const db = this.ensureConnected()
 
-    const rows = await db.select<any[]>(
+    const rows = await db.select<HistoryRow>(
       'SELECT * FROM history WHERE id = ?',
       [id]
     )
@@ -230,7 +263,7 @@ export class DatabaseService implements IDatabaseService {
     const db = this.ensureConnected()
 
     const fields: string[] = []
-    const values: any[] = []
+    const values: SqlBindValue[] = []
 
     if (updates.providerId !== undefined) {
       fields.push('provider_id = ?')
@@ -336,7 +369,7 @@ export class DatabaseService implements IDatabaseService {
     const db = this.ensureConnected()
 
     let sql = 'SELECT * FROM presets WHERE 1=1'
-    const params: any[] = []
+    const params: SqlBindValue[] = []
 
     if (options.modelId !== undefined) {
       if (options.modelId === null) {
@@ -363,14 +396,14 @@ export class DatabaseService implements IDatabaseService {
       params.push(options.offset)
     }
 
-    const rows = await db.select<any[]>(sql, params)
+    const rows = await db.select<PresetRow>(sql, params)
     return rows.map(this.mapPresetRow)
   }
 
   async getPresetById(id: string): Promise<PresetRecord | null> {
     const db = this.ensureConnected()
 
-    const rows = await db.select<any[]>(
+    const rows = await db.select<PresetRow>(
       'SELECT * FROM presets WHERE id = ?',
       [id]
     )
@@ -385,7 +418,7 @@ export class DatabaseService implements IDatabaseService {
     const db = this.ensureConnected()
 
     const fields: string[] = []
-    const params: any[] = []
+    const params: SqlBindValue[] = []
 
     if (updates.name !== undefined) {
       fields.push('name = ?')
@@ -435,7 +468,7 @@ export class DatabaseService implements IDatabaseService {
   async getSetting(key: string): Promise<string | null> {
     const db = this.ensureConnected()
 
-    const rows = await db.select<any[]>(
+    const rows = await db.select<SettingValueRow>(
       'SELECT value FROM settings WHERE key = ?',
       [key]
     )
@@ -489,7 +522,7 @@ export class DatabaseService implements IDatabaseService {
     const db = this.ensureConnected()
 
     let sql = 'SELECT * FROM custom_models WHERE 1=1'
-    const params: any[] = []
+    const params: SqlBindValue[] = []
 
     if (providerId) {
       sql += ' AND provider_id = ?'
@@ -498,14 +531,14 @@ export class DatabaseService implements IDatabaseService {
 
     sql += ' ORDER BY created_at DESC'
 
-    const rows = await db.select<any[]>(sql, params)
+    const rows = await db.select<CustomModelRow>(sql, params)
     return rows.map(this.mapCustomModelRow)
   }
 
   async getCustomModelById(id: string): Promise<CustomModelRecord | null> {
     const db = this.ensureConnected()
 
-    const rows = await db.select<any[]>(
+    const rows = await db.select<CustomModelRow>(
       'SELECT * FROM custom_models WHERE id = ?',
       [id]
     )
@@ -520,7 +553,7 @@ export class DatabaseService implements IDatabaseService {
     const db = this.ensureConnected()
 
     const fields: string[] = []
-    const params: any[] = []
+    const params: SqlBindValue[] = []
 
     if (updates.name !== undefined) {
       fields.push('name = ?')
@@ -570,7 +603,7 @@ export class DatabaseService implements IDatabaseService {
 
   // ==================== Private Helper Methods ====================
 
-  private mapHistoryRow(row: any): HistoryRecord {
+  private mapHistoryRow(row: HistoryRow): HistoryRecord {
     return {
       id: row.id,
       providerId: row.provider_id,
@@ -589,7 +622,7 @@ export class DatabaseService implements IDatabaseService {
     }
   }
 
-  private mapPresetRow(row: any): PresetRecord {
+  private mapPresetRow(row: PresetRow): PresetRecord {
     return {
       id: row.id,
       name: row.name,
@@ -603,7 +636,7 @@ export class DatabaseService implements IDatabaseService {
     }
   }
 
-  private mapCustomModelRow(row: any): CustomModelRecord {
+  private mapCustomModelRow(row: CustomModelRow): CustomModelRecord {
     return {
       id: row.id,
       name: row.name,
@@ -619,4 +652,3 @@ export class DatabaseService implements IDatabaseService {
 
 // Singleton instance
 export const databaseService = new DatabaseService()
-

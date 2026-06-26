@@ -1,7 +1,7 @@
+import { exists, mkdir, readFile, toDisplaySrc, writeFile } from '@/platform/desktopApi'
 import { getVideoThumbnailCachePath } from './thumbnailCachePaths'
 
 export async function generateAndCacheVideoThumbnail(videoPath: string, videoUrl: string): Promise<string> {
-  const { writeFile, mkdir, exists } = await import('@tauri-apps/plugin-fs')
   const { getThumbnailsPath } = await import('@/utils/dataPath')
 
   const cachePath = await getVideoThumbnailCachePath(videoPath)
@@ -102,9 +102,6 @@ export async function getOrCreateVideoThumbnail(
   videoPath: string,
   videoUrl?: string
 ): Promise<{ filePath: string; dataUrl: string }> {
-  const { exists, readFile } = await import('@tauri-apps/plugin-fs')
-  const { convertFileSrc } = await import('@tauri-apps/api/core')
-
   const cachePath = await getVideoThumbnailCachePath(videoPath)
   const cacheExists = await exists(cachePath)
 
@@ -119,7 +116,7 @@ export async function getOrCreateVideoThumbnail(
     return { filePath: cachePath, dataUrl }
   }
 
-  const url = videoUrl || convertFileSrc(videoPath)
+  const url = videoUrl || toDisplaySrc(videoPath)
   const generatedPath = await generateAndCacheVideoThumbnail(videoPath, url)
 
   const bytes = await readFile(generatedPath)
@@ -132,4 +129,3 @@ export async function getOrCreateVideoThumbnail(
 
   return { filePath: generatedPath, dataUrl }
 }
-

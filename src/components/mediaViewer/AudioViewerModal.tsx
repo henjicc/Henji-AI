@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import AudioPlayer from '@/components/AudioPlayer'
 
 export interface AudioViewerModalProps {

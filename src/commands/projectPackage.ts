@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { getPlatform } from '@/platform/runtime';
 
 export interface PackageMediaFile {
   srcPath: string;
@@ -16,9 +16,9 @@ export async function exportProjectPackage(
   mediaFiles: PackageMediaFile[],
   targetPath: string
 ): Promise<void> {
-  await invoke('export_project_package', { manifestJson, mediaFiles, targetPath });
+  await getPlatform().projectPackage.exportProjectPackage(manifestJson, mediaFiles, targetPath);
 }
 
 export async function importProjectPackage(zipPath: string): Promise<ImportedProjectPackage> {
-  return await invoke<ImportedProjectPackage>('import_project_package', { zipPath });
+  return await getPlatform().projectPackage.importProjectPackage(zipPath);
 }

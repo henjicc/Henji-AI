@@ -1,7 +1,15 @@
 import { createLogger } from '@/core/logging'
-import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
-import { appLocalDataDir, dirname, downloadDir, join } from '@tauri-apps/api/path';
-import { mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime';
+import {
+  appLocalDataDir,
+  dirname,
+  downloadDir,
+  join,
+  mkdir,
+  readFile,
+  toDisplaySrc as convertFileSrc,
+  writeFile,
+} from '@/platform/desktopApi';
 
 const logger = createLogger('commands.image')
 
@@ -18,6 +26,10 @@ const LOCAL_PATH_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 const storyboardMetadataStore = new Map<string, StoryboardImageMetadata>();
 const IMAGE_CMD_LOG_PREFIX = '[ImageCmd]';
 const IMAGE_CMD_LOG_ENABLED = false;
+
+function isNativeImageRuntime(): boolean {
+  return isDesktopRuntime();
+}
 
 function imageCmdInfo(message: string, payload: unknown): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
@@ -223,6 +235,7 @@ function resolveSafeFilename(input: string): string {
   const fallback = `image-${Date.now()}`;
   const trimmed = input.trim();
   if (!trimmed) return fallback;
+  // eslint-disable-next-line no-control-regex
   return trimmed.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
 }
 
@@ -375,7 +388,7 @@ export async function splitImage(
   lineThickness = 0
 ): Promise<string[]> {
   const startedAt = performance.now();
-  const runtime = isTauri() ? 'tauri' : 'web';
+  const runtime = isNativeImageRuntime() ? 'desktop' : 'web';
   imageCmdInfo('splitImage start', {
     runtime,
     rows,
@@ -383,7 +396,7 @@ export async function splitImage(
     lineThickness,
   });
 
-  if (!isTauri()) {
+  if (!isNativeImageRuntime()) {
     const fallback = await localSplitImage(imageBase64, rows, cols, lineThickness);
     imageCmdInfo('splitImage fallback(web)', {
       frames: fallback.length,
@@ -393,12 +406,7 @@ export async function splitImage(
   }
 
   try {
-    const rustResult = await invoke<string[]>('split_image', {
-      imageBase64,
-      rows,
-      cols,
-      lineThickness,
-    });
+    const rustResult = await getPlatform().image.splitImage(imageBase64, rows, cols, lineThickness);
     imageCmdInfo('splitImage rust', {
       frames: rustResult.length,
       totalMs: Math.round(performance.now() - startedAt),
@@ -425,7 +433,7 @@ export async function splitImageSource(
   lineThickness = 0
 ): Promise<string[]> {
   const startedAt = performance.now();
-  const runtime = isTauri() ? 'tauri' : 'web';
+  const runtime = isNativeImageRuntime() ? 'desktop' : 'web';
   imageCmdInfo('splitImageSource start', {
     runtime,
     sourceKind: sourceKindForLog(source),
@@ -434,7 +442,7 @@ export async function splitImageSource(
     lineThickness,
   });
 
-  if (!isTauri()) {
+  if (!isNativeImageRuntime()) {
     const fallback = await localSplitImage(source, rows, cols, lineThickness);
     imageCmdInfo('splitImageSource fallback(web)', {
       frames: fallback.length,
@@ -444,12 +452,7 @@ export async function splitImageSource(
   }
 
   try {
-    const rustResult = await invoke<string[]>('split_image_source', {
-      source,
-      rows,
-      cols,
-      lineThickness,
-    });
+    const rustResult = await getPlatform().image.splitImageSource(source, rows, cols, lineThickness);
     imageCmdInfo('splitImageSource rust', {
       frames: rustResult.length,
       totalMs: Math.round(performance.now() - startedAt),
@@ -527,7 +530,7 @@ export async function mergeStoryboardImages(
   payload: MergeStoryboardImagesPayload
 ): Promise<MergeStoryboardImagesResult> {
   try {
-    return await invoke<MergeStoryboardImagesResult>('merge_storyboard_images', { payload });
+    return await getPlatform().image.mergeStoryboardImages(payload);
   } catch {
     // fallback to frontend merge implementation
   }
@@ -667,7 +670,7 @@ export async function readStoryboardImageMetadata(
   source: string
 ): Promise<StoryboardImageMetadata | null> {
   try {
-    return await invoke<StoryboardImageMetadata | null>('read_storyboard_image_metadata', { source });
+    return await getPlatform().image.readStoryboardImageMetadata(source);
   } catch {
     return storyboardMetadataStore.get(normalizeSourceKey(source)) ?? null;
   }
@@ -678,7 +681,7 @@ export async function embedStoryboardImageMetadata(
   metadata: StoryboardImageMetadata
 ): Promise<string> {
   try {
-    return await invoke<string>('embed_storyboard_image_metadata', { source, metadata });
+    return await getPlatform().image.embedStoryboardImageMetadata(source, metadata);
   } catch {
     storyboardMetadataStore.set(normalizeSourceKey(source), {
       gridRows: Math.max(1, Math.floor(metadata.gridRows)),
@@ -722,10 +725,7 @@ export async function prepareNodeImageSource(
   maxPreviewDimension = 512
 ): Promise<PrepareNodeImageSourceResult> {
   try {
-    return await invoke<PrepareNodeImageSourceResult>('prepare_node_image_source', {
-      source,
-      maxPreviewDimension,
-    });
+    return await getPlatform().image.prepareNodeImageSource(source, maxPreviewDimension);
   } catch {
     // fallback to frontend preparation
   }
@@ -754,11 +754,7 @@ export async function prepareNodeImageBinary(
   maxPreviewDimension = 512
 ): Promise<PrepareNodeImageSourceResult> {
   try {
-    return await invoke<PrepareNodeImageSourceResult>('prepare_node_image_binary', {
-      bytes: Array.from(bytes),
-      extension,
-      maxPreviewDimension,
-    });
+    return await getPlatform().image.prepareNodeImageBinary(bytes, extension, maxPreviewDimension);
   } catch {
     // fallback to frontend preparation
   }
@@ -772,7 +768,7 @@ export async function cropImageSource(
   payload: CropImageSourcePayload
 ): Promise<string> {
   try {
-    return await invoke<string>('crop_image_source', { payload });
+    return await getPlatform().image.cropImageSource(payload);
   } catch {
     // fallback to frontend crop
   }
@@ -838,12 +834,12 @@ export interface ImageInfoResult {
 }
 
 export async function readImageInfo(source: string): Promise<ImageInfoResult> {
-  return await invoke<ImageInfoResult>('read_image_info', { source });
+  return await getPlatform().image.readImageInfo(source);
 }
 
 export async function loadImage(filePath: string): Promise<string> {
   try {
-    return await invoke<string>('load_image', { filePath });
+    return await getPlatform().image.loadImage(filePath);
   } catch {
     return await fileToDataUrl(normalizeLocalPath(filePath));
   }
@@ -851,7 +847,7 @@ export async function loadImage(filePath: string): Promise<string> {
 
 export async function persistImageSource(source: string): Promise<string> {
   try {
-    return await invoke<string>('persist_image_source', { source });
+    return await getPlatform().image.persistImageSource(source);
   } catch {
     // fallback to frontend persistence
   }
@@ -873,10 +869,7 @@ export async function persistImageBinary(
   extension = 'png'
 ): Promise<string> {
   try {
-    return await invoke<string>('persist_image_binary', {
-      bytes: Array.from(bytes),
-      extension,
-    });
+    return await getPlatform().image.persistImageBinary(bytes, extension);
   } catch {
     return await persistBytes(bytes, extensionToMime(extension));
   }
@@ -887,7 +880,7 @@ export async function saveImageSourceToDownloads(
   suggestedFileName?: string
 ): Promise<string> {
   try {
-    return await invoke<string>('save_image_source_to_downloads', { source, suggestedFileName });
+    return await getPlatform().image.saveImageSourceToDownloads(source, suggestedFileName);
   } catch {
     // fallback to frontend file save
   }
@@ -907,7 +900,7 @@ export async function saveImageSourceToPath(
   targetPath: string
 ): Promise<string> {
   try {
-    return await invoke<string>('save_image_source_to_path', { source, targetPath });
+    return await getPlatform().image.saveImageSourceToPath(source, targetPath);
   } catch {
     // fallback to frontend file save
   }
@@ -930,11 +923,7 @@ export async function saveImageSourceToDirectory(
   suggestedFileName?: string
 ): Promise<string> {
   try {
-    return await invoke<string>('save_image_source_to_directory', {
-      source,
-      targetDir,
-      suggestedFileName,
-    });
+    return await getPlatform().image.saveImageSourceToDirectory(source, targetDir, suggestedFileName);
   } catch {
     // fallback to frontend file save
   }
@@ -961,11 +950,7 @@ export async function saveImageSourceToAppDebugDir(
   suggestedFileName?: string
 ): Promise<string> {
   try {
-    return await invoke<string>('save_image_source_to_app_debug_dir', {
-      source,
-      category,
-      suggestedFileName,
-    });
+    return await getPlatform().image.saveImageSourceToAppDebugDir(source, category, suggestedFileName);
   } catch {
     // fallback to frontend file save
   }
@@ -977,7 +962,7 @@ export async function saveImageSourceToAppDebugDir(
 
 export async function copyImageSourceToClipboard(source: string): Promise<void> {
   try {
-    await invoke('copy_image_source_to_clipboard', { source });
+    await getPlatform().clipboard.writeImageFromSource(source);
     return;
   } catch {
     // fallback
@@ -985,9 +970,9 @@ export async function copyImageSourceToClipboard(source: string): Promise<void> 
 
   const localPath = await persistImageSource(source);
 
-  if (isTauri()) {
+  if (isNativeImageRuntime()) {
     try {
-      await invoke('copy_image_to_clipboard', { filePath: localPath });
+      await getPlatform().clipboard.writeImageFromPath(localPath);
       return;
     } catch {
       // fallback to browser clipboard

@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { getPlatform } from '@/platform/runtime'
 
 const logger = createLogger('components.UpdateDialog')
 /**
@@ -7,7 +8,6 @@ const logger = createLogger('components.UpdateDialog')
  */
 
 import React, { useState, useEffect } from 'react'
-import { open } from '@tauri-apps/plugin-shell'
 import { ReleaseInfo, formatReleaseDate } from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
 import { useI18n } from '@/hooks/useI18n'
@@ -37,7 +37,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
   const handleUpdate = async () => {
     try {
       // 打开 GitHub Release 页面
-      await open(releaseInfo.htmlUrl)
+      await getPlatform().system.shell.openExternal(releaseInfo.htmlUrl)
       handleClose()
     } catch (error) {
       logger.error('打开更新页面失败:', error)

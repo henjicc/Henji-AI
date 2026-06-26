@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { useEffect } from 'react'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTestModeShortcuts')
@@ -21,8 +22,8 @@ export function useTestModeShortcuts({ togglePanel }: UseTestModeShortcutsParams
       if (import.meta.env.DEV) {
         e.preventDefault()
         try {
-          const { invoke } = await import('@tauri-apps/api/core')
-          await invoke('toggle_devtools')
+          if (!isDesktopRuntime()) return
+          await getPlatform().window.toggleDevTools()
           logger.info('[DevTools] 开发者工具已切换', {})
         } catch (error) {
           logger.error('[DevTools] 打开开发者工具失败', error)
@@ -37,8 +38,8 @@ export function useTestModeShortcuts({ togglePanel }: UseTestModeShortcutsParams
         const testMode = getTestModeState()
         if (!testMode.enabled || !testMode.options.enableDevTools) return
 
-        const { invoke } = await import('@tauri-apps/api/core')
-        await invoke('toggle_devtools')
+        if (!isDesktopRuntime()) return
+        await getPlatform().window.toggleDevTools()
         logger.info('[DevTools] 开发者工具已切换', {})
       } catch (error) {
         logger.error('[DevTools] 打开开发者工具失败', error)

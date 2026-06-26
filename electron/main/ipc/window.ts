@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain, screen, type IpcMainInvokeEvent, type Rectangle } from 'electron'
+import { BrowserWindow, screen, type IpcMainInvokeEvent, type Rectangle } from 'electron'
+import { parseVoid, registerIpcHandler } from './registry'
 
 const WINDOW_MINIMIZE = 'window:minimize'
 const WINDOW_TOGGLE_MAXIMIZE = 'window:toggleMaximize'
@@ -83,23 +84,23 @@ export function bindWindowStateEvents(win: BrowserWindow): void {
 }
 
 export function registerWindowIpc(): void {
-  ipcMain.handle(WINDOW_MINIMIZE, (event) => {
+  registerIpcHandler(WINDOW_MINIMIZE, parseVoid, (_input, event) => {
     getEventWindow(event).minimize()
   })
 
-  ipcMain.handle(WINDOW_TOGGLE_MAXIMIZE, (event) => {
+  registerIpcHandler(WINDOW_TOGGLE_MAXIMIZE, parseVoid, (_input, event) => {
     toggleMaximizeWindow(getEventWindow(event))
   })
 
-  ipcMain.handle(WINDOW_CLOSE, (event) => {
+  registerIpcHandler(WINDOW_CLOSE, parseVoid, (_input, event) => {
     getEventWindow(event).close()
   })
 
-  ipcMain.handle(WINDOW_IS_MAXIMIZED, (event): boolean => {
+  registerIpcHandler(WINDOW_IS_MAXIMIZED, parseVoid, (_input, event): boolean => {
     return isWindowMaximized(getEventWindow(event))
   })
 
-  ipcMain.handle(WINDOW_TOGGLE_DEVTOOLS, (event) => {
+  registerIpcHandler(WINDOW_TOGGLE_DEVTOOLS, parseVoid, (_input, event) => {
     const win = getEventWindow(event)
     if (win.webContents.isDevToolsOpened()) {
       win.webContents.closeDevTools()

@@ -1,4 +1,4 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import { fileToBlobSrc } from '@/utils/save'
 
 export async function toAudioDisplayUrl(audioPath: string): Promise<string> {

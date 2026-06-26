@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef, useState } from 'react'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { readFile } from '@/platform/desktopApi'
 import { RefreshCw } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
 import { useTauriDragDrop } from '@/hooks/useTauriDragDrop'

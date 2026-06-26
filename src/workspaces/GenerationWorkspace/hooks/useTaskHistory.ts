@@ -1,7 +1,7 @@
-﻿import { createLogger } from '@/core/logging'
+import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { exists, toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
@@ -19,16 +19,11 @@ function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   return status
 }
 
-async function toTauriUrl(fullPath: string): Promise<string> {
-  return convertFileSrc(fullPath.replace(/\\/g, '/'))
-}
-
 async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video'): Promise<string> {
   // For images, try to use cached thumbnail first
   if (kind === 'image') {
     try {
       const { getHistoryThumbnailCachePath } = await import('@/utils/historyThumbnail')
-      const { exists } = await import('@tauri-apps/plugin-fs')
       const cachePath = await getHistoryThumbnailCachePath(fullPath)
       if (await exists(cachePath)) {
         return convertFileSrc(cachePath.replace(/\\/g, '/'))

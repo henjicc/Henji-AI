@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { UiButton, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
-import { open } from '@tauri-apps/plugin-shell'
+import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
 
 const logger = createLogger('components.MediaGenerator.components.ModelscopeCustomModelManager')

@@ -1,6 +1,5 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
-import { invoke, isTauri } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 export interface RuntimeRequestPreviewDto {
   requestId: string
@@ -22,35 +21,29 @@ export interface LlmRuntimeRequestPreviewDto {
 }
 
 export async function logFrontendEvents(events: LogEventBridgeDto[]): Promise<void> {
-  if (!isTauri() || events.length === 0) {
+  if (!isDesktopRuntime() || events.length === 0) {
     return
   }
 
-  await invoke('log_frontend_events', {
-    events,
-  })
+  await getPlatform().logging.logFrontendEvents(events)
 }
 
 export async function listenRuntimeRequestPreview(
   handler: (payload: RuntimeRequestPreviewDto) => void
 ): Promise<() => void> {
-  if (!isTauri()) {
+  if (!isDesktopRuntime()) {
     return () => undefined
   }
 
-  return listen<RuntimeRequestPreviewDto>('henji://runtime-request-preview', (event) => {
-    handler(event.payload)
-  })
+  return await getPlatform().logging.listenRuntimeRequestPreview(handler)
 }
 
 export async function listenLlmRuntimeRequestPreview(
   handler: (payload: LlmRuntimeRequestPreviewDto) => void
 ): Promise<() => void> {
-  if (!isTauri()) {
+  if (!isDesktopRuntime()) {
     return () => undefined
   }
 
-  return listen<LlmRuntimeRequestPreviewDto>('henji://llm-runtime-request-preview', (event) => {
-    handler(event.payload)
-  })
+  return await getPlatform().logging.listenLlmRuntimeRequestPreview(handler)
 }

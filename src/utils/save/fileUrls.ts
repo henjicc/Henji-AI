@@ -1,4 +1,4 @@
-import { readFile } from '@tauri-apps/plugin-fs'
+import { readFile } from '@/platform/desktopApi'
 import { inferMimeFromPath as inferMimeFromPathShared } from '@/utils/mime'
 
 export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promise<string> {

@@ -75,6 +75,9 @@ function createPaths(): PathsPlatform {
     dirname: () => {
       throw new PlatformNotImplementedError(DOMAIN, 'paths.dirname')
     },
+    tempDir: () => {
+      throw new PlatformNotImplementedError(DOMAIN, 'paths.tempDir')
+    },
   }
 }
 

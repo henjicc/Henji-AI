@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Preset, PresetSaveMode } from '../types/preset'
 import { loadPresets, createPreset, deletePreset, formatTimeAgo } from '../utils/preset'
-import { canDeleteFile } from '../utils/fileRefCount'
+import { canDeleteFile, type Task } from '../utils/fileRefCount'
 import { readJsonFromAppData } from '../utils/save'
-import { remove } from '@tauri-apps/plugin-fs'
+import { remove } from '@/platform/desktopApi'
 import PanelTrigger from './ui/PanelTrigger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
@@ -13,8 +13,8 @@ import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/comp
 const logger = createLogger('components.PresetPanel')
 
 interface PresetPanelProps {
-    getCurrentState: () => Record<string, any>
-    onLoadPreset: (params: Record<string, any>) => void
+    getCurrentState: () => Record<string, unknown>
+    onLoadPreset: (params: Record<string, unknown>) => void
     disabled?: boolean
 }
 const PresetPanel: React.FC<PresetPanelProps> = ({
@@ -40,7 +40,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     }
     const handleQuickSave = async (mode: PresetSaveMode) => {
         const state = getCurrentState()
-        if (!state.input?.trim()) {
+        const input = typeof state.input === 'string' ? state.input : ''
+        if (!input.trim()) {
             alert(t('ui:input.required'))
             return
         }
@@ -59,9 +60,10 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
         if (!presetName.trim() || !saveMode) return
         try {
             const state = getCurrentState()
+            const input = typeof state.input === 'string' ? state.input : ''
             await createPreset(
                 presetName,
-                state.input || '',  // 提示词
+                input,  // 提示词
                 saveMode,
                 {
                     params: state  // 所有参数统一保存
@@ -99,7 +101,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             const updatedPresets = await loadPresets()
             setPresets(updatedPresets)
             if (presetFiles.length > 0) {
-                const tasks = await readJsonFromAppData('Henji-AI/history.json') || []
+                const tasks = await readJsonFromAppData<Task[]>('Henji-AI/history.json') || []
                 for (const filePath of presetFiles) {
                     const canDelete = canDeleteFile(filePath, tasks, updatedPresets)
                     if (canDelete) {

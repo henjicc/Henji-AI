@@ -1,5 +1,5 @@
-﻿import React from "react"
-import { convertFileSrc } from "@tauri-apps/api/core"
+import React from "react"
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"

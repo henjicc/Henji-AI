@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
 import { Copy, Crop, Download, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2 } from 'lucide-react';
-import { save } from '@tauri-apps/plugin-dialog';
+import { saveDialog } from '@/platform/desktopApi';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
@@ -55,7 +55,7 @@ const TOOLBAR_NEUTRAL_BUTTON_CLASS =
   'border-[rgba(255,255,255,0.18)] bg-bg-dark/70 text-text-dark hover:border-[rgba(255,255,255,0.32)] hover:bg-bg-dark';
 
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const isImageEdit = isImageEditNode(node);
   const isStoryboardGen = isStoryboardGenNode(node);
   const isStoryboardSplit = isStoryboardSplitNode(node);
@@ -201,7 +201,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         .join('\n');
     }
     return '';
-  }, [ignoreAtTagWhenCopyingAndGenerating, isStoryboardGen, isStoryboardSplit, node, t, i18n.language]);
+  }, [ignoreAtTagWhenCopyingAndGenerating, isStoryboardGen, isStoryboardSplit, node, t]);
 
   const handleCopyStoryboardText = useCallback(async () => {
     if (!storyboardText) {
@@ -230,7 +230,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     }
 
     try {
-      const selectedPath = await save({
+      const selectedPath = await saveDialog({
         defaultPath: `node-${node.id}.png`,
       });
       if (!selectedPath || Array.isArray(selectedPath)) {

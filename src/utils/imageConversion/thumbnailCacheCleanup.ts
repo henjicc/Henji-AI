@@ -1,4 +1,5 @@
-﻿import { createLogger } from '@/core/logging'
+import { createLogger } from '@/core/logging'
+import { basename, exists, join, remove } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.imageConversion.thumbnailCacheCleanup')
 
@@ -7,12 +8,10 @@ const logger = createLogger('utils.imageConversion.thumbnailCacheCleanup')
  */
 export async function deleteThumbnailCache(mediaPath: string): Promise<boolean> {
   try {
-    const { exists, remove } = await import('@tauri-apps/plugin-fs')
     const { getThumbnailsPath } = await import('@/utils/dataPath')
-    const { join, basename } = await import('@tauri-apps/api/path')
 
     const thumbnailsDir = await getThumbnailsPath()
-    const mediaName = await basename(mediaPath)
+    const mediaName = basename(mediaPath)
     const thumbName = mediaName.replace(/\.[^.]+$/, '.webp')
 
     let deleted = false
@@ -41,5 +40,3 @@ export async function deleteThumbnailCache(mediaPath: string): Promise<boolean> 
     return false
   }
 }
-
-

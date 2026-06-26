@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { getPlatform } from '@/platform/runtime'
 import { downloadMediaFile, quickDownloadMediaFile, resolveFilePath, isDesktop } from '@/utils/save'
 import type { ToastNotification } from '../types'
 
@@ -77,7 +77,7 @@ export function useMediaFileActions({ notify, messages }: UseMediaFileActionsPar
 
     try {
       const fullPath = await resolveFilePath(filePath)
-      await invoke('copy_image_to_clipboard', { filePath: fullPath })
+      await getPlatform().clipboard.writeImageFromPath(fullPath)
 
       await new Promise<void>((resolve) => {
         setTimeout(() => {

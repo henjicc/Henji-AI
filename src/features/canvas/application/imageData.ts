@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isDesktopRuntime } from '@/platform/runtime';
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi';
 
 const logger = createLogger('features.canvas.application.imageData')
 
@@ -53,6 +54,10 @@ export interface PreparedNodeImage {
 
 const ORIGINAL_IMAGE_ZOOM_THRESHOLD = 1.45;
 
+function isNativeImageRuntime(): boolean {
+  return isDesktopRuntime();
+}
+
 export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
 }
@@ -81,7 +86,7 @@ export function isLikelyLocalImagePath(imageUrl: string): boolean {
 export function resolveImageDisplayUrl(imageUrl: string): string {
   const lower = imageUrl.toLowerCase();
   if (lower.startsWith('file://')) {
-    if (!isTauri()) {
+    if (!isNativeImageRuntime()) {
       return imageUrl;
     }
 
@@ -102,7 +107,7 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
     return imageUrl;
   }
 
-  if (!isTauri()) {
+  if (!isNativeImageRuntime()) {
     return imageUrl;
   }
 
@@ -114,7 +119,7 @@ export async function persistImageLocally(source: string): Promise<string> {
     return source;
   }
 
-  if (!isTauri()) {
+  if (!isNativeImageRuntime()) {
     return source;
   }
 
@@ -145,7 +150,7 @@ export async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
   }
 
   if (isLikelyLocalImagePath(imageUrl)) {
-    if (isTauri()) {
+    if (isNativeImageRuntime()) {
       return await loadImage(imageUrl);
     }
     const localResponse = await fetch(resolveImageDisplayUrl(imageUrl));
@@ -226,7 +231,7 @@ export async function prepareNodeImageFromFile(
     return prepared;
   }
 
-  if (isTauri()) {
+  if (isNativeImageRuntime()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
     const readStarted = performance.now();
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -322,7 +327,7 @@ export async function prepareNodeImage(
   maxPreviewDimension = DEFAULT_PREVIEW_MAX_DIMENSION
 ): Promise<PreparedNodeImage> {
   const started = performance.now();
-  if (isTauri()) {
+  if (isNativeImageRuntime()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
     try {
       const tauriStarted = performance.now();

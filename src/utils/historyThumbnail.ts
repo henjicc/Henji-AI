@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { basename, dirname, exists, join, mkdir, toDisplaySrc, writeFile } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.historyThumbnail')
 
@@ -7,9 +8,8 @@ const logger = createLogger('utils.historyThumbnail')
  */
 export async function getHistoryThumbnailCachePath(imagePath: string): Promise<string> {
   const { getThumbnailsPath } = await import('@/utils/dataPath')
-  const { join, basename } = await import('@tauri-apps/api/path')
   const thumbnailsDir = await getThumbnailsPath()
-  const imageName = await basename(imagePath)
+  const imageName = basename(imagePath)
   const thumbName = imageName.replace(/\.[^.]+$/, '.webp')
   return await join(thumbnailsDir, '540', thumbName)
 }
@@ -23,10 +23,6 @@ export async function getOrCreateHistoryThumbnail(
   imagePath: string,
   imageUrl?: string
 ): Promise<string | undefined> {
-  const { exists, readFile, writeFile, mkdir } = await import('@tauri-apps/plugin-fs')
-  const { convertFileSrc } = await import('@tauri-apps/api/core')
-  const { dirname } = await import('@tauri-apps/api/path')
-
   try {
     const cachePath = await getHistoryThumbnailCachePath(imagePath)
     const cacheExists = await exists(cachePath)
@@ -36,7 +32,7 @@ export async function getOrCreateHistoryThumbnail(
     }
 
     // Generate thumbnail: 540px max, WebP quality 0.8
-    const url = imageUrl || convertFileSrc(imagePath.replace(/\\/g, '/'))
+    const url = imageUrl || toDisplaySrc(imagePath.replace(/\\/g, '/'))
 
     // Ensure parent directory exists
     const parentDir = await dirname(cachePath)

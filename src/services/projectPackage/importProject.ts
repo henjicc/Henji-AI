@@ -1,4 +1,4 @@
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { openDialog } from '@/platform/desktopApi';
 import { v4 as uuidv4 } from 'uuid';
 import type { Viewport } from '@xyflow/react';
 

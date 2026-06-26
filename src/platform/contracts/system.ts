@@ -1,3 +1,8 @@
+export interface FsDirEntry {
+  name: string
+  isDirectory: boolean
+}
+
 export interface FsPlatform {
   readFile(path: string): Promise<Uint8Array>
   readTextFile(path: string): Promise<string>
@@ -5,9 +10,9 @@ export interface FsPlatform {
   writeTextFile(path: string, data: string): Promise<void>
   exists(path: string): Promise<boolean>
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>
-  readDir(path: string): Promise<string[]>
+  readDir(path: string): Promise<FsDirEntry[]>
   copyFile(src: string, dest: string): Promise<void>
-  remove(path: string): Promise<void>
+  remove(path: string, options?: { recursive?: boolean }): Promise<void>
 }
 
 export interface DialogSaveOptions {
@@ -36,6 +41,7 @@ export interface PathsPlatform {
   downloadDir(): Promise<string>
   join(...parts: string[]): Promise<string>
   dirname(path: string): Promise<string>
+  tempDir(): Promise<string>
 }
 
 export interface HttpPlatform {

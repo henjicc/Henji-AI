@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { loadEditState } from '@/utils/editStatePersistence'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'

@@ -1,4 +1,4 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import type { GenerateResult } from '@/core/providers/base'
 import {
   AUDIO_ACCEPT_LIST,

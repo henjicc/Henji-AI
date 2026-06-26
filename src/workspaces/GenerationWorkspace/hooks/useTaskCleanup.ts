@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
-import { remove } from '@tauri-apps/plugin-fs'
+import { remove } from '@/platform/desktopApi'
 import { canDeleteFile } from '@/utils/fileRefCount'
 import { loadPresets } from '@/utils/preset'
 import { deleteEditState } from '@/utils/editStatePersistence'

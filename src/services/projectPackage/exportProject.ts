@@ -1,4 +1,4 @@
-import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { saveDialog } from '@/platform/desktopApi';
 
 import { createLogger } from '@/core/logging';
 import { exportProjectPackage } from '@/commands/projectPackage';

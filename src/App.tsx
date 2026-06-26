@@ -33,17 +33,25 @@ const App: React.FC = () => {
 
       // 1. 加载所有模型到 ModelRegistry
       try {
-        const stats = await loadAllModels()
+        await loadAllModels()
         // logger.info('[App] Models loaded:', stats)
       } catch (error) {
         logger.error('[App] Failed to load models:', error)
       }
 
       // 2. 初始化数据库
-      await databaseService.init()
+      try {
+        await databaseService.init()
+      } catch (error) {
+        logger.error('[App] Failed to initialize database:', error)
+      }
 
       // 2.1 初始化画布项目存储
-      await canvasProjectService.init()
+      try {
+        await canvasProjectService.init()
+      } catch (error) {
+        logger.error('[App] Failed to initialize canvas project storage:', error)
+      }
 
       // 3. 加载启用的自定义模型
       try {

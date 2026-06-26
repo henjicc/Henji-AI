@@ -1,8 +1,11 @@
 import { createLogger } from '@/core/logging'
-import { mkdir, writeFile } from '@tauri-apps/plugin-fs'
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
-import * as path from '@tauri-apps/api/path'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import {
+  join,
+  mkdir,
+  nativeFetch as httpFetch,
+  toDisplaySrc as convertFileSrc,
+  writeFile,
+} from '@/platform/desktopApi'
 import { getMediaPath } from '@/utils/dataPath'
 import { detectFileType } from '@/utils/fileTypeDetector'
 
@@ -14,7 +17,7 @@ export async function saveBinary(
 ): Promise<{ fullPath: string; webSrc: string }> {
 
   const mediaPath = await getMediaPath()
-  const fullPath = await path.join(mediaPath, filename)
+  const fullPath = await join(mediaPath, filename)
   await mkdir(mediaPath, { recursive: true })
   await writeFile(fullPath, data)
   const webSrc = convertFileSrc(fullPath)

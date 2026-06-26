@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { GenerationTask } from '../types'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
 import { fileToBlobSrc, isDesktop, saveAudioFromUrl, saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
 import { joinMulti, splitMulti } from './multiFile'
 

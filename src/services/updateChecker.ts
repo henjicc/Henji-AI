@@ -6,7 +6,7 @@ const logger = createLogger('services.updateChecker')
  * 通过 GitHub API 检查应用是否有新版本
  */
 
-import { fetch } from '@tauri-apps/plugin-http'
+import { nativeFetch as fetch } from '@/platform/desktopApi'
 
 export interface ReleaseInfo {
   version: string

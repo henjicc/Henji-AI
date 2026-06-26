@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { fetch } from '@tauri-apps/plugin-http'
+import { nativeFetch as fetch } from '@/platform/desktopApi'
 import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig } from '@/core/llm/types'
 
 const logger = createLogger('services.llm.llmDiscoveryService')

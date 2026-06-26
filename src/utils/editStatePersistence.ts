@@ -1,6 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { writeFile, readFile, mkdir, remove, exists } from '@tauri-apps/plugin-fs'
-import * as path from '@tauri-apps/api/path'
+import { appLocalDataDir, exists, join, mkdir, readFile, remove, writeFile } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.editStatePersistence')
 
@@ -8,14 +7,14 @@ const DIR_NAME = 'EditStates'
 const APP_DIR = 'Henji-AI'
 
 async function getEditStateDir(): Promise<string> {
-    const appDataDir = await path.appLocalDataDir()
-    const fullPath = await path.join(appDataDir, APP_DIR, DIR_NAME)
+        const appDataDir = await appLocalDataDir()
+        const fullPath = await join(appDataDir, APP_DIR, DIR_NAME)
     return fullPath
 }
 
 async function getEditStatePath(taskId: string): Promise<string> {
     const dir = await getEditStateDir()
-    return await path.join(dir, `${taskId}.json`)
+    return await join(dir, `${taskId}.json`)
 }
 
 /**
@@ -24,7 +23,7 @@ async function getEditStatePath(taskId: string): Promise<string> {
  * @param states The edit states to save
  * @returns The filename of the saved state file
  */
-export async function saveEditState(taskId: string, states: Record<string, any>): Promise<string> {
+export async function saveEditState(taskId: string, states: Record<string, unknown>): Promise<string> {
     try {
         const dir = await getEditStateDir()
         const filePath = await getEditStatePath(taskId)
@@ -48,11 +47,11 @@ export async function saveEditState(taskId: string, states: Record<string, any>)
  * Load edit states from a JSON file
  * @param taskIdOrFilename The task ID or filename (e.g., "123" or "123.json")
  */
-export async function loadEditState(taskIdOrFilename: string): Promise<Record<string, any> | null> {
+export async function loadEditState(taskIdOrFilename: string): Promise<Record<string, unknown> | null> {
     try {
         const dir = await getEditStateDir()
         const filename = taskIdOrFilename.endsWith('.json') ? taskIdOrFilename : `${taskIdOrFilename}.json`
-        const filePath = await path.join(dir, filename)
+        const filePath = await join(dir, filename)
 
         const fileExists = await exists(filePath)
         if (!fileExists) {
@@ -78,7 +77,7 @@ export async function deleteEditState(taskIdOrFilename: string): Promise<void> {
     try {
         const dir = await getEditStateDir()
         const filename = taskIdOrFilename.endsWith('.json') ? taskIdOrFilename : `${taskIdOrFilename}.json`
-        const filePath = await path.join(dir, filename)
+        const filePath = await join(dir, filename)
 
         const fileExists = await exists(filePath)
         if (fileExists) {

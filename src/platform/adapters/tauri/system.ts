@@ -12,7 +12,7 @@ import {
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { open as openShell } from '@tauri-apps/plugin-shell'
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
-import { appLocalDataDir, dirname, downloadDir, join } from '@tauri-apps/api/path'
+import { appLocalDataDir, dirname, downloadDir, join, tempDir } from '@tauri-apps/api/path'
 import type {
   DialogOpenOptions,
   DialogPlatform,
@@ -32,9 +32,12 @@ function createFs(): FsPlatform {
     writeTextFile: (path, data) => writeTextFile(path, data),
     exists: (path) => exists(path),
     mkdir: (path, options) => mkdir(path, options),
-    readDir: async (path) => (await readDir(path)).map((entry) => entry.name ?? ''),
+    readDir: async (path) => (await readDir(path)).map((entry) => ({
+      name: entry.name ?? '',
+      isDirectory: entry.isDirectory,
+    })),
     copyFile: (src, dest) => copyFile(src, dest),
-    remove: (path) => remove(path),
+    remove: (path, options) => remove(path, options),
   }
 }
 
@@ -57,6 +60,7 @@ function createPaths(): PathsPlatform {
     downloadDir: () => downloadDir(),
     join: (...parts) => join(...parts),
     dirname: (path) => dirname(path),
+    tempDir: () => tempDir(),
   }
 }
 

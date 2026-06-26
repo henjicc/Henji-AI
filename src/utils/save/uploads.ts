@@ -1,9 +1,14 @@
 import { createLogger } from '@/core/logging'
-import { mkdir, readFile, remove, writeFile } from '@tauri-apps/plugin-fs'
 import Pica from 'pica'
-import * as path from '@tauri-apps/api/path'
-import { convertFileSrc } from '@tauri-apps/api/core'
-import { fetch as httpFetch } from '@tauri-apps/plugin-http'
+import {
+  join,
+  mkdir,
+  nativeFetch as httpFetch,
+  readFile,
+  remove,
+  toDisplaySrc as convertFileSrc,
+  writeFile,
+} from '@/platform/desktopApi'
 import { getUploadsPath } from '@/utils/dataPath'
 import { inferMimeFromPath as inferMimeFromPathShared } from '@/utils/mime'
 import { fileToBlobSrc, fileToDataUrl, bytesToDataUrl } from './fileUrls'
@@ -12,6 +17,12 @@ import { sha256Hex } from './hash'
 const logger = createLogger('utils.save.uploads')
 
 const uploadCache: Map<string, { bytes: Uint8Array; dataUrl: string; displaySrc: string; compressedHash: string }> = new Map()
+
+function normalizeBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const normalized = new Uint8Array(bytes.byteLength)
+  normalized.set(bytes)
+  return normalized
+}
 
 export async function saveUploadImage(
   fileOrBlob: File | Blob,
@@ -25,13 +36,13 @@ export async function saveUploadImage(
   let cached = uploadCache.get(originalHash)
 
   if (!cached) {
-    const bytes = await ensureCompressedJpegBytesWithPica(fileOrBlob as Blob, {
+    const bytes = normalizeBytes(await ensureCompressedJpegBytesWithPica(fileOrBlob as Blob, {
       maxPixels: 17_000_000,
       quality: 0.85,
       maxDimension: opts?.maxDimension,
-    })
+    }))
     const dataUrl = bytesToDataUrl(bytes, mime)
-    const displaySrc = URL.createObjectURL(new Blob([bytes as any], { type: mime }))
+    const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
     const compressedHash = await sha256Hex(bytes.buffer as ArrayBuffer)
     cached = { bytes, dataUrl, displaySrc, compressedHash }
     uploadCache.set(originalHash, cached)
@@ -39,7 +50,7 @@ export async function saveUploadImage(
 
   const name = `${cached.compressedHash}.${ext}`
   const uploadsPath = await getUploadsPath()
-  const full = await path.join(uploadsPath, name)
+  const full = await join(uploadsPath, name)
 
   if (mode === 'persist') {
     await mkdir(uploadsPath, { recursive: true })
@@ -47,7 +58,9 @@ export async function saveUploadImage(
     try {
       await readFile(full)
       exists = true
-    } catch { }
+    } catch {
+      // Missing cached file means it needs to be written.
+    }
     if (!exists) {
       await writeFile(full, cached.bytes)
     }
@@ -77,7 +90,7 @@ export async function saveUploadVideo(
 
   const name = `${hash}.${ext}`
   const uploadsPath = await getUploadsPath()
-  const full = await path.join(uploadsPath, name)
+  const full = await join(uploadsPath, name)
 
   if (mode === 'persist') {
     await mkdir(uploadsPath, { recursive: true })
@@ -86,7 +99,9 @@ export async function saveUploadVideo(
     try {
       await readFile(full)
       exists = true
-    } catch { }
+    } catch {
+      // Missing cached file means it needs to be written.
+    }
 
     if (!exists) {
       await writeFile(full, bytes)
@@ -139,7 +154,7 @@ export async function saveUploadAudio(
   const name = `${hash}.${ext}`
 
   const uploadsPath = await getUploadsPath()
-  const full = await path.join(uploadsPath, name)
+  const full = await join(uploadsPath, name)
 
   if (mode === 'persist') {
     await mkdir(uploadsPath, { recursive: true })
@@ -148,7 +163,9 @@ export async function saveUploadAudio(
     try {
       await readFile(full)
       exists = true
-    } catch { }
+    } catch {
+      // Missing cached file means it needs to be written.
+    }
 
     if (!exists) {
       await writeFile(full, bytes)
@@ -169,7 +186,7 @@ export async function saveUploadAudio(
 export async function saveBase64ToUploads(
   base64: string
 ): Promise<{ fullPath: string; displaySrc: string; relativePath: string }> {
-  const matches = base64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)
+  const matches = base64.match(/^data:([A-Za-z-+/]+);base64,(.+)$/)
   if (!matches || matches.length !== 3) {
     throw new Error('Invalid base64 string')
   }
@@ -186,14 +203,16 @@ export async function saveBase64ToUploads(
   const name = `${hash}.${ext}`
 
   const uploadsPath = await getUploadsPath()
-  const full = await path.join(uploadsPath, name)
+  const full = await join(uploadsPath, name)
 
   await mkdir(uploadsPath, { recursive: true })
   let exists = false
   try {
     await readFile(full)
     exists = true
-  } catch { }
+  } catch {
+    // Missing cached file means it needs to be written.
+  }
 
   if (!exists) {
     await writeFile(full, bytes)
@@ -215,14 +234,16 @@ export async function saveBytesToUploads(
   const name = `${hash}.${ext}`
 
   const uploadsPath = await getUploadsPath()
-  const full = await path.join(uploadsPath, name)
+  const full = await join(uploadsPath, name)
 
   await mkdir(uploadsPath, { recursive: true })
   let exists = false
   try {
     await readFile(full)
     exists = true
-  } catch { }
+  } catch {
+    // Missing cached file means it needs to be written.
+  }
   if (!exists) {
     await writeFile(full, bytes)
     logger.info('[save] bytes persisted', full)
@@ -276,7 +297,9 @@ export async function ensureCompressedJpegBytesWithPica(
   let bitmap: ImageBitmap | null = null
   try {
     bitmap = await createImageBitmap(blob)
-  } catch { }
+  } catch {
+    // createImageBitmap may fail for uncommon image encodings.
+  }
 
   const cleanup: Array<() => void> = []
   let w0 = 0
@@ -337,6 +360,12 @@ export async function ensureCompressedJpegBytesWithPica(
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
     return bytes
   } finally {
-    cleanup.forEach(fn => { try { fn() } catch { } })
+    cleanup.forEach(fn => {
+      try {
+        fn()
+      } catch {
+        // Ignore cleanup failures.
+      }
+    })
   }
 }
