@@ -1,0 +1,30 @@
+import type { PlatformRuntime } from '@/platform/contracts'
+import { createElectronAiRuntime } from './aiRuntime'
+import { createElectronLlmRuntime } from './llmRuntime'
+import { createElectronDb } from './db'
+import { createElectronKeystore } from './keystore'
+import { createElectronSystem } from './system'
+import { createElectronMedia } from './media'
+import { createElectronImage } from './image'
+import { createElectronClipboard } from './clipboard'
+import { createElectronDragDrop } from './dragDrop'
+import { createElectronProjectPackage } from './projectPackage'
+import { createElectronWindow } from './window'
+import { createElectronLogging } from './logging'
+
+export function createElectronPlatform(): PlatformRuntime {
+  return {
+    aiRuntime: createElectronAiRuntime(),
+    llmRuntime: createElectronLlmRuntime(),
+    db: createElectronDb(),
+    keystore: createElectronKeystore(),
+    system: createElectronSystem(),
+    media: createElectronMedia(),
+    image: createElectronImage(),
+    clipboard: createElectronClipboard(),
+    dragDrop: createElectronDragDrop(),
+    projectPackage: createElectronProjectPackage(),
+    window: createElectronWindow(),
+    logging: createElectronLogging(),
+  }
+}
