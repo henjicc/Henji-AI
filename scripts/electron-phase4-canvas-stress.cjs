@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.cjs')
 const SAMPLE_VIDEO_PATH = path.join(
   ROOT,
-  'docs/ref/ComfyUI_frontend/browser_tests/assets/plain_video.mp4'
+  'scripts/fixtures/plain_video.mp4'
 )
 const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8Dwn4GBgYGJAQoAHxcCArzxVaIAAAAASUVORK5CYII='

@@ -1,4 +1,4 @@
-export type ShellKind = 'tauri' | 'electron'
+export type ShellKind = 'electron'
 
 export class PlatformNotImplementedError extends Error {
   constructor(domain: string, method: string) {

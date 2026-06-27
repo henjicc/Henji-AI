@@ -1,4 +1,4 @@
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import type { GenerateResult } from '@/core/providers/base'
 import {
   AUDIO_ACCEPT_LIST,
@@ -90,7 +90,7 @@ export function toDisplayAudioSrc(value: string): string {
   ) {
     return source
   }
-  return convertFileSrc(source.replace(/\\/g, '/'))
+  return toDisplaySrc(source.replace(/\\/g, '/'))
 }
 
 export function extractVoiceId(metadata: unknown): string {

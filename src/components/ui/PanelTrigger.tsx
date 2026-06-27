@@ -164,7 +164,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const viewportW = window.innerWidth
       const viewportH = window.innerHeight
       const margin = 8
-      const titleBarHeight = 40 // Tauri 标题栏高度
+      const titleBarHeight = 40 // 桌面标题栏高度
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
       left = Math.max(margin, Math.min(left, viewportW - w - margin))
@@ -210,7 +210,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const viewportW = window.innerWidth
       const viewportH = window.innerHeight
       const margin = 8
-      const titleBarHeight = 40 // Tauri 标题栏高度
+      const titleBarHeight = 40 // 桌面标题栏高度
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
 
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
@@ -265,7 +265,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const viewportW = window.innerWidth
       const viewportH = window.innerHeight
       const margin = 8
-      const titleBarHeight = 40 // Tauri 标题栏高度
+      const titleBarHeight = 40 // 桌面标题栏高度
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
 
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left

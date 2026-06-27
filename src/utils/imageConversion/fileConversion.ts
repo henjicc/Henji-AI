@@ -1,5 +1,5 @@
 export async function dataUrlToFile(dataUrl: string, filename: string = 'image.jpg'): Promise<File> {
-  // 直接转换 data URL 为 Blob（不使用 fetch，兼容 Tauri 生产环境）
+  // 直接转换 data URL 为 Blob（不使用 fetch，兼容桌面生产环境）
   const parts = dataUrl.split(',')
   const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg'
   const bstr = atob(parts[1])
@@ -62,4 +62,3 @@ export async function convertBlobToPng(blob: Blob): Promise<Blob> {
     img.src = url
   })
 }
-

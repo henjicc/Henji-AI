@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { GenerationTask } from '../types'
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import { fileToBlobSrc, isDesktop, saveAudioFromUrl, saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
 import { joinMulti, splitMulti } from './multiFile'
 
@@ -11,8 +11,8 @@ export interface NormalizedMediaResult {
   filePath: string | undefined
 }
 
-function toTauriUrl(fullPath: string): string {
-  return convertFileSrc(fullPath.replace(/\\/g, '/'))
+function toDesktopDisplayUrl(fullPath: string): string {
+  return toDisplaySrc(fullPath.replace(/\\/g, '/'))
 }
 
 export async function toDisplayUrlStringFromFilePath(
@@ -21,13 +21,13 @@ export async function toDisplayUrlStringFromFilePath(
 ): Promise<string> {
   const paths = splitMulti(filePath)
   if (type === 'video') {
-    return joinMulti(paths.map((p) => toTauriUrl(p)))
+    return joinMulti(paths.map((p) => toDesktopDisplayUrl(p)))
   }
   const urls = await Promise.all(paths.map(async (p) => {
     try {
       return await fileToBlobSrc(p)
     } catch {
-      return toTauriUrl(p)
+      return toDesktopDisplayUrl(p)
     }
   }))
   return joinMulti(urls)

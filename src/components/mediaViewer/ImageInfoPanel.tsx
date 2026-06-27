@@ -11,7 +11,7 @@ const logger = createLogger('components.mediaViewer.ImageInfoPanel');
 
 interface ImageInfoPanelProps {
   open: boolean;
-  /** 原始图片来源（本地路径或 URL，非 convertFileSrc 结果） */
+  /** 原始图片来源（本地路径或 URL，非桌面展示 URL） */
   imageSource: string;
 }
 

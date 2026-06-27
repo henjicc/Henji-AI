@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
-import { exists, toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { exists, toDisplaySrc } from '@/platform/desktopApi'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
@@ -26,14 +26,14 @@ async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video')
       const { getHistoryThumbnailCachePath } = await import('@/utils/historyThumbnail')
       const cachePath = await getHistoryThumbnailCachePath(fullPath)
       if (await exists(cachePath)) {
-        return convertFileSrc(cachePath.replace(/\\/g, '/'))
+        return toDisplaySrc(cachePath.replace(/\\/g, '/'))
       }
     } catch {
       // Fall through to full URL
     }
   }
   // For non-image or when thumbnail is unavailable, use the original file
-  return convertFileSrc(fullPath.replace(/\\/g, '/'))
+  return toDisplaySrc(fullPath.replace(/\\/g, '/'))
 }
 
 async function toDisplayUrlString(

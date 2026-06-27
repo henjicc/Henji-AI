@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import MediaGenerator from '@/components/MediaGenerator'
 import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
@@ -431,7 +431,7 @@ const GenerationWorkspace: React.FC = () => {
     const rawUrl = typeof url === 'string' ? url : ''
     const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
     const normalizedUrl = normalizedFilePath
-      ? convertFileSrc(normalizedFilePath.replace(/\\/g, '/'))
+      ? toDisplaySrc(normalizedFilePath.replace(/\\/g, '/'))
       : (rawUrl ? (splitMulti(rawUrl)[0] ?? '') : '')
     setCurrentVideoUrl(normalizedUrl)
     setCurrentVideoPath(normalizedFilePath)
@@ -442,7 +442,7 @@ const GenerationWorkspace: React.FC = () => {
     setCurrentVideoPath(undefined)
   }
   const openAudioViewer = (url?: string, filePath?: string) => {
-    setCurrentAudioUrl(url || (filePath ? convertFileSrc(filePath.replace(/\\/g, '/')) : ''))
+    setCurrentAudioUrl(url || (filePath ? toDisplaySrc(filePath.replace(/\\/g, '/')) : ''))
     setCurrentAudioPath(filePath)
     setIsAudioViewerOpen(true)
   }

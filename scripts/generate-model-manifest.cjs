@@ -5,7 +5,7 @@ const vm = require('vm')
 
 const ROOT = process.cwd()
 const MODELS_DIR = path.join(ROOT, 'src', 'models')
-const OUTPUT = path.join(ROOT, 'src-tauri', 'resources', 'model-manifest.json')
+const OUTPUT = path.join(ROOT, 'resources', 'model-manifest.json')
 
 const KNOWN_ENDPOINT_CONSTANTS = {
   KIE_CREATE_TASK_ENDPOINT: '/api/v1/jobs/createTask',

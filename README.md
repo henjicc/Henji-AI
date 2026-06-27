@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./src-tauri/icons/128x128@2x.png" width="100" height="100" alt="痕迹AI" style="margin-bottom: -50px;">
+  <img src="./resources/icons/128x128@2x.png" width="100" height="100" alt="痕迹AI" style="margin-bottom: -50px;">
   <h1 style="color: #00a0ea;">痕迹AI</h1>
   <h3>一个软件用上各种AI - 聚合多家供应商，一站式生成图片、视频和音频</h3>
   
@@ -103,8 +103,7 @@ Windows 用户请下载 <strong>.msi</strong> 文件，macOS 用户请下载 <st
 ### 环境要求
 
 - **Node.js**: 18+ (推荐使用 LTS 版本)
-- **Windows/macOS**: Electron 开发通常无需额外 Rust/Tauri 环境
-- **可选**: 如需回归旧 Tauri 壳，仍需 Rust、MSVC/Xcode 等旧环境
+- **Windows/macOS**: Electron 开发无需额外 Rust/Tauri 环境
 
 ### 安装依赖
 
@@ -141,17 +140,17 @@ npm run electron:dpi-check
 
 构建产物位于 `release/`。
 
-### 进度预测种子导出
+### 进度预测 seeds
 
-开发时如果想把本机学习到的进度预测结果打进安装包，可以先导出本地种子文件：
+开发时如需把默认进度预测数据打进安装包，维护基础 seeds 后重新生成资源：
 
 ```bash
-npm run progress:export-seeds
+npm run gen:progress-seeds
 ```
 
-导出的文件默认位于 `dev-data/progress-seeds.local.json`。后续执行 `npm run dev`、`npm run electron:dev`、`npm run electron:build`、`npm run electron:dist` 时，会自动把这个本地文件合并到 `src-tauri/resources/progress-seeds.json`，并作为打包默认值参与构建。
+基础 seeds 位于 `resources/progress-seeds.base.json`。如本地存在 `dev-data/progress-seeds.local.json`，执行 `npm run dev`、`npm run electron:dev`、`npm run electron:build`、`npm run electron:dist` 时会自动合并到 `resources/progress-seeds.json`，并作为打包默认值参与构建。
 
-> 注：`src-tauri/resources/` 目前仍是 manifest/seeds 的历史生成目录，Electron 打包会复制其中资源；目录改名会在最终移除 Tauri 残留时处理。
+`resources/model-manifest.json` 与 `resources/progress-seeds.json` 是自动生成产物，已在 Git 中忽略。
 
 ## 架构说明
 
@@ -183,7 +182,6 @@ MediaGenerator/ConversationWorkspace
 - Electron 提供统一 Chromium 运行环境
 - 窗口控制自动适配操作系统风格
 - 文件、媒体、剪贴板、拖拽等桌面能力统一走 `src/platform/*` 平台抽象层
-- Tauri 旧壳暂时保留到迁移收尾阶段，不再作为新开发主路径
 
 ## 扩展开发
 

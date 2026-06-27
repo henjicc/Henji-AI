@@ -30,8 +30,10 @@ function isReadableFile(filePath: string): boolean {
 
 function resolveBundledIconPath(): string | undefined {
   const candidates = [
-    path.join(app.getAppPath(), 'src-tauri', 'icons', '32x32.png'),
-    path.join(app.getAppPath(), 'src-tauri', 'icons', '128x128.png'),
+    path.join(app.getAppPath(), 'resources', 'icons', '32x32.png'),
+    path.join(app.getAppPath(), 'resources', 'icons', '128x128.png'),
+    path.join(process.resourcesPath, 'resources', 'icons', '32x32.png'),
+    path.join(process.resourcesPath, 'resources', 'icons', '128x128.png'),
   ]
   return candidates.find(isReadableFile)
 }

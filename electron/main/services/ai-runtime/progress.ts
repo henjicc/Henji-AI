@@ -347,9 +347,8 @@ function loadProgressSeedFile(): ProgressSeedFile {
 function loadSeedCandidates(): string[] {
   const cwd = process.cwd()
   const candidates = [
-    path.join(cwd, 'src-tauri', 'resources', GENERATED_RESOURCE_FILE),
     path.join(cwd, 'resources', GENERATED_RESOURCE_FILE),
-    path.join(cwd, 'src-tauri', 'resources', BASE_RESOURCE_FILE),
+    path.join(cwd, 'resources', BASE_RESOURCE_FILE),
   ]
   if (process.resourcesPath) {
     candidates.push(path.join(process.resourcesPath, 'resources', GENERATED_RESOURCE_FILE))

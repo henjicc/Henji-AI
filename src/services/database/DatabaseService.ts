@@ -591,7 +591,7 @@ export class DatabaseService implements IDatabaseService {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const backupPath = `sqlite:henji_backup_${timestamp}.db`
 
-    // Note: Tauri SQL plugin doesn't directly support backup
+    // Note: the desktop database adapter does not expose native backup.
     // This returns the backup path for the caller to handle file copying
     return backupPath
   }

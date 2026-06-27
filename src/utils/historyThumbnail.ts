@@ -16,7 +16,7 @@ export async function getHistoryThumbnailCachePath(imagePath: string): Promise<s
 
 /**
  * Get or create a 540px WebP history thumbnail.
- * Returns the thumbnail cache path (not data URL), suitable for convertFileSrc.
+ * Returns the thumbnail cache path (not data URL), suitable for toDisplaySrc.
  * Falls back to generating on first call, then serves from cache.
  */
 export async function getOrCreateHistoryThumbnail(

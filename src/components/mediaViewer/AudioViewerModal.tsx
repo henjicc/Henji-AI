@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import AudioPlayer from '@/components/AudioPlayer'
 
 export interface AudioViewerModalProps {
@@ -17,7 +17,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose }: AudioVie
   const playbackUrl = useMemo(() => {
     const normalizedPath = filePath?.trim()
     if (normalizedPath) {
-      return convertFileSrc(normalizedPath.replace(/\\/g, '/'))
+      return toDisplaySrc(normalizedPath.replace(/\\/g, '/'))
     }
     return audioUrl
   }, [audioUrl, filePath])

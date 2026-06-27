@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback, useRef, useState } from 'react'
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import { GenerationService } from '@/core/services/GenerationService'
 import { registry } from '@/core/ModelRegistry'
 import { taskQueueManager } from '@/services/taskQueue'
@@ -87,12 +87,12 @@ function classifyMediaSourceKind(source: string): string {
   if (trimmed.startsWith('data:')) return 'data-url'
   if (trimmed.startsWith('blob:')) return 'blob-url'
   if (trimmed.startsWith('asset://localhost/')) return 'asset-url'
-  if (trimmed.startsWith('tauri://localhost/')) return 'tauri-url'
+  if (trimmed.startsWith('tauri://localhost/')) return 'legacy-tauri-url'
   if (trimmed.startsWith('http://asset.localhost/') || trimmed.startsWith('https://asset.localhost/')) {
     return 'asset-http-url'
   }
   if (trimmed.startsWith('http://tauri.localhost/') || trimmed.startsWith('https://tauri.localhost/')) {
-    return 'tauri-http-url'
+    return 'legacy-tauri-http-url'
   }
   if (trimmed.startsWith('file://')) return 'file-url'
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return 'remote-url'
@@ -120,7 +120,7 @@ function isFileValue(value: unknown): value is File {
 }
 
 function toVideoDisplayUrl(path: string): string {
-  return convertFileSrc(path.replace(/\\/g, '/'))
+  return toDisplaySrc(path.replace(/\\/g, '/'))
 }
 
 function isLikelyVideoSource(value: string): boolean {
@@ -253,13 +253,15 @@ export function useTaskGeneration({
         if (typeof options.video !== 'string' || options.video.trim().length === 0) {
           options.video = videoUrls[0]
         }
-        ;(options as Record<string, unknown>).uploadedVideos = options.videos
+        const mutableOptions = options as Record<string, unknown>
+        mutableOptions.uploadedVideos = options.videos
 
       }
       if (task.uploadedAudioFilePaths && task.uploadedAudioFilePaths.length > 0) {
         const audioUrls = task.uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p))
         options.audios = await Promise.all(audioUrls)
-        ;(options as Record<string, unknown>).uploadedAudios = options.audios
+        const mutableOptions = options as Record<string, unknown>
+        mutableOptions.uploadedAudios = options.audios
       }
 
       updateTask(taskId, { status: 'generating' })

@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
 import { RefreshCw } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
-import { useTauriDragDrop } from '@/hooks/useTauriDragDrop'
+import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
 import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
@@ -93,10 +93,10 @@ export function StackedMediaUploader({
   const { expanded, hoverCapable, onMouseEnter, onMouseLeave, onToggle, beginExpandLock, endExpandLock } = useStackedExpand()
   const dragCounter = useRef(0)
   const { isDragging: isCustomDragging, dragData, endDrag } = useDragDrop()
-  const { isDragging: isTauriDragging, elementRef } = useTauriDragDrop((droppedFiles) => {
+  const { isDragging: isNativeDragging, elementRef } = useNativeDragDrop((droppedFiles) => {
     void handleFiles(droppedFiles)
   }, disabled)
-  const isDragging = isHtmlDragging || isCustomDragging || isTauriDragging
+  const isDragging = isHtmlDragging || isCustomDragging || isNativeDragging
   const canUploadMore = !maxCount || files.length < maxCount
   const showUploadCard = canUploadMore && !hideUploadButton && !disabled
 

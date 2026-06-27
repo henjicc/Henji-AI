@@ -6,7 +6,7 @@
 - 允许 Codex 在完成一组相关改动、验证通过或需要保存阶段性成果时自主提交 commit
 - commit 信息使用中文，简洁说明本次改动目的
 - 提交前优先检查工作区，避免把无关文件、临时截图、日志、安装包或自动生成但非必要的产物误提交
-- 当前分支基线是 Electron 迁移分支；如需回看旧 Tauri 实现，只作对照，不在新功能里继续扩展 Tauri 路径
+- 当前分支基线是 Electron；旧 Tauri/Rust 代码已从工作树移除，如需回看只通过 Git 历史或外部备份对照
 
 ## 项目概述
 
@@ -15,8 +15,8 @@ Henji-AI（痕迹AI）是基于 **Electron + React + TypeScript** 的桌面应�
 当前迁移状态：
 
 - Electron 主壳、preload 安全 IPC、Node/TS 主进程能力已经成为开发基线
-- Tauri/Rust 旧壳仍保留在仓库中，主要用于历史对照、回滚和 4.3 最终清理前的兜底
-- `src-tauri/resources/model-manifest.json` 与 `src-tauri/resources/progress-seeds.json` 仍是生成产物的当前落点，并会被 Electron 打包复制到 `resources/`；目录名属于迁移残留，后续 4.3 可再重命名/收口
+- Tauri/Rust 旧壳、Tauri 依赖、Tauri 脚本和 Tauri PAL adapter 已清理
+- `resources/model-manifest.json` 与 `resources/progress-seeds.json` 是当前自动生成产物落点；`resources/icons/` 是 Electron 打包图标来源
 - 证书、公证、真实 GitHub Release 发布凭据、macOS 真机验收属于发布前收尾项；没有凭据或设备时不阻塞日常 Electron 开发
 
 ## 常用命令
@@ -33,22 +33,12 @@ npm run electron:smoke         # Electron 构建产物冒烟验收
 npm run electron:canvas-stress # Electron 画布压测
 npm run electron:dpi-check     # Electron DPI/分辨率检查
 npm run electron:updater-e2e   # 本地模拟 updater 端到端
-npm run gen:model-manifest     # 生成模型清单到 src-tauri/resources/model-manifest.json
+npm run gen:model-manifest     # 生成模型清单到 resources/model-manifest.json
+npm run gen:progress-seeds     # 生成进度 seeds 到 resources/progress-seeds.json
 npm run check:colors           # 颜色规范检查
 npm run check:model-i18n       # 模型 i18n key 校验
 npm run lint                   # 前端 lint
 ```
-
-**旧 Tauri 命令仅用于回退/对照**：
-
-```bash
-npm run tauri:dev
-npm run tauri:build
-npm run tauri:dev:mac
-npm run tauri:build:mac
-```
-
-在 Windows 下裸跑旧 Tauri/Rust 命令仍需 VS Build Tools 开发者命令环境与 `CC=cl.exe`/`CXX=cl.exe`。除非任务明确要求回归旧壳，不要优先使用 Tauri 命令做最终验收。
 
 **注意**: 项目使用 `@/` 作为 `src/` 的路径别名。
 
@@ -62,7 +52,7 @@ npm run tauri:build:mac
 
 ## Manifest / Seeds 注意
 
-- `src-tauri/resources/model-manifest.json` 与 `src-tauri/resources/progress-seeds.json` 是自动生成产物，不是手写主源
+- `resources/model-manifest.json` 与 `resources/progress-seeds.json` 是自动生成产物，不是手写主源
 - 它们会在 `npm run gen:model-manifest`、`npm run dev`、`npm run electron:dev`、`npm run electron:build`、`npm run electron:dist` 等脚本链路中刷新
 - 单纯“退出并重新打开应用”不会重新生成 manifest；修改模型定义、请求构建或运行时约束后，必须重新跑上述脚本之一
 - Electron 主进程会在开发态读取仓库内生成产物，在打包态读取随包 `resources/` 副本
@@ -98,14 +88,13 @@ npm run tauri:build:mac
 - `src/core/providers/` 当前主要承载基类与兼容层（如 `ProviderFactoryRegistry`），不承担真实 provider 执行
 - 所有模型生成相关的提供商细节（鉴权、路由、请求格式、轮询、结果解析）应落在 Electron 主进程 `electron/main/services/ai-runtime/**`
 - 非模型生成场景（如更新检查、资源下载/转换）允许在服务层封装网络请求，但禁止散落在业务 UI
-- 旧 Rust `src-tauri/src/ai_runtime/` 只作对照与待清理资产，不再作为新能力落点
 
 ### 3. 平台抽象层（PAL）边界
 
 - 渲染层运行时代码统一通过 `src/platform/*`、`src/commands/*`、领域服务访问桌面能力
-- **禁止**在业务 UI 新增对 `@tauri-apps/*`、Electron `ipcRenderer`、Node 内置模块的直接 import
+- **禁止**在业务 UI 新增对 Electron `ipcRenderer`、Node 内置模块或已移除的旧 Tauri API 的直接 import
 - Electron 主进程能力经 `ipcMain` + preload 白名单暴露，保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`
-- `src/platform/adapters/tauri/*` 是旧壳兼容层；新增能力优先实现 Electron adapter，Tauri adapter 不再扩展，除非是为删除/迁移做最小调整
+- `src/platform/adapters/electron/*` 是当前唯一桌面平台 adapter；未来新增桌面能力仍先扩展 PAL 契约，再由 Electron adapter 实现
 
 ### 4. 严格解耦与体积治理
 
@@ -166,7 +155,7 @@ electron/
 
 src/
 ├── commands/          # 前端命令桥；对外签名稳定，内部走 platform
-├── platform/          # PAL 契约 + electron/tauri adapters
+├── platform/          # PAL 契约 + electron adapter
 ├── components/        # React UI 组件（展示 + 轻交互）
 ├── core/              # 模型定义、注册、请求构建、GenerationService、兼容层
 ├── features/          # 领域功能（含主画布实现）
@@ -177,7 +166,7 @@ src/
 ├── utils/             # 纯工具函数
 └── workspaces/        # 工作区容器
 
-src-tauri/             # 旧 Tauri/Rust 实现与当前 manifest/seeds 生成产物落点，待 4.3 清理
+resources/             # Electron 打包资源源文件与自动生成 manifest/seeds
 old-Henji-AI/          # 旧项目代码备份（仅供对照）
 ```
 
@@ -192,10 +181,10 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
 - ✅ AI Runtime、LLM 流式 Runtime、图片处理、剪贴板/拖拽、项目包导入导出
 - ✅ electron-builder 打包、electron-updater 主链路、本机安装器与本地 updater E2E
 - ✅ Electron smoke、画布压测、DPI 自动化检查
+- ✅ 4.3 Tauri 残留清理：`src-tauri/`、Tauri 依赖/脚本、Tauri PAL adapter、旧 POC 与旧 adapter 迁移清单已移除
 
 仍未做或可后置：
 
-- 4.3：删除 `src-tauri/`、Tauri 依赖/脚本、Tauri PAL adapter，并重命名 manifest/seeds 资源落点
 - macOS 真实设备上的 DMG、safeStorage、拖拽/剪贴板、透明窗口验收
 - Windows/macOS 代码签名与 macOS notarization（需要证书/Apple 账号）
 - 真实 GitHub Release 发布凭据下的线上自动更新
@@ -412,7 +401,7 @@ powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include
 
 **请求格式错误：**
 - 在模型 `request.builder()` 中增加最小日志定位
-- 对照 `src-tauri/resources/model-manifest.json` 检查输出 builder 结果
+- 对照 `resources/model-manifest.json` 检查输出 builder 结果
 - Electron 运行时错误优先看 `electron/main/services/ai-runtime/trace.ts` 相关 trace 与主进程日志
 
 **Electron 安装包未签名：**
@@ -428,7 +417,6 @@ powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include
 - **样式**: Tailwind CSS
 - **数据库**: SQLite（Electron 下 `better-sqlite3`）
 - **国际化**: i18next
-- **旧壳**: Tauri 2.0 / Rust 保留至 4.3 清理
 
 ## 重要文件
 
@@ -456,6 +444,8 @@ powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include
 - `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互
 - `src/features/canvas/hooks/useCanvasShortcuts.ts` - 画布快捷键行为
 - `src/features/canvas/ui/CanvasOverlays.tsx` - 画布叠层 UI
-- `src-tauri/resources/model-manifest.json` - 模型清单（自动生成，当前仍在旧目录）
-- `src-tauri/resources/progress-seeds.json` - 进度学习 seeds（自动生成，当前仍在旧目录）
+- `resources/model-manifest.json` - 模型清单（自动生成，Git 忽略）
+- `resources/progress-seeds.json` - 进度学习 seeds（自动生成，Git 忽略）
+- `resources/progress-seeds.base.json` - 进度学习基础 seeds
+- `resources/icons/` - Electron 打包图标
 - `docs/task/项目计划/` - Tauri → Electron 迁移计划与收尾状态

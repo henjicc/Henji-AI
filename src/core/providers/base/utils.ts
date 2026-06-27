@@ -82,7 +82,7 @@ export async function readLocalFile(path: string): Promise<Blob> {
     // 移除 asset:// 前缀
     const normalizedPath = path.replace(/^asset:\/\//, '')
 
-    // 使用 Tauri 的 readFile API
+    // 使用桌面平台文件 API
     const bytes = await readFile(normalizedPath)
 
     // 根据文件扩展名推断 MIME 类型
@@ -103,13 +103,13 @@ export async function readLocalFile(path: string): Promise<Blob> {
 export function isLocalPath(path: string): boolean {
   // Windows 路径: C:\, D:\, \\network\share
   // macOS/Linux 路径: /Users/, /home/, ~/
-  // Tauri asset 协议: asset://
+  // 旧桌面 asset 协议: asset://
   return (
     /^[a-zA-Z]:\\/.test(path) || // Windows 绝对路径
     /^\\\\/.test(path) || // Windows 网络路径
     /^\//.test(path) || // Unix 绝对路径
     /^~\//.test(path) || // Unix home路径
-    /^asset:\/\//.test(path) // Tauri asset协议
+    /^asset:\/\//.test(path) // 旧 asset 协议
   )
 }
 

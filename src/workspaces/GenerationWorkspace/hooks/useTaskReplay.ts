@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import type { ImageEditState } from '@/components/ImageEditor'
 import { loadEditState } from '@/utils/editStatePersistence'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'
@@ -75,21 +75,21 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
     if (uploadedFilePaths.length > 0) {
       options.uploadedFilePaths = uploadedFilePaths
       if (!isStringArray(options.images) || options.images.length === 0) {
-        options.images = uploadedFilePaths.map((p) => convertFileSrc(p))
+        options.images = uploadedFilePaths.map((p) => toDisplaySrc(p))
       }
     }
 
     if (uploadedVideoFilePaths.length > 0) {
       options.uploadedVideoFilePaths = uploadedVideoFilePaths
       if (!('video' in options)) {
-        options.video = convertFileSrc(uploadedVideoFilePaths[0])
+        options.video = toDisplaySrc(uploadedVideoFilePaths[0])
       }
     }
 
     if (uploadedAudioFilePaths.length > 0) {
       options.uploadedAudioFilePaths = uploadedAudioFilePaths
       if (!isStringArray(options.audios) || options.audios.length === 0) {
-        options.audios = uploadedAudioFilePaths.map((p) => convertFileSrc(p))
+        options.audios = uploadedAudioFilePaths.map((p) => toDisplaySrc(p))
       }
     }
 

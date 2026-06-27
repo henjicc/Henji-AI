@@ -115,9 +115,9 @@ jspm_packages/
 
 # TypeScript cache
 *.tsbuildinfo
-src-tauri/target/
-src-tauri/gen/
-src-tauri/resources/model-manifest.json
-src-tauri/resources/progress-seeds.json
+src-tauri/
+resources/model-manifest.json
+resources/progress-seeds.json
 dev-data/
+scratchpad_feed/
 nul

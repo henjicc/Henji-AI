@@ -6,7 +6,7 @@ import {
   nativeFetch as httpFetch,
   readFile,
   remove,
-  toDisplaySrc as convertFileSrc,
+  toDisplaySrc,
   writeFile,
 } from '@/platform/desktopApi'
 import { getUploadsPath } from '@/utils/dataPath'
@@ -221,7 +221,7 @@ export async function saveBase64ToUploads(
     logger.info('[save] base64 image already exists (hash match)', full)
   }
 
-  const displaySrc = convertFileSrc(full)
+  const displaySrc = toDisplaySrc(full)
   return { fullPath: full, displaySrc, relativePath: name }
 }
 
@@ -251,7 +251,7 @@ export async function saveBytesToUploads(
     logger.info('[save] bytes already exists (hash match)', full)
   }
 
-  const displaySrc = convertFileSrc(full)
+  const displaySrc = toDisplaySrc(full)
   return { fullPath: full, displaySrc, relativePath: name }
 }
 

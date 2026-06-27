@@ -7,9 +7,9 @@ files:
   - out/**
   - package.json
 extraResources:
-  - from: src-tauri/resources/model-manifest.json
+  - from: resources/model-manifest.json
     to: resources/model-manifest.json
-  - from: src-tauri/resources/progress-seeds.json
+  - from: resources/progress-seeds.json
     to: resources/progress-seeds.json
 asarUnpack:
   - node_modules/better-sqlite3/**
@@ -17,7 +17,7 @@ asarUnpack:
   - node_modules/@img/**
   - node_modules/@napi-rs/**
 win:
-  icon: src-tauri/icons/icon.ico
+  icon: resources/icons/icon.ico
   target:
     - target: nsis
       arch:
@@ -33,7 +33,7 @@ nsis:
 msi:
   artifactName: henji-ai-${version}-${arch}.${ext}
 mac:
-  icon: src-tauri/icons/icon.icns
+  icon: resources/icons/icon.icns
   category: public.app-category.graphics-design
   target:
     - target: dmg

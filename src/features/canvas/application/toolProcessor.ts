@@ -247,7 +247,7 @@ export class CanvasToolProcessor implements ToolProcessor {
         safeLineThickness
       );
     } catch {
-      // Fallback when Tauri command is unavailable or fails.
+      // Fallback when native image processing is unavailable or fails.
       outputs = await this.localSplit(sourceImage, safeRows, safeCols, safeLineThickness);
     }
 

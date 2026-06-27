@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { isDesktopRuntime } from '@/platform/runtime';
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi';
+import { toDisplaySrc } from '@/platform/desktopApi';
 
 const logger = createLogger('features.canvas.application.imageData')
 
@@ -97,7 +97,7 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
       if (!normalizedPath) {
         return imageUrl;
       }
-      return convertFileSrc(normalizedPath);
+      return toDisplaySrc(normalizedPath);
     } catch {
       return imageUrl;
     }
@@ -111,7 +111,7 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
     return imageUrl;
   }
 
-  return convertFileSrc(imageUrl);
+  return toDisplaySrc(imageUrl);
 }
 
 export async function persistImageLocally(source: string): Promise<string> {
@@ -218,8 +218,8 @@ export async function prepareNodeImageFromFile(
   maxPreviewDimension = DEFAULT_PREVIEW_MAX_DIMENSION
 ): Promise<PreparedNodeImage> {
   const started = performance.now();
-  const tauriFilePath = (file as File & { path?: string }).path;
-  const normalizedPath = typeof tauriFilePath === 'string' ? tauriFilePath.trim() : '';
+  const nativeFilePath = (file as File & { path?: string }).path;
+  const normalizedPath = typeof nativeFilePath === 'string' ? nativeFilePath.trim() : '';
   const canUseLocalPath =
     normalizedPath.length > 0
     && (isLikelyLocalImagePath(normalizedPath) || normalizedPath.toLowerCase().startsWith('file://'));
@@ -237,11 +237,11 @@ export async function prepareNodeImageFromFile(
     const bytes = new Uint8Array(await file.arrayBuffer());
     const readElapsed = Math.round(performance.now() - readStarted);
     const extension = resolveFileExtension(file);
-    const tauriStarted = performance.now();
+    const nativeStarted = performance.now();
     const prepared = await prepareNodeImageBinary(bytes, extension, safeMaxDimension);
-    const tauriElapsed = Math.round(performance.now() - tauriStarted);
+    const nativeElapsed = Math.round(performance.now() - nativeStarted);
     logger.info(
-      `[upload-perf][imageData] prepareNodeImageFromFile binary-mode name="${file.name}" size=${file.size}B readArrayBuffer=${readElapsed}ms tauriPrepare=${tauriElapsed}ms total=${Math.round(performance.now() - started)}ms`
+      `[upload-perf][imageData] prepareNodeImageFromFile binary-mode name="${file.name}" size=${file.size}B readArrayBuffer=${readElapsed}ms nativePrepare=${nativeElapsed}ms total=${Math.round(performance.now() - started)}ms`
     );
     return {
       imageUrl: prepared.imagePath,
@@ -330,10 +330,10 @@ export async function prepareNodeImage(
   if (isNativeImageRuntime()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
     try {
-      const tauriStarted = performance.now();
+      const nativeStarted = performance.now();
       const prepared = await prepareNodeImageSource(imageUrl, safeMaxDimension);
       logger.info(
-        `[upload-perf][imageData] prepareNodeImage tauri-source elapsed=${Math.round(performance.now() - tauriStarted)}ms total=${Math.round(performance.now() - started)}ms`
+        `[upload-perf][imageData] prepareNodeImage native-source elapsed=${Math.round(performance.now() - nativeStarted)}ms total=${Math.round(performance.now() - started)}ms`
       );
       return {
         imageUrl: prepared.imagePath,

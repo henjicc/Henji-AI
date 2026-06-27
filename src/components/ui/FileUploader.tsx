@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import React, { useRef, useState } from 'react'
-import { useTauriDragDrop } from '../../hooks/useTauriDragDrop'
+import { useNativeDragDrop } from '../../hooks/useNativeDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
 import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@/platform/desktopApi'
@@ -53,12 +53,11 @@ export default function FileUploader({
     // Custom drag and drop context
     const { isDragging: isCustomDragging, dragData, endDrag } = useDragDrop()
 
-    // Handle Tauri native drag and drop
-    const { isDragging: isTauriDragging, elementRef } = useTauriDragDrop((droppedFiles) => {
+    const { isDragging: isNativeDragging, elementRef } = useNativeDragDrop((droppedFiles) => {
         handleFiles(droppedFiles)
     }, disabled)
 
-    const isDragging = isHTML5Dragging || isTauriDragging || isCustomDragging
+    const isDragging = isHTML5Dragging || isNativeDragging || isCustomDragging
     const {
         dragState,
         itemRefs,
@@ -148,9 +147,6 @@ export default function FileUploader({
 
         const fromIndexData = e.dataTransfer.getData('text/henji-reorder-index')
         logger.info('[FileUploader] wrapper drop reorder', { fromIndexData })
-        if (fromIndexData) {
-
-        }
     }
 
     // Handle custom drag drop
@@ -164,7 +160,7 @@ export default function FileUploader({
                 try {
                     let file: File
 
-                    // 优先使用原始文件路径 (Tauri 环境)
+                    // 优先使用原始文件路径（桌面环境）
                     if (dragData.filePath && isDesktop()) {
                         const bytes = await readFile(dragData.filePath)
                         const mime = inferMimeFromPath(dragData.filePath)
@@ -272,7 +268,7 @@ export default function FileUploader({
                                     const bytes = await readFile(dragData.filePath)
                                     const mime = inferMimeFromPath(dragData.filePath)
                                     const blob = new Blob([bytes], { type: mime })
-                                    const filename = dragData.filePath.split(/[\\\/]/).pop() || `image-${Date.now()}.jpg`
+                                    const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
                                     file = new File([blob], filename, { type: mime })
                                 } else {
                                     file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)

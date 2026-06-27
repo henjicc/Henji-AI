@@ -126,7 +126,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const TabBar = () => (
     <div
       className="flex items-center gap-0.5 bg-black/20 rounded-lg p-0.5"
-      data-tauri-ignore-drag-region
       style={noDragRegionStyle}
     >
       {tabs.map((tab) => (
@@ -153,7 +152,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   return (
     <div
       className="fixed top-0 left-0 right-0 z-[2147483647] h-10 border-b border-zinc-700/50 bg-panel px-3 text-white"
-      data-tauri-drag-region
       style={dragRegionStyle}
     >
       {isMacOS ? (
@@ -161,7 +159,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* macOS: 左侧窗口控制按钮 */}
           <div
             className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-2"
-            data-tauri-ignore-drag-region
             style={noDragRegionStyle}
           >
             <UiIconButton
@@ -210,7 +207,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* macOS: 中间 Tab 栏 */}
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            data-tauri-ignore-drag-region
             style={noDragRegionStyle}
           >
             <TabBar />
@@ -225,7 +221,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* Windows: 中间 Tab 栏 */}
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            data-tauri-ignore-drag-region
             style={noDragRegionStyle}
           >
             <TabBar />
@@ -234,7 +229,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* Windows: 右侧窗口控制按钮 */}
           <div
             className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 shrink-0"
-            data-tauri-ignore-drag-region
             style={noDragRegionStyle}
           >
             <UiIconButton

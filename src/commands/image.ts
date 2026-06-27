@@ -7,7 +7,7 @@ import {
   join,
   mkdir,
   readFile,
-  toDisplaySrc as convertFileSrc,
+  toDisplaySrc,
   writeFile,
 } from '@/platform/desktopApi';
 
@@ -136,7 +136,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 
 function resolveDisplaySource(source: string): string {
   if (isLikelyLocalPath(source)) {
-    return convertFileSrc(normalizeLocalPath(source));
+    return toDisplaySrc(normalizeLocalPath(source));
   }
   return source;
 }

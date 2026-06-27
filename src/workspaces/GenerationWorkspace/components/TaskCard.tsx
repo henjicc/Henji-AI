@@ -1,5 +1,5 @@
 import React from "react"
-import { toDisplaySrc as convertFileSrc } from '@/platform/desktopApi'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
@@ -72,7 +72,7 @@ const TaskCard = React.memo(function TaskCard({
     if (shouldIgnoreClick()) return
     // Use full-resolution URLs for the viewer (thumbnail URLs are for display only)
     const fullUrls = filePaths.length > 0
-      ? filePaths.map(fp => convertFileSrc(fp.replace(/\\\\/g, '/')))
+      ? filePaths.map(fp => toDisplaySrc(fp.replace(/\\\\/g, '/')))
       : list
     onOpenImageViewer(fullUrls[0], fullUrls, filePaths)
   }
@@ -209,7 +209,7 @@ const TaskCard = React.memo(function TaskCard({
       const urls = splitMulti(task.result.url)
       const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
       const filePath = filePaths[0]
-      const videoUrl = filePath ? convertFileSrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
+      const videoUrl = filePath ? toDisplaySrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
       return (
         <div
           className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 cursor-pointer"

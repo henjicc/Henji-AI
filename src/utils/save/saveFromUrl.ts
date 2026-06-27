@@ -3,7 +3,7 @@ import {
   join,
   mkdir,
   nativeFetch as httpFetch,
-  toDisplaySrc as convertFileSrc,
+  toDisplaySrc,
   writeFile,
 } from '@/platform/desktopApi'
 import { getMediaPath } from '@/utils/dataPath'
@@ -20,7 +20,7 @@ export async function saveBinary(
   const fullPath = await join(mediaPath, filename)
   await mkdir(mediaPath, { recursive: true })
   await writeFile(fullPath, data)
-  const webSrc = convertFileSrc(fullPath)
+  const webSrc = toDisplaySrc(fullPath)
   logger.info('[save] wrote file', fullPath)
   return { fullPath, webSrc }
 }

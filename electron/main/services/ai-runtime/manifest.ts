@@ -49,7 +49,6 @@ function loadManifestStore(): ModelManifestStore {
 function getManifestCandidates(): string[] {
   const cwd = process.cwd()
   const candidates = [
-    path.join(cwd, 'src-tauri', 'resources', 'model-manifest.json'),
     path.join(cwd, 'resources', 'model-manifest.json'),
   ]
 
