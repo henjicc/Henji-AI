@@ -24,7 +24,12 @@ import {
 } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import { NODE_ROW_CARD_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_ROW_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+  NODE_ROW_CARD_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
 import {
   areMediaOutputListsEqual,
   collectInputMedia,
@@ -133,6 +138,9 @@ export const GenerationNodeShell = memo(({
   const findNodePosition = useCanvasStore((state) => state.findNodePosition);
   const addEdge = useCanvasStore((state) => state.addEdge);
   const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus);
+  const hasSourceConnections = useCanvasStore(
+    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+  );
 
   const definition = useMemo(() => getNodeDefinition(nodeType), [nodeType]);
   const generationSpec = definition.generation;
@@ -405,13 +413,13 @@ export const GenerationNodeShell = memo(({
       />
 
       <div className="relative flex flex-col gap-1.5">
-        <div className="relative min-h-[100px]">
+        <div className="group/row relative min-h-[100px]">
           <Handle
             type="target"
             id={promptPortId()}
             position={Position.Left}
-            style={{ background: getSocketColor('STRING'), left: 0, top: 20, transform: 'translateX(-50%)' }}
-            className="!h-2.5 !w-2.5 !border !border-surface-dark"
+            style={{ background: getSocketColor('STRING'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+            className={`${NODE_PORT_ROW_CLASS} ${isPromptOverridden ? NODE_PORT_VISIBLE_CLASS : ''}`}
           />
           <div
             className={`h-full p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS}`}
@@ -466,7 +474,8 @@ export const GenerationNodeShell = memo(({
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor(modelType.toUpperCase()), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={minWidth}

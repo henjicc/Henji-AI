@@ -34,6 +34,11 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
+import { getSocketColor } from '@/features/canvas/domain/socketTypes';
+import {
   prepareNodeImageFromFile,
   resolveImageDisplayUrl,
   shouldUseOriginalImageByZoom,
@@ -60,6 +65,9 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   const { t } = useTranslation();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const hasSourceConnections = useCanvasStore(
+    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+  );
   const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
   const { zoom } = useViewport();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -333,7 +341,8 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('IMAGE'), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={resizeMinWidth}

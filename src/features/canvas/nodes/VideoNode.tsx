@@ -19,6 +19,11 @@ import { captureVideoPoster } from '@/features/canvas/generation/videoPoster';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
+import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { formatDuration } from '@/utils/mediaDimensions';
 import { saveUploadVideo } from '@/utils/save';
@@ -44,6 +49,12 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const { t } = useTranslation();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const hasTargetConnections = useCanvasStore(
+    (state) => state.edges.some((edge) => edge.target === id && (edge.targetHandle ?? 'target') === 'target')
+  );
+  const hasSourceConnections = useCanvasStore(
+    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -239,14 +250,16 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
           type="target"
           id="target"
           position={Position.Left}
-          className="!h-2 !w-2 !border-surface-dark !bg-accent"
+          className={`${NODE_PORT_NODE_CLASS} ${hasTargetConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+          style={{ background: getSocketColor('VIDEO'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
         />
       )}
       <Handle
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('VIDEO'), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={resizeConstraints.minWidth}

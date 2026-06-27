@@ -1,8 +1,26 @@
 import { registry } from '@/core/ModelRegistry';
 import { deriveSocketType, isSocketCompatible } from '@/core/types/SocketType';
-import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
-import { getNodeMediaOutputs, getNodeValueOutput } from '../domain/nodeRegistry';
-import { MODEL_PARAM_ID, PROMPT_PARAM_ID, mediaParamIdToKind, parseParamPortId } from '../domain/socketTypes';
+import type { CanvasEdge, CanvasNode, CanvasNodeType } from '../domain/canvasNodes';
+import {
+  getCanvasNodeDefinition,
+  getNodeMediaOutputs,
+  getNodeValueOutput,
+  isConnectionCompatible,
+  nodeHasSourceHandle,
+  nodeHasTargetHandle,
+} from '../domain/nodeRegistry';
+import {
+  MODEL_PARAM_ID,
+  PROMPT_PARAM_ID,
+  mediaParamIdToKind,
+  modelPortId,
+  paramPortId,
+  parseParamPortId,
+  isParamPortId,
+  promptPortId,
+  resolveMediaTargetHandle,
+  type RowMediaKind,
+} from '../domain/socketTypes';
 
 /**
  * 标量值注入解析（数值/源节点 → 下游参数端口）。
@@ -83,7 +101,17 @@ export function isParamConnectionCompatible(
 
   if (paramId === MODEL_PARAM_ID) {
     const output = getNodeValueOutput(sourceNode.type, sourceNode.data);
-    return output?.socketType === 'MODEL';
+    if (output?.socketType !== 'MODEL') {
+      return false;
+    }
+    const generationType = getCanvasNodeDefinition(targetNode.type)?.generation?.modelType;
+    if (!generationType) {
+      return true;
+    }
+    if (typeof output.value !== 'string') {
+      return false;
+    }
+    return registry.getModel(output.value)?.meta.type === generationType;
   }
 
   if (paramId === PROMPT_PARAM_ID) {
@@ -104,6 +132,89 @@ export function isParamConnectionCompatible(
     return false;
   }
   return isSocketCompatible(output.socketType, deriveSocketType(param));
+}
+
+function createPreviewNode(type: CanvasNodeType): CanvasNode | null {
+  const definition = getCanvasNodeDefinition(type);
+  if (!definition) {
+    return null;
+  }
+  return {
+    id: `preview-${type}`,
+    type,
+    position: { x: 0, y: 0 },
+    data: definition.createDefaultData(),
+  } as CanvasNode;
+}
+
+function resolveSchemaTargetHandle(sourceNode: CanvasNode, targetNode: CanvasNode): string | null {
+  const output = getNodeValueOutput(sourceNode.type, sourceNode.data);
+  const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
+  if (!output || typeof modelId !== 'string' || !modelId) {
+    return null;
+  }
+
+  const param = registry.getSchema(modelId).find((item) =>
+    isSocketCompatible(output.socketType, deriveSocketType(item))
+  );
+  return param ? paramPortId(param.id) : null;
+}
+
+export function resolveCompatibleTargetHandleForSource(
+  sourceNode: CanvasNode,
+  targetType: CanvasNodeType
+): string | null {
+  if (!nodeHasTargetHandle(targetType)) {
+    return null;
+  }
+
+  const targetNode = createPreviewNode(targetType);
+  if (!targetNode) {
+    return null;
+  }
+
+  for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data)) {
+    if (output.kind === 'image' || output.kind === 'video' || output.kind === 'audio') {
+      if (isParamConnectionCompatible(sourceNode, targetNode, resolveMediaTargetHandle(targetType, output.kind as RowMediaKind))) {
+        return resolveMediaTargetHandle(targetType, output.kind as RowMediaKind);
+      }
+      if (isConnectionCompatible(sourceNode.type, targetType)) {
+        return 'target';
+      }
+    }
+  }
+
+  const valueOutput = getNodeValueOutput(sourceNode.type, sourceNode.data);
+  if (!valueOutput) {
+    return null;
+  }
+
+  if (isParamConnectionCompatible(sourceNode, targetNode, modelPortId())) {
+    return modelPortId();
+  }
+  if (isParamConnectionCompatible(sourceNode, targetNode, promptPortId())) {
+    return promptPortId();
+  }
+  return resolveSchemaTargetHandle(sourceNode, targetNode);
+}
+
+export function canSourceTypeConnectToTargetHandle(
+  sourceType: CanvasNodeType,
+  targetNode: CanvasNode,
+  targetHandle: string | null | undefined
+): boolean {
+  if (!nodeHasSourceHandle(sourceType)) {
+    return false;
+  }
+
+  const sourceNode = createPreviewNode(sourceType);
+  if (!sourceNode) {
+    return false;
+  }
+
+  return isParamPortId(targetHandle)
+    ? isParamConnectionCompatible(sourceNode, targetNode, targetHandle)
+    : isConnectionCompatible(sourceType, targetNode.type);
 }
 
 /** 字符串集合内容相等比较（供 store selector 避免无效重渲染） */

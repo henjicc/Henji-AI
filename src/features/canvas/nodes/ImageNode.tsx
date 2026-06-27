@@ -23,6 +23,10 @@ import {
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -44,6 +48,12 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   const { t } = useTranslation();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const hasTargetConnections = useCanvasStore(
+    (state) => state.edges.some((edge) => edge.target === id && (edge.targetHandle ?? 'target') === 'target')
+  );
+  const hasSourceConnections = useCanvasStore(
+    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+  );
   const { zoom } = useViewport();
   const isExportResultNode = type === CANVAS_NODE_TYPES.exportImage;
   const { isGenerating, progress: displayProgress } = useGenerationProgressDisplay(id, data);
@@ -139,13 +149,15 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
         type="target"
         id="target"
         position={Position.Left}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasTargetConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
       />
       <Handle
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={resizeMinWidth}

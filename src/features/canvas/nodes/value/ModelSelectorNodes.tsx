@@ -13,6 +13,8 @@ type ModelSelectorNodeProps = NodeProps & {
   id: string;
   data: ModelSelectorNodeData;
   selected?: boolean;
+  width?: number;
+  height?: number;
 };
 
 const NOOP_PARAMS_CHANGE = (): void => {};
@@ -42,14 +44,15 @@ function ModelSelectorBody({
   );
 }
 
-export const ImageModelSelectorNode = memo(({ id, data, selected }: ModelSelectorNodeProps) => (
+export const ImageModelSelectorNode = memo(({ id, data, selected, width, height }: ModelSelectorNodeProps) => (
   <ValueSourceShell
     id={id}
     nodeType={CANVAS_NODE_TYPES.imageModelSelector}
     data={data}
     socketType="MODEL"
     selected={selected}
-    width={240}
+    width={width ?? 240}
+    height={height}
     icon={<Sparkles className="h-4 w-4" />}
   >
     <ModelSelectorBody id={id} data={data} mediaType="image" />
@@ -57,14 +60,15 @@ export const ImageModelSelectorNode = memo(({ id, data, selected }: ModelSelecto
 ));
 ImageModelSelectorNode.displayName = 'ImageModelSelectorNode';
 
-export const VideoModelSelectorNode = memo(({ id, data, selected }: ModelSelectorNodeProps) => (
+export const VideoModelSelectorNode = memo(({ id, data, selected, width, height }: ModelSelectorNodeProps) => (
   <ValueSourceShell
     id={id}
     nodeType={CANVAS_NODE_TYPES.videoModelSelector}
     data={data}
     socketType="MODEL"
     selected={selected}
-    width={240}
+    width={width ?? 240}
+    height={height}
     icon={<Video className="h-4 w-4" />}
   >
     <ModelSelectorBody id={id} data={data} mediaType="video" />
@@ -72,14 +76,15 @@ export const VideoModelSelectorNode = memo(({ id, data, selected }: ModelSelecto
 ));
 VideoModelSelectorNode.displayName = 'VideoModelSelectorNode';
 
-export const AudioModelSelectorNode = memo(({ id, data, selected }: ModelSelectorNodeProps) => (
+export const AudioModelSelectorNode = memo(({ id, data, selected, width, height }: ModelSelectorNodeProps) => (
   <ValueSourceShell
     id={id}
     nodeType={CANVAS_NODE_TYPES.audioModelSelector}
     data={data}
     socketType="MODEL"
     selected={selected}
-    width={240}
+    width={width ?? 240}
+    height={height}
     icon={<AudioLines className="h-4 w-4" />}
   >
     <ModelSelectorBody id={id} data={data} mediaType="audio" />

@@ -20,6 +20,8 @@ import {
   NODE_ROW_CONTROL_SLOT_CLASS,
   NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
+  NODE_PORT_ROW_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { NodeParamControl } from './NodeParamControl';
 
@@ -103,7 +105,7 @@ export const NodeParamRows = memo(({
               id={paramPortId(param.id)}
               position={Position.Left}
               style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-              className="!h-2.5 !w-2.5 !border !border-surface-dark"
+              className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
             />
             <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
             <div className={NODE_ROW_CONTROL_SLOT_CLASS}>

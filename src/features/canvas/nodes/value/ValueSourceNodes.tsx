@@ -3,7 +3,7 @@ import { Hash, ToggleLeft, Type } from 'lucide-react';
 import type { NodeProps } from '@xyflow/react';
 
 import { CANVAS_NODE_TYPES, type ValueSourceNodeData } from '@/features/canvas/domain/canvasNodes';
-import { UiInput, UiSwitch } from '@/components/ui';
+import { UiInput, UiSwitch, UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { ValueSourceShell } from './ValueSourceShell';
 
@@ -11,6 +11,8 @@ type ValueNodeProps = NodeProps & {
   id: string;
   data: ValueSourceNodeData;
   selected?: boolean;
+  width?: number;
+  height?: number;
 };
 
 function useSetValue(id: string): (value: number | string | boolean) => void {
@@ -46,7 +48,7 @@ function NumberValueField({
   );
 }
 
-export const IntSourceNode = memo(({ id, data, selected }: ValueNodeProps) => {
+export const IntSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
   const setValue = useSetValue(id);
   return (
     <ValueSourceShell
@@ -55,6 +57,8 @@ export const IntSourceNode = memo(({ id, data, selected }: ValueNodeProps) => {
       data={data}
       socketType="INT"
       selected={selected}
+      width={width}
+      height={height}
       icon={<Hash className="h-4 w-4" />}
     >
       <NumberValueField value={Number(data.value)} integer onCommit={setValue} />
@@ -63,7 +67,7 @@ export const IntSourceNode = memo(({ id, data, selected }: ValueNodeProps) => {
 });
 IntSourceNode.displayName = 'IntSourceNode';
 
-export const FloatSourceNode = memo(({ id, data, selected }: ValueNodeProps) => {
+export const FloatSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
   const setValue = useSetValue(id);
   return (
     <ValueSourceShell
@@ -72,6 +76,8 @@ export const FloatSourceNode = memo(({ id, data, selected }: ValueNodeProps) => 
       data={data}
       socketType="FLOAT"
       selected={selected}
+      width={width}
+      height={height}
       icon={<Hash className="h-4 w-4" />}
     >
       <NumberValueField value={Number(data.value)} integer={false} onCommit={setValue} />
@@ -80,7 +86,7 @@ export const FloatSourceNode = memo(({ id, data, selected }: ValueNodeProps) => 
 });
 FloatSourceNode.displayName = 'FloatSourceNode';
 
-export const StringSourceNode = memo(({ id, data, selected }: ValueNodeProps) => {
+export const StringSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
   const setValue = useSetValue(id);
   return (
     <ValueSourceShell
@@ -89,21 +95,24 @@ export const StringSourceNode = memo(({ id, data, selected }: ValueNodeProps) =>
       data={data}
       socketType="STRING"
       selected={selected}
+      width={width ?? 300}
+      height={height ?? 132}
+      minWidth={240}
+      minHeight={116}
       icon={<Type className="h-4 w-4" />}
     >
-      <UiInput
-        type="text"
+      <UiTextArea
         value={typeof data.value === 'string' ? data.value : ''}
         onChange={(event) => setValue(event.target.value)}
         onMouseDown={(event) => event.stopPropagation()}
-        className="h-8 w-full"
+        className="ui-scrollbar min-h-0 flex-1 resize-none"
       />
     </ValueSourceShell>
   );
 });
 StringSourceNode.displayName = 'StringSourceNode';
 
-export const BooleanSourceNode = memo(({ id, data, selected }: ValueNodeProps) => {
+export const BooleanSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
   const setValue = useSetValue(id);
   return (
     <ValueSourceShell
@@ -112,6 +121,8 @@ export const BooleanSourceNode = memo(({ id, data, selected }: ValueNodeProps) =
       data={data}
       socketType="BOOLEAN"
       selected={selected}
+      width={width}
+      height={height}
       icon={<ToggleLeft className="h-4 w-4" />}
     >
       <div className="flex items-center justify-between">
