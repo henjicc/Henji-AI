@@ -6,6 +6,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 
+import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -27,7 +28,7 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
   // 生成中判定：下游是结果展示节点且正在生成（按注册表 media.role 泛化，无节点类型特判）
   const isProcessingEdge = useCanvasStore((state) => {
-    const targetNode = state.nodes.find((node) => node.id === target);
+    const targetNode = getNodeIndexById(state.nodes).get(target);
     if (!targetNode || targetNode.data?.isGenerating !== true) {
       return false;
     }

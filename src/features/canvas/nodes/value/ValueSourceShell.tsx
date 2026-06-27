@@ -2,6 +2,7 @@ import { type ReactNode, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
 import type { CanvasNodeData, CanvasNodeType } from '@/features/canvas/domain/canvasNodes';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { getSocketColor, type SocketType } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
@@ -53,7 +54,7 @@ export function ValueSourceShell({
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const hasSourceConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
 
   const title = useMemo(

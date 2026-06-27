@@ -9,6 +9,7 @@ import {
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import {
@@ -38,10 +39,10 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const hasTargetConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.target === id && (edge.targetHandle ?? 'target') === 'target')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false
   );
   const hasSourceConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);

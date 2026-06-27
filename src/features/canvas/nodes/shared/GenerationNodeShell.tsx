@@ -11,6 +11,7 @@ import {
   type CanvasNodeData,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
@@ -138,7 +139,7 @@ export const GenerationNodeShell = memo(({
   const addEdge = useCanvasStore((state) => state.addEdge);
   const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus);
   const hasSourceConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
 
   const definition = useMemo(() => getNodeDefinition(nodeType), [nodeType]);

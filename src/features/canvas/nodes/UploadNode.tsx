@@ -26,6 +26,7 @@ import {
   resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import {
   isNodeUsingDefaultDisplayName,
   resolveNodeDisplayName,
@@ -66,7 +67,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const hasSourceConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
   const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
   const preferOriginalImage = useOriginalImageLod();

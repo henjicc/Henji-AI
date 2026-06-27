@@ -17,6 +17,7 @@ import {
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -47,10 +48,10 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const hasTargetConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.target === id && (edge.targetHandle ?? 'target') === 'target')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false
   );
   const hasSourceConnections = useCanvasStore(
-    (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
   const preferOriginalImage = useOriginalImageLod();
   const isExportResultNode = type === CANVAS_NODE_TYPES.exportImage;
