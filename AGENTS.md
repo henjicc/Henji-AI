@@ -5,56 +5,71 @@
 
 - 允许 Codex 在完成一组相关改动、验证通过或需要保存阶段性成果时自主提交 commit
 - commit 信息使用中文，简洁说明本次改动目的
-- 提交前优先检查工作区，避免把无关文件、临时截图、日志或自动生成但非必要的产物误提交
+- 提交前优先检查工作区，避免把无关文件、临时截图、日志、安装包或自动生成但非必要的产物误提交
+- 当前分支基线是 Electron 迁移分支；如需回看旧 Tauri 实现，只作对照，不在新功能里继续扩展 Tauri 路径
 
 ## 项目概述
 
-Henji-AI（痕迹AI）是基于 Tauri 的桌面应用，聚合多个 AI 提供商（PPIO、Fal、ModelScope、KIE）生成图像、视频和音频
+Henji-AI（痕迹AI）是基于 **Electron + React + TypeScript** 的桌面应用，聚合多个 AI 提供商（PPIO、Fal、ModelScope、KIE）生成图像、视频和音频。
+
+当前迁移状态：
+
+- Electron 主壳、preload 安全 IPC、Node/TS 主进程能力已经成为开发基线
+- Tauri/Rust 旧壳仍保留在仓库中，主要用于历史对照、回滚和 4.3 最终清理前的兜底
+- `src-tauri/resources/model-manifest.json` 与 `src-tauri/resources/progress-seeds.json` 仍是生成产物的当前落点，并会被 Electron 打包复制到 `resources/`；目录名属于迁移残留，后续 4.3 可再重命名/收口
+- 证书、公证、真实 GitHub Release 发布凭据、macOS 真机验收属于发布前收尾项；没有凭据或设备时不阻塞日常 Electron 开发
 
 ## 常用命令
 
 ```bash
-npm install                 # 安装依赖
-npm run dev                 # 运行 Vite 开发服务器
-npm run build               # 构建前端（包含 manifest 与校验）
-npm run gen:model-manifest  # 生成模型清单到 src-tauri/resources/model-manifest.json
-npm run check:colors        # 颜色规范检查
-npm run check:model-i18n    # 模型 i18n key 校验
-npm run tauri:dev           # 运行 Tauri 开发模式（Windows 需要 MSVC）
-npm run tauri:dev:mac       # 运行 Tauri 开发模式（macOS）
+npm install                    # 安装依赖
+npm run dev                    # 运行裸 Vite 渲染层调试（不含 Electron 主进程能力）
+npm run electron:dev           # 运行 Electron 开发模式（推荐桌面端调试）
+npm run electron:build         # Electron 构建（manifest/seeds + 校验 + tsc + electron-vite）
+npm run electron:pack          # 生成未安装目录包
+npm run electron:dist          # 生成安装包/分发产物
+npm run electron:publish       # 构建并发布到 electron-builder 配置的发布通道
+npm run electron:smoke         # Electron 构建产物冒烟验收
+npm run electron:canvas-stress # Electron 画布压测
+npm run electron:dpi-check     # Electron DPI/分辨率检查
+npm run electron:updater-e2e   # 本地模拟 updater 端到端
+npm run gen:model-manifest     # 生成模型清单到 src-tauri/resources/model-manifest.json
+npm run check:colors           # 颜色规范检查
+npm run check:model-i18n       # 模型 i18n key 校验
+npm run lint                   # 前端 lint
 ```
 
-**注意**: 项目使用 `@/` 作为 `src/` 的路径别名
+**旧 Tauri 命令仅用于回退/对照**：
 
-**Windows / MSVC 注意**:
-
-- 在 Windows 下执行 `cargo test`、`cargo build`、`tauri dev`、`tauri build` 等 Rust/Tauri 命令时，必须先进入 VS Build Tools 的开发者命令环境，再设置 `CC=cl.exe` 与 `CXX=cl.exe`
-- 推荐复用 `npm run tauri:dev` / `npm run tauri:build` 中的做法，不要直接在普通 PowerShell 环境里裸跑 `cargo`
-- Windows 的 `npm run tauri:dev` 默认会设置 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`，用于打开 WebView2 CDP 调试端口
-- 如需单独运行 Rust 测试，可参考：
-
-```powershell
-$vsDevCmd = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat'
-cmd.exe /c "call `"$vsDevCmd`" -arch=amd64 && set CC=cl.exe && set CXX=cl.exe && cargo test --manifest-path src-tauri\Cargo.toml"
+```bash
+npm run tauri:dev
+npm run tauri:build
+npm run tauri:dev:mac
+npm run tauri:build:mac
 ```
 
-**Tauri / WebView2 调试注意**:
+在 Windows 下裸跑旧 Tauri/Rust 命令仍需 VS Build Tools 开发者命令环境与 `CC=cl.exe`/`CXX=cl.exe`。除非任务明确要求回归旧壳，不要优先使用 Tauri 命令做最终验收。
 
-- Tauri UI 验收应优先看真实 Tauri WebView，不要把裸浏览器打开的 Vite 页面当作最终视觉依据
-- 自定义标题栏、窗口按钮、设置入口、对话/画布/工具箱切换等能力依赖 Tauri 容器，裸浏览器页面可能缺失或表现不同
-- 运行 `npm run tauri:dev` 后，可通过 `http://127.0.0.1:9223/json/version` 和 `http://127.0.0.1:9223/json` 检查 CDP 是否开启
-- 使用 Playwright/CDP 连接真实 WebView 时，选择 title 为 `痕迹AI`、url 为 `http://localhost:3000/` 的 page target；忽略 DevTools 自身 target
-- 如果 9223 不通，先确认应用是在设置环境变量之后启动的；已打开的 WebView 不会因为后设置环境变量而自动启用 CDP
+**注意**: 项目使用 `@/` 作为 `src/` 的路径别名。
 
-**Manifest 注意**:
+## Electron 调试与验收注意
 
-- `src-tauri/resources/model-manifest.json` 是自动生成产物，不是手写主源
-- 它会在 `npm run gen:model-manifest`、`npm run dev`、`npm run build`、`npm run tauri:dev`、`npm run tauri:build` 这类脚本链路中刷新
+- 桌面能力验收优先看真实 Electron 窗口，不要把裸浏览器 Vite 页面当作最终依据
+- 自定义标题栏、窗口控制、preload bridge、SQLite、safeStorage、媒体协议、自动更新、原生拖拽/剪贴板都依赖 Electron 容器
+- Electron 自动化脚本会通过 CDP/Playwright 启动构建产物；如需临时手动调试，可优先复用 `scripts/lib/electronLaunch.cjs` 中的启动方式
+- `electron-builder.yml` 当前配置 Windows NSIS/MSI、macOS DMG、GitHub Releases 发布通道、`better-sqlite3`/`sharp` 原生模块 unpack 与 manifest/seeds 资源分发
+- 当前无代码签名证书时安装包会是未签名状态，这是已知发布限制，不属于功能阻塞
+
+## Manifest / Seeds 注意
+
+- `src-tauri/resources/model-manifest.json` 与 `src-tauri/resources/progress-seeds.json` 是自动生成产物，不是手写主源
+- 它们会在 `npm run gen:model-manifest`、`npm run dev`、`npm run electron:dev`、`npm run electron:build`、`npm run electron:dist` 等脚本链路中刷新
 - 单纯“退出并重新打开应用”不会重新生成 manifest；修改模型定义、请求构建或运行时约束后，必须重新跑上述脚本之一
+- Electron 主进程会在开发态读取仓库内生成产物，在打包态读取随包 `resources/` 副本
 
 ## 核心架构原则
 
-**关键：解耦是本项目架构的基础，始终优先考虑关注点分离**
+**关键：解耦是本项目架构的基础，始终优先考虑关注点分离。迁移只替换桌面外壳与后端能力实现，不改变业务分层。**
 
 ### 1. 配置驱动架构（最重要）
 
@@ -66,43 +81,52 @@ cmd.exe /c "call `"$vsDevCmd`" -arch=amd64 && set CC=cl.exe && set CXX=cl.exe &&
 - **禁止**在通用组件中硬编码模型特定逻辑
 - 需要模型特定行为时，扩展模型定义 schema
 
-### 2. 生成链路边界（已更新）
+### 2. 生成链路边界（Electron 基线）
 
 模型生成主链路按以下路径执行：
 
 - 前端：`GenerationService`（`src/core/services/GenerationService.ts`）
 - 前端命令桥：`src/commands/aiRuntime.ts`
-- 后端执行：`src-tauri/src/ai_runtime/`（Rust providers + 轮询 + trace）
+- 平台抽象层：`src/platform/*`
+- Electron preload：`electron/preload/index.ts` 暴露 `window.henjiNative.ai`
+- Electron 主进程：`electron/main/ipc/ai-runtime.ts`
+- 后端执行：`electron/main/services/ai-runtime/`（Node/TS providers + 上传 + 轮询 + trace + 进度学习）
 
 约束：
 
 - **禁止**在业务组件中直接发起模型生成 API 调用
-- `src/core/providers/` 当前主要承载基类与兼容层（如 `ProviderFactoryRegistry`），不再承担真实 provider 执行
-- 所有模型生成相关的提供商细节（鉴权、路由、请求格式、轮询、结果解析）应落在 Rust `ai_runtime/providers/*.rs`
+- `src/core/providers/` 当前主要承载基类与兼容层（如 `ProviderFactoryRegistry`），不承担真实 provider 执行
+- 所有模型生成相关的提供商细节（鉴权、路由、请求格式、轮询、结果解析）应落在 Electron 主进程 `electron/main/services/ai-runtime/**`
 - 非模型生成场景（如更新检查、资源下载/转换）允许在服务层封装网络请求，但禁止散落在业务 UI
+- 旧 Rust `src-tauri/src/ai_runtime/` 只作对照与待清理资产，不再作为新能力落点
 
-**注意**：`src/adapters/` 已移除，旧代码仅保存在 `old-Henji-AI/`
+### 3. 平台抽象层（PAL）边界
 
-### 3. 严格解耦与体积治理
+- 渲染层运行时代码统一通过 `src/platform/*`、`src/commands/*`、领域服务访问桌面能力
+- **禁止**在业务 UI 新增对 `@tauri-apps/*`、Electron `ipcRenderer`、Node 内置模块的直接 import
+- Electron 主进程能力经 `ipcMain` + preload 白名单暴露，保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`
+- `src/platform/adapters/tauri/*` 是旧壳兼容层；新增能力优先实现 Electron adapter，Tauri adapter 不再扩展，除非是为删除/迁移做最小调整
 
-- **层级分离**: 组件不包含业务编排，业务层不直接实现 provider 协议，Provider/Runtime 不包含 UI 逻辑
+### 4. 严格解耦与体积治理
+
+- **层级分离**: 组件不包含业务编排，业务层不直接实现 provider 协议，Runtime/Provider 不包含 UI 逻辑
 - **文件体积策略**:
   - 新文件优先控制在 `<= 400` 行
   - `400~500` 行可接受（非阻断）
   - `> 500` 行允许少量存量存在，但应遵循“禁止继续膨胀 + 修改即拆分”
 - **单一职责**: 每个文件/类/函数只做一件事，如果描述时需要用到“和”，优先拆分
 - **禁止跨层导入**:
-  - 组件不能导入 `providers/`（运行时实现）或 `adapters/`
-  - Runtime/Provider 层不能导入 `components/`
+  - 组件不能导入 runtime/provider 实现、Electron 主进程代码或旧 adapters
+  - Electron 主进程不能导入 `components/`
   - 模型定义不能导入 `services/` 或 `components/`
-  - 使用 `core/` 作为层间桥梁
+  - 使用 `core/`、`commands/`、`platform/` 作为层间桥梁
 
-### 4. UI Primitive 单点落地
+### 5. UI Primitive 单点落地
 
 - **统一入口**：业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
 - **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
 - **禁止回退**：禁止在业务组件重新引入原生控件并单独写一套样式
-- **通用优先**：能复用现有通用组件时，优先复用现成的 `Ui*`、`Dropdown`、`PanelTrigger` 等组件，不要随手新写“看起来差不多”的组件
+- **通用优先**：能复用现有通用组件时，优先复用现成的 `Ui*`、`Dropdown`、`PanelTrigger` 等组件
 - **新增门槛**：只有在现有通用组件确实覆盖不了需求时，才考虑新增组件；动手前先告诉用户原因和替代方案，等用户确认后再创建
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 - **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
@@ -110,23 +134,23 @@ cmd.exe /c "call `"$vsDevCmd`" -arch=amd64 && set CC=cl.exe && set CXX=cl.exe &&
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 
-### 5. 画布模块拆分约定
+### 6. 画布模块拆分约定
 
 - `src/features/canvas/Canvas.tsx` 只保留编排与接线，不承载复杂业务实现
 - 画布行为优先放入 hooks：
   - `src/features/canvas/hooks/useCanvasDuplication.ts`
   - `src/features/canvas/hooks/useCanvasNodeMenu.ts`
   - `src/features/canvas/hooks/useCanvasShortcuts.ts`
-- 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`（例如 `CanvasOverlays.tsx`、`CanvasEmptyHint.tsx`）
+- 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`
 - 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
 
-### 6. 主题与运行时样式落地约定
+### 7. 主题与运行时样式落地约定
 
 - `settingsStore` 中的 `themeTonePreset` / `uiRadiusPreset` / `accentColor` 变更后，必须同步到 `document.documentElement`（`data-*` 或 CSS 变量）
 - 禁止“有设置项但未生效”的状态长期存在；新增主题设置时需同时提交“状态 + 应用层同步器”
 - 主题状态必须单一数据源，避免多套 store 并存且互不联动
 
-### 7. 根级 Provider 挂载约定
+### 8. 根级 Provider 挂载约定
 
 - 全局 Provider（如拖拽、全局菜单、通知）只允许在应用根层挂载一次
 - 禁止在多个根容器重复包裹同一 Provider，避免事件重复订阅与状态分叉
@@ -134,17 +158,17 @@ cmd.exe /c "call `"$vsDevCmd`" -arch=amd64 && set CC=cl.exe && set CXX=cl.exe &&
 ## 目录结构
 
 ```text
+electron/
+├── main/              # Electron 主进程：窗口、IPC、协议、Node/TS 后端能力
+│   ├── ipc/           # ipcMain handler 注册
+│   └── services/      # db / keystore / ai-runtime / llm / image / project-package / updater 等
+└── preload/           # contextBridge 安全暴露 window.henjiNative
+
 src/
-├── commands/          # 前端到 Tauri 的命令桥（含 aiRuntime）
+├── commands/          # 前端命令桥；对外签名稳定，内部走 platform
+├── platform/          # PAL 契约 + electron/tauri adapters
 ├── components/        # React UI 组件（展示 + 轻交互）
-├── core/              # 前端核心（模型定义、注册、请求构建、兼容层）
-│   ├── providers/
-│   │   ├── base/                  # ProviderHandler 基类与类型
-│   │   └── ProviderFactoryRegistry.ts # 兼容层（非真实 provider 执行）
-│   ├── services/                  # GenerationService
-│   ├── linkage/                   # 参数联动引擎
-│   ├── request/                   # 请求构建器
-│   └── types/                     # 核心类型定义
+├── core/              # 模型定义、注册、请求构建、GenerationService、兼容层
 ├── features/          # 领域功能（含主画布实现）
 ├── models/            # 模型定义（*.model.ts）
 ├── services/          # 领域服务（数据库/上传/更新检查/预设等）
@@ -153,30 +177,30 @@ src/
 ├── utils/             # 纯工具函数
 └── workspaces/        # 工作区容器
 
-src-tauri/src/ai_runtime/
-├── commands.rs        # Tauri 命令入口
-├── providers/         # 实际 provider 执行（fal/kie/modelscope/ppio）
-├── polling.rs         # 轮询
-├── request_builder_dsl.rs
-└── ...                # key_store / trace / upload / task_registry 等
+src-tauri/             # 旧 Tauri/Rust 实现与当前 manifest/seeds 生成产物落点，待 4.3 清理
+old-Henji-AI/          # 旧项目代码备份（仅供对照）
 ```
 
-old-Henji-AI/           # 旧项目代码备份（仅供对照）
+## Electron 迁移状态（重要）
 
-## 架构迁移状态（重要）
+已完成/基本完成：
 
-项目已完成从 Adapter 到 Provider Runtime 的主迁移：
+- ✅ Electron 工程骨架、窗口/标题栏、preload 安全 IPC
+- ✅ 渲染层经 PAL 收口，业务代码不再直接依赖 Tauri invoke
+- ✅ SQLite（better-sqlite3）、safeStorage 密钥、系统文件/对话框/外链/日志
+- ✅ `henji-media://` 媒体协议与 Range 支持
+- ✅ AI Runtime、LLM 流式 Runtime、图片处理、剪贴板/拖拽、项目包导入导出
+- ✅ electron-builder 打包、electron-updater 主链路、本机安装器与本地 updater E2E
+- ✅ Electron smoke、画布压测、DPI 自动化检查
 
-- ✅ `src/adapters/` 已移除，旧代码保存在 `old-Henji-AI/`
-- ✅ 前端模型生成统一走 `GenerationService -> aiRuntime`
-- ✅ Provider 实际执行下沉到 Rust `ai_runtime/providers/*.rs`
-- ✅ 构建前自动生成 `src-tauri/resources/model-manifest.json`
+仍未做或可后置：
 
-当前开发基线：
-
-- 新模型开发：`defineModel` + `.model.ts` + i18n + manifest 构建链路
-- 模型生成相关改动：优先改 Rust runtime 与模型配置，不在 UI 写 provider 特判
-- 非模型生成网络能力：放在对应 `services/` 领域服务集中封装
+- 4.3：删除 `src-tauri/`、Tauri 依赖/脚本、Tauri PAL adapter，并重命名 manifest/seeds 资源落点
+- macOS 真实设备上的 DMG、safeStorage、拖拽/剪贴板、透明窗口验收
+- Windows/macOS 代码签名与 macOS notarization（需要证书/Apple 账号）
+- 真实 GitHub Release 发布凭据下的线上自动更新
+- 用真实用户旧数据/API key/历史项目包做最终手动回归
+- 图像水印/分镜文字与旧 Rust 输出的像素级基线对比（功能 smoke 已过，像素级比较可后置）
 
 ## 关键约束（不可违反）
 
@@ -188,12 +212,12 @@ old-Henji-AI/           # 旧项目代码备份（仅供对照）
    - `> 500` 行允许少量存量，但禁止继续膨胀，且修改时优先拆分
 
 2. **禁止跨层导入**
-   - 组件不能导入 Runtime Provider 实现或旧 adapters
+   - 组件不能导入 Electron 主进程、Runtime Provider 实现或旧 adapters
    - Runtime/Provider 不能导入 UI 组件
    - 模型不能导入 `services/` 或 `components/`
 
 3. **禁止在业务 UI 直接走模型 API**
-   - 模型生成主链路必须通过 `GenerationService + src/commands/aiRuntime.ts + src-tauri/ai_runtime`
+   - 模型生成主链路必须通过 `GenerationService + src/commands/aiRuntime.ts + src/platform + electron/main/services/ai-runtime`
    - 业务组件禁止散落 `fetch()` / `axios` 调用模型生成接口
 
 4. **禁止模型特定 UI 逻辑**
@@ -284,9 +308,10 @@ export const myModel = defineModel({
 ### 步骤 2: 验证
 
 ```bash
-npm run build   # 自动生成 manifest + 颜色校验 + i18n 校验 + 编译构建
-npm run dev     # 前端调试
-npm run tauri:dev  # 端到端联调（推荐）
+npm run gen:model-manifest
+npm run check:model-i18n
+npm run electron:build
+npm run electron:dev
 ```
 
 ## 参数类型（以 `src/core/types/ComponentTypes.ts` 为准）
@@ -327,19 +352,27 @@ window.__getModelStats()       // 显示注册表统计
 window.__reloadModels()        // 重新加载所有模型
 ```
 
+Electron preload：
+
+```javascript
+window.henjiNative             // Electron 安全桥，包含 db/ai/image/media/updater 等白名单能力
+```
+
 ## 重构后回归检查
 
-每次涉及 UI / 画布 / 模型参数重构后，优先执行快速检查，`npm run build` 只在需要验证完整类型链路、最终产物或发布前再跑：
+每次涉及 UI / 画布 / 模型参数 / Electron 主进程能力重构后，优先执行快速检查，`npm run electron:build` 只在需要验证完整类型链路、最终产物或发布前再跑：
 
 ```bash
 npm run gen:model-manifest
 npm run check:colors
 npm run check:model-i18n
-npm run check:rust:logging
 npm run lint
+npx tsc -p tsconfig.electron.json --noEmit
+npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
+npm run electron:smoke
 ```
 
-`npm run build` 很费时间，不要无必要地频繁执行。
+`npm run electron:build` / `npm run electron:dist` 较费时间，不要无必要地频繁执行。
 
 ```powershell
 # 原生控件检查（命中应仅在 primitives.tsx）
@@ -351,15 +384,15 @@ $matches | Where-Object { $_.Path -notlike '*src\components\ui\primitives.tsx' }
 Get-ChildItem src -Recurse -Include *.ts,*.tsx | Select-String -Pattern '#[0-9a-fA-F]{3,8}|rgba?\('
 
 # any 增量检查
-Get-ChildItem src -Recurse -Include *.ts,*.tsx | Select-String -Pattern '\bany\b'
+Get-ChildItem src -Recurse -Include *.ts,*.tsx,electron\*.ts | Select-String -Pattern '\bany\b'
 
 # 文件行数治理检查（重点关注 > 500）
-powershell -Command "$files = Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx; foreach ($f in $files) { $count = (Get-Content $f.FullName).Count; if ($count -gt 500) { Write-Output \"$($f.FullName)`t$count\" } }"
+powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include *.ts,*.tsx; foreach ($f in $files) { $count = (Get-Content $f.FullName).Count; if ($count -gt 500) { Write-Output \"$($f.FullName)`t$count\" } }"
 ```
 
 期望结果：
 
-- 快速检查优先通过；`npm run build` 仅在确有需要时执行
+- 快速检查优先通过；`npm run electron:build` 仅在确有需要时执行
 - 原生控件命中仅存在于 `src/components/ui/primitives.tsx`
 - 新增改动不引入新的颜色硬编码
 - 不新增 `any`（允许存量，禁止增量）
@@ -371,36 +404,46 @@ powershell -Command "$files = Get-ChildItem -Path src -Recurse -Include *.ts,*.t
 - 检查文件命名：必须以 `.model.ts` 结尾
 - 检查文件位置：必须在 `src/models/` 中
 - 先跑 `npm run gen:model-manifest` 和 `npm run lint`
-- 需要确认类型和产物时，再跑 `npm run build`
+- 需要确认 Electron 运行产物时，再跑 `npm run electron:build` / `npm run electron:smoke`
 
 **联动不工作：**
 - 验证 `trigger` 和 `target` 参数 ID
 - 检查 `condition` 函数逻辑
 
 **请求格式错误：**
-- 在 `request.builder()` 中增加最小日志定位
+- 在模型 `request.builder()` 中增加最小日志定位
 - 对照 `src-tauri/resources/model-manifest.json` 检查输出 builder 结果
+- Electron 运行时错误优先看 `electron/main/services/ai-runtime/trace.ts` 相关 trace 与主进程日志
+
+**Electron 安装包未签名：**
+- 当前无签名证书时这是预期状态
+- 等 Windows 证书、Apple Developer 账号/公证条件具备后，再在 `electron-builder.yml` 增加签名配置并做 4.2 真实发布验收
 
 ## 技术栈
 
-- **框架**: Tauri 2.0 (Rust 后端)
+- **桌面框架**: Electron 42 + Electron 主进程 Node/TS
 - **前端**: React 18 + TypeScript
-- **构建工具**: Vite 4
+- **构建工具**: Vite 4 + electron-vite
+- **打包/更新**: electron-builder + electron-updater
 - **样式**: Tailwind CSS
-- **数据库**: SQLite (Tauri 插件)
+- **数据库**: SQLite（Electron 下 `better-sqlite3`）
 - **国际化**: i18next
+- **旧壳**: Tauri 2.0 / Rust 保留至 4.3 清理
 
 ## 重要文件
 
+- `electron/main/index.ts` - Electron 主进程入口
+- `electron/main/window.ts` - Electron 窗口与无边框标题栏行为
+- `electron/main/protocol.ts` - `henji-media://` 媒体协议
+- `electron/main/ipc/` - Electron IPC handler
+- `electron/main/services/` - Electron Node/TS 后端能力
+- `electron/preload/index.ts` - preload 安全桥
+- `electron-builder.yml` - Electron 打包、资源、发布配置
+- `src/platform/` - 平台抽象层（PAL）
 - `src/core/ModelRegistry.ts` - 模型注册中心
 - `src/core/defineModel.ts` - 模型定义辅助函数
 - `src/core/services/GenerationService.ts` - 前端统一生成服务入口
-- `src/commands/aiRuntime.ts` - 前端到 Tauri AI Runtime 命令桥
-- `src/core/providers/base/` - Provider 基类与类型（兼容层）
-- `src/core/providers/ProviderFactoryRegistry.ts` - Provider 注册兼容层
-- `src-tauri/src/ai_runtime/commands.rs` - Tauri AI Runtime 命令入口
-- `src-tauri/src/ai_runtime/providers/` - 真实 provider 执行实现
-- `src-tauri/resources/model-manifest.json` - 模型清单（构建自动生成）
+- `src/commands/aiRuntime.ts` - 前端 AI Runtime 命令桥
 - `src/components/ui/primitives.tsx` - UI primitives 唯一原生标签落点
 - `src/components/ui/styleTokens.ts` - UI 视觉 token
 - `src/core/theme/colorTokens.ts` - 主题与画布颜色常量
@@ -413,5 +456,6 @@ powershell -Command "$files = Get-ChildItem -Path src -Recurse -Include *.ts,*.t
 - `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互
 - `src/features/canvas/hooks/useCanvasShortcuts.ts` - 画布快捷键行为
 - `src/features/canvas/ui/CanvasOverlays.tsx` - 画布叠层 UI
-- `docs/model-adaptation-guide-new.md` - 模型适配指南（新架构）
-- `迁移计划_新系统完全替代adapters/清单.md` - 历史迁移清单（仅供对照）
+- `src-tauri/resources/model-manifest.json` - 模型清单（自动生成，当前仍在旧目录）
+- `src-tauri/resources/progress-seeds.json` - 进度学习 seeds（自动生成，当前仍在旧目录）
+- `docs/task/项目计划/` - Tauri → Electron 迁移计划与收尾状态

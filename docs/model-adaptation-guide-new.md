@@ -77,7 +77,9 @@ params: [
 ### 3. 验证编译
 
 ```bash
-npx tsc --noEmit
+npm run gen:model-manifest
+npm run check:model-i18n
+npm run electron:build
 ```
 
 ## 完整示例
@@ -91,4 +93,5 @@ npx tsc --noEmit
 
 - 模型会被 `loadAllModels()` 自动扫描并注册，无需手动维护 `providers.json` 或 `index.ts`。
 - 价格、进度、端点等配置统一在 `*.model.ts` 中完成。
-- 新增供应商时，仅需新增对应的 Provider 文件（例如 `src/core/providers/PPIOProvider.ts`）。
+- 新增模型时优先只改 `src/models/{provider}/*.model.ts` 与 i18n。
+- 如果需要新增供应商或改供应商协议，真实执行逻辑应落在 `electron/main/services/ai-runtime/providers/`，并通过 manifest/request DSL 与 PAL 接入；`src/core/providers/` 仅保留兼容层与基类，不再承担真实 provider 执行。

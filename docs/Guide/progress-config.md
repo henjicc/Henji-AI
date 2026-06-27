@@ -76,9 +76,11 @@ dev-data/progress-seeds.local.json
 后续执行以下命令时，会自动把这个本地文件合并进最终打包资源：
 
 - `npm run dev`
-- `npm run build`
-- `npm run tauri:dev`
-- `npm run tauri:build`
+- `npm run electron:dev`
+- `npm run electron:build`
+- `npm run electron:dist`
+
+当前生成产物仍落在 `src-tauri/resources/progress-seeds.json`，这是迁移期保留的历史资源目录；Electron 打包会把它复制到随包资源中。
 
 ## 建议
 

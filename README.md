@@ -13,7 +13,7 @@
 <div align="center">
 Windows 用户请下载 <strong>.msi</strong> 文件，macOS 用户请下载 <strong>.dmg</strong> 文件
 
-Windows 用户如果在启动时遇到了报错，请尝试安装 [WebView2 运行时](https://developer.microsoft.com/zh-cn/Microsoft-edge/webview2#download)
+当前桌面端已切到 Electron 迁移基线，新版本会随应用打包 Chromium，不再依赖系统 WebView2 运行时。
 
 ### Github下载
 [![Download Latest Release](https://img.shields.io/github/v/release/henjicc/Henji-AI?style=for-the-badge&color=blue)](https://github.com/henjicc/Henji-AI/releases/latest)
@@ -88,12 +88,14 @@ Windows 用户如果在启动时遇到了报错，请尝试安装 [WebView2 运�
 
 ## 技术栈
 
-- **框架**: [Tauri 2.0](https://tauri.app/) - 基于 Rust 的跨平台桌面应用框架
+- **桌面框架**: Electron 42 + Node/TypeScript 主进程
 - **前端**: React 18 + TypeScript
-- **构建工具**: Vite 4
+- **构建工具**: Vite 4 + electron-vite
+- **打包/更新**: electron-builder + electron-updater
 - **样式**: Tailwind CSS
+- **数据库**: SQLite + better-sqlite3
 - **HTTP 客户端**: Axios
-- **图片处理**: Pica
+- **图片处理**: Pica + sharp
 
 
 ## 开发指南
@@ -101,9 +103,8 @@ Windows 用户如果在启动时遇到了报错，请尝试安装 [WebView2 运�
 ### 环境要求
 
 - **Node.js**: 18+ (推荐使用 LTS 版本)
-- **Rust**: 1.70+
-- **Windows**: Visual Studio Build Tools (MSVC)
-- **macOS**: Xcode Command Line Tools
+- **Windows/macOS**: Electron 开发通常无需额外 Rust/Tauri 环境
+- **可选**: 如需回归旧 Tauri 壳，仍需 Rust、MSVC/Xcode 等旧环境
 
 ### 安装依赖
 
@@ -113,29 +114,32 @@ npm install
 
 ### 开发模式
 
-**Windows**:
 ```bash
-npm run tauri:dev
+npm run electron:dev
 ```
 
-**macOS**:
+裸 Vite 页面只适合调试纯渲染层：
+
 ```bash
-npm run tauri:dev:mac
+npm run dev
 ```
 
 ### 构建应用
 
-**Windows** (生成 MSI 安装包):
 ```bash
-npm run tauri:build
+npm run electron:build
+npm run electron:dist
 ```
 
-**macOS** (生成 DMG 安装包):
+常用验收命令：
+
 ```bash
-npm run tauri:build:mac
+npm run electron:smoke
+npm run electron:canvas-stress
+npm run electron:dpi-check
 ```
 
-构建产物位于 `src-tauri/target/release/bundle/`
+构建产物位于 `release/`。
 
 ### 进度预测种子导出
 
@@ -145,7 +149,9 @@ npm run tauri:build:mac
 npm run progress:export-seeds
 ```
 
-导出的文件默认位于 `dev-data/progress-seeds.local.json`。后续执行 `npm run dev`、`npm run build`、`npm run tauri:dev`、`npm run tauri:build` 时，会自动把这个本地文件合并到 `src-tauri/resources/progress-seeds.json`，并作为打包默认值参与构建。
+导出的文件默认位于 `dev-data/progress-seeds.local.json`。后续执行 `npm run dev`、`npm run electron:dev`、`npm run electron:build`、`npm run electron:dist` 时，会自动把这个本地文件合并到 `src-tauri/resources/progress-seeds.json`，并作为打包默认值参与构建。
+
+> 注：`src-tauri/resources/` 目前仍是 manifest/seeds 的历史生成目录，Electron 打包会复制其中资源；目录改名会在最终移除 Tauri 残留时处理。
 
 ## 架构说明
 
@@ -156,24 +162,28 @@ npm run progress:export-seeds
 ```
 MediaGenerator/ConversationWorkspace
   → GenerationService
-  → ProviderFactoryRegistry
-  → Provider (PPIO / Fal / KIE / Modelscope)
+  → src/commands/aiRuntime.ts
+  → src/platform
+  → Electron preload IPC
+  → electron/main/services/ai-runtime
+  → Provider (PPIO / Fal / KIE / ModelScope)
 ```
 
 模型定义集中在 `src/models/**/*.model.ts`，由 `loadAllModels()` 自动扫描注册到 `ModelRegistry`。请求构建由 `RequestBuilder` + `EndpointSelector` 完成。
 
 ### 数据存储
 
-- **API Keys**: localStorage
-- **历史记录**: AppLocalData (`Henji-AI/history.json`)
-- **媒体文件**: AppLocalData (`Henji-AI/Media/`)
+- **API Keys**: Electron safeStorage 加密后存储
+- **历史记录/预设/设置/画布项目**: SQLite (`henji.db`)
+- **媒体文件**: AppLocalData (`Henji-AI/Media/` 等旧数据目录)
 - **缓存**: AppLocalData (`Henji-AI/Uploads/`, `Henji-AI/Waveforms/`)
 
 ### 跨平台适配
 
-- Windows 和 macOS 使用不同的构建脚本
+- Electron 提供统一 Chromium 运行环境
 - 窗口控制自动适配操作系统风格
-- 文件路径使用 Tauri API 保证跨平台兼容
+- 文件、媒体、剪贴板、拖拽等桌面能力统一走 `src/platform/*` 平台抽象层
+- Tauri 旧壳暂时保留到迁移收尾阶段，不再作为新开发主路径
 
 ## 扩展开发
 
