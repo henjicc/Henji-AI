@@ -1,3 +1,4 @@
+import { ipcMain } from 'electron'
 import { startNativeFileDrag, type StartNativeFileDragPayload } from '../services/drag'
 import { parseRecord, registerIpcHandler } from './registry'
 
@@ -20,4 +21,13 @@ export function registerDragIpc(): void {
     parseStartNativeFileDragPayload,
     (payload, event) => startNativeFileDrag(event.sender, payload)
   )
+
+  ipcMain.on('drag:startNativeFileDragImmediate', (event, rawInput: unknown) => {
+    try {
+      const payload = parseStartNativeFileDragPayload(rawInput)
+      startNativeFileDrag(event.sender, payload)
+    } catch {
+      // 原生拖拽没有回复通道；校验失败只终止本次手势。
+    }
+  })
 }

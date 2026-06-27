@@ -353,6 +353,7 @@ export interface HenjiClipboardApi {
 
 export interface HenjiDragApi {
   startNativeFileDrag(filePath: string, iconPath?: string): Promise<void>
+  startNativeFileDragImmediate(filePath: string, iconPath?: string): void
 }
 
 export interface HenjiPackageMediaFile {

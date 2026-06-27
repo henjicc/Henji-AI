@@ -43,7 +43,16 @@ const TaskCard = React.memo(function TaskCard({
   showMenu,
 }: TaskCardProps): JSX.Element {
   const { t, i18n } = useI18n()
-  const { startImageDrag, startVideoDrag, shouldIgnoreClick, markContextMenu } = useHistoryDrag()
+  const {
+    startImageDrag,
+    startVideoDrag,
+    startImageNativeDrag,
+    startVideoNativeDrag,
+    endNativeDrag,
+    isNativeFileDragEnabled,
+    shouldIgnoreClick,
+    markContextMenu
+  } = useHistoryDrag()
 
   const formatDate = (value?: Date): string => {
     if (!value) return ""
@@ -175,6 +184,9 @@ const TaskCard = React.memo(function TaskCard({
                   e.stopPropagation()
                   startImageDrag(e, url, filePath)
                 }}
+                draggable={isNativeFileDragEnabled && Boolean(filePath)}
+                onDragStart={(e) => startImageNativeDrag(e, url, filePath)}
+                onDragEnd={endNativeDrag}
                 onContextMenuCapture={() => markContextMenu()}
               >
                 <img
@@ -219,6 +231,9 @@ const TaskCard = React.memo(function TaskCard({
             e.stopPropagation()
             startVideoDrag(e, videoUrl, filePath)
           }}
+          draggable={isNativeFileDragEnabled && Boolean(filePath)}
+          onDragStart={(e) => startVideoNativeDrag(e, videoUrl, filePath)}
+          onDragEnd={endNativeDrag}
           onContextMenuCapture={() => markContextMenu()}
         >
           <video src={videoUrl} className="w-full h-auto block" draggable={false} muted preload="metadata" />
@@ -270,6 +285,10 @@ const TaskCard = React.memo(function TaskCard({
           onOpenVideo={handleVideoClick}
           onStartImageDrag={startImageDrag}
           onStartVideoDrag={startVideoDrag}
+          onStartImageNativeDrag={startImageNativeDrag}
+          onStartVideoNativeDrag={startVideoNativeDrag}
+          onNativeDragEnd={endNativeDrag}
+          nativeFileDragEnabled={isNativeFileDragEnabled}
           shouldIgnoreClick={shouldIgnoreClick}
        />
         <div className="min-w-0 flex-1 relative">

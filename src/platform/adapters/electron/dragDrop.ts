@@ -18,7 +18,9 @@ function extractDroppedFiles(event: DragEvent): File[] {
 export function createElectronDragDrop(): DragDropPlatform {
   return {
     startNativeFileDrag: (filePath, iconPath) => {
-      return getNativeDrag().startNativeFileDrag(filePath, iconPath)
+      const nativeDrag = getNativeDrag()
+      nativeDrag.startNativeFileDragImmediate(filePath, iconPath)
+      return Promise.resolve()
     },
 
     onFilesDropped: (handler) => {

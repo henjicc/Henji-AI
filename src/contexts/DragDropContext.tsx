@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
-import { getPlatform } from '@/platform/runtime'
+import { detectShell, getPlatform } from '@/platform/runtime'
 import React, { createContext, useContext, useState, ReactNode, useRef, useCallback } from 'react'
 
 const logger = createLogger('contexts.DragDropContext')
@@ -17,6 +17,7 @@ interface DragContextValue {
     isDragging: boolean
     dragData: DragData | null
     startDrag: (data: DragData, previewUrl: string) => void
+    startNativeDrag: (data: DragData) => void
     endDrag: () => void
     dragPosition: { x: number; y: number }
 
@@ -76,15 +77,12 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
         nativeDragTriggeredRef.current = true
 
         try {
-            // 使用缩略图作为图标，如果没有则使用原文件
-            const iconPath = data.thumbnailPath || data.filePath
-
             // 结束自定义拖放（隐藏预览）
             setIsDragging(false)
             setPreviewUrl(null)
 
             // 启动原生拖放
-            await getPlatform().dragDrop.startNativeFileDrag(data.filePath, iconPath)
+            await getPlatform().dragDrop.startNativeFileDrag(data.filePath, data.thumbnailPath)
         } catch (err) {
             logger.info('[DragDrop] Native drag cancelled or failed:', err)
         } finally {
@@ -93,6 +91,16 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             dragDataRef.current = null
         }
     }, [])
+
+    const shouldUseEdgeNativeDrag = useCallback(() => {
+        return detectShell() !== 'electron'
+    }, [])
+
+    const startNativeDrag = useCallback((data: DragData) => {
+        dragDataRef.current = data
+        nativeDragTriggeredRef.current = false
+        void triggerNativeDrag()
+    }, [triggerNativeDrag])
 
     // Global mouse move handler with edge detection
     React.useEffect(() => {
@@ -112,7 +120,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
 
             // 边缘检测：当鼠标接近窗口边缘时，触发原生拖放
             const data = dragDataRef.current
-            if (data?.filePath && !nativeDragTriggeredRef.current) {
+            if (shouldUseEdgeNativeDrag() && data?.filePath && !nativeDragTriggeredRef.current) {
                 const nearLeft = e.clientX < EDGE_THRESHOLD
                 const nearRight = e.clientX > window.innerWidth - EDGE_THRESHOLD
                 const nearTop = e.clientY < EDGE_THRESHOLD
@@ -137,7 +145,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
 
             const data = dragDataRef.current
             // relatedTarget === null 表示鼠标离开了窗口（而不是移动到其他元素）
-            if (data?.filePath && !nativeDragTriggeredRef.current && e.relatedTarget === null) {
+            if (shouldUseEdgeNativeDrag() && data?.filePath && !nativeDragTriggeredRef.current && e.relatedTarget === null) {
                 triggerNativeDrag()
             }
         }
@@ -147,7 +155,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             if (!isDragging) return
 
             const data = dragDataRef.current
-            if (data?.filePath && !nativeDragTriggeredRef.current) {
+            if (shouldUseEdgeNativeDrag() && data?.filePath && !nativeDragTriggeredRef.current) {
                 triggerNativeDrag()
             }
         }
@@ -165,10 +173,10 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
             document.removeEventListener('mouseleave', handleMouseLeave)
             window.removeEventListener('blur', handleWindowBlur)
         }
-    }, [isDragging, endDrag, triggerNativeDrag])
+    }, [isDragging, endDrag, shouldUseEdgeNativeDrag, triggerNativeDrag])
 
     return (
-        <DragContext.Provider value={{ isDragging, dragData, startDrag, endDrag, dragPosition, previewUrl }}>
+        <DragContext.Provider value={{ isDragging, dragData, startDrag, startNativeDrag, endDrag, dragPosition, previewUrl }}>
             {children}
             {/* Drag preview */}
             {isDragging && previewUrl && (

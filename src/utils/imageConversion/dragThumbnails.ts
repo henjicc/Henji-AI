@@ -120,7 +120,7 @@ export async function generateVideoThumbnail(videoUrl: string): Promise<string> 
     const uint8Array = new Uint8Array(arrayBuffer)
 
     const tempPath = await tempDir()
-    const fileName = `drag-video-thumb-${Date.now()}-${Math.floor(Math.random() * 1000)}.webp`
+    const fileName = `drag-video-thumb-${Date.now()}-${Math.floor(Math.random() * 1000)}.png`
     const filePath = await join(tempPath, fileName)
 
     await writeFile(filePath, uint8Array)

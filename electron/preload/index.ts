@@ -203,6 +203,9 @@ const clipboardApi: HenjiClipboardApi = {
 
 const dragApi: HenjiDragApi = {
   startNativeFileDrag: (filePath, iconPath) => nativeInvoke('drag:startNativeFileDrag', { filePath, iconPath }),
+  startNativeFileDragImmediate: (filePath, iconPath) => {
+    ipcRenderer.send('drag:startNativeFileDragImmediate', { filePath, iconPath })
+  },
 }
 
 const projectPackageApi: HenjiProjectPackageApi = {
