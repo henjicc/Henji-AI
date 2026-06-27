@@ -60,7 +60,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.videoUpload;
-  const { isGenerating, progress } = useGenerationProgressDisplay(id, data);
+  const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
 
   const resolvedAspectRatio = data.aspectRatio || '16:9';
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
@@ -220,8 +220,8 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] transition-[width] duration-100 ease-linear"
-              style={{ width: `${progress * 100}%` }}
+              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] ease-out"
+              style={{ transform: `scaleX(${progress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
             />
           </div>
         )}

@@ -10,7 +10,7 @@ import {
   type DragEvent,
   type SyntheticEvent,
 } from 'react';
-import { Handle, Position, useViewport, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -41,9 +41,9 @@ import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import {
   prepareNodeImageFromFile,
   resolveImageDisplayUrl,
-  shouldUseOriginalImageByZoom,
 } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiInput } from '@/components/ui';
@@ -69,7 +69,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
   );
   const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
-  const { zoom } = useViewport();
+  const preferOriginalImage = useOriginalImageLod();
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadSequenceRef = useRef(0);
   const uploadPerfRef = useRef<{
@@ -279,12 +279,11 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     if (transientPreviewUrl) {
       return transientPreviewUrl;
     }
-    const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-    const picked = preferOriginal
+    const picked = preferOriginalImage
       ? data.imageUrl || data.previewImageUrl
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, transientPreviewUrl, zoom]);
+  }, [data.imageUrl, data.previewImageUrl, preferOriginalImage, transientPreviewUrl]);
 
   return (
     <div

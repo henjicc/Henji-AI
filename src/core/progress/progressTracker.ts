@@ -20,12 +20,13 @@ export interface ProgressTracker {
   fail: (message?: string) => void
 }
 
-const DEFAULT_CURVE: Required<ProgressCurveConfig> = {
+export const DEFAULT_PROGRESS_CURVE: Required<ProgressCurveConfig> = {
   slowStart: 80,
   slowEnd: 95,
   cap: 99,
   tailFactor: 1.2
 }
+const DEFAULT_CURVE = DEFAULT_PROGRESS_CURVE
 
 const DEFAULT_TICK_MS = 300
 const DEFAULT_POLLING_ATTEMPTS = 120
@@ -206,7 +207,7 @@ const resolveExpectedDurationMs = (
   }
 }
 
-const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
+export const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
   if (spec.expectedDurationMs <= 0) return 0
 
   const t = elapsedMs / spec.expectedDurationMs
@@ -232,6 +233,13 @@ const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
   const tail = (cap - slowEnd) * (1 - Math.exp(-extra / spec.curve.tailFactor))
   return slowEnd + tail
 }
+
+const PROGRESS_BAR_FINAL_TRANSITION_MS = 450
+const PROGRESS_BAR_DEFAULT_TRANSITION_MS = 2800
+
+/** 进度条 CSS 过渡时长：临近完成时收短，制造丝滑结尾，与生成 Tab 保持一致 */
+export const getProgressTransitionDurationMs = (progressPercent: number): number =>
+  progressPercent >= 99 ? PROGRESS_BAR_FINAL_TRANSITION_MS : PROGRESS_BAR_DEFAULT_TRANSITION_MS
 
 export const resolveProgressSpec = (
   model: ModelDefinition,

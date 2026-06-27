@@ -13,6 +13,7 @@ import { createProgressTracker, resolveProgressSpec } from '@/core/progress/prog
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ModelDefinition, ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
+import { readImageInfo } from '@/commands/image'
 import { recordApiTrace } from '@/utils/testMode'
 import {
 
@@ -214,22 +215,15 @@ function resolveChoiceSmartAspectValues(
 }
 
 async function readImageRatio(imageSource: string): Promise<number | null> {
-  if (typeof Image === 'undefined') {
+  try {
+    const info = await readImageInfo(imageSource)
+    if (info.width > 0 && info.height > 0) {
+      return info.width / info.height
+    }
+    return null
+  } catch {
     return null
   }
-
-  return new Promise((resolve) => {
-    const image = new Image()
-    image.onload = () => {
-      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-        resolve(image.naturalWidth / image.naturalHeight)
-        return
-      }
-      resolve(null)
-    }
-    image.onerror = () => resolve(null)
-    image.src = imageSource
-  })
 }
 
 async function normalizeSmartAspectParams(

@@ -9,6 +9,7 @@ import { getCustomModelService } from './services/customModels/CustomModelServic
 import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from './core/panels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
+import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 
 const logger = createLogger('App')
 
@@ -21,6 +22,7 @@ const logger = createLogger('App')
  */
 const App: React.FC = () => {
   useApplyRuntimeTheme()
+  useDevToolsShortcut()
   const [activeTab, setActiveTab] = useState('generation')
   const [isReady, setIsReady] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)

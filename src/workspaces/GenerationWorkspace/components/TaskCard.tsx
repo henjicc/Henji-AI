@@ -3,6 +3,7 @@ import { toDisplaySrc } from '@/platform/desktopApi'
 import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
+import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
 import { UiButton, UiIconButton } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
@@ -122,7 +123,7 @@ const TaskCard = React.memo(function TaskCard({
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent mb-3" />
             <p className="text-zinc-400 mb-3">{t("ui:workspace.status.generating")}</p>
             {progressValue !== undefined && (
-              <ProgressBar progress={progressValue} className="mt-3" duration={progressValue >= 99 ? 450 : 2800} />
+              <ProgressBar progress={progressValue} className="mt-3" duration={getProgressTransitionDurationMs(progressValue)} />
             )}
           </div>
         </div>

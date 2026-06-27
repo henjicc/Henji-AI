@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Handle, Position, useViewport, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -16,10 +16,7 @@ import {
   resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
-import {
-  resolveImageDisplayUrl,
-  shouldUseOriginalImageByZoom,
-} from '@/features/canvas/application/imageData';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -29,6 +26,7 @@ import {
 } from '@/features/canvas/ui/nodeControlStyles';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
+import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 type ImageNodeProps = NodeProps & {
@@ -54,9 +52,9 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   const hasSourceConnections = useCanvasStore(
     (state) => state.edges.some((edge) => edge.source === id && (edge.sourceHandle ?? 'source') === 'source')
   );
-  const { zoom } = useViewport();
+  const preferOriginalImage = useOriginalImageLod();
   const isExportResultNode = type === CANVAS_NODE_TYPES.exportImage;
-  const { isGenerating, progress: displayProgress } = useGenerationProgressDisplay(id, data);
+  const { isGenerating, progress: displayProgress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
   const resolvedAspectRatio = data.aspectRatio || DEFAULT_ASPECT_RATIO;
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
     minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
@@ -76,12 +74,11 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   );
 
   const imageSource = useMemo(() => {
-    const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-    const picked = preferOriginal
+    const picked = preferOriginalImage
       ? data.imageUrl || data.previewImageUrl
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, zoom]);
+  }, [data.imageUrl, data.previewImageUrl, preferOriginalImage]);
 
   // 获取原图 URL 用于查看器
   const originalImageUrl = useMemo(() => {
@@ -138,8 +135,8 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] transition-[width] duration-100 ease-linear"
-              style={{ width: `${displayProgress * 100}%` }}
+              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] ease-out"
+              style={{ transform: `scaleX(${displayProgress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
             />
           </div>
         )}
