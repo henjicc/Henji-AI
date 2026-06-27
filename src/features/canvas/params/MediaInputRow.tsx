@@ -111,6 +111,7 @@ export function MediaInputRow({
     files: displayUrls,
     onReorder: handleReorder,
   });
+  const isRowDragging = dragState.isDragging || dragState.isDropping;
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0 || isConnected) {
@@ -136,6 +137,7 @@ export function MediaInputRow({
       className={`${NODE_ROW_CLASS} ${
         isConnected ? '' : NODE_ROW_HOVER_CLASS
       }`}
+      style={isRowDragging ? { zIndex: 40 } : undefined}
     >
       <Handle
         type="target"
@@ -145,7 +147,11 @@ export function MediaInputRow({
         className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
       />
       <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
-      <div className={`nodrag nowheel gap-1.5 overflow-x-auto ${NODE_ROW_CONTROL_SLOT_CLASS}`}>
+      <div
+        className={`nodrag nowheel gap-1.5 ${NODE_ROW_CONTROL_SLOT_CLASS} ${
+          isRowDragging ? 'overflow-visible' : 'overflow-x-auto'
+        }`}
+      >
         {displayUrls.map((url, index) => {
           const isDraggingThis = dragState.isDragging && dragState.fromIndex === index;
           const isDroppingThis = dragState.isDropping && dragState.fromIndex === index;
@@ -164,14 +170,15 @@ export function MediaInputRow({
             style={
               isDraggingThis
                 ? {
-                    transform: `translate(${dragState.currentX - dragState.startX}px, ${dragState.currentY - dragState.startY}px) scale(1.1)`,
+                    // 仅水平方向跟随光标：排序判定本身就只看横向距离，纵向位移只会带来抖动/触发行内滚动条
+                    transform: `translateX(${dragState.currentX - dragState.startX}px) scale(1.1)`,
                     position: 'relative',
                     zIndex: 50,
                     opacity: 0.85,
                     pointerEvents: 'none',
                   }
                 : isDroppingThis
-                  ? { transform: 'translate(0, 0)', transition: 'transform 0.15s ease', position: 'relative', zIndex: 50 }
+                  ? { transform: 'translateX(0px)', transition: 'transform 0.15s ease', position: 'relative', zIndex: 50 }
                   : undefined
             }
             onMouseDown={!isConnected ? (event) => handleMouseDown(index, event) : undefined}
