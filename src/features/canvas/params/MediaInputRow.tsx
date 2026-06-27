@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -6,8 +6,8 @@ import { Image as ImageIcon, Music, Video, X } from 'lucide-react';
 
 import { prepareNodeImageFromFile, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import {
-  areStringListsEqual,
-  collectInputMediaUrls,
+  areMediaOutputListsEqual,
+  collectInputMediaByKind,
 } from '@/features/canvas/application/graphMediaResolver';
 import { getSocketColor, mediaPortId, type RowMediaKind } from '@/features/canvas/domain/socketTypes';
 import {
@@ -46,17 +46,22 @@ const MEDIA_ICON: Record<RowMediaKind, typeof ImageIcon> = {
   audio: Music,
 };
 
-async function fileToMediaUrl(file: File, kind: RowMediaKind): Promise<string> {
+interface UploadedMediaUrl {
+  url: string;
+  previewUrl?: string;
+}
+
+async function fileToMediaUrl(file: File, kind: RowMediaKind): Promise<UploadedMediaUrl> {
   if (kind === 'image') {
     const prepared = await prepareNodeImageFromFile(file);
-    return prepared.imageUrl;
+    return { url: prepared.imageUrl, previewUrl: prepared.previewImageUrl };
   }
   if (kind === 'video') {
     const saved = await saveUploadVideo(file, 'persist');
-    return saved.fullPath;
+    return { url: saved.fullPath };
   }
   const saved = await saveUploadAudio(file, 'persist');
-  return saved.fullPath;
+  return { url: saved.fullPath };
 }
 
 function resolveFileName(url: string): string {
@@ -92,11 +97,29 @@ export function MediaInputRow({
   const { getZoom } = useReactFlow();
   const dragZoomRef = useRef(1);
 
-  const upstreamUrls = useStoreWithEqualityFn(
+  const upstreamMedia = useStoreWithEqualityFn(
     useCanvasStore,
-    (state) => collectInputMediaUrls(nodeId, state.nodes, state.edges, mediaKind),
-    areStringListsEqual
+    (state) => collectInputMediaByKind(nodeId, state.nodes, state.edges, mediaKind),
+    areMediaOutputListsEqual
   );
+  const upstreamUrls = useMemo(() => upstreamMedia.map((item) => item.url), [upstreamMedia]);
+  // 本地上传的图片在上传时已经生成过 previewImageUrl（见 prepareNodeImageFromFile），
+  // 这里缓存下来供缩略图复用，避免 28px 小图也去解码原图。仅运行时内存缓存，不参与持久化。
+  const localPreviewMapRef = useRef(new Map<string, string>());
+  const previewUrlByUrl = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of upstreamMedia) {
+      if (item.previewUrl) {
+        map.set(item.url, item.previewUrl);
+      }
+    }
+    for (const [url, previewUrl] of localPreviewMapRef.current) {
+      if (!map.has(url)) {
+        map.set(url, previewUrl);
+      }
+    }
+    return map;
+  }, [upstreamMedia]);
   const isConnected = upstreamUrls.length > 0;
   const displayUrls = isConnected ? upstreamUrls : inlineValue;
   const canAddMore = !isConnected && displayUrls.length < maxCount;
@@ -145,7 +168,13 @@ export function MediaInputRow({
     }
     const remaining = Math.max(0, maxCount - inlineValue.length);
     const accepted = Array.from(files).slice(0, remaining);
-    const urls = await Promise.all(accepted.map((file) => fileToMediaUrl(file, mediaKind)));
+    const uploaded = await Promise.all(accepted.map((file) => fileToMediaUrl(file, mediaKind)));
+    for (const item of uploaded) {
+      if (item.previewUrl) {
+        localPreviewMapRef.current.set(item.url, item.previewUrl);
+      }
+    }
+    const urls = uploaded.map((item) => item.url);
     if (urls.length > 0) {
       onInlineChange([...inlineValue, ...urls]);
     }
@@ -239,7 +268,8 @@ export function MediaInputRow({
           >
             {mediaKind === 'image' ? (
               <CanvasNodeImage
-                src={resolveImageDisplayUrl(url)}
+                src={resolveImageDisplayUrl(previewUrlByUrl.get(url) ?? url)}
+                viewerSourceUrl={resolveImageDisplayUrl(url)}
                 viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
                 alt=""
                 className="h-7 w-7 rounded-md border border-[rgba(255,255,255,0.18)] object-cover"

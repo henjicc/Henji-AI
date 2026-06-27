@@ -34,6 +34,16 @@ export function collectInputMedia(
   return outputs;
 }
 
+/** 收集指定媒体类型的上游输出（保留 previewUrl，供缩略图展示用原图/预览图取舍） */
+export function collectInputMediaByKind(
+  nodeId: string,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+  kind: MediaKind
+): NodeMediaOutput[] {
+  return collectInputMedia(nodeId, nodes, edges).filter((output) => output.kind === kind);
+}
+
 /** 收集指定媒体类型的上游输出 URL 列表 */
 export function collectInputMediaUrls(
   nodeId: string,
@@ -41,9 +51,7 @@ export function collectInputMediaUrls(
   edges: CanvasEdge[],
   kind: MediaKind
 ): string[] {
-  return collectInputMedia(nodeId, nodes, edges)
-    .filter((output) => output.kind === kind)
-    .map((output) => output.url);
+  return collectInputMediaByKind(nodeId, nodes, edges, kind).map((output) => output.url);
 }
 
 /** 输出列表内容相等比较（供 store selector 避免无效重渲染） */
