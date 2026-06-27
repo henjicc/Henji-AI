@@ -39,6 +39,7 @@ import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
 import { registry } from '@/core/ModelRegistry';
 import { GenerationService } from '@/core/services/GenerationService';
@@ -190,7 +191,7 @@ export const GenerationNodeShell = memo(({
       effectiveImages.map((imageUrl, index) => ({
         id: `image-ref-${index}`,
         label: `图${index + 1}`,
-        thumbnailSrc: imageUrl,
+        thumbnailSrc: resolveImageDisplayUrl(imageUrl),
       })),
     [effectiveImages]
   );
@@ -413,7 +414,7 @@ export const GenerationNodeShell = memo(({
             className="!h-2.5 !w-2.5 !border !border-surface-dark"
           />
           <div
-            className={`h-full p-2 ${NODE_ROW_CARD_CLASS}`}
+            className={`h-full p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS}`}
             style={promptOverrideValue ? { backgroundColor: getSocketTintColor('STRING') } : undefined}
           >
             <ReferenceTextarea
@@ -430,10 +431,10 @@ export const GenerationNodeShell = memo(({
               onSubmit={() => {
                 void handleGenerate();
               }}
-              className="relative h-full min-h-0"
+              className="relative h-full min-h-[86px] overflow-hidden rounded-md"
               highlightLayerClassName="text-sm leading-6 text-text-dark"
-              highlightContentClassName="px-1 py-0.5"
-              textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words disabled:cursor-default"
+              highlightContentClassName="min-h-full px-1.5 py-1"
+              textareaClassName="ui-scrollbar nodrag nowheel !border-0 !bg-transparent !shadow-none relative z-10 h-full min-h-[86px] w-full resize-none overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 selection:bg-accent/45 selection:text-white focus:!border-transparent focus:!ring-0 focus:!shadow-none focus-visible:!ring-0 whitespace-pre-wrap break-words disabled:cursor-default"
               pickerClassName="w-[120px]"
               pickerListClassName="max-h-[180px]"
             />
