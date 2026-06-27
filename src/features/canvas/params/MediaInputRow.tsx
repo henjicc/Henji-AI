@@ -118,8 +118,11 @@ export function MediaInputRow({
   });
   const isRowDragging = dragState.isDragging || dragState.isDropping;
 
-  // 横向让位步进量：拖拽刚开始（toIndex 尚未偏离 fromIndex）时测量一次真实间距，
+  // 横向让位步进量：拖拽刚开始（toIndex 尚未偏离 fromIndex）时测量一次真实间距，当成固定网格用，
   // 避免用固定像素数（图片/视频/音频 chip 宽度不一致）。
+  // 用 offsetLeft（布局坐标，不受画布缩放影响）而不是 getBoundingClientRect()（屏幕坐标，
+  // 需要再除一次 zoom 才能换算回本地像素）——这样测出来的步进量可以直接拿来当 translateX 用，
+  // 不会因为屏幕坐标换算引入的舍入误差导致"回到原位"和真正原位有一点点偏差。
   const stepPxRef = useRef(34);
   useEffect(() => {
     if (!dragState.isDragging || dragState.fromIndex !== dragState.toIndex) {
@@ -130,7 +133,7 @@ export function MediaInputRow({
     if (!first || !second) {
       return;
     }
-    const measured = Math.abs(second.getBoundingClientRect().left - first.getBoundingClientRect().left);
+    const measured = Math.abs(second.offsetLeft - first.offsetLeft);
     if (measured > 0) {
       stepPxRef.current = measured;
     }
@@ -198,28 +201,23 @@ export function MediaInputRow({
             };
           } else if (isDroppingThis && fromIndex !== null && toIndex !== null) {
             // 落位动画：直接过渡到重排后的目标列位置，避免先弹回原位再跳到新位的二次跳动
+            // 步进量是按布局坐标量出来的固定网格，本地 transform 直接用，不需要再除 zoom
             itemStyle = {
-              transform: `translateX(${((toIndex - fromIndex) * stepPxRef.current) / zoom}px)`,
+              transform: `translateX(${(toIndex - fromIndex) * stepPxRef.current}px)`,
               transition: 'transform 0.15s ease',
               position: 'relative',
               zIndex: 50,
             };
-          } else if (
-            (dragState.isDragging || dragState.isDropping) &&
-            fromIndex !== null &&
-            toIndex !== null &&
-            fromIndex !== toIndex
-          ) {
-            // 让位动画：被插队的项整体让出一格
+          } else if ((dragState.isDragging || dragState.isDropping) && fromIndex !== null && toIndex !== null) {
+            // 让位/复位动画：始终显式给出位移值（哪怕是 0）并保留 transition，
+            // 这样从"已让位"回到"未让位"也会平滑过渡，而不是直接消失瞬间归位
             let shiftX = 0;
             if (fromIndex < toIndex && index > fromIndex && index <= toIndex) {
               shiftX = -stepPxRef.current;
             } else if (fromIndex > toIndex && index < fromIndex && index >= toIndex) {
               shiftX = stepPxRef.current;
             }
-            if (shiftX !== 0) {
-              itemStyle = { transform: `translateX(${shiftX / zoom}px)`, transition: 'transform 0.15s ease' };
-            }
+            itemStyle = { transform: `translateX(${shiftX}px)`, transition: 'transform 0.15s ease' };
           }
 
           return (
