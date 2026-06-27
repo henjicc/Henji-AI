@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -113,6 +113,24 @@ export function MediaInputRow({
   });
   const isRowDragging = dragState.isDragging || dragState.isDropping;
 
+  // 横向让位步进量：拖拽刚开始（toIndex 尚未偏离 fromIndex）时测量一次真实间距，
+  // 避免用固定像素数（图片/视频/音频 chip 宽度不一致）。
+  const stepPxRef = useRef(34);
+  useEffect(() => {
+    if (!dragState.isDragging || dragState.fromIndex !== dragState.toIndex) {
+      return;
+    }
+    const first = itemRefs.current[0];
+    const second = itemRefs.current[1];
+    if (!first || !second) {
+      return;
+    }
+    const measured = Math.abs(second.getBoundingClientRect().left - first.getBoundingClientRect().left);
+    if (measured > 0) {
+      stepPxRef.current = measured;
+    }
+  }, [dragState.isDragging, dragState.fromIndex, dragState.toIndex, itemRefs]);
+
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0 || isConnected) {
       return;
@@ -153,12 +171,49 @@ export function MediaInputRow({
         }`}
       >
         {displayUrls.map((url, index) => {
-          const isDraggingThis = dragState.isDragging && dragState.fromIndex === index;
-          const isDroppingThis = dragState.isDropping && dragState.fromIndex === index;
+          const { fromIndex, toIndex } = dragState;
+          const isDraggingThis = dragState.isDragging && fromIndex === index;
+          const isDroppingThis = dragState.isDropping && fromIndex === index;
           const isDropTarget =
+            (dragState.isDragging || dragState.isDropping) && toIndex === index && fromIndex !== index;
+
+          let itemStyle: CSSProperties | undefined;
+          if (isDraggingThis) {
+            // 视觉上任意方向跟随光标（拿起来的手感），排序判定本身只看横向距离，与视觉位移无关
+            itemStyle = {
+              transform: `translate(${dragState.currentX - dragState.startX}px, ${
+                dragState.currentY - dragState.startY
+              }px) scale(1.1)`,
+              position: 'relative',
+              zIndex: 50,
+              opacity: 0.85,
+              pointerEvents: 'none',
+            };
+          } else if (isDroppingThis && fromIndex !== null && toIndex !== null) {
+            // 落位动画：直接过渡到重排后的目标列位置，避免先弹回原位再跳到新位的二次跳动
+            itemStyle = {
+              transform: `translateX(${(toIndex - fromIndex) * stepPxRef.current}px)`,
+              transition: 'transform 0.15s ease',
+              position: 'relative',
+              zIndex: 50,
+            };
+          } else if (
             (dragState.isDragging || dragState.isDropping) &&
-            dragState.toIndex === index &&
-            dragState.fromIndex !== index;
+            fromIndex !== null &&
+            toIndex !== null &&
+            fromIndex !== toIndex
+          ) {
+            // 让位动画：被插队的项整体让出一格
+            let shiftX = 0;
+            if (fromIndex < toIndex && index > fromIndex && index <= toIndex) {
+              shiftX = -stepPxRef.current;
+            } else if (fromIndex > toIndex && index < fromIndex && index >= toIndex) {
+              shiftX = stepPxRef.current;
+            }
+            if (shiftX !== 0) {
+              itemStyle = { transform: `translateX(${shiftX}px)`, transition: 'transform 0.15s ease' };
+            }
+          }
 
           return (
           <div
@@ -167,20 +222,7 @@ export function MediaInputRow({
               itemRefs.current[index] = element;
             }}
             className={`group relative shrink-0 ${isDropTarget ? 'rounded-md ring-2 ring-accent' : ''}`}
-            style={
-              isDraggingThis
-                ? {
-                    // 仅水平方向跟随光标：排序判定本身就只看横向距离，纵向位移只会带来抖动/触发行内滚动条
-                    transform: `translateX(${dragState.currentX - dragState.startX}px) scale(1.1)`,
-                    position: 'relative',
-                    zIndex: 50,
-                    opacity: 0.85,
-                    pointerEvents: 'none',
-                  }
-                : isDroppingThis
-                  ? { transform: 'translateX(0px)', transition: 'transform 0.15s ease', position: 'relative', zIndex: 50 }
-                  : undefined
-            }
+            style={itemStyle}
             onMouseDown={!isConnected ? (event) => handleMouseDown(index, event) : undefined}
           >
             {mediaKind === 'image' ? (
