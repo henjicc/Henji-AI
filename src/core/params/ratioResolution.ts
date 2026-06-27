@@ -252,6 +252,11 @@ function pickResolutionCandidate(
   return candidates[0]
 }
 
+export function isAspectRatioChoiceParam(param: ParamDef): boolean {
+  const descriptor = toChoiceDescriptor(param)
+  return descriptor !== null && looksLikeAspect(descriptor)
+}
+
 export function getAspectChoiceParams(params: ParamDef[]): ChoiceParamDescriptor[] {
   return params
     .map(toChoiceDescriptor)

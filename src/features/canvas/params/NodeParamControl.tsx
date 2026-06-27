@@ -13,8 +13,15 @@ import type {
 } from '@/core/types';
 import { getI18nText } from '@/core/types/I18nText';
 import { panelRegistry } from '@/core/panels/PanelRegistry';
+import {
+  formatAspectRatioDisplayLabel,
+  isAspectRatioChoiceParam,
+  isSmartAspectValue,
+} from '@/core/params/ratioResolution';
 import Dropdown from '@/components/ui/Dropdown';
 import PanelTrigger from '@/components/ui/PanelTrigger';
+import { AspectRatioSelector } from '@/components/params/panels/ResolutionPanel/AspectRatioSelector';
+import type { AspectRatioOption } from '@/components/params/panels/ResolutionPanel/types';
 import { UiIconButton, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
 
@@ -198,6 +205,77 @@ function CompactDropdownControl({
   );
 }
 
+const ASPECT_PANEL_ITEM_WIDTH = 78;
+const ASPECT_PANEL_GAP = 8;
+const ASPECT_PANEL_MAX_PER_ROW = 4;
+/** 面板内边距（p-3 单侧 12px）+ UI_TRIGGER_PANEL_CLASS 边框（单侧 1px），两侧合计 */
+const ASPECT_PANEL_CHROME = (12 + 1) * 2;
+
+function estimateAspectPanelWidth(itemCount: number): number {
+  const columns = Math.max(1, Math.min(ASPECT_PANEL_MAX_PER_ROW, itemCount));
+  const contentWidth = columns * ASPECT_PANEL_ITEM_WIDTH + ASPECT_PANEL_GAP * (columns - 1);
+  return contentWidth + ASPECT_PANEL_CHROME;
+}
+
+/** 比例下拉的特殊面板：把"16:9"这类纯文字选项换成矩形比例预览，点开即可直观比对 */
+function CompactAspectRatioControl({
+  param,
+  value,
+  onChange,
+  disabled,
+}: { param: DropdownParamDef | RadioParamDef; value: DynamicValue; onChange: (value: DynamicValue) => void; disabled?: boolean }) {
+  const { i18n } = useTranslation();
+  const smartOption = useMemo(
+    () => param.options.find((option) => isSmartAspectValue(option.value)),
+    [param.options]
+  );
+  const aspectOptions = useMemo<AspectRatioOption[]>(
+    () => param.options
+      .filter((option) => option !== smartOption)
+      .map((option) => ({ value: String(option.value), label: option.label })),
+    [param.options, smartOption]
+  );
+  const isUnset = value === undefined || value === null || value === '';
+  const effectiveValue = !isUnset ? value : param.default;
+  const selectedOption = param.options.find((option) => isSameOptionValue(option.value, effectiveValue));
+  const display = selectedOption
+    ? formatAspectRatioDisplayLabel(getI18nText(selectedOption.label, i18n.language), selectedOption.value)
+    : String(effectiveValue ?? '');
+  const selectorValue = selectedOption && isSmartAspectValue(selectedOption.value)
+    ? 'smart'
+    : String(effectiveValue ?? '');
+  const panelWidth = estimateAspectPanelWidth(aspectOptions.length + (smartOption ? 1 : 0));
+
+  return (
+    <PanelTrigger
+      display={display}
+      disabled={disabled}
+      buttonClassName={COMPACT_TRIGGER_CLASS}
+      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      panelWidth={panelWidth}
+      alignment="aboveCenter"
+      gap={8}
+      closeOnPanelClick={false}
+      renderPanel={() => (
+        <div className="p-3">
+          <AspectRatioSelector
+            value={selectorValue}
+            onChange={(next) => {
+              if (next === 'smart' && smartOption) {
+                onChange(smartOption.value);
+                return;
+              }
+              onChange(next);
+            }}
+            options={aspectOptions}
+            smartMatchEnabled={Boolean(smartOption)}
+          />
+        </div>
+      )}
+    />
+  );
+}
+
 function CompactTextControl({
   param,
   value,
@@ -243,6 +321,7 @@ function CompactPanelControl({
       buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
       panelWidth={panelWidth}
       alignment="aboveCenter"
+      gap={8}
       closeOnPanelClick={false}
       freezePositionOnOpen={param.panel === 'voice-selector'}
       renderPanel={() => (
@@ -290,6 +369,16 @@ export function NodeParamControl({ param, value, onChange, disabled }: NodeParam
       );
     case 'dropdown':
     case 'radio':
+      if (isAspectRatioChoiceParam(param)) {
+        return (
+          <CompactAspectRatioControl
+            param={param as DropdownParamDef | RadioParamDef}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+          />
+        );
+      }
       return (
         <CompactDropdownControl
           param={param as DropdownParamDef | RadioParamDef}
