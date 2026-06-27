@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
@@ -21,6 +21,9 @@ import {
 import { saveUploadAudio, saveUploadVideo } from '@/utils/save';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
+import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
 
 interface MediaInputRowProps {
   nodeId: string;
@@ -61,6 +64,13 @@ function resolveFileName(url: string): string {
   return normalized.length > 18 ? `${normalized.slice(0, 18)}…` : normalized;
 }
 
+function moveArrayItem<T>(list: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...list];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 /**
  * 媒体输入行：缩略图槛（图片）或文件名 chip（视频/音频）+ 类型化端口。
  * 已连线（上游有该媒体类型输出）→ 只读展示上游媒体；未连线 → 槛位可本地上传。
@@ -75,6 +85,7 @@ export function MediaInputRow({
 }: MediaInputRowProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [viewerVideoUrl, setViewerVideoUrl] = useState<string | null>(null);
 
   const upstreamUrls = useStoreWithEqualityFn(
     useCanvasStore,
@@ -86,6 +97,20 @@ export function MediaInputRow({
   const canAddMore = !isConnected && displayUrls.length < maxCount;
   const socketColor = getSocketColor(mediaKind.toUpperCase());
   const Icon = MEDIA_ICON[mediaKind];
+
+  const handleReorder = useCallback((from: number, to: number) => {
+    if (isConnected || from === to) {
+      return;
+    }
+    onInlineChange(moveArrayItem(inlineValue, from, to));
+  }, [inlineValue, isConnected, onInlineChange]);
+
+  const { dragState, itemRefs, handleMouseDown } = useReorderDrag({
+    disabled: isConnected,
+    isCustomDragging: false,
+    files: displayUrls,
+    onReorder: handleReorder,
+  });
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0 || isConnected) {
@@ -121,15 +146,55 @@ export function MediaInputRow({
       />
       <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
       <div className={`nodrag nowheel gap-1.5 overflow-x-auto ${NODE_ROW_CONTROL_SLOT_CLASS}`}>
-        {displayUrls.map((url, index) => (
-          <div key={`${url}-${index}`} className="group relative shrink-0">
+        {displayUrls.map((url, index) => {
+          const isDraggingThis = dragState.isDragging && dragState.fromIndex === index;
+          const isDroppingThis = dragState.isDropping && dragState.fromIndex === index;
+          const isDropTarget =
+            (dragState.isDragging || dragState.isDropping) &&
+            dragState.toIndex === index &&
+            dragState.fromIndex !== index;
+
+          return (
+          <div
+            key={`${url}-${index}`}
+            ref={(element) => {
+              itemRefs.current[index] = element;
+            }}
+            className={`group relative shrink-0 ${isDropTarget ? 'rounded-md ring-2 ring-accent' : ''}`}
+            style={
+              isDraggingThis
+                ? {
+                    transform: `translate(${dragState.currentX - dragState.startX}px, ${dragState.currentY - dragState.startY}px) scale(1.1)`,
+                    position: 'relative',
+                    zIndex: 50,
+                    opacity: 0.85,
+                    pointerEvents: 'none',
+                  }
+                : isDroppingThis
+                  ? { transform: 'translate(0, 0)', transition: 'transform 0.15s ease', position: 'relative', zIndex: 50 }
+                  : undefined
+            }
+            onMouseDown={!isConnected ? (event) => handleMouseDown(index, event) : undefined}
+          >
             {mediaKind === 'image' ? (
-              <img
+              <CanvasNodeImage
                 src={resolveImageDisplayUrl(url)}
+                viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
                 alt=""
                 className="h-7 w-7 rounded-md border border-[rgba(255,255,255,0.18)] object-cover"
                 draggable={false}
               />
+            ) : mediaKind === 'video' ? (
+              <span
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[rgba(255,255,255,0.18)] bg-bg-dark/60 px-1.5 text-[10px] text-text-muted"
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  setViewerVideoUrl(resolveImageDisplayUrl(url));
+                }}
+              >
+                <Icon className="h-3 w-3 shrink-0" />
+                {resolveFileName(url)}
+              </span>
             ) : (
               <span className="flex h-7 items-center gap-1 rounded-md border border-[rgba(255,255,255,0.18)] bg-bg-dark/60 px-1.5 text-[10px] text-text-muted">
                 <Icon className="h-3 w-3 shrink-0" />
@@ -149,7 +214,8 @@ export function MediaInputRow({
               </UiIconButton>
             )}
           </div>
-        ))}
+          );
+        })}
         {canAddMore && (
           <UiIconButton
             type="button"
@@ -176,6 +242,13 @@ export function MediaInputRow({
           event.target.value = '';
         }}
       />
+      {viewerVideoUrl && (
+        <VideoViewerModal
+          open
+          videoUrl={viewerVideoUrl}
+          onClose={() => setViewerVideoUrl(null)}
+        />
+      )}
     </div>
   );
 }
