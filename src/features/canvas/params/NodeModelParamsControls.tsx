@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Search, Sparkles, SlidersHorizontal, X } from 'lucide-react';
+import { Check, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import PinyinMatch from 'pinyin-match';
 
@@ -30,6 +30,8 @@ interface NodeModelParamsControlsProps {
   paramsChipClassName?: string;
   /** 是否显示参数浮层 chip（逐行渲染模式下置 false，仅保留模型选择） */
   showParamsChip?: boolean;
+  /** 模型 chip 内容（名称+供应商）的实际像素宽度变化回调，用于驱动节点最小宽度随内容自适应 */
+  onModelChipContentWidthChange?: (width: number) => void;
 }
 
 interface PanelAnchor {
@@ -105,11 +107,13 @@ export const NodeModelParamsControls = memo(({
   modelChipClassName = 'max-w-[260px] justify-start',
   paramsChipClassName = 'max-w-[120px] justify-start',
   showParamsChip = true,
+  onModelChipContentWidthChange,
 }: NodeModelParamsControlsProps) => {
   const { t, i18n } = useTranslation();
   const { t: tModels } = useTranslation('models');
   const containerRef = useRef<HTMLDivElement>(null);
   const modelTriggerRef = useRef<HTMLDivElement>(null);
+  const modelChipMeasureRef = useRef<HTMLDivElement>(null);
   const paramsTriggerRef = useRef<HTMLDivElement>(null);
   const modelPanelRef = useRef<HTMLDivElement>(null);
   const paramsPanelRef = useRef<HTMLDivElement>(null);
@@ -224,6 +228,18 @@ export const NodeModelParamsControls = memo(({
     }
   }, [providerFilter, providerOptions]);
 
+  useLayoutEffect(() => {
+    const measureEl = modelChipMeasureRef.current;
+    if (!measureEl || !onModelChipContentWidthChange) {
+      return;
+    }
+    const measure = () => onModelChipContentWidthChange(measureEl.scrollWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(measureEl);
+    return () => observer.disconnect();
+  }, [onModelChipContentWidthChange, selectedModelName, selectedModel]);
+
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
       const target = event.target as globalThis.Node;
@@ -267,7 +283,6 @@ export const NodeModelParamsControls = memo(({
             setOpenPanel('model');
           }}
         >
-          <Sparkles className="h-3 w-3 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
             <span className="shrink-0 text-xs leading-none text-text-muted/80">
@@ -275,6 +290,20 @@ export const NodeModelParamsControls = memo(({
             </span>
           )}
         </UiChipButton>
+        {onModelChipContentWidthChange && (
+          <div
+            ref={modelChipMeasureRef}
+            aria-hidden
+            className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap text-xs"
+          >
+            <span className="text-xs font-normal leading-none">{selectedModelName}</span>
+            {selectedModel && (
+              <span className="text-xs leading-none text-text-muted/80">
+                {getProviderDisplayName(selectedModel.meta.provider)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {hasConfigurableParams && (
