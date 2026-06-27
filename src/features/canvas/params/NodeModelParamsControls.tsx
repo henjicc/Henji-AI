@@ -7,6 +7,7 @@ import PinyinMatch from 'pinyin-match';
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
 import type { ModelDefinition } from '@/core/types';
+import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel';
 import { UiChipButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui';
@@ -64,6 +65,12 @@ function buildPanelStyle(anchor: PanelAnchor | null): React.CSSProperties | unde
   };
 }
 
+function getModelFunctionLabels(model: ModelDefinition, translateTag: (tag: string) => string): string[] {
+  return (model.meta.tags ?? [])
+    .filter((tag) => FILTERABLE_TAGS.includes(tag))
+    .map((tag) => translateTag(tag));
+}
+
 function matchesModelSearch(model: ModelDefinition, query: string, language: string): boolean {
   const keyword = query.trim();
   if (!keyword) {
@@ -100,11 +107,13 @@ export const NodeModelParamsControls = memo(({
   showParamsChip = true,
 }: NodeModelParamsControlsProps) => {
   const { t, i18n } = useTranslation();
+  const { t: tModels } = useTranslation('models');
   const containerRef = useRef<HTMLDivElement>(null);
   const modelTriggerRef = useRef<HTMLDivElement>(null);
   const paramsTriggerRef = useRef<HTMLDivElement>(null);
   const modelPanelRef = useRef<HTMLDivElement>(null);
   const paramsPanelRef = useRef<HTMLDivElement>(null);
+  const modelSearchInputRef = useRef<HTMLInputElement>(null);
   const [openPanel, setOpenPanel] = useState<'model' | 'params' | null>(null);
   const [renderPanel, setRenderPanel] = useState<'model' | 'params' | null>(null);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
@@ -230,6 +239,18 @@ export const NodeModelParamsControls = memo(({
     };
   }, []);
 
+  useEffect(() => {
+    if (renderPanel !== 'model') {
+      return;
+    }
+    const shouldAutoFocus = localStorage.getItem('enable_auto_focus_model_search') !== 'false';
+    if (!shouldAutoFocus) {
+      return;
+    }
+    const timer = setTimeout(() => modelSearchInputRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
+  }, [renderPanel]);
+
   return (
     <div ref={containerRef} className="flex w-full min-w-0 items-center gap-1">
       <div ref={modelTriggerRef} className="relative flex min-w-0 flex-1">
@@ -299,6 +320,7 @@ export const NodeModelParamsControls = memo(({
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
                 <UiInput
+                  ref={modelSearchInputRef}
                   type="text"
                   value={modelSearchQuery}
                   onChange={(event) => setModelSearchQuery(event.target.value)}
@@ -354,6 +376,7 @@ export const NodeModelParamsControls = memo(({
               {filteredModels.map((model) => {
                 const active = model.meta.id === selectedModel?.meta.id;
                 const displayName = getI18nText(model.meta.name, i18n.language) || model.meta.id;
+                const functionLabels = getModelFunctionLabels(model, (tag) => tModels(`tags.${tag}`, { defaultValue: tag }));
 
                 return (
                   <UiOptionButton
@@ -368,14 +391,16 @@ export const NodeModelParamsControls = memo(({
                       setOpenPanel(null);
                     }}
                   >
-                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted ${active ? 'bg-white/15 text-white' : 'bg-bg-dark'}`}>
-                      <Sparkles className="h-4 w-4" />
-                    </div>
+                    {model.meta.icon && (
+                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-text-muted ${active ? 'bg-white/15 text-white' : 'bg-bg-dark'}`}>
+                        <img src={model.meta.icon} alt="" className="h-full w-full object-cover" />
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className={`truncate text-sm ${active ? 'text-white' : 'text-text-dark'}`}>{displayName}</div>
                       <div className={`truncate text-xs ${active ? 'text-white/70' : 'text-text-muted'}`}>
                         {getProviderDisplayName(model.meta.provider)}
-                        {model.meta.description ? ` · ${model.meta.description}` : ''}
+                        {functionLabels.length > 0 ? ` · ${functionLabels.join(' · ')}` : ''}
                       </div>
                     </div>
                     {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />}
