@@ -416,11 +416,11 @@ const InputArea: React.FC<InputAreaProps> = ({
                 ? t('inputArea.placeholder.englishOnly')
                 : t('inputArea.placeholder.default')
           }
-          className="relative isolate overflow-hidden rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
+          className="relative isolate overflow-visible rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
           highlightLayerClassName="text-sm leading-6 text-white"
           highlightContentClassName={`${promptMinHeightClass} ${promptLeftPaddingClass} py-3 pr-14`}
           textareaClassName={`ui-scrollbar !border-0 !bg-transparent !backdrop-blur-0 !shadow-none !rounded-2xl w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden focus:!ring-0 focus:!shadow-none transition-colors duration-200 ease-out text-transparent caret-white placeholder-zinc-500/85 whitespace-pre-wrap break-words`}
-          pickerClassName="w-[150px]"
+          pickerClassName="z-50 w-[150px]"
           pickerListClassName="max-h-[180px]"
           renderPickerItem={({ item }) => (
             <>

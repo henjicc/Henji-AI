@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
 import { RefreshCw } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
+import { readHenjiDragData, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
 import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
@@ -52,6 +53,38 @@ function inferAudioMimeFromPath(path: string): string {
   if (lower.endsWith('.ogg')) return 'audio/ogg'
   if (lower.endsWith('.m4a')) return 'audio/mp4'
   return 'audio/mpeg'
+}
+
+async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<File | null> {
+  if (dragData.type === 'image') {
+    if (dragData.filePath && isDesktop()) {
+      const bytes = await readFile(dragData.filePath)
+      const mime = inferMimeFromPath(dragData.filePath)
+      const blob = new Blob([bytes], { type: mime })
+      const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
+      return new File([blob], filename, { type: mime })
+    }
+
+    return await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+  }
+
+  if (dragData.type === 'video' && dragData.filePath && isDesktop()) {
+    const bytes = await readFile(dragData.filePath)
+    const mime = inferVideoMimeFromPath(dragData.filePath)
+    const blob = new Blob([bytes], { type: mime })
+    const filename = dragData.filePath.split(/[\\/]/).pop() || `video-${Date.now()}.mp4`
+    return new File([blob], filename, { type: mime })
+  }
+
+  if (dragData.type === 'audio' && dragData.filePath && isDesktop()) {
+    const bytes = await readFile(dragData.filePath)
+    const mime = inferAudioMimeFromPath(dragData.filePath)
+    const blob = new Blob([bytes], { type: mime })
+    const filename = dragData.filePath.split(/[\\/]/).pop() || `audio-${Date.now()}.mp3`
+    return new File([blob], filename, { type: mime })
+  }
+
+  return null
 }
 
 function AudioPreviewIcon(): JSX.Element {
@@ -189,6 +222,19 @@ export function StackedMediaUploader({
     if (disabled) return
     if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
       await handleFiles(Array.from(event.dataTransfer.files))
+      return
+    }
+
+    const transferredDragData = readHenjiDragData(event.dataTransfer)
+    if (transferredDragData) {
+      try {
+        const file = await dragTransferDataToFile(transferredDragData)
+        if (file) {
+          await handleFiles([file])
+        }
+      } catch (error) {
+        logger.error('StackedMediaUploader convert transferred drag data failed', error)
+      }
     }
   }
 
@@ -196,40 +242,31 @@ export function StackedMediaUploader({
     if (!isCustomDragging || !dragData) return
     if (dragData.type === 'image') {
       try {
-        let file: File
-        if (dragData.filePath && isDesktop()) {
-          const bytes = await readFile(dragData.filePath)
-          const mime = inferMimeFromPath(dragData.filePath)
-          const blob = new Blob([bytes], { type: mime })
-          const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
-          file = new File([blob], filename, { type: mime })
-        } else {
-          file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+        const file = await dragTransferDataToFile(dragData)
+        if (file) {
+          await handleFiles([file])
         }
-        await handleFiles([file])
       } catch (error) {
         logger.error('StackedMediaUploader convert image failed', error)
       }
     }
 
-    if (dragData.type === 'video' && dragData.filePath && isDesktop()) {
+    if (dragData.type === 'video') {
       try {
-        const bytes = await readFile(dragData.filePath)
-        const mime = inferVideoMimeFromPath(dragData.filePath)
-        const blob = new Blob([bytes], { type: mime })
-        const filename = dragData.filePath.split(/[\\/]/).pop() || `video-${Date.now()}.mp4`
-        await handleFiles([new File([blob], filename, { type: mime })])
+        const file = await dragTransferDataToFile(dragData)
+        if (file) {
+          await handleFiles([file])
+        }
       } catch (error) {
         logger.error('StackedMediaUploader convert video failed', error)
       }
     }
-    if (dragData.type === 'audio' && dragData.filePath && isDesktop()) {
+    if (dragData.type === 'audio') {
       try {
-        const bytes = await readFile(dragData.filePath)
-        const mime = inferAudioMimeFromPath(dragData.filePath)
-        const blob = new Blob([bytes], { type: mime })
-        const filename = dragData.filePath.split(/[\\/]/).pop() || `audio-${Date.now()}.mp3`
-        await handleFiles([new File([blob], filename, { type: mime })])
+        const file = await dragTransferDataToFile(dragData)
+        if (file) {
+          await handleFiles([file])
+        }
       } catch (error) {
         logger.error('StackedMediaUploader convert audio failed', error)
       }

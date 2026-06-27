@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { useDragDrop } from '@/contexts/DragDropContext'
+import { writeHenjiDragData } from '@/contexts/dragDataTransfer'
 import { basename, toDisplaySrc } from '@/platform/desktopApi'
 import { detectShell } from '@/platform/runtime'
 import { inferMimeFromPath } from '@/utils/mime'
@@ -56,10 +57,11 @@ function clearBrowserDragPreview(): void {
   browserDragPreviewHost?.replaceChildren()
 }
 
-function prepareNativeDragEvent(e: ReactDragEvent, previewUrl?: string): void {
+function prepareNativeDragEvent(e: ReactDragEvent, payload: DragPayload, previewUrl?: string): void {
   try {
     e.dataTransfer.clearData()
     e.dataTransfer.setData('application/x-henji-native-file-drag', '1')
+    writeHenjiDragData(e.dataTransfer, payload)
     setSmallBrowserDragPreview(e, previewUrl)
   } catch {
     // 某些拖拽数据源不允许清空；失败时仍继续走 Electron 原生拖拽。
@@ -68,16 +70,21 @@ function prepareNativeDragEvent(e: ReactDragEvent, previewUrl?: string): void {
   e.dataTransfer.dropEffect = 'copy'
 }
 
-function tryStartDownloadUrlDrag(e: ReactDragEvent, filePath: string, previewUrl?: string): boolean {
+function tryStartDownloadUrlDrag(e: ReactDragEvent, payload: DragPayload, previewUrl?: string): boolean {
+  if (!payload.filePath) {
+    return false
+  }
+
   try {
     e.dataTransfer.clearData()
     e.dataTransfer.effectAllowed = 'copy'
     e.dataTransfer.dropEffect = 'copy'
+    writeHenjiDragData(e.dataTransfer, payload)
     setSmallBrowserDragPreview(e, previewUrl)
 
-    const fileName = basename(filePath)
-    const mime = inferMimeFromPath(filePath)
-    const downloadUrl = toDisplaySrc(filePath.replace(/\\/g, '/'))
+    const fileName = basename(payload.filePath)
+    const mime = inferMimeFromPath(payload.filePath)
+    const downloadUrl = toDisplaySrc(payload.filePath.replace(/\\/g, '/'))
     e.dataTransfer.setData('DownloadURL', `${mime}:${fileName}:${downloadUrl}`)
     return true
   } catch {
@@ -243,14 +250,14 @@ export function useHistoryDrag(): UseHistoryDragResult {
     endDrag()
     armNativeDragCleanup()
 
-    if (tryStartDownloadUrlDrag(e, payload.filePath, previewUrl)) {
+    if (tryStartDownloadUrlDrag(e, payload, previewUrl)) {
       e.stopPropagation()
       nativeDragActiveRef.current = true
       isDraggingRef.current = true
       return
     }
 
-    prepareNativeDragEvent(e, previewUrl)
+    prepareNativeDragEvent(e, payload, previewUrl)
     e.preventDefault()
     e.stopPropagation()
     nativeDragActiveRef.current = true

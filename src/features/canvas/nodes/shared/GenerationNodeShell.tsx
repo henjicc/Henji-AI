@@ -431,11 +431,11 @@ export const GenerationNodeShell = memo(({
               onSubmit={() => {
                 void handleGenerate();
               }}
-              className="relative h-full min-h-[86px] overflow-hidden rounded-md"
+              className="relative h-full min-h-[86px] overflow-visible rounded-md"
               highlightLayerClassName="text-sm leading-6 text-text-dark"
               highlightContentClassName="min-h-full px-1.5 py-1"
               textareaClassName="ui-scrollbar nodrag nowheel !border-0 !bg-transparent !shadow-none relative z-10 h-full min-h-[86px] w-full resize-none overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 selection:bg-accent/45 selection:text-white focus:!border-transparent focus:!ring-0 focus:!shadow-none focus-visible:!ring-0 whitespace-pre-wrap break-words disabled:cursor-default"
-              pickerClassName="w-[120px]"
+              pickerClassName="z-[90] w-[120px]"
               pickerListClassName="max-h-[180px]"
             />
           </div>
