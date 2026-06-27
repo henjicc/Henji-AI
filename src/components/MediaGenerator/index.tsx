@@ -26,7 +26,7 @@ import { validateGenerationRequirements } from '@/core/validation/modelRequireme
 import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
 
 interface MediaGeneratorProps {
-  onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: unknown) => void | Promise<void>
+  onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: DynamicValue) => void | Promise<void>
   isLoading: boolean
   onOpenClearHistory: () => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -177,13 +177,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uiState.setUploadedFilePaths(prev => prev.slice(0, maxImageCount))
       uiState.setFileOrder(prev => prev.filter(item => item.type !== 'image' || item.index < maxImageCount))
     }
-  }, [
-    maxImageCount,
-    uiState.uploadedImages.length,
-    uiState.setFileOrder,
-    uiState.setUploadedFilePaths,
-    uiState.setUploadedImages
-  ])
+  }, [maxImageCount, uiState.uploadedImages.length, uiState.setFileOrder, uiState.setUploadedFilePaths, uiState.setUploadedImages, uiState])
 
   useEffect(() => {
     if (maxVideoCount === 0 && uiState.uploadedVideos.length > 0) {
@@ -204,15 +198,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         uiState.setUploadedVideoDuration(0)
       }
     }
-  }, [
-    maxVideoCount,
-    uiState.uploadedVideos.length,
-    uiState.setFileOrder,
-    uiState.setUploadedVideos,
-    uiState.setUploadedVideoFiles,
-    uiState.setUploadedVideoFilePaths,
-    uiState.setUploadedVideoDuration
-  ])
+  }, [maxVideoCount, uiState.uploadedVideos.length, uiState.setFileOrder, uiState.setUploadedVideos, uiState.setUploadedVideoFiles, uiState.setUploadedVideoFilePaths, uiState.setUploadedVideoDuration, uiState])
 
   useEffect(() => {
     if (maxAudioCount === 0 && uiState.uploadedAudios.length > 0) {
@@ -227,13 +213,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uiState.setUploadedAudioFilePaths(prev => prev.slice(0, maxAudioCount))
       uiState.setFileOrder(prev => prev.filter(item => item.type !== 'audio' || item.index < maxAudioCount))
     }
-  }, [
-    maxAudioCount,
-    uiState.uploadedAudios.length,
-    uiState.setFileOrder,
-    uiState.setUploadedAudioFilePaths,
-    uiState.setUploadedAudios
-  ])
+  }, [maxAudioCount, uiState.uploadedAudios.length, uiState.setFileOrder, uiState.setUploadedAudioFilePaths, uiState.setUploadedAudios, uiState])
 
   // 6. 暴露 setter 给父组件
   useEffect(() => {
@@ -311,7 +291,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const inputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
 
   // 9. 预设加载处理
-  const handleLoadPreset = (presetData: Record<string, unknown>) => {
+  const handleLoadPreset = (presetData: DynamicValueMap) => {
     const params = PresetManager.loadPreset(presetData, uiState.selectedModel)
     Object.entries(params).forEach(([key, value]) => {
       modelState.setParam(key, value)

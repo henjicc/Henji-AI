@@ -64,7 +64,7 @@ export const kieHailuo02Model = defineModel({
       trigger: ['kieHailuo02Resolution', 'kieHailuo02Duration'],
       effect: 'autoSwitch',
       target: 'kieHailuo02Duration',
-      condition: (_: unknown, allParams: Record<string, unknown>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         return allParams.kieHailuo02Resolution === '1080P' && allParams.kieHailuo02Duration !== 6
       },
       value: 6
@@ -73,7 +73,7 @@ export const kieHailuo02Model = defineModel({
       trigger: ['kieHailuo02Duration', 'kieHailuo02Resolution'],
       effect: 'autoSwitch',
       target: 'kieHailuo02Resolution',
-      condition: (_: unknown, allParams: Record<string, unknown>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         return allParams.kieHailuo02Duration === 10 && allParams.kieHailuo02Resolution === '1080P'
       },
       value: '768P'
@@ -101,7 +101,7 @@ export const kieHailuo02Model = defineModel({
           : 'hailuo/02-image-to-video-standard'
       }
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       if (images.length > 0) {
         input.image_url = images[0]

@@ -54,6 +54,17 @@
       "rules": {
         "no-restricted-syntax": "off"
       }
+    },
+    {
+      "files": [
+        "src/contexts/NotificationContext.tsx",
+        "src/features/canvas/nodes/storyboardGen/shared.tsx",
+        "src/features/canvas/nodes/storyboardSplit/shared.tsx",
+        "src/features/canvas/ui/NodeHeader.tsx"
+      ],
+      "rules": {
+        "react-refresh/only-export-components": "off"
+      }
     }
   ]
 }

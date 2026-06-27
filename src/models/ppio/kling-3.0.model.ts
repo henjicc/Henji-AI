@@ -253,7 +253,7 @@ export const kling30Model = defineModel({
         : (rawResolution === '1080P' ? '1080P' : '720P')
 
       if (mode === 'motion-control') {
-        const requestData: Record<string, unknown> = {
+        const requestData: DynamicValueMap = {
           image: requestImages[0],
           video: requestVideos[0],
           prompt,
@@ -274,7 +274,7 @@ export const kling30Model = defineModel({
       const rawSound = params.ppioKling30Sound ?? params.sound
       const sound = rawSound === true
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt,
         duration,
         sound,

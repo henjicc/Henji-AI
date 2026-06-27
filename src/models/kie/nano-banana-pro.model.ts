@@ -68,7 +68,7 @@ export const kieNanoBananaProModel = defineModel({
       const aspectRatio = params.kieNanoBananaAspectRatio || params.aspect_ratio
       const resolution = params.kieNanoBananaResolution || params.resolution
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
         input.aspect_ratio = aspectRatio

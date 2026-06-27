@@ -43,10 +43,10 @@ export interface PresetSetters {
 
     // Vidu
     setPpioViduQ1VideoDuration: (v: number) => void
-    setPpioViduQ1Mode: (v: any) => void
+    setPpioViduQ1Mode: (v: DynamicValue) => void
     setPpioViduQ1AspectRatio: (v: string) => void
     setPpioViduQ1Style: (v: string) => void
-    setPpioViduQ1MovementAmplitude: (v: any) => void
+    setPpioViduQ1MovementAmplitude: (v: DynamicValue) => void
     setPpioViduQ1Bgm: (v: boolean) => void
 
     // Kling
@@ -132,7 +132,7 @@ export interface PresetSetters {
     setFalKlingVideoO1Mode: (v: 'image-to-video' | 'reference-to-video' | 'video-to-video-edit' | 'video-to-video-reference') => void
     setFalKlingVideoO1AspectRatio: (v: string) => void
     setFalKlingVideoO1KeepAudio: (v: boolean) => void
-    setFalKlingVideoO1Elements: (v: any[]) => void
+    setFalKlingVideoO1Elements: (v: DynamicValue[]) => void
     setUploadedVideos: (v: string[]) => void
     // 注意：setUploadedVideoFiles 不在这里定义，因为 File 对象无法序列化
 
@@ -301,7 +301,7 @@ export interface PresetSetters {
  */
 export function createPresetSetterMap(
     setters: PresetSetters
-): Record<string, (value: any) => void> {
+): Record<string, (value: DynamicValue) => void> {
     return {
         // 基础参数
         input: setters.setInput,

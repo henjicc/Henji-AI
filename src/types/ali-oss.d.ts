@@ -8,13 +8,13 @@ declare module 'ali-oss' {
             endpoint?: string;
             bucket?: string;
             secure?: boolean;
-            [key: string]: any;
+            [key: string]: DynamicValue;
         });
 
-        put(name: string, file: any): Promise<{
+        put(name: string, file: DynamicValue): Promise<{
             name: string;
             url: string;
-            res: any;
+            res: DynamicValue;
         }>;
     }
 }

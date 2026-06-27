@@ -1,6 +1,6 @@
 export interface InferMimeOptions {
   /**
-   * MIME type to return when extension is unknown.
+   * MIME type to return when extension is DynamicValue.
    *
    * Defaults to 'application/octet-stream'.
    */

@@ -11,8 +11,8 @@ export interface LogEvent {
   taskId?: string
   modelId?: string
   providerId?: string
-  context?: unknown
-  error?: unknown
+  context?: DynamicValue
+  error?: DynamicValue
   source: 'frontend' | 'backend'
 }
 
@@ -31,8 +31,8 @@ export interface LogCallMeta {
   taskId?: string
   modelId?: string
   providerId?: string
-  context?: unknown
-  error?: unknown
+  context?: DynamicValue
+  error?: DynamicValue
 }
 
 export interface LogEventBridgeDto {
@@ -45,6 +45,6 @@ export interface LogEventBridgeDto {
   taskId?: string
   modelId?: string
   providerId?: string
-  context?: unknown
-  error?: unknown
+  context?: DynamicValue
+  error?: DynamicValue
 }

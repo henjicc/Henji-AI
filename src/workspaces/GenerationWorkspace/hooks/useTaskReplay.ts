@@ -9,7 +9,7 @@ import { isRecord, isStringArray } from '../utils/typeGuards'
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskReplay')
 
 export interface UseTaskReplayParams {
-  handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
+  handleGenerate: (input: string, model: string, type: MediaType, options?: DynamicValue) => Promise<void>
   imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
 }
 
@@ -47,7 +47,7 @@ async function restoreEditStatesFromFile(
 }
 
 function restoreEditStatesInline(
-  inline: unknown,
+  inline: DynamicValue,
   images: string[],
   imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
 ): void {

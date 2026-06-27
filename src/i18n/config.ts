@@ -34,27 +34,27 @@ import enUS_settings from './locales/en-US/settings.json'
 import enUS_storyboard from './locales/en-US/storyboard.json'
 
 
-type ModelLocale = Record<string, unknown> & { defs?: Record<string, unknown> }
+type ModelLocale = DynamicValueMap & { defs?: DynamicValueMap }
 
 function mergeModelDefs(base: ModelLocale, ...sources: ModelLocale[]): ModelLocale {
-  const mergedDefs: Record<string, unknown> = { ...(base.defs || {}) }
+  const mergedDefs: DynamicValueMap = { ...(base.defs || {}) }
   sources.forEach((src) => {
     if (src && typeof src === 'object' && src.defs && typeof src.defs === 'object') {
-      Object.assign(mergedDefs, src.defs as Record<string, unknown>)
+      Object.assign(mergedDefs, src.defs as DynamicValueMap)
     }
   })
   return { ...base, defs: mergedDefs }
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
+function isPlainRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function deepMergeLocale(
-  base: Record<string, unknown>,
-  extension: Record<string, unknown>
-): Record<string, unknown> {
-  const next: Record<string, unknown> = { ...base }
+  base: DynamicValueMap,
+  extension: DynamicValueMap
+): DynamicValueMap {
+  const next: DynamicValueMap = { ...base }
   Object.entries(extension).forEach(([key, value]) => {
     const baseValue = next[key]
     if (isPlainRecord(baseValue) && isPlainRecord(value)) {
@@ -68,7 +68,7 @@ function deepMergeLocale(
 
 const resources = {
   'zh-CN': {
-    common: deepMergeLocale(zhCN_common as Record<string, unknown>, zhCN_storyboard as Record<string, unknown>),
+    common: deepMergeLocale(zhCN_common as DynamicValueMap, zhCN_storyboard as DynamicValueMap),
     models: mergeModelDefs(zhCN_models, zhCN_models_ppio, zhCN_models_fal, zhCN_models_kie, zhCN_models_modelscope),
     params: zhCN_params,
     errors: zhCN_errors,
@@ -77,7 +77,7 @@ const resources = {
     settings: zhCN_settings,
   },
   'en-US': {
-    common: deepMergeLocale(enUS_common as Record<string, unknown>, enUS_storyboard as Record<string, unknown>),
+    common: deepMergeLocale(enUS_common as DynamicValueMap, enUS_storyboard as DynamicValueMap),
     models: mergeModelDefs(enUS_models, enUS_models_ppio, enUS_models_fal, enUS_models_kie, enUS_models_modelscope),
     params: enUS_params,
     errors: enUS_errors,

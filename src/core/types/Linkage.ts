@@ -110,7 +110,7 @@ export interface ResetLinkage extends BaseLinkage {
    * @param allParams - 所有参数的当前值
    * @returns 是否执行重置
    */
-  condition?: (triggerValue: any, allParams: Record<string, any>) => boolean
+  condition?: (triggerValue: DynamicValue, allParams: DynamicValueMap) => boolean
 }
 
 /**
@@ -151,10 +151,10 @@ export interface FilterOptionsLinkage extends BaseLinkage {
    * @returns 过滤后的选项列表
    */
   filter: (
-    triggerValue: any,
-    options: Array<{ value: any; label: any; [key: string]: any }>,
-    allParams: Record<string, any>
-  ) => Array<{ value: any; label: any; [key: string]: any }>
+    triggerValue: DynamicValue,
+    options: Array<{ value: DynamicValue; label: DynamicValue; [key: string]: DynamicValue }>,
+    allParams: DynamicValueMap
+  ) => Array<{ value: DynamicValue; label: DynamicValue; [key: string]: DynamicValue }>
 }
 
 /**
@@ -194,8 +194,8 @@ export interface FilterRangeLinkage extends BaseLinkage {
    * @returns 新的范围配置
    */
   filter: (
-    triggerValue: any,
-    allParams: Record<string, any>
+    triggerValue: DynamicValue,
+    allParams: DynamicValueMap
   ) => {
     min?: number
     max?: number
@@ -230,14 +230,14 @@ export interface SetValueLinkage extends BaseLinkage {
   /**
    * 新值（固定值或计算函数）
    */
-  value: LinkageValue | ((triggerValue: any, allParams: Record<string, any>) => LinkageValue)
+  value: LinkageValue | ((triggerValue: DynamicValue, allParams: DynamicValueMap) => LinkageValue)
 
   /**
    * 设置条件（可选）
    *
    * 如果不提供，总是设置
    */
-  condition?: (triggerValue: any, allParams: Record<string, any>) => boolean
+  condition?: (triggerValue: DynamicValue, allParams: DynamicValueMap) => boolean
 }
 
 /**
@@ -273,12 +273,12 @@ export interface AutoSwitchLinkage extends BaseLinkage {
    * @param allParams - 所有参数的当前值
    * @returns 是否执行切换
    */
-  condition: (triggerValue: any, allParams: Record<string, any>) => boolean
+  condition: (triggerValue: DynamicValue, allParams: DynamicValueMap) => boolean
 
   /**
    * 切换后的值（固定值或计算函数）
    */
-  value: LinkageValue | ((triggerValue: any, allParams: Record<string, any>) => LinkageValue)
+  value: LinkageValue | ((triggerValue: DynamicValue, allParams: DynamicValueMap) => LinkageValue)
 
   /**
    * 不恢复原值（默认 false）
@@ -328,7 +328,7 @@ export interface DisableLinkage extends BaseLinkage {
    * @param allParams - 所有参数的当前值
    * @returns 是否禁用
    */
-  condition: (triggerValue: any, allParams: Record<string, any>) => boolean
+  condition: (triggerValue: DynamicValue, allParams: DynamicValueMap) => boolean
 
   /**
    * 禁用原因（可选）
@@ -369,7 +369,7 @@ export interface HideLinkage extends BaseLinkage {
    * @param allParams - 所有参数的当前值
    * @returns 是否隐藏
    */
-  condition: (triggerValue: any, allParams: Record<string, any>) => boolean
+  condition: (triggerValue: DynamicValue, allParams: DynamicValueMap) => boolean
 }
 
 /**
@@ -404,9 +404,9 @@ export interface CustomLinkage extends BaseLinkage {
    * @param updateParam - 更新参数值的函数
    */
   handler: (
-    triggerValue: any,
-    allParams: Record<string, any>,
-    updateParam: (paramId: string, value: any) => void
+    triggerValue: DynamicValue,
+    allParams: DynamicValueMap,
+    updateParam: (paramId: string, value: DynamicValue) => void
   ) => void
 }
 

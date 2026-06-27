@@ -8,7 +8,7 @@ interface Sortable {
   createdAt?: number
   name?: string
   type?: string
-  [key: string]: any
+  [key: string]: DynamicValue
 }
 
 /**

@@ -15,7 +15,7 @@ export abstract class ProviderHandler {
     this.providerName = providerName
   }
 
-  async generate(_model: ModelDefinition, _params: Record<string, unknown>): Promise<GenerateResult> {
+  async generate(_model: ModelDefinition, _params: DynamicValueMap): Promise<GenerateResult> {
     throw new Error(`[${this.providerName}] Frontend provider execution is deprecated`) 
   }
 }

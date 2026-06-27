@@ -93,7 +93,7 @@ export const kieSeedream45Model = defineModel({
         ? 'seedream/4.5-text-to-image'
         : 'seedream/4.5-edit'
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       const aspectRatioText = typeof aspectRatio === 'string' ? aspectRatio : ''
       input.aspect_ratio =

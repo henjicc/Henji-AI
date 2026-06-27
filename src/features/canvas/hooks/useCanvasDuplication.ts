@@ -15,7 +15,7 @@ interface UseCanvasDuplicationParams {
   nodes: CanvasNode[]
   edges: CanvasEdge[]
   selectedNodeIds: string[]
-  addNode: (type: CanvasNodeType, position: { x: number; y: number }, data?: Record<string, unknown>) => string
+  addNode: (type: CanvasNodeType, position: { x: number; y: number }, data?: DynamicValueMap) => string
   applyNodesChange: (changes: NodeChange<CanvasNode>[]) => void
   connectNodes: (connection: Connection) => void
   setSelectedNode: (nodeId: string | null) => void
@@ -100,10 +100,10 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
       const sizeMap = new Map<string, { width: number; height: number }>()
       for (const sourceNode of sourceNodes) {
         const data = cloneNodeData(sourceNode.data)
-        if ('isGenerating' in (data as Record<string, unknown>)) {
+        if ('isGenerating' in (data as DynamicValueMap)) {
           (data as { isGenerating?: boolean }).isGenerating = false
         }
-        if ('generationStartedAt' in (data as Record<string, unknown>)) {
+        if ('generationStartedAt' in (data as DynamicValueMap)) {
           (data as { generationStartedAt?: number | null }).generationStartedAt = null
         }
 
@@ -113,7 +113,7 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
             x: sourceNode.position.x + chosenOffset.x + offsetStep * 8,
             y: sourceNode.position.y + chosenOffset.y + offsetStep * 6,
           },
-          { ...(data as Record<string, unknown>) }
+          { ...(data as DynamicValueMap) }
         )
         idMap.set(sourceNode.id, nextNodeId)
         sizeMap.set(nextNodeId, getNodeSize(sourceNode))

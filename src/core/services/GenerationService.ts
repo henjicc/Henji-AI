@@ -41,12 +41,12 @@ export interface GenerationExecutionOptions {
 
 interface PendingProgressSampleContext {
   startedAtMs: number
-  params: Record<string, unknown>
+  params: DynamicValueMap
   source: 'generation' | 'canvas'
   estimate: AiProgressEstimateDto | null
 }
 
-function getErrorMessage(error: unknown): string {
+function getErrorMessage(error: DynamicValue): string {
   if (typeof error === 'string') {
     const trimmed = error.trim()
     return trimmed.length > 0 ? trimmed : 'Generation failed'
@@ -57,7 +57,7 @@ function getErrorMessage(error: unknown): string {
   }
 
   if (error && typeof error === 'object') {
-    const record = error as Record<string, unknown>
+    const record = error as DynamicValueMap
     if (typeof record.message === 'string' && record.message.trim().length > 0) {
       return record.message
     }
@@ -73,7 +73,7 @@ function createRequestId(modelId: string): string {
   return `${modelId}-${suffix}`
 }
 
-function attachUploadRuntimeParams(params: Record<string, unknown>): Record<string, unknown> {
+function attachUploadRuntimeParams(params: DynamicValueMap): DynamicValueMap {
   const uploadService = UploadService.getInstance()
   const next = {
     ...params,
@@ -87,7 +87,7 @@ function attachUploadRuntimeParams(params: Record<string, unknown>): Record<stri
   return next
 }
 
-function formatFailedMetadata(metadata: Record<string, unknown> | undefined): string {
+function formatFailedMetadata(metadata: DynamicValueMap | undefined): string {
   if (!metadata || Object.keys(metadata).length === 0) return ''
   try {
     return `: ${JSON.stringify(metadata)}`
@@ -96,12 +96,12 @@ function formatFailedMetadata(metadata: Record<string, unknown> | undefined): st
   }
 }
 
-function isStringArray(value: unknown): value is string[] {
+function isStringArray(value: DynamicValue): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-function getFirstImageSource(params: Record<string, unknown>): string | null {
-  const candidates: unknown[] = [params.images, params.uploadedFilePaths]
+function getFirstImageSource(params: DynamicValueMap): string | null {
+  const candidates: DynamicValue[] = [params.images, params.uploadedFilePaths]
   for (const candidate of candidates) {
     if (!isStringArray(candidate)) {
       continue
@@ -133,7 +133,7 @@ interface SmartAspectResolutionReport {
 }
 
 interface SmartAspectNormalizationResult {
-  params: Record<string, unknown>
+  params: DynamicValueMap
   report: {
     hasReferenceImage: boolean
     hasImageInput: boolean
@@ -146,7 +146,7 @@ interface SmartAspectNormalizationResult {
 }
 
 interface ResolutionPreprocessSummary {
-  mode: 'smart' | 'fixed' | 'unknown'
+  mode: 'smart' | 'fixed' | 'DynamicValue'
   aspectRatio?: string
   quality?: string
   width?: number
@@ -156,7 +156,7 @@ interface ResolutionPreprocessSummary {
 
 function resolveChoiceSmartAspectValues(
   model: ModelDefinition,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   hasReferenceImage: boolean,
   targetRatio: number
 ): SmartAspectResolutionReport {
@@ -234,9 +234,9 @@ async function readImageRatio(imageSource: string): Promise<number | null> {
 
 async function normalizeSmartAspectParams(
   model: ModelDefinition,
-  params: Record<string, unknown>
+  params: DynamicValueMap
 ): Promise<SmartAspectNormalizationResult> {
-  const nextParams: Record<string, unknown> = { ...params }
+  const nextParams: DynamicValueMap = { ...params }
   const firstImageSource = getFirstImageSource(nextParams)
   const hasImageInput = typeof firstImageSource === 'string' && firstImageSource.trim().length > 0
   const imageRatio = firstImageSource ? await readImageRatio(firstImageSource) : null
@@ -265,21 +265,21 @@ async function normalizeSmartAspectParams(
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function getNumberValue(value: unknown): number | undefined {
+function getNumberValue(value: DynamicValue): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function getStringValue(value: unknown): string | undefined {
+function getStringValue(value: DynamicValue): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined
 }
 
 function buildResolutionPreprocessSummary(
-  sourceParams: Record<string, unknown>,
-  runtimeParams: Record<string, unknown>
+  sourceParams: DynamicValueMap,
+  runtimeParams: DynamicValueMap
 ): ResolutionPreprocessSummary | null {
   const resolution = isRecord(sourceParams.resolution) ? sourceParams.resolution : null
   if (!resolution) {
@@ -313,7 +313,7 @@ function buildResolutionPreprocessSummary(
   }
 
   return {
-    mode: 'unknown',
+    mode: 'DynamicValue',
     quality,
     width,
     height,
@@ -321,23 +321,23 @@ function buildResolutionPreprocessSummary(
   }
 }
 
-function countNonEmptyStringItems(value: unknown): number {
+function countNonEmptyStringItems(value: DynamicValue): number {
   if (!Array.isArray(value)) {
     return 0
   }
   return value.filter((item) => typeof item === 'string' && item.trim().length > 0).length
 }
 
-function hasPromptInput(params: Record<string, unknown>): boolean {
+function hasPromptInput(params: DynamicValueMap): boolean {
   const candidates = [params.prompt, params.text]
   return candidates.some((candidate) => typeof candidate === 'string' && candidate.trim().length > 0)
 }
 
 function buildGeneratePreflightSummary(
-  sourceParams: Record<string, unknown>,
-  runtimeParams: Record<string, unknown>,
+  sourceParams: DynamicValueMap,
+  runtimeParams: DynamicValueMap,
   normalization: SmartAspectNormalizationResult['report']
-): Record<string, unknown> {
+): DynamicValueMap {
   const imagesCount = countNonEmptyStringItems(runtimeParams.images)
   const videosCount = countNonEmptyStringItems(runtimeParams.videos)
   const uploadedImagePathCount = countNonEmptyStringItems(runtimeParams.uploadedFilePaths)
@@ -373,7 +373,7 @@ function buildGeneratePreflightSummary(
 
 function recordRuntimeTrace(
   modelId: string,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   trace: AiGenerateResponseDto['trace']
 ): void {
   if (!trace) {
@@ -430,13 +430,13 @@ export class GenerationService {
 
   async generate(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
     const requestId = createRequestId(modelId)
-    const sourceParams = params as Record<string, unknown>
+    const sourceParams = params as DynamicValueMap
     const progressSource = options.progressSource ?? 'generation'
     const startedAtMs = Date.now()
 
@@ -561,7 +561,7 @@ export class GenerationService {
 
   async generateImage(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -570,7 +570,7 @@ export class GenerationService {
 
   async generateVideo(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -579,7 +579,7 @@ export class GenerationService {
 
   async generateAudio(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -589,7 +589,7 @@ export class GenerationService {
   async continuePolling(
     modelId: string,
     taskId: string,
-    params: Record<string, unknown> = {},
+    params: DynamicValueMap = {},
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -758,7 +758,7 @@ export class GenerationService {
 
   async getProgressEstimate(
     modelId: string,
-    params: Record<string, unknown>
+    params: DynamicValueMap
   ): Promise<AiProgressEstimateDto | null> {
     try {
       return await aiGetProgressEstimate({
@@ -776,7 +776,7 @@ export class GenerationService {
 
   private async recordProgressSample(
     modelId: string,
-    params: Record<string, unknown>,
+    params: DynamicValueMap,
     startedAtMs: number,
     finishedAtMs: number,
     source: 'generation' | 'canvas'
@@ -821,7 +821,7 @@ export class GenerationService {
   private buildProgressTimingContext(
     estimate: AiProgressEstimateDto | null,
     recorded: AiRecordProgressSampleResponseDto | null
-  ): Record<string, unknown> {
+  ): DynamicValueMap {
     return {
       estimatedDurationMs: estimate?.durationMs,
       estimatedSource: estimate?.source,

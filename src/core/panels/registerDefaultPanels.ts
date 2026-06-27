@@ -1,6 +1,3 @@
-import { createLogger } from '@/core/logging'
-
-const logger = createLogger('core.panels.registerDefaultPanels')
 /**
  * 注册默认面板
  *
@@ -40,10 +37,5 @@ export function registerDefaultPanels(): void {
 
   // 注册 MiniMax 音色克隆面板
   panelRegistry.register('minimax-voice-clone', MinimaxVoiceClonePanel)
-
-  // 开发模式下输出注册信息
-  if (import.meta.env.DEV) {
-    // logger.info('[PanelRegistry] Registered panels:', panelRegistry.listRegistered())
-  }
 }
 

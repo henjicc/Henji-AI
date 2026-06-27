@@ -109,7 +109,7 @@ export const hailuo02Model = defineModel({
       const duration = params.falHailuo02Duration || '6'
       const promptOptimizer = params.falHailuo02PromptOptimizer !== false
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
 
       if (promptOptimizer !== undefined) {
         requestData.prompt_optimizer = promptOptimizer

@@ -26,17 +26,17 @@ const SUPPORTED_WAN25_SIZES = new Set([
 ])
 const SUPPORTED_WAN25_RESOLUTIONS = new Set(['480P', '720P', '1080P'])
 
-function resolveBoolean(value: unknown, fallback: boolean): boolean {
+function resolveBoolean(value: DynamicValue, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
 }
 
-function resolveDuration(value: unknown): 5 | 10 {
+function resolveDuration(value: DynamicValue): 5 | 10 {
   return value === 10 ? 10 : 5
 }
 
 function resolveSupportedValue(
-  preferred: unknown,
-  legacy: unknown,
+  preferred: DynamicValue,
+  legacy: DynamicValue,
   supportedValues: ReadonlySet<string>,
   fallback: string
 ): string {

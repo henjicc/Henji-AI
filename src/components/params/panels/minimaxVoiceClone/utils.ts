@@ -7,25 +7,25 @@ import {
   type MinimaxVoiceClonePanelValue,
 } from './types'
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function normalizeString(value: unknown): string {
+export function normalizeString(value: DynamicValue): string {
   if (typeof value !== 'string') {
     return ''
   }
   return value.trim()
 }
 
-export function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+export function normalizeBoolean(value: DynamicValue, fallback: boolean): boolean {
   if (typeof value === 'boolean') {
     return value
   }
   return fallback
 }
 
-export function normalizeNumber(value: unknown, fallback: number): number {
+export function normalizeNumber(value: DynamicValue, fallback: number): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(parsed)) {
     return fallback
@@ -33,7 +33,7 @@ export function normalizeNumber(value: unknown, fallback: number): number {
   return parsed
 }
 
-export function normalizeValue(value: unknown): MinimaxVoiceClonePanelValue {
+export function normalizeValue(value: DynamicValue): MinimaxVoiceClonePanelValue {
   const record = isRecord(value) ? value : {}
   return {
     voiceName: normalizeString(record.voiceName),
@@ -93,7 +93,7 @@ export function toDisplayAudioSrc(value: string): string {
   return toDisplaySrc(source.replace(/\\/g, '/'))
 }
 
-export function extractVoiceId(metadata: unknown): string {
+export function extractVoiceId(metadata: DynamicValue): string {
   if (!isRecord(metadata)) {
     return ''
   }
@@ -117,7 +117,7 @@ export function extractVoiceId(metadata: unknown): string {
 export function extractPreviewAudioUrl(result: GenerateResult): string {
   const metadata = result.metadata
   if (isRecord(metadata)) {
-    const candidates: unknown[] = [
+    const candidates: DynamicValue[] = [
       metadata.demo_audio_url,
       metadata.audio_url,
       metadata.audio,

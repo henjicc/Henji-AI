@@ -21,9 +21,9 @@ interface InputAreaProps {
   promptRedoTriggerValue?: string | null
   promptRedoReplacementValue?: string | null
   onRedoPromptReplacement?: () => void
-  currentModel: any
+  currentModel: DynamicValue
   selectedModel: string
-  modelParams: Record<string, unknown>
+  modelParams: DynamicValueMap
   uploadedImages: string[]
   isLoading: boolean
   isGenerating?: boolean

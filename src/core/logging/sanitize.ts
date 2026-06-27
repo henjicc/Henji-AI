@@ -5,7 +5,7 @@ const LONG_STRING_TAIL = 80
 
 const SENSITIVE_KEY_PARTS = ['apikey', 'api_key', 'authorization', 'token', 'secret', 'password']
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -25,7 +25,7 @@ function sanitizeString(value: string): string {
   return `${value.slice(0, LONG_STRING_HEAD)}...(len=${value.length})...${value.slice(-LONG_STRING_TAIL)}`
 }
 
-function sanitizeSensitiveValue(value: unknown): unknown {
+function sanitizeSensitiveValue(value: DynamicValue): DynamicValue {
   if (typeof value === 'string') {
     if (value.startsWith('Bearer ')) {
       return `Bearer ${maskText(value.slice(7))}`
@@ -35,7 +35,7 @@ function sanitizeSensitiveValue(value: unknown): unknown {
   return '***'
 }
 
-function sanitizeUnknown(value: unknown, depth: number): unknown {
+function sanitizeUnknown(value: DynamicValue, depth: number): DynamicValue {
   if (depth >= MAX_DEPTH) {
     return '[depth-limited]'
   }
@@ -65,7 +65,7 @@ function sanitizeUnknown(value: unknown, depth: number): unknown {
   }
 
   if (isRecord(value)) {
-    const result: Record<string, unknown> = {}
+    const result: DynamicValueMap = {}
 
     Object.entries(value).forEach(([key, nested]) => {
       const lowerKey = key.toLowerCase()
@@ -82,6 +82,6 @@ function sanitizeUnknown(value: unknown, depth: number): unknown {
   return String(value)
 }
 
-export function sanitizeLogPayload(value: unknown): unknown {
+export function sanitizeLogPayload(value: DynamicValue): DynamicValue {
   return sanitizeUnknown(value, 0)
 }

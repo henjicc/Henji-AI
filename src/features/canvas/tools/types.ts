@@ -43,7 +43,7 @@ export interface ToolExecutionContext {
   processTool: (
     toolType: NodeToolType,
     sourceImageUrl: string,
-    options: Record<string, unknown>
+    options: DynamicValueMap
   ) => Promise<ToolProcessorResult>;
 }
 

@@ -107,7 +107,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     ? providerKeyStatus[selectedModel.meta.provider] === true
     : false
 
-  const handleParamsChange = useCallback((nextParams: Record<string, unknown>) => {
+  const handleParamsChange = useCallback((nextParams: DynamicValueMap) => {
     updateNodeData(id, { params: nextParams })
   }, [id, updateNodeData])
 
@@ -227,12 +227,12 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       return
     }
 
-    const generationParams: Record<string, unknown> = {
+    const generationParams: DynamicValueMap = {
       ...modelParamValues,
       prompt,
       text: prompt,
     }
-    const estimateParams: Record<string, unknown> = {
+    const estimateParams: DynamicValueMap = {
       ...generationParams,
       ...(incomingImages.length > 0
         ? {

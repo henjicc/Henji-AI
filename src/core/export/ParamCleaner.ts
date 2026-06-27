@@ -20,10 +20,10 @@ export class ParamCleaner {
    * @returns 清理后的参数
    */
   clean(
-    params: Record<string, any>,
+    params: DynamicValueMap,
     options: CleanOptions = {},
     schema?: ParamDef[]
-  ): Record<string, any> {
+  ): DynamicValueMap {
     let result = { ...params }
 
     // 1. 移除默认值
@@ -56,8 +56,8 @@ export class ParamCleaner {
    * @param schema - 参数 Schema
    * @returns 移除默认值后的参数
    */
-  removeDefaults(params: Record<string, any>, schema: ParamDef[]): Record<string, any> {
-    const result: Record<string, any> = {}
+  removeDefaults(params: DynamicValueMap, schema: ParamDef[]): DynamicValueMap {
+    const result: DynamicValueMap = {}
 
     for (const [key, value] of Object.entries(params)) {
       const paramDef = schema.find((p) => p.id === key)
@@ -86,8 +86,8 @@ export class ParamCleaner {
    * @param params - 参数对象
    * @returns 移除空值后的参数
    */
-  removeEmpty(params: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {}
+  removeEmpty(params: DynamicValueMap): DynamicValueMap {
+    const result: DynamicValueMap = {}
 
     for (const [key, value] of Object.entries(params)) {
       // 跳过 null, undefined, 空字符串, 空数组
@@ -112,8 +112,8 @@ export class ParamCleaner {
    * @param params - 参数对象
    * @returns 移除敏感信息后的参数
    */
-  removeSensitive(params: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {}
+  removeSensitive(params: DynamicValueMap): DynamicValueMap {
+    const result: DynamicValueMap = {}
     const sensitiveKeys = ['apiKey', 'api_key', 'token', 'password', 'secret']
 
     for (const [key, value] of Object.entries(params)) {
@@ -138,8 +138,8 @@ export class ParamCleaner {
    * @param params - 参数对象
    * @returns 移除 Base64 数据后的参数
    */
-  removeBase64(params: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {}
+  removeBase64(params: DynamicValueMap): DynamicValueMap {
+    const result: DynamicValueMap = {}
 
     for (const [key, value] of Object.entries(params)) {
       if (typeof value === 'string' && this.isBase64(value)) {
@@ -158,7 +158,7 @@ export class ParamCleaner {
    * @param paramDef - 参数定义
    * @returns 默认值
    */
-  private getDefaultValue(paramDef: ParamDef): any {
+  private getDefaultValue(paramDef: ParamDef): DynamicValue {
     if ('defaultValue' in paramDef) {
       return paramDef.defaultValue
     }
@@ -172,7 +172,7 @@ export class ParamCleaner {
    * @param b - 值 B
    * @returns 是否相等
    */
-  private isEqual(a: any, b: any): boolean {
+  private isEqual(a: DynamicValue, b: DynamicValue): boolean {
     if (a === b) return true
     if (a == null || b == null) return false
     if (typeof a !== typeof b) return false

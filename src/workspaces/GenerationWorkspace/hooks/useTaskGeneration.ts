@@ -51,7 +51,7 @@ export interface UseTaskGenerationParams {
 
 export interface UseTaskGenerationReturn {
   isGenerating: boolean
-  handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
+  handleGenerate: (input: string, model: string, type: MediaType, options?: DynamicValue) => Promise<void>
   handleContinuePolling: (task: GenerationTask) => Promise<void>
 }
 
@@ -59,12 +59,12 @@ function createTaskId(): string {
   return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function getUserMessage(error: unknown): string {
+function getUserMessage(error: DynamicValue): string {
   if (error instanceof Error) return error.message
   return String(error)
 }
 
-function maybeToUserMessage(error: unknown): string {
+function maybeToUserMessage(error: DynamicValue): string {
   if (!isRecord(error)) return getUserMessage(error)
   const toUserMessage = error['toUserMessage']
   if (typeof toUserMessage === 'function') {
@@ -77,7 +77,7 @@ function maybeToUserMessage(error: unknown): string {
   return getUserMessage(error)
 }
 
-function asGeneratorOptions(value: unknown): GeneratorOptions {
+function asGeneratorOptions(value: DynamicValue): GeneratorOptions {
   return isRecord(value) ? (value as GeneratorOptions) : {}
 }
 
@@ -100,7 +100,7 @@ function classifyMediaSourceKind(source: string): string {
   return 'other'
 }
 
-function summarizeMediaSources(values: unknown): Array<Record<string, unknown>> {
+function summarizeMediaSources(values: DynamicValue): Array<DynamicValueMap> {
   if (!isStringArray(values)) {
     return []
   }
@@ -115,7 +115,7 @@ function summarizeMediaSources(values: unknown): Array<Record<string, unknown>> 
   }))
 }
 
-function isFileValue(value: unknown): value is File {
+function isFileValue(value: DynamicValue): value is File {
   return typeof File !== 'undefined' && value instanceof File
 }
 
@@ -135,7 +135,7 @@ function isLikelyVideoSource(value: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)
 }
 
-function normalizeNonEmptyString(value: unknown): string | undefined {
+function normalizeNonEmptyString(value: DynamicValue): string | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -147,14 +147,14 @@ function isMinimaxVoiceCloneMode(options: GeneratorOptions): boolean {
   return options.minimaxMode === 'voice-clone'
 }
 
-function asMutableRecord(value: unknown): Record<string, unknown> {
+function asMutableRecord(value: DynamicValue): DynamicValueMap {
   if (isRecord(value)) {
     return { ...value }
   }
   return {}
 }
 
-function extractVoiceIdFromMetadata(metadata: unknown): string | undefined {
+function extractVoiceIdFromMetadata(metadata: DynamicValue): string | undefined {
   if (!isRecord(metadata)) {
     return undefined
   }
@@ -180,7 +180,7 @@ function extractVoiceIdFromMetadata(metadata: unknown): string | undefined {
 async function persistClonedVoiceIfNeeded(
   task: GenerationTask,
   options: GeneratorOptions,
-  metadata: unknown
+  metadata: DynamicValue
 ): Promise<void> {
   if (task.provider !== 'ppio' || !isMinimaxVoiceCloneMode(options)) {
     return
@@ -223,9 +223,9 @@ export function useTaskGeneration({
     input: string,
     options: GeneratorOptions,
     onProgress?: GenerationProgressCallback
-  ): Promise<unknown> => {
+  ): Promise<DynamicValue> => {
     const generationService = GenerationService.getInstance()
-    const params: Record<string, unknown> = {
+    const params: DynamicValueMap = {
       prompt: input,
       text: input,
       ...options,
@@ -253,14 +253,14 @@ export function useTaskGeneration({
         if (typeof options.video !== 'string' || options.video.trim().length === 0) {
           options.video = videoUrls[0]
         }
-        const mutableOptions = options as Record<string, unknown>
+        const mutableOptions = options as DynamicValueMap
         mutableOptions.uploadedVideos = options.videos
 
       }
       if (task.uploadedAudioFilePaths && task.uploadedAudioFilePaths.length > 0) {
         const audioUrls = task.uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p))
         options.audios = await Promise.all(audioUrls)
-        const mutableOptions = options as Record<string, unknown>
+        const mutableOptions = options as DynamicValueMap
         mutableOptions.uploadedAudios = options.audios
       }
 
@@ -276,7 +276,7 @@ export function useTaskGeneration({
       }
 
       const result = await generateWithService(task.model, task.prompt, options, handleProgress)
-      const resultObj: Record<string, unknown> = isRecord(result) ? result : {}
+      const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
       const serverTaskId = extractServerTaskIdFromMetadata(metadata)
         ?? (typeof resultObj['taskId'] === 'string' ? resultObj['taskId'] : undefined)
@@ -380,7 +380,7 @@ export function useTaskGeneration({
     input: string,
     model: string,
     type: MediaType,
-    optionsRaw?: unknown
+    optionsRaw?: DynamicValue
   ): Promise<void> => {
     const options = asGeneratorOptions(optionsRaw)
 
@@ -459,7 +459,7 @@ export function useTaskGeneration({
       const videoSourceUrls = uploadedVideoFilePaths.map(toVideoDisplayUrl)
       options.uploadedVideoFilePaths = uploadedVideoFilePaths
       options.videos = videoSourceUrls
-      ;(options as Record<string, unknown>).uploadedVideos = videoSourceUrls
+      ;(options as DynamicValueMap).uploadedVideos = videoSourceUrls
       options.video = videoSourceUrls[0]
     }
 
@@ -467,7 +467,7 @@ export function useTaskGeneration({
       const audioSourceUrls = await Promise.all(uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p)))
       options.uploadedAudioFilePaths = uploadedAudioFilePaths
       options.audios = audioSourceUrls
-      ;(options as Record<string, unknown>).uploadedAudios = audioSourceUrls
+      ;(options as DynamicValueMap).uploadedAudios = audioSourceUrls
     }
 
     const sanitizedVideos = isStringArray(options.videos)
@@ -475,13 +475,13 @@ export function useTaskGeneration({
       : []
     if (sanitizedVideos.length > 0) {
       options.videos = sanitizedVideos
-      ;(options as Record<string, unknown>).uploadedVideos = sanitizedVideos
+      ;(options as DynamicValueMap).uploadedVideos = sanitizedVideos
       if (typeof options.video !== 'string' || options.video.trim().length === 0) {
         options.video = sanitizedVideos[0]
       }
     } else {
       delete options.videos
-      delete (options as Record<string, unknown>).uploadedVideos
+      delete (options as DynamicValueMap).uploadedVideos
       if (typeof options.video === 'string' && !isLikelyVideoSource(options.video)) {
         delete options.video
       }
@@ -489,10 +489,10 @@ export function useTaskGeneration({
 
     if (!isStringArray(options.audios) || options.audios.length === 0) {
       delete options.audios
-      delete (options as Record<string, unknown>).uploadedAudios
+      delete (options as DynamicValueMap).uploadedAudios
     } else {
       options.audios = options.audios.filter((item) => typeof item === 'string' && item.trim().length > 0)
-      ;(options as Record<string, unknown>).uploadedAudios = options.audios
+      ;(options as DynamicValueMap).uploadedAudios = options.audios
     }
 
     if (isMinimaxVoiceCloneMode(options)) {
@@ -561,7 +561,7 @@ export function useTaskGeneration({
     }
 
     // 供应商信息（用于历史）
-    const info: unknown = registry.getModelInfo(model)
+    const info: DynamicValue = registry.getModelInfo(model)
     const providerId = isRecord(info) && typeof info['provider'] === 'string' ? info['provider'] : undefined
 
     // 视频缩略图：优先使用视频文件 URL，避免 <video> 无法渲染 base64 缩略图第一帧

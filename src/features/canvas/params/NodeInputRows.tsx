@@ -24,15 +24,15 @@ interface NodeInputRowsProps {
   /** 该节点声明可接受的媒体类型（来自 ports.target.accepts，已过滤为 image/video/audio） */
   acceptedMediaKinds: RowMediaKind[];
   schema: ParamDef[];
-  values: Record<string, unknown>;
-  setParam: (key: string, value: unknown) => void;
+  values: DynamicValueMap;
+  setParam: (key: string, value: DynamicValue) => void;
   excludeParamIds?: string[];
   mediaInputs: Partial<Record<RowMediaKind, string[]>>;
   onMediaInputChange: (kind: RowMediaKind, next: string[]) => void;
   overrideModelId: string | null;
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (params: Record<string, unknown>) => void;
+  onParamsChange: (params: DynamicValueMap) => void;
   incomingImages?: string[];
 }
 

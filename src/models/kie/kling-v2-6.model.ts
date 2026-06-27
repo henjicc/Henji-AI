@@ -94,9 +94,9 @@ export const kieKlingV26Model = defineModel({
       name: sharedFieldText('aspectRatio'),
       default: '16:9',
       visible: {
-        condition: (params: Record<string, unknown>) =>
+        condition: (params: DynamicValueMap) =>
           params.kieKlingV26Mode !== 'motion-control' &&
-          ((params.uploadedImages as unknown[] | undefined)?.length ?? 0) === 0
+          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
       },
       options: [
         { value: '16:9', label: '16:9' },
@@ -183,7 +183,7 @@ export const kieKlingV26Model = defineModel({
         ? 'kling-2.6/image-to-video'
         : 'kling-2.6/text-to-video'
 
-      const input: Record<string, unknown> = {
+      const input: DynamicValueMap = {
         prompt,
         duration: String(duration),
         sound: enableAudio

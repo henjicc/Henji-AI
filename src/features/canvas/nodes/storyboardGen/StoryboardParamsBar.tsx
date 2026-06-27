@@ -16,12 +16,12 @@ interface StoryboardParamsBarProps {
   frameLayout: StoryboardFrameLayout
   modelId: string
   providerId: string
-  storedParams: Record<string, unknown> | undefined
+  storedParams: DynamicValueMap | undefined
   /** 默认值合并后的运行时参数（用于价格估算） */
-  mergedParams: Record<string, unknown>
+  mergedParams: DynamicValueMap
   incomingImages: string[]
   onModelChange: (modelId: string) => void
-  onParamsChange: (nextParams: Record<string, unknown>) => void
+  onParamsChange: (nextParams: DynamicValueMap) => void
   onGenerate: () => void
 }
 

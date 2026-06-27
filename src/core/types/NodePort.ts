@@ -37,7 +37,7 @@ export interface InputPort {
   required: boolean
 
   /** 默认值 */
-  default?: any
+  default?: DynamicValue
 
   /** 描述 */
   description?: I18nText

@@ -268,7 +268,7 @@ export function Canvas() {
   );
 
   const handleMoveEnd = useCallback(
-    (_event: unknown, viewport: Viewport) => {
+    (_event: DynamicValue, viewport: Viewport) => {
       setViewportState(viewport);
       const project = getCurrentProject();
       if (!project || isRestoringCanvasRef.current) {
@@ -280,7 +280,7 @@ export function Canvas() {
   );
 
   const handleMove = useCallback(
-    (_event: unknown, viewport: Viewport) => {
+    (_event: DynamicValue, viewport: Viewport) => {
       setViewportState(viewport);
     },
     [setViewportState]

@@ -2,10 +2,10 @@ import { LinkageEngine } from '@/core/linkage'
 import type { ParamDef } from '@/core/types'
 import { evaluateCondition } from '@/core/validation/conditionEvaluator'
 
-type ParamValueMap = Record<string, unknown>
+type ParamValueMap = DynamicValueMap
 
-function asRuntimeParams(values: ParamValueMap): Record<string, any> {
-  return values as Record<string, any>
+function asRuntimeParams(values: ParamValueMap): DynamicValueMap {
+  return values as DynamicValueMap
 }
 
 export function isParamVisible(

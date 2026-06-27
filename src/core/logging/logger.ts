@@ -7,22 +7,22 @@ import { listenLlmRuntimeRequestPreview, listenRuntimeRequestPreview } from '@/c
 import { isDesktopRuntime } from '@/platform/runtime'
 
 export interface Logger {
-  trace: (...args: unknown[]) => void
-  debug: (...args: unknown[]) => void
-  info: (...args: unknown[]) => void
-  warn: (...args: unknown[]) => void
-  error: (...args: unknown[]) => void
-  table: (...args: unknown[]) => void
-  group: (...args: unknown[]) => void
-  groupCollapsed: (...args: unknown[]) => void
-  groupEnd: (...args: unknown[]) => void
-  child: (subDomain: string, context?: Record<string, unknown>) => Logger
-  withContext: (context: Record<string, unknown>) => Logger
+  trace: (...args: DynamicValue[]) => void
+  debug: (...args: DynamicValue[]) => void
+  info: (...args: DynamicValue[]) => void
+  warn: (...args: DynamicValue[]) => void
+  error: (...args: DynamicValue[]) => void
+  table: (...args: DynamicValue[]) => void
+  group: (...args: DynamicValue[]) => void
+  groupCollapsed: (...args: DynamicValue[]) => void
+  groupEnd: (...args: DynamicValue[]) => void
+  child: (subDomain: string, context?: DynamicValueMap) => Logger
+  withContext: (context: DynamicValueMap) => Logger
 }
 
 interface LoggerContext {
   domain: string
-  context: Record<string, unknown>
+  context: DynamicValueMap
 }
 
 const META_KEYS = new Set(['event', 'requestId', 'taskId', 'modelId', 'providerId', 'context', 'error'])
@@ -52,11 +52,11 @@ let loggerConfigInitialized = false
 let runtimePreviewUnlisten: (() => void) | null = null
 let llmRuntimePreviewUnlisten: (() => void) | null = null
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function mergeContextValue(base: unknown, extra: Record<string, unknown>): unknown {
+function mergeContextValue(base: DynamicValue, extra: DynamicValueMap): DynamicValue {
   if (base === undefined) {
     return extra
   }
@@ -74,13 +74,13 @@ function mergeContextValue(base: unknown, extra: Record<string, unknown>): unkno
   }
 }
 
-function pickMetaFromRecord(value: Record<string, unknown>): {
+function pickMetaFromRecord(value: DynamicValueMap): {
   hasMeta: boolean
   meta: LogCallMeta
-  extraContext?: Record<string, unknown>
+  extraContext?: DynamicValueMap
 } {
   const meta: LogCallMeta = {}
-  const extraContext: Record<string, unknown> = {}
+  const extraContext: DynamicValueMap = {}
   let hasMeta = false
 
   Object.entries(value).forEach(([key, nested]) => {
@@ -126,7 +126,7 @@ function pickMetaFromRecord(value: Record<string, unknown>): {
   }
 }
 
-function assignMetaFromRecord(target: LogCallMeta, value: Record<string, unknown>): boolean {
+function assignMetaFromRecord(target: LogCallMeta, value: DynamicValueMap): boolean {
   const extracted = pickMetaFromRecord(value)
   if (!extracted.hasMeta) {
     return false
@@ -140,7 +140,7 @@ function assignMetaFromRecord(target: LogCallMeta, value: Record<string, unknown
   return true
 }
 
-function inferMessage(args: unknown[]): string {
+function inferMessage(args: DynamicValue[]): string {
   const [first] = args
   if (typeof first === 'string') {
     return first
@@ -171,7 +171,7 @@ function inferEvent(message: string, level: LogLevel): string {
   return compact.slice(0, 64)
 }
 
-function normalizeMetaFromArgs(level: LogLevel, args: unknown[]): { message: string; meta: LogCallMeta } {
+function normalizeMetaFromArgs(level: LogLevel, args: DynamicValue[]): { message: string; meta: LogCallMeta } {
   const message = inferMessage(args)
   const rest = typeof args[0] === 'string' ? args.slice(1) : args
 
@@ -254,7 +254,7 @@ function toBridgePayload(event: LogEvent): LogEventBridgeDto {
   }
 }
 
-function normalizeSyntheticLogArgs(kind: 'table' | 'group' | 'group_collapsed' | 'group_end', args: unknown[]): unknown[] {
+function normalizeSyntheticLogArgs(kind: 'table' | 'group' | 'group_collapsed' | 'group_end', args: DynamicValue[]): DynamicValue[] {
   if (kind === 'group_end') {
     return ['group_end', { event: 'log.group_end' }]
   }
@@ -325,11 +325,11 @@ function getConsoleTitle(eventName: string, level: LogLevel, message: string): s
   return getLevelLabel(level)
 }
 
-function isEmptyRecord(value: unknown): boolean {
+function isEmptyRecord(value: DynamicValue): boolean {
   return isRecord(value) && Object.keys(value).length === 0
 }
 
-function toPrettyJson(value: unknown): string {
+function toPrettyJson(value: DynamicValue): string {
   try {
     return JSON.stringify(value, null, 2)
   } catch {
@@ -359,7 +359,7 @@ function compactRuntimeString(value: string): string {
   return value
 }
 
-function compactRuntimePayload(value: unknown, depth = 0): unknown {
+function compactRuntimePayload(value: DynamicValue, depth = 0): DynamicValue {
   if (depth > 8) {
     return '[depth-limited]'
   }
@@ -373,7 +373,7 @@ function compactRuntimePayload(value: unknown, depth = 0): unknown {
   }
 
   if (isRecord(value)) {
-    const next: Record<string, unknown> = {}
+    const next: DynamicValueMap = {}
     Object.entries(value).forEach(([key, nested]) => {
       next[key] = compactRuntimePayload(nested, depth + 1)
     })
@@ -383,15 +383,15 @@ function compactRuntimePayload(value: unknown, depth = 0): unknown {
   return value
 }
 
-function getStringValue(value: unknown): string | undefined {
+function getStringValue(value: DynamicValue): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined
 }
 
-function getNumberValue(value: unknown): number | undefined {
+function getNumberValue(value: DynamicValue): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function getBooleanValue(value: unknown): boolean | undefined {
+function getBooleanValue(value: DynamicValue): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined
 }
 
@@ -408,7 +408,7 @@ function formatSmartAspectReason(reason: string | undefined): string {
   return '自动处理'
 }
 
-function formatDurationMsLabel(value: unknown): string | null {
+function formatDurationMsLabel(value: DynamicValue): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return null
   }
@@ -416,14 +416,14 @@ function formatDurationMsLabel(value: unknown): string | null {
   return `${seconds.toFixed(seconds >= 10 ? 1 : 2)}s`
 }
 
-function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | null {
+function buildGenerateStartDetail(event: LogEvent): DynamicValueMap | null {
   const context = isRecord(event.context) ? event.context : {}
   const preflight = isRecord(context['preflight']) ? context['preflight'] : null
   if (!preflight) {
     return null
   }
 
-  const detail: Record<string, unknown> = {}
+  const detail: DynamicValueMap = {}
   const lines: string[] = []
 
   const smartAspect = isRecord(preflight['smartAspect']) ? preflight['smartAspect'] : null
@@ -445,11 +445,11 @@ function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | nu
           if (!isRecord(item)) {
             return null
           }
-          const paramId = getStringValue(item['paramId']) || 'unknown'
+          const paramId = getStringValue(item['paramId']) || 'DynamicValue'
           const from = item['from']
           const to = item['to']
           const fromText = typeof from === 'string' || typeof from === 'number' ? String(from) : 'smart'
-          const toText = typeof to === 'string' || typeof to === 'number' ? String(to) : 'unknown'
+          const toText = typeof to === 'string' || typeof to === 'number' ? String(to) : 'DynamicValue'
           return `${paramId}: ${fromText} -> ${toText} (${formatSmartAspectReason(getStringValue(item['reason']))})`
         })
         .filter((item): item is string => Boolean(item))
@@ -479,7 +479,7 @@ function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | nu
     ? preflight['resolutionPreprocess']
     : null
   if (resolutionPreprocess) {
-    const mode = getStringValue(resolutionPreprocess['mode']) || 'unknown'
+    const mode = getStringValue(resolutionPreprocess['mode']) || 'DynamicValue'
     const aspectRatio = getStringValue(resolutionPreprocess['aspectRatio']) || '-'
     const quality = getStringValue(resolutionPreprocess['quality']) || '-'
     const width = getNumberValue(resolutionPreprocess['width'])
@@ -512,7 +512,7 @@ function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | nu
 
   const uploadStrategy = isRecord(preflight['uploadStrategy']) ? preflight['uploadStrategy'] : null
   if (uploadStrategy) {
-    const provider = getStringValue(uploadStrategy['provider']) || 'unknown'
+    const provider = getStringValue(uploadStrategy['provider']) || 'DynamicValue'
     const fallbackEnabled = getBooleanValue(uploadStrategy['fallbackEnabled']) ?? false
     lines.push(`📤 上传策略: ${provider} | fallback ${fallbackEnabled ? '开启' : '关闭'}`)
   }
@@ -520,7 +520,7 @@ function buildGenerateStartDetail(event: LogEvent): Record<string, unknown> | nu
   const progressEstimate = isRecord(context['progressEstimate']) ? context['progressEstimate'] : null
   if (progressEstimate) {
     const durationLabel = formatDurationMsLabel(getNumberValue(progressEstimate['durationMs']))
-    const source = getStringValue(progressEstimate['source']) || 'unknown'
+    const source = getStringValue(progressEstimate['source']) || 'DynamicValue'
     const globalCount = getNumberValue(progressEstimate['globalSampleCount']) ?? 0
     const bucketCount = getNumberValue(progressEstimate['bucketSampleCount']) ?? 0
     const recentGlobal = Array.isArray(progressEstimate['recentGlobalDurationsMs'])
@@ -577,7 +577,7 @@ function buildConsoleHead(event: LogEvent): string {
   return `[HenjiLog] ${segments.join(' | ')}`
 }
 
-function buildConsoleDetail(event: LogEvent): Record<string, unknown> | null {
+function buildConsoleDetail(event: LogEvent): DynamicValueMap | null {
   if (event.event === 'generation.generate.start') {
     return buildGenerateStartDetail(event)
   }
@@ -635,7 +635,7 @@ function buildConsoleDetail(event: LogEvent): Record<string, unknown> | null {
   if (event.event === 'generation.runtime.response_json') {
     const context = isRecord(event.context) ? event.context : {}
     const responseBody = compactRuntimePayload(context['responseBody'])
-    const detail: Record<string, unknown> = {
+    const detail: DynamicValueMap = {
       'API原始响应(JSON)': toPrettyJson(responseBody ?? null),
     }
     if (typeof context['phase'] === 'string') {
@@ -654,7 +654,7 @@ function buildConsoleDetail(event: LogEvent): Record<string, unknown> | null {
     return null
   }
 
-  const detail: Record<string, unknown> = {
+  const detail: DynamicValueMap = {
     事件: event.event,
     域: event.domain,
     时间: event.timestamp,
@@ -716,7 +716,7 @@ function writeToConsole(event: LogEvent): void {
 }
 
 function createInternalLogger(ctx: LoggerContext): Logger {
-  const logAt = (level: LogLevel, args: unknown[]): void => {
+  const logAt = (level: LogLevel, args: DynamicValue[]): void => {
     if (!isDomainEnabled(ctx.domain) || !shouldLogLevel(level)) {
       return
     }
@@ -753,23 +753,23 @@ function createInternalLogger(ctx: LoggerContext): Logger {
   }
 
   const logger: Logger = {
-    trace: (...args: unknown[]) => logAt('trace', args),
-    debug: (...args: unknown[]) => logAt('debug', args),
-    info: (...args: unknown[]) => logAt('info', args),
-    warn: (...args: unknown[]) => logAt('warn', args),
-    error: (...args: unknown[]) => logAt('error', args),
-    table: (...args: unknown[]) => logAt('info', normalizeSyntheticLogArgs('table', args)),
-    group: (...args: unknown[]) => logAt('debug', normalizeSyntheticLogArgs('group', args)),
-    groupCollapsed: (...args: unknown[]) => logAt('debug', normalizeSyntheticLogArgs('group_collapsed', args)),
-    groupEnd: (...args: unknown[]) => logAt('debug', normalizeSyntheticLogArgs('group_end', args)),
-    child: (subDomain: string, context: Record<string, unknown> = {}) => {
+    trace: (...args: DynamicValue[]) => logAt('trace', args),
+    debug: (...args: DynamicValue[]) => logAt('debug', args),
+    info: (...args: DynamicValue[]) => logAt('info', args),
+    warn: (...args: DynamicValue[]) => logAt('warn', args),
+    error: (...args: DynamicValue[]) => logAt('error', args),
+    table: (...args: DynamicValue[]) => logAt('info', normalizeSyntheticLogArgs('table', args)),
+    group: (...args: DynamicValue[]) => logAt('debug', normalizeSyntheticLogArgs('group', args)),
+    groupCollapsed: (...args: DynamicValue[]) => logAt('debug', normalizeSyntheticLogArgs('group_collapsed', args)),
+    groupEnd: (...args: DynamicValue[]) => logAt('debug', normalizeSyntheticLogArgs('group_end', args)),
+    child: (subDomain: string, context: DynamicValueMap = {}) => {
       const nextDomain = subDomain.trim().length > 0 ? `${ctx.domain}.${subDomain}` : ctx.domain
       return createInternalLogger({
         domain: nextDomain,
         context: { ...ctx.context, ...context },
       })
     },
-    withContext: (context: Record<string, unknown>) => {
+    withContext: (context: DynamicValueMap) => {
       return createInternalLogger({
         domain: ctx.domain,
         context: { ...ctx.context, ...context },
@@ -780,7 +780,7 @@ function createInternalLogger(ctx: LoggerContext): Logger {
   return logger
 }
 
-export function createLogger(domain: string, context: Record<string, unknown> = {}): Logger {
+export function createLogger(domain: string, context: DynamicValueMap = {}): Logger {
   const normalizedDomain = domain.trim() || 'app'
   return createInternalLogger({
     domain: normalizedDomain,

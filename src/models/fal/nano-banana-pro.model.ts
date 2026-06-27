@@ -72,7 +72,7 @@ export const nanoBananaProModel = defineModel({
       const images = params.images || []
       const prompt = params.prompt || ''
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
 
       if (params.falNanoBananaProNumImages !== undefined) {
         requestData.num_images = params.falNanoBananaProNumImages

@@ -3,7 +3,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits'
 
 interface UseGlobalPasteImageParams {
   selectedModel: string
-  modelParams: Record<string, unknown>
+  modelParams: DynamicValueMap
   uploadedImagesCount: number
   uploadedVideosCount: number
   handleImageFileUpload: (files: File[], maxImageCount: number) => Promise<void>

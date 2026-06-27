@@ -43,13 +43,13 @@ export interface CustomModelConfig {
   }
 
   request: {
-    baseParams: Record<string, any>
+    baseParams: DynamicValueMap
   }
 
   pricing?: {
     type: 'fixed' | 'dynamic'
     basePrice?: number
-    calculate?: (params: Record<string, any>) => number
+    calculate?: (params: DynamicValueMap) => number
   }
 }
 

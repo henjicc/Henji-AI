@@ -112,13 +112,13 @@ function createDefaultProviderKeyStatus(): ProviderKeyStatusMap {
   }, {});
 }
 
-function normalizeProviderKeyStatus(input: unknown): ProviderKeyStatusMap {
+function normalizeProviderKeyStatus(input: DynamicValue): ProviderKeyStatusMap {
   const defaults = createDefaultProviderKeyStatus();
   if (!input || typeof input !== 'object') {
     return defaults;
   }
 
-  const entries = Object.entries(input as Record<string, unknown>);
+  const entries = Object.entries(input as DynamicValueMap);
   entries.forEach(([providerId, configured]) => {
     if (!providerId.trim()) return;
     defaults[providerId] = configured === true;
@@ -127,7 +127,7 @@ function normalizeProviderKeyStatus(input: unknown): ProviderKeyStatusMap {
   return defaults;
 }
 
-function normalizeUploadProvider(input: unknown): UploadProvider {
+function normalizeUploadProvider(input: DynamicValue): UploadProvider {
   return input === 'fal' || input === 'kie' || input === 'bizyair'
     ? input
     : DEFAULT_UPLOAD_PROVIDER;
@@ -228,7 +228,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       version: 8,
-      migrate: (persistedState: unknown) => {
+      migrate: (persistedState: DynamicValue) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
           apiKeys?: Record<string, string>;

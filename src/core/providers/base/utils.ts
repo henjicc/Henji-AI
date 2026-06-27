@@ -5,7 +5,6 @@
  */
 
 import { readFile } from '@/platform/desktopApi'
-import { ProviderError, ProviderErrorCode } from './errors'
 
 /**
  * 将 Data URI 转换为 Blob
@@ -246,13 +245,13 @@ export async function retry<T>(
   options: {
     maxAttempts: number
     delay: number
-    onRetry?: (attempt: number, error: any) => void
-    shouldRetry?: (error: any) => boolean
+    onRetry?: (attempt: number, error: DynamicValue) => void
+    shouldRetry?: (error: DynamicValue) => boolean
   }
 ): Promise<T> {
   const { maxAttempts, delay, onRetry, shouldRetry = () => true } = options
 
-  let lastError: any
+  let lastError: DynamicValue
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

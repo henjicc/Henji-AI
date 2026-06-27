@@ -10,14 +10,14 @@ import UniversalResolutionSelector from './UniversalResolutionSelector'
 
 interface SchemaFormProps {
     schema: ParamDef[]
-    values: Record<string, any>
-    onChange: (id: string, value: any) => void
+    values: DynamicValueMap
+    onChange: (id: string, value: DynamicValue) => void
     className?: string
 }
 
 export default function SchemaForm({ schema, values, onChange, className }: SchemaFormProps) {
     // 使用 ref 追踪上一次的 values，用于检测 watchKeys 的变化
-    const prevValuesRef = React.useRef<Record<string, any>>({})
+    const prevValuesRef = React.useRef<DynamicValueMap>({})
 
     // Handle autoSwitch logic
     React.useEffect(() => {

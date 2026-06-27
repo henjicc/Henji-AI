@@ -15,7 +15,7 @@ import { getDefaultModelId } from './defaultModels';
 
 const LEGACY_KEYS = ['model', 'size', 'requestAspectRatio', 'extraParams'] as const;
 
-function resolveMigratedModelId(legacyModelId: unknown): string {
+function resolveMigratedModelId(legacyModelId: DynamicValue): string {
   const requested = typeof legacyModelId === 'string' ? legacyModelId.trim() : '';
   if (requested && registry.getModel(requested)) {
     return requested;
@@ -41,15 +41,15 @@ function resolveMigratedModelId(legacyModelId: unknown): string {
 
 function buildMigratedParams(
   modelId: string,
-  legacy: Record<string, unknown>
-): Record<string, unknown> {
+  legacy: DynamicValueMap
+): DynamicValueMap {
   const schema = registry.getSchema(modelId);
-  const params: Record<string, unknown> = {};
+  const params: DynamicValueMap = {};
 
   const legacyExtraParams = legacy.extraParams;
   if (legacyExtraParams && typeof legacyExtraParams === 'object') {
     const schemaIds = new Set(schema.map((param) => param.id));
-    for (const [key, value] of Object.entries(legacyExtraParams as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(legacyExtraParams as DynamicValueMap)) {
       if (schemaIds.has(key)) {
         params[key] = value;
       }
@@ -84,7 +84,7 @@ function buildMigratedParams(
   return params;
 }
 
-function stripLegacyKeys(data: Record<string, unknown>): void {
+function stripLegacyKeys(data: DynamicValueMap): void {
   for (const key of LEGACY_KEYS) {
     if (key in data) {
       delete data[key];
@@ -96,7 +96,7 @@ function stripLegacyKeys(data: Record<string, unknown>): void {
  * 迁移生成类节点（AI 图片 / 分镜生成）的模型数据。
  * 直接修改传入对象（normalizeNodes 中的 mergedData 是新对象，安全）。
  */
-export function migrateGenerationNodeData(data: Record<string, unknown>): void {
+export function migrateGenerationNodeData(data: DynamicValueMap): void {
   // 模型清单尚未加载时跳过，等待下次 normalize
   if (registry.getModelsByType('image').length === 0) {
     return;
@@ -117,7 +117,7 @@ export function migrateGenerationNodeData(data: Record<string, unknown>): void {
   data.modelId = modelId;
   data.params = {
     ...params,
-    ...((data.params && typeof data.params === 'object') ? (data.params as Record<string, unknown>) : {}),
+    ...((data.params && typeof data.params === 'object') ? (data.params as DynamicValueMap) : {}),
   };
   stripLegacyKeys(data);
 }

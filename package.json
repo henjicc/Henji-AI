@@ -18,7 +18,7 @@
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:colors": "npm run check:colors",
     "lint:fix": "eslint src --ext ts,tsx --fix",
-    "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && electron-vite dev",
+    "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && node scripts/electron-vite-dev.cjs",
     "electron:build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && tsc -p tsconfig.electron.json && electron-vite build",
     "electron:pack": "npm run electron:build && electron-builder --dir",
     "electron:dist": "npm run electron:build && electron-builder",

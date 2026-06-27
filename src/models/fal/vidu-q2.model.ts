@@ -165,9 +165,9 @@ export const viduQ2Model = defineModel({
       const resolution = params.viduQ2Resolution || '720p'
       const movementAmplitude = params.viduQ2MovementAmplitude || 'auto'
       const bgm = params.viduQ2Bgm === true
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: any) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
       requestData.duration = duration
 
       if (mode === 'text-to-video' || mode === 'reference-to-video') {

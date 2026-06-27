@@ -116,7 +116,7 @@ export const kieSeedream40Model = defineModel({
         ? 'bytedance/seedream-v4-text-to-image'
         : 'bytedance/seedream-v4-edit'
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       const aspectRatioText = typeof aspectRatio === 'string' ? aspectRatio : ''
       const normalizedAspectRatio =

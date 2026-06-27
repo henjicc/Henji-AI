@@ -97,18 +97,19 @@ export function useSettings(): UseSettingsResult {
 
   // 更新单个设置
   const updateSetting = <K extends SettingsKey>(key: K, value: Settings[K]) => {
+    if (key === 'promptOptimizationButtonBehavior') {
+      const nextValue = normalizePromptOptimizationButtonBehavior(value)
+      setSettings(prev => ({ ...prev, [key]: nextValue }))
+      writePromptOptimizationButtonBehavior(nextValue)
+      return
+    }
+
     const nextValue = key === 'priceEstimateCurrencyMode'
       ? normalizePriceEstimateCurrencyMode(value)
       : key === 'usdToCnyRate'
         ? normalizeUsdToCnyRate(value)
-        : key === 'promptOptimizationButtonBehavior'
-          ? normalizePromptOptimizationButtonBehavior(value)
         : value
     setSettings(prev => ({ ...prev, [key]: nextValue }))
-    if (key === 'promptOptimizationButtonBehavior') {
-      writePromptOptimizationButtonBehavior(nextValue)
-      return
-    }
     const storageKey = key === 'showPriceEstimate'
       ? SHOW_PRICE_ESTIMATE_STORAGE_KEY
       : key === 'priceEstimateCurrencyMode'

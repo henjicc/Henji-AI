@@ -7,24 +7,24 @@ export interface ProviderKeyStatusDto {
 
 export interface AiGenerateRequestDto {
   modelId: string
-  params: Record<string, unknown>
+  params: DynamicValueMap
   requestId?: string
 }
 
 export interface AiContinuePollingRequestDto {
   modelId: string
   taskId: string
-  params?: Record<string, unknown>
+  params?: DynamicValueMap
 }
 
 export interface AiGetProgressEstimateRequestDto {
   modelId: string
-  params?: Record<string, unknown>
+  params?: DynamicValueMap
 }
 
 export interface AiRecordProgressSampleRequestDto {
   modelId: string
-  params?: Record<string, unknown>
+  params?: DynamicValueMap
   startedAtMs: number
   finishedAtMs: number
   source: 'generation' | 'canvas'
@@ -35,7 +35,7 @@ export interface AiGenerateResponseDto {
   url: string
   filePath?: string
   taskId?: string
-  metadata?: Record<string, unknown>
+  metadata?: DynamicValueMap
   trace?: AiRuntimeTrace
 }
 

@@ -37,7 +37,7 @@ export function TaskList({
   onOpenImageViewer,
   onOpenVideoViewer,
 }: TaskListProps): JSX.Element {
-  const { t, i18n } = useI18n()
+  const { t } = useI18n()
 
   return (
     <div className="max-w-6xl mx-auto w-[90%] space-y-6">

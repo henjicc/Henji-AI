@@ -14,7 +14,7 @@ function applyI18nScope(model: ModelDefinition): ModelDefinition {
     return model
   }
 
-  const visit = (value: unknown): void => {
+  const visit = (value: DynamicValue): void => {
     if (!value) return
     if (typeof value === 'function') return
     if (Array.isArray(value)) {
@@ -23,7 +23,7 @@ function applyI18nScope(model: ModelDefinition): ModelDefinition {
     }
     if (typeof value !== 'object') return
 
-    const obj = value as Record<string, unknown>
+    const obj = value as DynamicValueMap
     const keyValue = obj.key
     if (typeof keyValue === 'string') {
       const absolute = obj.absolute === true

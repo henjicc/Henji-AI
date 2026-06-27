@@ -71,7 +71,7 @@ export const minimaxHailuo02Model = defineModel({
     }
   ],
   endpoints: {
-    selector: async (params) => {
+    selector: async (_params) => {
       return '/async/minimax-hailuo-02'
     }
   },
@@ -87,7 +87,7 @@ export const minimaxHailuo02Model = defineModel({
       const enable = params.ppioHailuo02PromptExtend === undefined ? (params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion) : params.ppioHailuo02PromptExtend
       const prompt = params.prompt || ''
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration,
         resolution,

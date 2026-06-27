@@ -158,7 +158,7 @@ export const veo31Model = defineModel({
       const generateAudio = params.falVeo31GenerateAudio
       const autoFix = params.falVeo31AutoFix
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: `${duration}s`
       }

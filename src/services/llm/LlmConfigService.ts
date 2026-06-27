@@ -359,7 +359,7 @@ export function getLlmConfigService(): LlmConfigService {
 
 export const llmConfigService = getLlmConfigService()
 
-export function getErrorMessage(error: unknown): string {
+export function getErrorMessage(error: DynamicValue): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
   logger.error('[LlmConfigService] Unknown error', error)

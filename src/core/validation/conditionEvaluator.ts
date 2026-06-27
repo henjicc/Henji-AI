@@ -7,8 +7,8 @@ export type ConditionInput = ConditionExpression | ConditionFunction | undefined
 
 export function evaluateCondition(
   condition: ConditionInput,
-  params: Record<string, any>,
-  context: Record<string, any> = {}
+  params: DynamicValueMap,
+  context: DynamicValueMap = {}
 ): boolean {
   if (!condition) return true
 

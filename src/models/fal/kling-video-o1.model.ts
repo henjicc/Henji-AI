@@ -121,9 +121,9 @@ export const klingVideoO1Model = defineModel({
       const duration = params.falKlingVideoO1VideoDuration || 5
       const aspectRatio = params.falKlingVideoO1AspectRatio
       const keepAudio = params.falKlingVideoO1KeepAudio || false
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: any) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: `${duration}`
       }

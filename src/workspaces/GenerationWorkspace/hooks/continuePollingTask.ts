@@ -17,7 +17,7 @@ export interface ContinuePollingTaskParams {
   notify: (message: string, type?: 'success' | 'error') => void
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   updateProgress: (taskId: string, progress: number) => void
-  toUserMessage: (error: unknown) => string
+  toUserMessage: (error: DynamicValue) => string
 }
 
 export async function continuePollingTask({
@@ -30,7 +30,7 @@ export async function continuePollingTask({
 }: ContinuePollingTaskParams): Promise<void> {
   const serverTaskId = task.serverTaskId
     ?? extractServerTaskIdFromErrorMessage(task.error ?? '')
-    ?? extractServerTaskIdFromMetadata(task.result as unknown)
+    ?? extractServerTaskIdFromMetadata(task.result as DynamicValue)
 
   if (!serverTaskId) {
     logger.error('[Workspace] 再次轮询失败：缺少有效任务ID', { taskId: task.id, model: task.model, error: task.error })
@@ -63,7 +63,7 @@ export async function continuePollingTask({
       text: task.prompt,
       ...options,
     }, handleProgress)
-    const resultObj: Record<string, unknown> = {
+    const resultObj: DynamicValueMap = {
       url: result.url,
       filePath: result.filePath,
       metadata: result.metadata,

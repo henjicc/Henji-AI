@@ -62,7 +62,8 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
     const applyRatioConstraint = useCallback((rect: CropRect, ratio: number | null, handle: HandleType): CropRect => {
         if (!ratio) return rect
 
-        let { x, y, width, height } = rect
+        const { x, width } = rect
+        let { y, height } = rect
 
         // 根据拖拽的手柄决定如何调整
         if (handle === 'move') {
@@ -206,7 +207,7 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
         })
 
         onCropRectChange(newRect)
-    }, [cropRatio])
+    }, [constrainRect, cropRatio, cropRect.height, cropRect.width, cropRect.x, cropRect.y, getCurrentRatio, imageHeight, imageWidth, onCropRectChange])
 
     return (
         <>

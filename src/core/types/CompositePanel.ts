@@ -45,13 +45,13 @@ export interface ComponentConfig {
   label?: I18nText
 
   /** 组件特定配置 */
-  config: any
+  config: DynamicValue
 
   /** 显示条件 */
-  showWhen?: (compositeValue: any) => boolean
+  showWhen?: (compositeValue: DynamicValue) => boolean
 
   /** 禁用条件 */
-  disabledWhen?: (compositeValue: any) => boolean
+  disabledWhen?: (compositeValue: DynamicValue) => boolean
 }
 
 /**
@@ -68,7 +68,7 @@ export interface ComponentLinkage {
   effect: LinkageEffect
 
   /** 联动处理函数 */
-  handler: (sourceValue: any, targetConfig: any, compositeValue: any) => any
+  handler: (sourceValue: DynamicValue, targetConfig: DynamicValue, compositeValue: DynamicValue) => DynamicValue
 }
 
 /**

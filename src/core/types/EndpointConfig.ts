@@ -22,7 +22,7 @@ export interface EndpointRule {
    * when: { mode: 'image-to-video', resolution: '1080p' }
    * ```
    */
-  when: Record<string, any>
+  when: DynamicValueMap
 
   /**
    * 匹配成功时使用的端点
@@ -82,7 +82,7 @@ export type EndpointConfig =
        * @param params - 请求参数
        * @returns 选择的端点
        */
-      selector?: (params: Record<string, any>) => string | Promise<string>
+      selector?: (params: DynamicValueMap) => string | Promise<string>
 
       /**
        * Optional route map for multi-endpoint models.
@@ -105,15 +105,15 @@ export interface RouteDefinition {
   /**
    * 构建图片请求
    */
-  buildImageRequest?: (params: any) => { endpoint: string; requestData: any }
+  buildImageRequest?: (params: DynamicValue) => { endpoint: string; requestData: DynamicValue }
 
   /**
    * 构建视频请求
    */
-  buildVideoRequest?: (params: any) => { endpoint: string; requestData: any }
+  buildVideoRequest?: (params: DynamicValue) => { endpoint: string; requestData: DynamicValue }
 
   /**
    * 构建音频请求
    */
-  buildAudioRequest?: (params: any) => { endpoint: string; requestData: any }
+  buildAudioRequest?: (params: DynamicValue) => { endpoint: string; requestData: DynamicValue }
 }

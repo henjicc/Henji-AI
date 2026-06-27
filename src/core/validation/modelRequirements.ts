@@ -26,7 +26,7 @@ const isCountSatisfied = (
   return true
 }
 
-const normalizeParams = (params: Record<string, unknown>, inputs: GenerationInputs): Record<string, unknown> => {
+const normalizeParams = (params: DynamicValueMap, inputs: GenerationInputs): DynamicValueMap => {
   return {
     ...params,
     prompt: inputs.prompt,
@@ -44,7 +44,7 @@ const getRequirements = (modelId: string): GenerationRequirement[] => {
 
 export function validateGenerationRequirements(
   modelId: string,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   inputs: GenerationInputs
 ): RequirementValidationResult {
   const requirements = getRequirements(modelId)
@@ -64,7 +64,7 @@ export function validateGenerationRequirements(
   for (const requirement of requirements) {
     const matches = evaluateCondition(
       requirement.when,
-      normalized as Record<string, any>,
+      normalized as DynamicValueMap,
       context
     )
 

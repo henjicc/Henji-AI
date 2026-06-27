@@ -29,7 +29,7 @@ export class CanvasToolProcessor implements ToolProcessor {
   async process(
     toolType: NodeToolType,
     sourceImageUrl: string,
-    options: Record<string, unknown>
+    options: DynamicValueMap
   ): Promise<ToolProcessorResult> {
     if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
       const metadata = await this.readStoryboardMetadata(sourceImageUrl);
@@ -62,7 +62,7 @@ export class CanvasToolProcessor implements ToolProcessor {
     }
   }
 
-  private async cropImage(sourceImage: string, options: Record<string, unknown>): Promise<string> {
+  private async cropImage(sourceImage: string, options: DynamicValueMap): Promise<string> {
     try {
       return await cropImageSource({
         source: sourceImage,
@@ -146,7 +146,7 @@ export class CanvasToolProcessor implements ToolProcessor {
 
   private async annotateImage(
     sourceImage: string,
-    options: Record<string, unknown>
+    options: DynamicValueMap
   ): Promise<string> {
     const image = await loadImageElement(sourceImage);
     const canvas = document.createElement('canvas');

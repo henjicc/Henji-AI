@@ -57,7 +57,7 @@ export function useEditorLayout({
         let srcHeight = crop ? crop.height : image.height
 
         if (isRotated) {
-            ;[srcWidth, srcHeight] = [srcHeight, srcWidth]
+            [srcWidth, srcHeight] = [srcHeight, srcWidth]
         }
 
         return { width: srcWidth, height: srcHeight, scale: 1 }

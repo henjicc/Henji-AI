@@ -34,9 +34,9 @@ export function collectInputValues(
   nodeId: string,
   nodes: CanvasNode[],
   edges: CanvasEdge[]
-): Record<string, unknown> {
+): DynamicValueMap {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const overrides: Record<string, unknown> = {};
+  const overrides: DynamicValueMap = {};
   for (const edge of edges) {
     if (edge.target !== nodeId) {
       continue;
@@ -95,7 +95,7 @@ export function isParamConnectionCompatible(
   if (!output) {
     return false;
   }
-  const modelId = (targetNode.data as { modelId?: unknown }).modelId;
+  const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
   if (typeof modelId !== 'string' || !modelId) {
     return false;
   }
@@ -124,8 +124,8 @@ export function areStringSetsEqual(a: Set<string>, b: Set<string>): boolean {
 
 /** 覆盖表内容相等比较（供 store selector 避免无效重渲染） */
 export function areValueOverridesEqual(
-  a: Record<string, unknown>,
-  b: Record<string, unknown>
+  a: DynamicValueMap,
+  b: DynamicValueMap
 ): boolean {
   if (a === b) {
     return true;

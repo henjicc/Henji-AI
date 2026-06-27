@@ -112,7 +112,7 @@ export const grokImagineImageModel = defineModel({
         return bestValue
       }
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : ''
       }
 

@@ -30,7 +30,7 @@ export interface SplitLayout {
 
 export type SplitOptionsPatch = Partial<Record<'rows' | 'cols' | 'lineThicknessPercent', number>>;
 
-export function toFiniteNumber(value: unknown, fallback: number): number {
+export function toFiniteNumber(value: DynamicValue, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }

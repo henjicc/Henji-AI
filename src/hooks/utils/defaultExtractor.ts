@@ -66,8 +66,8 @@ function getSmartOptionValue(
  * // { prompt: '', quality: 'standard', size: 1024 }
  * ```
  */
-export function extractDefaults(schema: ParamDef[]): Record<string, unknown> {
-  const defaults: Record<string, unknown> = {}
+export function extractDefaults(schema: ParamDef[]): DynamicValueMap {
+  const defaults: DynamicValueMap = {}
 
   for (const param of schema) {
     if (param.default !== undefined) {
@@ -91,7 +91,7 @@ export function extractDefaults(schema: ParamDef[]): Record<string, unknown> {
  * @param value - 参数值
  * @returns 是否有效
  */
-export function validateParamValue(paramDef: ParamDef, value: unknown): boolean {
+export function validateParamValue(paramDef: ParamDef, value: DynamicValue): boolean {
   // 基础类型检查
   if (paramDef.valueType === 'string' && typeof value !== 'string') {
     return false

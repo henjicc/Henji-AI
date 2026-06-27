@@ -52,8 +52,8 @@ export interface PromptOptimizationProfile {
 export interface LlmToolSchema {
   name: string
   description?: string
-  inputSchema?: unknown
-  outputSchema?: unknown
+  inputSchema?: DynamicValue
+  outputSchema?: DynamicValue
 }
 
 export interface LlmPolicy {
@@ -144,5 +144,5 @@ export interface LlmChatRequest {
   tools?: LlmToolSchema[]
   policy?: Partial<LlmPolicy>
   memory?: LlmMemoryScope
-  metadata?: Record<string, unknown>
+  metadata?: DynamicValueMap
 }

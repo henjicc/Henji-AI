@@ -66,7 +66,7 @@ export function usePresetLoader(currentModelId: string) {
     const validParamIds = new Set(schema.map(p => p.id))
 
     // 过滤出有效参数（忽略无效参数）
-    const validParams: Record<string, any> = {}
+    const validParams: DynamicValueMap = {}
     const ignoredParams: string[] = []
 
     for (const [key, value] of Object.entries(preset.params)) {

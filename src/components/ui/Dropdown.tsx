@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   UI_FIELD_LABEL_CLASS,
@@ -64,9 +64,9 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     if (value === undefined) return false
     return String(value) === String(optValue)
   }
-  const getOptionLabels = (source?: Option<T>[]): string[] => {
+  const getOptionLabels = useCallback((source?: Option<T>[]): string[] => {
     return (source || []).map((option) => String(option.label))
-  }
+  }, [])
   const measureTextMinWidth = (targetButton: HTMLElement, labels: string[]): number | null => {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
@@ -137,7 +137,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       }
     }
     computeMinWidth()
-  }, [display, minWidthStrategy, options, panelWidthStrategy, value])
+  }, [buttonMinWidthPx, display, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, value])
 
   useEffect(() => {
     const updatePos = () => {

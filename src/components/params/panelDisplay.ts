@@ -8,11 +8,11 @@ import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { getI18nText, type I18nText } from '@/core/types/I18nText'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
-export function resolvePanelWidth(config: unknown, fallbackWidth: number): number {
+export function resolvePanelWidth(config: DynamicValue, fallbackWidth: number): number {
   if (!config || typeof config !== 'object') {
     return fallbackWidth
   }
-  const record = config as Record<string, unknown>
+  const record = config as DynamicValueMap
   const width = typeof record.panelWidth === 'number' ? record.panelWidth : record.width
   if (typeof width === 'number' && Number.isFinite(width) && width > 0) {
     return width
@@ -21,17 +21,17 @@ export function resolvePanelWidth(config: unknown, fallbackWidth: number): numbe
 }
 
 export function formatPanelDisplayValue(
-  value: unknown,
+  value: DynamicValue,
   panel: string,
   language: string,
-  config?: unknown
+  config?: DynamicValue
 ): string {
   if (value === undefined || value === null || value === '') return '未设置'
 
   // ResolutionPanel 的显示逻辑
   if (panel === 'resolution') {
     const record = typeof value === 'object' && value !== null
-      ? (value as Record<string, unknown>)
+      ? (value as DynamicValueMap)
       : null
     if (!record) {
       return '未设置'
@@ -56,13 +56,13 @@ export function formatPanelDisplayValue(
     try {
       const stored = localStorage.getItem('modelscope_custom_models')
       if (!stored) return trimmed
-      const parsed = JSON.parse(stored) as unknown
+      const parsed = JSON.parse(stored) as DynamicValue
       if (!Array.isArray(parsed)) return trimmed
       const match = parsed.find((item) => {
         if (!item || typeof item !== 'object') return false
-        const record = item as Record<string, unknown>
+        const record = item as DynamicValueMap
         return record.id === trimmed
-      }) as Record<string, unknown> | undefined
+      }) as DynamicValueMap | undefined
       if (!match) return trimmed
       const name = typeof match.name === 'string' ? match.name.trim() : ''
       return name || trimmed
@@ -73,7 +73,7 @@ export function formatPanelDisplayValue(
 
   if (panel === 'voice-selector' && typeof value === 'string') {
     const configRecord = config && typeof config === 'object'
-      ? (config as Record<string, unknown>)
+      ? (config as DynamicValueMap)
       : null
     const voices = configRecord?.voices
     if (Array.isArray(voices)) {
@@ -81,11 +81,11 @@ export function formatPanelDisplayValue(
         if (!item || typeof item !== 'object') {
           return false
         }
-        const voice = item as Record<string, unknown>
+        const voice = item as DynamicValueMap
         return voice.id === value
       })
       if (matched && typeof matched === 'object') {
-        const matchedRecord = matched as Record<string, unknown>
+        const matchedRecord = matched as DynamicValueMap
         const name = matchedRecord.name
         if (typeof name === 'string' || (name && typeof name === 'object')) {
           return getI18nText(name as I18nText, language)
@@ -94,7 +94,7 @@ export function formatPanelDisplayValue(
     }
     const voiceLibrary = configRecord?.voiceLibrary
     if (voiceLibrary && typeof voiceLibrary === 'object') {
-      const libraryRecord = voiceLibrary as Record<string, unknown>
+      const libraryRecord = voiceLibrary as DynamicValueMap
       const providerId = typeof libraryRecord.providerId === 'string' ? libraryRecord.providerId : undefined
       const modelId = typeof libraryRecord.modelId === 'string' ? libraryRecord.modelId : undefined
       const cachedName = voiceLibraryService.getCachedVoiceName(value, { providerId, modelId })

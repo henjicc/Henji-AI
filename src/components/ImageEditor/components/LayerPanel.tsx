@@ -39,7 +39,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
   onLayerAdd,
   onLayerRemove,
   onLayerDuplicate,
-  onLayerReorder
+  onLayerReorder: _onLayerReorder
 }) => {
   const { t } = useI18n('ui')
   return (
@@ -65,7 +65,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
           </div>
         ) : (
           <div className="layers-list">
-            {layers.map((layer, index) => (
+            {layers.map((layer) => (
               <div
                 key={layer.id}
                 className={`layer-item ${layer.id === activeLayerId ? 'active' : ''}`}

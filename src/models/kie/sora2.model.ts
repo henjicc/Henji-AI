@@ -89,7 +89,7 @@ export const kieSora2Model = defineModel({
       trigger: 'uploadedImages',
       effect: 'autoSwitch',
       target: 'kieSora2AspectRatio',
-      condition: (images: string[], allParams: Record<string, unknown>) => {
+      condition: (images: string[], allParams: DynamicValueMap) => {
         const hasImages = Array.isArray(images) && images.length > 0
         const current = allParams.kieSora2AspectRatio
         return (hasImages && current === '16:9') || (!hasImages && current === 'smart')
@@ -119,7 +119,7 @@ export const kieSora2Model = defineModel({
 
       const mappedRatio = mapSora2AspectRatio(String(aspectRatio))
 
-      const input: Record<string, unknown> = {
+      const input: DynamicValueMap = {
         prompt,
         n_frames: duration,
         remove_watermark: true

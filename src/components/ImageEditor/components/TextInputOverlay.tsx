@@ -45,7 +45,6 @@ export const TextInputOverlay: React.FC<TextInputOverlayProps> = ({
 
     const scale = displaySize.width > 0 ? stageSize.width / displaySize.width : 1
     const fontSize = (activeText ? activeText.fontSize : toolSettings.fontSize) * scale
-    const color = activeText ? activeText.fill : toolSettings.strokeColor
     const fontFamily = activeText ? activeText.fontFamily : toolSettings.fontFamily
 
     return (

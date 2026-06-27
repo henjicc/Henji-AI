@@ -17,9 +17,9 @@ import { useNodeModelParams } from './useNodeModelParams';
 interface NodeModelParamsControlsProps {
   mediaType: CanvasModelMediaType;
   modelId: string;
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (nextParams: Record<string, unknown>) => void;
+  onParamsChange: (nextParams: DynamicValueMap) => void;
   /** 上游连线输入的图片（用于智能宽高比预览与联动） */
   incomingImages?: string[];
   chipClassName?: string;

@@ -76,7 +76,7 @@ export interface BaseParamDef {
   /**
    * 默认值
    */
-  default: any
+  default: DynamicValue
 
   /**
    * API 映射配置（可选）

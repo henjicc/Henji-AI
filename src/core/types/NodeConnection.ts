@@ -30,5 +30,5 @@ export interface NodeConnection {
   }
 
   /** 数据转换（可选） */
-  transform?: (value: any) => any
+  transform?: (value: DynamicValue) => DynamicValue
 }

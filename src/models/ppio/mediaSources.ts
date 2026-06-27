@@ -1,12 +1,12 @@
-export type PpioModelParams = Record<string, unknown>
+export type PpioModelParams = DynamicValueMap
 
-function filterMediaSources(values: unknown): string[] {
+function filterMediaSources(values: DynamicValue): string[] {
   return Array.isArray(values)
     ? values.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : []
 }
 
-function resolvePreferredSources(primary: unknown, fallback: unknown): string[] {
+function resolvePreferredSources(primary: DynamicValue, fallback: DynamicValue): string[] {
   const preferred = filterMediaSources(primary)
   return preferred.length > 0 ? preferred : filterMediaSources(fallback)
 }

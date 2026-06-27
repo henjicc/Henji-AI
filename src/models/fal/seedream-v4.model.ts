@@ -184,7 +184,7 @@ export const seedreamV4Model = defineModel({
 
       const imageSize = await resolveFalSeedreamV4Size(resolutionValue, images)
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt,
         image_size: imageSize,
         num_images: numImages,

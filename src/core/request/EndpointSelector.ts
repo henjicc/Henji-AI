@@ -48,7 +48,7 @@ export interface SelectContext {
   /**
    * 自定义上下文
    */
-  [key: string]: any
+  [key: string]: DynamicValue
 }
 
 /**
@@ -79,7 +79,7 @@ export class EndpointSelector {
    * // { endpoint: 'reference-to-video', route: { path: '/v2v', method: 'POST' } }
    * ```
    */
-  async select(params: Record<string, any>, context: SelectContext): Promise<SelectResult> {
+  async select(params: DynamicValueMap, context: SelectContext): Promise<SelectResult> {
     const endpoint = await this.selectEndpoint(params, context)
     const route = this.getRoute(endpoint)
     return { endpoint, route }
@@ -92,7 +92,7 @@ export class EndpointSelector {
    * @param context - 选择上下文
    * @returns 端点键
    */
-  private async selectEndpoint(params: Record<string, any>, context: SelectContext): Promise<string> {
+  private async selectEndpoint(params: DynamicValueMap, context: SelectContext): Promise<string> {
     // 1) Fixed endpoint
     if (typeof this.config === 'string') {
       return this.config
@@ -124,7 +124,7 @@ export class EndpointSelector {
     throw new Error('[EndpointSelector] No endpoint matched')
   }
 
-  private matchesWhen(when: Record<string, any>, params: Record<string, any>, context: SelectContext): boolean {
+  private matchesWhen(when: DynamicValueMap, params: DynamicValueMap, context: SelectContext): boolean {
     return Object.entries(when).every(([key, expected]) => {
       const value = key in params ? params[key] : context[key]
       // Match behavior with older ModelRegistry implementation for booleans.

@@ -86,7 +86,7 @@ export function useAnnotationEditor({
         setTextEditingId(null)
         setIsEditingText(true)
         focusTextInput()
-    }, [focusTextInput, setSelectedId])
+    }, [focusTextInput])
 
     const {
         drawingAnnotation,

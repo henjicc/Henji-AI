@@ -14,11 +14,11 @@ import type { CanvasNodeDefinition } from './nodeRegistry';
 /** 视频/音频节点定义（与 nodeRegistry 中的图片系节点遵循同一 SOP） */
 
 function videoOutputsFromData(data: CanvasNodeData): NodeMediaOutput[] {
-  const videoUrl = (data as { videoUrl?: unknown }).videoUrl;
+  const videoUrl = (data as { videoUrl?: DynamicValue }).videoUrl;
   if (typeof videoUrl !== 'string' || !videoUrl) {
     return [];
   }
-  const previewImageUrl = (data as { previewImageUrl?: unknown }).previewImageUrl;
+  const previewImageUrl = (data as { previewImageUrl?: DynamicValue }).previewImageUrl;
   return [{
     kind: 'video',
     url: videoUrl,
@@ -27,7 +27,7 @@ function videoOutputsFromData(data: CanvasNodeData): NodeMediaOutput[] {
 }
 
 function audioOutputsFromData(data: CanvasNodeData): NodeMediaOutput[] {
-  const audioUrl = (data as { audioUrl?: unknown }).audioUrl;
+  const audioUrl = (data as { audioUrl?: DynamicValue }).audioUrl;
   if (typeof audioUrl !== 'string' || !audioUrl) {
     return [];
   }

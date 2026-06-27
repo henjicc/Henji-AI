@@ -76,7 +76,7 @@ export const kling25TurboModel = defineModel({
       const cfgScale = params.ppioKling25TurboCfgScale ?? params.cfg_scale ?? 0.5
       const prompt = (params.prompt || '').slice(0, 2500)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: String(duration),
         cfg_scale: cfgScale,

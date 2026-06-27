@@ -16,8 +16,8 @@ interface LegacyPreset {
   name: string
   description?: string
   modelId?: string
-  settings?: Record<string, any>
-  params?: Record<string, any>
+  settings?: DynamicValueMap
+  params?: DynamicValueMap
 }
 
 /**
@@ -65,7 +65,7 @@ export async function migratePresetsFromLocalStorage(): Promise<PresetMigrationR
           isFavorite: false
         })
         result.migratedCount++
-      } catch (error: any) {
+      } catch (error: DynamicValue) {
         result.errors.push(`Failed to migrate preset "${oldPreset.name}": ${error.message}`)
       }
     }
@@ -82,7 +82,7 @@ export async function migratePresetsFromLocalStorage(): Promise<PresetMigrationR
     }
 
     return result
-  } catch (error: any) {
+  } catch (error: DynamicValue) {
     logger.error('[PresetMigration] Migration failed:', error)
     result.errors.push(error.message)
     return result

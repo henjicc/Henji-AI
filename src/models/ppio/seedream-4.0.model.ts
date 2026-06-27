@@ -176,7 +176,7 @@ export const seedream40Model = defineModel({
                 finalPrompt = `生成${maxImages}张图片。${params.prompt}`
             }
 
-            const requestData: Record<string, unknown> = {
+            const requestData: DynamicValueMap = {
                 prompt: finalPrompt,
                 watermark: false
             }

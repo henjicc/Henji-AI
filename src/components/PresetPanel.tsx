@@ -13,8 +13,8 @@ import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/comp
 const logger = createLogger('components.PresetPanel')
 
 interface PresetPanelProps {
-    getCurrentState: () => Record<string, unknown>
-    onLoadPreset: (params: Record<string, unknown>) => void
+    getCurrentState: () => DynamicValueMap
+    onLoadPreset: (params: DynamicValueMap) => void
     disabled?: boolean
 }
 const PresetPanel: React.FC<PresetPanelProps> = ({

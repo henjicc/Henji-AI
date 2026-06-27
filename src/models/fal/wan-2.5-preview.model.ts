@@ -81,7 +81,7 @@ export const wan25PreviewModel = defineModel({
       const resolution = params.falWan25Resolution
       const promptExpansion = params.falWan25PromptExpansion
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         enable_safety_checker: false,
         duration: `${duration}`

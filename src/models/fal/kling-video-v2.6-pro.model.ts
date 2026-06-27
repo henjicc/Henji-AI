@@ -123,9 +123,9 @@ export const klingVideoV26ProModel = defineModel({
       name: sharedFieldText('aspectRatio'),
       default: '16:9',
       visible: {
-        condition: (params: Record<string, unknown>) =>
+        condition: (params: DynamicValueMap) =>
           params.falKlingV26ProMode !== 'motion-control' &&
-          ((params.uploadedImages as unknown[] | undefined)?.length ?? 0) === 0
+          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
       },
       options: [
         { value: '16:9', label: '16:9' },
@@ -143,9 +143,9 @@ export const klingVideoV26ProModel = defineModel({
       max: 1,
       step: 0.1,
       visible: {
-        condition: (params: Record<string, unknown>) =>
+        condition: (params: DynamicValueMap) =>
           params.falKlingV26ProMode !== 'motion-control' &&
-          ((params.uploadedImages as unknown[] | undefined)?.length ?? 0) === 0
+          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
       }
     },
     {
@@ -187,10 +187,10 @@ export const klingVideoV26ProModel = defineModel({
       const cfgScale = params.falKlingV26ProCfgScale
       const characterOrientation = params.falKlingV26ProCharacterOrientation || 'video'
       const keepOriginalSound = params.falKlingV26ProKeepOriginalSound !== false
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: any) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
 
       if (mode === 'motion-control') {
-        const requestData: any = {
+        const requestData: DynamicValue = {
           image_url: images[0],
           video_url: videoInput,
           character_orientation: characterOrientation,
@@ -204,7 +204,7 @@ export const klingVideoV26ProModel = defineModel({
         return requestData
       }
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: `${duration}`,
         generate_audio: generateAudio

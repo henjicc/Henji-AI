@@ -18,7 +18,7 @@ interface BuildStoryboardPromptParams {
 interface GenerateStoryboardImageParams {
   modelId: string
   /** schema 参数 + prompt/text 协议键（智能宽高比由 GenerationService 解析） */
-  params: Record<string, unknown>
+  params: DynamicValueMap
   incomingImages: string[]
   frameAspectRatioValue: string
   gridRows: number

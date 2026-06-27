@@ -284,7 +284,7 @@ export const viduQ3Model = defineModel({
         ? pickClosestRatio(ratioHint)
         : (supportedRatios.includes(rawAspectRatio as SupportedRatio) ? rawAspectRatio as SupportedRatio : '16:9')
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt,
         duration,
         resolution,

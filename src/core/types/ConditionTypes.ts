@@ -38,7 +38,7 @@ export type ConditionExpression = string
  * }
  * ```
  */
-export type ConditionFunction = (params: Record<string, any>) => boolean
+export type ConditionFunction = (params: DynamicValueMap) => boolean
 
 /**
  * 显示条件
@@ -140,7 +140,7 @@ export interface SmartMatchConfig {
     dimensions?: { width: number; height: number }
     duration?: number
     size?: number
-  }) => any
+  }) => DynamicValue
 
   /**
    * 是否自动应用（默认 true）

@@ -1,7 +1,7 @@
 import { dirname, join, mkdir, readFile, writeFile } from '@/platform/desktopApi'
 import { getDataRoot } from '@/utils/dataPath'
 
-export async function writeJsonToAppData(relPath: string, data: unknown): Promise<void> {
+export async function writeJsonToAppData(relPath: string, data: DynamicValue): Promise<void> {
   const dataRoot = await getDataRoot()
   const fullPath = await join(dataRoot, relPath.replace(/^Henji-AI[/\\]?/, ''))
   const dirPath = await dirname(fullPath)
@@ -11,7 +11,7 @@ export async function writeJsonToAppData(relPath: string, data: unknown): Promis
   await writeFile(fullPath, bytes)
 }
 
-export async function readJsonFromAppData<T = unknown>(relPath: string): Promise<T | null> {
+export async function readJsonFromAppData<T = DynamicValue>(relPath: string): Promise<T | null> {
   try {
     const dataRoot = await getDataRoot()
     const fullPath = await join(dataRoot, relPath.replace(/^Henji-AI[/\\]?/, ''))

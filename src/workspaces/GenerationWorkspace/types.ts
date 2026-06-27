@@ -5,7 +5,7 @@ export type MediaType = 'image' | 'video' | 'audio'
 
 export type TaskStatus = 'queued' | 'pending' | 'generating' | 'success' | 'error'
 
-export interface GeneratorOptions extends Record<string, unknown> {
+export interface GeneratorOptions extends DynamicValueMap {
   size?: string
   images?: string[]
   uploadedFilePaths?: string[]

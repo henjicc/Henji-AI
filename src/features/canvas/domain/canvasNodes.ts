@@ -55,7 +55,7 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
 
 export interface NodeDisplayData {
   displayName?: string;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface NodeImageData extends NodeDisplayData {
@@ -63,7 +63,7 @@ export interface NodeImageData extends NodeDisplayData {
   previewImageUrl?: string | null;
   aspectRatio: string;
   isSizeManuallyAdjusted?: boolean;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface UploadImageNodeData extends NodeImageData {
@@ -82,12 +82,12 @@ export interface ExportImageNodeData extends NodeImageData {
 
 export interface GroupNodeData extends NodeDisplayData {
   label: string;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface TextAnnotationNodeData extends NodeDisplayData {
   content: string;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface ImageEditNodeData extends NodeImageData {
@@ -95,7 +95,7 @@ export interface ImageEditNodeData extends NodeImageData {
   /** 核心 ModelRegistry 中的模型 ID */
   modelId?: string;
   /** schema 驱动的模型参数（与默认值合并后使用） */
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
   model?: string;
   /** @deprecated 旧版字段 */
@@ -103,7 +103,7 @@ export interface ImageEditNodeData extends NodeImageData {
   /** @deprecated 旧版字段 */
   requestAspectRatio?: string;
   /** @deprecated 旧版字段 */
-  extraParams?: Record<string, unknown>;
+  extraParams?: DynamicValueMap;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
@@ -139,7 +139,7 @@ export interface StoryboardSplitNodeData {
   gridCols: number;
   frames: StoryboardFrameItem[];
   exportOptions?: StoryboardExportOptions;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface StoryboardGenFrameItem {
@@ -156,7 +156,7 @@ export interface StoryboardGenNodeData {
   /** 核心 ModelRegistry 中的模型 ID */
   modelId?: string;
   /** schema 驱动的模型参数（与默认值合并后使用） */
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
   model?: string;
   /** @deprecated 旧版字段 */
@@ -164,24 +164,24 @@ export interface StoryboardGenNodeData {
   /** @deprecated 旧版字段 */
   requestAspectRatio?: string;
   /** @deprecated 旧版字段 */
-  extraParams?: Record<string, unknown>;
+  extraParams?: DynamicValueMap;
   imageUrl: string | null;
   previewImageUrl?: string | null;
   aspectRatio: string;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface MediaGenNodeData extends NodeDisplayData {
   prompt: string;
   modelId?: string;
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export type VideoGenNodeData = MediaGenNodeData;
@@ -198,7 +198,7 @@ export interface VideoMediaNodeData extends NodeDisplayData {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface AudioMediaNodeData extends NodeDisplayData {
@@ -208,7 +208,7 @@ export interface AudioMediaNodeData extends NodeDisplayData {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 /**

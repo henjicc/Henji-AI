@@ -14,14 +14,14 @@ import type { PanelType, SpecialPanelConfig } from '@/core/types/PanelTypes'
  * 面板注册中心类
  */
 class PanelRegistry {
-  private panels: Map<PanelType, React.ComponentType<any>> = new Map()
+  private panels: Map<PanelType, React.ComponentType<DynamicValue>> = new Map()
 
   /**
    * 注册面板组件
    * @param type 面板类型
    * @param component 面板组件
    */
-  register(type: PanelType, component: React.ComponentType<any>): void {
+  register(type: PanelType, component: React.ComponentType<DynamicValue>): void {
     if (this.panels.has(type)) {
       // 已注册则跳过（支持 React StrictMode 的双重调用）
       return
@@ -34,7 +34,7 @@ class PanelRegistry {
    * @param type 面板类型
    * @returns 面板组件或 undefined
    */
-  get(type: PanelType): React.ComponentType<any> | undefined {
+  get(type: PanelType): React.ComponentType<DynamicValue> | undefined {
     return this.panels.get(type)
   }
 

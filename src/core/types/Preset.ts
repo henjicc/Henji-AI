@@ -37,7 +37,7 @@ export interface Preset {
 /**
  * 预设参数类型
  */
-export type PresetParams = Record<string, any>
+export type PresetParams = DynamicValueMap
 
 /**
  * 创建预设输入

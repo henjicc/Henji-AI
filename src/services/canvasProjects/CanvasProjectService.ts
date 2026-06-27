@@ -52,8 +52,8 @@ function rowToSummary(row: CanvasProjectRow): CanvasProjectSummary {
 }
 
 function rowToRecord(row: CanvasProjectRow): CanvasProjectRecord {
-  const nodes = safeJsonParse<unknown[]>(row.nodes_json, [])
-  const edges = safeJsonParse<unknown[]>(row.edges_json, [])
+  const nodes = safeJsonParse<DynamicValue[]>(row.nodes_json, [])
+  const edges = safeJsonParse<DynamicValue[]>(row.edges_json, [])
   const viewport = safeJsonParse<typeof DEFAULT_VIEWPORT>(row.viewport_json, DEFAULT_VIEWPORT)
   return {
     ...rowToSummary(row),

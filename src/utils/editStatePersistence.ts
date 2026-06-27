@@ -23,7 +23,7 @@ async function getEditStatePath(taskId: string): Promise<string> {
  * @param states The edit states to save
  * @returns The filename of the saved state file
  */
-export async function saveEditState(taskId: string, states: Record<string, unknown>): Promise<string> {
+export async function saveEditState(taskId: string, states: DynamicValueMap): Promise<string> {
     try {
         const dir = await getEditStateDir()
         const filePath = await getEditStatePath(taskId)
@@ -47,7 +47,7 @@ export async function saveEditState(taskId: string, states: Record<string, unkno
  * Load edit states from a JSON file
  * @param taskIdOrFilename The task ID or filename (e.g., "123" or "123.json")
  */
-export async function loadEditState(taskIdOrFilename: string): Promise<Record<string, unknown> | null> {
+export async function loadEditState(taskIdOrFilename: string): Promise<DynamicValueMap | null> {
     try {
         const dir = await getEditStateDir()
         const filename = taskIdOrFilename.endsWith('.json') ? taskIdOrFilename : `${taskIdOrFilename}.json`

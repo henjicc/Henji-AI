@@ -23,7 +23,7 @@ export const useGenerationHandler = (
   uploadedFilePaths: string[],
   uploadedVideoFilePaths: string[],
   uploadedAudioFilePaths: string[],
-  onGenerate: (input: string, model: string, type: ModelType, options?: unknown) => void | Promise<void>
+  onGenerate: (input: string, model: string, type: ModelType, options?: DynamicValue) => void | Promise<void>
 ) => {
   const handleGenerate = useCallback(async () => {
     // 获取模型信息
@@ -34,7 +34,7 @@ export const useGenerationHandler = (
       return
     }
 
-    const rawType: unknown = modelInfo.type
+    const rawType: DynamicValue = modelInfo.type
     const modelType: ModelType = rawType === 'image' || rawType === 'video' || rawType === 'audio' ? rawType : 'image'
 
     // 准备生成选项

@@ -33,6 +33,6 @@ export interface InputLimitsConfig {
   rules?: InputLimitRule[]
 }
 
-export type InputLimitsResolver = (params: Record<string, any>) => InputLimitsConfig
+export type InputLimitsResolver = (params: DynamicValueMap) => InputLimitsConfig
 
 export type InputLimits = InputLimitsConfig | InputLimitsResolver

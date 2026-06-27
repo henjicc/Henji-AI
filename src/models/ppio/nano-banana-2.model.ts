@@ -143,7 +143,7 @@ export const nanoBanana2Model = defineModel({
         ? resolveClosestAspectRatio(imageRatioHint)
         : rawAspectRatio
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size: quality === '0.5K' || quality === '1K' || quality === '2K' || quality === '4K' ? quality : '1K',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1'
@@ -160,7 +160,7 @@ export const nanoBanana2Model = defineModel({
     currency: '¥',
     calculator: (params) => {
       const resolution = params.resolution && typeof params.resolution === 'object'
-        ? params.resolution as Record<string, unknown>
+        ? params.resolution as DynamicValueMap
         : undefined
       const quality = typeof resolution?.quality === 'string'
         ? resolution.quality

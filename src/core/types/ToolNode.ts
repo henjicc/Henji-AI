@@ -56,8 +56,8 @@ export interface ToolNode {
   }
 
   /** 执行函数 */
-  execute: (inputs: Record<string, any>) => Promise<NodeOutput> | NodeOutput
+  execute: (inputs: DynamicValueMap) => Promise<NodeOutput> | NodeOutput
 
   /** 工具节点特有配置 */
-  config?: Record<string, any>
+  config?: DynamicValueMap
 }

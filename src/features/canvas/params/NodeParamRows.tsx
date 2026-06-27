@@ -29,9 +29,9 @@ interface NodeParamRowsProps {
   /** 模型参数 schema（registry.getSchema 结果） */
   schema: ParamDef[];
   /** 默认值与持久化合并后的当前参数值 */
-  values: Record<string, unknown>;
+  values: DynamicValueMap;
   /** 参数变化回写 */
-  setParam: (key: string, value: unknown) => void;
+  setParam: (key: string, value: DynamicValue) => void;
   /** 不在逐行区渲染的参数（如 prompt，由 shell 单独渲染） */
   excludeParamIds?: string[];
 }

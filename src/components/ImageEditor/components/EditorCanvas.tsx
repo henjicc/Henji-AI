@@ -17,8 +17,8 @@ interface EditorCanvasProps {
 
 export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   imageUrl,
-  width,
-  height,
+  width: _width,
+  height: _height,
   scale,
   rotation,
   onCanvasReady,

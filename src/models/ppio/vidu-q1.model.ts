@@ -186,7 +186,7 @@ export const viduQ1Model = defineModel({
       const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto'
       const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: 5,
         resolution: '1080p',
@@ -225,7 +225,7 @@ export const viduQ1Model = defineModel({
   },
   pricing: {
     currency: '¥',
-    calculator: (params) => {
+    calculator: (_params) => {
       const basePrice = 0.6
       return basePrice
     },

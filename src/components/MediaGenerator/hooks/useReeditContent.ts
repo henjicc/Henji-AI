@@ -14,10 +14,10 @@ interface ReEditEventDetail {
   uploadedVideoFilePaths?: string[]
   model?: string
   provider?: string
-  options?: Record<string, unknown>
+  options?: DynamicValueMap
 }
 
-function sanitizePresetOptions(options: Record<string, unknown>): Record<string, unknown> {
+function sanitizePresetOptions(options: DynamicValueMap): DynamicValueMap {
   const paramsToSet = { ...options }
   delete paramsToSet.images
   delete paramsToSet.uploadedFilePaths

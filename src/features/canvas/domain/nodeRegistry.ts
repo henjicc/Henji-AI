@@ -110,11 +110,11 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
 
 /** 通用提取：节点 data 上的 imageUrl/previewImageUrl 作为图片输出 */
 function imageOutputsFromData(data: CanvasNodeData): NodeMediaOutput[] {
-  const imageUrl = (data as { imageUrl?: unknown }).imageUrl;
+  const imageUrl = (data as { imageUrl?: DynamicValue }).imageUrl;
   if (typeof imageUrl !== 'string' || !imageUrl) {
     return [];
   }
-  const previewImageUrl = (data as { previewImageUrl?: unknown }).previewImageUrl;
+  const previewImageUrl = (data as { previewImageUrl?: DynamicValue }).previewImageUrl;
   return [{
     kind: 'image',
     url: imageUrl,

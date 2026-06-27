@@ -58,10 +58,10 @@ export interface GenerationNodeShellData {
   displayName?: string;
   prompt: string;
   modelId?: string;
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   /** 媒体行未连线时的本地内联上传值 */
   mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface GenerationNodeShellProps {
@@ -78,7 +78,7 @@ export interface GenerationNodeShellProps {
   apiKeyRequiredKey: string;
   resultTitleKey: string;
   /** 结果节点的附加初始数据（如 resultKind） */
-  resultNodeExtraData?: Record<string, unknown>;
+  resultNodeExtraData?: DynamicValueMap;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -230,7 +230,7 @@ export const GenerationNodeShell = memo(({
     ? providerKeyStatus[effectiveModel.meta.provider] === true
     : false;
 
-  const handleParamsChange = useCallback((nextParams: Record<string, unknown>) => {
+  const handleParamsChange = useCallback((nextParams: DynamicValueMap) => {
     updateNodeData(id, { params: nextParams });
   }, [id, updateNodeData]);
 
@@ -292,13 +292,13 @@ export const GenerationNodeShell = memo(({
     // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
     const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState();
     const injectedParamValues = collectInputValues(id, graphNodes, graphEdges);
-    const generationParams: Record<string, unknown> = {
+    const generationParams: DynamicValueMap = {
       ...modelParamValues,
       ...injectedParamValues,
       prompt,
       text: prompt,
     };
-    const estimateParams: Record<string, unknown> = {
+    const estimateParams: DynamicValueMap = {
       ...generationParams,
       ...(effectiveImages.length > 0
         ? { images: effectiveImages, uploadedFilePaths: effectiveImages }

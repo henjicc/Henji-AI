@@ -160,7 +160,7 @@ export type OperationType =
 export interface EditorOperation {
     type: OperationType
     timestamp: number
-    data: any  // 操作相关数据，用于撤销/重做
+    data: DynamicValue  // 操作相关数据，用于撤销/重做
     prevState?: Partial<CanvasState>  // 操作前的状态快照
 }
 

@@ -24,10 +24,10 @@ export interface FlowStage {
  * 参数值记录
  */
 export interface ParamValueRecord {
-  value: any
+  value: DynamicValue
   source?: 'user-input' | 'default' | 'linkage' | 'transform' | 'api-build'
   changedBy?: string       // 被哪个联动规则修改
-  transformedFrom?: any    // 转换前的值
+  transformedFrom?: DynamicValue    // 转换前的值
   reason?: string          // 变化原因
 }
 

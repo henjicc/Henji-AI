@@ -9,8 +9,11 @@ import {
   type VoiceSourceTag,
 } from '@/core/voice/voiceFeatureTags'
 import { getI18nText, type I18nText } from '@/core/types'
+import { createLogger } from '@/core/logging'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+
+const logger = createLogger('components.params.panels.VoiceSelectorPanel')
 
 type VoiceSourceFilter = 'all' | VoiceSourceTag
 type VoiceGenderFilter = 'all' | VoiceGenderTag
@@ -116,7 +119,7 @@ function resolveLanguageLabel(code: string): string {
   return code.toUpperCase()
 }
 
-function resolveDescriptionText(description: unknown, language: string): string {
+function resolveDescriptionText(description: DynamicValue, language: string): string {
   if (typeof description === 'string') {
     return description.trim()
   }
@@ -188,7 +191,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   const [hoveredVoiceId, setHoveredVoiceId] = useState<string | null>(null)
   const [customVoices, setCustomVoices] = useState<VoiceSelectorConfig['voices']>([])
   const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null)
-  const configuredVoices = config?.voices ?? []
+  const configuredVoices = useMemo(() => config?.voices ?? [], [config?.voices])
   const voiceLibraryScope = config?.voiceLibrary
 
   useEffect(() => {
@@ -221,7 +224,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
 
     loadCustomVoices().catch((error) => {
       if (import.meta.env.DEV) {
-        console.warn('[VoiceSelectorPanel] load custom voices failed', error)
+        logger.warn('load custom voices failed', error)
       }
     })
 

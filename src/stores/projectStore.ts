@@ -116,8 +116,8 @@ function mapNodeImageReferences(
   mapImageUrl: (imageUrl: string | null | undefined) => string | null | undefined
 ): CanvasNode[] {
   return nodes.map((node) => {
-    const nodeData = node.data as Record<string, unknown>;
-    const nextData: Record<string, unknown> = { ...nodeData };
+    const nodeData = node.data as DynamicValueMap;
+    const nextData: DynamicValueMap = { ...nodeData };
 
     if ('imageUrl' in nextData) {
       nextData.imageUrl = mapImageUrl(nextData.imageUrl as string | null | undefined) ?? null;
@@ -140,7 +140,7 @@ function mapNodeImageReferences(
           return frame;
         }
 
-        const frameRecord = frame as Record<string, unknown>;
+        const frameRecord = frame as DynamicValueMap;
         if (!('imageUrl' in frameRecord)) {
           return frame;
         }
@@ -272,7 +272,7 @@ function extractImagePoolFromHistoryJson(historyJson: string): string[] {
   }
 
   const rawArrayJson = historyJson.slice(arrayStart, arrayEnd + 1);
-  const parsed = safeParseJson<unknown>(rawArrayJson, []);
+  const parsed = safeParseJson<DynamicValue>(rawArrayJson, []);
   if (!Array.isArray(parsed)) {
     return [];
   }

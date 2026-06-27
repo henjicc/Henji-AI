@@ -1,0 +1,15 @@
+{
+  "sample": {
+    "url": "http://localhost:5173/",
+    "title": "痕迹AI",
+    "rootChildren": 0,
+    "rootOpacity": null,
+    "rootBg": null,
+    "rootTextColor": null,
+    "textSnippet": "",
+    "buttonCount": 0,
+    "fixedCount": 0
+  },
+  "consoleErrors": [],
+  "pageErrors": []
+}

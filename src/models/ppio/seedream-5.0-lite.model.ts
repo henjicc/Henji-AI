@@ -22,7 +22,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-function toInteger(value: unknown): number | null {
+function toInteger(value: DynamicValue): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return Math.trunc(value)
   }
@@ -135,7 +135,7 @@ export const seedream50LiteModel = defineModel({
     builder: (params) => {
       const localClamp = (value: number, min: number, max: number): number =>
         Math.min(max, Math.max(min, value))
-      const localToInteger = (value: unknown): number | null => {
+      const localToInteger = (value: DynamicValue): number | null => {
         if (typeof value === 'number' && Number.isFinite(value)) {
           return Math.trunc(value)
         }
@@ -145,7 +145,7 @@ export const seedream50LiteModel = defineModel({
         }
         return null
       }
-      const localToPositiveNumber = (value: unknown): number | null => {
+      const localToPositiveNumber = (value: DynamicValue): number | null => {
         if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
           return value
         }
@@ -207,7 +207,7 @@ export const seedream50LiteModel = defineModel({
       }
       const localResolveRequestSize = (): string => {
         const resolutionRecord = params.resolution && typeof params.resolution === 'object'
-          ? params.resolution as Record<string, unknown>
+          ? params.resolution as DynamicValueMap
           : undefined
 
         if (!resolutionRecord) {
@@ -244,7 +244,7 @@ export const seedream50LiteModel = defineModel({
       const maxGeneratedImages = localClamp(rawMaxImages, 1, Math.max(1, 15 - requestImages.length))
       const size = localResolveRequestSize()
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size,
         watermark: false,

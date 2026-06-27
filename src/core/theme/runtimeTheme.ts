@@ -105,11 +105,11 @@ function normalizeHexColor(input: string, fallback: string): string {
   return (trimmed.startsWith('#') ? trimmed : `#${trimmed}`).toUpperCase();
 }
 
-function isThemeTonePreset(value: unknown): value is ThemeTonePreset {
+function isThemeTonePreset(value: DynamicValue): value is ThemeTonePreset {
   return value === 'neutral' || value === 'warm' || value === 'cool';
 }
 
-function isUiRadiusPreset(value: unknown): value is UiRadiusPreset {
+function isUiRadiusPreset(value: DynamicValue): value is UiRadiusPreset {
   return value === 'compact' || value === 'default' || value === 'large';
 }
 
@@ -171,7 +171,7 @@ export function createRuntimeThemePayload(config: RuntimeThemeConfig): RuntimeTh
   };
 }
 
-export function parseRuntimeThemePayload(input: unknown): RuntimeThemePayload | null {
+export function parseRuntimeThemePayload(input: DynamicValue): RuntimeThemePayload | null {
   if (!input || typeof input !== 'object') {
     return null;
   }

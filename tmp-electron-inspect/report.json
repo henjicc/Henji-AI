@@ -1,0 +1,98 @@
+{
+  "samples": [
+    {
+      "url": "http://localhost:5174/",
+      "title": "痕迹AI",
+      "bodyBg": "rgb(10, 11, 13)",
+      "rootExists": true,
+      "rootChildren": 0,
+      "rootOpacity": null,
+      "rootDisplay": null,
+      "rootVisibility": null,
+      "rootBg": null,
+      "rootTextColor": null,
+      "rootText": "",
+      "fixedCount": 0,
+      "dialogs": []
+    },
+    {
+      "url": "http://localhost:5174/",
+      "title": "痕迹AI",
+      "bodyBg": "rgb(10, 11, 13)",
+      "rootExists": true,
+      "rootChildren": 0,
+      "rootOpacity": null,
+      "rootDisplay": null,
+      "rootVisibility": null,
+      "rootBg": null,
+      "rootTextColor": null,
+      "rootText": "",
+      "fixedCount": 0,
+      "dialogs": []
+    },
+    {
+      "url": "http://localhost:5174/",
+      "title": "痕迹AI",
+      "bodyBg": "rgb(10, 11, 13)",
+      "rootExists": true,
+      "rootChildren": 0,
+      "rootOpacity": null,
+      "rootDisplay": null,
+      "rootVisibility": null,
+      "rootBg": null,
+      "rootTextColor": null,
+      "rootText": "",
+      "fixedCount": 0,
+      "dialogs": []
+    },
+    {
+      "url": "http://localhost:5174/",
+      "title": "痕迹AI",
+      "bodyBg": "rgb(10, 11, 13)",
+      "rootExists": true,
+      "rootChildren": 0,
+      "rootOpacity": null,
+      "rootDisplay": null,
+      "rootVisibility": null,
+      "rootBg": null,
+      "rootTextColor": null,
+      "rootText": "",
+      "fixedCount": 0,
+      "dialogs": []
+    },
+    {
+      "url": "http://localhost:5174/",
+      "title": "痕迹AI",
+      "bodyBg": "rgb(10, 11, 13)",
+      "rootExists": true,
+      "rootChildren": 0,
+      "rootOpacity": null,
+      "rootDisplay": null,
+      "rootVisibility": null,
+      "rootBg": null,
+      "rootTextColor": null,
+      "rootText": "",
+      "fixedCount": 0,
+      "dialogs": []
+    },
+    {
+      "url": "http://localhost:5174/",
+      "title": "痕迹AI",
+      "bodyBg": "rgb(10, 11, 13)",
+      "rootExists": true,
+      "rootChildren": 0,
+      "rootOpacity": null,
+      "rootDisplay": null,
+      "rootVisibility": null,
+      "rootBg": null,
+      "rootTextColor": null,
+      "rootText": "",
+      "fixedCount": 0,
+      "dialogs": []
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [
+    "Cannot access 'SHARED_FIELDS' before initialization"
+  ]
+}

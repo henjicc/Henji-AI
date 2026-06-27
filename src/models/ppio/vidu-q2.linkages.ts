@@ -1,7 +1,7 @@
 import type { Linkage } from '@/core/types'
 import { MODE_FALLBACK, MODE_SUPPORT_MATRIX, resolveEditionFromParams, resolveModeFromParams } from './vidu-q2.constants'
 
-function getImageCount(params: Record<string, unknown>): number {
+function getImageCount(params: DynamicValueMap): number {
   return Array.isArray(params.uploadedImages) ? params.uploadedImages.length : 0
 }
 

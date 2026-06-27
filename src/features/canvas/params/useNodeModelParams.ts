@@ -8,17 +8,17 @@ import { extractDefaults } from '@/hooks/utils/defaultExtractor';
 export interface UseNodeModelParamsOptions {
   modelId: string;
   /** 节点 data 中持久化的参数（可为空，缺省时使用 schema 默认值） */
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   /** 参数变化时回写节点 data（传入完整参数对象） */
-  onParamsChange: (nextParams: Record<string, unknown>) => void;
+  onParamsChange: (nextParams: DynamicValueMap) => void;
 }
 
 export interface UseNodeModelParamsResult {
   schema: ParamDef[];
-  defaults: Record<string, unknown>;
+  defaults: DynamicValueMap;
   /** 默认值与持久化参数合并后的运行时值 */
-  values: Record<string, unknown>;
-  setParam: (key: string, value: unknown) => void;
+  values: DynamicValueMap;
+  setParam: (key: string, value: DynamicValue) => void;
   resetParams: () => void;
 }
 
@@ -52,8 +52,8 @@ export function useNodeModelParams({
   );
 
   const setParam = useCallback(
-    (key: string, value: unknown) => {
-      let nextValues: Record<string, unknown> = { ...values, [key]: value };
+    (key: string, value: DynamicValue) => {
+      let nextValues: DynamicValueMap = { ...values, [key]: value };
       if (linkageEngine) {
         nextValues = linkageEngine.execute(key, nextValues, schema);
       }

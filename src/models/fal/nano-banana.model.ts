@@ -60,7 +60,7 @@ export const nanoBananaModel = defineModel({
       const images = params.images || []
       const prompt = params.prompt || ''
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt
       }
 

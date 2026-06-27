@@ -104,7 +104,7 @@ export const viduQ2Model = defineModel({
       const modeValues = ['text-image-to-video', 'reference-to-video', 'start-end-frame', 'smart-multiframe'] as const
       type LocalEdition = (typeof editionValues)[number]
       type LocalMode = (typeof modeValues)[number]
-      const isEdition = (value: unknown): value is LocalEdition => {
+      const isEdition = (value: DynamicValue): value is LocalEdition => {
         return typeof value === 'string' && editionValues.includes(value as LocalEdition)
       }
       const support: Record<LocalEdition, LocalMode[]> = {
@@ -139,13 +139,13 @@ export const viduQ2Model = defineModel({
           'smart-multiframe': '/async/vidu-q2-turbo-multiframe'
         }
       }
-      const filterMedia = (items: unknown): string[] => {
+      const filterMedia = (items: DynamicValue): string[] => {
         if (!Array.isArray(items)) {
           return []
         }
         return items.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
       }
-      const resolveEdition = (rawParams: Record<string, unknown>): LocalEdition => {
+      const resolveEdition = (rawParams: DynamicValueMap): LocalEdition => {
         const proMode = rawParams.ppioViduQ2ProMode === true
         const fastMode = rawParams.ppioViduQ2FastMode === true
         if (proMode && fastMode) {
@@ -196,7 +196,7 @@ export const viduQ2Model = defineModel({
       const modeValues = ['text-image-to-video', 'reference-to-video', 'start-end-frame', 'smart-multiframe'] as const
       type LocalEdition = (typeof editionValues)[number]
       type LocalMode = (typeof modeValues)[number]
-      const isEdition = (value: unknown): value is LocalEdition => {
+      const isEdition = (value: DynamicValue): value is LocalEdition => {
         return typeof value === 'string' && editionValues.includes(value as LocalEdition)
       }
       const support: Record<LocalEdition, LocalMode[]> = {
@@ -211,23 +211,23 @@ export const viduQ2Model = defineModel({
         'pro-fast': 'text-image-to-video',
         turbo: 'text-image-to-video'
       }
-      const filterMedia = (items: unknown): string[] => {
+      const filterMedia = (items: DynamicValue): string[] => {
         if (!Array.isArray(items)) {
           return []
         }
         return items.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
       }
-      const resolveBoolean = (preferred: unknown, legacy: unknown, fallbackValue: boolean): boolean => {
+      const resolveBoolean = (preferred: DynamicValue, legacy: DynamicValue, fallbackValue: boolean): boolean => {
         if (typeof preferred === 'boolean') return preferred
         if (typeof legacy === 'boolean') return legacy
         return fallbackValue
       }
-      const resolveNumber = (preferred: unknown, legacy: unknown, fallbackValue: number): number => {
+      const resolveNumber = (preferred: DynamicValue, legacy: DynamicValue, fallbackValue: number): number => {
         const source = preferred !== undefined ? preferred : legacy
         const parsed = typeof source === 'number' ? source : Number(source)
         return Number.isFinite(parsed) ? parsed : fallbackValue
       }
-      const clampInteger = (value: unknown, min: number, max: number, fallbackValue: number): number => {
+      const clampInteger = (value: DynamicValue, min: number, max: number, fallbackValue: number): number => {
         const resolved = resolveNumber(value, undefined, fallbackValue)
         const rounded = Math.round(resolved)
         if (rounded < min) return min
@@ -235,7 +235,7 @@ export const viduQ2Model = defineModel({
         return rounded
       }
 
-      const resolveEdition = (rawParams: Record<string, unknown>): LocalEdition => {
+      const resolveEdition = (rawParams: DynamicValueMap): LocalEdition => {
         const proMode = rawParams.ppioViduQ2ProMode === true
         const fastMode = rawParams.ppioViduQ2FastMode === true
         if (proMode && fastMode) {
@@ -436,7 +436,7 @@ export const viduQ2Model = defineModel({
       const modeValues = ['text-image-to-video', 'reference-to-video', 'start-end-frame', 'smart-multiframe'] as const
       type LocalEdition = (typeof editionValues)[number]
       type LocalMode = (typeof modeValues)[number]
-      const isEdition = (value: unknown): value is LocalEdition => {
+      const isEdition = (value: DynamicValue): value is LocalEdition => {
         return typeof value === 'string' && editionValues.includes(value as LocalEdition)
       }
       const support: Record<LocalEdition, LocalMode[]> = {
@@ -451,7 +451,7 @@ export const viduQ2Model = defineModel({
         'pro-fast': 'text-image-to-video',
         turbo: 'text-image-to-video'
       }
-      const resolveEdition = (rawParams: Record<string, unknown>): LocalEdition => {
+      const resolveEdition = (rawParams: DynamicValueMap): LocalEdition => {
         const proMode = rawParams.ppioViduQ2ProMode === true
         const fastMode = rawParams.ppioViduQ2FastMode === true
         if (proMode && fastMode) return 'pro-fast'
@@ -463,7 +463,7 @@ export const viduQ2Model = defineModel({
         if (isEdition(legacy)) return legacy
         return 'q2'
       }
-      const resolveMode = (rawParams: Record<string, unknown>, edition: LocalEdition): LocalMode => {
+      const resolveMode = (rawParams: DynamicValueMap, edition: LocalEdition): LocalMode => {
         const preferred = rawParams.ppioViduQ2Mode
         const legacy = rawParams.mode
         const rawMode = typeof preferred === 'string' ? preferred : (typeof legacy === 'string' ? legacy : fallback[edition])

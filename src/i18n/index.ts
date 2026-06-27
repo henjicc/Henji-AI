@@ -9,7 +9,7 @@ export default i18n
 /**
  * 切换语言
  */
-export function changeLanguage(lang: string): Promise<any> {
+export function changeLanguage(lang: string): Promise<DynamicValue> {
   return i18n.changeLanguage(lang)
 }
 

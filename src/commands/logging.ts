@@ -8,7 +8,7 @@ export interface RuntimeRequestPreviewDto {
   providerId: string
   method: string
   route: string
-  requestBody: unknown
+  requestBody: DynamicValue
 }
 
 export interface LlmRuntimeRequestPreviewDto {
@@ -17,7 +17,7 @@ export interface LlmRuntimeRequestPreviewDto {
   providerId: string
   method: string
   route: string
-  requestBody: unknown
+  requestBody: DynamicValue
 }
 
 export async function logFrontendEvents(events: LogEventBridgeDto[]): Promise<void> {

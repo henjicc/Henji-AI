@@ -20,7 +20,7 @@ function isRemoteUrl(value: string): boolean {
 export async function persistGenerationResult(
   mediaType: CanvasMediaType,
   output: string
-): Promise<Record<string, unknown>> {
+): Promise<DynamicValueMap> {
   if (mediaType === 'image') {
     const prepared = await prepareNodeImage(output);
     return {

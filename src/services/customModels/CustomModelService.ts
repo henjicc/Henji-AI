@@ -144,7 +144,7 @@ export class CustomModelService {
    * 注册到 ModelRegistry
    */
   private registerToRegistry(customModel: CustomModel): void {
-    registry.register(customModel.config as any)
+    registry.register(customModel.config as DynamicValue)
     logger.info(`[CustomModelService] Registered custom model: ${customModel.id}`)
   }
 

@@ -38,11 +38,11 @@ export const TOOL_BUTTONS: ToolButton[] = [
   { type: 'text', label: '文本', icon: Type },
 ];
 
-export function toNumber(value: unknown, fallback: number): number {
+export function toNumber(value: DynamicValue, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-export function toText(value: unknown, fallback: string): string {
+export function toText(value: DynamicValue, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
 }
 

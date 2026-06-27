@@ -82,7 +82,7 @@ export interface MinimaxVoiceClonePanelConfig {
 export interface CompositePanelConfig {
   panels: Array<{
     type: PanelType
-    config: any
+    config: DynamicValue
   }>
   layout?: 'horizontal' | 'vertical' | 'grid'
 }
@@ -91,7 +91,7 @@ export interface CompositePanelConfig {
  * 自定义面板配置
  */
 export interface CustomPanelConfig {
-  [key: string]: any
+  [key: string]: DynamicValue
 }
 
 /**
@@ -117,20 +117,20 @@ export interface SpecialPanelConfig {
   triggerStyle?: TriggerStyle
 
   /** 触发器显示函数 */
-  triggerDisplay?: (value: any) => string
+  triggerDisplay?: (value: DynamicValue) => string
 
   /** 面板特定配置 */
   config: ResolutionPanelConfig | VoiceSelectorConfig | MinimaxVoiceClonePanelConfig | CompositePanelConfig | CustomPanelConfig
 
   /** 当前值 */
-  value: any
+  value: DynamicValue
 
   /** 值变化回调 */
-  onChange: (value: any) => void
+  onChange: (value: DynamicValue) => void
 
   /** 显示条件 */
-  showWhen?: (params: Record<string, any>) => boolean
+  showWhen?: (params: DynamicValueMap) => boolean
 
   /** 禁用条件 */
-  disabled?: (params: Record<string, any>) => boolean
+  disabled?: (params: DynamicValueMap) => boolean
 }

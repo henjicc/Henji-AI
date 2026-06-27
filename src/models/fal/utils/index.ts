@@ -6,7 +6,7 @@
  * 解析图片尺寸参数
  * 将 "width*height" 格式转换为 Fal API 需要的格式
  */
-export function parseImageSize(sizeParam?: string): any {
+export function parseImageSize(sizeParam?: string): DynamicValue {
   if (!sizeParam) {
     return 'landscape_4_3'
   }

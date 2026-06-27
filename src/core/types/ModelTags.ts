@@ -88,7 +88,7 @@ export type KnownModelTag =
  *
  * 迁移期允许扩展字符串标签，避免阻塞模型定义；优先使用 KnownModelTag 中的标准标签。
  */
-export type ModelTag = KnownModelTag | (string & {})
+export type ModelTag = KnownModelTag | (string & Record<never, never>)
 
 /**
  * 模型标签配置

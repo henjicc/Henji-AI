@@ -47,7 +47,7 @@ export interface ValidationError {
  * ```
  */
 export function validateParams(
-  params: Record<string, any>,
+  params: DynamicValueMap,
   schema: ParamDef[]
 ): ValidationError[] {
   const errors: ValidationError[] = []
@@ -108,7 +108,7 @@ export function validateParams(
  * @param value - 参数值
  * @returns 是否有效
  */
-export function validateParamValue(paramDef: ParamDef, value: any): boolean {
+export function validateParamValue(paramDef: ParamDef, value: DynamicValue): boolean {
   // 必需参数检查
   if ('required' in paramDef && paramDef.required) {
     if (value === undefined || value === null || value === '') {
@@ -147,7 +147,7 @@ export function validateParamValue(paramDef: ParamDef, value: any): boolean {
 /**
  * 验证类型
  */
-function validateType(paramDef: ParamDef, value: any): ValidationError | null {
+function validateType(paramDef: ParamDef, value: DynamicValue): ValidationError | null {
   if (!isValidType(paramDef, value)) {
     return {
       paramId: paramDef.id,
@@ -161,7 +161,7 @@ function validateType(paramDef: ParamDef, value: any): ValidationError | null {
 /**
  * 检查类型是否有效
  */
-function isValidType(paramDef: ParamDef, value: any): boolean {
+function isValidType(paramDef: ParamDef, value: DynamicValue): boolean {
   const expectedType = paramDef.valueType
   const actualType = typeof value
 
@@ -184,7 +184,7 @@ function isValidType(paramDef: ParamDef, value: any): boolean {
 /**
  * 验证范围
  */
-function validateRange(paramDef: ParamDef, value: any): ValidationError | null {
+function validateRange(paramDef: ParamDef, value: DynamicValue): ValidationError | null {
   if (!isValidRange(paramDef, value)) {
     const min = 'min' in paramDef ? paramDef.min : undefined
     const max = 'max' in paramDef ? paramDef.max : undefined
@@ -210,7 +210,7 @@ function validateRange(paramDef: ParamDef, value: any): ValidationError | null {
 /**
  * 检查范围是否有效
  */
-function isValidRange(paramDef: ParamDef, value: any): boolean {
+function isValidRange(paramDef: ParamDef, value: DynamicValue): boolean {
   if (typeof value !== 'number') {
     return true
   }
@@ -229,7 +229,7 @@ function isValidRange(paramDef: ParamDef, value: any): boolean {
 /**
  * 验证选项
  */
-function validateOptions(paramDef: ParamDef, value: any): ValidationError | null {
+function validateOptions(paramDef: ParamDef, value: DynamicValue): ValidationError | null {
   if (!isValidOption(paramDef, value)) {
     const validValues =
       'options' in paramDef && paramDef.options
@@ -248,7 +248,7 @@ function validateOptions(paramDef: ParamDef, value: any): ValidationError | null
 /**
  * 检查选项是否有效
  */
-function isValidOption(paramDef: ParamDef, value: any): boolean {
+function isValidOption(paramDef: ParamDef, value: DynamicValue): boolean {
   if (!('options' in paramDef) || !paramDef.options) {
     return true
   }
@@ -260,7 +260,7 @@ function isValidOption(paramDef: ParamDef, value: any): boolean {
 /**
  * 验证数组长度
  */
-function validateArrayLength(paramDef: ParamDef, value: any): ValidationError | null {
+function validateArrayLength(paramDef: ParamDef, value: DynamicValue): ValidationError | null {
   if (!isValidArrayLength(paramDef, value)) {
     const maxCount = 'maxCount' in paramDef ? paramDef.maxCount : undefined
 
@@ -276,7 +276,7 @@ function validateArrayLength(paramDef: ParamDef, value: any): ValidationError | 
 /**
  * 检查数组长度是否有效
  */
-function isValidArrayLength(paramDef: ParamDef, value: any): boolean {
+function isValidArrayLength(paramDef: ParamDef, value: DynamicValue): boolean {
   if (!Array.isArray(value)) {
     return true
   }

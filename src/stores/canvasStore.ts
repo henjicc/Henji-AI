@@ -158,7 +158,7 @@ interface CanvasState {
   clearCanvas: () => void;
 }
 
-function normalizeHandleId(value: unknown): string | undefined {
+function normalizeHandleId(value: DynamicValue): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -185,9 +185,9 @@ function normalizeEdgesWithNodes(rawEdges: CanvasEdge[], nodes: CanvasNode[]): C
       ...edge,
       type: edge.type ?? 'disconnectableEdge',
       sourceHandle:
-        normalizeHandleId((edge as CanvasEdge & { sourceHandle?: unknown }).sourceHandle) ?? 'source',
+        normalizeHandleId((edge as CanvasEdge & { sourceHandle?: DynamicValue }).sourceHandle) ?? 'source',
       targetHandle:
-        normalizeHandleId((edge as CanvasEdge & { targetHandle?: unknown }).targetHandle) ?? 'target',
+        normalizeHandleId((edge as CanvasEdge & { targetHandle?: DynamicValue }).targetHandle) ?? 'target',
     }));
 }
 
@@ -209,7 +209,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         const firstFrameAspectRatio = frames.find((frame) => typeof frame.aspectRatio === 'string')
           ?.aspectRatio;
         const normalizedFrameAspectRatio =
-          (typeof (mergedData as { frameAspectRatio?: unknown }).frameAspectRatio === 'string'
+          (typeof (mergedData as { frameAspectRatio?: DynamicValue }).frameAspectRatio === 'string'
             ? (mergedData as { frameAspectRatio?: string }).frameAspectRatio
             : null) ??
           firstFrameAspectRatio ??
@@ -247,7 +247,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         node.type === CANVAS_NODE_TYPES.imageEdit
         || node.type === CANVAS_NODE_TYPES.storyboardGen
       ) {
-        migrateGenerationNodeData(mergedData as Record<string, unknown>);
+        migrateGenerationNodeData(mergedData as DynamicValueMap);
       }
 
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
@@ -1092,7 +1092,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
 
         const hasDataChange = Object.entries(data).some(([key, nextValue]) => {
-          const previousValue = (node.data as Record<string, unknown>)[key];
+          const previousValue = (node.data as DynamicValueMap)[key];
           return !Object.is(previousValue, nextValue);
         });
         if (!hasDataChange) {

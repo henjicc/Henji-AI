@@ -31,12 +31,12 @@ function isNativeImageRuntime(): boolean {
   return isDesktopRuntime();
 }
 
-function imageCmdInfo(message: string, payload: unknown): void {
+function imageCmdInfo(message: string, payload: DynamicValue): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
   logger.info(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }
 
-function imageCmdWarn(message: string, payload: unknown): void {
+function imageCmdWarn(message: string, payload: DynamicValue): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
   logger.warn(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }

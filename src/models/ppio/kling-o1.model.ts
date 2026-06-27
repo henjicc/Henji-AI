@@ -172,7 +172,7 @@ export const klingO1Model = defineModel({
       trigger: 'images',
       effect: 'autoSwitch',
       target: 'ppioKlingO1Mode',
-      condition: (images: string[], allParams: Record<string, any>) => {
+      condition: (images: string[], allParams: DynamicValueMap) => {
         const count = images?.length || 0
         const mode = allParams.ppioKlingO1Mode
         return mode === 'text-image-to-video' && count === 2
@@ -185,12 +185,12 @@ export const klingO1Model = defineModel({
       trigger: ['videos', 'images'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1Mode',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const videoCount = allParams.uploadedVideos?.length || 0
         const mode = allParams.ppioKlingO1Mode
         return videoCount > 0 && (mode === 'reference-to-video' || mode === 'video-edit')
       },
-      value: (_: any, allParams: Record<string, any>) => allParams.ppioKlingO1Mode,
+      value: (_: DynamicValue, allParams: DynamicValueMap) => allParams.ppioKlingO1Mode,
       noRestore: true
     },
 
@@ -199,7 +199,7 @@ export const klingO1Model = defineModel({
       trigger: ['ppioKlingO1Mode', 'images', 'videos'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1AspectRatio',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode || 'text-image-to-video'
         const imageCount = allParams.uploadedImages?.length || 0
         const currentRatio = allParams.ppioKlingO1AspectRatio
@@ -215,7 +215,7 @@ export const klingO1Model = defineModel({
       trigger: ['ppioKlingO1Mode', 'videos'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1AspectRatio',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode || 'text-image-to-video'
         const currentRatio = allParams.ppioKlingO1AspectRatio
         return currentRatio === 'smart' &&
@@ -229,7 +229,7 @@ export const klingO1Model = defineModel({
       trigger: ['images', 'videos'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1AspectRatio',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode || 'text-image-to-video'
         const imageCount = allParams.uploadedImages?.length || 0
         const currentRatio = allParams.ppioKlingO1AspectRatio

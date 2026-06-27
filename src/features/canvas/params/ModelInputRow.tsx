@@ -21,9 +21,9 @@ interface ModelInputRowProps {
   modelId: string;
   /** 已连线的模型选择器解析出的覆盖模型 id；非空时节点内选择只读 */
   overrideModelId: string | null;
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (params: Record<string, unknown>) => void;
+  onParamsChange: (params: DynamicValueMap) => void;
   incomingImages?: string[];
 }
 

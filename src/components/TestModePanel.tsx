@@ -24,8 +24,8 @@ interface TestModePanelProps {
   flowRecords?: ParamFlowRecord[]
   onExportFlowRecord?: (record: ParamFlowRecord) => void
   modelId?: string
-  params?: Record<string, unknown>
-  context?: Record<string, unknown>
+  params?: DynamicValueMap
+  context?: DynamicValueMap
 }
 
 const TestModePanel: React.FC<TestModePanelProps> = ({

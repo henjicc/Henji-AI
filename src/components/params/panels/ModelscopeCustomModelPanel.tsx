@@ -23,17 +23,17 @@ interface CustomModel {
 export interface ModelscopeCustomModelPanelProps {
   value: string
   onChange: (value: string) => void
-  config?: Record<string, unknown>
+  config?: DynamicValueMap
 }
 
 const STORAGE_KEY = 'modelscope_custom_models'
 
-function normalizeModelType(raw: unknown): CustomModelType {
+function normalizeModelType(raw: DynamicValue): CustomModelType {
   if (!raw || typeof raw !== 'object') {
     return { imageGeneration: true, imageEditing: false }
   }
 
-  const record = raw as Record<string, unknown>
+  const record = raw as DynamicValueMap
   const imageGeneration = record.imageGeneration === true
   const imageEditing = record.imageEditing === true && !imageGeneration
 
@@ -44,13 +44,13 @@ function parseCustomModels(raw: string | null): CustomModel[] {
   if (!raw) return []
 
   try {
-    const parsed = JSON.parse(raw) as unknown
+    const parsed = JSON.parse(raw) as DynamicValue
     if (!Array.isArray(parsed)) return []
 
     const models: CustomModel[] = []
     for (const item of parsed) {
       if (!item || typeof item !== 'object') continue
-      const record = item as Record<string, unknown>
+      const record = item as DynamicValueMap
       const id = typeof record.id === 'string' ? record.id.trim() : ''
       if (!id) continue
       const name = typeof record.name === 'string' && record.name.trim()
@@ -110,7 +110,7 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
     return models.map(model => {
       const typeLabel = model.modelType.imageEditing
         ? t('modelscopeCustomModelPanel.type.imageEditing')
-        : (model.modelType.imageGeneration ? t('modelscopeCustomModelPanel.type.imageGeneration') : t('modelscopeCustomModelPanel.type.unknown'))
+        : (model.modelType.imageGeneration ? t('modelscopeCustomModelPanel.type.imageGeneration') : t('modelscopeCustomModelPanel.type.DynamicValue'))
       return {
         value: model.id,
         label: `${model.name} (${typeLabel})`

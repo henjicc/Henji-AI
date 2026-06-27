@@ -6,11 +6,11 @@ interface ApiTraceViewerProps {
   compact?: boolean
 }
 
-function stringifyTraceJson(value: unknown): string {
+function stringifyTraceJson(value: DynamicValue): string {
   return JSON.stringify(value ?? null, null, 2)
 }
 
-function getRequestDisplayValue(trace: AiRuntimeTrace): unknown {
+function getRequestDisplayValue(trace: AiRuntimeTrace): DynamicValue {
   if (trace.requestBody !== undefined) {
     return trace.requestBody
   }

@@ -4,7 +4,7 @@ import { createElectronPlatform } from '@/platform/adapters/electron'
 
 declare global {
   interface Window {
-    henjiNative?: unknown
+    henjiNative?: DynamicValue
   }
 }
 

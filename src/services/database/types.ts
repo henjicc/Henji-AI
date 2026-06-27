@@ -23,7 +23,7 @@ export interface HistoryRecord {
   modelId: string
   type: 'image' | 'video' | 'audio'
   prompt: string | null
-  params: Record<string, any>
+  params: DynamicValueMap
   filePath: string | null
   taskId: string | null
   status: HistoryStatus
@@ -41,7 +41,7 @@ export interface PresetRecord {
   name: string
   description: string | null
   modelId: string | null  // null = 全局预设
-  params: Record<string, any>
+  params: DynamicValueMap
   isFavorite: boolean
   useCount: number
   createdAt: string
@@ -65,7 +65,7 @@ export interface CustomModelRecord {
   name: string
   providerId: string
   baseModel: string | null
-  config: Record<string, any>
+  config: DynamicValueMap
   isEnabled: boolean
   createdAt: string
   updatedAt: string

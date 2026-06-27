@@ -115,7 +115,7 @@ export const pixverseV55Model = defineModel({
       const resolution = params.pixverseResolution
       const duration = params.falPixverse55VideoDuration || 5
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
 
       if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
         requestData.aspect_ratio = aspectRatio

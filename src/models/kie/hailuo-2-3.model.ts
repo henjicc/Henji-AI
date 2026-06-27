@@ -87,7 +87,7 @@ export const kieHailuo23Model = defineModel({
       trigger: ['kieHailuo23Duration', 'kieHailuo23Resolution'],
       effect: 'autoSwitch',
       target: 'kieHailuo23Resolution',
-      condition: (_: unknown, allParams: Record<string, unknown>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         return allParams.kieHailuo23Duration === 10 && allParams.kieHailuo23Resolution === '1080P'
       },
       value: '768P'

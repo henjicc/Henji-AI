@@ -92,7 +92,7 @@ export const sora2Model = defineModel({
       const aspectRatio = params.falSora2AspectRatio
       const resolution = params.falSora2Resolution
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration,
         delete_video: true

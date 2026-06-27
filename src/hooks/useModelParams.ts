@@ -20,17 +20,17 @@ export interface UseModelParamsReturn {
   /**
    * 当前参数值
    */
-  params: Record<string, any>
+  params: DynamicValueMap
 
   /**
    * 设置单个参数
    */
-  setParam: (key: string, value: any) => void
+  setParam: (key: string, value: DynamicValue) => void
 
   /**
    * 批量设置参数
    */
-  setParams: (values: Record<string, any>) => void
+  setParams: (values: DynamicValueMap) => void
 
   /**
    * 重置所有参数为默认值
@@ -45,7 +45,7 @@ export interface UseModelParamsReturn {
   /**
    * 获取过滤后的选项（用于 dropdown 和 radio）
    */
-  getFilteredOptions: (paramId: string) => any[]
+  getFilteredOptions: (paramId: string) => DynamicValue[]
 
   /**
    * 获取参数定义
@@ -55,7 +55,7 @@ export interface UseModelParamsReturn {
   /**
    * 验证参数值
    */
-  validateParam: (paramId: string, value: any) => boolean
+  validateParam: (paramId: string, value: DynamicValue) => boolean
 
   /**
    * 参数 Schema
@@ -65,7 +65,7 @@ export interface UseModelParamsReturn {
   /**
    * 默认值
    */
-  defaults: Record<string, any>
+  defaults: DynamicValueMap
 
   /**
    * 参数流转追踪记录（仅在启用追踪时可用）
@@ -149,7 +149,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
   }
 
   // 6. 参数状态
-  const [params, setParamsState] = useState<Record<string, any>>(defaults)
+  const [params, setParamsState] = useState<DynamicValueMap>(defaults)
 
   // 6. 模型切换时重置参数
   useEffect(() => {
@@ -157,7 +157,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
   }, [modelId, defaults])
 
   // 7. 设置单个参数（集成联动引擎和追踪）
-  const setParam = useCallback((key: string, value: any) => {
+  const setParam = useCallback((key: string, value: DynamicValue) => {
     setParamsState((prev) => {
       // 开始追踪
       if (enableTracking && trackerRef.current) {
@@ -184,7 +184,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
 
         // 记录联动变化
         if (enableTracking && trackerRef.current) {
-          const changes: Record<string, any> = {}
+          const changes: DynamicValueMap = {}
           Object.keys(newParams).forEach((k) => {
             if (newParams[k] !== beforeLinkage[k]) {
               changes[k] = newParams[k]
@@ -211,7 +211,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
   }, [linkageEngine, schema, enableTracking, modelId])
 
   // 6. 批量设置参数
-  const setParams = useCallback((values: Record<string, any>) => {
+  const setParams = useCallback((values: DynamicValueMap) => {
     setParamsState((prev) => {
       // 检查是否有嵌套路径
       const hasNestedPaths = Object.keys(values).some((key) => key.includes('.'))
@@ -286,7 +286,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
 
   // 11. 验证参数值
   const validateParam = useCallback(
-    (paramId: string, value: any) => {
+    (paramId: string, value: DynamicValue) => {
       const paramDef = getParamDef(paramId)
       if (!paramDef) {
         return false
@@ -315,7 +315,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
       return []
     }
     return trackerRef.current.getRecords()
-  }, [enableTracking, params]) // 依赖 params 以便在参数变化时更新
+  }, [enableTracking]) // 依赖 params 以便在参数变化时更新
 
   return {
     params,

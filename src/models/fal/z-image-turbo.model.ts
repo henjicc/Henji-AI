@@ -80,7 +80,7 @@ export const zImageTurboModel = defineModel({
       const prompt = params.prompt || ''
       const imageSize = parseImageSize(params.falZImageTurboImageSize)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         image_size: imageSize,
         num_inference_steps: params.falZImageTurboNumInferenceSteps || 8,

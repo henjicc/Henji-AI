@@ -339,7 +339,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       }
       try {
         const buf = await fetchAudioArrayBuffer(src, filePath)
-        const Ctx = window.AudioContext ?? ((window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
+        const Ctx = window.AudioContext ?? ((window as DynamicValue as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
         if (!Ctx) {
           if (!aborted) {
             const fallback = buildFallbackWaveform(cacheKey)

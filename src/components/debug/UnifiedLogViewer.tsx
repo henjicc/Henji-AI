@@ -39,7 +39,7 @@ const EVENT_DISPLAY_MAP: Record<string, { emoji: string; title: string }> = {
   'log.table': { emoji: '📋', title: '表格日志' },
 }
 
-function stringify(value: unknown): string {
+function stringify(value: DynamicValue): string {
   if (value === undefined) {
     return ''
   }

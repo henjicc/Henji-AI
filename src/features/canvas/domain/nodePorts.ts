@@ -41,7 +41,7 @@ export interface NodeMediaOutput {
  */
 export interface NodeValueOutput {
   socketType: SocketType;
-  value: unknown;
+  value: DynamicValue;
 }
 
 /**

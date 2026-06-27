@@ -13,5 +13,5 @@ export interface SqlExecuteResult {
  */
 export interface DbPlatform {
   execute(sql: string, params?: SqlBindValue[]): Promise<SqlExecuteResult>
-  select<T = unknown>(sql: string, params?: SqlBindValue[]): Promise<T[]>
+  select<T = DynamicValue>(sql: string, params?: SqlBindValue[]): Promise<T[]>
 }

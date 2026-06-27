@@ -72,7 +72,7 @@ export function parseCustomRatio(value: string): number | null {
   return numeric;
 }
 
-export function toNumber(value: unknown): number | null {
+export function toNumber(value: DynamicValue): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 

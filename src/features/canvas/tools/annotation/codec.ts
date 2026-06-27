@@ -15,16 +15,16 @@ export function normalizeAnnotationRect(
   };
 }
 
-function isFiniteNumber(value: unknown): value is number {
+function isFiniteNumber(value: DynamicValue): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function sanitizeAnnotation(item: unknown): AnnotationItem | null {
+function sanitizeAnnotation(item: DynamicValue): AnnotationItem | null {
   if (!item || typeof item !== 'object') {
     return null;
   }
 
-  const raw = item as Record<string, unknown>;
+  const raw = item as DynamicValueMap;
   const id = typeof raw.id === 'string' ? raw.id : null;
   const type = typeof raw.type === 'string' ? raw.type : null;
   if (!id || !type) {
@@ -100,8 +100,8 @@ function sanitizeAnnotation(item: unknown): AnnotationItem | null {
   return null;
 }
 
-export function parseAnnotationItems(value: unknown): AnnotationItem[] {
-  let source: unknown = value;
+export function parseAnnotationItems(value: DynamicValue): AnnotationItem[] {
+  let source: DynamicValue = value;
   if (typeof value === 'string') {
     try {
       source = JSON.parse(value);

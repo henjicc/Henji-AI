@@ -5,7 +5,7 @@ const logger = createLogger('components.CustomModels.CustomModelManager')
  * 自定义模型管理器
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { CustomModel } from '@/core/types/CustomModel'
 import { getCustomModelService } from '@/services/customModels/CustomModelService'
 import { databaseService } from '@/services/database/DatabaseService'
@@ -19,14 +19,10 @@ export function CustomModelManager() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const { t } = useI18n('ui')
 
-  const service = getCustomModelService(databaseService)
+  const service = useMemo(() => getCustomModelService(databaseService), [])
 
   // 加载模型列表
-  useEffect(() => {
-    loadModels()
-  }, [])
-
-  const loadModels = async () => {
+  const loadModels = useCallback(async () => {
     try {
       setLoading(true)
       const data = await service.getCustomModels()
@@ -36,7 +32,11 @@ export function CustomModelManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [service])
+
+  useEffect(() => {
+    loadModels()
+  }, [loadModels])
 
   // 添加模型
   const handleAdd = async (name: string, modelUrl: string, description?: string) => {

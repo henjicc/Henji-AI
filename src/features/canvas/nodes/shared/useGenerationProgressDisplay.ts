@@ -6,7 +6,7 @@ interface GenerationProgressSource {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface GenerationProgressDisplay {

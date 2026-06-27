@@ -41,7 +41,7 @@ export interface ExportData {
   /**
    * 导出的数据
    */
-  data: any
+  data: DynamicValue
 
   /**
    * 元数据（可选）
@@ -60,7 +60,7 @@ export interface ExportData {
     /**
      * 其他自定义元数据
      */
-    [key: string]: any
+    [key: string]: DynamicValue
   }
 }
 

@@ -178,7 +178,7 @@ export const kling26ProModel = defineModel({
     }
   ],
   endpoints: {
-    selector: async (params: Record<string, any>) => {
+    selector: async (params: DynamicValueMap) => {
       // 使用原始参数 ID（ppioKling26Mode），不是 API 字段名（mode）
       const mode = params.ppioKling26Mode || 'text-image-to-video'
       const images = resolvePpioImageSources(params)
@@ -217,7 +217,7 @@ export const kling26ProModel = defineModel({
         }
       }
 
-      const requestData: Record<string, any> = {
+      const requestData: DynamicValueMap = {
         prompt,
         duration: params.ppioKling26VideoDuration || params.duration || 5,
         sound: params.ppioKling26Sound !== undefined ? params.ppioKling26Sound : (params.sound || false),

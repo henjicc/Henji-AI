@@ -135,7 +135,7 @@ export const kieSeedanceV3Model = defineModel({
         }
       }
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       if (images.length === 0 && aspectRatio && aspectRatio !== 'smart') {
         input.aspect_ratio = aspectRatio

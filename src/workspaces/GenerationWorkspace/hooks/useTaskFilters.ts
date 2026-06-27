@@ -71,11 +71,7 @@ function buildSearchText(task: GenerationTask): string {
 
 export function useTaskFilters(tasks: GenerationTask[], filters: TaskFilterState): UseTaskFiltersResult {
   const keyword = filters.keyword.trim().toLowerCase()
-  const { start, end } = useMemo(() => resolveTimeRange(filters), [
-    filters.endDate,
-    filters.startDate,
-    filters.timePreset,
-  ])
+  const { start, end } = useMemo(() => resolveTimeRange(filters), [filters])
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {

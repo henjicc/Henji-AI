@@ -20,8 +20,8 @@ import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/
 
 interface NodeParamControlProps {
   param: ParamDef;
-  value: unknown;
-  onChange: (value: unknown) => void;
+  value: DynamicValue;
+  onChange: (value: DynamicValue) => void;
   disabled?: boolean;
 }
 
@@ -58,7 +58,7 @@ function CompactNumberControl({
   value,
   onChange,
   disabled,
-}: { param: NumberParamDef; value: unknown; onChange: (value: number) => void; disabled?: boolean }) {
+}: { param: NumberParamDef; value: DynamicValue; onChange: (value: number) => void; disabled?: boolean }) {
   const safeValue = typeof value === 'number' && Number.isFinite(value)
     ? clampNumber(value, param)
     : clampNumber(typeof param.default === 'number' ? param.default : (param.min ?? 0), param);
@@ -150,7 +150,7 @@ function CompactNumberControl({
   );
 }
 
-function isSameOptionValue(left: unknown, right: unknown): boolean {
+function isSameOptionValue(left: DynamicValue, right: DynamicValue): boolean {
   if (left === right) {
     return true;
   }
@@ -165,7 +165,7 @@ function CompactDropdownControl({
   value,
   onChange,
   disabled,
-}: { param: DropdownParamDef | RadioParamDef; value: unknown; onChange: (value: unknown) => void; disabled?: boolean }) {
+}: { param: DropdownParamDef | RadioParamDef; value: DynamicValue; onChange: (value: DynamicValue) => void; disabled?: boolean }) {
   const { i18n } = useTranslation();
   const options = useMemo(
     () => param.options.map((option) => ({
@@ -203,7 +203,7 @@ function CompactTextControl({
   value,
   onChange,
   disabled,
-}: { param: TextParamDef; value: unknown; onChange: (value: string) => void; disabled?: boolean }) {
+}: { param: TextParamDef; value: DynamicValue; onChange: (value: string) => void; disabled?: boolean }) {
   const { i18n } = useTranslation();
   const placeholder = getI18nText(param.placeholder || '', i18n.language);
   return (
@@ -224,7 +224,7 @@ function CompactPanelControl({
   value,
   onChange,
   disabled,
-}: { param: CompositePanelDef; value: unknown; onChange: (value: unknown) => void; disabled?: boolean }) {
+}: { param: CompositePanelDef; value: DynamicValue; onChange: (value: DynamicValue) => void; disabled?: boolean }) {
   const { i18n } = useTranslation();
   const PanelComponent = param.panel ? panelRegistry.get(param.panel) : undefined;
   const display = formatPanelDisplayValue(value, param.panel ?? 'composite', i18n.language, param.config);

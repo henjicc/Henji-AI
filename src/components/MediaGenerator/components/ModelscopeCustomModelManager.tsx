@@ -19,12 +19,12 @@ interface CustomModel {
 interface ModelscopeCustomModelManagerProps {
   onModelsChange?: () => void
 }
-function parseModelType(raw: unknown): { imageGeneration: boolean; imageEditing: boolean } {
+function parseModelType(raw: DynamicValue): { imageGeneration: boolean; imageEditing: boolean } {
 
   if (typeof raw !== 'object' || raw === null) {
     return { imageGeneration: true, imageEditing: false }
   }
-  const value = raw as { imageGeneration?: unknown; imageEditing?: unknown }
+  const value = raw as { imageGeneration?: DynamicValue; imageEditing?: DynamicValue }
   const imageGeneration = value.imageGeneration === true
   const imageEditing = value.imageEditing === true && !imageGeneration
   if (!imageGeneration && !imageEditing) {
@@ -63,7 +63,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     try {
       const stored = localStorage.getItem('modelscope_custom_models')
       if (stored) {
-        const loadedModels: unknown = JSON.parse(stored)
+        const loadedModels: DynamicValue = JSON.parse(stored)
         if (!Array.isArray(loadedModels)) {
           setModels([])
           return
@@ -71,7 +71,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
         const migratedModels = loadedModels
           .map((rawModel) => {
             if (typeof rawModel !== 'object' || rawModel === null) return null
-            const candidate = rawModel as { id?: unknown; name?: unknown; modelType?: unknown }
+            const candidate = rawModel as { id?: DynamicValue; name?: DynamicValue; modelType?: DynamicValue }
             if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') return null
             return {
               id: candidate.id.trim(),

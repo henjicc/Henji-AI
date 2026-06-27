@@ -8,12 +8,12 @@ export interface ResolutionConfig {
     type: 'aspect_ratio' | 'size' | 'resolution'  // 参数类型
     smartMatch?: boolean                           // 是否启用智能匹配
     visualize?: boolean                            // 是否使用可视化选择器
-    extractRatio?: (value: any) => number | null   // 从参数值提取宽高比的函数
+    extractRatio?: (value: DynamicValue) => number | null   // 从参数值提取宽高比的函数
     customInput?: boolean                          // 是否支持自定义输入
-    qualityOptions?: Array<{ value: any; label: string }> | ((values: any) => Array<{ value: any; label: string }>)  // 质量选项（如 2K/4K）
+    qualityOptions?: Array<{ value: DynamicValue; label: string }> | ((values: DynamicValue) => Array<{ value: DynamicValue; label: string }>)  // 质量选项（如 2K/4K）
     qualityKey?: string                            // 质量参数的 key（默认为 'resolutionQuality'）
     defaultQuality?: string                        // 默认质量选项
-    hideAspectRatio?: (values: any) => boolean     // 是否隐藏宽高比选择器（仅保留质量选择器）
+    hideAspectRatio?: (values: DynamicValue) => boolean     // 是否隐藏宽高比选择器（仅保留质量选择器）
 
     // 基数配置
     baseSize?: number                              // 基数（正方形时的边长，默认 1440）
@@ -35,8 +35,8 @@ export interface ResolutionConfig {
  * 自动切换规则
  */
 export interface AutoSwitchRule {
-    condition: (values: any) => boolean  // 触发条件
-    value: any | ((values: any) => any)  // 切换到的值（可以是静态值或函数）
+    condition: (values: DynamicValue) => boolean  // 触发条件
+    value: DynamicValue | ((values: DynamicValue) => DynamicValue)  // 切换到的值（可以是静态值或函数）
     noRestore?: boolean  // 是否在条件不满足时恢复默认值
     watchKeys?: string[]  // 监听的 key 列表，只有这些 key 变化时才触发检查（默认监听所有 values）
 }
@@ -45,11 +45,11 @@ export interface BaseParam {
     id: string
     label?: string
     type: ParamType
-    defaultValue?: any  // 参数的默认值（当切换到该模型时自动设置）
+    defaultValue?: DynamicValue  // 参数的默认值（当切换到该模型时自动设置）
     autoSwitch?: AutoSwitchRule | AutoSwitchRule[]  // 自动切换规则（支持单个或多个规则）
     resolutionConfig?: ResolutionConfig  // 分辨率参数配置
-    hidden?: (values: any) => boolean
-    disabled?: (values: any) => boolean
+    hidden?: (values: DynamicValue) => boolean
+    disabled?: (values: DynamicValue) => boolean
     className?: string
     tooltip?: string
     tooltipDelay?: number
@@ -64,8 +64,8 @@ export interface DropdownOption {
 
 export interface DropdownParam extends BaseParam {
     type: 'dropdown'
-    options: DropdownOption[] | ((values: any) => DropdownOption[])
-    display?: (value: any) => string
+    options: DropdownOption[] | ((values: DynamicValue) => DropdownOption[])
+    display?: (value: DynamicValue) => string
     panelClassName?: string
     buttonClassName?: string
     placeholder?: string
@@ -73,8 +73,8 @@ export interface DropdownParam extends BaseParam {
 
 export interface ToggleParam extends BaseParam {
     type: 'toggle'
-    toValue?: (checked: boolean) => any  // Convert from boolean to actual value
-    fromValue?: (value: any) => boolean  // Convert from actual value to boolean
+    toValue?: (checked: boolean) => DynamicValue  // Convert from boolean to actual value
+    fromValue?: (value: DynamicValue) => boolean  // Convert from actual value to boolean
 }
 
 export interface NumberParam extends BaseParam {

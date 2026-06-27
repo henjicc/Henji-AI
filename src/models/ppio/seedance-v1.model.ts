@@ -124,7 +124,7 @@ export const seedanceV1Model = defineModel({
       const camera_fixed = params.ppioSeedanceV1CameraFixed || params.camera_fixed || false
       const prompt = params.prompt || ''
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         resolution,
         duration,

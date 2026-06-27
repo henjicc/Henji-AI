@@ -160,7 +160,7 @@ export const grokImagineVideoModel = defineModel({
         : (typeof params.mode === 'string' ? params.mode : '')
       const mode = rawMode || (videos.length > 0 ? 'video-edit' : 'text-image-to-video')
 
-      const normalizeDuration = (value: unknown): number => {
+      const normalizeDuration = (value: DynamicValue): number => {
         const parsed = Number(value)
         if (!Number.isFinite(parsed)) {
           return 6
@@ -168,7 +168,7 @@ export const grokImagineVideoModel = defineModel({
         return Math.min(10, Math.max(6, Math.round(parsed)))
       }
 
-      const parseAspectRatio = (value: unknown): number | null => {
+      const parseAspectRatio = (value: DynamicValue): number | null => {
         if (typeof value !== 'string' || value.indexOf(':') < 0) {
           return null
         }
@@ -255,7 +255,7 @@ export const grokImagineVideoModel = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const normalizeDuration = (value: unknown): number => {
+      const normalizeDuration = (value: DynamicValue): number => {
         const parsed = Number(value)
         if (!Number.isFinite(parsed)) {
           return 6
@@ -263,10 +263,10 @@ export const grokImagineVideoModel = defineModel({
         return Math.min(10, Math.max(6, Math.round(parsed)))
       }
 
-      const normalizeEditDuration = (value: unknown): number => {
+      const normalizeEditDuration = (value: DynamicValue): number => {
         const parsed = Number(value)
         if (!Number.isFinite(parsed) || parsed <= 0) {
-          return 8
+          return DEFAULT_VIDEO_EDIT_DURATION
         }
         return Math.min(8.7, parsed)
       }

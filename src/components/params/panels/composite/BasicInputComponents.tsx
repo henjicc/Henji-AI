@@ -7,8 +7,8 @@ import { getI18nText, type I18nText } from '@/core/types'
 
 interface CompositeComponentProps<TConfig> {
   config: TConfig
-  value: unknown
-  onChange: (value: unknown) => void
+  value: DynamicValue
+  onChange: (value: DynamicValue) => void
   disabled?: boolean
 }
 
@@ -210,12 +210,12 @@ export const CompositeRadio: React.FC<CompositeComponentProps<RadioConfig>> = ({
   )
 }
 
-function resolveFileName(value: unknown): string {
+function resolveFileName(value: DynamicValue): string {
   if (typeof File !== 'undefined' && value instanceof File) {
     return value.name
   }
   if (value && typeof value === 'object' && 'name' in value) {
-    const record = value as { name?: unknown }
+    const record = value as { name?: DynamicValue }
     return typeof record.name === 'string' ? record.name : ''
   }
   return ''

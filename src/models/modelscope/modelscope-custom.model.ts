@@ -14,9 +14,9 @@ const getCustomModel = (modelId: string): { id?: string; modelType?: { imageEdit
     if (!stored) return undefined
     const parsed = JSON.parse(stored)
     if (!Array.isArray(parsed)) return undefined
-    return parsed.find((item: unknown) => {
+    return parsed.find((item: DynamicValue) => {
       if (!item || typeof item !== 'object') return false
-      const record = item as Record<string, unknown>
+      const record = item as DynamicValueMap
       return record.id === modelId
     }) as { id?: string; modelType?: { imageEditing?: boolean } } | undefined
   } catch {
@@ -24,7 +24,7 @@ const getCustomModel = (modelId: string): { id?: string; modelType?: { imageEdit
   }
 }
 
-const resolveCustomInputLimits = (params: Record<string, unknown>) => {
+const resolveCustomInputLimits = (params: DynamicValueMap) => {
   const customId = typeof params.modelscopeCustomModel === 'string' ? params.modelscopeCustomModel.trim() : ''
   if (!customId) {
     return { images: { max: 0 }, videos: { max: 0 } }
