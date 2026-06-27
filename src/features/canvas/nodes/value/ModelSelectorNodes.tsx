@@ -38,7 +38,7 @@ function ModelSelectorBody({
       onModelChange={setModelId}
       onParamsChange={NOOP_PARAMS_CHANGE}
       chipClassName={NODE_CONTROL_CHIP_CLASS}
-      modelChipClassName={`${NODE_CONTROL_MODEL_CHIP_CLASS} !w-[200px]`}
+      modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
       showParamsChip={false}
     />
   );
@@ -53,6 +53,8 @@ export const ImageModelSelectorNode = memo(({ id, data, selected, width, height 
     selected={selected}
     width={width ?? 240}
     height={height}
+    minWidth={220}
+    minHeight={56}
     icon={<Sparkles className="h-4 w-4" />}
   >
     <ModelSelectorBody id={id} data={data} mediaType="image" />
@@ -69,6 +71,8 @@ export const VideoModelSelectorNode = memo(({ id, data, selected, width, height 
     selected={selected}
     width={width ?? 240}
     height={height}
+    minWidth={220}
+    minHeight={56}
     icon={<Video className="h-4 w-4" />}
   >
     <ModelSelectorBody id={id} data={data} mediaType="video" />
@@ -85,6 +89,8 @@ export const AudioModelSelectorNode = memo(({ id, data, selected, width, height 
     selected={selected}
     width={width ?? 240}
     height={height}
+    minWidth={220}
+    minHeight={56}
     icon={<AudioLines className="h-4 w-4" />}
   >
     <ModelSelectorBody id={id} data={data} mediaType="audio" />

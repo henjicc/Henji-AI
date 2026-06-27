@@ -1,13 +1,15 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Check, Search, Sparkles, SlidersHorizontal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import PinyinMatch from 'pinyin-match';
 
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
+import type { ModelDefinition } from '@/core/types';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel';
-import { UiChipButton, UiOptionButton, UiPanel } from '@/components/ui';
+import { UiChipButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui';
 import {
   getProviderDisplayName,
   type CanvasModelMediaType,
@@ -34,6 +36,12 @@ interface PanelAnchor {
   top: number;
 }
 
+interface ProviderFilterOption {
+  id: string;
+  label: string;
+  count: number;
+}
+
 function getPanelAnchor(triggerElement: HTMLDivElement | null): PanelAnchor | null {
   if (!triggerElement) {
     return null;
@@ -54,6 +62,29 @@ function buildPanelStyle(anchor: PanelAnchor | null): React.CSSProperties | unde
     top: anchor.top,
     transform: 'translateX(-50%) translateY(-100%)',
   };
+}
+
+function matchesModelSearch(model: ModelDefinition, query: string, language: string): boolean {
+  const keyword = query.trim();
+  if (!keyword) {
+    return true;
+  }
+  const displayName = getI18nText(model.meta.name, language) || model.meta.id;
+  const description = model.meta.description ? getI18nText(model.meta.description, language) : '';
+  const haystack = [
+    displayName,
+    model.meta.id,
+    model.meta.provider,
+    getProviderDisplayName(model.meta.provider),
+    description,
+    ...(model.meta.aliases ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const normalizedKeyword = keyword.toLowerCase();
+  return haystack.includes(normalizedKeyword) || Boolean(PinyinMatch.match(displayName, keyword));
 }
 
 export const NodeModelParamsControls = memo(({
@@ -79,8 +110,28 @@ export const NodeModelParamsControls = memo(({
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [modelPanelAnchor, setModelPanelAnchor] = useState<PanelAnchor | null>(null);
   const [paramsPanelAnchor, setParamsPanelAnchor] = useState<PanelAnchor | null>(null);
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [providerFilter, setProviderFilter] = useState('all');
 
   const models = useMemo(() => registry.getModelsByType(mediaType), [mediaType]);
+  const providerOptions = useMemo<ProviderFilterOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const model of models) {
+      counts.set(model.meta.provider, (counts.get(model.meta.provider) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([id, count]) => ({ id, label: getProviderDisplayName(id), count }))
+      .sort((a, b) => a.label.localeCompare(b.label, i18n.language));
+  }, [i18n.language, models]);
+  const filteredModels = useMemo(
+    () => models.filter((model) => {
+      if (providerFilter !== 'all' && model.meta.provider !== providerFilter) {
+        return false;
+      }
+      return matchesModelSearch(model, modelSearchQuery, i18n.language);
+    }),
+    [i18n.language, modelSearchQuery, models, providerFilter]
+  );
   const selectedModel = useMemo(
     () => registry.getModel(modelId) ?? models[0],
     [modelId, models]
@@ -159,6 +210,12 @@ export const NodeModelParamsControls = memo(({
   }, [openPanel, renderPanel]);
 
   useEffect(() => {
+    if (providerFilter !== 'all' && !providerOptions.some((option) => option.id === providerFilter)) {
+      setProviderFilter('all');
+    }
+  }, [providerFilter, providerOptions]);
+
+  useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
       const target = event.target as globalThis.Node;
       if (containerRef.current?.contains(target)) return;
@@ -174,11 +231,11 @@ export const NodeModelParamsControls = memo(({
   }, []);
 
   return (
-    <div ref={containerRef} className="flex items-center gap-1">
-      <div ref={modelTriggerRef} className="relative flex">
+    <div ref={containerRef} className="flex w-full min-w-0 items-center gap-1">
+      <div ref={modelTriggerRef} className="relative flex min-w-0 flex-1">
         <UiChipButton
           active={openPanel === 'model'}
-          className={`${chipClassName} ${modelChipClassName}`}
+          className={`min-w-0 overflow-hidden ${chipClassName} ${modelChipClassName}`}
           onClick={(event) => {
             event.stopPropagation();
             if (openPanel === 'model') {
@@ -190,7 +247,7 @@ export const NodeModelParamsControls = memo(({
           }}
         >
           <Sparkles className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 truncate text-xs font-normal leading-none">{selectedModelName}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
             <span className="shrink-0 text-xs leading-none text-text-muted/80">
               {getProviderDisplayName(selectedModel.meta.provider)}
@@ -237,9 +294,64 @@ export const NodeModelParamsControls = memo(({
           }`}
           style={buildPanelStyle(modelPanelAnchor)}
         >
-          <UiPanel className="w-[360px] p-2">
-            <div className="ui-scrollbar max-h-[300px] space-y-1 overflow-y-auto pr-1">
-              {models.map((model) => {
+          <UiPanel className="w-[420px] p-2">
+            <div className="space-y-2 border-b border-border-dark/70 pb-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+                <UiInput
+                  type="text"
+                  value={modelSearchQuery}
+                  onChange={(event) => setModelSearchQuery(event.target.value)}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  placeholder={t('modelParams.searchPlaceholder', { defaultValue: '搜索模型名称、供应商或描述' })}
+                  className="h-8 rounded-md pl-8 pr-8 text-xs"
+                />
+                {modelSearchQuery && (
+                  <UiIconButton
+                    type="button"
+                    showBorder={false}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setModelSearchQuery('');
+                    }}
+                    className="absolute right-1 top-1/2 !h-6 !w-6 -translate-y-1/2 !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-layer hover:!text-text-dark"
+                    title={t('modelParams.clearSearch', { defaultValue: '清空搜索' })}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </UiIconButton>
+                )}
+              </div>
+              <div className="ui-scrollbar flex max-w-full gap-1 overflow-x-auto pb-0.5">
+                <UiChipButton
+                  type="button"
+                  active={providerFilter === 'all'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setProviderFilter('all');
+                  }}
+                  className="!h-7 shrink-0 !rounded-md !px-2.5 !text-xs"
+                >
+                  {t('modelParams.allProviders', { defaultValue: '全部' })}
+                </UiChipButton>
+                {providerOptions.map((provider) => (
+                  <UiChipButton
+                    key={provider.id}
+                    type="button"
+                    active={providerFilter === provider.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setProviderFilter(provider.id);
+                    }}
+                    className="!h-7 shrink-0 !rounded-md !px-2.5 !text-xs"
+                  >
+                    <span>{provider.label}</span>
+                    <span className="text-[10px] text-text-muted/80">{provider.count}</span>
+                  </UiChipButton>
+                ))}
+              </div>
+            </div>
+            <div className="ui-scrollbar mt-2 max-h-[300px] space-y-1 overflow-y-auto pr-1">
+              {filteredModels.map((model) => {
                 const active = model.meta.id === selectedModel?.meta.id;
                 const displayName = getI18nText(model.meta.name, i18n.language) || model.meta.id;
 
@@ -270,6 +382,11 @@ export const NodeModelParamsControls = memo(({
                   </UiOptionButton>
                 );
               })}
+              {filteredModels.length === 0 && (
+                <div className="px-3 py-8 text-center text-xs text-text-muted">
+                  {t('modelParams.noModels', { defaultValue: '没有匹配的模型' })}
+                </div>
+              )}
             </div>
           </UiPanel>
         </div>,

@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry';
+import type { ParamDef } from '@/core/types';
 import { deriveSocketType, isSocketCompatible } from '@/core/types/SocketType';
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '../domain/canvasNodes';
 import {
@@ -28,6 +29,25 @@ import {
  * 与 graphMediaResolver 对称：媒体走整节点端口，标量值走 `param:<id>` 参数端口。
  * 无节点类型特判——上游值由各节点 getValueOutput 声明。
  */
+function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamDef | undefined {
+  const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
+  if (typeof modelId === 'string' && modelId) {
+    const storedParam = registry.getSchema(modelId).find((item) => item.id === paramId);
+    if (storedParam) {
+      return storedParam;
+    }
+  }
+
+  const generationType = getCanvasNodeDefinition(targetNode.type)?.generation?.modelType;
+  if (!generationType) {
+    return undefined;
+  }
+
+  return registry
+    .getModelsByType(generationType)
+    .flatMap((model) => model.params)
+    .find((item) => item.id === paramId);
+}
 
 /** 返回连到本节点参数端口、且有边的 paramId 集合（不要求上游能解析出值） */
 export function getConnectedParamIds(nodeId: string, edges: CanvasEdge[]): Set<string> {
@@ -123,11 +143,7 @@ export function isParamConnectionCompatible(
   if (!output) {
     return false;
   }
-  const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
-  if (typeof modelId !== 'string' || !modelId) {
-    return false;
-  }
-  const param = registry.getSchema(modelId).find((item) => item.id === paramId);
+  const param = findParamForTargetNode(targetNode, paramId);
   if (!param) {
     return false;
   }

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import type { ParamDef } from '@/core/types';
-import { deriveSocketType, getSocketColor, getSocketTintColor } from '@/core/types/SocketType';
+import { deriveSocketType, getSocketColor } from '@/core/types/SocketType';
 import { getI18nText } from '@/core/types/I18nText';
 import { isParamVisible } from '@/components/params/paramVisibility';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -98,7 +98,6 @@ export const NodeParamRows = memo(({
             className={`${NODE_ROW_CLASS} ${
               isConnected ? '' : NODE_ROW_HOVER_CLASS
             }`}
-            style={isConnected ? { backgroundColor: getSocketTintColor(socketType) } : undefined}
           >
             <Handle
               type="target"

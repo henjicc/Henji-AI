@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
-import { getSocketColor, getSocketTintColor, modelPortId } from '@/features/canvas/domain/socketTypes';
+import { getSocketColor, modelPortId } from '@/features/canvas/domain/socketTypes';
 import { NodeModelParamsControls } from './NodeModelParamsControls';
 import {
   NODE_CONTROL_CHIP_CLASS,
@@ -55,7 +55,6 @@ export function ModelInputRow({
       className={`${NODE_ROW_CLASS} ${
         overrideModelId ? '' : NODE_ROW_HOVER_CLASS
       }`}
-      style={overrideModelId ? { backgroundColor: getSocketTintColor('MODEL') } : undefined}
     >
       <Handle
         type="target"

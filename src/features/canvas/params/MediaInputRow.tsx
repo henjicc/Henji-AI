@@ -9,7 +9,7 @@ import {
   areStringListsEqual,
   collectInputMediaUrls,
 } from '@/features/canvas/application/graphMediaResolver';
-import { getSocketColor, getSocketTintColor, mediaPortId, type RowMediaKind } from '@/features/canvas/domain/socketTypes';
+import { getSocketColor, mediaPortId, type RowMediaKind } from '@/features/canvas/domain/socketTypes';
 import {
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
@@ -111,7 +111,6 @@ export function MediaInputRow({
       className={`${NODE_ROW_CLASS} ${
         isConnected ? '' : NODE_ROW_HOVER_CLASS
       }`}
-      style={isConnected ? { backgroundColor: getSocketTintColor(mediaKind.toUpperCase()) } : undefined}
     >
       <Handle
         type="target"

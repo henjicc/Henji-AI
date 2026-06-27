@@ -18,7 +18,6 @@ import {
   MODEL_PARAM_ID,
   PROMPT_PARAM_ID,
   getSocketColor,
-  getSocketTintColor,
   promptPortId,
   type RowMediaKind,
 } from '@/features/canvas/domain/socketTypes';
@@ -423,7 +422,6 @@ export const GenerationNodeShell = memo(({
           />
           <div
             className={`h-full p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS}`}
-            style={promptOverrideValue ? { backgroundColor: getSocketTintColor('STRING') } : undefined}
           >
             <ReferenceTextarea
               value={promptOverrideValue ?? promptDraft}

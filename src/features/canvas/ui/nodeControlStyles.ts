@@ -1,6 +1,6 @@
 export const NODE_CONTROL_CHIP_CLASS = '!h-7 !rounded-md !px-2.5 !text-xs !font-normal !gap-1.5';
 
-export const NODE_CONTROL_MODEL_CHIP_CLASS = '!max-w-[260px] !justify-start';
+export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-full !min-w-0 !max-w-[260px] !justify-start';
 
 export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!max-w-[120px] !justify-start';
 

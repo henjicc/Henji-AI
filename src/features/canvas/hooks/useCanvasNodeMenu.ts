@@ -7,6 +7,7 @@ import type {
   ReactFlowInstance
 } from '@xyflow/react'
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import {
   getMenuNodeDefinitions,
   isConnectionCompatible,
@@ -35,6 +36,94 @@ interface UseCanvasNodeMenuParams {
   connectNodes: (connection: Connection) => void
   scheduleCanvasPersist: (delayMs?: number) => void
   setSelectedNode: (nodeId: string | null) => void
+}
+
+interface RectLike {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+const QUICK_ADD_GAP = 80
+const DEFAULT_QUICK_ADD_SIZE: RectLike = { x: 0, y: 0, width: 220, height: 120 }
+
+function estimateQuickAddSize(type: CanvasNodeType): Pick<RectLike, 'width' | 'height'> {
+  switch (type) {
+    case CANVAS_NODE_TYPES.intSource:
+    case CANVAS_NODE_TYPES.floatSource:
+    case CANVAS_NODE_TYPES.booleanSource:
+      return { width: 160, height: 56 }
+    case CANVAS_NODE_TYPES.stringSource:
+      return { width: 300, height: 132 }
+    case CANVAS_NODE_TYPES.imageModelSelector:
+    case CANVAS_NODE_TYPES.videoModelSelector:
+    case CANVAS_NODE_TYPES.audioModelSelector:
+      return { width: 240, height: 56 }
+    default:
+      return DEFAULT_QUICK_ADD_SIZE
+  }
+}
+
+function getNodeRect(node: CanvasNode): RectLike {
+  const measured = node.measured
+  const width = typeof measured?.width === 'number' && Number.isFinite(measured.width)
+    ? measured.width
+    : DEFAULT_QUICK_ADD_SIZE.width
+  const height = typeof measured?.height === 'number' && Number.isFinite(measured.height)
+    ? measured.height
+    : DEFAULT_QUICK_ADD_SIZE.height
+  return {
+    x: node.position.x,
+    y: node.position.y,
+    width,
+    height,
+  }
+}
+
+function rectsOverlap(left: RectLike, right: RectLike): boolean {
+  return (
+    left.x < right.x + right.width &&
+    left.x + left.width > right.x &&
+    left.y < right.y + right.height &&
+    left.y + left.height > right.y
+  )
+}
+
+function resolveQuickAddPosition(
+  type: CanvasNodeType,
+  requestedPosition: { x: number; y: number },
+  pending: PendingConnectStart | null,
+  nodes: CanvasNode[]
+): { x: number; y: number } {
+  if (!pending) {
+    return requestedPosition
+  }
+  const anchorNode = nodes.find((node) => node.id === pending.nodeId)
+  if (!anchorNode) {
+    return requestedPosition
+  }
+
+  const anchorRect = getNodeRect(anchorNode)
+  const newSize = estimateQuickAddSize(type)
+  const requestedRect = {
+    x: requestedPosition.x,
+    y: requestedPosition.y,
+    width: newSize.width,
+    height: newSize.height,
+  }
+  if (!rectsOverlap(requestedRect, anchorRect)) {
+    return requestedPosition
+  }
+
+  const nextX = pending.handleType === 'target'
+    ? anchorRect.x - newSize.width - QUICK_ADD_GAP
+    : anchorRect.x + anchorRect.width + QUICK_ADD_GAP
+
+  return {
+    x: nextX,
+    y: requestedPosition.y - newSize.height / 2,
+  }
 }
 
 export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
@@ -112,7 +201,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   }, [clearMenu, openNodeMenuAtClientPosition, setSelectedNode])
 
   const handleNodeSelect = useCallback((type: CanvasNodeType) => {
-      const newNodeId = addNode(type, flowPosition)
+    const newNodePosition = resolveQuickAddPosition(type, flowPosition, pendingConnectStart, nodes)
+    const newNodeId = addNode(type, newNodePosition)
     if (pendingConnectStart) {
       if (pendingConnectStart.handleType === 'source') {
         // 从某节点的输出端口拖出 → 新节点作为目标，按端口/参数类型定位目标端口

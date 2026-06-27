@@ -40,7 +40,7 @@ type NodeHeaderProps = {
 export const NODE_HEADER_TONE_CLASS = 'text-white/55';
 export const NODE_HEADER_TITLE_CLASS = 'text-[14px] font-normal';
 export const NODE_HEADER_META_CLASS = 'text-xs text-text-muted';
-export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-7 left-1 right-1 z-10';
+export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-8 left-2 right-2 z-20';
 // 标题不再用 max-w-[60%] 限宽：百分比宽度作用在"宽度由内容撑出"的祖先链上时
 // 解析不稳定（浏览器常把它解析成一个很小的值），改用逐层 min-w-0 + flex-1 的
 // flex 分配方式，宽度始终由实际可用空间精确推算，不依赖任何百分比。

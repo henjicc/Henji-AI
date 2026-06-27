@@ -45,7 +45,7 @@ export function ValueSourceShell({
   width = 180,
   height,
   minWidth = 160,
-  minHeight = 92,
+  minHeight = 56,
   maxWidth = 720,
   maxHeight = 520,
   resizable = true,
@@ -90,7 +90,7 @@ export function ValueSourceShell({
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div className="nodrag nowheel flex min-h-0 flex-1 flex-col">{children}</div>
+      <div className="nodrag nowheel flex min-h-0 flex-1 flex-col justify-center">{children}</div>
 
       <Handle
         type="source"
