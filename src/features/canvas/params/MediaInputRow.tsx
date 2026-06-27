@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { Image as ImageIcon, Music, Video, X } from 'lucide-react';
@@ -86,6 +86,11 @@ export function MediaInputRow({
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [viewerVideoUrl, setViewerVideoUrl] = useState<string | null>(null);
+  // 节点渲染在 React Flow 缩放过的画布坐标系里：CSS transform 是"本地像素"，
+  // 画布缩放会把它再放大/缩小一次，所以跟手位移、让位位移都要先除以 zoom 才能在屏幕上 1:1 还原。
+  // 用 getZoom() 在拖拽开始那一刻取一次快照（而非 useViewport() 那样订阅视口、每帧重渲染）。
+  const { getZoom } = useReactFlow();
+  const dragZoomRef = useRef(1);
 
   const upstreamUrls = useStoreWithEqualityFn(
     useCanvasStore,
@@ -177,12 +182,14 @@ export function MediaInputRow({
           const isDropTarget =
             (dragState.isDragging || dragState.isDropping) && toIndex === index && fromIndex !== index;
 
+          const zoom = dragZoomRef.current;
           let itemStyle: CSSProperties | undefined;
           if (isDraggingThis) {
             // 视觉上任意方向跟随光标（拿起来的手感），排序判定本身只看横向距离，与视觉位移无关
+            // 除以 zoom：节点本身处在画布缩放坐标系里，本地 transform 像素会被画布再缩放一次
             itemStyle = {
-              transform: `translate(${dragState.currentX - dragState.startX}px, ${
-                dragState.currentY - dragState.startY
+              transform: `translate(${(dragState.currentX - dragState.startX) / zoom}px, ${
+                (dragState.currentY - dragState.startY) / zoom
               }px) scale(1.1)`,
               position: 'relative',
               zIndex: 50,
@@ -192,7 +199,7 @@ export function MediaInputRow({
           } else if (isDroppingThis && fromIndex !== null && toIndex !== null) {
             // 落位动画：直接过渡到重排后的目标列位置，避免先弹回原位再跳到新位的二次跳动
             itemStyle = {
-              transform: `translateX(${(toIndex - fromIndex) * stepPxRef.current}px)`,
+              transform: `translateX(${((toIndex - fromIndex) * stepPxRef.current) / zoom}px)`,
               transition: 'transform 0.15s ease',
               position: 'relative',
               zIndex: 50,
@@ -211,7 +218,7 @@ export function MediaInputRow({
               shiftX = stepPxRef.current;
             }
             if (shiftX !== 0) {
-              itemStyle = { transform: `translateX(${shiftX}px)`, transition: 'transform 0.15s ease' };
+              itemStyle = { transform: `translateX(${shiftX / zoom}px)`, transition: 'transform 0.15s ease' };
             }
           }
 
@@ -223,7 +230,14 @@ export function MediaInputRow({
             }}
             className={`group relative shrink-0 ${isDropTarget ? 'rounded-md ring-2 ring-accent' : ''}`}
             style={itemStyle}
-            onMouseDown={!isConnected ? (event) => handleMouseDown(index, event) : undefined}
+            onMouseDown={
+              !isConnected
+                ? (event) => {
+                    dragZoomRef.current = getZoom();
+                    handleMouseDown(index, event);
+                  }
+                : undefined
+            }
           >
             {mediaKind === 'image' ? (
               <CanvasNodeImage
