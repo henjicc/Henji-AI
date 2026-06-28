@@ -101,13 +101,29 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     if (!audioRef.current) {
       const element = new Audio(audioSource);
       element.preload = 'metadata';
-      element.addEventListener('timeupdate', () => setCurrentTime(element.currentTime || 0));
       element.addEventListener('loadedmetadata', () => setMediaDuration(element.duration || 0));
       element.addEventListener('ended', () => setIsPlaying(false));
       audioRef.current = element;
     }
     return audioRef.current;
   }, [audioSource]);
+
+  // 播放中用 rAF 驱动进度，避免原生 timeupdate 事件频率过低（~4Hz）导致波形进度跳动
+  useEffect(() => {
+    if (!isPlaying) {
+      return;
+    }
+    let rafId = 0;
+    const tick = () => {
+      const element = audioRef.current;
+      if (element) {
+        setCurrentTime(element.currentTime);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying]);
 
   const togglePlay = useCallback(() => {
     const element = ensureAudioElement();

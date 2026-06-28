@@ -13,6 +13,35 @@ interface WaveformProps {
   onSeekEnd?: (ratio: number, dragged: boolean) => void
 }
 
+interface BarGeom {
+  key: number
+  xStart: number
+  y: number
+  baseW: number
+  bh: number
+  r: number
+}
+
+// 静态灰色波形条 + clipPath 定义只依赖采样数据，与播放进度无关；用 memo 隔离避免进度高频更新时整组波形条重渲染
+const StaticBars = React.memo(function StaticBars({ bars, clipId }: { bars: BarGeom[]; clipId: string }) {
+  return (
+    <>
+      <defs>
+        <clipPath id={clipId}>
+          {bars.map((bar) => (
+            <rect key={bar.key} x={bar.xStart} y={bar.y} width={bar.baseW} height={bar.bh} rx={bar.r} ry={bar.r} />
+          ))}
+        </clipPath>
+      </defs>
+      <g>
+        {bars.map((bar) => (
+          <rect key={bar.key} x={bar.xStart} y={bar.y} width={bar.baseW} height={bar.bh} rx={bar.r} ry={bar.r} fill="rgba(120,120,120,0.35)" />
+        ))}
+      </g>
+    </>
+  )
+})
+
 const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, progress = 0, duration, onSeek, onSeekStart, onSeekMove, onSeekEnd }) => {
   const [hoverX, setHoverX] = React.useState<number | null>(null)
   const [dragging, setDragging] = React.useState(false)
@@ -20,6 +49,7 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
   const hasDraggedRef = React.useRef(false)
   const svgRef = React.useRef<SVGSVGElement | null>(null)
   const [vw, setVw] = React.useState<number>(width || 0)
+  const clipId = React.useId()
   React.useLayoutEffect(() => {
     const update = () => {
       const el = svgRef.current
@@ -36,6 +66,16 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
   const n = samples.length || 1
   const clampedProg = Math.max(0, Math.min(1, progress))
   const coverX = clampedProg * w
+  const bars = React.useMemo<BarGeom[]>(() => samples.map((s, i) => {
+    const amp = Math.max(0, Math.min(1, s))
+    const bh = Math.max(2, Math.floor(amp * h))
+    const xStart = Math.floor((i / n) * w)
+    const xEnd = Math.floor(((i + 1) / n) * w)
+    const baseW = Math.max(1, xEnd - xStart)
+    const y = Math.floor((h - bh) / 2)
+    const r = Math.min(4, Math.floor(baseW / 3))
+    return { key: i, xStart, y, baseW, bh, r }
+  }), [samples, w, h, n])
   const posToRatio = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
     const x = e.clientX - rect.left
@@ -76,24 +116,8 @@ const Waveform: React.FC<WaveformProps> = ({ samples, width = 0, height = 72, pr
   }
   return (
     <svg ref={svgRef} width="100%" height={h} viewBox={`0 0 ${w} ${h}`} className="block" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}>
-      {samples.map((s, i) => {
-        const amp = Math.max(0, Math.min(1, s))
-        const bh = Math.max(2, Math.floor(amp * h))
-        const xStart = Math.floor((i / n) * w)
-        const xEnd = Math.floor(((i + 1) / n) * w)
-        const baseW = Math.max(1, xEnd - xStart)
-        const y = Math.floor((h - bh) / 2)
-        const r = Math.min(4, Math.floor(baseW / 3))
-        const fillW = Math.max(0, Math.min(baseW, coverX - xStart))
-        return (
-          <g key={i}>
-            <rect x={xStart} y={y} width={baseW} height={bh} rx={r} ry={r} fill={'rgba(120,120,120,0.35)'} />
-            {fillW > 0 && (
-              <rect x={xStart} y={y} width={fillW} height={bh} rx={r} ry={r} fill={UI_ACCENT_HEX} />
-            )}
-          </g>
-        )
-      })}
+      <StaticBars bars={bars} clipId={clipId} />
+      <rect x={0} y={0} width={coverX} height={h} fill={UI_ACCENT_HEX} clipPath={`url(#${clipId})`} />
       {hoverX != null && (<rect x={hoverX} y={0} width={1} height={h} fill="rgba(255,255,255,0.35)" />)}
       {hoverX != null && (
         (() => {
