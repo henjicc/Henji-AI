@@ -33,9 +33,17 @@ type NodeHeaderProps = {
   headerAdjust?: HeaderAdjust;
   iconAdjust?: HeaderAdjust;
   titleAdjust?: HeaderAdjust;
+  rightSlotAdjust?: HeaderAdjust;
   editable?: boolean;
   onTitleChange?: (value: string) => void;
 };
+
+// 统一控制点：所有节点的"图标+名称"整体相对于节点的位置微调。
+// 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
+export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale: 1 };
+// 统一控制点：所有节点右上角价格徽标（PriceEstimate）相对于节点的位置微调。
+// 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
+export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = { x: -8, y: 0, scale: 1 };
 
 export const NODE_HEADER_TONE_CLASS = 'text-white/55';
 export const NODE_HEADER_TITLE_CLASS = 'text-[14px] font-normal';
@@ -93,9 +101,10 @@ export function NodeHeader({
   metaClassName,
   titleRowClassName,
   subtitleClassName,
-  headerAdjust,
+  headerAdjust = NODE_HEADER_ICON_TITLE_ADJUST,
   iconAdjust,
   titleAdjust,
+  rightSlotAdjust = NODE_HEADER_PRICE_ADJUST,
   editable = false,
   onTitleChange,
 }: NodeHeaderProps) {
@@ -256,7 +265,11 @@ export function NodeHeader({
           </div>
         ) : null}
       </div>
-      {rightSlot}
+      {rightSlot ? (
+        <div className="shrink-0" style={composeTransformStyle(rightSlotAdjust)}>
+          {rightSlot}
+        </div>
+      ) : null}
     </div>
   );
 }

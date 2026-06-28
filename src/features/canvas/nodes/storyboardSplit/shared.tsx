@@ -16,9 +16,6 @@ export interface PanelAnchor {
 export const STORYBOARD_NODE_WIDTH_PX = 318;
 export const STORYBOARD_NODE_MIN_HEIGHT_PX = 320;
 export const STORYBOARD_GRID_GAP_PX = 1;
-export const STORYBOARD_SPLIT_HEADER_ADJUST = { x: 0, y: 0, scale: 1 };
-export const STORYBOARD_SPLIT_ICON_ADJUST = { x: 0, y: 0, scale: 1 };
-export const STORYBOARD_SPLIT_TITLE_ADJUST = { x: 0, y: 0, scale: 1 };
 
 export function SplitResultIcon({ className }: { className?: string }): JSX.Element {
   return (

@@ -21,7 +21,7 @@ import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/Inc
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
 import { buildFrameViewerImageList, buildIncomingImageItems, collectIncomingImageRefs } from '@/features/canvas/nodes/storyboardSplit/data';
-import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX, STORYBOARD_NODE_MIN_HEIGHT_PX, STORYBOARD_NODE_WIDTH_PX, STORYBOARD_SPLIT_HEADER_ADJUST, STORYBOARD_SPLIT_ICON_ADJUST, STORYBOARD_SPLIT_TITLE_ADJUST, toCssAspectRatio } from '@/features/canvas/nodes/storyboardSplit/shared';
+import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX, STORYBOARD_NODE_MIN_HEIGHT_PX, STORYBOARD_NODE_WIDTH_PX, toCssAspectRatio } from '@/features/canvas/nodes/storyboardSplit/shared';
 
 type StoryboardNodeProps = NodeProps & {
   id: string;
@@ -263,9 +263,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={<SplitResultIcon className="h-3.5 w-3.5" />}
         titleText={resolvedTitle}
-        headerAdjust={STORYBOARD_SPLIT_HEADER_ADJUST}
-        iconAdjust={STORYBOARD_SPLIT_ICON_ADJUST}
-        titleAdjust={STORYBOARD_SPLIT_TITLE_ADJUST}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />

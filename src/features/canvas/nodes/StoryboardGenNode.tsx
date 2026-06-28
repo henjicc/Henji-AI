@@ -24,9 +24,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
 import {
-  STORYBOARD_GEN_HEADER_ADJUST,
   STORYBOARD_GEN_ICON_ADJUST,
-  STORYBOARD_GEN_TITLE_ADJUST,
   areFrameDescriptionDraftsEqual,
   buildFrameDescriptionDrafts,
   generateFrameId,
@@ -343,9 +341,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={<Sparkles className="h-4 w-4" />}
         titleText={resolvedTitle}
-        headerAdjust={STORYBOARD_GEN_HEADER_ADJUST}
         iconAdjust={STORYBOARD_GEN_ICON_ADJUST}
-        titleAdjust={STORYBOARD_GEN_TITLE_ADJUST}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
