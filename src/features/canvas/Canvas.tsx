@@ -14,6 +14,7 @@ import {
   SelectionMode,
   useReactFlow,
   type Connection,
+  type DefaultEdgeOptions,
   type EdgeChange,
   type NodeChange,
   type Viewport,
@@ -31,6 +32,7 @@ import {
 import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
+import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
 import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -46,6 +48,13 @@ interface CanvasToastState {
   message: string;
   id: number;
 }
+
+// 静态配置项提升到模块作用域：避免每次 Canvas 渲染都重建新引用传给 <ReactFlow>，
+// 引用稳定才能让 ReactFlow 内部依赖这些 props 的 effect/memo 不被无谓触发。
+const CANVAS_DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = { type: 'disconnectableEdge' };
+const CANVAS_PRO_OPTIONS = { hideAttribution: true };
+const CANVAS_MULTI_SELECTION_KEY_CODE = ['Control', 'Meta'];
+const CANVAS_SELECTION_KEY_CODE = ['Control', 'Meta'];
 
 function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
   if (!toast) {
@@ -347,7 +356,17 @@ export function Canvas() {
     cancelPendingViewportPersist();
   }, [cancelPendingViewportPersist]);
 
-  const selectedNodeIds = useMemo(() => nodes.filter((node) => Boolean(node.selected)).map((node) => node.id), [nodes]);
+  const rawSelectedNodeIds = useMemo(
+    () => nodes.filter((node) => Boolean(node.selected)).map((node) => node.id),
+    [nodes]
+  );
+  const selectedNodeIdsRef = useRef<string[]>([]);
+  // nodes 引用几乎每次交互都变（包括与选中无关的字段编辑），但选中的 id 集合通常不变；
+  // 这里按内容比较复用旧引用，避免下游 useEffect/useCallback（依赖 selectedNodeIds）被无谓触发。
+  if (!areStringListsEqual(selectedNodeIdsRef.current, rawSelectedNodeIds)) {
+    selectedNodeIdsRef.current = rawSelectedNodeIds;
+  }
+  const selectedNodeIds = selectedNodeIdsRef.current;
   const selectedUploadNodeId = useMemo(() => {
     if (selectedNodeIds.length !== 1) {
       return null;
@@ -426,18 +445,18 @@ export function Canvas() {
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        defaultEdgeOptions={{ type: 'disconnectableEdge' }}
+        defaultEdgeOptions={CANVAS_DEFAULT_EDGE_OPTIONS}
         defaultViewport={DEFAULT_VIEWPORT}
         minZoom={0.1}
         maxZoom={5}
         selectionOnDrag
         selectionMode={SelectionMode.Partial}
-        multiSelectionKeyCode={['Control', 'Meta']}
-        selectionKeyCode={['Control', 'Meta']}
+        multiSelectionKeyCode={CANVAS_MULTI_SELECTION_KEY_CODE}
+        selectionKeyCode={CANVAS_SELECTION_KEY_CODE}
         deleteKeyCode={null}
         onlyRenderVisibleElements
         zoomOnDoubleClick={false}
-        proOptions={{ hideAttribution: true }}
+        proOptions={CANVAS_PRO_OPTIONS}
         className="bg-bg-dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />

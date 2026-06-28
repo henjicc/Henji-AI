@@ -35,14 +35,12 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
     return getNodeDefinition(targetNode.type)?.media?.role === 'result';
   });
 
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // 选中态/生成中态切换会触发本组件重渲染，但端点位置往往没变；
+  // 按端点坐标缓存路径计算，避免无关状态变化时重复算 bezier 路径。
+  const [edgePath, labelX, labelY] = useMemo(
+    () => getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }),
+    [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition]
+  );
 
   const processingStroke = useMemo(() => 'rgb(var(--accent-rgb) / 0.94)', []);
   const baseStrokeWidth = isProcessingEdge
