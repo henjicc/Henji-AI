@@ -10,7 +10,7 @@ import {
   type DragEvent,
   type SyntheticEvent,
 } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -40,6 +40,7 @@ import {
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import {
+  detectAspectRatio,
   prepareNodeImageFromFile,
   resolveImageDisplayUrl,
 } from '@/features/canvas/application/imageData';
@@ -64,6 +65,7 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 
 export const UploadNode = memo(({ id, data, selected, width, height }: UploadNodeProps) => {
   const { t } = useTranslation();
+  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const hasSourceConnections = useCanvasStore(
@@ -95,6 +97,11 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   });
   const resizeMinWidth = resizeConstraints.minWidth;
   const resizeMinHeight = resizeConstraints.minHeight;
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
+
   const resolvedTitle = useMemo(() => {
     const sourceFileName = typeof data.sourceFileName === 'string' ? data.sourceFileName.trim() : '';
     if (
@@ -142,6 +149,18 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
           `[upload-perf][e2e] preview-state-committed nodeId=${id} name="${file.name}" elapsed=${Math.round(performance.now() - started)}ms`
         );
       });
+
+      // 用本地预览图直接探测宽高比，不等待真正的图片落盘处理完成，
+      // 让节点尺寸与预览图几乎同时到位，避免“先维持旧尺寸、地址写入后再跳变”的延迟感
+      detectAspectRatio(optimisticPreviewUrl)
+        .then((ratio) => {
+          if (uploadSequenceRef.current === sequence) {
+            updateNodeData(id, { aspectRatio: ratio });
+          }
+        })
+        .catch(() => {
+          // 探测失败时静默忽略，最终尺寸仍由下方 prepareNodeImageFromFile 的结果兜底
+        });
 
       try {
         const prepared = await prepareNodeImageFromFile(file);

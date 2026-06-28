@@ -93,6 +93,27 @@ export function resolveSizeInsideTargetBox(
   };
 }
 
+/**
+ * 用于上传类节点的自适应自动适配：在“当前参考尺寸”内按新比例收缩适配，
+ * 若结果小于按比例换算的最小可拖拽尺寸，则直接贴底到该最小尺寸。
+ * 首次上传时传入最小尺寸作为参考尺寸，效果等同于退化到最小尺寸；
+ * 重新上传时传入节点当前尺寸作为参考尺寸，从而保留用户已手动调整过的“体感大小”。
+ */
+export function resolveAdaptiveAutoFitSize(
+  aspectRatio: string,
+  currentSize: ImageNodeSize,
+  constraints: ImageNodeMinSize
+): ImageNodeSize {
+  const floor = resolveResizeMinConstraintsByAspect(aspectRatio, constraints);
+  const fitted = resolveSizeInsideTargetBox(aspectRatio, currentSize);
+
+  if (fitted.width < floor.minWidth || fitted.height < floor.minHeight) {
+    return { width: floor.minWidth, height: floor.minHeight };
+  }
+
+  return fitted;
+}
+
 export function ensureAtLeastOneMinEdge(
   size: ImageNodeSize,
   constraints: ImageNodeMinSize

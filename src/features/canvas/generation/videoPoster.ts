@@ -39,6 +39,53 @@ function drawPosterDataUrl(video: HTMLVideoElement): string | null {
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
+const ASPECT_RATIO_PROBE_TIMEOUT_MS = 5_000;
+
+/**
+ * 只读取视频元数据（宽高），不等待帧抓取，用于上传时尽快拿到宽高比让节点立即重新适配。
+ * 比 captureVideoPoster 快得多：不需要 seek 到具体帧再绘制 canvas。
+ */
+export async function detectVideoAspectRatioFromSource(videoSource: string): Promise<string> {
+  const displayUrl = resolveImageDisplayUrl(videoSource);
+
+  return await new Promise<string>((resolve, reject) => {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.preload = 'metadata';
+
+    let settled = false;
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      video.removeAttribute('src');
+      video.load();
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('视频宽高探测超时'));
+    }, ASPECT_RATIO_PROBE_TIMEOUT_MS);
+
+    video.onloadedmetadata = () => {
+      if (settled) return;
+      settled = true;
+      const ratio = video.videoWidth && video.videoHeight
+        ? reduceAspectRatio(video.videoWidth, video.videoHeight)
+        : '16:9';
+      cleanup();
+      resolve(ratio);
+    };
+    video.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('视频宽高探测失败'));
+    };
+    video.src = displayUrl;
+  });
+}
+
 /**
  * 抓取视频首帧作为 poster 并落盘，同时返回宽高比与时长。
  * 失败时降级返回空 poster（节点回退到图标占位）。

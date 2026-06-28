@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Play, Upload, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -16,7 +16,7 @@ import {
 } from '@/features/canvas/application/imageNodeSizing';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
-import { captureVideoPoster } from '@/features/canvas/generation/videoPoster';
+import { captureVideoPoster, detectVideoAspectRatioFromSource } from '@/features/canvas/generation/videoPoster';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -48,6 +48,7 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 /** 视频展示节点：服务于结果视频与上传视频两种类型，poster 优先、点击播放才挂载 video */
 export const VideoNode = memo(({ id, data, selected, type, width, height }: VideoNodeProps) => {
   const { t } = useTranslation();
+  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const hasTargetConnections = useCanvasStore(
@@ -57,6 +58,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
   );
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadSequenceRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
@@ -74,6 +76,10 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   });
   const resolvedWidth = resolveNodeDimension(width, compactSize.width);
   const resolvedHeight = resolveNodeDimension(height, compactSize.height);
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
 
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(type as CanvasNodeType, data),
@@ -96,8 +102,28 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   );
 
   const processFile = useCallback(async (file: File) => {
+    const sequence = uploadSequenceRef.current + 1;
+    uploadSequenceRef.current = sequence;
+
+    // 先用本地文件直接探测宽高比，不等待落盘 + 抓帧的完整流程，
+    // 让节点尺寸尽快重新适配，避免“先维持旧尺寸、稍后才跳变”的延迟感
+    const optimisticBlobUrl = URL.createObjectURL(file);
+    detectVideoAspectRatioFromSource(optimisticBlobUrl)
+      .then((ratio) => {
+        if (uploadSequenceRef.current === sequence) {
+          updateNodeData(id, { aspectRatio: ratio });
+        }
+      })
+      .catch(() => {
+        // 探测失败时静默忽略，最终尺寸仍由下方 captureVideoPoster 的结果兜底
+      })
+      .finally(() => URL.revokeObjectURL(optimisticBlobUrl));
+
     const saved = await saveUploadVideo(file, 'persist');
     const poster = await captureVideoPoster(saved.fullPath);
+    if (uploadSequenceRef.current !== sequence) {
+      return;
+    }
     updateNodeData(id, {
       videoUrl: saved.fullPath,
       previewImageUrl: poster.posterUrl,

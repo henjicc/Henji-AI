@@ -38,6 +38,7 @@ import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { canvasNodeFactory } from '@/features/canvas/application/canvasServices';
 import {
   ensureAtLeastOneMinEdge,
+  resolveAdaptiveAutoFitSize,
   resolveMinEdgeFittedSize,
   resolveSizeInsideTargetBox,
 } from '@/features/canvas/application/imageNodeSizing';
@@ -334,7 +335,13 @@ function getNodeSize(node: CanvasNode): { width: number; height: number } {
 function isImageAutoResizableType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.upload
     || type === CANVAS_NODE_TYPES.imageEdit
-    || type === CANVAS_NODE_TYPES.exportImage;
+    || type === CANVAS_NODE_TYPES.exportImage
+    || type === CANVAS_NODE_TYPES.videoUpload;
+}
+
+/** 上传类节点（图片/视频）始终按当前尺寸自适应重新贴合，不受手动调整锁定影响 */
+function isAdaptiveUploadNodeType(type: CanvasNodeType): boolean {
+  return type === CANVAS_NODE_TYPES.upload || type === CANVAS_NODE_TYPES.videoUpload;
 }
 
 function withManualSizeLock(node: CanvasNode): CanvasNode {
@@ -414,47 +421,84 @@ function resolveDerivedAspectRatio(
   return imageLikeAspect || fallbackAspectRatio;
 }
 
-function maybeApplyImageAutoResize(node: CanvasNode, patch: Partial<CanvasNodeData>): CanvasNode {
+/**
+ * node 为补丁应用前的原始节点，mergedData 为已合并的新数据。
+ * 上传类节点（图片/视频）每次内容变化都会重新计算尺寸：
+ * - 首次上传内容为空 -> 参考尺寸退化为最小尺寸，结果即为最小可拖拽尺寸
+ * - 重新上传已有内容 -> 参考尺寸取节点当前尺寸，按新比例自适应贴合，不低于最小可拖拽尺寸
+ * 其余类型（AI 编辑结果、导出结果）维持原有“手动调整后锁定”行为。
+ */
+function maybeApplyImageAutoResize(
+  node: CanvasNode,
+  mergedData: CanvasNodeData,
+  patch: Partial<CanvasNodeData>
+): CanvasNode {
   if (!isImageAutoResizableType(node.type)) {
-    return node;
+    return { ...node, data: mergedData };
   }
 
-  const nodeData = node.data as CanvasNodeData & {
+  const previousData = node.data as CanvasNodeData & {
     imageUrl?: string | null;
+    videoUrl?: string | null;
+  };
+  const nextData = mergedData as CanvasNodeData & {
+    imageUrl?: string | null;
+    videoUrl?: string | null;
     aspectRatio?: string;
     isSizeManuallyAdjusted?: boolean;
   };
   const patchData = patch as Partial<CanvasNodeData> & {
     imageUrl?: string | null;
+    videoUrl?: string | null;
     aspectRatio?: string;
-    isSizeManuallyAdjusted?: boolean;
   };
 
-  const hasImageRelatedChange = 'imageUrl' in patchData || 'previewImageUrl' in patchData || 'aspectRatio' in patchData;
-  if (!hasImageRelatedChange) {
-    return node;
+  const hasMediaRelatedChange = 'imageUrl' in patchData
+    || 'videoUrl' in patchData
+    || 'previewImageUrl' in patchData
+    || 'aspectRatio' in patchData;
+  if (!hasMediaRelatedChange) {
+    return { ...node, data: mergedData };
   }
 
-  const isSizeManuallyAdjusted = patchData.isSizeManuallyAdjusted ?? nodeData.isSizeManuallyAdjusted ?? false;
-  if (isSizeManuallyAdjusted) {
-    return node;
+  const isAdaptiveUploadType = isAdaptiveUploadNodeType(node.type);
+  if (nextData.isSizeManuallyAdjusted && !isAdaptiveUploadType) {
+    return { ...node, data: mergedData };
   }
 
-  const nextImageUrl = patchData.imageUrl ?? nodeData.imageUrl;
-  if (typeof nextImageUrl !== 'string' || nextImageUrl.trim().length === 0) {
-    return node;
+  // 上传类节点只要新比例到位就立即重新适配，不必等真正的图片/视频地址落地——
+  // 否则会先维持旧尺寸，等地址写入后才突然跳变，产生明显的“慢半拍”感。
+  // 其余类型（AI 编辑结果、导出结果）仍要求地址已写入才计算尺寸。
+  const readyToResize = isAdaptiveUploadType
+    ? 'aspectRatio' in patchData
+    : typeof nextData.imageUrl === 'string' && nextData.imageUrl.trim().length > 0;
+  if (!readyToResize) {
+    return { ...node, data: mergedData };
   }
 
-  const nextAspectRatio = patchData.aspectRatio ?? nodeData.aspectRatio ?? DEFAULT_ASPECT_RATIO;
-  const nextSize = node.type === CANVAS_NODE_TYPES.exportImage
-    ? resolveAutoImageNodeDimensions(nextAspectRatio, {
-      minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
-      minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
-    })
-    : resolveAutoImageNodeDimensions(nextAspectRatio);
+  const nextAspectRatio = nextData.aspectRatio ?? DEFAULT_ASPECT_RATIO;
+
+  let nextSize: { width: number; height: number };
+  if (isAdaptiveUploadType) {
+    const previousContentUrl = previousData.imageUrl ?? previousData.videoUrl;
+    const hadExistingContent = typeof previousContentUrl === 'string' && previousContentUrl.trim().length > 0;
+    const baseConstraints = { minWidth: EXPORT_RESULT_NODE_MIN_WIDTH, minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT };
+    const referenceSize = hadExistingContent
+      ? getNodeSize(node)
+      : { width: baseConstraints.minWidth, height: baseConstraints.minHeight };
+    nextSize = resolveAdaptiveAutoFitSize(nextAspectRatio, referenceSize, baseConstraints);
+  } else {
+    nextSize = node.type === CANVAS_NODE_TYPES.exportImage
+      ? resolveAutoImageNodeDimensions(nextAspectRatio, {
+        minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
+        minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
+      })
+      : resolveAutoImageNodeDimensions(nextAspectRatio);
+  }
 
   return {
     ...node,
+    data: mergedData,
     width: nextSize.width,
     height: nextSize.height,
     style: {
@@ -1103,13 +1147,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ...node.data,
           ...data,
         } as CanvasNodeData;
-        const resizedNode = maybeApplyImageAutoResize(
-          {
-            ...node,
-            data: mergedData,
-          },
-          data
-        );
+        const resizedNode = maybeApplyImageAutoResize(node, mergedData, data);
 
         changed = true;
         return resizedNode;
