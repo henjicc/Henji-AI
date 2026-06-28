@@ -30,7 +30,6 @@ import { SplitStoryboardToolEditor } from './tool-editors/SplitStoryboardToolEdi
 export function NodeToolDialog() {
   const { t } = useTranslation();
   const activeToolDialog = useCanvasStore((state) => state.activeToolDialog);
-  const nodes = useCanvasStore((state) => state.nodes);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
   const addStoryboardSplitNode = useCanvasStore((state) => state.addStoryboardSplitNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
@@ -56,13 +55,11 @@ export function NodeToolDialog() {
     };
   }, [activeToolDialog]);
 
-  const sourceNode = useMemo(() => {
-    if (!displayToolDialog) {
-      return null;
-    }
-
-    return nodes.find((node) => node.id === displayToolDialog.nodeId) ?? null;
-  }, [displayToolDialog, nodes]);
+  // 直接在 selector 里按 id 查找，避免订阅整个 nodes 数组——
+  // 画布上任意其他节点编辑都会换 nodes 数组引用，但只有目标节点对象本身变化时才需要重渲染。
+  const sourceNode = useCanvasStore((state) =>
+    displayToolDialog ? state.nodes.find((node) => node.id === displayToolDialog.nodeId) ?? null : null
+  );
 
   const sourceImageUrl = useMemo(() => {
     if (!sourceNode) {

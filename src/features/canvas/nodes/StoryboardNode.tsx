@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Download, SlidersHorizontal } from 'lucide-react';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -20,7 +21,7 @@ import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboar
 import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
-import { buildFrameViewerImageList, buildIncomingImageItems, collectIncomingImageRefs } from '@/features/canvas/nodes/storyboardSplit/data';
+import { areIncomingImageRefsEqual, buildFrameViewerImageList, buildIncomingImageItems, collectIncomingImageRefs } from '@/features/canvas/nodes/storyboardSplit/data';
 import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX, STORYBOARD_NODE_MIN_HEIGHT_PX, STORYBOARD_NODE_WIDTH_PX, toCssAspectRatio } from '@/features/canvas/nodes/storyboardSplit/shared';
 
 type StoryboardNodeProps = NodeProps & {
@@ -42,8 +43,13 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const exportSettingsPanelRef = useRef<HTMLDivElement>(null);
 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
-  const nodes = useCanvasStore((state) => state.nodes);
-  const edges = useCanvasStore((state) => state.edges);
+  // 本节点只需要"上游连了哪些图片"这一派生结果，不需要整个 nodes/edges 数组；
+  // 用内容相等比较订阅，避免画布上任意其他节点的无关编辑都触发本节点重渲染。
+  const incomingImageRefs = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => collectIncomingImageRefs(id, state.nodes, state.edges),
+    areIncomingImageRefsEqual
+  );
   const reorderStoryboardFrame = useCanvasStore((state) => state.reorderStoryboardFrame);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
@@ -89,7 +95,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   );
   const exportOptions = useMemo(() => resolveExportOptions(data.exportOptions), [data.exportOptions]);
 
-  const incomingImageRefs = useMemo(() => collectIncomingImageRefs(id, nodes, edges), [edges, id, nodes]);
   const incomingImageItems = useMemo(() => buildIncomingImageItems(incomingImageRefs), [incomingImageRefs]);
   const incomingReferenceItems = useMemo(
     () =>
