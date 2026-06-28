@@ -96,11 +96,15 @@ export function MediaInputRow({
   // 用 getZoom() 在拖拽开始那一刻取一次快照（而非 useViewport() 那样订阅视口、每帧重渲染）。
   const { getZoom } = useReactFlow();
   const dragZoomRef = useRef(1);
+  const mediaHandleId = mediaPortId(mediaKind);
 
   const upstreamMedia = useStoreWithEqualityFn(
     useCanvasStore,
     (state) => collectInputMediaByKind(nodeId, state.nodes, state.edges, mediaKind),
     areMediaOutputListsEqual
+  );
+  const hasMediaPortConnection = useCanvasStore((state) =>
+    state.edges.some((edge) => edge.target === nodeId && edge.targetHandle === mediaHandleId)
   );
   const upstreamUrls = useMemo(() => upstreamMedia.map((item) => item.url), [upstreamMedia]);
   // 本地上传的图片在上传时已经生成过 previewImageUrl（见 prepareNodeImageFromFile），
@@ -120,7 +124,7 @@ export function MediaInputRow({
     }
     return map;
   }, [upstreamMedia]);
-  const isConnected = upstreamUrls.length > 0;
+  const isConnected = hasMediaPortConnection || upstreamUrls.length > 0;
   const displayUrls = isConnected ? upstreamUrls : inlineValue;
   const canAddMore = !isConnected && displayUrls.length < maxCount;
   const socketColor = getSocketColor(mediaKind.toUpperCase());
@@ -196,7 +200,7 @@ export function MediaInputRow({
     >
       <Handle
         type="target"
-        id={mediaPortId(mediaKind)}
+        id={mediaHandleId}
         position={Position.Left}
         style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
         className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}

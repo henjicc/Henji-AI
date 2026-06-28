@@ -32,6 +32,11 @@
     "generate": "生成",
     "emptyHintTitle": "双击鼠标添加节点",
     "emptyHintSubtitle": "Double-click to add a node",
+    "connection": {
+      "typeMismatch": "连接类型不对，请连接到匹配的输入行",
+      "mediaLimitExceeded": "{{media}}最多只能连接 {{max}} 个",
+      "mediaFallback": "媒体"
+    },
     "toolbar": {
       "zoomIn": "放大",
       "zoomOut": "缩小",

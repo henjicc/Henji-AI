@@ -32,6 +32,11 @@
     "generate": "Generate",
     "emptyHintTitle": "Double-click to add a node",
     "emptyHintSubtitle": "Double-click to add a node",
+    "connection": {
+      "typeMismatch": "Connection type mismatch. Use the matching input row.",
+      "mediaLimitExceeded": "{{media}} accepts up to {{max}} connection(s).",
+      "mediaFallback": "Media"
+    },
     "toolbar": {
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out",

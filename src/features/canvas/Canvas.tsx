@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import {
   ReactFlow,
@@ -29,7 +30,7 @@ import {
 } from '@/features/canvas/domain/canvasNodes';
 import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
-import { isParamConnectionCompatible } from '@/features/canvas/application/graphValueResolver';
+import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -41,12 +42,36 @@ import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialog } from './ui/NodeToolDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
 
+interface CanvasToastState {
+  message: string;
+  id: number;
+}
+
+function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
+  if (!toast) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-4 z-[12000] -translate-x-1/2">
+      <div
+        key={toast.id}
+        className="rounded-lg border border-red-400/30 bg-red-500/15 px-4 py-2 text-sm font-medium text-red-100 shadow-2xl backdrop-blur-md"
+      >
+        {toast.message}
+      </div>
+    </div>
+  );
+}
+
 export function Canvas() {
   const { t } = useTranslation();
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const isRestoringCanvasRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [connectionToast, setConnectionToast] = useState<CanvasToastState | null>(null);
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const history = useCanvasStore((state) => state.history);
@@ -109,6 +134,24 @@ export function Canvas() {
     },
     [persistCanvasSnapshot]
   );
+
+  const showConnectionToast = useCallback((message: string) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setConnectionToast({ message, id: Date.now() });
+    toastTimerRef.current = setTimeout(() => {
+      setConnectionToast(null);
+      toastTimerRef.current = null;
+    }, 2400);
+  }, []);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribeOpen = canvasEventBus.subscribe('tool-dialog/open', (payload) => {
@@ -255,16 +298,30 @@ export function Canvas() {
         return;
       }
       // 参数端口连线走插槽类型兼容；整节点媒体连线走媒体端口兼容
-      const compatible = isParamPortId(connection.targetHandle)
-        ? isParamConnectionCompatible(sourceNode, targetNode, connection.targetHandle)
+      const paramValidation = isParamPortId(connection.targetHandle)
+        ? validateParamConnection(sourceNode, targetNode, connection.targetHandle, nodes, edges)
+        : null;
+      const compatible = paramValidation
+        ? paramValidation.compatible
         : isConnectionCompatible(sourceNode.type, targetNode.type);
       if (!compatible) {
+        if (paramValidation?.reason === 'media-limit-exceeded') {
+          const mediaLabel = paramValidation.mediaKind
+            ? t(`node.mediaRow.${paramValidation.mediaKind}`)
+            : t('canvas.connection.mediaFallback');
+          showConnectionToast(t('canvas.connection.mediaLimitExceeded', {
+            media: mediaLabel,
+            max: paramValidation.maxCount ?? 0,
+          }));
+        } else {
+          showConnectionToast(t('canvas.connection.typeMismatch'));
+        }
         return;
       }
       connectNodes(connection);
       scheduleCanvasPersist(0);
     },
-    [connectNodes, nodes, scheduleCanvasPersist]
+    [connectNodes, edges, nodes, scheduleCanvasPersist, showConnectionToast, t]
   );
 
   const handleMoveEnd = useCallback(
@@ -397,6 +454,7 @@ export function Canvas() {
       </ReactFlow>
 
       <NodeToolDialog />
+      <CanvasConnectionToast toast={connectionToast} />
 
       <CanvasOverlays
         nodesCount={nodes.length} emptyTitle={t('canvas.emptyHintTitle')} emptySubtitle={t('canvas.emptyHintSubtitle')}

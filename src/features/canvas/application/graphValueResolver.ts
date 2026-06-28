@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry';
+import { resolveInputLimits } from '@/core/inputs/inputLimits';
 import type { ParamDef } from '@/core/types';
 import { deriveSocketType, isSocketCompatible } from '@/core/types/SocketType';
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '../domain/canvasNodes';
@@ -23,12 +24,40 @@ import {
   type RowMediaKind,
 } from '../domain/socketTypes';
 
+const MEDIA_LIMIT_KEY: Record<RowMediaKind, 'images' | 'videos' | 'audios'> = {
+  image: 'images',
+  video: 'videos',
+  audio: 'audios',
+};
+
+export type ConnectionRejectionReason = 'type-mismatch' | 'media-limit-exceeded';
+
+export interface ParamConnectionValidationResult {
+  compatible: boolean;
+  reason?: ConnectionRejectionReason;
+  mediaKind?: RowMediaKind;
+  maxCount?: number;
+}
+
 /**
  * 标量值注入解析（数值/源节点 → 下游参数端口）。
  *
  * 与 graphMediaResolver 对称：媒体走整节点端口，标量值走 `param:<id>` 参数端口。
  * 无节点类型特判——上游值由各节点 getValueOutput 声明。
  */
+function getDeclaredSourceMediaKind(sourceNode: CanvasNode): RowMediaKind | null {
+  const emits = getCanvasNodeDefinition(sourceNode.type)?.ports?.source?.emits;
+  return emits === 'image' || emits === 'video' || emits === 'audio' ? emits : null;
+}
+
+function sourceEmitsMediaKind(sourceNode: CanvasNode, mediaKind: RowMediaKind): boolean {
+  if (getDeclaredSourceMediaKind(sourceNode) === mediaKind) {
+    return true;
+  }
+  return getNodeMediaOutputs(sourceNode.type, sourceNode.data)
+    .some((output) => output.kind === mediaKind);
+}
+
 function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamDef | undefined {
   const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
   if (typeof modelId === 'string' && modelId) {
@@ -115,8 +144,7 @@ export function isParamConnectionCompatible(
 
   const mediaKind = mediaParamIdToKind(paramId);
   if (mediaKind) {
-    return getNodeMediaOutputs(sourceNode.type, sourceNode.data)
-      .some((output) => output.kind === mediaKind);
+    return sourceEmitsMediaKind(sourceNode, mediaKind);
   }
 
   if (paramId === MODEL_PARAM_ID) {
@@ -148,6 +176,100 @@ export function isParamConnectionCompatible(
     return false;
   }
   return isSocketCompatible(output.socketType, deriveSocketType(param));
+}
+
+function resolveTargetModelId(targetNode: CanvasNode, nodes: CanvasNode[], edges: CanvasEdge[]): string | null {
+  const injectedValues = collectInputValues(targetNode.id, nodes, edges);
+  const injectedModelId = injectedValues[MODEL_PARAM_ID];
+  if (typeof injectedModelId === 'string' && registry.getModel(injectedModelId)) {
+    return injectedModelId;
+  }
+
+  const storedModelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
+  return typeof storedModelId === 'string' && registry.getModel(storedModelId)
+    ? storedModelId
+    : null;
+}
+
+function resolveTargetParams(targetNode: CanvasNode, nodes: CanvasNode[], edges: CanvasEdge[]): DynamicValueMap {
+  const storedParams = (targetNode.data as { params?: DynamicValue }).params;
+  return {
+    ...(typeof storedParams === 'object' && storedParams !== null && !Array.isArray(storedParams)
+      ? storedParams as DynamicValueMap
+      : {}),
+    ...collectInputValues(targetNode.id, nodes, edges),
+  };
+}
+
+function isSameConnection(edge: CanvasEdge, sourceNode: CanvasNode, targetNode: CanvasNode, targetHandle: string): boolean {
+  return edge.source === sourceNode.id &&
+    edge.target === targetNode.id &&
+    (edge.sourceHandle ?? 'source') === 'source' &&
+    (edge.targetHandle ?? 'target') === targetHandle;
+}
+
+function countMediaConnections(
+  targetNode: CanvasNode,
+  mediaKind: RowMediaKind,
+  targetHandle: string,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+  sourceNode: CanvasNode
+): number {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  let count = 0;
+
+  for (const edge of edges) {
+    if (edge.target !== targetNode.id || isSameConnection(edge, sourceNode, targetNode, targetHandle)) {
+      continue;
+    }
+
+    const edgeParamId = parseParamPortId(edge.targetHandle);
+    if (edgeParamId && mediaParamIdToKind(edgeParamId) !== mediaKind) {
+      continue;
+    }
+    if (!edgeParamId && edge.targetHandle !== 'target') {
+      continue;
+    }
+
+    const edgeSourceNode = nodeById.get(edge.source);
+    if (edgeSourceNode && sourceEmitsMediaKind(edgeSourceNode, mediaKind)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+export function validateParamConnection(
+  sourceNode: CanvasNode,
+  targetNode: CanvasNode,
+  targetHandle: string | null | undefined,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[]
+): ParamConnectionValidationResult {
+  if (!isParamConnectionCompatible(sourceNode, targetNode, targetHandle)) {
+    return { compatible: false, reason: 'type-mismatch' };
+  }
+
+  const paramId = parseParamPortId(targetHandle);
+  const mediaKind = paramId ? mediaParamIdToKind(paramId) : null;
+  if (!mediaKind || !targetHandle) {
+    return { compatible: true };
+  }
+
+  const modelId = resolveTargetModelId(targetNode, nodes, edges);
+  if (!modelId) {
+    return { compatible: true };
+  }
+
+  const limits = resolveInputLimits(modelId, resolveTargetParams(targetNode, nodes, edges));
+  const maxCount = limits[MEDIA_LIMIT_KEY[mediaKind]].max;
+  const currentCount = countMediaConnections(targetNode, mediaKind, targetHandle, nodes, edges, sourceNode);
+
+  return currentCount < maxCount
+    ? { compatible: true }
+    : { compatible: false, reason: 'media-limit-exceeded', mediaKind, maxCount };
 }
 
 function createPreviewNode(type: CanvasNodeType): CanvasNode | null {
