@@ -44,6 +44,7 @@ import {
 } from '@/features/canvas/application/imageNodeSizing';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
+import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 
 export type {
   ActiveToolDialog,
@@ -565,7 +566,10 @@ function resolveSelectedNodeId(selectedNodeId: string | null, nodes: CanvasNode[
   if (!selectedNodeId) {
     return null;
   }
-  return nodes.some((node) => node.id === selectedNodeId) ? selectedNodeId : null;
+  // 这两个 resolve 函数总是在同一次 set() 里用同一份 nodes 引用各调一次；
+  // 复用 getNodeIndexById 的单槎缓存，O(n) 建一次索引比两次各自 O(n) 的 .some() 扫描更省，
+  // 且建好的索引能被同一帧内其他消费者（如 DisconnectableEdge 的 selector）直接复用。
+  return getNodeIndexById(nodes).has(selectedNodeId) ? selectedNodeId : null;
 }
 
 function resolveActiveToolDialog(
@@ -575,7 +579,7 @@ function resolveActiveToolDialog(
   if (!activeToolDialog) {
     return null;
   }
-  return nodes.some((node) => node.id === activeToolDialog.nodeId) ? activeToolDialog : null;
+  return getNodeIndexById(nodes).has(activeToolDialog.nodeId) ? activeToolDialog : null;
 }
 
 function createDefaultStoryboardExportOptions(): StoryboardExportOptions {
