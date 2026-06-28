@@ -43,6 +43,7 @@ import {
   resolveSizeInsideTargetBox,
 } from '@/features/canvas/application/imageNodeSizing';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
+import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
 
 export type {
   ActiveToolDialog,
@@ -1157,8 +1158,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         return {};
       }
 
+      // 模型切换后旧参数端口（含媒体端口）可能不复存在，回收已失效的连线，
+      // 避免连线在画布上视觉悬空、指向一个已不再渲染的端口。
+      let nextEdges = state.edges;
+      if ('modelId' in data) {
+        const targetNode = nextNodes.find((node) => node.id === nodeId);
+        if (targetNode) {
+          const staleEdgeIds = new Set(findStaleParamEdgeIds(targetNode, nextNodes, state.edges));
+          if (staleEdgeIds.size > 0) {
+            nextEdges = state.edges.filter((edge) => !staleEdgeIds.has(edge.id));
+          }
+        }
+      }
+
       return {
         nodes: nextNodes,
+        edges: nextEdges,
         history: {
           past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
           future: [],

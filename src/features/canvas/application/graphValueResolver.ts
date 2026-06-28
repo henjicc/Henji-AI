@@ -201,6 +201,56 @@ function resolveTargetParams(targetNode: CanvasNode, nodes: CanvasNode[], edges:
   };
 }
 
+/**
+ * 模型切换后回收失效连线：找出指向本节点参数端口、但目标端口在当前模型下已不存在
+ * （schema 中无此参数 / 媒体类型已不被接受或上限降为 0 / 媒体连接数超出新上限）的 edge id。
+ * 仅在节点自身 modelId 直接变化时调用；模型选择器连线覆盖模型的场景暂不在此处理。
+ */
+export function findStaleParamEdgeIds(
+  targetNode: CanvasNode,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[]
+): string[] {
+  const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
+  if (typeof modelId !== 'string' || !modelId || !registry.getModel(modelId)) {
+    return [];
+  }
+
+  const acceptedKinds = getCanvasNodeDefinition(targetNode.type)?.ports?.target?.accepts ?? [];
+  const schemaParamIds = new Set(registry.getSchema(modelId).map((item) => item.id));
+  const limits = resolveInputLimits(modelId, resolveTargetParams(targetNode, nodes, edges));
+  const mediaUsage: Partial<Record<RowMediaKind, number>> = {};
+  const staleEdgeIds: string[] = [];
+
+  for (const edge of edges) {
+    if (edge.target !== targetNode.id) {
+      continue;
+    }
+    const paramId = parseParamPortId(edge.targetHandle);
+    if (!paramId || paramId === MODEL_PARAM_ID || paramId === PROMPT_PARAM_ID) {
+      continue;
+    }
+
+    const mediaKind = mediaParamIdToKind(paramId);
+    if (mediaKind) {
+      const maxCount = acceptedKinds.includes(mediaKind) ? limits[MEDIA_LIMIT_KEY[mediaKind]].max : 0;
+      const usedCount = mediaUsage[mediaKind] ?? 0;
+      if (usedCount >= maxCount) {
+        staleEdgeIds.push(edge.id);
+      } else {
+        mediaUsage[mediaKind] = usedCount + 1;
+      }
+      continue;
+    }
+
+    if (!schemaParamIds.has(paramId)) {
+      staleEdgeIds.push(edge.id);
+    }
+  }
+
+  return staleEdgeIds;
+}
+
 function isSameConnection(edge: CanvasEdge, sourceNode: CanvasNode, targetNode: CanvasNode, targetHandle: string): boolean {
   return edge.source === sourceNode.id &&
     edge.target === targetNode.id &&
