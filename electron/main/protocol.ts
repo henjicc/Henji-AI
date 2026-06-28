@@ -145,11 +145,25 @@ function streamFile(targetPath: string, range: ByteRange | null): ReadableStream
   return Readable.toWeb(stream) as ReadableStream<Uint8Array>
 }
 
+const CONTENT_ADDRESSED_DIR_NAMES = new Set(['Media', 'Thumbnails', 'Uploads'])
+
+/**
+ * Media/Thumbnails/Uploads 下的文件名是内容哈希派生的，同路径不会被替换成不同内容，
+ * 可以放心长期缓存；其他来源（如用户自定义授权目录）路径可能被外部编辑，保持不缓存。
+ */
+function isContentAddressedPath(targetPath: string): boolean {
+  const segments = targetPath.split(/[\\/]/)
+  return segments.some((segment) => CONTENT_ADDRESSED_DIR_NAMES.has(segment))
+}
+
 function createHeaders(targetPath: string, size: number, range: ByteRange | null): Headers {
   const headers = new Headers()
   headers.set('Accept-Ranges', 'bytes')
   headers.set('Content-Type', inferMimeFromPath(targetPath))
-  headers.set('Cache-Control', 'no-store')
+  headers.set(
+    'Cache-Control',
+    isContentAddressedPath(targetPath) ? 'public, max-age=31536000, immutable' : 'no-store'
+  )
 
   if (range) {
     headers.set('Content-Length', String(range.end - range.start + 1))
