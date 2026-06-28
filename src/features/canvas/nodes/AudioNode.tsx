@@ -19,10 +19,12 @@ import {
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { formatDuration, getAudioDuration } from '@/utils/mediaDimensions';
+import { useAudioWaveform } from '@/hooks/useAudioWaveform';
 import { saveUploadAudio } from '@/utils/save';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal';
+import Waveform from '@/components/Waveform';
 
 type AudioNodeProps = NodeProps & {
   id: string;
@@ -31,7 +33,9 @@ type AudioNodeProps = NodeProps & {
 };
 
 const AUDIO_NODE_WIDTH = 280;
-const AUDIO_NODE_HEIGHT = 88;
+const AUDIO_NODE_HEIGHT = 96;
+const AUDIO_WAVEFORM_WIDTH = 210;
+const AUDIO_WAVEFORM_HEIGHT = 28;
 
 /** 音频节点：服务于结果音频与上传音频，卡片式展示 + 懒挂载播放 */
 export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => {
@@ -47,6 +51,8 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(0);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.audioUpload;
@@ -60,6 +66,13 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     () => (data.audioUrl ? resolveImageDisplayUrl(data.audioUrl) : null),
     [data.audioUrl]
   );
+  const { waveform, waveDuration } = useAudioWaveform(audioSource ?? '', undefined, {
+    width: AUDIO_WAVEFORM_WIDTH,
+    compact: true,
+    duration: data.durationSec ?? undefined,
+  });
+  const effectiveDuration = mediaDuration || waveDuration || data.durationSec || 0;
+  const waveformProgress = effectiveDuration > 0 ? currentTime / effectiveDuration : 0;
   const durationLabel = useMemo(
     () => (typeof data.durationSec === 'number' && data.durationSec > 0
       ? formatDuration(data.durationSec)
@@ -77,25 +90,56 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     audioRef.current?.pause();
     audioRef.current = null;
     setIsPlaying(false);
+    setCurrentTime(0);
+    setMediaDuration(0);
   }, [audioSource]);
 
-  const togglePlay = useCallback(() => {
+  const ensureAudioElement = useCallback((): HTMLAudioElement | null => {
     if (!audioSource) {
-      return;
-    }
-    if (isPlaying) {
-      audioRef.current?.pause();
-      setIsPlaying(false);
-      return;
+      return null;
     }
     if (!audioRef.current) {
       const element = new Audio(audioSource);
-      element.onended = () => setIsPlaying(false);
+      element.preload = 'metadata';
+      element.addEventListener('timeupdate', () => setCurrentTime(element.currentTime || 0));
+      element.addEventListener('loadedmetadata', () => setMediaDuration(element.duration || 0));
+      element.addEventListener('ended', () => setIsPlaying(false));
       audioRef.current = element;
     }
-    void audioRef.current.play();
+    return audioRef.current;
+  }, [audioSource]);
+
+  const togglePlay = useCallback(() => {
+    const element = ensureAudioElement();
+    if (!element) {
+      return;
+    }
+    if (isPlaying) {
+      element.pause();
+      setIsPlaying(false);
+      return;
+    }
+    void element.play();
     setIsPlaying(true);
-  }, [audioSource, isPlaying]);
+  }, [ensureAudioElement, isPlaying]);
+
+  const seekToRatio = useCallback((ratio: number) => {
+    const element = ensureAudioElement();
+    const total = element?.duration || effectiveDuration;
+    if (!element || !total) {
+      return;
+    }
+    element.currentTime = ratio * total;
+    setCurrentTime(element.currentTime);
+  }, [ensureAudioElement, effectiveDuration]);
+
+  const handleWaveformSeekEnd = useCallback((ratio: number, dragged: boolean) => {
+    seekToRatio(ratio);
+    if (dragged && audioRef.current) {
+      void audioRef.current.play();
+      setIsPlaying(true);
+    }
+  }, [seekToRatio]);
 
   const processFile = useCallback(async (file: File) => {
     const saved = await saveUploadAudio(file, 'persist');
@@ -162,7 +206,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div className="relative flex h-full w-full items-center gap-3 overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3">
+      <div className="relative flex h-full w-full items-center gap-2.5 overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3">
         {data.audioUrl ? (
           <>
             <UiIconButton
@@ -171,20 +215,33 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
                 event.stopPropagation();
                 togglePlay();
               }}
-              className="h-10 w-10 shrink-0 rounded-full"
+              className="nodrag h-9 w-9 shrink-0 rounded-full"
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
             </UiIconButton>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 text-text-muted">
-                <AudioLines className={`h-4 w-4 ${isPlaying ? 'text-accent' : ''}`} />
-                <span className="truncate text-xs">
-                  {data.sourceFileName || resolvedTitle}
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="nodrag nowheel" style={{ height: AUDIO_WAVEFORM_HEIGHT }}>
+                {waveform ? (
+                  <Waveform
+                    samples={waveform}
+                    width={AUDIO_WAVEFORM_WIDTH}
+                    height={AUDIO_WAVEFORM_HEIGHT}
+                    progress={waveformProgress}
+                    duration={effectiveDuration}
+                    onSeekStart={seekToRatio}
+                    onSeekMove={seekToRatio}
+                    onSeekEnd={handleWaveformSeekEnd}
+                  />
+                ) : (
+                  <div className="h-full w-full rounded bg-layer/50" />
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[10px] leading-none text-text-muted/75">
+                <span className="min-w-0 flex-1 truncate pr-2">{data.sourceFileName || resolvedTitle}</span>
+                <span className="shrink-0 tabular-nums">
+                  {formatDuration(currentTime)} / {durationLabel ?? formatDuration(effectiveDuration)}
                 </span>
               </div>
-              {durationLabel && (
-                <div className="mt-1 text-[10px] leading-none text-text-muted/80">{durationLabel}</div>
-              )}
             </div>
           </>
         ) : isUploadVariant ? (
