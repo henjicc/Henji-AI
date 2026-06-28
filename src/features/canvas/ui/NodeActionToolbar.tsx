@@ -52,7 +52,11 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
 
 const TOOLBAR_BUTTON_RADIUS_CLASS = 'rounded-full';
 const TOOLBAR_NEUTRAL_BUTTON_CLASS =
-  'border-[rgba(255,255,255,0.18)] bg-bg-dark/70 text-text-dark hover:border-[rgba(255,255,255,0.32)] hover:bg-bg-dark';
+  '!border-transparent !bg-transparent text-text-muted hover:!border-border-dark hover:!bg-layer hover:!text-text-dark';
+const TOOLBAR_ACCENT_BUTTON_CLASS =
+  '!border-transparent !bg-transparent text-accent hover:!border-accent/45 hover:!bg-accent/15';
+const TOOLBAR_DANGER_BUTTON_CLASS =
+  '!border-transparent !bg-transparent text-red-400 hover:!border-red-500/80 hover:!bg-red-500 hover:!text-white';
 
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const { t } = useTranslation();
@@ -271,7 +275,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {canTriggerGeneration && (
           <UiChipButton
             key="node-generate"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs border-accent/45 bg-accent/15 text-accent hover:bg-accent/25`}
+            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_ACCENT_BUTTON_CLASS}`}
             onClick={(event) => {
               event.stopPropagation();
               canvasEventBus.publish('generation/run', { nodeId: node.id });
@@ -383,7 +387,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         )}
         <UiChipButton
           key="node-delete"
-          className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} border-red-500/45 bg-red-500/15 px-2.5 text-xs text-red-300 hover:bg-red-500/25`}
+          className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_DANGER_BUTTON_CLASS}`}
           onClick={(event) => {
             event.stopPropagation();
             closeDownloadMenu();
