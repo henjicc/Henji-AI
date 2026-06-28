@@ -199,7 +199,7 @@ export function NodeHeader({
         variant="ghost"
         size="sm"
         className={joinClasses(
-          '!h-auto !min-h-0 !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
+          '!h-auto !min-h-0 !rounded-none !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
           '!justify-start overflow-hidden whitespace-nowrap cursor-grab select-none text-left active:cursor-grabbing',
           NODE_HEADER_TITLE_FLEX_CLASS,
           NODE_HEADER_TITLE_CLASS,
