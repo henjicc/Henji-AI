@@ -1,5 +1,5 @@
-import sharp from 'sharp'
 import type { StoryboardImageMetadataDto } from './types'
+import { loadSharp } from './sharp-loader'
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const METADATA_KEY = 'StoryboardCopilotMetadata'
@@ -8,6 +8,7 @@ export async function encodePngWithStoryboardMetadata(
   input: Buffer,
   metadata: StoryboardImageMetadataDto
 ): Promise<Buffer> {
+  const sharp = await loadSharp()
   const png = await sharp(input).png().toBuffer()
   const chunk = createItxtChunk(METADATA_KEY, JSON.stringify(normalizeMetadata(metadata)))
   return insertChunkAfterIhdr(png, chunk)

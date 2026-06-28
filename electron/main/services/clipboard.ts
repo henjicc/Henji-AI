@@ -1,8 +1,8 @@
 import { clipboard, nativeImage } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import sharp from 'sharp'
 import { resolveSourceBytes } from './image/source'
+import { loadSharp } from './image/sharp-loader'
 
 export interface ClipboardFileEntryDto {
   path: string
@@ -105,6 +105,7 @@ export function readClipboardText(): string {
 }
 
 export async function writeImageFromPath(filePath: string): Promise<void> {
+  const sharp = await loadSharp()
   const pngBytes = await sharp(await fs.readFile(filePath)).png().toBuffer()
   const image = nativeImage.createFromBuffer(pngBytes)
   if (image.isEmpty()) {
@@ -115,6 +116,7 @@ export async function writeImageFromPath(filePath: string): Promise<void> {
 
 export async function writeImageFromSource(source: string): Promise<void> {
   const { bytes } = await resolveSourceBytes(source)
+  const sharp = await loadSharp()
   const pngBytes = await sharp(bytes).png().toBuffer()
   const image = nativeImage.createFromBuffer(pngBytes)
   if (image.isEmpty()) {

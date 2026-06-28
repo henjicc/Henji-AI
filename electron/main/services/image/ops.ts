@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import sharp, { type OverlayOptions, type Region } from 'sharp'
+import type { OverlayOptions, Region } from 'sharp'
+import { loadSharp } from './sharp-loader'
 import {
   ensureOutputPathWithExtension,
   ensureUniquePath,
@@ -71,6 +72,7 @@ export async function prepareNodeImageBinary(
 
 export async function cropImageSource(payload: CropImageSourcePayloadDto): Promise<string> {
   const { bytes } = await resolveSourceBytes(payload.source)
+  const sharp = await loadSharp()
   const meta = await sharp(bytes).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
@@ -126,6 +128,7 @@ export async function saveImageSourceToAppDebugDir(
 
 export async function readImageInfo(source: string): Promise<ImageInfoResultDto> {
   const { bytes, extension } = await resolveSourceBytes(source)
+  const sharp = await loadSharp()
   const meta = await sharp(bytes).metadata()
   const localPath = isLocalSource(source) ? normalizeLocalSource(source) : null
   const stat = localPath && fs.existsSync(localPath) ? fs.statSync(localPath) : null
@@ -143,6 +146,7 @@ export async function readImageInfo(source: string): Promise<ImageInfoResultDto>
 
 export async function mergeStoryboardImages(payload: MergeStoryboardImagesPayloadDto): Promise<MergeStoryboardImagesResultDto> {
   const layout = await resolveMergeLayout(payload)
+  const sharp = await loadSharp()
   const base = sharp({
     create: {
       width: layout.canvasWidth,
@@ -175,6 +179,7 @@ async function splitBuffer(bytes: Buffer, rows: number, cols: number, lineThickn
   const safeRows = Math.max(1, Math.floor(rows))
   const safeCols = Math.max(1, Math.floor(cols))
   const safeLine = Math.max(0, Math.floor(lineThickness))
+  const sharp = await loadSharp()
   const meta = await sharp(bytes).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
@@ -195,6 +200,7 @@ async function splitBuffer(bytes: Buffer, rows: number, cols: number, lineThickn
 }
 
 async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDimension: number): Promise<PrepareNodeImageSourceResultDto> {
+  const sharp = await loadSharp()
   const meta = await sharp(bytes).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
@@ -310,6 +316,7 @@ async function resolveMergeLayout(payload: MergeStoryboardImagesPayloadDto): Pro
   const firstSource = payload.frameSources.slice(0, frameCount).find((source) => source.trim())
   if (!firstSource) throw new Error('没有可合并的分镜图片')
   const { bytes } = await resolveSourceBytes(firstSource)
+  const sharp = await loadSharp()
   const meta = await sharp(bytes).metadata()
   let cellWidth = Math.max(64, meta.width ?? 64)
   let cellHeight = Math.max(64, meta.height ?? 64)
@@ -335,6 +342,7 @@ async function resolveMergeLayout(payload: MergeStoryboardImagesPayloadDto): Pro
 
 async function buildFrameComposites(payload: MergeStoryboardImagesPayloadDto, layout: MergeLayout): Promise<OverlayOptions[]> {
   const overlays: OverlayOptions[] = []
+  const sharp = await loadSharp()
   for (let index = 0; index < layout.frameCount; index += 1) {
     const source = payload.frameSources[index]?.trim()
     const left = layout.padding + (index % layout.cols) * (layout.cellWidth + layout.gap)
