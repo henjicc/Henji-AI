@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
-import { bindWindowStateEvents, maximizeWindow } from './ipc/window'
+import { bindWindowStateEvents } from './ipc/window'
+import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 
 export function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -10,8 +11,7 @@ export function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     frame: false,
-    transparent: true,
-    backgroundColor: 'transparent',
+    backgroundColor: APP_WINDOW_BACKGROUND_HEX,
     title: '痕迹AI',
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -26,14 +26,14 @@ export function createWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => {
     if (win.isDestroyed()) return
-    maximizeWindow(win)
+    win.maximize()
     win.show()
   })
 
   if (!win.isVisible()) {
     setTimeout(() => {
       if (!win.isDestroyed() && !win.isVisible()) {
-        maximizeWindow(win)
+        win.maximize()
         win.show()
       }
     }, 3000)

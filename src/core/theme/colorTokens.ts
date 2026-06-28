@@ -70,6 +70,8 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   layer: '#262626',
 } as const;
 
+export const APP_WINDOW_BACKGROUND_HEX = DEFAULT_THEME_COLOR_SCHEME_HEX.app;
+
 export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',
   surface: '#1A1A1A',

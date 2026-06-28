@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, type IpcMainInvokeEvent, type Rectangle } from 'electron'
+import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { parseVoid, registerIpcHandler } from './registry'
 
 const WINDOW_MINIMIZE = 'window:minimize'
@@ -12,9 +12,6 @@ interface WindowStatePayload {
   isMaximized: boolean
 }
 
-const normalBoundsByWindow = new WeakMap<BrowserWindow, Rectangle>()
-const maximizedByWindow = new WeakMap<BrowserWindow, boolean>()
-
 function getEventWindow(event: IpcMainInvokeEvent): BrowserWindow {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win) {
@@ -23,56 +20,25 @@ function getEventWindow(event: IpcMainInvokeEvent): BrowserWindow {
   return win
 }
 
-function isWindowMaximized(win: BrowserWindow): boolean {
-  return maximizedByWindow.get(win) === true || win.isMaximized()
-}
-
 function sendWindowState(win: BrowserWindow): void {
   if (win.isDestroyed()) return
 
   const payload: WindowStatePayload = {
-    isMaximized: isWindowMaximized(win),
+    isMaximized: win.isMaximized(),
   }
   win.webContents.send(WINDOW_STATE_CHANGED, payload)
 }
 
-export function maximizeWindow(win: BrowserWindow): void {
-  if (isWindowMaximized(win)) return
-
-  normalBoundsByWindow.set(win, win.getBounds())
-  const display = screen.getDisplayMatching(win.getBounds())
-  win.setBounds(display.workArea)
-  maximizedByWindow.set(win, true)
-  sendWindowState(win)
-}
-
-function restoreWindow(win: BrowserWindow): void {
-  if (!isWindowMaximized(win)) return
-
-  const normalBounds = normalBoundsByWindow.get(win)
-  maximizedByWindow.set(win, false)
+function toggleMaximizeWindow(win: BrowserWindow): void {
   if (win.isMaximized()) {
     win.unmaximize()
-  }
-  if (normalBounds) {
-    win.setBounds(normalBounds)
-  }
-  sendWindowState(win)
-}
-
-function toggleMaximizeWindow(win: BrowserWindow): void {
-  if (isWindowMaximized(win)) {
-    restoreWindow(win)
   } else {
-    maximizeWindow(win)
+    win.maximize()
   }
 }
 
 export function bindWindowStateEvents(win: BrowserWindow): void {
   const emit = (): void => {
-    if (!isWindowMaximized(win)) {
-      normalBoundsByWindow.set(win, win.getBounds())
-    }
     sendWindowState(win)
   }
 
@@ -97,7 +63,7 @@ export function registerWindowIpc(): void {
   })
 
   registerIpcHandler(WINDOW_IS_MAXIMIZED, parseVoid, (_input, event): boolean => {
-    return isWindowMaximized(getEventWindow(event))
+    return getEventWindow(event).isMaximized()
   })
 
   registerIpcHandler(WINDOW_TOGGLE_DEVTOOLS, parseVoid, (_input, event) => {

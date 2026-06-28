@@ -151,7 +151,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-[2147483647] h-10 border-b border-zinc-700/50 bg-panel px-3 text-white"
+      className="fixed top-0 left-0 right-0 z-[2147483647] h-10 select-none border-b border-zinc-700/50 bg-panel px-3 text-white"
       style={dragRegionStyle}
     >
       {isMacOS ? (
@@ -160,6 +160,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-2"
             style={noDragRegionStyle}
+            data-window-nodrag
           >
             <UiIconButton
               type="button"
@@ -208,6 +209,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             style={noDragRegionStyle}
+            data-window-nodrag
           >
             <TabBar />
           </div>
@@ -222,6 +224,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             style={noDragRegionStyle}
+            data-window-nodrag
           >
             <TabBar />
           </div>
@@ -230,6 +233,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div
             className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 shrink-0"
             style={noDragRegionStyle}
+            data-window-nodrag
           >
             <UiIconButton
               type="button"
