@@ -4,7 +4,37 @@ import {
   isSmartAspectValue,
 } from '@/core/params/ratioResolution';
 
+import type { CanvasNode } from './canvasNodes';
 import { getDefaultModelId } from './defaultModels';
+import { getCanvasNodeDefinition } from './nodeRegistry';
+import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
+
+const LEGACY_TARGET_HANDLE_ID = 'target';
+
+/**
+ * 节点由旧版单一 target Handle 迁移为逐行媒体端口（connectivity.targetHandleMode: 'rows'）后，
+ * 历史画布里残留的 'target' 连线需要重新指向对应媒体类型的专属端口，否则连线会失去锚点。
+ * 仅在该节点只声明了一种可接受媒体类型时才能无歧义推断；多媒体类型节点保留原值不处理。
+ */
+export function migrateLegacyTargetHandle(targetNode: CanvasNode, targetHandle: string): string {
+  if (targetHandle !== LEGACY_TARGET_HANDLE_ID) {
+    return targetHandle;
+  }
+
+  const definition = getCanvasNodeDefinition(targetNode.type);
+  if (definition?.connectivity.targetHandleMode !== 'rows') {
+    return targetHandle;
+  }
+
+  const acceptedRowKinds = (definition.ports?.target?.accepts ?? []).filter(
+    (kind): kind is RowMediaKind => kind === 'image' || kind === 'video' || kind === 'audio'
+  );
+  if (acceptedRowKinds.length !== 1) {
+    return targetHandle;
+  }
+
+  return resolveMediaTargetHandle(targetNode.type, acceptedRowKinds[0]);
+}
 
 /**
  * 旧版生成节点数据（model/size/requestAspectRatio/extraParams）

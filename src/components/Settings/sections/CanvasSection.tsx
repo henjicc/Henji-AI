@@ -18,6 +18,8 @@ const CanvasSection: React.FC = () => {
   const setKeepStyleConsistent = useSettingsStore((state) => state.setStoryboardGenKeepStyleConsistent)
   const disableTextInImage = useSettingsStore((state) => state.storyboardGenDisableTextInImage)
   const setDisableTextInImage = useSettingsStore((state) => state.setStoryboardGenDisableTextInImage)
+  const autoInferEmptyFrame = useSettingsStore((state) => state.storyboardGenAutoInferEmptyFrame)
+  const setAutoInferEmptyFrame = useSettingsStore((state) => state.setStoryboardGenAutoInferEmptyFrame)
   const ignoreAtTag = useSettingsStore((state) => state.ignoreAtTagWhenCopyingAndGenerating)
   const setIgnoreAtTag = useSettingsStore((state) => state.setIgnoreAtTagWhenCopyingAndGenerating)
 
@@ -62,6 +64,19 @@ const CanvasSection: React.FC = () => {
             onText={onText}
             offText={offText}
           />
+        </div>
+        <div className="mt-3">
+          <Toggle
+            label={t('sections.canvas.storyboardAutoInferEmptyFrameLabel')}
+            checked={autoInferEmptyFrame}
+            onChange={setAutoInferEmptyFrame}
+            className="w-full"
+            onText={onText}
+            offText={offText}
+          />
+          <p className="mt-2 text-xs text-text-muted">
+            {t('sections.canvas.storyboardAutoInferEmptyFrameHint')}
+          </p>
         </div>
         <div className="mt-3">
           <Toggle

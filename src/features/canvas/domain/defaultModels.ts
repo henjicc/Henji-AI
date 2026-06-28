@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry';
+import type { ModelTag } from '@/core/types';
 
 export type CanvasModelMediaType = 'image' | 'video' | 'audio';
 
@@ -15,8 +16,13 @@ const PREFERRED_DEFAULT_MODEL_IDS: Record<CanvasModelMediaType, string[]> = {
   audio: [],
 };
 
-export function getDefaultModelId(mediaType: CanvasModelMediaType): string {
-  const models = registry.getModelsByType(mediaType);
+/**
+ * @param requiredTags 可选，限定候选模型必须同时具备的标签（如仅允许支持图片编辑的模型）
+ */
+export function getDefaultModelId(mediaType: CanvasModelMediaType, requiredTags: ModelTag[] = []): string {
+  const models = registry
+    .getModelsByType(mediaType)
+    .filter((model) => requiredTags.every((tag) => model.meta.tags?.includes(tag)));
   for (const preferredId of PREFERRED_DEFAULT_MODEL_IDS[mediaType]) {
     if (models.some((model) => model.meta.id === preferredId)) {
       return preferredId;

@@ -41,6 +41,7 @@ import {
   type NodeValueOutput,
 } from './nodePorts';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
+import type { ModelTag } from '@/core/types';
 
 /**
  * 新增画布节点 SOP：
@@ -298,6 +299,7 @@ const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> =
       fromSource: false,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'image', role: 'result' },
   ports: {
@@ -326,6 +328,9 @@ const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> =
   }),
 };
 
+/** 分镜生成始终向模型发送栅格参考图，因此默认模型也只能从支持图片编辑的模型中选取 */
+const STORYBOARD_GEN_MODEL_REQUIRED_TAGS: ModelTag[] = ['image-to-image'];
+
 const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardGen,
   menuLabelKey: 'node.menu.storyboardGen',
@@ -334,6 +339,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarGenerate: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -342,6 +348,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
       fromSource: true,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'image', role: 'generator' },
   ports: {
@@ -359,8 +366,9 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
     gridRows: 2,
     gridCols: 2,
     frames: [],
-    modelId: getDefaultModelId('image'),
+    modelId: getDefaultModelId('image', STORYBOARD_GEN_MODEL_REQUIRED_TAGS),
     params: {},
+    mediaInputs: {},
     imageUrl: null,
     previewImageUrl: null,
     aspectRatio: DEFAULT_ASPECT_RATIO,

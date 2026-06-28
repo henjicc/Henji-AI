@@ -1,6 +1,7 @@
 import {
   type ChangeEvent,
   forwardRef,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type TextareaHTMLAttributes,
@@ -54,6 +55,7 @@ interface ReferenceTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAre
   className?: string;
   textareaClassName?: string;
   highlightLayerClassName?: string;
+  highlightLayerStyle?: CSSProperties;
   highlightContentClassName?: string;
   pickerClassName?: string;
   pickerListClassName?: string;
@@ -85,6 +87,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
   className = '',
   textareaClassName = '',
   highlightLayerClassName = '',
+  highlightLayerStyle,
   highlightContentClassName = '',
   pickerClassName = '',
   pickerListClassName = '',
@@ -105,6 +108,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
   disabled,
   onScroll,
   onFocus,
+  style,
   ...textareaProps
 }, ref): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -476,7 +480,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
         ref={highlightRef}
         aria-hidden="true"
         className={`ui-scrollbar pointer-events-none absolute inset-0 z-0 overflow-y-auto overflow-x-hidden ${highlightLayerClassName}`}
-        style={{ scrollbarGutter: 'stable' }}
+        style={{ scrollbarGutter: 'stable', ...highlightLayerStyle }}
       >
         <div className={`min-h-full whitespace-pre-wrap break-words ${highlightContentClassName}`}>
           {highlightedText}
@@ -498,7 +502,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
         }}
         disabled={disabled}
         className={textareaMergedClassName}
-        style={{ scrollbarGutter: 'stable' }}
+        style={{ scrollbarGutter: 'stable', ...style }}
         {...textareaProps}
       />
 

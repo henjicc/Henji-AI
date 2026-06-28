@@ -13,6 +13,7 @@ interface BuildStoryboardPromptParams {
   frameDescriptionDrafts: Record<string, string>
   keepStyleConsistent: boolean
   disableTextInImage: boolean
+  autoInferEmptyFrame: boolean
 }
 
 interface GenerateStoryboardImageParams {
@@ -41,7 +42,8 @@ export function buildStoryboardPrompt({
   nodeData,
   frameDescriptionDrafts,
   keepStyleConsistent,
-  disableTextInImage
+  disableTextInImage,
+  autoInferEmptyFrame
 }: BuildStoryboardPromptParams): string {
   const { gridRows, gridCols, frames } = nodeData
   const parts: string[] = []
@@ -61,6 +63,9 @@ export function buildStoryboardPrompt({
     const frameDescription = frameDescriptionDrafts[frame.id] ?? frame.description
     const sanitizedDescription = sanitizeStoryboardPromptText(frameDescription)
     if (!sanitizedDescription) {
+      if (autoInferEmptyFrame) {
+        parts.push(`分镜${index + 1}：依据前后内容进行推测`)
+      }
       return
     }
     parts.push(`分镜${index + 1}：${sanitizedDescription}`)

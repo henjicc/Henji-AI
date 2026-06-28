@@ -176,6 +176,8 @@
       "uploadFilenameTitleLabel": "上传节点使用文件名作为标题",
       "storyboardKeepStyleLabel": "分镜生成保持与参考图风格一致",
       "storyboardNoTextLabel": "分镜生成禁止生成描述文字",
+      "storyboardAutoInferEmptyFrameLabel": "分镜格子留空时自动推测内容",
+      "storyboardAutoInferEmptyFrameHint": "开启后，未填写描述的分镜格子会在提示词中补充“依据之前的内容进行推测”，交给模型自动续写",
       "ignoreAtTagLabel": "复制与生成时忽略 @图 标记"
     },
     "promptOptimization": {

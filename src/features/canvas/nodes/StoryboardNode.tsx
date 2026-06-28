@@ -15,6 +15,7 @@ import {
   NODE_CONTROL_ICON_CLASS,
   NODE_CONTROL_PRIMARY_BUTTON_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
+import { mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { FrameCard } from '@/features/canvas/nodes/storyboardSplit/FrameCard';
 import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboardSplit/ExportSettingsPanel';
@@ -22,7 +23,8 @@ import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/Inc
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
 import { areIncomingImageRefsEqual, buildFrameViewerImageList, buildIncomingImageItems, collectIncomingImageRefs } from '@/features/canvas/nodes/storyboardSplit/data';
-import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX, STORYBOARD_NODE_MIN_HEIGHT_PX, STORYBOARD_NODE_WIDTH_PX, toCssAspectRatio } from '@/features/canvas/nodes/storyboardSplit/shared';
+import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
+import { computeStoryboardSplitBaseLayout, computeStoryboardSplitFrameLayout } from '@/features/canvas/nodes/storyboardSplit/layout';
 
 type StoryboardNodeProps = NodeProps & {
   id: string;
@@ -79,15 +81,19 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     () => data.frameAspectRatio ?? orderedFrames.find((frame) => typeof frame.aspectRatio === 'string')?.aspectRatio ?? '1:1',
     [data.frameAspectRatio, orderedFrames]
   );
-  const frameAspectRatioCss = useMemo(() => toCssAspectRatio(frameAspectRatio), [frameAspectRatio]);
 
   const gridCols = Math.max(1, data.gridCols);
   const gridRows = Math.max(1, data.gridRows);
   const totalFrames = orderedFrames.length;
-  const resolvedNodeWidth = Math.max(STORYBOARD_NODE_WIDTH_PX, Math.round(width ?? STORYBOARD_NODE_WIDTH_PX));
-  const resolvedNodeHeight = Math.max(
-    STORYBOARD_NODE_MIN_HEIGHT_PX,
-    Math.round(height ?? STORYBOARD_NODE_MIN_HEIGHT_PX)
+  const baseLayout = useMemo(
+    () => computeStoryboardSplitBaseLayout(frameAspectRatio, gridCols, gridRows),
+    [frameAspectRatio, gridCols, gridRows]
+  );
+  const resolvedNodeWidth = Math.max(baseLayout.nodeWidth, Math.round(width ?? baseLayout.nodeWidth));
+  const resolvedNodeHeight = Math.max(baseLayout.nodeHeight, Math.round(height ?? baseLayout.nodeHeight));
+  const frameLayout = useMemo(
+    () => computeStoryboardSplitFrameLayout(frameAspectRatio, gridCols, gridRows, resolvedNodeWidth, resolvedNodeHeight),
+    [frameAspectRatio, gridCols, gridRows, resolvedNodeWidth, resolvedNodeHeight]
   );
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.storyboardSplit, data),
@@ -272,10 +278,16 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div className="ui-scrollbar nowheel min-h-0 flex-1 overflow-auto" onWheelCapture={(event) => event.stopPropagation()}>
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         <div
           className="grid overflow-hidden rounded-lg border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.14)]"
-          style={{ gap: `${STORYBOARD_GRID_GAP_PX}px`, gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+          style={{
+            gap: `${STORYBOARD_GRID_GAP_PX}px`,
+            width: `${frameLayout.gridWidth}px`,
+            height: `${frameLayout.gridHeight}px`,
+            gridTemplateColumns: `repeat(${gridCols}, ${frameLayout.cellWidth}px)`,
+            gridTemplateRows: `repeat(${gridRows}, ${frameLayout.cellHeight}px)`,
+          }}
         >
           {orderedFrames.map((frame, index) => (
             <FrameCard
@@ -283,7 +295,9 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
               nodeId={id}
               frame={frame}
               index={index}
-              frameAspectRatioCss={frameAspectRatioCss}
+              noteFontSizePx={frameLayout.noteFontSizePx}
+              noteLineHeightPx={frameLayout.noteLineHeightPx}
+              noteHeightPx={frameLayout.noteHeightPx}
               imageFit={exportOptions.imageFit}
               viewerImageList={frameViewerImageList}
               referenceItems={incomingReferenceItems}
@@ -362,7 +376,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
 
       <Handle
         type="target"
-        id="target"
+        id={mediaPortId('image')}
         position={Position.Left}
         className="!h-2 !w-2 !border-surface-dark !bg-accent"
       />
@@ -373,8 +387,8 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         className="!h-2 !w-2 !border-surface-dark !bg-accent"
       />
       <NodeResizeHandle
-        minWidth={STORYBOARD_NODE_WIDTH_PX}
-        minHeight={STORYBOARD_NODE_MIN_HEIGHT_PX}
+        minWidth={baseLayout.nodeWidth}
+        minHeight={baseLayout.nodeHeight}
         maxWidth={1800}
         maxHeight={1600}
       />

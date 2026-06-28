@@ -33,7 +33,7 @@ import {
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry';
 import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
-import { migrateGenerationNodeData } from '@/features/canvas/domain/nodeMigrations';
+import { migrateGenerationNodeData, migrateLegacyTargetHandle } from '@/features/canvas/domain/nodeMigrations';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { canvasNodeFactory } from '@/features/canvas/application/canvasServices';
 import {
@@ -184,14 +184,18 @@ function normalizeEdgesWithNodes(rawEdges: CanvasEdge[], nodes: CanvasNode[]): C
       }
       return nodeHasSourceHandle(sourceNode.type) && nodeHasTargetHandle(targetNode.type);
     })
-    .map((edge) => ({
-      ...edge,
-      type: edge.type ?? 'disconnectableEdge',
-      sourceHandle:
-        normalizeHandleId((edge as CanvasEdge & { sourceHandle?: DynamicValue }).sourceHandle) ?? 'source',
-      targetHandle:
-        normalizeHandleId((edge as CanvasEdge & { targetHandle?: DynamicValue }).targetHandle) ?? 'target',
-    }));
+    .map((edge) => {
+      const targetNode = nodeMap.get(edge.target) as CanvasNode;
+      const rawTargetHandle =
+        normalizeHandleId((edge as CanvasEdge & { targetHandle?: DynamicValue }).targetHandle) ?? 'target';
+      return {
+        ...edge,
+        type: edge.type ?? 'disconnectableEdge',
+        sourceHandle:
+          normalizeHandleId((edge as CanvasEdge & { sourceHandle?: DynamicValue }).sourceHandle) ?? 'source',
+        targetHandle: migrateLegacyTargetHandle(targetNode, rawTargetHandle),
+      };
+    });
 }
 
 function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {

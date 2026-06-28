@@ -146,6 +146,20 @@ npm run lint                   # 前端 lint
 - 全局 Provider（如拖拽、全局菜单、通知）只允许在应用根层挂载一次
 - 禁止在多个根容器重复包裹同一 Provider，避免事件重复订阅与状态分叉
 
+### 9. 画布节点组成规范
+
+新建/改造画布节点时，优先从标准化的"参数行组件"拼装，而不是从零写 UI；详细步骤与示例代码见 Skill `canvas-node-builder`。
+
+- **标准行组件**（`src/features/canvas/params/`）：
+  - `ModelInputRow` - 模型选择行
+  - `MediaInputRow` - 媒体输入行（图片/视频/音频；含本地上传、缩略图、拖拽排序、上游连线只读态）
+  - `NodeParamRows` - 标量参数逐行渲染（每参数一行，按 schema 自动生成，连线可覆盖）
+  - `NodeInputRows` - 上述三者的编排容器（模型行 → 媒体行 → 参数行），价格徽标统一走 `NodeHeader` 的 `rightSlot`
+- **通用生成节点**：直接复用 `src/features/canvas/nodes/shared/GenerationNodeShell.tsx`（AI 图片/视频/音频节点都是如此），无需单独写节点组件，行为差异全部由 `nodeRegistry.ts` 中的 `CanvasNodeDefinition` 声明驱动
+- **特殊节点**：节点有自己独有的交互（如分镜生成的格子编辑器）时，在标准行组件基础上叠加专属面板，而不是整个节点推倒重写；面板放节点同名子目录（如 `nodes/storyboardGen/`），节点主文件负责编排和接线，不在面板里重复实现模型选择/参数行
+- **媒体输入端口形态**：节点声明 `connectivity.targetHandleMode: 'rows'` + `ports.target.accepts` 后，媒体输入按类型生成专属端口并配 `MediaInputRow`；禁止继续手写单一 `id="target"` 的 Handle 来接收媒体
+- **禁止重复实现**：禁止在新节点里重新实现模型选择 chip、媒体上传缩略图、逐行参数布局——这些已是标准组件，再写一份即违反"禁止同功能多份实现"
+
 ## 目录结构
 
 ```text
@@ -255,6 +269,11 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
    - `src/features/canvas/` 为当前主实现目录
    - `src/workspaces/canvas/` 视为历史/过渡目录，除迁移与删除外不新增功能
    - 新画布能力必须落在 `src/features/canvas/`
+
+13. **画布节点组成约束**
+   - 新建生成类节点优先复用 `GenerationNodeShell`；做不到时优先拼装 `ModelInputRow`/`MediaInputRow`/`NodeParamRows`
+   - 媒体输入统一走 `connectivity.targetHandleMode: 'rows'` + `MediaInputRow`，禁止新增手写的单一 `target` Handle 来接收媒体
+   - 特殊节点的专属 UI 只叠加在标准行组件之上，不替代标准行组件
 
 ## 添加新模型
 
@@ -446,6 +465,9 @@ powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include
 - `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互
 - `src/features/canvas/hooks/useCanvasShortcuts.ts` - 画布快捷键行为
 - `src/features/canvas/ui/CanvasOverlays.tsx` - 画布叠层 UI
+- `src/features/canvas/nodes/shared/GenerationNodeShell.tsx` - 生成类节点通用壳，标准逐行参数体系的典型消费者
+- `src/features/canvas/params/` - 标准化逐行参数组件（`ModelInputRow`/`MediaInputRow`/`NodeParamRows`/`NodeInputRows`）
+- `src/features/canvas/domain/nodeRegistry.ts` - 节点声明注册表（含文件顶部"新增画布节点 SOP"注释）
 - `resources/model-manifest.json` - 模型清单（自动生成，Git 忽略）
 - `resources/progress-seeds.json` - 进度学习 seeds（自动生成，Git 忽略）
 - `resources/progress-seeds.base.json` - 进度学习基础 seeds

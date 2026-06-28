@@ -32,6 +32,8 @@ interface SettingsState {
   imageViewerInfoPanelCollapsed: boolean;
   storyboardGenKeepStyleConsistent: boolean;
   storyboardGenDisableTextInImage: boolean;
+  /** 分镜格子描述为空时，自动在 prompt 中补一句"依据之前的内容进行推测" */
+  storyboardGenAutoInferEmptyFrame: boolean;
   ignoreAtTagWhenCopyingAndGenerating: boolean;
   uiRadiusPreset: UiRadiusPreset;
   themeTonePreset: ThemeTonePreset;
@@ -48,6 +50,7 @@ interface SettingsState {
   setImageViewerInfoPanelCollapsed: (collapsed: boolean) => void;
   setStoryboardGenKeepStyleConsistent: (enabled: boolean) => void;
   setStoryboardGenDisableTextInImage: (enabled: boolean) => void;
+  setStoryboardGenAutoInferEmptyFrame: (enabled: boolean) => void;
   setIgnoreAtTagWhenCopyingAndGenerating: (enabled: boolean) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
@@ -160,6 +163,7 @@ export const useSettingsStore = create<SettingsState>()(
       imageViewerInfoPanelCollapsed: true,
       storyboardGenKeepStyleConsistent: true,
       storyboardGenDisableTextInImage: true,
+      storyboardGenAutoInferEmptyFrame: true,
       ignoreAtTagWhenCopyingAndGenerating: true,
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
@@ -204,6 +208,8 @@ export const useSettingsStore = create<SettingsState>()(
         set({ storyboardGenKeepStyleConsistent: enabled }),
       setStoryboardGenDisableTextInImage: (enabled) =>
         set({ storyboardGenDisableTextInImage: enabled }),
+      setStoryboardGenAutoInferEmptyFrame: (enabled) =>
+        set({ storyboardGenAutoInferEmptyFrame: enabled }),
       setIgnoreAtTagWhenCopyingAndGenerating: (enabled) =>
         set({ ignoreAtTagWhenCopyingAndGenerating: enabled }),
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),

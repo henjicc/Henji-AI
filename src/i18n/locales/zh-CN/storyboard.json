@@ -73,7 +73,11 @@
     "autoAspectRatio": "自动",
     "quality": "画质",
     "aspectRatio": "比例",
-    "title": "参数"
+    "title": "参数",
+    "searchPlaceholder": "搜索模型名称、供应商或描述",
+    "clearSearch": "清空搜索",
+    "allProviders": "全部",
+    "noModels": "没有匹配的模型"
   },
   "node": {
     "menu": {

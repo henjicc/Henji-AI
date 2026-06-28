@@ -6,7 +6,7 @@ import PinyinMatch from 'pinyin-match';
 
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
-import type { ModelDefinition } from '@/core/types';
+import type { ModelDefinition, ModelTag } from '@/core/types';
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel';
@@ -25,6 +25,8 @@ interface NodeModelParamsControlsProps {
   onParamsChange: (nextParams: DynamicValueMap) => void;
   /** 上游连线输入的图片（用于智能宽高比预览与联动） */
   incomingImages?: string[];
+  /** 限定可选模型必须同时具备的标签（如仅展示支持图片编辑的模型） */
+  requiredTags?: ModelTag[];
   chipClassName?: string;
   modelChipClassName?: string;
   paramsChipClassName?: string;
@@ -103,6 +105,7 @@ export const NodeModelParamsControls = memo(({
   onModelChange,
   onParamsChange,
   incomingImages = [],
+  requiredTags = [],
   chipClassName = '',
   modelChipClassName = 'max-w-[260px] justify-start',
   paramsChipClassName = 'max-w-[120px] justify-start',
@@ -126,7 +129,12 @@ export const NodeModelParamsControls = memo(({
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [providerFilter, setProviderFilter] = useState('all');
 
-  const models = useMemo(() => registry.getModelsByType(mediaType), [mediaType]);
+  const models = useMemo(
+    () => registry
+      .getModelsByType(mediaType)
+      .filter((model) => requiredTags.every((tag) => model.meta.tags?.includes(tag))),
+    [mediaType, requiredTags]
+  );
   const providerOptions = useMemo<ProviderFilterOption[]>(() => {
     const counts = new Map<string, number>();
     for (const model of models) {

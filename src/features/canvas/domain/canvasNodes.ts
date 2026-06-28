@@ -1,4 +1,5 @@
 import type { Edge, Node, XYPosition } from '@xyflow/react';
+import type { RowMediaKind } from './socketTypes';
 
 export const CANVAS_NODE_TYPES = {
   upload: 'uploadNode',
@@ -157,6 +158,8 @@ export interface StoryboardGenNodeData {
   modelId?: string;
   /** schema 驱动的模型参数（与默认值合并后使用） */
   params?: DynamicValueMap;
+  /** 图片行未连线时的本地内联上传值 */
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
   /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
   model?: string;
   /** @deprecated 旧版字段 */
