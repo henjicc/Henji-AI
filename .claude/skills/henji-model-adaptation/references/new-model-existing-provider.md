@@ -14,7 +14,7 @@
 - FAL 图片：`src/models/fal/nano-banana-pro.model.ts`、`src/models/fal/z-image-turbo.model.ts`
 - FAL 视频：`src/models/fal/kling-video-v2.6-pro.model.ts`、`src/models/fal/kling-video-o1.model.ts`
 - KIE 图片：`src/models/kie/gpt-image-2.model.ts`、`src/models/kie/nano-banana-pro.model.ts`
-- KIE 视频：`src/models/kie/kling-v2-6.model.ts`、`src/models/kie/sora2.model.ts`
+- KIE 视频：`src/models/kie/kling-v2-6.model.ts`
 - ModelScope 图片：`src/models/modelscope/qwen-image.model.ts`
 
 ## 2) 新建模型定义

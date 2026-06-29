@@ -145,11 +145,6 @@ export interface PresetSetters {
     setFalKlingV26ProCharacterOrientation: (v: 'video' | 'image') => void
     setFalKlingV26ProKeepOriginalSound: (v: boolean) => void
 
-    // Sora 2
-    setFalSora2Mode: (v: 'standard' | 'pro') => void
-    setFalSora2AspectRatio: (v: string) => void
-    setFalSora2Resolution: (v: string) => void
-
     // LTX-2
     setFalLtx2Mode: (v: 'text-to-video' | 'image-to-video' | 'retake-video') => void
     setFalLtx2Resolution: (v: string) => void
@@ -213,7 +208,6 @@ export interface PresetSetters {
     setFalNanoBananaAspectRatio: (v: string) => void
     setFalNanoBananaNumImages: (v: number) => void
     setFalPixverse55VideoDuration: (v: number) => void
-    setFalSora2VideoDuration: (v: number) => void
     setFalVeo31VideoDuration: (v: number) => void
     setFalViduQ2VideoDuration: (v: number) => void
     setFalWan25VideoDuration: (v: number) => void
@@ -286,12 +280,6 @@ export interface PresetSetters {
     setKieSeedanceV1AspectRatio: (v: string) => void
     setKieSeedanceV1Resolution: (v: string) => void
     setKieSeedanceV1CameraFixed: (v: boolean) => void
-
-    // KIE Sora 2
-    setKieSora2Mode: (v: string) => void
-    setKieSora2AspectRatio: (v: string) => void
-    setKieSora2Duration: (v: string) => void
-    setKieSora2Quality: (v: string) => void
 }
 
 /**
@@ -436,11 +424,6 @@ export function createPresetSetterMap(
         falKlingV26ProCharacterOrientation: setters.setFalKlingV26ProCharacterOrientation,
         falKlingV26ProKeepOriginalSound: setters.setFalKlingV26ProKeepOriginalSound,
 
-        // Sora 2
-        falSora2Mode: setters.setFalSora2Mode,
-        falSora2AspectRatio: setters.setFalSora2AspectRatio,
-        falSora2Resolution: setters.setFalSora2Resolution,
-
         // LTX-2
         falLtx2Mode: setters.setFalLtx2Mode,
         falLtx2Resolution: setters.setFalLtx2Resolution,
@@ -503,7 +486,6 @@ export function createPresetSetterMap(
         falNanoBananaNumImages: setters.setFalNanoBananaNumImages,
         falNanoBananaAspectRatio: setters.setFalNanoBananaAspectRatio,
         falPixverse55VideoDuration: setters.setFalPixverse55VideoDuration,
-        falSora2VideoDuration: setters.setFalSora2VideoDuration,
         falVeo31VideoDuration: setters.setFalVeo31VideoDuration,
         falViduQ2VideoDuration: setters.setFalViduQ2VideoDuration,
         falWan25VideoDuration: setters.setFalWan25VideoDuration,
@@ -575,11 +557,5 @@ export function createPresetSetterMap(
         kieSeedanceV1AspectRatio: setters.setKieSeedanceV1AspectRatio,
         kieSeedanceV1Resolution: setters.setKieSeedanceV1Resolution,
         kieSeedanceV1CameraFixed: setters.setKieSeedanceV1CameraFixed,
-
-        // KIE Sora 2
-        kieSora2Mode: setters.setKieSora2Mode,
-        kieSora2AspectRatio: setters.setKieSora2AspectRatio,
-        kieSora2Duration: setters.setKieSora2Duration,
-        kieSora2Quality: setters.setKieSora2Quality,
     }
 }

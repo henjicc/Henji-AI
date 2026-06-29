@@ -84,12 +84,6 @@
         "description": "KIE Seedream 4.5 image generation model"
       }
     },
-    "kie-sora-2": {
-      "meta": {
-        "name": "Sora 2",
-        "description": "KIE Sora 2 video generation model"
-      }
-    },
     "kie-z-image": {
       "meta": {
         "name": "Z-Image",

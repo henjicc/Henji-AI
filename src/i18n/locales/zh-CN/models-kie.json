@@ -84,12 +84,6 @@
         "description": "KIE Seedream 4.5 图片生成模型"
       }
     },
-    "kie-sora-2": {
-      "meta": {
-        "name": "Sora 2",
-        "description": "KIE Sora 2 视频生成模型"
-      }
-    },
     "kie-z-image": {
       "meta": {
         "name": "Z-Image",
