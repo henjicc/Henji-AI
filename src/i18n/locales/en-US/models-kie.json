@@ -42,6 +42,12 @@
         "description": "KIE Nano Banana Pro image generation model"
       }
     },
+    "kie-seedance-1.5-pro": {
+      "meta": {
+        "name": "Seedance 1.5 Pro",
+        "description": "KIE Seedance 1.5 Pro video generation model with text, image, and start-end-frame modes"
+      }
+    },
     "kie-seedance-v1": {
       "meta": {
         "name": "Seedance 1.0",
