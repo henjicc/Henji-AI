@@ -4,10 +4,17 @@ import type { ModelManifest, ModelManifestItem } from './types'
 
 class ModelManifestStore {
   private models = new Map<string, ModelManifestItem>()
+  private canonicalCount = 0
 
   constructor(manifest?: ModelManifest) {
+    this.canonicalCount = manifest?.models?.length ?? 0
     for (const item of manifest?.models ?? []) {
       this.models.set(item.modelId, item)
+      for (const alias of item.aliases ?? []) {
+        if (!this.models.has(alias)) {
+          this.models.set(alias, item)
+        }
+      }
     }
   }
 
@@ -20,7 +27,7 @@ class ModelManifestStore {
   }
 
   len(): number {
-    return this.models.size
+    return this.canonicalCount
   }
 }
 

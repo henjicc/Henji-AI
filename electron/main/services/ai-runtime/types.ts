@@ -86,6 +86,7 @@ export interface ModelManifest {
 
 export interface ModelManifestItem {
   modelId: string
+  aliases?: string[]
   providerId: string
   modelType?: string
   polling?: PollingConfig

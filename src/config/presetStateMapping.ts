@@ -279,13 +279,13 @@ export interface PresetSetters {
     setKieHailuo02Resolution: (v: string) => void
     setKieHailuo02PromptOptimizer: (v: boolean) => void
 
-    // KIE Seedance V3
-    setKieSeedanceV3Version: (v: string) => void
-    setKieSeedanceV3AspectRatio: (v: string) => void
-    setKieSeedanceV3Resolution: (v: string) => void
-    setKieSeedanceV3Duration: (v: string) => void
-    setKieSeedanceV3CameraFixed: (v: boolean) => void
-    setKieSeedanceV3FastMode: (v: boolean) => void
+    // KIE Seedance V1
+    setKieSeedanceV1Version: (v: string) => void
+    setKieSeedanceV1FastMode: (v: boolean) => void
+    setKieSeedanceV1Duration: (v: string) => void
+    setKieSeedanceV1AspectRatio: (v: string) => void
+    setKieSeedanceV1Resolution: (v: string) => void
+    setKieSeedanceV1CameraFixed: (v: boolean) => void
 
     // KIE Sora 2
     setKieSora2Mode: (v: string) => void
@@ -568,13 +568,13 @@ export function createPresetSetterMap(
         kieHailuo02Resolution: setters.setKieHailuo02Resolution,
         kieHailuo02PromptOptimizer: setters.setKieHailuo02PromptOptimizer,
 
-        // KIE Seedance V3
-        kieSeedanceV3Version: setters.setKieSeedanceV3Version,
-        kieSeedanceV3AspectRatio: setters.setKieSeedanceV3AspectRatio,
-        kieSeedanceV3Resolution: setters.setKieSeedanceV3Resolution,
-        kieSeedanceV3Duration: setters.setKieSeedanceV3Duration,
-        kieSeedanceV3CameraFixed: setters.setKieSeedanceV3CameraFixed,
-        kieSeedanceV3FastMode: setters.setKieSeedanceV3FastMode,
+        // KIE Seedance V1
+        kieSeedanceV1Version: setters.setKieSeedanceV1Version,
+        kieSeedanceV1FastMode: setters.setKieSeedanceV1FastMode,
+        kieSeedanceV1Duration: setters.setKieSeedanceV1Duration,
+        kieSeedanceV1AspectRatio: setters.setKieSeedanceV1AspectRatio,
+        kieSeedanceV1Resolution: setters.setKieSeedanceV1Resolution,
+        kieSeedanceV1CameraFixed: setters.setKieSeedanceV1CameraFixed,
 
         // KIE Sora 2
         kieSora2Mode: setters.setKieSora2Mode,

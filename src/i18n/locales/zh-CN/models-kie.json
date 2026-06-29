@@ -42,10 +42,10 @@
         "description": "KIE Nano Banana Pro 图片生成模型"
       }
     },
-    "kie-seedance-v3": {
+    "kie-seedance-v1": {
       "meta": {
-        "name": "Seedance 3",
-        "description": "KIE Seedance V3 视频生成模型"
+        "name": "Seedance 1.0",
+        "description": "KIE Seedance 1.0 视频生成模型，支持文生视频、图生视频与首尾帧"
       }
     },
     "kie-seedream-4.0": {

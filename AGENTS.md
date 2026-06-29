@@ -218,40 +218,43 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
 
 ### 类型安全约束
 
-5. **`any` 治理：增量零新增**
+5. **循环初始化保护**
+   - `src/core/i18n/modelText.ts` 的共享字典因模型 barrel 循环初始化必须保留 `var`，禁止为满足 lint 改成 `const/let`。
+
+6. **`any` 治理：增量零新增**
    - 存量 `any` 允许逐步治理
    - 新增或修改代码时禁止引入新的裸 `any`
    - 若确需新增，必须同处写明原因与替换计划
 
-6. **导出函数显式返回类型**
+7. **导出函数显式返回类型**
    - 新增/修改的导出函数应补齐显式返回类型
 
 ### 配置与一致性约束
 
-7. **配置优于代码**
+8. **配置优于代码**
    - 使用模型定义，而不是 if-else 或 switch 硬编码模型行为
    - 如果你在添加基于 modelId 的分支，先考虑扩展 schema
 
-8. **UI 一致性约束**
+9. **UI 一致性约束**
    - 对话模式、画布模式、工具模式复用同一套 `Ui*` primitives
    - 禁止同功能多份实现
 
-9. **ReferenceTextarea 规范**
+10. **ReferenceTextarea 规范**
    - @引用标记插入/删除/空格归一化统一走 `src/core/inputs/referenceTokens.ts`
    - 高亮渲染统一走 `src/components/ui/referenceTextareaUtils.tsx`
    - 禁止在业务组件重复实现 @引用解析和高亮
 
-10. **文件上传控件规范**
+11. **文件上传控件规范**
    - 上传能力统一复用 `FileUploader` / `UiInput(type=file)`
    - 拖拽排序统一复用 `src/components/ui/fileUploader/useReorderDrag.ts`
    - 禁止在业务组件重复实现上传/排序基础交互
 
-11. **颜色硬编码约束**
+12. **颜色硬编码约束**
    - UI 代码禁止直接写十六进制颜色或 `rgb/rgba` 字面量
    - 颜色应沉淀到 `src/index.css`、`tailwind.config.js`、`src/core/theme/colorTokens.ts`
    - 图像处理/画布像素算法可例外，但应优先复用 token
 
-12. **画布实现单源约束**
+13. **画布实现单源约束**
    - `src/features/canvas/` 为当前主实现目录
    - `src/workspaces/canvas/` 视为历史/过渡目录，除迁移与删除外不新增功能
    - 新画布能力必须落在 `src/features/canvas/`
