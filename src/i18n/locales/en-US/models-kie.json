@@ -48,6 +48,24 @@
         "description": "KIE Seedance 1.5 Pro video generation model with text, image, and start-end-frame modes"
       }
     },
+    "kie-seedance-2.0": {
+      "meta": {
+        "name": "Seedance 2.0",
+        "description": "KIE Seedance 2.0 video generation model with text/image-to-video and multi-modal reference-to-video modes"
+      }
+    },
+    "kie-seedance-2.0-fast": {
+      "meta": {
+        "name": "Seedance 2.0 Fast",
+        "description": "KIE Seedance 2.0 Fast video generation model with text/image-to-video and multi-modal reference-to-video modes"
+      }
+    },
+    "kie-seedance-2.0-mini": {
+      "meta": {
+        "name": "Seedance 2.0 Mini",
+        "description": "KIE Seedance 2.0 Mini video generation model with text/image-to-video and multi-modal reference-to-video modes"
+      }
+    },
     "kie-seedance-v1": {
       "meta": {
         "name": "Seedance 1.0",

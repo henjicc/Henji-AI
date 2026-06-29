@@ -48,6 +48,24 @@
         "description": "KIE Seedance 1.5 Pro 视频生成模型，支持文生视频、图生视频与首尾帧"
       }
     },
+    "kie-seedance-2.0": {
+      "meta": {
+        "name": "Seedance 2.0",
+        "description": "KIE Seedance 2.0 视频生成模型，支持文/图生视频与多模态参考生视频"
+      }
+    },
+    "kie-seedance-2.0-fast": {
+      "meta": {
+        "name": "Seedance 2.0 Fast",
+        "description": "KIE Seedance 2.0 Fast 视频生成模型，支持文/图生视频与多模态参考生视频"
+      }
+    },
+    "kie-seedance-2.0-mini": {
+      "meta": {
+        "name": "Seedance 2.0 Mini",
+        "description": "KIE Seedance 2.0 Mini 视频生成模型，支持文/图生视频与多模态参考生视频"
+      }
+    },
     "kie-seedance-v1": {
       "meta": {
         "name": "Seedance 1.0",
