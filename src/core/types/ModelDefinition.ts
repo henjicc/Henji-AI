@@ -270,6 +270,26 @@ export interface ModelMeta {
    * @example ["fal-ai-nano-banana", "nano-banana-fal"]
    */
   aliases?: string[]
+
+  /**
+   * 系列分组 ID（可选）
+   *
+   * 用于在模型选择面板中把同一产品系列的不同版本聚在一起：
+   * 系列之间按 ID 字母序排列，系列内部按 seriesRank 降序排列。
+   * 不填写时模型独自成组（用自身 id 当分组 key），回退到名称字母序。
+   *
+   * @example "seedance", "kling-video"
+   */
+  seriesId?: string
+
+  /**
+   * 系列内排序权重（可选，配合 seriesId 使用）
+   *
+   * 数值越大越靠前；同 seriesId 内按该字段降序排列，相同时按名称字母序兜底。
+   *
+   * @example 2.6
+   */
+  seriesRank?: number
 }
 
 /**

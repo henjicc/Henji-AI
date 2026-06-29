@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const kling25TurboModel = defineModel({
   meta: {
     id: 'ppio-kling-2.5-turbo',
+    seriesId: 'kling-video',
+    seriesRank: 2.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-2.5-turbo',

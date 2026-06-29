@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieHailuo02Model = defineModel({
   meta: {
     id: 'kie-hailuo-02',
+    seriesId: 'hailuo',
+    seriesRank: 2.0,
     provider: 'kie',
     type: 'video',
         i18nScope: 'models.defs.kie-hailuo-02',

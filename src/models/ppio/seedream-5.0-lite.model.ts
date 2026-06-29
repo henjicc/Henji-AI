@@ -38,6 +38,8 @@ function toInteger(value: DynamicValue): number | null {
 export const seedream50LiteModel = defineModel({
   meta: {
     id: 'ppio-seedream-5.0-lite',
+    seriesId: 'seedream',
+    seriesRank: 5.0,
     provider: 'ppio',
     type: 'image',
     i18nScope: 'models.defs.ppio-seedream-5.0-lite',

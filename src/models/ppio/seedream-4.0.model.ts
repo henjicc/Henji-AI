@@ -39,6 +39,8 @@ type ResolutionValue = SeedreamResolutionValue & { mode?: string }
 export const seedream40Model = defineModel({
     meta: {
         id: 'ppio-seedream-4.0',
+        seriesId: 'seedream',
+        seriesRank: 4.0,
         provider: 'ppio',
         type: 'image',
         i18nScope: 'models.defs.ppio-seedream-4.0',

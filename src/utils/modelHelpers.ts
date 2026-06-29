@@ -2,19 +2,7 @@ import { registry } from '@/core/ModelRegistry'
 import i18n from '@/i18n/config'
 import type { I18nText } from '@/core/types/I18nText'
 import { getI18nText } from '@/core/types/I18nText'
-
-const PROVIDER_ORDER: Record<string, number> = {
-  ppio: 0,
-  kie: 1,
-  modelscope: 2,
-  fal: 3
-}
-
-const MODEL_TYPE_ORDER: Record<'image' | 'video' | 'audio', number> = {
-  image: 0,
-  video: 1,
-  audio: 2
-}
+import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
 
 /**
  * 供应商 ID 到显示名称的映射
@@ -72,6 +60,8 @@ export function getAvailableProviders() {
       description: string
       functions: string[]
       tags?: string[]
+      seriesId?: string
+      seriesRank?: number
     }>
   }>()
 
@@ -92,7 +82,9 @@ export function getAvailableProviders() {
       type: model.meta.type,
       description: model.meta.description ? getLocalizedText(model.meta.description, locale) : '',
       functions: model.meta.tags || [],
-      tags: model.meta.tags
+      tags: model.meta.tags,
+      seriesId: model.meta.seriesId,
+      seriesRank: model.meta.seriesRank
     })
   })
 
@@ -102,7 +94,7 @@ export function getAvailableProviders() {
     provider.models.sort((a, b) => {
       const typeDiff = MODEL_TYPE_ORDER[a.type] - MODEL_TYPE_ORDER[b.type]
       if (typeDiff !== 0) return typeDiff
-      return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
+      return compareModelsBySeries(a, b)
     })
   })
 

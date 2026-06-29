@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieNanoBananaProModel = defineModel({
   meta: {
     id: 'kie-nano-banana-pro',
+    seriesId: 'nano-banana',
+    seriesRank: 2,
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-nano-banana-pro',

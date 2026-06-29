@@ -10,6 +10,8 @@ import { resolvePpioImageSources, resolvePpioPrimaryVideoSource, resolvePpioVide
 export const wan26Model = defineModel({
   meta: {
     id: 'ppio-wan-2.6',
+    seriesId: 'wan',
+    seriesRank: 2.6,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-wan-2.6',

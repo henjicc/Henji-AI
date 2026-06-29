@@ -3,6 +3,8 @@ import { defineModel, sharedFieldText } from '@/core'
 export const viduQ3Model = defineModel({
   meta: {
     id: 'ppio-vidu-q3',
+    seriesId: 'vidu',
+    seriesRank: 3,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-vidu-q3',

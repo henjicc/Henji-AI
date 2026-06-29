@@ -12,10 +12,12 @@ import {
   ParamDef,
   ModelType,
   ProviderId,
-  ModelTag
+  ModelTag,
+  getI18nText
 } from './types'
 import { validateModel } from './validators/modelValidator'
 import { EndpointSelector } from './request/EndpointSelector'
+import { compareModelsBySeries } from './modelSortOrder'
 
 /**
  * 模型注册中心类
@@ -306,6 +308,10 @@ export class ModelRegistry {
     return Array.from(ids)
       .map((id) => this.models.get(id)!)
       .filter(Boolean)
+      .sort((a, b) => compareModelsBySeries(
+        { id: a.meta.id, name: getI18nText(a.meta.name, 'en'), seriesId: a.meta.seriesId, seriesRank: a.meta.seriesRank },
+        { id: b.meta.id, name: getI18nText(b.meta.name, 'en'), seriesId: b.meta.seriesId, seriesRank: b.meta.seriesRank }
+      ))
   }
 
   /**

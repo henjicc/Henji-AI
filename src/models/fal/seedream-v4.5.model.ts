@@ -60,6 +60,8 @@ async function resolveFalSeedreamV45Size(
 export const seedreamV45Model = defineModel({
   meta: {
     id: 'fal-ai-bytedance-seedream-v4.5',
+    seriesId: 'seedream',
+    seriesRank: 4.5,
     provider: 'fal',
     type: 'image',
     i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4.5',

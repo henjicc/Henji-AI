@@ -8,6 +8,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const viduQ1Model = defineModel({
   meta: {
     id: 'ppio-vidu-q1',
+    seriesId: 'vidu',
+    seriesRank: 1,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-vidu-q1',

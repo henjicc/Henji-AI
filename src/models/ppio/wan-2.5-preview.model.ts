@@ -52,6 +52,8 @@ function resolveSupportedValue(
 export const wan25PreviewModel = defineModel({
   meta: {
     id: 'ppio-wan-2.5-preview',
+    seriesId: 'wan',
+    seriesRank: 2.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-wan-2.5-preview',

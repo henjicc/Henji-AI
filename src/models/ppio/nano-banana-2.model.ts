@@ -22,6 +22,8 @@ const SUPPORTED_ASPECT_RATIOS = [
 export const nanoBanana2Model = defineModel({
   meta: {
     id: 'ppio-nano-banana-2',
+    seriesId: 'nano-banana',
+    seriesRank: 3,
     provider: 'ppio',
     type: 'image',
     i18nScope: 'models.defs.ppio-nano-banana-2',

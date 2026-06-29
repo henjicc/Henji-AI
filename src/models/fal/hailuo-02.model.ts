@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText } from '@/core'
 export const hailuo02Model = defineModel({
   meta: {
     id: 'fal-ai-minimax-hailuo-02',
+    seriesId: 'hailuo',
+    seriesRank: 2.0,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-minimax-hailuo-02',

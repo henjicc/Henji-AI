@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieSeedream40Model = defineModel({
   meta: {
     id: 'kie-seedream-4.0',
+    seriesId: 'seedream',
+    seriesRank: 4.0,
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-seedream-4.0',

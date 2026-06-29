@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const seedance15ProModel = defineModel({
   meta: {
     id: 'ppio-seedance-v1.5-pro',
+    seriesId: 'seedance',
+    seriesRank: 1.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-seedance-v1.5-pro',

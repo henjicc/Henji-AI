@@ -9,6 +9,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieSeedance20MiniModel = defineModel({
   meta: {
     id: 'kie-seedance-2.0-mini',
+    seriesId: 'seedance',
+    seriesRank: 2.0,
     provider: 'kie',
     type: 'video',
     i18nScope: 'models.defs.kie-seedance-2.0-mini',

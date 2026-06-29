@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const minimaxHailuo23Model = defineModel({
   meta: {
     id: 'ppio-minimax-hailuo-2.3',
+    seriesId: 'hailuo',
+    seriesRank: 2.3,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-minimax-hailuo-2.3',

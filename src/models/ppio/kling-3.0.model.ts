@@ -3,6 +3,8 @@ import { defineModel, modelScopedText, sharedFieldText, sharedModeText, sharedOp
 export const kling30Model = defineModel({
   meta: {
     id: 'ppio-kling-3.0',
+    seriesId: 'kling-video',
+    seriesRank: 3.0,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-kling-3.0',

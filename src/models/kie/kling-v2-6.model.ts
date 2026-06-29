@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieKlingV26Model = defineModel({
   meta: {
     id: 'kie-kling-v2-6',
+    seriesId: 'kling-video',
+    seriesRank: 2.6,
     provider: 'kie',
     type: 'video',
         i18nScope: 'models.defs.kie-kling-v2-6',

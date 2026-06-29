@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText } from '@/core'
 export const wan25PreviewModel = defineModel({
   meta: {
     id: 'fal-ai-wan-25-preview',
+    seriesId: 'wan',
+    seriesRank: 2.5,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-wan-25-preview',

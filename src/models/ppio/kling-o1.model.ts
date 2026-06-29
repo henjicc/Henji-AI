@@ -14,6 +14,8 @@ import {
 export const klingO1Model = defineModel({
   meta: {
     id: 'ppio-kling-o1',
+    seriesId: 'kling-video',
+    seriesRank: 10,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-o1',

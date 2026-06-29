@@ -37,6 +37,8 @@ const SEEDREAM_45_CONSTRAINTS = {
 export const seedream45Model = defineModel({
     meta: {
         id: 'ppio-seedream-4.5',
+        seriesId: 'seedream',
+        seriesRank: 4.5,
         provider: 'ppio',
         type: 'image',
         i18nScope: 'models.defs.ppio-seedream-4.5',

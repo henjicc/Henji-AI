@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const klingVideoO1Model = defineModel({
   meta: {
     id: 'fal-ai-kling-video-o1',
+    seriesId: 'kling-video',
+    seriesRank: 10,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-o1',

@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 export const nanoBananaProModel = defineModel({
   meta: {
     id: 'fal-ai-nano-banana-pro',
+    seriesId: 'nano-banana',
+    seriesRank: 2,
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-nano-banana-pro',
