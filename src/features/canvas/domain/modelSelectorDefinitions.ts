@@ -53,6 +53,7 @@ function createModelSelectorDefinition(
     createDefaultData: () => ({
       displayName: DEFAULT_NODE_DISPLAY_NAME[type],
       modelId: getDefaultModelId(options.mediaType),
+      isExpanded: true,
     }),
   };
 }

@@ -67,7 +67,7 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   app: '#0A0A0A',
   canvas: '#0A0A0A',
   panel: '#171717',
-  layer: '#262626',
+  layer: '#404040',
 } as const;
 
 export const APP_WINDOW_BACKGROUND_HEX = DEFAULT_THEME_COLOR_SCHEME_HEX.app;

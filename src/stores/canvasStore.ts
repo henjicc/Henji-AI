@@ -17,6 +17,10 @@ import {
   EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
   EXPORT_RESULT_NODE_MIN_HEIGHT,
   EXPORT_RESULT_NODE_MIN_WIDTH,
+  MODEL_SELECTOR_COLLAPSED_DEFAULT_HEIGHT,
+  MODEL_SELECTOR_COLLAPSED_DEFAULT_WIDTH,
+  MODEL_SELECTOR_EXPANDED_DEFAULT_HEIGHT,
+  MODEL_SELECTOR_EXPANDED_DEFAULT_WIDTH,
   type ActiveToolDialog,
   type CanvasEdge,
   type CanvasNode,
@@ -127,6 +131,9 @@ interface CanvasState {
   ) => string | null;
 
   updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;
+  /** 模型选择器节点展开/折叠专用：collapsedWidth 由组件按当前选中模型 chip 的实测内容宽度传入，
+   * 让折叠态节点尺寸精确收紧到内容可容纳的最小宽度，而不是固定常量。 */
+  setModelSelectorExpanded: (nodeId: string, isExpanded: boolean, collapsedWidth?: number) => void;
   setNodeGenerationProgress: (nodeId: string, progress: number | null) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateStoryboardFrame: (
@@ -343,6 +350,12 @@ function isImageAutoResizableType(type: CanvasNodeType): boolean {
     || type === CANVAS_NODE_TYPES.imageEdit
     || type === CANVAS_NODE_TYPES.exportImage
     || type === CANVAS_NODE_TYPES.videoUpload;
+}
+
+function isModelSelectorNodeType(type: CanvasNodeType): boolean {
+  return type === CANVAS_NODE_TYPES.imageModelSelector
+    || type === CANVAS_NODE_TYPES.videoModelSelector
+    || type === CANVAS_NODE_TYPES.audioModelSelector;
 }
 
 /** 上传类节点（图片/视频）始终按当前尺寸自适应重新贴合，不受手动调整锁定影响 */
@@ -1182,6 +1195,48 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return {
         nodes: nextNodes,
         edges: nextEdges,
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+      };
+    });
+  },
+
+  setModelSelectorExpanded: (nodeId, isExpanded, collapsedWidth) => {
+    set((state) => {
+      let changed = false;
+      const nextNodes = state.nodes.map((node) => {
+        if (node.id !== nodeId || !isModelSelectorNodeType(node.type)) {
+          return node;
+        }
+        if (Boolean((node.data as { isExpanded?: boolean }).isExpanded) === isExpanded) {
+          return node;
+        }
+
+        changed = true;
+        const mergedData = { ...node.data, isExpanded } as CanvasNodeData;
+        const width = isExpanded
+          ? MODEL_SELECTOR_EXPANDED_DEFAULT_WIDTH
+          : Math.round(collapsedWidth ?? MODEL_SELECTOR_COLLAPSED_DEFAULT_WIDTH);
+        const height = isExpanded ? MODEL_SELECTOR_EXPANDED_DEFAULT_HEIGHT : MODEL_SELECTOR_COLLAPSED_DEFAULT_HEIGHT;
+
+        return {
+          ...node,
+          data: mergedData,
+          width,
+          height,
+          style: { ...(node.style ?? {}), width, height },
+        };
+      });
+
+      if (!changed) {
+        return {};
+      }
+
+      return {
+        nodes: nextNodes,
         history: {
           past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
           future: [],

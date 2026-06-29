@@ -5,7 +5,11 @@ import type { CanvasNodeData, CanvasNodeType } from '@/features/canvas/domain/ca
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { getSocketColor, type SocketType } from '@/features/canvas/domain/socketTypes';
-import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
+import {
+  NODE_HEADER_FLOATING_POSITION_CLASS,
+  NODE_HEADER_ICON_TITLE_ADJUST,
+  NodeHeader,
+} from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
   NODE_PORT_NODE_CLASS,
@@ -20,6 +24,8 @@ interface ValueSourceShellProps {
   socketType: SocketType;
   selected?: boolean;
   icon?: ReactNode;
+  /** 标题栏右侧插槽（如模型选择器节点的展开/折叠切换按钮），不传时维持原有无插槽外观 */
+  headerRightSlot?: ReactNode;
   children: ReactNode;
   /** 节点宽度（默认 180，模型选择器等更宽的内容可覆盖） */
   width?: number;
@@ -42,6 +48,7 @@ export function ValueSourceShell({
   socketType,
   selected,
   icon,
+  headerRightSlot,
   children,
   width = 180,
   height,
@@ -89,6 +96,8 @@ export function ValueSourceShell({
         titleText={title}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
+        rightSlot={headerRightSlot}
+        rightSlotAdjust={NODE_HEADER_ICON_TITLE_ADJUST}
       />
 
       <div className="nodrag nowheel flex min-h-0 flex-1 flex-col justify-center">{children}</div>

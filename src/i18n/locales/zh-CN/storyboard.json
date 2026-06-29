@@ -77,7 +77,9 @@
     "searchPlaceholder": "搜索模型名称、供应商或描述",
     "clearSearch": "清空搜索",
     "allProviders": "全部",
-    "noModels": "没有匹配的模型"
+    "noModels": "没有匹配的模型",
+    "expand": "展开",
+    "collapse": "收起"
   },
   "node": {
     "menu": {
