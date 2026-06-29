@@ -33,7 +33,7 @@ export interface ImageViewerModalProps {
   onContextMenu?: (e: React.MouseEvent, filePath?: string) => void;
 }
 
-/** asset.localhost 显示链接还原为本地路径，供 Rust 信息读取 */
+/** asset.localhost 显示链接还原为本地路径，供信息面板读取 */
 function normalizeInfoSource(url: string): string {
   const match = url.match(/^https?:\/\/asset\.localhost\/(.+)$/i);
   if (!match) {

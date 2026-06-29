@@ -1,7 +1,7 @@
 /**
  * Legacy compatibility shell for old frontend providers.
  *
- * Generation is now executed by Rust backend runtime. This class is retained
+ * Generation is now executed by the Electron backend runtime. This class is retained
  * only to avoid breaking old imports during migration.
  */
 

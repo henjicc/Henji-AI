@@ -4,7 +4,7 @@ const logger = createLogger('core.services.GenerationService')
 /**
  * GenerationService - unified AI runtime gateway.
  *
- * Frontend only prepares model params and delegates execution to Rust backend.
+ * Frontend only prepares model params and delegates execution to the Electron backend.
  */
 
 import { registry } from '@/core/ModelRegistry'

@@ -42,6 +42,7 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 
 ## 3. 执行规则
 
+- 当前 Henji-AI 生成运行时基线是 Electron + Node/TS，不再走 Tauri/Rust；所有供应商执行、上传、轮询与结果解析都以 `electron/main/services/ai-runtime/**` 为准。
 - 在输出确认清单前，先自行归纳：
   - 这是“一个模型多个端点”还是“多个独立模型”；
   - 应采用“自动路由”“显式展示 + 自动切换”还是“显式 `mode`”；
@@ -55,9 +56,9 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
 - Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。
 - 若参数是否显示依赖“是否已上传图片/视频”，先核对前端显隐/联动实际使用的运行时字段名；当前仓库里，参数面板显隐通常依赖 `uploadedImages` / `uploadedVideos`，而 `uploadedFilePaths` 更偏向请求构建。
-- 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src-tauri/src/ai_runtime/*`。
+- 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
-- 牢记 runtime 约束：`endpoints.selector` 与 `request.builder` 都会被序列化后在 Rust JS 沙箱独立执行，不能依赖模型文件顶层 helper/闭包变量；需要的工具函数应内联在函数体内。
+- 牢记 runtime 约束：`endpoints.selector` 与 `request.builder` 会被 `scripts/generate-model-manifest.cjs` 序列化为 `selectorJs` / `builderJs`，再由 `electron/main/services/ai-runtime/js-runtime.ts` 在 Node VM 中独立执行；不能依赖模型文件顶层 helper/闭包变量，除非该 helper 已明确存在于 `JS_PRELUDE`，需要的新工具函数应内联在函数体内或同步更新 manifest/runtime 支撑。
 - 若模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，修改模型 builder 时必须同步检查 override，避免 manifest 与源码行为不一致。
 - 多端点模型除“自动切路由”外，还要检查“分支参数契约”：
   - 文档只在部分端点定义的参数，应只在对应分支显示/发送；
@@ -74,8 +75,10 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 
 ## 4. 完成标准
 
-- 通过 `npm run build`。
+- 至少通过与改动相关的快速检查：`npm run gen:model-manifest`、`npm run check:model-i18n`、`npm run lint`。
+- 若改到 Electron 主进程/runtime/provider/upload，追加 `npx tsc -p tsconfig.electron.json --noEmit` 与 `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`。
+- 只有需要验证完整 Electron 类型链路、产物或发布链路时，再跑 `npm run electron:build`；构建后需要验收真实桌面能力时再跑 `npm run electron:smoke`。
 - 新增能力不引入跨层调用与 UI 直连模型 API。
 - 新增参数满足顺序约定，并明确“显示/请求”策略。
-- 需要验证运行中的 Tauri 进程已加载新 manifest（重启 `npm run tauri:dev` 或执行 manifest reload 命令）。
+- 需要验证运行中的 Electron 进程已加载新 manifest：重启 `npm run electron:dev`，或通过现有 manifest reload 能力确认 `resources/model-manifest.json` 已重新加载。
 - 默认值改动需通过“冷启动可见验证”：重启开发进程后确认参数面板初始显示值正确（不是仅看请求 builder 兜底）。

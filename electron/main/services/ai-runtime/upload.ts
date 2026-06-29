@@ -167,7 +167,7 @@ async function uploadForHostedUrl(prepared: PreparedMediaBinary): Promise<string
     try {
       return await uploadToKie(kieKey, prepared)
     } catch {
-      // Fall through to BizyAir, matching the Rust runtime fallback order.
+      // Fall through to BizyAir, matching the legacy fallback order.
     }
   }
   const bizyairKey = getAiProviderApiKey('bizyair')

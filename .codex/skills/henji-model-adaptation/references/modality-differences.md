@@ -34,7 +34,7 @@
 ## 上传与媒体处理注意点
 
 - 并非所有供应商都接受同一种媒体输入（URL/data URI/base64）。
-- 若模型要求公网 URL，优先确认 `src-tauri/src/ai_runtime/upload/mod.rs` 是否已覆盖。
+- 若模型要求公网 URL，优先确认 `electron/main/services/ai-runtime/upload.ts` 与 `electron/main/services/ai-runtime/upload-providers.ts` 是否已覆盖。
 
 ## 实操建议
 
@@ -44,4 +44,4 @@
 - 现有归并参考：
   - 图片自动切换：`src/models/ppio/nano-banana-2.model.ts`
   - 视频显式 mode：`src/models/ppio/kling-o1.model.ts`
-  - 视频多端点显式 mode：`src/models/fal/kling-video-o1.model.ts`
+  - 视频多端点显式 mode：`src/models/ppio/wan-2.7.model.ts`、`src/models/fal/kling-video-v2.6-pro.model.ts`

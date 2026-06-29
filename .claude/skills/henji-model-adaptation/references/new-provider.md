@@ -1,14 +1,14 @@
 # 场景 A：新增供应商
 
-仅在 `providerId` 不在现有集合（`ppio/fal/kie/modelscope`）时走本流程。
+仅在 `providerId` 不在现有生成 runtime 集合（`ppio/fal/kie/modelscope`）时走本流程。注意：`bizyair` 当前主要作为 API Key / 上传兜底提供方存在，不等于已接入模型生成 provider。
 
-## 1) 接入 Rust runtime（必须）
+## 1) 接入 Electron runtime（必须）
 
-- 新建 `src-tauri/src/ai_runtime/providers/{provider}.rs`，实现：
+- 新建 `electron/main/services/ai-runtime/providers/{provider}.ts`，实现：
   - `execute(input)`
-  - `continue_polling(input)`
-- 在 `src-tauri/src/ai_runtime/providers/mod.rs` 注册 match 分发。
-- 在 `src-tauri/src/ai_runtime/key_store.rs` 的 `KNOWN_PROVIDER_IDS` 增加新 provider。
+  - `continuePolling(input)`
+- 在 `electron/main/services/ai-runtime/providers/index.ts` 注册 `executeGenerate` / `executeContinuePolling` 分发。
+- 在 `electron/main/services/keystore.ts` 的 `KNOWN_AI_PROVIDER_IDS` 增加新 provider，保证设置页 key 状态可见。
 
 实现时先固定 6 个点：
 
@@ -33,8 +33,13 @@
 
 ## 3) 国际化（必须）
 
+- 若新增 provider 专属模型文案文件，除了新增 locale JSON，还要同步接入：
+  - `src/i18n/config.ts` 的 import 与 `mergeModelDefs(...)`
+  - `scripts/check-model-i18n.cjs` 的 `MODEL_LOCALE_FILES`
 - `src/i18n/locales/zh-CN/models.json`
 - `src/i18n/locales/en-US/models.json`
+- `src/i18n/locales/zh-CN/models-{provider}.json`
+- `src/i18n/locales/en-US/models-{provider}.json`
 - `src/i18n/locales/zh-CN/settings.json`
 - `src/i18n/locales/en-US/settings.json`
 
@@ -44,22 +49,34 @@
 
 若新供应商要求公网 URL 或特殊上传：
 
-- 修改 `src-tauri/src/ai_runtime/upload/mod.rs`
-- 必要时新增 `src-tauri/src/ai_runtime/upload/{provider}.rs`
+- 修改 `electron/main/services/ai-runtime/upload.ts`
+- 必要时扩展 `electron/main/services/ai-runtime/upload-providers.ts`
 - 明确本地路径/data URI/base64/public URL 的转换策略
 
-## 5) 先落地一个最小模型（强烈建议）
+## 5) Manifest / runtime 支撑（按需）
+
+- 若新 provider 的模型会使用新的 endpoint 常量，更新 `scripts/generate-model-manifest.cjs` 的 `KNOWN_ENDPOINT_CONSTANTS`。
+- 若 `request.builder` 需要复用运行时 helper，优先在 builder 内联；只有确认为公共能力时才同步扩展 `electron/main/services/ai-runtime/js-runtime.ts` 的 `JS_PRELUDE`。
+- 若 provider 有特殊数值/枚举/图片尺寸约束，优先用模型定义的 `runtimeConstraints`，让 Electron runtime 在请求前统一归一化。
+
+## 6) 先落地一个最小模型（强烈建议）
 
 - 新建 `src/models/{provider}/{model}.model.ts` 做 smoke 测试。
 - 保持 request 最小可跑通，不在 UI 写 provider 特判。
 
-## 6) 验证
+## 7) 验证
 
-- `npm run build`
-- 若可用：`npm run tauri:dev` 做端到端提交 + 轮询 + 结果下载验证
+- `npm run gen:model-manifest`
+- `npm run check:model-i18n`
+- `npm run lint`
+- `npx tsc -p tsconfig.electron.json --noEmit`
+- `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`
+- 若需要完整产物链路：`npm run electron:build`
+- 若可用：`npm run electron:dev` 做端到端提交 + 轮询 + 结果下载验证
 
 ## 常见回退点
 
-- 只改前端不改 Rust provider（会在 runtime 报 unsupported_provider）
+- 只改前端不改 Electron provider 分发（会在 runtime 报 unsupported_provider）
 - 漏改 key status 列表，导致设置页不显示新 provider key 状态
 - 新 provider 需要公网 URL，却未接入 upload 处理
+- 新增 provider 专属 `models-{provider}.json` 后，忘记更新 `src/i18n/config.ts` 或 `scripts/check-model-i18n.cjs`

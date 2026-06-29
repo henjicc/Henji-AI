@@ -46,7 +46,7 @@ export interface NodeValueOutput {
 
 /**
  * 上游媒体 → 生成参数协议键的注入规则。
- * 协议键与对话模式 useTaskGeneration 完全一致，由 Rust runtime 统一消费。
+ * 协议键与对话模式 useTaskGeneration 完全一致，由 Electron runtime 统一消费。
  */
 export interface InputInjectionRule {
   accepts: MediaKind;

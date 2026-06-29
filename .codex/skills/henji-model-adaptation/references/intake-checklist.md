@@ -46,7 +46,8 @@
 
 6) 验证
 - 将修改的文件范围：
-- 必跑命令：npm run build
+- 必跑命令：npm run gen:model-manifest / npm run check:model-i18n / npm run lint
+- 若涉及 Electron runtime/provider/upload：追加 npx tsc -p tsconfig.electron.json --noEmit
 ```
 
 ## 阻断规则

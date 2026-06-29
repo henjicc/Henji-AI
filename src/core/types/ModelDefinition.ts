@@ -374,7 +374,7 @@ export interface ModelDefinition {
   /**
    * Runtime constraints applied after request builder output.
    *
-   * Used by generated manifest + Rust runtime as a final safety net to
+   * Used by generated manifest + Electron runtime as a final safety net to
    * normalize request bodies before provider submission.
    */
   runtimeConstraints?: RuntimeConstraints

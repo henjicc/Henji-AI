@@ -9,7 +9,7 @@
 
 ## Phase 1：最小供应商闭环
 
-- 按 `new-provider.md` 完成 runtime + key 管理 + 前端 provider 元信息。
+- 按 `new-provider.md` 完成 Electron runtime + key 管理 + 前端 provider 元信息。
 - 先让一个最小 smoke 模型跑通提交/轮询/结果落地。
 
 ## Phase 2：目标模型适配
