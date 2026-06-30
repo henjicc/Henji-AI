@@ -31,12 +31,9 @@
     "release": "node scripts/release.cjs"
   },
   "dependencies": {
-    "@fal-ai/client": "^1.7.2",
     "@types/react-window": "^1.8.8",
     "@xyflow/react": "^12.10.1",
-    "ali-oss": "^6.23.0",
     "archiver": "^8.0.0",
-    "axios": "^1.6.0",
     "better-sqlite3": "^12.5.0",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",

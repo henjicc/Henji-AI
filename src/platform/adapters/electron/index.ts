@@ -2,6 +2,7 @@ import type { PlatformRuntime } from '@/platform/contracts'
 import { createElectronAiRuntime } from './aiRuntime'
 import { createElectronLlmRuntime } from './llmRuntime'
 import { createElectronDb } from './db'
+import { createElectronCanvasProjects } from './canvasProjects'
 import { createElectronKeystore } from './keystore'
 import { createElectronSystem } from './system'
 import { createElectronMedia } from './media'
@@ -19,6 +20,7 @@ export function createElectronPlatform(): PlatformRuntime {
     aiRuntime: createElectronAiRuntime(),
     llmRuntime: createElectronLlmRuntime(),
     db: createElectronDb(),
+    canvasProjects: createElectronCanvasProjects(),
     keystore: createElectronKeystore(),
     system: createElectronSystem(),
     media: createElectronMedia(),

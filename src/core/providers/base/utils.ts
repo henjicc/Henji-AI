@@ -199,8 +199,7 @@ export function extractMimeType(source: string): string {
  * @returns API 密钥或 null
  */
 export function getApiKey(provider: string): string | null {
-  const key = `${provider}ApiKey`
-  return localStorage.getItem(key)
+  throw new Error(`[providers/base/utils] getApiKey("${provider}") is unavailable in Electron runtime. Use keystore commands instead.`)
 }
 
 /**
@@ -210,8 +209,8 @@ export function getApiKey(provider: string): string | null {
  * @param apiKey - API 密钥
  */
 export function setApiKey(provider: string, apiKey: string): void {
-  const key = `${provider}ApiKey`
-  localStorage.setItem(key, apiKey)
+  void apiKey
+  throw new Error(`[providers/base/utils] setApiKey("${provider}") is unavailable in Electron runtime. Use keystore commands instead.`)
 }
 
 /**
@@ -220,7 +219,7 @@ export function setApiKey(provider: string, apiKey: string): void {
  * @returns Fal API 密钥或空字符串
  */
 export function getFalApiKey(): string {
-  return getApiKey('fal') || ''
+  throw new Error('[providers/base/utils] getFalApiKey() is unavailable in Electron runtime. Use keystore commands instead.')
 }
 
 /**

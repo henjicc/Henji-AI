@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
+import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerDbIpc } from './ipc/db'
 import { registerDragIpc } from './ipc/drag'
@@ -29,6 +30,7 @@ if (remoteDebuggingPort) {
 app.whenReady().then(() => {
   registerMediaProtocolHandler()
   registerAiRuntimeIpc()
+  registerCanvasProjectsIpc()
   registerClipboardIpc()
   registerDbIpc()
   registerDragIpc()

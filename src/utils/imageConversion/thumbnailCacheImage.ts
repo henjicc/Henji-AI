@@ -1,5 +1,11 @@
-import { exists, mkdir, readFile, toDisplaySrc, writeFile } from '@/platform/desktopApi'
+import { exists, mkdir, toDisplaySrc, writeFile } from '@/platform/desktopApi'
 import { getImageThumbnailCachePath } from './thumbnailCachePaths'
+
+export interface CachedThumbnailResult {
+  filePath: string
+  displaySrc: string
+  dataUrl?: string
+}
 
 export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl: string): Promise<string> {
   const { getThumbnailsPath } = await import('@/utils/dataPath')
@@ -87,31 +93,16 @@ export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl
 export async function getOrCreateImageThumbnail(
   imagePath: string,
   imageUrl?: string
-): Promise<{ filePath: string; dataUrl: string }> {
+): Promise<CachedThumbnailResult> {
   const cachePath = await getImageThumbnailCachePath(imagePath)
   const cacheExists = await exists(cachePath)
 
   if (cacheExists) {
-    const bytes = await readFile(cachePath)
-    const blob = new Blob([bytes], { type: 'image/webp' })
-    const dataUrl = await new Promise<string>((resolve) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.readAsDataURL(blob)
-    })
-    return { filePath: cachePath, dataUrl }
+    return { filePath: cachePath, displaySrc: toDisplaySrc(cachePath) }
   }
 
   const url = imageUrl || toDisplaySrc(imagePath)
   const generatedPath = await generateAndCacheImageThumbnail(imagePath, url)
 
-  const bytes = await readFile(generatedPath)
-  const blob = new Blob([bytes], { type: 'image/webp' })
-  const dataUrl = await new Promise<string>((resolve) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.readAsDataURL(blob)
-  })
-
-  return { filePath: generatedPath, dataUrl }
+  return { filePath: generatedPath, displaySrc: toDisplaySrc(generatedPath) }
 }

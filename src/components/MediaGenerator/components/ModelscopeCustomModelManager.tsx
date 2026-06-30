@@ -5,6 +5,7 @@ import AlertDialog from '@/components/ui/AlertDialog'
 import { UiButton, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
+import { replaceModelscopeCustomModels } from '@/models/modelscope/customModelRegistry'
 
 const logger = createLogger('components.MediaGenerator.components.ModelscopeCustomModelManager')
 
@@ -81,6 +82,9 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           })
           .filter((item): item is CustomModel => item !== null && item.id.length > 0 && item.name.length > 0)
         setModels(migratedModels)
+        replaceModelscopeCustomModels(migratedModels)
+      } else {
+        replaceModelscopeCustomModels([])
       }
     } catch (e) {
       logger.error('Failed to load custom models:', e)
@@ -90,6 +94,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
     try {
       localStorage.setItem('modelscope_custom_models', JSON.stringify(newModels))
       setModels(newModels)
+      replaceModelscopeCustomModels(newModels)
       onModelsChange?.()
     } catch (e) {
       logger.error('Failed to save custom models:', e)

@@ -3,6 +3,7 @@ import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
+  HenjiCanvasProjectsApi,
   HenjiClipboardApi,
   HenjiDbApi,
   HenjiDialogApi,
@@ -86,6 +87,15 @@ const diagnosticsApi: HenjiDiagnosticsApi = {
 const dbApi: HenjiDbApi = {
   execute: (sql, params) => nativeInvoke('db:execute', { sql, params }),
   select: (sql, params) => nativeInvoke('db:select', { sql, params }),
+}
+
+const canvasProjectsApi: HenjiCanvasProjectsApi = {
+  listProjects: () => nativeInvoke('canvasProjects:list'),
+  createProject: (id, name, snapshot) => nativeInvoke('canvasProjects:create', { id, name, snapshot }),
+  getProject: (projectId) => nativeInvoke('canvasProjects:get', { projectId }),
+  renameProject: (projectId, name) => nativeInvoke('canvasProjects:rename', { projectId, name }),
+  saveProjectSnapshot: (projectId, snapshot) => nativeInvoke('canvasProjects:saveSnapshot', { projectId, snapshot }),
+  deleteProject: (projectId) => nativeInvoke('canvasProjects:delete', { projectId }),
 }
 
 const keystoreApi: HenjiKeystoreApi = {
@@ -288,6 +298,7 @@ const api: HenjiNativeApi = {
   ai: aiApi,
   llm: llmApi,
   db: dbApi,
+  canvasProjects: canvasProjectsApi,
   keystore: keystoreApi,
   fs: fsApi,
   dialog: dialogApi,

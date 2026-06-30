@@ -1,6 +1,7 @@
 import type { AiRuntimePlatform } from './aiRuntime'
 import type { LlmRuntimePlatform } from './llmRuntime'
 import type { DbPlatform } from './db'
+import type { CanvasProjectsPlatform } from './canvasProjects'
 import type { KeystorePlatform } from './keystore'
 import type { SystemPlatform } from './system'
 import type { MediaPlatform } from './media'
@@ -17,6 +18,7 @@ export interface PlatformRuntime {
   aiRuntime: AiRuntimePlatform
   llmRuntime: LlmRuntimePlatform
   db: DbPlatform
+  canvasProjects: CanvasProjectsPlatform
   keystore: KeystorePlatform
   system: SystemPlatform
   media: MediaPlatform
@@ -34,6 +36,7 @@ export type {
   AiRuntimePlatform,
   LlmRuntimePlatform,
   DbPlatform,
+  CanvasProjectsPlatform,
   KeystorePlatform,
   SystemPlatform,
   MediaPlatform,
@@ -49,6 +52,7 @@ export type {
 export * from './aiRuntime'
 export * from './llmRuntime'
 export * from './db'
+export * from './canvasProjects'
 export * from './keystore'
 export * from './system'
 export * from './media'

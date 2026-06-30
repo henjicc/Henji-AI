@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import ModelscopeCustomModelManager from '@/components/MediaGenerator/components/ModelscopeCustomModelManager'
 import { useI18n } from '@/hooks/useI18n'
+import { replaceModelscopeCustomModels } from '@/models/modelscope/customModelRegistry'
 
 interface CustomModelType {
   imageGeneration: boolean
@@ -74,7 +75,9 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
   const [models, setModels] = useState<CustomModel[]>([])
 
   const refreshModels = useCallback(() => {
-    setModels(parseCustomModels(localStorage.getItem(STORAGE_KEY)))
+    const nextModels = parseCustomModels(localStorage.getItem(STORAGE_KEY))
+    setModels(nextModels)
+    replaceModelscopeCustomModels(nextModels)
   }, [])
 
   useEffect(() => {

@@ -13,6 +13,12 @@ const BROWSER_DRAG_PREVIEW_SIZE = 64
 
 type DragType = 'image' | 'video'
 
+interface DragThumbnail {
+  filePath: string
+  displaySrc: string
+  dataUrl?: string
+}
+
 let browserDragPreviewHost: HTMLDivElement | null = null
 
 function getBrowserDragPreviewHost(): HTMLDivElement {
@@ -118,7 +124,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
   const nativeDragCleanupRef = useRef<(() => void) | null>(null)
   const mouseDragCleanupRef = useRef<(() => void) | null>(null)
   const lastContextMenuTimeRef = useRef(0)
-  const thumbnailCacheRef = useRef(new Map<string, { filePath: string; dataUrl: string }>())
+  const thumbnailCacheRef = useRef(new Map<string, DragThumbnail>())
 
   const shouldIgnoreClick = useCallback((): boolean => {
     return isDraggingRef.current
@@ -132,7 +138,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
     e: ReactMouseEvent,
     payload: DragPayload,
     previewUrl: string,
-    getThumbnail: (filePath: string, url: string) => Promise<{ filePath: string; dataUrl: string } | null>
+    getThumbnail: (filePath: string, url: string) => Promise<DragThumbnail | null>
   ): void => {
     if (e.button !== 0) return
     if (Date.now() - lastContextMenuTimeRef.current < CONTEXT_MENU_COOLDOWN) return
@@ -162,7 +168,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
         const thumbnail = await getThumbnail(payloadFilePath, previewUrl)
         if (thumbnail) {
           thumbnailPath = thumbnail.filePath
-          previewDataUrl = thumbnail.dataUrl
+          previewDataUrl = thumbnail.displaySrc
           thumbnailCacheRef.current.set(payloadFilePath, thumbnail)
         }
       })()
@@ -246,7 +252,7 @@ export function useHistoryDrag(): UseHistoryDragResult {
     mouseDragCleanupRef.current = null
 
     const thumbnail = thumbnailCacheRef.current.get(payload.filePath)
-    const previewUrl = thumbnail?.dataUrl ?? (payload.type === 'image' ? payload.imageUrl : undefined)
+    const previewUrl = thumbnail?.displaySrc ?? (payload.type === 'image' ? payload.imageUrl : undefined)
     endDrag()
     armNativeDragCleanup()
 

@@ -41,6 +41,31 @@ export interface HenjiDbApi {
   select<T = unknown>(sql: string, params?: HenjiSqlBindValue[]): Promise<T[]>
 }
 
+export interface HenjiCanvasProjectSummary {
+  id: string
+  name: string
+  nodeCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface HenjiCanvasProjectSnapshot {
+  nodes: unknown[]
+  edges: unknown[]
+  viewport: unknown
+}
+
+export interface HenjiCanvasProjectRecord extends HenjiCanvasProjectSummary, HenjiCanvasProjectSnapshot {}
+
+export interface HenjiCanvasProjectsApi {
+  listProjects(): Promise<HenjiCanvasProjectSummary[]>
+  createProject(id: string, name: string, snapshot: HenjiCanvasProjectSnapshot): Promise<HenjiCanvasProjectRecord>
+  getProject(projectId: string): Promise<HenjiCanvasProjectRecord | null>
+  renameProject(projectId: string, name: string): Promise<void>
+  saveProjectSnapshot(projectId: string, snapshot: HenjiCanvasProjectSnapshot): Promise<void>
+  deleteProject(projectId: string): Promise<void>
+}
+
 export interface HenjiProviderKeyStatus {
   providerId: string
   configured: boolean
@@ -496,6 +521,7 @@ export interface HenjiNativeApi {
   ai: HenjiAiApi
   llm: HenjiLlmApi
   db: HenjiDbApi
+  canvasProjects: HenjiCanvasProjectsApi
   keystore: HenjiKeystoreApi
   fs: HenjiFsApi
   dialog: HenjiDialogApi
