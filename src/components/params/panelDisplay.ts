@@ -6,6 +6,7 @@
 
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { getI18nText, type I18nText } from '@/core/types/I18nText'
+import { getModelscopeCustomModel } from '@/models/modelscope/customModelRegistry'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
 export function resolvePanelWidth(config: DynamicValue, fallbackWidth: number): number {
@@ -52,23 +53,7 @@ export function formatPanelDisplayValue(
     if (typeof value !== 'string') return '未设置'
     const trimmed = value.trim()
     if (!trimmed) return '未设置'
-
-    try {
-      const stored = localStorage.getItem('modelscope_custom_models')
-      if (!stored) return trimmed
-      const parsed = JSON.parse(stored) as DynamicValue
-      if (!Array.isArray(parsed)) return trimmed
-      const match = parsed.find((item) => {
-        if (!item || typeof item !== 'object') return false
-        const record = item as DynamicValueMap
-        return record.id === trimmed
-      }) as DynamicValueMap | undefined
-      if (!match) return trimmed
-      const name = typeof match.name === 'string' ? match.name.trim() : ''
-      return name || trimmed
-    } catch {
-      return trimmed
-    }
+    return getModelscopeCustomModel(trimmed)?.name || trimmed
   }
 
   if (panel === 'voice-selector' && typeof value === 'string') {

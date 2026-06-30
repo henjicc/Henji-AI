@@ -8,18 +8,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import ModelscopeCustomModelManager from '@/components/MediaGenerator/components/ModelscopeCustomModelManager'
 import { useI18n } from '@/hooks/useI18n'
-import { replaceModelscopeCustomModels } from '@/models/modelscope/customModelRegistry'
-
-interface CustomModelType {
-  imageGeneration: boolean
-  imageEditing: boolean
-}
-
-interface CustomModel {
-  id: string
-  name: string
-  modelType: CustomModelType
-}
+import {
+  modelscopeCustomModelService,
+  type ModelscopeCustomModelEntry,
+} from '@/services/modelscopeCustomModels/ModelscopeCustomModelService'
 
 export interface ModelscopeCustomModelPanelProps {
   value: string
@@ -27,71 +19,20 @@ export interface ModelscopeCustomModelPanelProps {
   config?: DynamicValueMap
 }
 
-const STORAGE_KEY = 'modelscope_custom_models'
-
-function normalizeModelType(raw: DynamicValue): CustomModelType {
-  if (!raw || typeof raw !== 'object') {
-    return { imageGeneration: true, imageEditing: false }
-  }
-
-  const record = raw as DynamicValueMap
-  const imageGeneration = record.imageGeneration === true
-  const imageEditing = record.imageEditing === true && !imageGeneration
-
-  return { imageGeneration, imageEditing }
-}
-
-function parseCustomModels(raw: string | null): CustomModel[] {
-  if (!raw) return []
-
-  try {
-    const parsed = JSON.parse(raw) as DynamicValue
-    if (!Array.isArray(parsed)) return []
-
-    const models: CustomModel[] = []
-    for (const item of parsed) {
-      if (!item || typeof item !== 'object') continue
-      const record = item as DynamicValueMap
-      const id = typeof record.id === 'string' ? record.id.trim() : ''
-      if (!id) continue
-      const name = typeof record.name === 'string' && record.name.trim()
-        ? record.name.trim()
-        : id
-      const modelType = normalizeModelType(record.modelType)
-      models.push({ id, name, modelType })
-    }
-
-    return models
-  } catch {
-    return []
-  }
-}
-
 export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProps> = ({
   value,
   onChange
 }) => {
   const { t } = useI18n('ui')
-  const [models, setModels] = useState<CustomModel[]>([])
+  const [models, setModels] = useState<ModelscopeCustomModelEntry[]>([])
 
-  const refreshModels = useCallback(() => {
-    const nextModels = parseCustomModels(localStorage.getItem(STORAGE_KEY))
+  const refreshModels = useCallback(async (): Promise<void> => {
+    const nextModels = await modelscopeCustomModelService.listModels()
     setModels(nextModels)
-    replaceModelscopeCustomModels(nextModels)
   }, [])
 
   useEffect(() => {
-    refreshModels()
-  }, [refreshModels])
-
-  useEffect(() => {
-    const handler = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY) {
-        refreshModels()
-      }
-    }
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
+    void refreshModels()
   }, [refreshModels])
 
   useEffect(() => {

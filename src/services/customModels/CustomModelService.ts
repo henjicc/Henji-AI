@@ -66,7 +66,9 @@ export class CustomModelService {
    */
   async getCustomModels(): Promise<CustomModel[]> {
     const records = await this.db.getCustomModels()
-    return records.map(this.convertToCustomModel)
+    return records
+      .filter(this.isGeneratedCustomModelRecord)
+      .map(this.convertToCustomModel)
   }
 
   /**
@@ -171,6 +173,11 @@ export class CustomModelService {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     }
+  }
+
+  private isGeneratedCustomModelRecord(record: CustomModelRecord): boolean {
+    const modelConfig = record.config.modelConfig
+    return Boolean(modelConfig && typeof modelConfig === 'object')
   }
 
   /**

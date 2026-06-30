@@ -6,6 +6,7 @@ import SettingsModal from '@/components/Settings'
 import { databaseService } from './services/database/DatabaseService'
 import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
+import { modelscopeCustomModelService } from './services/modelscopeCustomModels/ModelscopeCustomModelService'
 import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from './core/panels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
@@ -59,6 +60,7 @@ const App: React.FC = () => {
       try {
         const customModelService = getCustomModelService(databaseService)
         await customModelService.loadEnabledModels()
+        await modelscopeCustomModelService.loadModelsToRegistry()
       } catch (error) {
         logger.error('[App] Failed to load custom models:', error)
       }
