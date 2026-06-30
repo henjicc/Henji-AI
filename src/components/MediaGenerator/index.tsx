@@ -514,8 +514,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           <PromptOptimizeButton
             prompt={uiState.input}
             uploadedImages={uiState.uploadedImages}
+            uploadedFilePaths={uiState.uploadedFilePaths}
             uploadedVideos={uiState.uploadedVideos}
             uploadedVideoFiles={uiState.uploadedVideoFiles}
+            uploadedVideoFilePaths={uiState.uploadedVideoFilePaths}
             targetModel={{
               providerId: uiState.selectedProvider,
               providerName: currentProvider?.name,

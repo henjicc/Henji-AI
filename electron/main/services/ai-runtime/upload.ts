@@ -261,6 +261,7 @@ function parseDataUri(input: string): { bytes: Uint8Array; mimeType: string } | 
 
 function normalizeLocalSource(source: string): string | undefined {
   for (const prefix of [
+    'henji-media://local/',
     'http://asset.localhost/', 'https://asset.localhost/',
     'http://tauri.localhost/', 'https://tauri.localhost/',
     'asset://localhost/', 'tauri://localhost/',

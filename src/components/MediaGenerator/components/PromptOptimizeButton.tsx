@@ -36,8 +36,10 @@ function createPromptOptimizationRequestId(): string {
 interface PromptOptimizeButtonProps {
   prompt: string
   uploadedImages: string[]
+  uploadedFilePaths: string[]
   uploadedVideos: string[]
   uploadedVideoFiles: File[]
+  uploadedVideoFilePaths: string[]
   targetModel?: PromptOptimizationTargetModel
   disabled?: boolean
   onOptimized: (prompt: string) => void
@@ -48,8 +50,10 @@ interface PromptOptimizeButtonProps {
 export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   prompt,
   uploadedImages,
+  uploadedFilePaths,
   uploadedVideos,
   uploadedVideoFiles,
+  uploadedVideoFilePaths,
   targetModel,
   disabled,
   onOptimized,
@@ -147,15 +151,6 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [cancelOptimize, streaming])
 
-  const fileToDataUrl = useCallback((file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-      reader.onerror = () => reject(reader.error ?? new Error('读取视频失败'))
-      reader.readAsDataURL(file)
-    })
-  }, [])
-
   const rememberSelectedProfile = useCallback(async (profileId: string): Promise<void> => {
     setSelectedProfileId(profileId)
     if (!config || config.selectedPromptProfileId === profileId) {
@@ -211,10 +206,11 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         currentPrompt,
         profile,
         uploadedImages,
+        uploadedFilePaths,
         uploadedVideos,
         uploadedVideoFiles,
+        uploadedVideoFilePaths,
         targetModel,
-        fileToDataUrl
       )
       await llmChatStream({
         requestId,
@@ -282,7 +278,6 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     }
   }, [
     config,
-    fileToDataUrl,
     finishStreaming,
     onAlert,
     onOptimized,
@@ -291,8 +286,10 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     selectedProfile,
     selectedProfileId,
     targetModel,
+    uploadedFilePaths,
     uploadedImages,
     uploadedVideoFiles,
+    uploadedVideoFilePaths,
     uploadedVideos,
   ])
 
