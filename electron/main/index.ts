@@ -13,6 +13,7 @@ import { registerMediaIpc } from './ipc/media'
 import { registerPingIpc } from './ipc/registry'
 import { registerProjectPackageIpc } from './ipc/project-package'
 import { registerStreamIpc } from './ipc/stream'
+import { registerStoryboardProjectsIpc } from './ipc/storyboard-projects'
 import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
@@ -44,6 +45,7 @@ app.whenReady().then(() => {
   registerPingIpc()
   registerProjectPackageIpc()
   registerStreamIpc()
+  registerStoryboardProjectsIpc()
   registerSystemIpc()
   registerUpdaterIpc()
   registerVideoIpc()

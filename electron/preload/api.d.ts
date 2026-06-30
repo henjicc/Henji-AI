@@ -66,6 +66,30 @@ export interface HenjiCanvasProjectsApi {
   deleteProject(projectId: string): Promise<void>
 }
 
+export interface HenjiStoryboardProjectSummary {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  nodeCount: number
+}
+
+export interface HenjiStoryboardProjectRecord extends HenjiStoryboardProjectSummary {
+  nodesJson: string
+  edgesJson: string
+  viewportJson: string
+  historyJson: string
+}
+
+export interface HenjiStoryboardProjectsApi {
+  listProjectSummaries(): Promise<HenjiStoryboardProjectSummary[]>
+  getProjectRecord(projectId: string): Promise<HenjiStoryboardProjectRecord | null>
+  upsertProjectRecord(record: HenjiStoryboardProjectRecord): Promise<void>
+  updateProjectViewportRecord(projectId: string, viewportJson: string): Promise<void>
+  renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void>
+  deleteProjectRecord(projectId: string): Promise<void>
+}
+
 export interface HenjiCustomModelRecord {
   id: string
   name: string
@@ -556,6 +580,7 @@ export interface HenjiNativeApi {
   llm: HenjiLlmApi
   db: HenjiDbApi
   canvasProjects: HenjiCanvasProjectsApi
+  storyboardProjects: HenjiStoryboardProjectsApi
   customModels: HenjiCustomModelsApi
   keystore: HenjiKeystoreApi
   fs: HenjiFsApi

@@ -24,6 +24,7 @@ import type {
   HenjiProjectPackageApi,
   HenjiRuntimeRequestPreviewPayload,
   HenjiShellApi,
+  HenjiStoryboardProjectsApi,
   HenjiUpdaterApi,
   HenjiUpdaterEvent,
   HenjiVideoApi,
@@ -97,6 +98,17 @@ const canvasProjectsApi: HenjiCanvasProjectsApi = {
   renameProject: (projectId, name) => nativeInvoke('canvasProjects:rename', { projectId, name }),
   saveProjectSnapshot: (projectId, snapshot) => nativeInvoke('canvasProjects:saveSnapshot', { projectId, snapshot }),
   deleteProject: (projectId) => nativeInvoke('canvasProjects:delete', { projectId }),
+}
+
+const storyboardProjectsApi: HenjiStoryboardProjectsApi = {
+  listProjectSummaries: () => nativeInvoke('storyboardProjects:list'),
+  getProjectRecord: (projectId) => nativeInvoke('storyboardProjects:get', { projectId }),
+  upsertProjectRecord: (record) => nativeInvoke('storyboardProjects:upsert', record),
+  updateProjectViewportRecord: (projectId, viewportJson) =>
+    nativeInvoke('storyboardProjects:updateViewport', { projectId, viewportJson }),
+  renameProjectRecord: (projectId, name, updatedAt) =>
+    nativeInvoke('storyboardProjects:rename', { projectId, name, updatedAt }),
+  deleteProjectRecord: (projectId) => nativeInvoke('storyboardProjects:delete', { projectId }),
 }
 
 const customModelsApi: HenjiCustomModelsApi = {
@@ -308,6 +320,7 @@ const api: HenjiNativeApi = {
   llm: llmApi,
   db: dbApi,
   canvasProjects: canvasProjectsApi,
+  storyboardProjects: storyboardProjectsApi,
   customModels: customModelsApi,
   keystore: keystoreApi,
   fs: fsApi,

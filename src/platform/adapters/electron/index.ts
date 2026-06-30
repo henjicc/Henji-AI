@@ -12,6 +12,7 @@ import { createElectronVideo } from './video'
 import { createElectronClipboard } from './clipboard'
 import { createElectronDragDrop } from './dragDrop'
 import { createElectronProjectPackage } from './projectPackage'
+import { createElectronStoryboardProjects } from './storyboardProjects'
 import { createElectronWindow } from './window'
 import { createElectronLogging } from './logging'
 import { createElectronUpdater } from './updater'
@@ -31,6 +32,7 @@ export function createElectronPlatform(): PlatformRuntime {
     clipboard: createElectronClipboard(),
     dragDrop: createElectronDragDrop(),
     projectPackage: createElectronProjectPackage(),
+    storyboardProjects: createElectronStoryboardProjects(),
     window: createElectronWindow(),
     logging: createElectronLogging(),
     updater: createElectronUpdater(),
