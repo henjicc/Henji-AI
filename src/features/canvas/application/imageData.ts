@@ -329,20 +329,16 @@ export async function prepareNodeImage(
   const started = performance.now();
   if (isNativeImageRuntime()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
-    try {
-      const nativeStarted = performance.now();
-      const prepared = await prepareNodeImageSource(imageUrl, safeMaxDimension);
-      logger.info(
-        `[upload-perf][imageData] prepareNodeImage native-source elapsed=${Math.round(performance.now() - nativeStarted)}ms total=${Math.round(performance.now() - started)}ms`
-      );
-      return {
-        imageUrl: prepared.imagePath,
-        previewImageUrl: prepared.previewImagePath,
-        aspectRatio: prepared.aspectRatio,
-      };
-    } catch {
-      // fallback to browser path for compatibility
-    }
+    const nativeStarted = performance.now();
+    const prepared = await prepareNodeImageSource(imageUrl, safeMaxDimension);
+    logger.info(
+      `[upload-perf][imageData] prepareNodeImage native-source elapsed=${Math.round(performance.now() - nativeStarted)}ms total=${Math.round(performance.now() - started)}ms`
+    );
+    return {
+      imageUrl: prepared.imagePath,
+      previewImageUrl: prepared.previewImagePath,
+      aspectRatio: prepared.aspectRatio,
+    };
   }
 
   const persistedImagePath = await persistImageLocally(imageUrl);

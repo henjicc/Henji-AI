@@ -11,6 +11,7 @@ import {
   persistImageLocally,
 } from './imageData';
 import { cropImageSource, readStoryboardImageMetadata } from '@/commands/image';
+import { isDesktopRuntime } from '@/platform/runtime';
 import { drawAnnotations, parseAnnotationItems } from '../tools/annotation';
 import type {
   IdGenerator,
@@ -63,17 +64,17 @@ export class CanvasToolProcessor implements ToolProcessor {
   }
 
   private async cropImage(sourceImage: string, options: DynamicValueMap): Promise<string> {
-    try {
-      return await cropImageSource({
-        source: sourceImage,
-        aspectRatio: String(options.aspectRatio ?? '1:1'),
-        cropX: Number(options.cropX),
-        cropY: Number(options.cropY),
-        cropWidth: Number(options.cropWidth),
-        cropHeight: Number(options.cropHeight),
-      });
-    } catch {
-      // Fallback to local canvas implementation when backend command is unavailable.
+    const payload = {
+      source: sourceImage,
+      aspectRatio: String(options.aspectRatio ?? '1:1'),
+      cropX: Number(options.cropX),
+      cropY: Number(options.cropY),
+      cropWidth: Number(options.cropWidth),
+      cropHeight: Number(options.cropHeight),
+    };
+
+    if (isDesktopRuntime()) {
+      return await cropImageSource(payload);
     }
 
     const aspectRatio = String(options.aspectRatio ?? '1:1');
@@ -246,8 +247,10 @@ export class CanvasToolProcessor implements ToolProcessor {
         safeCols,
         safeLineThickness
       );
-    } catch {
-      // Fallback when native image processing is unavailable or fails.
+    } catch (error) {
+      if (isDesktopRuntime()) {
+        throw error;
+      }
       outputs = await this.localSplit(sourceImage, safeRows, safeCols, safeLineThickness);
     }
 
@@ -333,7 +336,10 @@ export class CanvasToolProcessor implements ToolProcessor {
         gridCols: metadata.gridCols,
         frameNotes: Array.isArray(metadata.frameNotes) ? metadata.frameNotes : [],
       };
-    } catch {
+    } catch (error) {
+      if (isDesktopRuntime()) {
+        throw error;
+      }
       return null;
     }
   }
