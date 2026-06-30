@@ -8,7 +8,7 @@ import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
 import { modelscopeCustomModelService } from './services/modelscopeCustomModels/ModelscopeCustomModelService'
 import { loadAllModels } from './core/loaders'
-import { registerDefaultPanels } from './core/panels'
+import { registerDefaultPanels } from '@/components/params/panels/registerDefaultPanels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 
