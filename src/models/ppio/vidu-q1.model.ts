@@ -3,7 +3,7 @@
  */
 
 import { defineModel, sharedFieldText } from '@/core'
-import { resolvePpioImageSources } from './mediaSources'
+import { countUploadedImages, resolvePpioImageSources } from './mediaSources'
 
 export const viduQ1Model = defineModel({
   meta: {
@@ -142,24 +142,22 @@ export const viduQ1Model = defineModel({
     },
     // Hide aspect ratio when images uploaded in text-image mode
     {
-      trigger: ['ppioViduQ1Mode', 'uploadedImages'],
+      trigger: ['ppioViduQ1Mode', 'uploadedImages', 'images'],
       effect: 'hide',
       targets: ['ppioViduQ1AspectRatio'],
       condition: (_, allParams) => {
         const mode = allParams.ppioViduQ1Mode
-        const imageCount = allParams.uploadedImages?.length || 0
-        return mode === 'text-image-to-video' && imageCount > 0
+        return mode === 'text-image-to-video' && countUploadedImages(allParams) > 0
       }
     },
     // Hide style when not text-to-video with no images
     {
-      trigger: ['ppioViduQ1Mode', 'uploadedImages'],
+      trigger: ['ppioViduQ1Mode', 'uploadedImages', 'images'],
       effect: 'hide',
       targets: ['ppioViduQ1Style'],
       condition: (_, allParams) => {
         const mode = allParams.ppioViduQ1Mode
-        const imageCount = allParams.uploadedImages?.length || 0
-        return !(mode === 'text-image-to-video' && imageCount === 0)
+        return !(mode === 'text-image-to-video' && countUploadedImages(allParams) === 0)
       }
     }
   ],

@@ -1,5 +1,11 @@
 {
   "defs": {
+    "kie-gemini-omni-video": {
+      "meta": {
+        "name": "Gemini Omni",
+        "description": "KIE Gemini Omni video generation model with multi-image and video reference input"
+      }
+    },
     "kie-grok-imagine-video": {
       "meta": {
         "name": "Grok Imagine Video",

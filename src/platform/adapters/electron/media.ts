@@ -36,6 +36,9 @@ export function createElectronMedia(): MediaPlatform {
     async allowRoot(rootPath: string): Promise<void> {
       await getNative().media.allowRoot(rootPath)
     },
+    async isPathAllowed(targetPath: string): Promise<boolean> {
+      return await getNative().media.isPathAllowed(targetPath)
+    },
     toDisplaySrc(localPath: string) {
       return isDisplayUrl(localPath) ? localPath : toMediaUrl(localPath)
     },
@@ -50,6 +53,9 @@ export function createElectronMedia(): MediaPlatform {
         reader.onerror = (error) => reject(error)
         reader.readAsDataURL(blob)
       })
+    },
+    getPathForFile(file: File): string {
+      return getNative().media.getPathForFile(file)
     },
   }
 }

@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Scissors } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
 import { readHenjiDragData, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
@@ -24,6 +24,7 @@ interface StackedMediaUploaderProps {
   onUpload: (files: File[]) => Promise<void> | void
   onRemove: (index: number) => void
   onReplace?: (index: number, file: File) => Promise<void> | void
+  onTrim?: (index: number) => void
   onReorder?: (from: number, to: number) => void
   onFileClick?: (fileUrl: string, fileList: string[]) => void
   onDragStateChange?: (isDragging: boolean) => void
@@ -108,6 +109,7 @@ export function StackedMediaUploader({
   onUpload,
   onRemove,
   onReplace,
+  onTrim,
   onReorder,
   onFileClick,
   onDragStateChange,
@@ -392,6 +394,19 @@ export function StackedMediaUploader({
                     title="替换"
                   >
                     <RefreshCw className="h-3.5 w-3.5 text-white" strokeWidth={2.3} />
+                  </UiIconButton>
+                )}
+                {onTrim && isVideo && (
+                  <UiIconButton
+                    type="button"
+                    className={`absolute -bottom-1 -left-1 z-20 h-5 w-5 rounded border-zinc-500/70 bg-zinc-900/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onTrim(index)
+                    }}
+                    title="裁剪"
+                  >
+                    <Scissors className="h-3.5 w-3.5 text-white" strokeWidth={2.3} />
                   </UiIconButton>
                 )}
               </div>

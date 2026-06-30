@@ -12,6 +12,29 @@ export function toDisplaySrc(localPath: string): string {
   return getPlatform().media.toDisplaySrc(localPath)
 }
 
+/**
+ * 渲染层 File 对象若来自真实磁盘文件（文件选择器/拖拽），直接拿到它的文件系统路径，
+ * 不需要再读字节、算哈希、写一份新文件——只有合成 Blob（如剪贴板生成）才会返回空字符串。
+ */
+export function getPathForFile(file: File): string {
+  if (!isDesktopRuntime()) {
+    return ''
+  }
+  return getPlatform().media.getPathForFile(file)
+}
+
+/**
+ * 确认某个绝对路径是否在 henji-media:// 协议允许读取的范围内——复用 getPathForFile
+ * 拿到的原始磁盘路径前必须先过这一关，否则可能出现"路径有效但协议 403 拒绝"的
+ * 静默失败（<video src> 既不显示缩略图也放不了）。
+ */
+export async function isPathAllowedForMedia(targetPath: string): Promise<boolean> {
+  if (!isDesktopRuntime()) {
+    return false
+  }
+  return await getPlatform().media.isPathAllowed(targetPath)
+}
+
 export async function readFile(path: string): Promise<Uint8Array<ArrayBuffer>> {
   const bytes = await getPlatform().system.fs.readFile(path)
   const normalized = new Uint8Array(bytes.byteLength)

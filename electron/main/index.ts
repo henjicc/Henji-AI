@@ -13,6 +13,7 @@ import { registerProjectPackageIpc } from './ipc/project-package'
 import { registerStreamIpc } from './ipc/stream'
 import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
+import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme } from './protocol'
 import { initializeUpdater } from './services/updater'
@@ -41,6 +42,7 @@ app.whenReady().then(() => {
   registerStreamIpc()
   registerSystemIpc()
   registerUpdaterIpc()
+  registerVideoIpc()
   registerWindowIpc()
   initializeUpdater()
   createWindow()

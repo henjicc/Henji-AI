@@ -10,6 +10,8 @@ const logger = createLogger('components.MediaGenerator.hooks.useVideoUpload')
  * 策略：
  * 1. 上传时：只保存 File 对象引用 + 生成缩略图（不读取视频内容到内存）
  * 2. 点击生成时：才读取视频文件内容并上传到 FAL CDN
+ * 3. 体积超出 maxSizeMB 不在上传时拦截/压缩——本地 ffmpeg 压缩推迟到生成提交时
+ *    统一处理（见 GenerationService.ts），让上传保持即时，压缩耗时由任务进度条覆盖
  *
  * 优势：
  * - 避免大视频文件（最大200MB）占用内存
@@ -24,7 +26,10 @@ export const useVideoUpload = (
   setUploadedVideoFilePaths: (paths: string[]) => void,  // 新增：用于清空路径
   onError?: (title: string, message: string) => void,
   validationOptions?: VideoValidationOptions,
-  setUploadedVideoDuration?: (duration: number) => void // 新增：设置上传视频由于时长
+  setUploadedVideoDuration?: (duration: number) => void, // 新增：设置上传视频由于时长
+  // 换了一个视频/移除视频时清空裁剪选区——旧选区是针对上一个视频选的，不该继续生效
+  setUploadedVideoTrimStart?: (value: number | null) => void,
+  setUploadedVideoTrimEnd?: (value: number | null) => void
 ) => {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
 
@@ -62,6 +67,7 @@ export const useVideoUpload = (
       logger.info('[useVideoUpload] 视频元数据:', metadata)
 
       // 仅在显式提供约束时校验（由模型 inputLimits.videoConstraints 驱动）
+      // 文件大小不在此处校验：超限会在生成提交时本地压缩，而不是拒绝上传
       if (validationOptions) {
         const validation = validateVideo(metadata, validationOptions)
         if (!validation.valid) {
@@ -94,6 +100,10 @@ export const useVideoUpload = (
         setUploadedVideoDuration(metadata.duration)
       }
 
+      // 新视频上传，清空上一个视频的裁剪选区
+      setUploadedVideoTrimStart?.(null)
+      setUploadedVideoTrimEnd?.(null)
+
       setIsProcessingVideo(false)
 
       logger.info('', '[useVideoUpload] 视频上传完成（未读取内容，节省内存）')
@@ -110,6 +120,8 @@ export const useVideoUpload = (
     setUploadedVideoFilePaths,
     setUploadedVideoFiles,
     setUploadedVideos,
+    setUploadedVideoTrimStart,
+    setUploadedVideoTrimEnd,
     validationOptions
   ])
 
@@ -123,7 +135,9 @@ export const useVideoUpload = (
     if (setUploadedVideoDuration) {
       setUploadedVideoDuration(0)
     }
-  }, [setUploadedVideos, setUploadedVideoFiles, setUploadedVideoFilePaths, setUploadedVideoDuration])
+    setUploadedVideoTrimStart?.(null)
+    setUploadedVideoTrimEnd?.(null)
+  }, [setUploadedVideos, setUploadedVideoFiles, setUploadedVideoFilePaths, setUploadedVideoDuration, setUploadedVideoTrimStart, setUploadedVideoTrimEnd])
 
   /**
    * 替换视频
@@ -141,4 +155,3 @@ export const useVideoUpload = (
     handleVideoReplace
   }
 }
-

@@ -14,6 +14,8 @@ import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ModelDefinition, ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
 import { readImageInfo } from '@/commands/image'
+import { compressVideoToFit, readVideoInfo, trimVideoSource } from '@/commands/video'
+import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { recordApiTrace } from '@/utils/testMode'
 import {
 
@@ -115,6 +117,129 @@ function getFirstImageSource(params: DynamicValueMap): string | null {
   }
 
   return null
+}
+
+function getFirstVideoSource(params: DynamicValueMap): string | null {
+  const candidates: DynamicValue[] = [params.uploadedVideoFilePaths, params.videos]
+  for (const candidate of candidates) {
+    if (!isStringArray(candidate)) {
+      continue
+    }
+
+    const first = candidate.find((item) => item.trim().length > 0)
+    if (first) {
+      return first
+    }
+  }
+
+  return null
+}
+
+function replaceVideoSourceInParams(params: DynamicValueMap, oldSource: string, newSource: string): DynamicValueMap {
+  const next = { ...params }
+  for (const key of ['uploadedVideoFilePaths', 'videos'] as const) {
+    const candidate = next[key]
+    if (!isStringArray(candidate)) {
+      continue
+    }
+    const index = candidate.indexOf(oldSource)
+    if (index === -1) {
+      continue
+    }
+    const updated = [...candidate]
+    updated[index] = newSource
+    next[key] = updated
+  }
+  return next
+}
+
+/**
+ * 体积超限的视频在生成提交时压缩，而不是上传时拦截/拒绝：上传体验保持即时，
+ * 压缩耗时由已经启动的任务进度条覆盖，用户感知更"无感"。已在限制内时
+ * compressVideoToFit 内部直接短路返回原路径，这里不会产生多余开销。
+ */
+async function compressFirstVideoIfNeeded(model: ModelDefinition, params: DynamicValueMap): Promise<DynamicValueMap> {
+  const firstVideoSource = getFirstVideoSource(params)
+  if (!firstVideoSource) {
+    return params
+  }
+
+  const limits = resolveInputLimits(model.meta.id, params)
+  const maxSizeMB = limits.videoConstraints?.maxSizeMB
+  if (!maxSizeMB) {
+    return params
+  }
+
+  try {
+    const compressed = await compressVideoToFit(firstVideoSource, maxSizeMB)
+    if (compressed.path === firstVideoSource) {
+      return params
+    }
+    return replaceVideoSourceInParams(params, firstVideoSource, compressed.path)
+  } catch (error) {
+    logger.warn('[GenerationService] 视频压缩失败，使用原始文件继续生成', error)
+    return params
+  }
+}
+
+/**
+ * 裁剪窗口确认时只记录用户选中的 [start, end]（uploadedVideoTrimStart/End），不立即跑 ffmpeg；
+ * 真正切出这段画面发生在这里——生成提交那一刻，藏在已经在走的任务进度条后面。
+ * 作用在 compressFirstVideoIfNeeded 之后（即已压缩、关键帧已铺密的版本上），裁剪可以一直
+ * 用代价极低的流复制，且能精确卡在用户选的秒数上。trimVideoSource 内部已有哈希缓存，
+ * 同一个源 + 同一段 [start,end] 重复提交（如改了别的参数再生成一次）不会重复编码。
+ */
+async function trimFirstVideoIfSelected(params: DynamicValueMap): Promise<DynamicValueMap> {
+  const start = params.uploadedVideoTrimStart
+  const end = params.uploadedVideoTrimEnd
+  if (typeof start !== 'number' || typeof end !== 'number' || !(end > start)) {
+    return params
+  }
+
+  const source = getFirstVideoSource(params)
+  if (!source) {
+    return params
+  }
+
+  try {
+    const result = await trimVideoSource(source, start, end)
+    return replaceVideoSourceInParams(params, source, result.path)
+  } catch (error) {
+    logger.warn('[GenerationService] 视频裁剪失败，使用未裁剪版本继续生成', error)
+    return params
+  }
+}
+
+async function readVideoDurationSeconds(videoSource: string): Promise<number | null> {
+  try {
+    const info = await readVideoInfo(videoSource)
+    return info.durationSeconds > 0 ? info.durationSeconds : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * request.builder 在 Node VM 中执行、无法读取真实视频时长；这里在生成前统一探测
+ * "第一个视频输入"的真实时长，写入 __firstVideoDurationSeconds，供需要 start/end
+ * 截取秒数的视频模型（如 Gemini Omni 的 video_list）直接读取，而不必各自重复探测。
+ */
+async function attachFirstVideoDuration(params: DynamicValueMap): Promise<DynamicValueMap> {
+  const firstVideoSource = getFirstVideoSource(params)
+  if (!firstVideoSource) {
+    if (params.__firstVideoDurationSeconds === undefined) {
+      return params
+    }
+    const next = { ...params }
+    delete next.__firstVideoDurationSeconds
+    return next
+  }
+
+  const durationSeconds = await readVideoDurationSeconds(firstVideoSource)
+  if (durationSeconds === null) {
+    return params
+  }
+  return { ...params, __firstVideoDurationSeconds: durationSeconds }
 }
 
 type SmartAspectResolveReason = 'reference-image' | 'fallback-square' | 'fallback-nearest'
@@ -453,7 +578,10 @@ export class GenerationService {
       progressTracker?.start()
 
       const normalized = await normalizeSmartAspectParams(model, sourceParams)
-      const runtimeParams = attachUploadRuntimeParams(normalized.params)
+      const paramsWithCompressedVideo = await compressFirstVideoIfNeeded(model, normalized.params)
+      const paramsWithTrimmedVideo = await trimFirstVideoIfSelected(paramsWithCompressedVideo)
+      const paramsWithVideoDuration = await attachFirstVideoDuration(paramsWithTrimmedVideo)
+      const runtimeParams = attachUploadRuntimeParams(paramsWithVideoDuration)
       const preflightSummary = buildGeneratePreflightSummary(sourceParams, runtimeParams, normalized.report)
       logger.info('[GenerationService] 开始生成', {
         event: 'generation.generate.start',

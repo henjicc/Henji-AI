@@ -104,7 +104,12 @@
       "image": "Image",
       "video": "Video",
       "audio": "Audio",
-      "upload": "Upload"
+      "upload": "Upload",
+      "videoTrim": "Trim",
+      "videoTrimTitle": "Trim Video Clip",
+      "videoTrimProcessing": "Processing…",
+      "videoTrimReadFailed": "Failed to read video info",
+      "videoTrimFailed": "Failed to process video"
     },
     "modelRow": {
       "label": "Model",

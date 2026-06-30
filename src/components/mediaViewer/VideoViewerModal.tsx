@@ -22,9 +22,12 @@ export interface VideoViewerModalProps {
   filePath?: string
   onClose: () => void
   onDownload?: (filePath: string) => void
+  /** 若视频有关联的裁剪选区，自动从 start 开始播放并在 end 处跳回——
+   *  进度条仍显示完整时长，满足"看起来是完整视频，但只播放选中段"的体验要求 */
+  trimRange?: { start: number; end: number }
 }
 
-export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload }: VideoViewerModalProps): JSX.Element | null {
+export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
   const [isVisible, setIsVisible] = useState(open)
   const [overlayOpacity, setOverlayOpacity] = useState(0)
@@ -430,13 +433,26 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
                 setVideoDuration(videoRef.current.duration || 0)
                 updateRenderedVideoRect()
                 if (autoPlayOnOpen) {
+                  // 有裁剪选区时从 start 处开始播放，而不是从 0——
+                  // 但 videoDuration 仍用完整时长，进度条不做范围内重新归一化
+                  if (trimRange && trimRange.start > 0) {
+                    videoRef.current.currentTime = trimRange.start
+                  }
                   videoRef.current.play().catch(() => {})
                   setAutoPlayOnOpen(false)
                 }
               }
             }}
             onTimeUpdate={() => {
-              if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0)
+              const v = videoRef.current
+              if (!v) return
+              setCurrentTime(v.currentTime || 0)
+              // 有裁剪选区时：超出 end 自动暂停并跳回 start——和 VideoTrimModal 里已有的
+              // "预览只在选区内播放"逻辑一致，让用户在历史记录里也只看到选中的这段
+              if (trimRange && v.currentTime >= trimRange.end) {
+                v.pause()
+                v.currentTime = trimRange.start
+              }
             }}
             onPlaying={() => {
               setIsBuffering(false)
@@ -501,6 +517,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           onDownload={onDownload}
           filePath={filePath}
           isBuffering={isBuffering}
+          trimRange={trimRange}
         />
       </div>
     </div>

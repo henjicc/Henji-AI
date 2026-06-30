@@ -46,6 +46,8 @@ interface VideoViewerControlsProps {
   onDownload?: (filePath: string) => void
   filePath?: string
   isBuffering: boolean
+  /** 若有保存过的裁剪选区，在进度条上高亮标出对应区间，帮助用户理解播放为何在某点跳回 */
+  trimRange?: { start: number; end: number }
 }
 
 export function VideoViewerControls({
@@ -75,6 +77,7 @@ export function VideoViewerControls({
   onDownload,
   filePath,
   isBuffering,
+  trimRange,
 }: VideoViewerControlsProps): JSX.Element {
   const { t } = useI18n()
 
@@ -105,6 +108,16 @@ export function VideoViewerControls({
           onMouseLeave={() => setIsDraggingProgress(false)}
         >
           <div ref={progressFillRef} className="progress-bar" />
+          {trimRange && videoDuration > 0 && (
+            <div
+              className="absolute inset-y-0 pointer-events-none rounded-sm"
+              style={{
+                left: `${(trimRange.start / videoDuration) * 100}%`,
+                width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,
+                background: 'rgba(var(--text-rgb),0.25)',
+              }}
+            />
+          )}
         </div>
 
         <div className="controls-main">

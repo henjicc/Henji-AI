@@ -1,8 +1,11 @@
 import type { Linkage } from '@/core/types'
 import { MODE_FALLBACK, MODE_SUPPORT_MATRIX, resolveEditionFromParams, resolveModeFromParams } from './vidu-q2.constants'
+import { countUploadedImages } from './mediaSources'
 
+// 画布媒体行键是 images，对话/工具面板实时上传状态键是 uploadedImages；
+// 之前只查 uploadedImages，导致画布上传图片永远触发不了下面这些自动切换。
 function getImageCount(params: DynamicValueMap): number {
-  return Array.isArray(params.uploadedImages) ? params.uploadedImages.length : 0
+  return countUploadedImages(params)
 }
 
 export const viduQ2Linkages: Linkage[] = [
@@ -45,7 +48,7 @@ export const viduQ2Linkages: Linkage[] = [
     }
   },
   {
-    trigger: ['ppioViduQ2ProMode', 'uploadedImages'],
+    trigger: ['ppioViduQ2ProMode', 'uploadedImages', 'images'],
     effect: 'autoSwitch',
     target: 'ppioViduQ2ProMode',
     condition: (_, allParams) => {
@@ -54,7 +57,7 @@ export const viduQ2Linkages: Linkage[] = [
     value: false
   },
   {
-    trigger: ['ppioViduQ2Mode', 'uploadedImages', 'ppioViduQ2ProMode', 'ppioViduQ2FastMode'],
+    trigger: ['ppioViduQ2Mode', 'uploadedImages', 'images', 'ppioViduQ2ProMode', 'ppioViduQ2FastMode'],
     effect: 'autoSwitch',
     target: 'ppioViduQ2FastMode',
     condition: (_, allParams) => {
@@ -68,7 +71,7 @@ export const viduQ2Linkages: Linkage[] = [
     value: true
   },
   {
-    trigger: ['ppioViduQ2Mode', 'uploadedImages', 'ppioViduQ2ProMode', 'ppioViduQ2FastMode'],
+    trigger: ['ppioViduQ2Mode', 'uploadedImages', 'images', 'ppioViduQ2ProMode', 'ppioViduQ2FastMode'],
     effect: 'autoSwitch',
     target: 'ppioViduQ2FastMode',
     condition: (_, allParams) => {
@@ -82,7 +85,7 @@ export const viduQ2Linkages: Linkage[] = [
     value: false
   },
   {
-    trigger: ['uploadedImages', 'ppioViduQ2Mode'],
+    trigger: ['uploadedImages', 'images', 'ppioViduQ2Mode'],
     effect: 'autoSwitch',
     target: 'ppioViduQ2Mode',
     condition: (_, allParams) => {
@@ -93,7 +96,7 @@ export const viduQ2Linkages: Linkage[] = [
     value: 'start-end-frame'
   },
   {
-    trigger: ['uploadedImages', 'ppioViduQ2Mode'],
+    trigger: ['uploadedImages', 'images', 'ppioViduQ2Mode'],
     effect: 'autoSwitch',
     target: 'ppioViduQ2Mode',
     condition: (_, allParams) => {
@@ -193,7 +196,7 @@ export const viduQ2Linkages: Linkage[] = [
     }
   },
   {
-    trigger: ['ppioViduQ2Mode', 'ppioViduQ2ProMode', 'ppioViduQ2FastMode', 'uploadedImages'],
+    trigger: ['ppioViduQ2Mode', 'ppioViduQ2ProMode', 'ppioViduQ2FastMode', 'uploadedImages', 'images'],
     effect: 'hide',
     targets: ['ppioViduQ2Style'],
     condition: (_, allParams) => {

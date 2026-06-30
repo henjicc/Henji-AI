@@ -71,17 +71,33 @@ function isInsideRoot(targetPath: string, rootPath: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
-function assertAllowedMediaPath(targetPath: string): void {
-  assertValidMediaPath(targetPath)
-
-  const allowedRoots = [
+function getAllowedMediaRoots(): string[] {
+  return [
     getBaseLocalDataDir(),
     app.getPath('downloads'),
     app.getPath('temp') || os.tmpdir(),
     ...allowedMediaRoots,
   ]
+}
 
-  if (!allowedRoots.some((rootPath) => isInsideRoot(targetPath, rootPath))) {
+/**
+ * 不抛错的布尔版本，供渲染层在选用"直接复用原文件路径"这类快路径之前
+ * 先确认 henji-media:// 协议真的能读到这个路径——否则会出现"路径有效但协议
+ * 403 拒绝"的静默失败（典型表现：<video src> 既不显示缩略图也放不了）。
+ */
+export function isPathWithinAllowedMediaRoots(targetPath: string): boolean {
+  try {
+    assertValidMediaPath(targetPath)
+  } catch {
+    return false
+  }
+  return getAllowedMediaRoots().some((rootPath) => isInsideRoot(targetPath, rootPath))
+}
+
+function assertAllowedMediaPath(targetPath: string): void {
+  assertValidMediaPath(targetPath)
+
+  if (!getAllowedMediaRoots().some((rootPath) => isInsideRoot(targetPath, rootPath))) {
     throw new MediaProtocolError(403, 'Media path is outside allowed roots')
   }
 }

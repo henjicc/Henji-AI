@@ -1,0 +1,181 @@
+import { execFile } from 'node:child_process'
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+
+import { getUploadsDir } from '../image/path-utils'
+import { normalizeLocalSource } from '../image/source'
+import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
+import type {
+  CompressVideoToFitPayloadDto,
+  CompressVideoToFitResultDto,
+  TrimVideoSourcePayloadDto,
+  TrimVideoSourceResultDto,
+  VideoInfoResultDto,
+} from './types'
+
+const MAX_BUFFER_BYTES = 32 * 1024 * 1024
+
+function execFileAsync(binaryPath: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(binaryPath, args, { maxBuffer: MAX_BUFFER_BYTES }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${path.basename(binaryPath)} failed: ${error.message}\n${stderr}`))
+        return
+      }
+      resolve({ stdout, stderr })
+    })
+  })
+}
+
+async function resolveLocalVideoPath(source: string): Promise<string> {
+  const trimmed = source.trim()
+  if (!trimmed) throw new Error('Video source is empty')
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return await downloadToTempFile(trimmed)
+  }
+  const localPath = normalizeLocalSource(trimmed)
+  await fs.promises.access(localPath, fs.constants.R_OK)
+  return localPath
+}
+
+async function downloadToTempFile(url: string): Promise<string> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Remote video request failed with status ${response.status}`)
+  }
+  const bytes = Buffer.from(await response.arrayBuffer())
+  const ext = path.extname(new URL(url).pathname) || '.mp4'
+  const targetPath = path.join(getUploadsDir(), `${crypto.randomUUID()}${ext}`)
+  await fs.promises.writeFile(targetPath, bytes)
+  return targetPath
+}
+
+interface FfprobeStream {
+  codec_type?: string
+  width?: number
+  height?: number
+}
+
+interface FfprobeOutput {
+  format?: { duration?: string }
+  streams?: FfprobeStream[]
+}
+
+export async function readVideoInfo(source: string): Promise<VideoInfoResultDto> {
+  const ffprobePath = await loadFfprobePath()
+  const localPath = await resolveLocalVideoPath(source)
+  const { stdout } = await execFileAsync(ffprobePath, [
+    '-v', 'quiet',
+    '-print_format', 'json',
+    '-show_format',
+    '-show_streams',
+    localPath,
+  ])
+  const parsed = JSON.parse(stdout) as FfprobeOutput
+  const videoStream = parsed.streams?.find((stream) => stream.codec_type === 'video')
+  const durationSeconds = Number(parsed.format?.duration ?? 0)
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error('Unable to read video duration')
+  }
+  return {
+    durationSeconds,
+    width: videoStream?.width ?? 0,
+    height: videoStream?.height ?? 0,
+  }
+}
+
+export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promise<TrimVideoSourceResultDto> {
+  const { source, startSeconds, endSeconds } = payload
+  const durationSeconds = endSeconds - startSeconds
+  if (!(durationSeconds > 0)) {
+    throw new Error('endSeconds must be greater than startSeconds')
+  }
+
+  const ffmpegPath = await loadFfmpegPath()
+  const localPath = await resolveLocalVideoPath(source)
+
+  const digest = crypto
+    .createHash('md5')
+    .update(`${localPath}:${startSeconds}:${endSeconds}:${(await fs.promises.stat(localPath)).mtimeMs}`)
+    .digest('hex')
+  // 输出容器跟随源文件后缀（而不是统一发 .mp4）：纯流复制时输出容器必须和源编码兼容
+  // （比如源是 webm/VP9，复制进 .mp4 容器大概率失败），同容器内裁切天然兼容。
+  const sourceExt = path.extname(localPath) || '.mp4'
+  const outputPath = path.join(getUploadsDir(), `trim-${digest}${sourceExt}`)
+
+  if (!fs.existsSync(outputPath)) {
+    // 只做时间切割、不重新编码（-c copy）：直接按关键帧复制流，裁剪近乎瞬间完成，
+    // 代价是起止点会贴最近的关键帧（通常偏差不到一两秒）。本地裁剪不追求帧级精确，
+    // 体积/画质有需要会在生成提交时单独跑 compressVideoToFit 重新编码。
+    const isMp4Like = ['.mp4', '.m4v', '.mov'].includes(sourceExt.toLowerCase())
+    await execFileAsync(ffmpegPath, [
+      '-y',
+      '-ss', String(startSeconds),
+      '-i', localPath,
+      '-t', String(durationSeconds),
+      '-c', 'copy',
+      '-avoid_negative_ts', 'make_zero',
+      // movflags 是 mov/mp4 muxer 专用选项，喂给 webm/mkv 等容器会报错，按容器类型条件附加
+      ...(isMp4Like ? ['-movflags', '+faststart'] : []),
+      outputPath,
+    ])
+  }
+
+  return { path: outputPath, durationSeconds }
+}
+
+/**
+ * 把视频压缩到不超过 maxSizeMB：按目标体积反推平均码率，单遍编码（CRF + 码率上限的约束模式），
+ * preset=medium 取画质/速度中档。已经满足体积要求时直接原样返回，不重复编码。
+ */
+export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto): Promise<CompressVideoToFitResultDto> {
+  const { source, maxSizeMB } = payload
+  const localPath = await resolveLocalVideoPath(source)
+  const stat = await fs.promises.stat(localPath)
+  const maxBytes = Math.floor(maxSizeMB * 1024 * 1024)
+
+  if (stat.size <= maxBytes) {
+    return { path: localPath, sizeBytes: stat.size }
+  }
+
+  const ffmpegPath = await loadFfmpegPath()
+  const info = await readVideoInfo(localPath)
+
+  const audioBitrateBps = 128_000
+  const containerOverheadRatio = 0.92
+  const targetTotalBitsPerSecond = (maxBytes * 8 * containerOverheadRatio) / info.durationSeconds
+  const videoBitrateKbps = Math.round(Math.max(400_000, targetTotalBitsPerSecond - audioBitrateBps) / 1000)
+
+  // 缓存键加版本片段（:kf1）：下面新增了强制关键帧参数，编码产物变了但旧 hash 输入不变，
+  // 不加版本号会导致改动前就压缩过的视频继续复用旧的（关键帧稀疏的）缓存文件。
+  const digest = crypto
+    .createHash('md5')
+    .update(`${localPath}:${maxSizeMB}:${stat.mtimeMs}:kf1`)
+    .digest('hex')
+  const outputPath = path.join(getUploadsDir(), `compressed-${digest}.mp4`)
+
+  if (!fs.existsSync(outputPath)) {
+    await execFileAsync(ffmpegPath, [
+      '-y',
+      '-i', localPath,
+      '-c:v', 'libx264',
+      '-preset', 'medium',
+      '-crf', '26',
+      '-b:v', `${videoBitrateKbps}k`,
+      '-maxrate', `${Math.round(videoBitrateKbps * 1.5)}k`,
+      '-bufsize', `${videoBitrateKbps * 2}k`,
+      // 每 1 秒强制一个关键帧（按演示时间，不依赖帧率）：既然这趟压缩本来就要重新编码，
+      // 顺便把关键帧铺密，让后续裁剪可以一直用代价极低的 -c copy 流复制，且能精确卡在
+      // 任意整数秒边界，不会因为关键帧稀疏导致裁剪点明显跑偏。
+      '-force_key_frames', 'expr:gte(t,n_forced*1)',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputPath,
+    ])
+  }
+
+  const compressedStat = await fs.promises.stat(outputPath)
+  return { path: outputPath, sizeBytes: compressedStat.size }
+}

@@ -164,6 +164,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     modelId: effectiveModelId,
     storedParams: nodeData.params,
     onParamsChange: handleParamsChange,
+    media: { images: effectiveImages },
   })
 
   const handleModelChange = useCallback((nextModelId: string) => {

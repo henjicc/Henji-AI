@@ -55,7 +55,7 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 - 对接已接入的 provider 时，先核对该 provider 在仓库里的既有 route 写法与 runtime 约定，再决定 `endpoints` 填什么；不要只按文档标题猜路径，也不要漏掉现有 provider 统一前缀（例如部分 PPIO 路由实际要走 `/async/...`）。
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
 - Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。
-- 若参数是否显示依赖“是否已上传图片/视频”，先核对前端显隐/联动实际使用的运行时字段名；当前仓库里，参数面板显隐通常依赖 `uploadedImages` / `uploadedVideos`，而 `uploadedFilePaths` 更偏向请求构建。
+- 若参数显隐/联动/计价依赖“是否已上传图片/视频”，必须同时覆盖三种执行场景各自的运行时字段名，不能只查一个：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。只查其中一个键会导致另外两个场景判断错误（参数该隐藏没隐藏、画布里 mode 自动切换不触发、计价按错分支）。优先复用 `src/models/shared/mediaPresence.ts` 的 `hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`（KIE/PPIO 模型可从同目录 `./mediaSources` 导入，已重导出），仅限 `visible.condition`/`linkage`/`pricing.calculator` 使用，不能进 `request.builder`/`endpoints.selector`（会被序列化进独立 VM，import 失效）。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
 - 牢记 runtime 约束：`endpoints.selector` 与 `request.builder` 会被 `scripts/generate-model-manifest.cjs` 序列化为 `selectorJs` / `builderJs`，再由 `electron/main/services/ai-runtime/js-runtime.ts` 在 Node VM 中独立执行；不能依赖模型文件顶层 helper/闭包变量，除非该 helper 已明确存在于 `JS_PRELUDE`，需要的新工具函数应内联在函数体内或同步更新 manifest/runtime 支撑。

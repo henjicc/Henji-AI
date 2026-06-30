@@ -5,6 +5,7 @@ import type { KeystorePlatform } from './keystore'
 import type { SystemPlatform } from './system'
 import type { MediaPlatform } from './media'
 import type { ImagePlatform } from './image'
+import type { VideoPlatform } from './video'
 import type { ClipboardPlatform } from './clipboard'
 import type { DragDropPlatform } from './dragDrop'
 import type { ProjectPackagePlatform } from './projectPackage'
@@ -20,6 +21,7 @@ export interface PlatformRuntime {
   system: SystemPlatform
   media: MediaPlatform
   image: ImagePlatform
+  video: VideoPlatform
   clipboard: ClipboardPlatform
   dragDrop: DragDropPlatform
   projectPackage: ProjectPackagePlatform
@@ -36,6 +38,7 @@ export type {
   SystemPlatform,
   MediaPlatform,
   ImagePlatform,
+  VideoPlatform,
   ClipboardPlatform,
   DragDropPlatform,
   ProjectPackagePlatform,
@@ -50,6 +53,7 @@ export * from './keystore'
 export * from './system'
 export * from './media'
 export * from './image'
+export * from './video'
 export * from './clipboard'
 export * from './dragDrop'
 export * from './projectPackage'

@@ -1,6 +1,8 @@
 import { createLogger } from '@/core/logging'
 import Pica from 'pica'
 import {
+  getPathForFile,
+  isPathAllowedForMedia,
   join,
   mkdir,
   nativeFetch as httpFetch,
@@ -83,6 +85,21 @@ export async function saveUploadVideo(
 ): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
   const mime = file.type || 'video/mp4'
   const ext = mime.includes('webm') ? 'webm' : 'mp4'
+
+  // 桌面端：File 若来自真实磁盘文件（文件选择器/拖拽），直接拿现成路径，
+  // 不需要把整个视频读进内存、算一遍哈希、再写一份重复副本——这对几十上百 MB
+  // 的视频是非常明显的耗时来源。只有合成 Blob（如剪贴板生成）才会落到下面的慢路径。
+  // 但 henji-media:// 协议只允许读取几个白名单根目录下的文件，用户选的视频大概率
+  // 不在这些目录里（桌面、文档、自定义文件夹……）——直接复用这种路径会导致协议
+  // 403 拒绝，<video src> 既不显示缩略图也放不了，且不会报错，必须先确认路径在
+  // 允许范围内才走这条快路径，否则照旧落到下面的慢路径（写进 Uploads 目录，天然在允许范围内）。
+  if (mode === 'persist') {
+    const directPath = getPathForFile(file)
+    if (directPath && await isPathAllowedForMedia(directPath)) {
+      logger.info('[save] upload video reused source path (no copy needed)', directPath)
+      return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
+    }
+  }
 
   const originalBuf = await file.arrayBuffer()
   const bytes = new Uint8Array(originalBuf)
@@ -253,6 +270,22 @@ export async function saveBytesToUploads(
 
   const displaySrc = toDisplaySrc(full)
   return { fullPath: full, displaySrc, relativePath: name }
+}
+
+/**
+ * 判断一个路径是否落在本应用托管的 Uploads 目录内。
+ *
+ * saveUploadVideo 现在可能直接复用用户磁盘上的原始文件路径（见 getPathForFile 快路径），
+ * 不再保证"凡是出现在 uploadedXxxFilePaths 里的路径都是 Uploads 目录下的自有副本"。
+ * 任何要"删除已上传文件"的清理逻辑（如删除历史任务时清理上传源文件）必须先用这个函数确认
+ * 路径在托管目录内，否则可能把用户自己磁盘上的原始文件删掉。
+ */
+export async function isWithinUploadsDir(filePath: string): Promise<boolean> {
+  const uploadsPath = await getUploadsPath()
+  const normalize = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
+  const normalizedUploads = normalize(uploadsPath).replace(/\/$/, '')
+  const normalizedTarget = normalize(filePath)
+  return normalizedTarget === normalizedUploads || normalizedTarget.startsWith(`${normalizedUploads}/`)
 }
 
 export async function deleteUploads(paths: string[]): Promise<void> {

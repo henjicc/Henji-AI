@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
-import { Image as ImageIcon, Music, Video, X } from 'lucide-react';
+import { Image as ImageIcon, Music, Scissors, Video, X } from 'lucide-react';
 
 import { prepareNodeImageFromFile, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import {
@@ -23,6 +23,7 @@ import { UiIconButton, UiInput } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
+import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
 
 interface MediaInputRowProps {
@@ -32,6 +33,14 @@ interface MediaInputRowProps {
   maxCount: number;
   inlineValue: string[];
   onInlineChange: (next: string[]) => void;
+  /** 视频裁剪能力：来自模型 inputLimits.videoConstraints.trim，仅 mediaKind === 'video' 时有意义 */
+  videoTrimMaxClipSeconds?: number;
+  /** 视频体积上限（MB），存在时裁剪确认会顺带按需压缩一次完整视频 */
+  videoTrimMaxSizeMB?: number;
+  /** 已保存的裁剪选区（若有），重新打开裁剪窗口时用它初始化，而不是每次都从头选 */
+  videoTrimRange?: VideoTrimRange | null;
+  /** 确认裁剪只回传选区，不替换 inlineValue 里的视频引用——完整视频始终保留 */
+  onVideoTrimRangeChange?: (range: VideoTrimRange) => void;
 }
 
 const MEDIA_ACCEPT: Record<RowMediaKind, string> = {
@@ -87,10 +96,15 @@ export function MediaInputRow({
   maxCount,
   inlineValue,
   onInlineChange,
+  videoTrimMaxClipSeconds,
+  videoTrimMaxSizeMB,
+  videoTrimRange,
+  onVideoTrimRangeChange,
 }: MediaInputRowProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [viewerVideoUrl, setViewerVideoUrl] = useState<string | null>(null);
+  const [trimTargetIndex, setTrimTargetIndex] = useState<number | null>(null);
   // 节点渲染在 React Flow 缩放过的画布坐标系里：CSS transform 是"本地像素"，
   // 画布缩放会把它再放大/缩小一次，所以跟手位移、让位位移都要先除以 zoom 才能在屏幕上 1:1 还原。
   // 用 getZoom() 在拖拽开始那一刻取一次快照（而非 useViewport() 那样订阅视口、每帧重渲染）。
@@ -296,6 +310,19 @@ export function MediaInputRow({
                 {resolveFileName(url)}
               </span>
             )}
+            {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
+              <UiIconButton
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setTrimTargetIndex(index);
+                }}
+                title={t('node.mediaRow.videoTrim')}
+                className="absolute -left-1.5 -top-1.5 h-4 w-4 border-0 bg-bg-dark/90 p-0.5 text-text-dark opacity-0 shadow transition-opacity group-hover:opacity-100"
+                type="button"
+              >
+                <Scissors className="h-2.5 w-2.5" />
+              </UiIconButton>
+            )}
             {!isConnected && (
               <UiIconButton
                 onClick={(event) => {
@@ -342,6 +369,23 @@ export function MediaInputRow({
           open
           videoUrl={viewerVideoUrl}
           onClose={() => setViewerVideoUrl(null)}
+        />
+      )}
+      {trimTargetIndex !== null && videoTrimMaxClipSeconds && (
+        <VideoTrimModal
+          open
+          previewUrl={resolveImageDisplayUrl(inlineValue[trimTargetIndex])}
+          maxClipSeconds={videoTrimMaxClipSeconds}
+          maxSizeMB={videoTrimMaxSizeMB}
+          resolveSource={async () => inlineValue[trimTargetIndex]}
+          initialRange={videoTrimRange ?? null}
+          onConfirm={(range) => onVideoTrimRangeChange?.(range)}
+          onVideoCompressed={(newPath) => {
+            // 完整视频被压缩成新文件：更新画布媒体行引用，后续生成直接用压缩版本
+            const idx = trimTargetIndex;
+            onInlineChange(inlineValue.map((item, i) => (i === idx ? newPath : item)));
+          }}
+          onClose={() => setTrimTargetIndex(null)}
         />
       )}
     </div>

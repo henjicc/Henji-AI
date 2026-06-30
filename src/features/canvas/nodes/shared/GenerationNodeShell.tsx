@@ -67,6 +67,9 @@ export interface GenerationNodeShellData {
   params?: DynamicValueMap;
   /** 媒体行未连线时的本地内联上传值 */
   mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
+  /** 视频裁剪窗口选中的范围（秒），仅是元数据，不替换 mediaInputs.video 里的完整视频引用 */
+  videoTrimStart?: number;
+  videoTrimEnd?: number;
   [key: string]: DynamicValue;
 }
 
@@ -194,6 +197,31 @@ export const GenerationNodeShell = memo(({
     updateNodeData(id, { mediaInputs: { ...mediaInputs, [kind]: next } });
   }, [id, mediaInputs, updateNodeData]);
 
+  // 裁剪窗口选中的 [start, end] 只是附加在视频引用上的元数据，不替换 mediaInputs.video——
+  // 完整视频始终保留，重新打开裁剪窗口可以在完整时长范围内重新选择。
+  const videoTrimRange = useMemo(
+    () => (
+      typeof data.videoTrimStart === 'number' && typeof data.videoTrimEnd === 'number'
+        ? { start: data.videoTrimStart, end: data.videoTrimEnd }
+        : null
+    ),
+    [data.videoTrimStart, data.videoTrimEnd]
+  );
+  const handleVideoTrimRangeChange = useCallback((range: { start: number; end: number }) => {
+    updateNodeData(id, { videoTrimStart: range.start, videoTrimEnd: range.end });
+  }, [id, updateNodeData]);
+
+  // 换了一个视频（节点切换了引用，不只是同一个视频重新拖了选区）时清空裁剪选区，
+  // 对齐对话面板"换视频重置选区"的逻辑。
+  const primaryVideoRef = useRef<string | null>(null);
+  useEffect(() => {
+    const primaryVideo = effectiveVideos[0] ?? null;
+    if (primaryVideoRef.current !== null && primaryVideoRef.current !== primaryVideo && (data.videoTrimStart !== undefined || data.videoTrimEnd !== undefined)) {
+      updateNodeData(id, { videoTrimStart: undefined, videoTrimEnd: undefined });
+    }
+    primaryVideoRef.current = primaryVideo;
+  }, [effectiveVideos, data.videoTrimStart, data.videoTrimEnd, id, updateNodeData]);
+
   const incomingImageItems = useMemo(
     () =>
       effectiveImages.map((imageUrl, index) => ({
@@ -247,6 +275,7 @@ export const GenerationNodeShell = memo(({
     modelId: effectiveModelId,
     storedParams: data.params,
     onParamsChange: handleParamsChange,
+    media: { images: effectiveImages, videos: effectiveVideos, audios: effectiveAudios },
   });
 
   const handleModelChange = useCallback((nextModelId: string) => {
@@ -306,6 +335,10 @@ export const GenerationNodeShell = memo(({
       ...injectedParamValues,
       prompt,
       text: prompt,
+      // 裁剪窗口选中的 [start, end]（若用户裁剪过）；GenerationService 在生成提交时
+      // 用它对完整视频做一次快速裁剪，不在这里提前处理
+      ...(typeof data.videoTrimStart === 'number' ? { uploadedVideoTrimStart: data.videoTrimStart } : {}),
+      ...(typeof data.videoTrimEnd === 'number' ? { uploadedVideoTrimEnd: data.videoTrimEnd } : {}),
     };
     const estimateParams: DynamicValueMap = {
       ...generationParams,
@@ -371,7 +404,7 @@ export const GenerationNodeShell = memo(({
     } finally {
       setNodeGenerationProgress(newNodeId, null);
     }
-  }, [addEdge, addNode, apiKeyRequiredKey, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
     if (nodeId !== id) {
@@ -464,6 +497,8 @@ export const GenerationNodeShell = memo(({
           onModelChange={handleModelChange}
           onParamsChange={handleParamsChange}
           incomingImages={effectiveImages}
+          videoTrimRange={videoTrimRange}
+          onVideoTrimRangeChange={handleVideoTrimRangeChange}
         />
       </div>
 

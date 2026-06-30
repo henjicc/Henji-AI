@@ -1,4 +1,5 @@
 import { defineModel, sharedFieldText } from '@/core'
+import { countUploadedImages } from './mediaSources'
 
 export const viduQ3Model = defineModel({
   meta: {
@@ -145,54 +146,50 @@ export const viduQ3Model = defineModel({
   ],
   linkages: [
     {
-      trigger: ['uploadedImages', 'ppioViduQ3Mode'],
+      trigger: ['uploadedImages', 'images', 'ppioViduQ3Mode'],
       effect: 'autoSwitch',
       target: 'ppioViduQ3Mode',
       condition: (_, allParams) => {
-        const images = Array.isArray(allParams.uploadedImages) ? allParams.uploadedImages : []
         const mode = typeof allParams.ppioViduQ3Mode === 'string'
           ? allParams.ppioViduQ3Mode
           : 'text-image-to-video'
-        return images.length === 2 && mode !== 'start-end-frame'
+        return countUploadedImages(allParams) === 2 && mode !== 'start-end-frame'
       },
       value: 'start-end-frame'
     },
     {
-      trigger: ['uploadedImages', 'ppioViduQ3Mode'],
+      trigger: ['uploadedImages', 'images', 'ppioViduQ3Mode'],
       effect: 'autoSwitch',
       target: 'ppioViduQ3Mode',
       condition: (_, allParams) => {
-        const images = Array.isArray(allParams.uploadedImages) ? allParams.uploadedImages : []
-        return images.length <= 1 && allParams.ppioViduQ3Mode === 'start-end-frame'
+        return countUploadedImages(allParams) <= 1 && allParams.ppioViduQ3Mode === 'start-end-frame'
       },
       value: 'text-image-to-video'
     },
     {
-      trigger: ['ppioViduQ3Mode', 'ppioViduQ3ProMode', 'uploadedImages'],
+      trigger: ['ppioViduQ3Mode', 'ppioViduQ3ProMode', 'uploadedImages', 'images'],
       effect: 'hide',
       targets: ['ppioViduQ3AspectRatio'],
       condition: (_, allParams) => {
         const mode = allParams.ppioViduQ3Mode
         const isProMode = allParams.ppioViduQ3ProMode === true
-        const images = Array.isArray(allParams.uploadedImages) ? allParams.uploadedImages : []
         if (mode === 'start-end-frame') {
           return true
         }
-        if (images.length > 0 && !isProMode) {
+        if (countUploadedImages(allParams) > 0 && !isProMode) {
           return true
         }
         return false
       }
     },
     {
-      trigger: ['ppioViduQ3Mode', 'ppioViduQ3ProMode', 'uploadedImages'],
+      trigger: ['ppioViduQ3Mode', 'ppioViduQ3ProMode', 'uploadedImages', 'images'],
       effect: 'hide',
       targets: ['ppioViduQ3Style'],
       condition: (_, allParams) => {
         const mode = allParams.ppioViduQ3Mode
         const isProMode = allParams.ppioViduQ3ProMode === true
-        const images = Array.isArray(allParams.uploadedImages) ? allParams.uploadedImages : []
-        return !(mode === 'text-image-to-video' && isProMode && images.length > 0)
+        return !(mode === 'text-image-to-video' && isProMode && countUploadedImages(allParams) > 0)
       }
     },
   ],

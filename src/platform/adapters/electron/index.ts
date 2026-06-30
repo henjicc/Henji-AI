@@ -6,6 +6,7 @@ import { createElectronKeystore } from './keystore'
 import { createElectronSystem } from './system'
 import { createElectronMedia } from './media'
 import { createElectronImage } from './image'
+import { createElectronVideo } from './video'
 import { createElectronClipboard } from './clipboard'
 import { createElectronDragDrop } from './dragDrop'
 import { createElectronProjectPackage } from './projectPackage'
@@ -22,6 +23,7 @@ export function createElectronPlatform(): PlatformRuntime {
     system: createElectronSystem(),
     media: createElectronMedia(),
     image: createElectronImage(),
+    video: createElectronVideo(),
     clipboard: createElectronClipboard(),
     dragDrop: createElectronDragDrop(),
     projectPackage: createElectronProjectPackage(),

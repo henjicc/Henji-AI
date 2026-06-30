@@ -361,6 +361,7 @@ const GenerationWorkspace: React.FC = () => {
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
   const [currentVideoPath, setCurrentVideoPath] = useState<string | undefined>(undefined)
+  const [currentVideoTrimRange, setCurrentVideoTrimRange] = useState<{ start: number; end: number } | undefined>(undefined)
   const [isAudioViewerOpen, setIsAudioViewerOpen] = useState(false)
   const [currentAudioUrl, setCurrentAudioUrl] = useState('')
   const [currentAudioPath, setCurrentAudioPath] = useState<string | undefined>(undefined)
@@ -427,7 +428,7 @@ const GenerationWorkspace: React.FC = () => {
   useEffect(() => {
     return () => clearFilterHideTimer()
   }, [clearFilterHideTimer])
-  const openVideoViewer = (url?: string, filePath?: string) => {
+  const openVideoViewer = (url?: string, filePath?: string, trimRange?: { start: number; end: number }) => {
     const rawUrl = typeof url === 'string' ? url : ''
     const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
     const normalizedUrl = normalizedFilePath
@@ -435,6 +436,7 @@ const GenerationWorkspace: React.FC = () => {
       : (rawUrl ? (splitMulti(rawUrl)[0] ?? '') : '')
     setCurrentVideoUrl(normalizedUrl)
     setCurrentVideoPath(normalizedFilePath)
+    setCurrentVideoTrimRange(trimRange)
     setIsVideoViewerOpen(true)
   }
   const closeVideoViewer = () => {
@@ -605,6 +607,7 @@ const GenerationWorkspace: React.FC = () => {
         open={isVideoViewerOpen}
         videoUrl={currentVideoUrl}
         filePath={currentVideoPath}
+        trimRange={currentVideoTrimRange}
         onClose={closeVideoViewer}
         onDownload={(filePath) => void handleDownloadFromViewer(filePath)}
       />

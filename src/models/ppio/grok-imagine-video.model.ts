@@ -1,5 +1,5 @@
 import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
-import { resolvePpioImageSources, resolvePpioVideoSources, resolvePpioPrimaryVideoSource } from './mediaSources'
+import { hasUploadedImage, hasUploadedVideo, resolvePpioImageSources, resolvePpioVideoSources, resolvePpioPrimaryVideoSource } from './mediaSources'
 
 const SUPPORTED_ASPECT_RATIOS = ['16:9', '1:1', '9:16'] as const
 const SUPPORTED_RESOLUTIONS = ['480p', '720p'] as const
@@ -96,8 +96,7 @@ export const grokImagineVideoModel = defineModel({
       visible: {
         condition: (params) => {
           const mode = params.ppioGrokImagineVideoMode || 'text-image-to-video'
-          const uploadedImages = Array.isArray(params.uploadedImages) ? params.uploadedImages : []
-          return mode === 'text-image-to-video' && uploadedImages.length === 0
+          return mode === 'text-image-to-video' && !hasUploadedImage(params)
         },
         reason: '仅文生视频支持设置宽高比'
       },
@@ -118,13 +117,14 @@ export const grokImagineVideoModel = defineModel({
   ],
   linkages: [
     {
-      trigger: 'uploadedVideos',
+      // trigger 同时挂 uploadedVideos（对话面板键）和 videos（画布键），否则画布上传视频
+      // 不会触发这条 autoSwitch（画布压根没有 uploadedVideos 这个字段可触发）。
+      trigger: ['uploadedVideos', 'videos'],
       effect: 'autoSwitch',
       target: 'ppioGrokImagineVideoMode',
-      condition: (videos, allParams) => {
-        const videoCount = Array.isArray(videos) ? videos.length : 0
+      condition: (_, allParams) => {
         const mode = allParams.ppioGrokImagineVideoMode || 'text-image-to-video'
-        return videoCount > 0 && mode === 'text-image-to-video'
+        return hasUploadedVideo(allParams) && mode === 'text-image-to-video'
       },
       value: 'video-edit'
     }

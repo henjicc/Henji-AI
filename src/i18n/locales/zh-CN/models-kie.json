@@ -1,5 +1,11 @@
 {
   "defs": {
+    "kie-gemini-omni-video": {
+      "meta": {
+        "name": "Gemini Omni",
+        "description": "KIE Gemini Omni 视频生成模型，支持多图参考与视频参考片段"
+      }
+    },
     "kie-grok-imagine-video": {
       "meta": {
         "name": "Grok Imagine 视频",

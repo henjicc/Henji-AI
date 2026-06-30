@@ -25,7 +25,7 @@ export interface TaskCardProps {
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
-  onOpenVideoViewer: (url: string, filePath?: string) => void
+  onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
 }
 
@@ -81,6 +81,18 @@ const TaskCard = React.memo(function TaskCard({
   const handleVideoClick = (url: string, filePath?: string) => {
     if (shouldIgnoreClick()) return
     onOpenVideoViewer(url, filePath)
+  }
+
+  // 点击历史记录里"输入视频"的缩略图：如果这个任务有保存过的裁剪选区，
+  // 把它带进播放器，让播放器只在选区内播放——结果视频不受影响，用 handleVideoClick。
+  const handleInputVideoClick = (url: string, filePath?: string) => {
+    if (shouldIgnoreClick()) return
+    const trimStart = task.options?.uploadedVideoTrimStart
+    const trimEnd = task.options?.uploadedVideoTrimEnd
+    const trimRange = typeof trimStart === 'number' && typeof trimEnd === 'number'
+      ? { start: trimStart, end: trimEnd }
+      : undefined
+    onOpenVideoViewer(url, filePath, trimRange)
   }
 
   const modelName = getModelDisplayName(task.model)
@@ -283,7 +295,7 @@ const TaskCard = React.memo(function TaskCard({
           uploadedFilePaths={task.uploadedFilePaths}
           uploadedVideoFilePaths={task.uploadedVideoFilePaths}
           onOpenImage={handleImageClick}
-          onOpenVideo={handleVideoClick}
+          onOpenVideo={handleInputVideoClick}
           onStartImageDrag={startImageDrag}
           onStartVideoDrag={startVideoDrag}
           onStartImageNativeDrag={startImageNativeDrag}

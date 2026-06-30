@@ -67,7 +67,7 @@ return (
 
 要点：**没有手写的 `target` Handle**——图片输入完全交给 `MediaInputRow`（节点已声明 `targetHandleMode: 'rows'`）。
 
-## 三个容易漏改的地方（都是"看起来标准但行为不对"的根源）
+## 四个容易漏改的地方（都是"看起来标准但行为不对"的根源）
 
 ### 1. 本地上传 / 上游连线双态要全链路用 `effectiveImages`
 
@@ -87,7 +87,22 @@ const effectiveImages = useMemo(
 - 生成请求的 `images`/`uploadedFilePaths` 字段
 - `ModelInputRow` 的 `incomingImages` prop（用于参数面板里的智能宽高比/缩略图展示）
 
-### 2. 图片行数量上限决定要不要渲染这一行
+### 2. `useNodeModelParams` 要传 `media`，否则参数显隐/计价/联动在画布里不会响应本地上传
+
+```ts
+const { schema, values: modelParamValues, setParam } = useNodeModelParams({
+  modelId: effectiveModelId,
+  storedParams: nodeData.params,
+  onParamsChange: handleParamsChange,
+  media: { images: effectiveImages /*, videos: effectiveVideos, audios: effectiveAudios 视节点支持的媒体类型而定 */ },
+});
+```
+
+`useNodeModelParams` 返回的 `modelParamValues`（也就是上面 `NodeParamRows`/`PriceEstimate`/`resolveInputLimits` 共用的那个 `values`/`params`）默认**不包含** `images`/`videos`/`audios`——这两个键只在用户点"生成"那一刻才会临时拼进请求参数，不会出现在驱动 UI 渲染的这份状态里。不传 `media`，模型 schema 里"上传图片后隐藏某参数"、"有视频输入时价格不同"、"上传 2 张图自动切首尾帧"这类依赖媒体状态的 `visible.condition`/`pricing.calculator`/`linkage` 在画布里会全部失效（对话/工具面板不受影响，因为那边走的是另一套已经同步好的状态）——而且不会报错，是"看起来接上了但永远拿不到真实媒体"的静默失败，必须主动核对。
+
+**例外**：如果某处额外调用了 `useNodeModelParams` 只是为了渲染一个不依赖媒体状态的小型摘要（比如 `NodeModelParamsControls` 的参数 chip 文案），且这个实例和主实例共享同一份 `storedParams`/`onParamsChange`，**不要**给它传 `media`——传了反而会让它把"没有媒体"误判成真实状态，跑 `autoSwitch` 类联动时可能撤销主实例已经做出的正确切换。`media` 是否传，只看这个 `useNodeModelParams` 实例是不是该节点"持有真实媒体状态"的那一个。
+
+### 3. 图片行数量上限决定要不要渲染这一行
 
 ```ts
 const imageRowMax = useMemo(
@@ -100,7 +115,7 @@ const imageRowMax = useMemo(
 
 不要假设"这个节点类型永远有图片输入"就跳过这个判断——模型切换后限额可能变成 0（极少数模型场景），这时不该渲染空的图片行。
 
-### 3. 动态行数 → 动态节点高度
+### 4. 动态行数 → 动态节点高度
 
 特殊面板（格子网格）和标准行区共享节点总高度，而标准行区的行数会随"是否有图片行" + "当前模型有多少个可见参数"变化。如果节点高度是手算的固定值，行数变化时会挤压/裁切专属面板。做法：
 

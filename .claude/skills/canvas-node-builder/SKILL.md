@@ -135,6 +135,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 
 - **模型覆盖**：用 `getConnectedParamIds`/`collectInputValues`（`graphValueResolver.ts`）算出 `overrideModelId`，`effectiveModelId = overrideModelId ?? selectedModelId`，所有 schema/生成逻辑用 `effectiveModelId`，节点自身存储字段仍用 `selectedModelId`。完整写法照抄 `GenerationNodeShell.tsx` 第 207-254 行或 `StoryboardGenNode.tsx`。
 - **本地上传双态**：节点 data 加 `mediaInputs?: Partial<Record<RowMediaKind, string[]>>` 字段；`effectiveImages = incomingImages.length > 0 ? incomingImages : (mediaInputs.image ?? [])`；所有"用图片做什么"的逻辑（生成参数、智能宽高比检测、@引用列表）都要用 `effectiveImages`，不要漏改成只用 `incomingImages`。
+- **`useNodeModelParams` 要传 `media`**：调用处补上 `media: { images: effectiveImages, videos: effectiveVideos, audios: effectiveAudios }`（按节点实际支持的媒体类型取舍），否则 `modelParamValues` 里不会有 `images`/`videos`/`audios`，模型 schema 里依赖"是否已上传图片/视频"的 `visible.condition`/`pricing.calculator`/`linkage` 在画布里会静默失效（不报错，只是永远判断成"没有媒体"）。只有节点自己持有真实媒体状态时才传；如果是另一个共享同一份 `storedParams` 的次要 `useNodeModelParams` 实例（如参数摘要 chip），不要传。详见 [references/special-node-pattern.md](references/special-node-pattern.md) 第 2 点。
 - **数量上限**：`resolveInputLimits(effectiveModelId, modelParamValues).images.max` 决定 `MediaInputRow` 的 `maxCount`，同时决定要不要渲染这一行（`max > 0` 才渲染）。
 - **生成按钮**：`nodeRegistry.ts` 里该节点的 `capabilities.toolbarGenerate: true`，节点内部 `useEffect(() => canvasEventBus.subscribe('generation/run', ({nodeId}) => { if (nodeId === id) void handleGenerate() }), [...])`。**不要**在节点内容区画一个"生成"按钮——AI 图片/视频节点都没有，生成由选中节点后浮出的顶部工具条触发。
 - **连接端口**：`nodeRegistry.ts` 加 `connectivity.targetHandleMode: 'rows'`；如果这是从 legacy 单一 `target` Handle 迁移过来的旧节点类型，必须同时检查 `nodeMigrations.ts` 的 `migrateLegacyTargetHandle` 是否已覆盖该类型（它按 `ports.target.accepts` 只有一种媒体类型时自动迁移旧边，多媒体类型节点需要单独处理，不要假设自动生效）。
@@ -145,5 +146,6 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 - [ ] 没有手写的模型选择 chip / 媒体缩略图 / 逐行参数布局（这些是 `ModelInputRow`/`MediaInputRow`/`NodeParamRows` 的职责）
 - [ ] 没有手写单一 `id="target"` 的 Handle 来接收媒体（`targetHandleMode: 'rows'` + `MediaInputRow` 替代）
 - [ ] 没有节点内置"生成"按钮（`capabilities.toolbarGenerate` + `canvasEventBus` 替代）
+- [ ] 节点自身的 `useNodeModelParams` 调用传了 `media`（除非它是共享 `storedParams` 的次要实例）
 - [ ] `nodeRegistry.ts` 的 `CanvasNodeDefinition` 字段填全，对照 [references/node-registry-fields.md](references/node-registry-fields.md)
 - [ ] 跑 `npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && npm run lint && npx tsc --noEmit -p tsconfig.json`

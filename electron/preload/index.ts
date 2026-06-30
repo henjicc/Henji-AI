@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
@@ -24,6 +24,7 @@ import type {
   HenjiShellApi,
   HenjiUpdaterApi,
   HenjiUpdaterEvent,
+  HenjiVideoApi,
   HenjiWindowApi,
   HenjiWindowStatePayload,
 } from './api'
@@ -192,6 +193,8 @@ const httpApi: HenjiHttpApi = {
 
 const mediaApi: HenjiMediaApi = {
   allowRoot: (rootPath) => nativeInvoke('media:allowRoot', { rootPath }),
+  isPathAllowed: (targetPath) => nativeInvoke('media:isPathAllowed', { targetPath }),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 }
 
 const clipboardApi: HenjiClipboardApi = {
@@ -235,6 +238,12 @@ const imageApi: HenjiImageApi = {
   saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => nativeInvoke('image:saveImageSourceToDirectory', { source, targetDir, suggestedFileName }),
   saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => nativeInvoke('image:saveImageSourceToAppDebugDir', { source, category, suggestedFileName }),
   readImageInfo: (source) => nativeInvoke('image:readImageInfo', { source }),
+}
+
+const videoApi: HenjiVideoApi = {
+  readVideoInfo: (source) => nativeInvoke('video:readVideoInfo', { source }),
+  trimVideoSource: (payload) => nativeInvoke('video:trimVideoSource', payload),
+  compressVideoToFit: (payload) => nativeInvoke('video:compressVideoToFit', payload),
 }
 
 const loggingApi: HenjiLoggingApi = {
@@ -287,6 +296,7 @@ const api: HenjiNativeApi = {
   http: httpApi,
   media: mediaApi,
   image: imageApi,
+  video: videoApi,
   clipboard: clipboardApi,
   drag: dragApi,
   projectPackage: projectPackageApi,

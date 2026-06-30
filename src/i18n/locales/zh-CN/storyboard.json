@@ -104,7 +104,12 @@
       "image": "图片",
       "video": "视频",
       "audio": "音频",
-      "upload": "上传"
+      "upload": "上传",
+      "videoTrim": "裁剪",
+      "videoTrimTitle": "裁剪视频片段",
+      "videoTrimProcessing": "处理中…",
+      "videoTrimReadFailed": "读取视频信息失败",
+      "videoTrimFailed": "视频处理失败"
     },
     "modelRow": {
       "label": "模型",

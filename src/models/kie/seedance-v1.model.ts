@@ -3,7 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
-import { resolveKieImageSources } from './mediaSources'
+import { hasUploadedImage, resolveKieImageSources } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -82,7 +82,7 @@ export const kieSeedanceV1Model = defineModel({
       visible: {
         condition: (params: DynamicValueMap) =>
           params.kieSeedanceV1Version === 'pro' &&
-          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) > 0
+          hasUploadedImage(params)
       }
     },
     {
@@ -103,8 +103,7 @@ export const kieSeedanceV1Model = defineModel({
       name: sharedFieldText('aspectRatio'),
       default: 'smart',
       visible: {
-        condition: (params: DynamicValueMap) =>
-          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
+        condition: (params: DynamicValueMap) => !hasUploadedImage(params)
       },
       options: [
         { value: 'smart', label: sharedOptionText('smart') },

@@ -3,7 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
-import { resolveKieImageSources, resolveKiePrimaryVideoSource } from './mediaSources'
+import { hasUploadedImage, resolveKieImageSources, resolveKiePrimaryVideoSource } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -98,7 +98,7 @@ export const kieKlingV26Model = defineModel({
       visible: {
         condition: (params: DynamicValueMap) =>
           params.kieKlingV26Mode !== 'motion-control' &&
-          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
+          !hasUploadedImage(params)
       },
       options: [
         { value: '16:9', label: '16:9' },

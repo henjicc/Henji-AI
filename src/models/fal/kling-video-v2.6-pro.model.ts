@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
+import { hasUploadedImage } from '@/models/shared/mediaPresence'
 
 export const klingVideoV26ProModel = defineModel({
   meta: {
@@ -127,7 +128,7 @@ export const klingVideoV26ProModel = defineModel({
       visible: {
         condition: (params: DynamicValueMap) =>
           params.falKlingV26ProMode !== 'motion-control' &&
-          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
+          !hasUploadedImage(params)
       },
       options: [
         { value: '16:9', label: '16:9' },
@@ -147,7 +148,7 @@ export const klingVideoV26ProModel = defineModel({
       visible: {
         condition: (params: DynamicValueMap) =>
           params.falKlingV26ProMode !== 'motion-control' &&
-          ((params.uploadedImages as DynamicValue[] | undefined)?.length ?? 0) === 0
+          !hasUploadedImage(params)
       }
     },
     {

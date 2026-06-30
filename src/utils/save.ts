@@ -13,6 +13,7 @@ export {
   saveBase64ToUploads,
   saveBytesToUploads,
   deleteUploads,
+  isWithinUploadsDir,
   dataUrlToBlob,
   ensureCompressedJpegBytesWithPica,
 } from './save/uploads'

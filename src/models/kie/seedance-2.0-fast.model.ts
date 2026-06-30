@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
+import { hasUploadedVideo } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -185,7 +186,7 @@ export const kieSeedance20FastModel = defineModel({
       const resolution = String(params.kieSeedance20FastResolution || '720p')
       const duration = Number(params.kieSeedance20FastDuration || 5)
       const mode = params.kieSeedance20FastMode === 'reference-to-video' ? 'reference-to-video' : 'text-image-to-video'
-      const hasVideoInput = mode === 'reference-to-video' && (Array.isArray(params.uploadedVideos) ? params.uploadedVideos.length > 0 : false)
+      const hasVideoInput = mode === 'reference-to-video' && hasUploadedVideo(params)
 
       const perSecond: Record<string, { noVideo: number; withVideo: number }> = {
         '480p': { noVideo: 0.0775, withVideo: 0.045 },

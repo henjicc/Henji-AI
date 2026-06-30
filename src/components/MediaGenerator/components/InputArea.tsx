@@ -39,6 +39,7 @@ interface InputAreaProps {
   onVideoUpload?: (files: File[]) => void
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
+  onVideoTrim?: (index: number) => void
   onVideoClick?: (videoUrl: string) => void
   uploadedAudios?: string[]
   onAudioUpload?: (files: File[]) => void
@@ -86,6 +87,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onVideoUpload,
   onVideoRemove,
   onVideoReplace,
+  onVideoTrim,
   onVideoClick,
   uploadedAudios = [],
   onAudioUpload,
@@ -161,6 +163,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     shouldHideUploadButton,
     handleMixedFileRemove,
     handleMixedFileReplace,
+    handleMixedFileTrim,
     handleMixedFileReorder,
     handleMixedFileClick
   } = useMixedFileOrder({
@@ -180,6 +183,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     onImageClick,
     onVideoRemove,
     onVideoReplace,
+    onVideoTrim,
     onVideoClick,
     onAudioRemove,
     onAudioReplace,
@@ -226,17 +230,8 @@ const InputArea: React.FC<InputAreaProps> = ({
     if (videoFiles.length > 0 && onVideoUpload && currentVideoCount < maxVideoCount) {
       const file = videoFiles[0]
       if (videoConstraints) {
-        if (videoConstraints.maxSizeMB) {
-          const maxSizeBytes = videoConstraints.maxSizeMB * 1024 * 1024
-          if (file.size > maxSizeBytes) {
-            showAlert(
-              t('inputArea.alerts.videoSize.title'),
-              t('inputArea.alerts.videoSize.message', { maxSizeMB: videoConstraints.maxSizeMB }),
-              'warning'
-            )
-            return
-          }
-        }
+        // 文件体积超限不在上传时拦截：本地有 ffmpeg 后改为生成提交时按需压缩（见 GenerationService），
+        // 让上传体验保持即时，压缩耗时由任务进度条覆盖。
         if (videoConstraints.minDurationSec || videoConstraints.maxDurationSec) {
           try {
             const duration = await getVideoDuration(file)
@@ -361,6 +356,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
               onRemove={(needsVideoUpload || needsAudioUpload) ? handleMixedFileRemove : onImageRemove}
               onReplace={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReplace : onImageReplace}
+              onTrim={needsVideoUpload && videoConstraints?.trim ? handleMixedFileTrim : undefined}
               onReorder={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReorder : onImageReorder}
               onFileClick={(needsVideoUpload || needsAudioUpload) ? handleMixedFileClick : onImageClick}
               accept={needsVideoOnly

@@ -16,6 +16,8 @@ asarUnpack:
   - node_modules/sharp/**
   - node_modules/@img/**
   - node_modules/@napi-rs/**
+  - node_modules/ffmpeg-static/**
+  - node_modules/ffprobe-static/**
 win:
   icon: resources/icons/icon.ico
   target:

@@ -7,6 +7,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motion';
 import {
@@ -380,7 +381,9 @@ export function UiModal({
     return null;
   }
 
-  return (
+  // 挂到 document.body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
+  // 重新建立包含块，导致弹窗被错误地约束在那个祖先容器内而不是真正居中于整个窗口。
+  return createPortal(
     <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-50 flex items-center justify-center`}>
       <div
         className={`absolute inset-0 bg-black/55 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
@@ -404,6 +407,7 @@ export function UiModal({
           </div>
         )}
       </UiPanel>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -18,7 +18,7 @@ export interface TaskListProps {
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
-  onOpenVideoViewer: (url: string, filePath?: string) => void
+  onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
 }
 
 export function TaskList({

@@ -1,4 +1,5 @@
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { hasUploadedImage } from './mediaSources'
 
 const SUPPORTED_ASPECT_RATIOS = [
   '2:1',
@@ -44,10 +45,7 @@ export const grokImagineImageModel = defineModel({
       name: sharedFieldText('aspectRatio'),
       default: 'smart',
       visible: {
-        condition: (params) => {
-          const uploadedImages = Array.isArray(params.uploadedImages) ? params.uploadedImages : []
-          return uploadedImages.length === 0
-        },
+        condition: (params) => !hasUploadedImage(params),
         reason: '仅文生图模式支持设置比例'
       },
       options: [

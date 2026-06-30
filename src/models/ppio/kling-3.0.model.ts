@@ -1,4 +1,5 @@
 import { defineModel, modelScopedText, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
+import { hasUploadedImage } from './mediaSources'
 
 export const kling30Model = defineModel({
   meta: {
@@ -112,8 +113,7 @@ export const kling30Model = defineModel({
           if (params.ppioKling30Mode === 'motion-control') {
             return false
           }
-          const uploadedImages = Array.isArray(params.uploadedImages) ? params.uploadedImages : []
-          return uploadedImages.length === 0
+          return !hasUploadedImage(params)
         },
         reason: '仅文生视频支持设置宽高比'
       },

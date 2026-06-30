@@ -4,7 +4,7 @@ import { remove } from '@/platform/desktopApi'
 import { canDeleteFile } from '@/utils/fileRefCount'
 import { loadPresets } from '@/utils/preset'
 import { deleteEditState } from '@/utils/editStatePersistence'
-import { deleteWaveformCacheForAudio, isDesktop } from '@/utils/save'
+import { deleteWaveformCacheForAudio, isDesktop, isWithinUploadsDir } from '@/utils/save'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 
@@ -37,6 +37,20 @@ async function removeFileSafe(fullPath: string): Promise<void> {
   } catch (e) {
     logger.error('[Workspace] 删除文件失败', { data: [fullPath, e] })
   }
+}
+
+/**
+ * 删除"上传源文件"（图片/视频/音频）专用：saveUploadVideo 等函数现在可能直接复用用户磁盘上
+ * 的原始文件路径而不是落到 Uploads 目录的自有副本，删除前必须确认路径确实在托管目录内，
+ * 否则会把用户自己的文件删掉。结果文件（result.filePath）始终是本应用生成的产物，不受影响，
+ * 不需要走这个检查。
+ */
+async function removeUploadedSourceSafe(fullPath: string): Promise<void> {
+  if (!(await isWithinUploadsDir(fullPath))) {
+    logger.info('[Workspace] 跳过删除：路径不在托管 Uploads 目录内，可能是用户磁盘原始文件', fullPath)
+    return
+  }
+  await removeFileSafe(fullPath)
 }
 
 export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCleanupParams): UseTaskCleanupReturn {
@@ -86,7 +100,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       for (const filePath of target.uploadedFilePaths) {
         const ok = canDeleteFile(filePath, tasks, presets, taskId)
         if (!ok) continue
-        await removeFileSafe(filePath)
+        await removeUploadedSourceSafe(filePath)
         await deleteThumbnailCacheSafe(filePath)
       }
     }
@@ -96,7 +110,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       for (const filePath of target.uploadedVideoFilePaths) {
         const usedByOthers = tasks.some((t) => t.id !== taskId && t.uploadedVideoFilePaths?.includes(filePath))
         if (usedByOthers) continue
-        await removeFileSafe(filePath)
+        await removeUploadedSourceSafe(filePath)
         await deleteThumbnailCacheSafe(filePath)
       }
     }
@@ -105,7 +119,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
       for (const filePath of target.uploadedAudioFilePaths) {
         const usedByOthers = tasks.some((t) => t.id !== taskId && t.uploadedAudioFilePaths?.includes(filePath))
         if (usedByOthers) continue
-        await removeFileSafe(filePath)
+        await removeUploadedSourceSafe(filePath)
         await deleteWaveformCacheForAudio(filePath)
         await deleteThumbnailCacheSafe(filePath)
       }
@@ -173,21 +187,21 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     for (const filePath of uploadedImages) {
       const ok = canDeleteFile(filePath, remainingTasks, presets)
       if (!ok) continue
-      await removeFileSafe(filePath)
+      await removeUploadedSourceSafe(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 
     for (const filePath of uploadedVideos) {
       const usedByRemaining = remainingTasks.some((t) => t.uploadedVideoFilePaths?.includes(filePath))
       if (usedByRemaining) continue
-      await removeFileSafe(filePath)
+      await removeUploadedSourceSafe(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 
     for (const filePath of audioPaths) {
       const usedByRemaining = remainingTasks.some((t) => t.uploadedAudioFilePaths?.includes(filePath))
       if (usedByRemaining) continue
-      await removeFileSafe(filePath)
+      await removeUploadedSourceSafe(filePath)
       await deleteWaveformCacheForAudio(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
@@ -253,17 +267,17 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     for (const filePath of uploadedImages) {
       const ok = canDeleteFile(filePath, remainingTasks, presets)
       if (!ok) continue
-      await removeFileSafe(filePath)
+      await removeUploadedSourceSafe(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 
     for (const filePath of uploadedVideos) {
-      await removeFileSafe(filePath)
+      await removeUploadedSourceSafe(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 
     for (const filePath of audioPaths) {
-      await removeFileSafe(filePath)
+      await removeUploadedSourceSafe(filePath)
       await deleteWaveformCacheForAudio(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
