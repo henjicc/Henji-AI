@@ -31,6 +31,21 @@ export async function saveUploadImage(
   mode: 'memory' | 'persist' = 'persist',
   opts?: { maxDimension?: number }
 ): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
+  // Fast path: use main process sharp when a real file path is available
+  if (fileOrBlob instanceof File) {
+    const filePath = getPathForFile(fileOrBlob)
+    if (filePath) {
+      const result = await window.henjiNative!.image.compressImageSource({
+        source: filePath,
+        maxPixels: 17_000_000,
+        quality: 0.85,
+        maxDimension: opts?.maxDimension,
+      })
+      const displaySrc = await fileToBlobSrc(result.fullPath, 'image/jpeg')
+      return { fullPath: result.fullPath, displaySrc, dataUrl: result.dataUrl }
+    }
+  }
+
   const mime = 'image/jpeg'
   const ext = 'jpg'
   const originalBuf = await (fileOrBlob as Blob).arrayBuffer()

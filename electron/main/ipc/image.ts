@@ -1,4 +1,5 @@
 import {
+  compressImageSource,
   cropImageSource,
   embedStoryboardImageMetadata,
   loadImage,
@@ -117,6 +118,13 @@ export function registerImageIpc(): void {
     return saveImageSourceToAppDebugDir(source, category, suggestedFileName)
   })
   registerIpcHandler<string, Awaited<ReturnType<typeof readImageInfo>>>('image:readImageInfo', (input) => parseStringField(input, 'source'), (source) => readImageInfo(source))
+  registerIpcHandler<CompressImageSourcePayload, Awaited<ReturnType<typeof compressImageSource>>>('image:compressImageSource', parseCompressImageSourcePayload, (payload) => {
+    return compressImageSource(payload.source, {
+      maxPixels: payload.maxPixels,
+      quality: payload.quality,
+      maxDimension: payload.maxDimension,
+    })
+  })
 }
 
 function parseSplitImagePayload(input: unknown): SplitImagePayload {
@@ -323,4 +331,21 @@ function readImageFit(value: unknown): MergeStoryboardImagesPayloadDto['imageFit
   if (value === undefined) return undefined
   if (value === 'cover' || value === 'contain') return value
   throw new Error('Expected imageFit to be cover or contain')
+}
+
+interface CompressImageSourcePayload {
+  source: string
+  maxPixels?: number
+  quality?: number
+  maxDimension?: number
+}
+
+function parseCompressImageSourcePayload(input: unknown): CompressImageSourcePayload {
+  const record = parseRecord(input)
+  return {
+    source: readString(record, 'source'),
+    maxPixels: readOptionalNumber(record, 'maxPixels'),
+    quality: readOptionalNumber(record, 'quality'),
+    maxDimension: readOptionalNumber(record, 'maxDimension'),
+  }
 }

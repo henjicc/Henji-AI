@@ -200,6 +200,7 @@ export interface HenjiAiApi {
   reloadModelManifest(): Promise<number>
   getProgressEstimate(request: HenjiAiGetProgressEstimateRequest): Promise<HenjiAiProgressEstimate>
   recordProgressSample(request: HenjiAiRecordProgressSampleRequest): Promise<HenjiAiRecordProgressSampleResponse>
+  consumePendingResult(serverTaskId: string): Promise<{ url?: string; filePath?: string; metadata?: unknown } | null>
 }
 
 export interface HenjiLlmApi {
@@ -209,6 +210,7 @@ export interface HenjiLlmApi {
   getProviderKeyStatus(providerIds: string[]): Promise<HenjiProviderKeyStatus[]>
   chatStream(request: HenjiLlmChatRequest, onEvent: (event: HenjiLlmStreamEvent) => void): Promise<void>
   cancelTask(taskId: string): Promise<void>
+  discoverModels(providerId: string, baseUrl: string): Promise<Array<{ modelId: string; displayName: string }>>
 }
 
 export type HenjiLlmRole = 'system' | 'user' | 'assistant'
@@ -346,6 +348,12 @@ export interface HenjiImageApi {
   saveImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToAppDebugDir(source: string, category: string, suggestedFileName?: string): Promise<string>
   readImageInfo(source: string): Promise<HenjiImageInfoResult>
+  compressImageSource(payload: {
+    source: string
+    maxPixels?: number
+    quality?: number
+    maxDimension?: number
+  }): Promise<{ fullPath: string; dataUrl: string }>
 }
 
 export interface HenjiVideoInfoResult {
@@ -379,6 +387,7 @@ export interface HenjiVideoApi {
   readVideoInfo(source: string): Promise<HenjiVideoInfoResult>
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
   compressVideoToFit(payload: HenjiVideoCompressVideoToFitPayload): Promise<HenjiVideoCompressVideoToFitResult>
+  generateThumbnail(payload: { source: string; timeOffsetSeconds?: number }): Promise<{ dataUrl: string }>
 }
 
 export interface HenjiFsDirEntry {

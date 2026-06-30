@@ -28,6 +28,18 @@ function execFileAsync(binaryPath: string, args: string[]): Promise<{ stdout: st
   })
 }
 
+function execFileAsyncBuffer(binaryPath: string, args: string[]): Promise<{ stdout: Buffer; stderr: Buffer }> {
+  return new Promise((resolve, reject) => {
+    execFile(binaryPath, args, { maxBuffer: MAX_BUFFER_BYTES, encoding: 'buffer' }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${path.basename(binaryPath)} failed: ${error.message}\n${stderr.toString()}`))
+        return
+      }
+      resolve({ stdout, stderr })
+    })
+  })
+}
+
 async function resolveLocalVideoPath(source: string): Promise<string> {
   const trimmed = source.trim()
   if (!trimmed) throw new Error('Video source is empty')
@@ -178,4 +190,32 @@ export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto):
 
   const compressedStat = await fs.promises.stat(outputPath)
   return { path: outputPath, sizeBytes: compressedStat.size }
+}
+
+export async function generateVideoThumbnail(
+  source: string,
+  timeOffsetSeconds: number = 1.0
+): Promise<string> {
+  const ffmpegPath = await loadFfmpegPath()
+  const localPath = await resolveLocalVideoPath(source)
+
+  let seekTime = timeOffsetSeconds
+  try {
+    const info = await readVideoInfo(source)
+    seekTime = Math.min(Math.max(0.1, timeOffsetSeconds), Math.max(0.1, info.durationSeconds - 0.1))
+  } catch {
+    // use default seek time if info cannot be read
+  }
+
+  const { stdout } = await execFileAsyncBuffer(ffmpegPath, [
+    '-ss', String(seekTime),
+    '-i', localPath,
+    '-frames:v', '1',
+    '-vf', 'scale=480:-1',
+    '-f', 'image2pipe',
+    '-vcodec', 'png',
+    'pipe:1',
+  ])
+
+  return `data:image/png;base64,${stdout.toString('base64')}`
 }

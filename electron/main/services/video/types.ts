@@ -24,3 +24,12 @@ export interface CompressVideoToFitResultDto {
   path: string
   sizeBytes: number
 }
+
+export interface GenerateVideoThumbnailPayloadDto {
+  source: string
+  timeOffsetSeconds?: number
+}
+
+export interface GenerateVideoThumbnailResultDto {
+  dataUrl: string
+}

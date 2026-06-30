@@ -137,6 +137,7 @@ const aiApi: HenjiAiApi = {
   reloadModelManifest: () => nativeInvoke('ai:reloadModelManifest'),
   getProgressEstimate: (request) => nativeInvoke('ai:getProgressEstimate', request),
   recordProgressSample: (request) => nativeInvoke('ai:recordProgressSample', request),
+  consumePendingResult: (serverTaskId) => nativeInvoke('ai:consumePendingResult', { serverTaskId }),
 }
 
 const llmApi: HenjiLlmApi = {
@@ -176,6 +177,7 @@ const llmApi: HenjiLlmApi = {
     }
   },
   cancelTask: (taskId) => nativeInvoke('llm:cancelTask', { taskId }),
+  discoverModels: (providerId, baseUrl) => nativeInvoke('llm:discoverModels', { providerId, baseUrl }),
 }
 
 async function waitForOptionalTerminalEvent(terminalEvent: Promise<void>): Promise<void> {
@@ -269,12 +271,14 @@ const imageApi: HenjiImageApi = {
   saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => nativeInvoke('image:saveImageSourceToDirectory', { source, targetDir, suggestedFileName }),
   saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => nativeInvoke('image:saveImageSourceToAppDebugDir', { source, category, suggestedFileName }),
   readImageInfo: (source) => nativeInvoke('image:readImageInfo', { source }),
+  compressImageSource: (payload) => nativeInvoke('image:compressImageSource', payload),
 }
 
 const videoApi: HenjiVideoApi = {
   readVideoInfo: (source) => nativeInvoke('video:readVideoInfo', { source }),
   trimVideoSource: (payload) => nativeInvoke('video:trimVideoSource', payload),
   compressVideoToFit: (payload) => nativeInvoke('video:compressVideoToFit', payload),
+  generateThumbnail: (payload) => nativeInvoke('video:generateThumbnail', payload),
 }
 
 const loggingApi: HenjiLoggingApi = {

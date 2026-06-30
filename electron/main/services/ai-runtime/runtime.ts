@@ -4,6 +4,7 @@ import { AiRuntimeError } from './errors'
 import { getManifestStore, reloadManifestStore } from './manifest'
 import { saveMediaFromUrl } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
+import { savePendingResult } from './pending-results'
 import { executeContinuePolling, executeGenerate } from './providers'
 import { buildRequest } from './request-builder-dsl'
 import { normalizeRequestBody } from './request-normalizer'
@@ -150,7 +151,7 @@ export async function continuePolling(
       providerResult.metadata
     )
     const filePath = await saveMediaPaths(providerResult.url)
-    return {
+    const responseResult = {
       status: providerResult.status,
       url: providerResult.url,
       filePath,
@@ -158,6 +159,12 @@ export async function continuePolling(
       metadata: providerResult.metadata,
       trace,
     }
+    savePendingResult(request.taskId.trim(), {
+      url: providerResult.url,
+      filePath,
+      metadata: providerResult.metadata,
+    })
+    return responseResult
   } finally {
     clearCancelFlag(requestId)
   }

@@ -8,6 +8,8 @@ import {
   recordSample,
   reloadModelManifest,
 } from '../services/ai-runtime/runtime'
+import { consumePendingResult } from '../services/ai-runtime/pending-results'
+import type { PendingResultPayload } from '../services/ai-runtime/pending-results'
 import type {
   AiContinuePollingRequestDto,
   AiGenerateRequestDto,
@@ -87,6 +89,12 @@ export function registerAiRuntimeIpc(): void {
   registerIpcHandler<void, ProviderKeyStatusDto[]>('ai:getRuntimeProviderKeyStatus', parseVoid, () => {
     return getProviderKeyStatus()
   })
+
+  registerIpcHandler<string, PendingResultPayload | null>(
+    'ai:consumePendingResult',
+    (input) => parseStringField(input, 'serverTaskId'),
+    (serverTaskId) => consumePendingResult(serverTaskId)
+  )
 }
 
 function readString(record: Record<string, unknown>, field: string): string {

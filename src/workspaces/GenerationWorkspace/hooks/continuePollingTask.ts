@@ -49,24 +49,36 @@ export async function continuePollingTask({
     let currentProgress = Math.max(1, task.progress ?? 0)
     updateProgress(task.id, currentProgress)
 
-    const handleProgress: ContinuePollingProgressCallback = (status) => {
-      if (status.progress === undefined) return
-      const next = Math.max(currentProgress, status.progress)
-      if (next <= currentProgress) return
-      currentProgress = next
-      updateProgress(task.id, currentProgress)
-    }
+    // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
+    const cached = await window.henjiNative?.ai.consumePendingResult(serverTaskId)
+    let resultObj: DynamicValueMap
+    if (cached) {
+      logger.info('[Workspace] 命中缓存轮询结果，跳过重新轮询', { taskId: task.id, serverTaskId })
+      resultObj = {
+        url: cached.url,
+        filePath: cached.filePath,
+        metadata: cached.metadata,
+      }
+    } else {
+      const handleProgress: ContinuePollingProgressCallback = (status) => {
+        if (status.progress === undefined) return
+        const next = Math.max(currentProgress, status.progress)
+        if (next <= currentProgress) return
+        currentProgress = next
+        updateProgress(task.id, currentProgress)
+      }
 
-    const generationService = GenerationService.getInstance()
-    const result = await generationService.continuePolling(task.model, serverTaskId, {
-      prompt: task.prompt,
-      text: task.prompt,
-      ...options,
-    }, handleProgress)
-    const resultObj: DynamicValueMap = {
-      url: result.url,
-      filePath: result.filePath,
-      metadata: result.metadata,
+      const generationService = GenerationService.getInstance()
+      const result = await generationService.continuePolling(task.model, serverTaskId, {
+        prompt: task.prompt,
+        text: task.prompt,
+        ...options,
+      }, handleProgress)
+      resultObj = {
+        url: result.url,
+        filePath: result.filePath,
+        metadata: result.metadata,
+      }
     }
     logger.info('[Workspace] 继续轮询响应', { model: task.model, taskId: serverTaskId, metadata: resultObj['metadata'] })
 

@@ -27,15 +27,30 @@ export async function generateVideoThumbnail(
   videoFile: File,
   timeOffset: number = 1.0
 ): Promise<string> {
+  // Fast path: use main process ffmpeg when a real file path is available
+  const filePath = window.henjiNative?.media.getPathForFile(videoFile)
+  if (filePath) {
+    const result = await window.henjiNative!.video.generateThumbnail({
+      source: filePath,
+      timeOffsetSeconds: timeOffset,
+    })
+    return result.dataUrl
+  }
+  return generateVideoThumbnailFallback(videoFile, timeOffset)
+}
+
+async function generateVideoThumbnailFallback(
+  videoFile: File,
+  timeOffset: number = 1.0
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    video.preload = 'auto'  // 使用 auto 确保加载足够的数据
+    video.preload = 'auto'
     video.muted = true
     video.playsInline = true
 
     const objectUrl = URL.createObjectURL(videoFile)
 
-    // 清理函数：确保在释放 blob URL 之前停止视频加载
     const cleanup = () => {
       video.pause()
       video.removeAttribute('src')
@@ -44,7 +59,6 @@ export async function generateVideoThumbnail(
       video.remove()
     }
 
-    // 实际截图逻辑
     const captureFrame = () => {
       try {
         const canvas = document.createElement('canvas')
@@ -68,14 +82,12 @@ export async function generateVideoThumbnail(
     }
 
     video.addEventListener('loadedmetadata', () => {
-      // 确保时间点不超过视频时长，且至少为 0.1 秒（避免第一帧可能是黑的）
       const seekTime = Math.min(Math.max(0.1, timeOffset), Math.max(0.1, video.duration - 0.1))
       video.currentTime = seekTime
     }, { once: true })
 
     video.addEventListener('seeked', () => {
       // 【macOS/WebKit 修复】seeked 事件触发时，视频帧可能还没完全准备好渲染
-      // 添加 200ms 延迟确保帧数据已解码
       setTimeout(captureFrame, 200)
     }, { once: true })
 
@@ -85,7 +97,7 @@ export async function generateVideoThumbnail(
     }, { once: true })
 
     video.src = objectUrl
-    video.load()  // 显式调用 load() 开始加载
+    video.load()
   })
 }
 

@@ -183,7 +183,7 @@ const LlmSettingsSection: React.FC = () => {
   const handleFetchModels = async (provider: LlmProviderConfig): Promise<void> => {
     setIsFetchingModels(prev => ({ ...prev, [provider.providerId]: true }))
     try {
-      const discovered = await fetchOpenAiCompatibleModels(provider, keys[provider.providerId])
+      const discovered = await fetchOpenAiCompatibleModels(provider)
       const nextModels = [...config.models]
       discovered.forEach((item) => {
         const exists = nextModels.some(model => model.providerId === provider.providerId && model.modelId === item.modelId)

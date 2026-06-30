@@ -68,62 +68,18 @@ export async function generateThumbnail(imageUrl: string): Promise<string> {
  */
 export async function generateVideoThumbnail(videoUrl: string): Promise<string> {
   try {
-    const video = document.createElement('video')
-    video.crossOrigin = 'anonymous'
-    video.muted = true
-    video.preload = 'metadata'
-
-    await new Promise<void>((resolve, reject) => {
-      video.onloadeddata = () => resolve()
-      video.onerror = () => reject(new Error('Failed to load video'))
-      video.src = videoUrl
-    })
-
-    await new Promise<void>((resolve) => {
-      if (video.readyState >= 2) {
-        resolve()
-      } else {
-        video.oncanplay = () => resolve()
-      }
-    })
-
-    const MAX_SIZE = 100
-    let width = video.videoWidth
-    let height = video.videoHeight
-
-    if (width > height) {
-      if (width > MAX_SIZE) {
-        height = height * (MAX_SIZE / width)
-        width = MAX_SIZE
-      }
-    } else {
-      if (height > MAX_SIZE) {
-        width = width * (MAX_SIZE / height)
-        height = MAX_SIZE
-      }
-    }
-
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Failed to get canvas context')
-
-    ctx.drawImage(video, 0, 0, width, height)
-
-    const blob = await new Promise<Blob | null>(resolve =>
-      canvas.toBlob(resolve, 'image/png')
-    )
-    if (!blob) throw new Error('Failed to create video thumbnail blob')
-
-    const arrayBuffer = await blob.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
+    const result = await window.henjiNative!.video.generateThumbnail({ source: videoUrl })
+    // dataUrl is 'data:image/png;base64,...'
+    const base64 = result.dataUrl.split(',')[1]
+    if (!base64) throw new Error('Invalid thumbnail data URL')
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
 
     const tempPath = await tempDir()
     const fileName = `drag-video-thumb-${Date.now()}-${Math.floor(Math.random() * 1000)}.png`
     const filePath = await join(tempPath, fileName)
-
-    await writeFile(filePath, uint8Array)
+    await writeFile(filePath, bytes)
 
     return filePath
   } catch (error) {

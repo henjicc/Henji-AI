@@ -154,6 +154,12 @@ function initializeSchema(conn: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_canvas_projects_updated_at
       ON canvas_projects(updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS pending_task_results (
+      server_task_id TEXT PRIMARY KEY,
+      result_json TEXT NOT NULL,
+      completed_at INTEGER NOT NULL
+    );
   `)
 }
 

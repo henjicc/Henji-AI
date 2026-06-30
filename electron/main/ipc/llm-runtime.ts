@@ -1,5 +1,7 @@
 import type { JsonObject, JsonValue, LlmChatRequestDto, LlmStreamEventDto } from '../services/llm/types'
 import { cancelLlmRuntimeTask, llmChatStream } from '../services/llm/runtime'
+import { discoverModels } from '../services/llm/discovery'
+import type { DiscoveredModelItem } from '../services/llm/discovery'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
 
 interface ChatStreamPayload {
@@ -26,6 +28,18 @@ export function registerLlmRuntimeIpc(): void {
   registerIpcHandler<string, void>('llm:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {
     cancelLlmRuntimeTask(taskId)
   })
+
+  registerIpcHandler<{ providerId: string; baseUrl: string }, DiscoveredModelItem[]>(
+    'llm:discoverModels',
+    (input) => {
+      const record = parseRecord(input)
+      return {
+        providerId: readString(record, 'providerId'),
+        baseUrl: readString(record, 'baseUrl'),
+      }
+    },
+    ({ providerId, baseUrl }) => discoverModels(providerId, baseUrl)
+  )
 }
 
 function parseChatStreamPayload(input: unknown): ChatStreamPayload {

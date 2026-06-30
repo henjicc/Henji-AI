@@ -126,6 +126,36 @@ export async function saveImageSourceToAppDebugDir(
   return await saveImageSourceToDirectory(source, getDebugDir(category || 'grid'), suggestedFileName)
 }
 
+export async function compressImageSource(
+  source: string,
+  opts: { maxPixels?: number; quality?: number; maxDimension?: number }
+): Promise<{ fullPath: string; dataUrl: string }> {
+  const sharp = await loadSharp()
+  const { bytes: inputBytes } = await resolveSourceBytes(source)
+
+  let pipeline = sharp(inputBytes)
+  const meta = await pipeline.metadata()
+  const w = meta.width ?? 0
+  const h = meta.height ?? 0
+  const maxPixels = opts.maxPixels ?? 17_000_000
+
+  const scalePixels = w * h > maxPixels ? Math.sqrt(maxPixels / (w * h)) : 1
+  const scaleDim = opts.maxDimension ? Math.min(1, opts.maxDimension / Math.max(w, h, 1)) : 1
+  const scale = Math.min(scalePixels, scaleDim)
+
+  if (scale < 1) {
+    pipeline = pipeline.resize(Math.max(1, Math.floor(w * scale)), Math.max(1, Math.floor(h * scale)))
+  }
+
+  const outputBytes = await pipeline
+    .jpeg({ quality: Math.round((opts.quality ?? 0.85) * 100) })
+    .toBuffer()
+
+  const fullPath = persistImageBytes(outputBytes, 'jpg')
+  const dataUrl = `data:image/jpeg;base64,${outputBytes.toString('base64')}`
+  return { fullPath, dataUrl }
+}
+
 export async function readImageInfo(source: string): Promise<ImageInfoResultDto> {
   const { bytes, extension } = await resolveSourceBytes(source)
   const sharp = await loadSharp()
