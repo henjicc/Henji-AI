@@ -7,7 +7,7 @@ export interface SqlExecuteResult {
 
 /**
  * 通用 SQL 执行接口，复用同一个 henji.db 连接。
- * 现状有 DatabaseService（history/presets/settings/custom_models）、
+ * 现状有 DatabaseService（history/presets/settings）、
  * projectState.ts（storyboard_projects）、progress_learning（progress_samples）
  * 三处独立消费方，迁移后应共用同一个 db 实例。
  */

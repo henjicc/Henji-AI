@@ -5,6 +5,7 @@ import type {
   HenjiAiApi,
   HenjiCanvasProjectsApi,
   HenjiClipboardApi,
+  HenjiCustomModelsApi,
   HenjiDbApi,
   HenjiDialogApi,
   HenjiDragApi,
@@ -96,6 +97,14 @@ const canvasProjectsApi: HenjiCanvasProjectsApi = {
   renameProject: (projectId, name) => nativeInvoke('canvasProjects:rename', { projectId, name }),
   saveProjectSnapshot: (projectId, snapshot) => nativeInvoke('canvasProjects:saveSnapshot', { projectId, snapshot }),
   deleteProject: (projectId) => nativeInvoke('canvasProjects:delete', { projectId }),
+}
+
+const customModelsApi: HenjiCustomModelsApi = {
+  insertModel: (model) => nativeInvoke('customModels:insert', model),
+  listModels: (providerId) => nativeInvoke('customModels:list', { providerId }),
+  getModel: (modelId) => nativeInvoke('customModels:get', { modelId }),
+  updateModel: (modelId, updates) => nativeInvoke('customModels:update', { modelId, updates }),
+  deleteModel: (modelId) => nativeInvoke('customModels:delete', { modelId }),
 }
 
 const keystoreApi: HenjiKeystoreApi = {
@@ -299,6 +308,7 @@ const api: HenjiNativeApi = {
   llm: llmApi,
   db: dbApi,
   canvasProjects: canvasProjectsApi,
+  customModels: customModelsApi,
   keystore: keystoreApi,
   fs: fsApi,
   dialog: dialogApi,

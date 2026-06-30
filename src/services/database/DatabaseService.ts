@@ -1,4 +1,11 @@
 import { createLogger } from '@/core/logging'
+import {
+  deleteCustomModel as deleteCustomModelCommand,
+  getCustomModel as getCustomModelCommand,
+  insertCustomModel as insertCustomModelCommand,
+  listCustomModels,
+  updateCustomModel as updateCustomModelCommand,
+} from '@/commands/customModels'
 
 const logger = createLogger('services.database.DatabaseService')
 /**
@@ -51,17 +58,6 @@ interface PresetRow {
 
 interface SettingValueRow {
   value: string
-}
-
-interface CustomModelRow {
-  id: string
-  name: string
-  provider_id: string
-  base_model: string | null
-  config: string | null
-  is_enabled: number
-  created_at: string
-  updated_at: string
 }
 
 export class DatabaseService implements IDatabaseService {
@@ -139,19 +135,6 @@ export class DatabaseService implements IDatabaseService {
       )
     `)
 
-    // 创建自定义模型表
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS custom_models (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        provider_id TEXT NOT NULL,
-        base_model TEXT,
-        config TEXT NOT NULL,
-        is_enabled INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
   }
 
   /**
@@ -496,88 +479,30 @@ export class DatabaseService implements IDatabaseService {
   async insertCustomModel(
     model: Omit<CustomModelRecord, 'createdAt' | 'updatedAt'>
   ): Promise<void> {
-    const db = this.ensureConnected()
-
-    await db.execute(
-      `INSERT INTO custom_models (
-        id, name, provider_id, base_model, config, is_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        model.id,
-        model.name,
-        model.providerId,
-        model.baseModel,
-        JSON.stringify(model.config),
-        model.isEnabled ? 1 : 0,
-      ]
-    )
+    await insertCustomModelCommand(model)
   }
 
   async getCustomModels(providerId?: string): Promise<CustomModelRecord[]> {
-    const db = this.ensureConnected()
-
-    let sql = 'SELECT * FROM custom_models WHERE 1=1'
-    const params: SqlBindValue[] = []
-
-    if (providerId) {
-      sql += ' AND provider_id = ?'
-      params.push(providerId)
-    }
-
-    sql += ' ORDER BY created_at DESC'
-
-    const rows = await db.select<CustomModelRow>(sql, params)
-    return rows.map(this.mapCustomModelRow)
+    return await listCustomModels(providerId)
   }
 
   async getCustomModelById(id: string): Promise<CustomModelRecord | null> {
-    const db = this.ensureConnected()
-
-    const rows = await db.select<CustomModelRow>(
-      'SELECT * FROM custom_models WHERE id = ?',
-      [id]
-    )
-
-    return rows.length > 0 ? this.mapCustomModelRow(rows[0]) : null
+    return await getCustomModelCommand(id)
   }
 
   async updateCustomModel(
     id: string,
     updates: Partial<CustomModelRecord>
   ): Promise<void> {
-    const db = this.ensureConnected()
-
-    const fields: string[] = []
-    const params: SqlBindValue[] = []
-
-    if (updates.name !== undefined) {
-      fields.push('name = ?')
-      params.push(updates.name)
-    }
-
-    if (updates.config !== undefined) {
-      fields.push('config = ?')
-      params.push(JSON.stringify(updates.config))
-    }
-
-    if (updates.isEnabled !== undefined) {
-      fields.push('is_enabled = ?')
-      params.push(updates.isEnabled ? 1 : 0)
-    }
-
-    if (fields.length === 0) return
-
-    params.push(id)
-
-    await db.execute(
-      `UPDATE custom_models SET ${fields.join(', ')} WHERE id = ?`,
-      params
-    )
+    await updateCustomModelCommand(id, {
+      name: updates.name,
+      config: updates.config,
+      isEnabled: updates.isEnabled,
+    })
   }
 
   async deleteCustomModel(id: string): Promise<void> {
-    const db = this.ensureConnected()
-    await db.execute('DELETE FROM custom_models WHERE id = ?', [id])
+    await deleteCustomModelCommand(id)
   }
 
   // ==================== Utility Methods ====================
@@ -631,18 +556,6 @@ export class DatabaseService implements IDatabaseService {
     }
   }
 
-  private mapCustomModelRow(row: CustomModelRow): CustomModelRecord {
-    return {
-      id: row.id,
-      name: row.name,
-      providerId: row.provider_id,
-      baseModel: row.base_model,
-      config: JSON.parse(row.config || '{}'),
-      isEnabled: row.is_enabled === 1,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }
-  }
 }
 
 // Singleton instance

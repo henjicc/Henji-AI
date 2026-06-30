@@ -3,6 +3,7 @@ import { createElectronAiRuntime } from './aiRuntime'
 import { createElectronLlmRuntime } from './llmRuntime'
 import { createElectronDb } from './db'
 import { createElectronCanvasProjects } from './canvasProjects'
+import { createElectronCustomModels } from './customModels'
 import { createElectronKeystore } from './keystore'
 import { createElectronSystem } from './system'
 import { createElectronMedia } from './media'
@@ -21,6 +22,7 @@ export function createElectronPlatform(): PlatformRuntime {
     llmRuntime: createElectronLlmRuntime(),
     db: createElectronDb(),
     canvasProjects: createElectronCanvasProjects(),
+    customModels: createElectronCustomModels(),
     keystore: createElectronKeystore(),
     system: createElectronSystem(),
     media: createElectronMedia(),

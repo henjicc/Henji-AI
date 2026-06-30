@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
+import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerDbIpc } from './ipc/db'
 import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
@@ -32,6 +33,7 @@ app.whenReady().then(() => {
   registerAiRuntimeIpc()
   registerCanvasProjectsIpc()
   registerClipboardIpc()
+  registerCustomModelsIpc()
   registerDbIpc()
   registerDragIpc()
   registerImageIpc()

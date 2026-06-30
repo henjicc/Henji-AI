@@ -66,6 +66,40 @@ export interface HenjiCanvasProjectsApi {
   deleteProject(projectId: string): Promise<void>
 }
 
+export interface HenjiCustomModelRecord {
+  id: string
+  name: string
+  providerId: string
+  baseModel: string | null
+  config: Record<string, unknown>
+  isEnabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface HenjiInsertCustomModelPayload {
+  id: string
+  name: string
+  providerId: string
+  baseModel: string | null
+  config: Record<string, unknown>
+  isEnabled: boolean
+}
+
+export interface HenjiUpdateCustomModelPayload {
+  name?: string
+  config?: Record<string, unknown>
+  isEnabled?: boolean
+}
+
+export interface HenjiCustomModelsApi {
+  insertModel(model: HenjiInsertCustomModelPayload): Promise<void>
+  listModels(providerId?: string): Promise<HenjiCustomModelRecord[]>
+  getModel(modelId: string): Promise<HenjiCustomModelRecord | null>
+  updateModel(modelId: string, updates: HenjiUpdateCustomModelPayload): Promise<void>
+  deleteModel(modelId: string): Promise<void>
+}
+
 export interface HenjiProviderKeyStatus {
   providerId: string
   configured: boolean
@@ -522,6 +556,7 @@ export interface HenjiNativeApi {
   llm: HenjiLlmApi
   db: HenjiDbApi
   canvasProjects: HenjiCanvasProjectsApi
+  customModels: HenjiCustomModelsApi
   keystore: HenjiKeystoreApi
   fs: HenjiFsApi
   dialog: HenjiDialogApi
