@@ -1,4 +1,4 @@
-import { compressVideoToFit, generateVideoThumbnail, readVideoInfo, trimVideoSource } from '../services/video/ops'
+import { compressVideoToFit, generateVideoThumbnail, generateVideoThumbnailBytes, readVideoInfo, trimVideoSource } from '../services/video/ops'
 import type {
   CompressVideoToFitPayloadDto,
   CompressVideoToFitResultDto,
@@ -26,6 +26,14 @@ export function registerVideoIpc(): void {
     async (payload) => {
       const dataUrl = await generateVideoThumbnail(payload.source, payload.timeOffsetSeconds)
       return { dataUrl }
+    }
+  )
+  registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array }>(
+    'video:generateThumbnailBytes',
+    parseThumbnailBytesPayload,
+    async ({ source, maxSize }) => {
+      const bytes = await generateVideoThumbnailBytes(source, maxSize)
+      return { bytes }
     }
   )
 }
@@ -60,6 +68,19 @@ function parseThumbnailPayload(input: unknown): GenerateVideoThumbnailPayloadDto
   return {
     source: readString(record, 'source'),
     timeOffsetSeconds: readOptionalNumber(record, 'timeOffsetSeconds'),
+  }
+}
+
+interface ThumbnailBytesPayload {
+  source: string
+  maxSize?: number
+}
+
+function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
+  const record = parseRecord(input)
+  return {
+    source: readString(record, 'source'),
+    maxSize: readOptionalNumber(record, 'maxSize'),
   }
 }
 

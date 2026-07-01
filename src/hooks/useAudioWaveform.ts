@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { nativeFetch, readFile } from '@/platform/desktopApi'
 
 const SAFE_LOCAL_WAVEFORM_HOSTS = new Set(['localhost', '127.0.0.1', 'asset.localhost', 'tauri.localhost'])
-const WAVEFORM_ALGO_VERSION = '2026-03-25-v4'
+// v5：新增主进程 ffmpeg 分桶路径，与渲染层 Web Audio 全量解码数值不完全一致，
+// bump 版本号避免新旧算法结果在缓存里混用导致同一音频刷新前后波形跳变。
+const WAVEFORM_ALGO_VERSION = '2026-07-01-v5'
 const waveformMemoryCache = new Map<string, number[]>()
 
 function isCrossOriginWaveformRestricted(source: string): boolean {
@@ -41,6 +43,29 @@ function buildFallbackWaveform(seed: string, bars = 256): number[] {
     result.push(Math.max(0.06, Math.min(1, value)))
   }
   return result
+}
+
+/**
+ * 把每桶的原始能量值（rms*1.2 与 peak*0.65 取大值）转成最终展示曲线：百分位归一化 → 幂次
+ * 变换 → 平滑 → 底部楼层限制。主进程分桶结果和渲染层 Web Audio 全量解码结果共用这一套曲线
+ * 调整逻辑，避免两条路径的展示效果逐渐漂移。
+ */
+function postProcessWaveform(rawBars: number[], compact: boolean): number[] {
+  const sorted = [...rawBars].sort((a, b) => a - b)
+  const percentile = (ratio: number): number => {
+    if (sorted.length === 0) return 0
+    const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio)))
+    return sorted[index]
+  }
+  const low = percentile(0.1)
+  const high = percentile(0.98)
+  const range = Math.max(1e-6, high - low)
+  const norm = rawBars.map((v) => Math.max(0, Math.min(1, (v - low) / range)))
+  const expanded = norm.map((v) => Math.pow(v, compact ? 0.72 : 0.78))
+  return smoothWaveform(expanded, compact ? 1 : 2).map((v) => {
+    const floor = compact ? 0.014 : 0.004
+    return Math.max(floor, Math.min(1, v))
+  })
 }
 
 function smoothWaveform(values: number[], radius = 2): number[] {
@@ -130,6 +155,27 @@ export function useAudioWaveform(
       if (!aborted) {
         setWaveDuration(null)
       }
+
+      const nativeSource = filePath?.trim() || src
+      const native = window.henjiNative
+      if (native && nativeSource) {
+        try {
+          const result = await native.audio.extractSamples({ source: nativeSource, bucketCount: targetBars })
+          const rmsList = result.rms as number[]
+          const peakList = result.peak as number[]
+          const arr = rmsList.map((rmsValue, index) => Math.max(rmsValue * 1.2, (peakList[index] ?? 0) * 0.65))
+          const smooth = postProcessWaveform(arr, compact)
+          if (!aborted) {
+            waveformMemoryCache.set(cacheKey, smooth)
+            setWaveform(smooth)
+            setWaveDuration(result.durationSeconds || null)
+          }
+          return
+        } catch {
+          // 主进程处理失败（如无本地路径可解析、无音轨等），走下面的渲染层 Web Audio 后备
+        }
+      }
+
       try {
         const buf = await fetchAudioArrayBuffer(src, filePath)
         const Ctx = window.AudioContext ?? ((window as DynamicValue as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
@@ -165,21 +211,7 @@ export function useAudioWaveform(
           const rms = count > 0 ? Math.sqrt(sumSquares / count) : 0
           arr.push(Math.max(rms * 1.2, peak * 0.65))
         }
-        const sorted = [...arr].sort((a, b) => a - b)
-        const percentile = (ratio: number): number => {
-          if (sorted.length === 0) return 0
-          const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio)))
-          return sorted[index]
-        }
-        const low = percentile(0.1)
-        const high = percentile(0.98)
-        const range = Math.max(1e-6, high - low)
-        const norm = arr.map((v) => Math.max(0, Math.min(1, (v - low) / range)))
-        const expanded = norm.map((v) => Math.pow(v, compact ? 0.72 : 0.78))
-        const smooth = smoothWaveform(expanded, compact ? 1 : 2).map((v) => {
-          const floor = compact ? 0.014 : 0.004
-          return Math.max(floor, Math.min(1, v))
-        })
+        const smooth = postProcessWaveform(arr, compact)
         if (!aborted) {
           waveformMemoryCache.set(cacheKey, smooth)
           setWaveform(smooth)

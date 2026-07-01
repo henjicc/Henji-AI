@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
+import { registerAudioIpc } from './ipc/audio'
 import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
@@ -32,6 +33,7 @@ if (remoteDebuggingPort) {
 app.whenReady().then(() => {
   registerMediaProtocolHandler()
   registerAiRuntimeIpc()
+  registerAudioIpc()
   registerCanvasProjectsIpc()
   registerClipboardIpc()
   registerCustomModelsIpc()

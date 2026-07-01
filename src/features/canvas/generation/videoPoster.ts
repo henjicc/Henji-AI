@@ -44,11 +44,24 @@ const ASPECT_RATIO_PROBE_TIMEOUT_MS = 5_000;
 /**
  * 只读取视频元数据（宽高），不等待帧抓取，用于上传时尽快拿到宽高比让节点立即重新适配。
  * 比 captureVideoPoster 快得多：不需要 seek 到具体帧再绘制 canvas。
+ * 有主进程可用时优先走 ffprobe（无需加载整段视频），失败（如 blob: URL 主进程无法解析）时回退 HTML5 探测。
  */
 export async function detectVideoAspectRatioFromSource(videoSource: string): Promise<string> {
+  if (window.henjiNative) {
+    try {
+      const info = await window.henjiNative.video.readVideoInfo(videoSource);
+      return reduceAspectRatio(info.width, info.height);
+    } catch {
+      // 主进程无法解析该来源（如尚未落盘的 blob: URL），走下面的渲染层后备逻辑
+    }
+  }
+  return detectVideoAspectRatioFallback(videoSource);
+}
+
+function detectVideoAspectRatioFallback(videoSource: string): Promise<string> {
   const displayUrl = resolveImageDisplayUrl(videoSource);
 
-  return await new Promise<string>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     const video = document.createElement('video');
     video.muted = true;
     video.preload = 'metadata';
@@ -88,9 +101,33 @@ export async function detectVideoAspectRatioFromSource(videoSource: string): Pro
 
 /**
  * 抓取视频首帧作为 poster 并落盘，同时返回宽高比与时长。
+ * 有主进程可用时优先并行调用 ffprobe（宽高/时长）+ ffmpeg（首帧截图），失败时回退渲染层 HTML5 Video。
  * 失败时降级返回空 poster（节点回退到图标占位）。
  */
 export async function captureVideoPoster(videoSource: string): Promise<VideoPosterInfo> {
+  if (window.henjiNative) {
+    try {
+      const [info, thumbnail] = await Promise.all([
+        window.henjiNative.video.readVideoInfo(videoSource),
+        window.henjiNative.video.generateThumbnail({
+          source: videoSource,
+          timeOffsetSeconds: POSTER_CAPTURE_TIME_SEC,
+        }),
+      ]);
+      const posterUrl = await persistImageLocally(thumbnail.dataUrl);
+      return {
+        posterUrl,
+        aspectRatio: reduceAspectRatio(info.width, info.height),
+        durationSec: info.durationSeconds,
+      };
+    } catch (error) {
+      logger.warn('[videoPoster] 主进程截帧失败，回退渲染层', error);
+    }
+  }
+  return captureVideoPosterFallback(videoSource);
+}
+
+async function captureVideoPosterFallback(videoSource: string): Promise<VideoPosterInfo> {
   const displayUrl = resolveImageDisplayUrl(videoSource);
 
   const captured = await new Promise<{ dataUrl: string | null; aspectRatio: string; durationSec: number | null }>(

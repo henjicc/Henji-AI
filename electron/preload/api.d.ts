@@ -354,6 +354,7 @@ export interface HenjiImageApi {
     quality?: number
     maxDimension?: number
   }): Promise<{ fullPath: string; dataUrl: string }>
+  generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
 }
 
 export interface HenjiVideoInfoResult {
@@ -388,6 +389,17 @@ export interface HenjiVideoApi {
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
   compressVideoToFit(payload: HenjiVideoCompressVideoToFitPayload): Promise<HenjiVideoCompressVideoToFitResult>
   generateThumbnail(payload: { source: string; timeOffsetSeconds?: number }): Promise<{ dataUrl: string }>
+  generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
+}
+
+export interface HenjiAudioExtractSamplesResult {
+  rms: number[]
+  peak: number[]
+  durationSeconds: number
+}
+
+export interface HenjiAudioApi {
+  extractSamples(payload: { source: string; bucketCount: number }): Promise<HenjiAudioExtractSamplesResult>
 }
 
 export interface HenjiFsDirEntry {
@@ -600,6 +612,7 @@ export interface HenjiNativeApi {
   media: HenjiMediaApi
   image: HenjiImageApi
   video: HenjiVideoApi
+  audio: HenjiAudioApi
   clipboard: HenjiClipboardApi
   drag: HenjiDragApi
   projectPackage: HenjiProjectPackageApi

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
+  HenjiAudioApi,
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
@@ -272,6 +273,7 @@ const imageApi: HenjiImageApi = {
   saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => nativeInvoke('image:saveImageSourceToAppDebugDir', { source, category, suggestedFileName }),
   readImageInfo: (source) => nativeInvoke('image:readImageInfo', { source }),
   compressImageSource: (payload) => nativeInvoke('image:compressImageSource', payload),
+  generateThumbnailBytes: (payload) => nativeInvoke('image:generateThumbnailBytes', payload),
 }
 
 const videoApi: HenjiVideoApi = {
@@ -279,6 +281,11 @@ const videoApi: HenjiVideoApi = {
   trimVideoSource: (payload) => nativeInvoke('video:trimVideoSource', payload),
   compressVideoToFit: (payload) => nativeInvoke('video:compressVideoToFit', payload),
   generateThumbnail: (payload) => nativeInvoke('video:generateThumbnail', payload),
+  generateThumbnailBytes: (payload) => nativeInvoke('video:generateThumbnailBytes', payload),
+}
+
+const audioApi: HenjiAudioApi = {
+  extractSamples: (payload) => nativeInvoke('audio:extractSamples', payload),
 }
 
 const loggingApi: HenjiLoggingApi = {
@@ -335,6 +342,7 @@ const api: HenjiNativeApi = {
   media: mediaApi,
   image: imageApi,
   video: videoApi,
+  audio: audioApi,
   clipboard: clipboardApi,
   drag: dragApi,
   projectPackage: projectPackageApi,

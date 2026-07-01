@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import { databaseService } from '@/services/database/DatabaseService'
 import {
   appLocalDataDir,
   basename,
@@ -17,6 +18,31 @@ import {
 
 const logger = createLogger('utils.dataPath')
 
+const CUSTOM_DATA_DIR_SETTING_KEY = 'custom_data_directory'
+let legacyMigrationDone = false
+
+/**
+ * 老用户的自定义数据目录曾经只存在 localStorage，迁移到 SQLite settings 表后一次性搬运并清理旧 key。
+ * localStorage 清空/丢失曾导致应用静默回退默认目录、用户找不到之前迁移过去的文件。
+ */
+async function migrateLegacyCustomDataRoot(): Promise<void> {
+  if (legacyMigrationDone) return
+  legacyMigrationDone = true
+
+  const legacy = localStorage.getItem(CUSTOM_DATA_DIR_SETTING_KEY)
+  if (!legacy || !legacy.trim()) return
+
+  try {
+    const existing = await databaseService.getSetting(CUSTOM_DATA_DIR_SETTING_KEY)
+    if (!existing) {
+      await databaseService.setSetting(CUSTOM_DATA_DIR_SETTING_KEY, legacy.trim())
+    }
+    localStorage.removeItem(CUSTOM_DATA_DIR_SETTING_KEY)
+  } catch (error) {
+    logger.error('迁移自定义数据目录设置失败:', error)
+  }
+}
+
 // ==================== 核心路径管理 ====================
 
 /**
@@ -33,7 +59,9 @@ export async function getDefaultDataRoot(): Promise<string> {
  * @returns 当前使用的数据根目录路径
  */
 export async function getDataRoot(): Promise<string> {
-  const customPath = localStorage.getItem('custom_data_directory')
+  await databaseService.init()
+  await migrateLegacyCustomDataRoot()
+  const customPath = await databaseService.getSetting(CUSTOM_DATA_DIR_SETTING_KEY)
   const root = customPath && customPath.trim() ? customPath : await getDefaultDataRoot()
   if (isDesktopRuntime()) {
     await getPlatform().media.allowRoot(root)
@@ -118,14 +146,16 @@ export async function initializeDataDirectory(rootPath: string): Promise<void> {
  * @param customPath 自定义目录路径
  */
 export async function setCustomDataRoot(customPath: string): Promise<void> {
-  localStorage.setItem('custom_data_directory', customPath)
+  await databaseService.init()
+  await databaseService.setSetting(CUSTOM_DATA_DIR_SETTING_KEY, customPath)
 }
 
 /**
  * 恢复到默认数据根目录
  */
 export async function resetToDefaultDataRoot(): Promise<void> {
-  localStorage.removeItem('custom_data_directory')
+  await databaseService.init()
+  await databaseService.deleteSetting(CUSTOM_DATA_DIR_SETTING_KEY)
 }
 
 // ==================== 验证和检查 ====================

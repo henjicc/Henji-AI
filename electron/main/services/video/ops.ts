@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { getUploadsDir } from '../image/path-utils'
-import { normalizeLocalSource } from '../image/source'
+import { execFileAsyncBuffer, resolveLocalMediaPath } from '../media/shared'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
 import type {
   CompressVideoToFitPayloadDto,
@@ -28,41 +28,6 @@ function execFileAsync(binaryPath: string, args: string[]): Promise<{ stdout: st
   })
 }
 
-function execFileAsyncBuffer(binaryPath: string, args: string[]): Promise<{ stdout: Buffer; stderr: Buffer }> {
-  return new Promise((resolve, reject) => {
-    execFile(binaryPath, args, { maxBuffer: MAX_BUFFER_BYTES, encoding: 'buffer' }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`${path.basename(binaryPath)} failed: ${error.message}\n${stderr.toString()}`))
-        return
-      }
-      resolve({ stdout, stderr })
-    })
-  })
-}
-
-async function resolveLocalVideoPath(source: string): Promise<string> {
-  const trimmed = source.trim()
-  if (!trimmed) throw new Error('Video source is empty')
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return await downloadToTempFile(trimmed)
-  }
-  const localPath = normalizeLocalSource(trimmed)
-  await fs.promises.access(localPath, fs.constants.R_OK)
-  return localPath
-}
-
-async function downloadToTempFile(url: string): Promise<string> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Remote video request failed with status ${response.status}`)
-  }
-  const bytes = Buffer.from(await response.arrayBuffer())
-  const ext = path.extname(new URL(url).pathname) || '.mp4'
-  const targetPath = path.join(getUploadsDir(), `${crypto.randomUUID()}${ext}`)
-  await fs.promises.writeFile(targetPath, bytes)
-  return targetPath
-}
-
 interface FfprobeStream {
   codec_type?: string
   width?: number
@@ -76,7 +41,7 @@ interface FfprobeOutput {
 
 export async function readVideoInfo(source: string): Promise<VideoInfoResultDto> {
   const ffprobePath = await loadFfprobePath()
-  const localPath = await resolveLocalVideoPath(source)
+  const localPath = await resolveLocalMediaPath(source)
   const { stdout } = await execFileAsync(ffprobePath, [
     '-v', 'quiet',
     '-print_format', 'json',
@@ -105,7 +70,7 @@ export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promi
   }
 
   const ffmpegPath = await loadFfmpegPath()
-  const localPath = await resolveLocalVideoPath(source)
+  const localPath = await resolveLocalMediaPath(source)
 
   const digest = crypto
     .createHash('md5')
@@ -143,7 +108,7 @@ export async function trimVideoSource(payload: TrimVideoSourcePayloadDto): Promi
  */
 export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto): Promise<CompressVideoToFitResultDto> {
   const { source, maxSizeMB } = payload
-  const localPath = await resolveLocalVideoPath(source)
+  const localPath = await resolveLocalMediaPath(source)
   const stat = await fs.promises.stat(localPath)
   const maxBytes = Math.floor(maxSizeMB * 1024 * 1024)
 
@@ -197,7 +162,7 @@ export async function generateVideoThumbnail(
   timeOffsetSeconds: number = 1.0
 ): Promise<string> {
   const ffmpegPath = await loadFfmpegPath()
-  const localPath = await resolveLocalVideoPath(source)
+  const localPath = await resolveLocalMediaPath(source)
 
   let seekTime = timeOffsetSeconds
   try {
@@ -218,4 +183,25 @@ export async function generateVideoThumbnail(
   ])
 
   return `data:image/png;base64,${stdout.toString('base64')}`
+}
+
+/**
+ * 200px 约束的 webp 缩略图，供缩略图缓存场景使用（区别于 generateVideoThumbnail 的
+ * 480px PNG poster 场景，两者用途/格式不同，不合并成一个通用函数）。
+ */
+export async function generateVideoThumbnailBytes(source: string, maxSize = 200): Promise<Buffer> {
+  const ffmpegPath = await loadFfmpegPath()
+  const localPath = await resolveLocalMediaPath(source)
+
+  const { stdout } = await execFileAsyncBuffer(ffmpegPath, [
+    '-ss', '0.1',
+    '-i', localPath,
+    '-frames:v', '1',
+    '-vf', `scale='min(${maxSize},iw)':'min(${maxSize},ih)':force_original_aspect_ratio=decrease`,
+    '-c:v', 'libwebp',
+    '-f', 'webp',
+    'pipe:1',
+  ])
+
+  return stdout
 }

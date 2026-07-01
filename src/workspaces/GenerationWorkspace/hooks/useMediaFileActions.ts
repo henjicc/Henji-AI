@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { getPlatform } from '@/platform/runtime'
 import { downloadMediaFile, quickDownloadMediaFile, resolveFilePath, isDesktop } from '@/utils/save'
+import { QUICK_DOWNLOAD_SETTING_SPECS, readLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 import type { ToastNotification } from '../types'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useMediaFileActions')
@@ -40,9 +41,11 @@ export function useMediaFileActions({ notify, messages }: UseMediaFileActionsPar
     try {
       const sourcePath = await resolveFilePath(filePath)
 
-      const enableQuick = localStorage.getItem('enable_quick_download') === 'true'
-      const buttonOnly = localStorage.getItem('quick_download_button_only') !== 'false'
-      const quickPath = localStorage.getItem('quick_download_path') || ''
+      const {
+        enableQuickDownload: enableQuick,
+        quickDownloadButtonOnly: buttonOnly,
+        quickDownloadPath: quickPath,
+      } = readLocalStorageSettings(QUICK_DOWNLOAD_SETTING_SPECS)
 
       const useQuick = enableQuick && (!buttonOnly || fromButton) && !!quickPath
       logger.info('[Workspace] 下载设置', { enableQuick, buttonOnly, quickPath, useQuick })

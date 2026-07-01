@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { COLLAPSE_SETTING_SPECS, COLLAPSE_WATCH_EVENTS, useLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 
 interface UseBottomPanelOptions {
   listContainerRef: RefObject<HTMLDivElement>
@@ -22,9 +23,10 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
   const [isCollapsing, setIsCollapsing] = useState(false)
 
-  const [enableAutoCollapse, setEnableAutoCollapse] = useState(true)
-  const [collapseDelay, setCollapseDelay] = useState(500)
-  const [collapseOnScrollOnly, setCollapseOnScrollOnly] = useState(true)
+  const { enableAutoCollapse, collapseDelay, collapseOnScrollOnly } = useLocalStorageSettings(
+    COLLAPSE_SETTING_SPECS,
+    COLLAPSE_WATCH_EVENTS
+  )
 
   const isPanelHoveredRef = useRef(false)
   const collapseTimerRef = useRef<number | null>(null)
@@ -86,19 +88,6 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
       document.removeEventListener('mousemove', trackMousePosition)
       clearInterval(interval)
     }
-  }, [])
-
-  useEffect(() => {
-    const loadSettings = () => {
-      setEnableAutoCollapse(localStorage.getItem('enable_auto_collapse') !== 'false')
-      setCollapseDelay(parseInt(localStorage.getItem('collapse_delay') || '500', 10))
-      setCollapseOnScrollOnly(localStorage.getItem('collapse_on_scroll_only') !== 'false')
-    }
-
-    loadSettings()
-    const handleSettingChange = () => loadSettings()
-    window.addEventListener('collapseSettingChanged', handleSettingChange)
-    return () => window.removeEventListener('collapseSettingChanged', handleSettingChange)
   }, [])
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { app } from 'electron'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { getCustomDataRoot } from '../dataRoot'
 
 const APP_IDENTIFIER = 'com.henji.ai'
 
@@ -35,10 +36,15 @@ export function mimeFromExtension(extension: string | undefined): string {
 }
 
 export function getDataRootDir(): string {
-  const base = process.platform === 'win32' && process.env.LOCALAPPDATA
-    ? path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
-    : path.join(app.getPath('appData'), APP_IDENTIFIER)
-  const root = path.join(base, 'Henji-AI')
+  const custom = getCustomDataRoot()
+  const root = custom
+    ? custom
+    : path.join(
+        process.platform === 'win32' && process.env.LOCALAPPDATA
+          ? path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER)
+          : path.join(app.getPath('appData'), APP_IDENTIFIER),
+        'Henji-AI'
+      )
   fs.mkdirSync(root, { recursive: true })
   return root
 }

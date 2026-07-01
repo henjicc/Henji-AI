@@ -4,6 +4,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { getCustomDataRoot } from './services/dataRoot'
 
 const MEDIA_SCHEME = 'henji-media'
 const MEDIA_HOST = 'local'
@@ -72,12 +73,17 @@ function isInsideRoot(targetPath: string, rootPath: string): boolean {
 }
 
 function getAllowedMediaRoots(): string[] {
-  return [
+  const roots = [
     getBaseLocalDataDir(),
     app.getPath('downloads'),
     app.getPath('temp') || os.tmpdir(),
     ...allowedMediaRoots,
   ]
+  const customRoot = getCustomDataRoot()
+  if (customRoot) {
+    roots.push(customRoot)
+  }
+  return roots
 }
 
 /**

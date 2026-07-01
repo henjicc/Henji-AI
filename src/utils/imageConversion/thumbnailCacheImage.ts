@@ -18,6 +18,20 @@ export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl
     await mkdir(thumbnailsDir, { recursive: true })
   }
 
+  if (imagePath.trim() && window.henjiNative) {
+    try {
+      const { bytes } = await window.henjiNative.image.generateThumbnailBytes({ source: imagePath })
+      await writeFile(cachePath, bytes)
+      return cachePath
+    } catch {
+      // 主进程处理失败（如路径不在协议白名单内），走下面的渲染层后备逻辑
+    }
+  }
+
+  return generateImageThumbnailFallback(imageUrl, cachePath)
+}
+
+function generateImageThumbnailFallback(imageUrl: string, cachePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'

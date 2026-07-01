@@ -13,6 +13,20 @@ export async function generateAndCacheVideoThumbnail(videoPath: string, videoUrl
     await mkdir(thumbnailsDir, { recursive: true })
   }
 
+  if (videoPath.trim() && window.henjiNative) {
+    try {
+      const { bytes } = await window.henjiNative.video.generateThumbnailBytes({ source: videoPath })
+      await writeFile(cachePath, bytes)
+      return cachePath
+    } catch {
+      // 主进程处理失败（如路径不在协议白名单内），走下面的渲染层后备逻辑
+    }
+  }
+
+  return generateVideoThumbnailFallback(videoUrl, cachePath)
+}
+
+function generateVideoThumbnailFallback(videoUrl: string, cachePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.crossOrigin = 'anonymous'

@@ -156,6 +156,12 @@ export async function compressImageSource(
   return { fullPath, dataUrl }
 }
 
+export async function generateImageThumbnailBytes(source: string, maxSize = 200): Promise<Buffer> {
+  const sharp = await loadSharp()
+  const { bytes } = await resolveSourceBytes(source)
+  return await sharp(bytes).resize(maxSize, maxSize, { fit: 'inside' }).webp({ quality: 80 }).toBuffer()
+}
+
 export async function readImageInfo(source: string): Promise<ImageInfoResultDto> {
   const { bytes, extension } = await resolveSourceBytes(source)
   const sharp = await loadSharp()

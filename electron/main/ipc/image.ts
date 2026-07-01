@@ -2,6 +2,7 @@ import {
   compressImageSource,
   cropImageSource,
   embedStoryboardImageMetadata,
+  generateImageThumbnailBytes,
   loadImage,
   mergeStoryboardImages,
   persistImageBinary,
@@ -124,6 +125,10 @@ export function registerImageIpc(): void {
       quality: payload.quality,
       maxDimension: payload.maxDimension,
     })
+  })
+  registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array }>('image:generateThumbnailBytes', parseThumbnailBytesPayload, async ({ source, maxSize }) => {
+    const bytes = await generateImageThumbnailBytes(source, maxSize)
+    return { bytes }
   })
 }
 
@@ -347,5 +352,18 @@ function parseCompressImageSourcePayload(input: unknown): CompressImageSourcePay
     maxPixels: readOptionalNumber(record, 'maxPixels'),
     quality: readOptionalNumber(record, 'quality'),
     maxDimension: readOptionalNumber(record, 'maxDimension'),
+  }
+}
+
+interface ThumbnailBytesPayload {
+  source: string
+  maxSize?: number
+}
+
+function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
+  const record = parseRecord(input)
+  return {
+    source: readString(record, 'source'),
+    maxSize: readOptionalNumber(record, 'maxSize'),
   }
 }
