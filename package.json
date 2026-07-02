@@ -31,6 +31,8 @@
     "release": "node scripts/release.cjs"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
     "@types/react-window": "^1.8.8",
     "@xyflow/react": "^12.10.1",
     "archiver": "^8.0.0",
@@ -54,6 +56,7 @@
     "react-window": "^2.2.3",
     "remark-gfm": "^4.0.1",
     "sharp": "^0.35.2",
+    "three": "^0.169.0",
     "uuid": "^13.0.0",
     "yauzl": "^3.4.0",
     "zustand": "^5.0.11"
@@ -65,6 +68,7 @@
     "@types/pica": "^9.0.5",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
+    "@types/three": "^0.169.0",
     "@types/yauzl": "^3.4.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",

@@ -1,17 +1,12 @@
 import React from 'react'
-import { useI18n } from '@/hooks/useI18n'
+import CameraStageVerify from '@/features/cameraStage/CameraStageVerify'
 
 /**
  * 工具箱占位组件
+ *
+ * 运镜控制 1.1 技术验证期间临时挂载三维验证场景，
+ * 验证完成后视情况还原占位文案或保留为正式入口（3.2 决定）。
  */
-const ToolboxPlaceholder: React.FC = () => {
-    const { t } = useI18n('ui')
-    return (
-        <div className="flex-1 flex items-center justify-center h-full bg-app">
-            <div className="text-gray-500 text-lg">{t('placeholders.developing')}</div>
-        </div>
-    )
-}
+const ToolboxPlaceholder: React.FC = () => <CameraStageVerify />
 
 export default ToolboxPlaceholder
-

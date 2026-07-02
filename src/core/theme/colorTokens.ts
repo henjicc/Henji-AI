@@ -34,6 +34,15 @@ export const STORYBOARD_CELL_BG_HEX = '#262626';
 export const STORYBOARD_NOTE_BG_HEX = '#0A0A0A';
 export const STORYBOARD_NOTE_TEXT_HEX = '#E5E5E5';
 
+// 运镜控制三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
+export const CAMERA_STAGE_COLOR_HEX = {
+  stageBg: '#18181c',
+  gridCell: '#303036',
+  gridSection: '#4a4a52',
+  objectWarm: '#e8734a',
+  objectCool: '#4a90e8',
+} as const;
+
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
 export const ANNOTATION_TRANSFORMER_HEX = '#3b82f6';
