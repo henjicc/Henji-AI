@@ -6,6 +6,12 @@ import path from 'node:path'
 import { getUploadsDir } from '../image/path-utils'
 import { execFileAsyncBuffer, resolveLocalMediaPath } from '../media/shared'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
+import {
+  getPreferredEncoder,
+  invalidateEncoderCache,
+  isHardwareEncoder,
+  type VideoEncoderProfile,
+} from './hwaccel'
 import type {
   CompressVideoToFitPayloadDto,
   CompressVideoToFitResultDto,
@@ -123,6 +129,8 @@ export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto):
   const containerOverheadRatio = 0.92
   const targetTotalBitsPerSecond = (maxBytes * 8 * containerOverheadRatio) / info.durationSeconds
   const videoBitrateKbps = Math.round(Math.max(400_000, targetTotalBitsPerSecond - audioBitrateBps) / 1000)
+  const maxrateKbps = Math.round(videoBitrateKbps * 1.5)
+  const bufsizeKbps = videoBitrateKbps * 2
 
   // 缓存键加版本片段（:kf1）：下面新增了强制关键帧参数，编码产物变了但旧 hash 输入不变，
   // 不加版本号会导致改动前就压缩过的视频继续复用旧的（关键帧稀疏的）缓存文件。
@@ -133,28 +141,53 @@ export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto):
   const outputPath = path.join(getUploadsDir(), `compressed-${digest}.mp4`)
 
   if (!fs.existsSync(outputPath)) {
-    await execFileAsync(ffmpegPath, [
-      '-y',
-      '-i', localPath,
-      '-c:v', 'libx264',
-      '-preset', 'medium',
-      '-crf', '26',
-      '-b:v', `${videoBitrateKbps}k`,
-      '-maxrate', `${Math.round(videoBitrateKbps * 1.5)}k`,
-      '-bufsize', `${videoBitrateKbps * 2}k`,
-      // 每 1 秒强制一个关键帧（按演示时间，不依赖帧率）：既然这趟压缩本来就要重新编码，
-      // 顺便把关键帧铺密，让后续裁剪可以一直用代价极低的 -c copy 流复制，且能精确卡在
-      // 任意整数秒边界，不会因为关键帧稀疏导致裁剪点明显跑偏。
-      '-force_key_frames', 'expr:gte(t,n_forced*1)',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-movflags', '+faststart',
-      outputPath,
-    ])
+    await encodeCompressedVideo(ffmpegPath, localPath, outputPath, videoBitrateKbps, maxrateKbps, bufsizeKbps)
   }
 
   const compressedStat = await fs.promises.stat(outputPath)
   return { path: outputPath, sizeBytes: compressedStat.size }
+}
+
+/**
+ * 优先用探测到的硬件编码器（NVENC/QSV/AMF/VideoToolbox）编码；若编码失败则重新探测一次
+ * 硬件可用性（识别显卡被拔掉/驱动变化等场景）。重新探测后编码器选择不变，说明硬件仍正常、
+ * 失败另有原因，不重试直接抛错；选择变化（含降级到 CPU）则用新选择重试一次。
+ */
+async function encodeCompressedVideo(
+  ffmpegPath: string,
+  localPath: string,
+  outputPath: string,
+  videoBitrateKbps: number,
+  maxrateKbps: number,
+  bufsizeKbps: number
+): Promise<void> {
+  const buildArgs = (profile: VideoEncoderProfile): string[] => [
+    '-y',
+    '-i', localPath,
+    ...profile.buildEncodeArgs(videoBitrateKbps, maxrateKbps, bufsizeKbps),
+    // 每 1 秒强制一个关键帧（按演示时间，不依赖帧率）：既然这趟压缩本来就要重新编码，
+    // 顺便把关键帧铺密，让后续裁剪可以一直用代价极低的 -c copy 流复制，且能精确卡在
+    // 任意整数秒边界，不会因为关键帧稀疏导致裁剪点明显跑偏。
+    '-force_key_frames', 'expr:gte(t,n_forced*1)',
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-movflags', '+faststart',
+    outputPath,
+  ]
+
+  const profile = await getPreferredEncoder()
+  if (!isHardwareEncoder(profile)) {
+    await execFileAsync(ffmpegPath, buildArgs(profile))
+    return
+  }
+
+  try {
+    await execFileAsync(ffmpegPath, buildArgs(profile))
+  } catch (error) {
+    const retried = await invalidateEncoderCache()
+    if (retried.id === profile.id) throw error
+    await execFileAsync(ffmpegPath, buildArgs(retried))
+  }
 }
 
 export async function generateVideoThumbnail(
