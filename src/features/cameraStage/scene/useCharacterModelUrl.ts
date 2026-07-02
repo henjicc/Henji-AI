@@ -8,21 +8,27 @@ import { getBundledResourceUrl } from '@/platform/desktopApi'
  */
 
 const CHARACTER_MODEL_RESOURCE = 'camera-stage/UAL1_Standard.glb'
+const CAMERA_MODEL_RESOURCE = 'camera-stage/Video Camera.glb'
 
-let cachedUrl: string | null | undefined
-let pendingResolve: Promise<string | null> | null = null
+const cachedUrls = new Map<string, string | null>()
+const pendingResolves = new Map<string, Promise<string | null>>()
 
-export function useCharacterModelUrl(): string | null {
-  const [url, setUrl] = useState<string | null>(cachedUrl ?? null)
+function useBundledCameraStageResourceUrl(resourcePath: string): string | null {
+  const [url, setUrl] = useState<string | null>(cachedUrls.get(resourcePath) ?? null)
 
   useEffect(() => {
-    if (cachedUrl !== undefined) {
+    if (cachedUrls.has(resourcePath)) {
       return
     }
     let mounted = true
-    pendingResolve ??= getBundledResourceUrl(CHARACTER_MODEL_RESOURCE)
+    let pendingResolve = pendingResolves.get(resourcePath)
+    if (!pendingResolve) {
+      pendingResolve = getBundledResourceUrl(resourcePath)
+      pendingResolves.set(resourcePath, pendingResolve)
+    }
     void pendingResolve.then((value) => {
-      cachedUrl = value
+      cachedUrls.set(resourcePath, value)
+      pendingResolves.delete(resourcePath)
       if (mounted) {
         setUrl(value)
       }
@@ -30,7 +36,15 @@ export function useCharacterModelUrl(): string | null {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [resourcePath])
 
   return url
+}
+
+export function useCharacterModelUrl(): string | null {
+  return useBundledCameraStageResourceUrl(CHARACTER_MODEL_RESOURCE)
+}
+
+export function useCameraModelUrl(): string | null {
+  return useBundledCameraStageResourceUrl(CAMERA_MODEL_RESOURCE)
 }

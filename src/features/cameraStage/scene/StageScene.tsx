@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Grid, OrbitControls, TransformControls } from '@react-three/drei'
+import { Grid, OrbitControls } from '@react-three/drei'
 import type { Group } from 'three'
 import { CAMERA_STAGE_COLOR_HEX } from '@/core/theme/colorTokens'
 import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
@@ -8,6 +8,7 @@ import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import StageObjectMesh from './StageObjectMesh'
 import StageViewportCamera from './StageViewportCamera'
+import StageTransformControls from './StageTransformControls'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -113,7 +114,7 @@ const StageScene: React.FC = () => {
         />
       ))}
       {selectedNode && !isCameraView && (
-        <TransformControls
+        <StageTransformControls
           object={selectedNode}
           mode={transformMode}
           onObjectChange={handleGizmoChange}

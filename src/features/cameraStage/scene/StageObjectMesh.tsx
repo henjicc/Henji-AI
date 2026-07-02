@@ -9,8 +9,9 @@ import type {
   StagePrimitiveKind,
   StageVec3,
 } from '../domain/sceneTypes'
+import CameraModel from './CameraModel'
 import CharacterModel from './CharacterModel'
-import { useCharacterModelUrl } from './useCharacterModelUrl'
+import { useCameraModelUrl, useCharacterModelUrl } from './useCharacterModelUrl'
 
 /**
  * 单个场景对象的三维渲染：
@@ -111,6 +112,7 @@ const CameraHelperMesh: React.FC<{
   lookAtTarget: StageVec3
 }> = ({ object, selected, lookAtTarget }) => {
   const helperRef = useRef<Group>(null)
+  const modelUrl = useCameraModelUrl()
   const target = useMemo(
     () => new Vector3(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z),
     [lookAtTarget.x, lookAtTarget.y, lookAtTarget.z],
@@ -122,10 +124,10 @@ const CameraHelperMesh: React.FC<{
     const halfWidth = halfHeight * 1.55
     const origin = new Vector3(0, 0, 0)
     const corners = [
-      new Vector3(-halfWidth, halfHeight, -distance),
-      new Vector3(halfWidth, halfHeight, -distance),
-      new Vector3(halfWidth, -halfHeight, -distance),
-      new Vector3(-halfWidth, -halfHeight, -distance),
+      new Vector3(-halfWidth, halfHeight, distance),
+      new Vector3(halfWidth, halfHeight, distance),
+      new Vector3(halfWidth, -halfHeight, distance),
+      new Vector3(-halfWidth, -halfHeight, distance),
     ]
     const points = [
       origin, corners[0],
@@ -146,16 +148,36 @@ const CameraHelperMesh: React.FC<{
     helperRef.current?.lookAt(target)
   }, [target])
 
+  const placeholder = (
+    <>
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[0.82, 0.46, 0.24]} />
+        <StageMaterial color={object.color} selected={selected} />
+      </mesh>
+      <mesh position={[-0.2, 0.41, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.2, 0.2, 0.1, 32]} />
+        <StageMaterial color={object.color} selected={selected} />
+      </mesh>
+      <mesh position={[0.2, 0.41, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.2, 0.2, 0.1, 32]} />
+        <StageMaterial color={object.color} selected={selected} />
+      </mesh>
+      <mesh position={[0, 0, 0.34]} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
+        <cylinderGeometry args={[0.27, 0.14, 0.44, 4, 1, false]} />
+        <StageMaterial color={object.color} selected={selected} />
+      </mesh>
+    </>
+  )
+
   return (
     <group ref={helperRef}>
-      <mesh>
-        <boxGeometry args={[0.45, 0.32, 0.5]} />
-        <StageMaterial color={object.color} selected={selected} />
-      </mesh>
-      <mesh position={[0, 0, -0.42]} rotation={[-Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[0.16, 0.35, 24]} />
-        <StageMaterial color={object.color} selected={selected} />
-      </mesh>
+      {modelUrl ? (
+        <CharacterErrorBoundary fallback={placeholder}>
+          <Suspense fallback={placeholder}>
+            <CameraModel object={object} selected={selected} url={modelUrl} />
+          </Suspense>
+        </CharacterErrorBoundary>
+      ) : placeholder}
       <lineSegments geometry={frustumGeometry}>
         <lineBasicMaterial
           color={object.color}
