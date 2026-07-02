@@ -141,6 +141,18 @@ function initializeSchema(conn: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_storyboard_projects_updated_at
       ON storyboard_projects(updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS camera_stage_projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      object_count INTEGER NOT NULL DEFAULT 0,
+      scene_json TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_camera_stage_projects_updated_at
+      ON camera_stage_projects(updated_at DESC);
+
     CREATE TABLE IF NOT EXISTS canvas_projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

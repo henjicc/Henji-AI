@@ -90,6 +90,26 @@ export interface HenjiStoryboardProjectsApi {
   deleteProjectRecord(projectId: string): Promise<void>
 }
 
+export interface HenjiCameraStageProjectSummary {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  objectCount: number
+}
+
+export interface HenjiCameraStageProjectRecord extends HenjiCameraStageProjectSummary {
+  sceneJson: string
+}
+
+export interface HenjiCameraStageProjectsApi {
+  listProjectSummaries(): Promise<HenjiCameraStageProjectSummary[]>
+  getProjectRecord(projectId: string): Promise<HenjiCameraStageProjectRecord | null>
+  upsertProjectRecord(record: HenjiCameraStageProjectRecord): Promise<void>
+  renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void>
+  deleteProjectRecord(projectId: string): Promise<void>
+}
+
 export interface HenjiCustomModelRecord {
   id: string
   name: string
@@ -605,6 +625,7 @@ export interface HenjiNativeApi {
   db: HenjiDbApi
   canvasProjects: HenjiCanvasProjectsApi
   storyboardProjects: HenjiStoryboardProjectsApi
+  cameraStageProjects: HenjiCameraStageProjectsApi
   customModels: HenjiCustomModelsApi
   keystore: HenjiKeystoreApi
   fs: HenjiFsApi

@@ -9,6 +9,7 @@ import {
 import { getCameraObjects } from '../domain/cameraUtils'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
+import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
 import type {
   StageGizmoMode,
   StageObject,
@@ -25,6 +26,10 @@ interface CameraStageState {
   gizmoMode: StageGizmoMode
   viewMode: StageViewMode
   activeCameraId: string | null
+  /** 当前已保存工程 id；null 表示尚未保存过（新场景） */
+  currentProjectId: string | null
+  /** 当前工程名（新场景用默认名，保存后与工程记录一致） */
+  currentProjectName: string
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
@@ -39,7 +44,14 @@ interface CameraStageState {
   updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3) => void
   /** 一键应用预设姿势（整体替换当前姿态） */
   applyPosePreset: (id: string, preset: StagePosePreset) => void
+  /** 关联到某个已保存工程（保存/加载后调用），仅更新工程标识不动场景数据 */
+  bindProject: (id: string, name: string) => void
+  /** 用工程快照整体重置场景（加载工程用）；同时复位选中/视角等界面态 */
+  loadSnapshot: (snapshot: StageSceneSnapshotInput, project: { id: string; name: string }) => void
 }
+
+/** 新场景默认工程名 */
+export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 生成同类对象的递增序号名，如"立方体 2" */
 function nextName(objects: StageObject[], base: string): string {
@@ -61,6 +73,8 @@ export const useCameraStageStore = create<CameraStageState>((set) => ({
   gizmoMode: 'translate',
   viewMode: 'director',
   activeCameraId: null,
+  currentProjectId: null,
+  currentProjectName: CAMERA_STAGE_DEFAULT_PROJECT_NAME,
 
   addPrimitive: (kind) =>
     set((state) => {
@@ -159,4 +173,22 @@ export const useCameraStageStore = create<CameraStageState>((set) => ({
         item.id === id && item.type === 'character' ? { ...item, pose: clonePose(preset) } : item,
       ),
     })),
+
+  bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
+
+  loadSnapshot: (snapshot, project) =>
+    set(() => {
+      const activeCameraId = isCameraId(snapshot.objects, snapshot.activeCameraId)
+        ? snapshot.activeCameraId
+        : firstCameraId(snapshot.objects)
+      return {
+        objects: snapshot.objects,
+        selectedId: null,
+        gizmoMode: 'translate',
+        viewMode: 'director',
+        activeCameraId,
+        currentProjectId: project.id,
+        currentProjectName: project.name,
+      }
+    }),
 }))

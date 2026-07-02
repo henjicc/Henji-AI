@@ -4,6 +4,7 @@ import type {
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
+  HenjiCameraStageProjectsApi,
   HenjiCanvasProjectsApi,
   HenjiClipboardApi,
   HenjiCustomModelsApi,
@@ -110,6 +111,15 @@ const storyboardProjectsApi: HenjiStoryboardProjectsApi = {
   renameProjectRecord: (projectId, name, updatedAt) =>
     nativeInvoke('storyboardProjects:rename', { projectId, name, updatedAt }),
   deleteProjectRecord: (projectId) => nativeInvoke('storyboardProjects:delete', { projectId }),
+}
+
+const cameraStageProjectsApi: HenjiCameraStageProjectsApi = {
+  listProjectSummaries: () => nativeInvoke('cameraStageProjects:list'),
+  getProjectRecord: (projectId) => nativeInvoke('cameraStageProjects:get', { projectId }),
+  upsertProjectRecord: (record) => nativeInvoke('cameraStageProjects:upsert', record),
+  renameProjectRecord: (projectId, name, updatedAt) =>
+    nativeInvoke('cameraStageProjects:rename', { projectId, name, updatedAt }),
+  deleteProjectRecord: (projectId) => nativeInvoke('cameraStageProjects:delete', { projectId }),
 }
 
 const customModelsApi: HenjiCustomModelsApi = {
@@ -333,6 +343,7 @@ const api: HenjiNativeApi = {
   db: dbApi,
   canvasProjects: canvasProjectsApi,
   storyboardProjects: storyboardProjectsApi,
+  cameraStageProjects: cameraStageProjectsApi,
   customModels: customModelsApi,
   keystore: keystoreApi,
   fs: fsApi,

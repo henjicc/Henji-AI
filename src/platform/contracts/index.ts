@@ -12,6 +12,7 @@ import type { ClipboardPlatform } from './clipboard'
 import type { DragDropPlatform } from './dragDrop'
 import type { ProjectPackagePlatform } from './projectPackage'
 import type { StoryboardProjectsPlatform } from './storyboardProjects'
+import type { CameraStageProjectsPlatform } from './cameraStageProjects'
 import type { WindowPlatform } from './window'
 import type { LoggingPlatform } from './logging'
 import type { UpdaterPlatform } from './updater'
@@ -31,6 +32,7 @@ export interface PlatformRuntime {
   dragDrop: DragDropPlatform
   projectPackage: ProjectPackagePlatform
   storyboardProjects: StoryboardProjectsPlatform
+  cameraStageProjects: CameraStageProjectsPlatform
   window: WindowPlatform
   logging: LoggingPlatform
   updater: UpdaterPlatform
@@ -51,6 +53,7 @@ export type {
   DragDropPlatform,
   ProjectPackagePlatform,
   StoryboardProjectsPlatform,
+  CameraStageProjectsPlatform,
   WindowPlatform,
   LoggingPlatform,
   UpdaterPlatform,
@@ -69,6 +72,7 @@ export * from './clipboard'
 export * from './dragDrop'
 export * from './projectPackage'
 export * from './storyboardProjects'
+export * from './cameraStageProjects'
 export * from './window'
 export * from './logging'
 export * from './updater'
