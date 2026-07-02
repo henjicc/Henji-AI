@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber'
 import type { Object3D } from 'three'
 import { TransformControls as TransformControlsImpl } from 'three-stdlib'
 import type { StageGizmoMode } from '../domain/sceneTypes'
+import { beginHistorySession, endHistorySession } from '../store/cameraStageStore'
 
 interface StageTransformControlsProps {
   object: Object3D
@@ -108,6 +109,12 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
 
     const handleDraggingChanged = (event: TransformEvent): void => {
       defaultControls.enabled = !event.value
+      // 一次 gizmo 拖拽合并为一条撤销记录：拖拽开始开会话，结束提交
+      if (event.value) {
+        beginHistorySession()
+      } else {
+        endHistorySession()
+      }
     }
     controls.addEventListener('dragging-changed', handleDraggingChanged)
     return () => {

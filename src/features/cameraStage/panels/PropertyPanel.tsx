@@ -3,7 +3,7 @@ import NumberInput from '@/components/ui/NumberInput'
 import { UiButton, UiInput, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import type { StageObject, StageVec3 } from '../domain/sceneTypes'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
 import CameraSettingsSection from './CameraSettingsSection'
 import CharacterPoseSection from './CharacterPoseSection'
 
@@ -81,7 +81,12 @@ const PropertyPanel: React.FC = () => {
     : VEC3_ROWS
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-surface-dark">
+    <div
+      className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-surface-dark"
+      // 一段连续编辑（聚焦某控件时的输入/滑杆拖动）合并为一条撤销记录：焦点进入开会话，离开提交
+      onFocusCapture={beginHistorySession}
+      onBlurCapture={endHistorySession}
+    >
       <div className="px-3 pb-2 pt-3 text-sm font-medium text-text-dark">属性</div>
       <div className="flex flex-col gap-4 px-3 pb-4">
         <div className="flex flex-col gap-2">

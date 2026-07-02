@@ -14,6 +14,7 @@ import type {
 import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
 import {
   CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+  clearCameraStageHistory,
   useCameraStageStore,
 } from '../store/cameraStageStore'
 
@@ -60,6 +61,7 @@ export async function createNewProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
 ): Promise<SavedProjectInfo> {
   useCameraStageStore.getState().newScene(name)
+  clearCameraStageHistory()
   return await saveCurrentProject()
 }
 
@@ -74,6 +76,7 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
     { objects: snapshot.objects, activeCameraId: snapshot.activeCameraId },
     { id: record.id, name: record.name },
   )
+  clearCameraStageHistory()
   return true
 }
 

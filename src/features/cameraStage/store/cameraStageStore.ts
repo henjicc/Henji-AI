@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import type { StoreApi } from 'zustand'
+import { temporal } from 'zundo'
 import {
   PRIMITIVE_KIND_LABELS,
   createCameraObject,
@@ -55,6 +57,35 @@ interface CameraStageState {
 /** 新场景默认工程名 */
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
+/** 撤销历史只跟踪场景数据切片（对象列表），界面态（选中/视角/工程标识）不入历史 */
+type TrackedState = Pick<CameraStageState, 'objects'>
+
+/**
+ * 会话式历史批处理：gizmo 拖拽、滑杆连续调整会触发大量 set，
+ * 用会话把「一次连续交互」合并为一条撤销记录——会话内只记录首帧的前态，其余忽略。
+ * 由交互组件在拖拽/聚焦开始时调用 begin、结束时调用 end。
+ */
+let historyRecord: StoreApi<CameraStageState>['setState'] | null = null
+let historySessionActive = false
+let historySessionCaptured = false
+let historySessionPast: CameraStageState | null = null
+
+export function beginHistorySession(): void {
+  if (historySessionActive) return
+  historySessionActive = true
+  historySessionCaptured = false
+  historySessionPast = null
+}
+
+export function endHistorySession(): void {
+  if (historySessionActive && historySessionCaptured && historySessionPast && historyRecord) {
+    historyRecord(historySessionPast)
+  }
+  historySessionActive = false
+  historySessionCaptured = false
+  historySessionPast = null
+}
+
 /** 生成同类对象的递增序号名，如"立方体 2" */
 function nextName(objects: StageObject[], base: string): string {
   const count = objects.filter((item) => item.name.startsWith(base)).length
@@ -69,7 +100,9 @@ function isCameraId(objects: StageObject[], id: string | null): boolean {
   return !!id && objects.some((item) => item.id === id && item.type === 'camera')
 }
 
-export const useCameraStageStore = create<CameraStageState>((set) => ({
+export const useCameraStageStore = create<CameraStageState>()(
+  temporal(
+    (set) => ({
   objects: [],
   selectedId: null,
   gizmoMode: 'translate',
@@ -204,4 +237,31 @@ export const useCameraStageStore = create<CameraStageState>((set) => ({
         currentProjectName: project.name,
       }
     }),
-}))
+    }),
+    {
+      limit: 100,
+      // 只跟踪场景数据切片；界面态变更不入历史
+      partialize: (state): TrackedState => ({ objects: state.objects }),
+      // 对象数组走不可变更新，引用相等即无实质变化 → 跳过记录（避免选中/视角变更污染历史）
+      equality: (a, b) => a.objects === b.objects,
+      handleSet: (handleSet) => {
+        historyRecord = handleSet
+        return (pastState) => {
+          if (historySessionActive) {
+            if (!historySessionCaptured) {
+              historySessionPast = pastState as CameraStageState
+              historySessionCaptured = true
+            }
+            return
+          }
+          handleSet(pastState)
+        }
+      },
+    },
+  ),
+)
+
+/** 清空撤销/重做历史（加载工程、新建场景后调用，避免跨工程回退） */
+export function clearCameraStageHistory(): void {
+  useCameraStageStore.temporal.getState().clear()
+}

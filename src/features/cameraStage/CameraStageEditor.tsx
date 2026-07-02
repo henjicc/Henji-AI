@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Camera } from 'lucide-react'
+import { ArrowLeft, Camera, Redo2, Undo2 } from 'lucide-react'
 import { Dropdown, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
 import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
@@ -9,6 +9,7 @@ import type { CameraStageDockHandle } from './layout/CameraStageDock'
 import { saveCurrentProject } from './projects/cameraStageProjectService'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
 import { useCameraStageStore } from './store/cameraStageStore'
+import { useCameraStageHistory } from './store/useCameraStageHistory'
 
 /**
  * 运镜控制编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
@@ -38,6 +39,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const projectName = useCameraStageStore((state) => state.currentProjectName)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
+
+  const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
 
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [shotHint, setShotHint] = useState<string | null>(null)
@@ -97,15 +100,30 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     return () => window.clearTimeout(timer)
   }, [shotHint])
 
-  // 编辑器作用域 Ctrl/Cmd+S 保存（输入框内不拦截，交给原生行为）
+  // 编辑器作用域快捷键：Ctrl/Cmd+S 保存、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做
+  // （输入框内不拦截 S，交给原生行为；撤销重做直接读 temporal，避免依赖 canUndo 频繁重挂监听）
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return
+      if (!(event.ctrlKey || event.metaKey)) return
       const target = event.target as HTMLElement | null
       const tag = target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
-      event.preventDefault()
-      void handleSave()
+      const inEditable = tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable
+      const key = event.key.toLowerCase()
+      if (key === 's') {
+        if (inEditable) return
+        event.preventDefault()
+        void handleSave()
+      } else if (key === 'z') {
+        if (inEditable) return
+        event.preventDefault()
+        const temporal = useCameraStageStore.temporal.getState()
+        if (event.shiftKey) temporal.redo()
+        else temporal.undo()
+      } else if (key === 'y') {
+        if (inEditable) return
+        event.preventDefault()
+        useCameraStageStore.temporal.getState().redo()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -134,6 +152,29 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             <ArrowLeft size={15} />
           </UiIconButton>
         )}
+
+        <div className="flex items-center gap-0.5 border-l border-border-dark pl-2">
+          <UiIconButton
+            showBorder={false}
+            appearance="hover-only"
+            disabled={!canUndo}
+            className="h-7 w-7"
+            title="撤销 (Ctrl+Z)"
+            onClick={() => undo()}
+          >
+            <Undo2 size={14} />
+          </UiIconButton>
+          <UiIconButton
+            showBorder={false}
+            appearance="hover-only"
+            disabled={!canRedo}
+            className="h-7 w-7"
+            title="重做 (Ctrl+Shift+Z)"
+            onClick={() => redo()}
+          >
+            <Redo2 size={14} />
+          </UiIconButton>
+        </div>
 
         <div className="flex items-center gap-1.5">
           <UiOptionButton
