@@ -58,7 +58,7 @@ export default function NumberInput(props: NumberInputProps) {
   return (
     <div className={className}>
       {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
-      <div className="relative inline-block">
+      <div className={`relative inline-block ${widthClassName === 'w-full' ? 'w-full' : ''}`}>
         <UiInput
           type="number"
           value={inputValue}

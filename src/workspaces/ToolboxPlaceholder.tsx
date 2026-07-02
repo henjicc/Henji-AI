@@ -1,12 +1,12 @@
 import React from 'react'
-import CameraStageVerify from '@/features/cameraStage/CameraStageVerify'
+import CameraStageEditor from '@/features/cameraStage/CameraStageEditor'
 
 /**
- * 工具箱占位组件
+ * 工具箱 Tab 容器
  *
- * 运镜控制 1.1 技术验证期间临时挂载三维验证场景，
- * 验证完成后视情况还原占位文案或保留为正式入口（3.2 决定）。
+ * 当前承载「运镜控制」编辑器（2.1 起为正式开发代码）；
+ * 工具箱多工具入口布局与正式命名文案由 3.2 任务落地。
  */
-const ToolboxPlaceholder: React.FC = () => <CameraStageVerify />
+const ToolboxPlaceholder: React.FC = () => <CameraStageEditor />
 
 export default ToolboxPlaceholder

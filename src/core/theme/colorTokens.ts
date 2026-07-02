@@ -41,7 +41,22 @@ export const CAMERA_STAGE_COLOR_HEX = {
   gridSection: '#4a4a52',
   objectWarm: '#e8734a',
   objectCool: '#4a90e8',
+  characterPlaceholder: '#d9a441',
+  cameraPlaceholder: '#8f97a3',
+  selectionOutline: '#4a90e8',
 } as const;
+
+// 运镜控制新建对象默认颜色轮换盘（按对象序号取模）
+export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
+  '#e8734a',
+  '#4a90e8',
+  '#58c472',
+  '#e8c84a',
+  '#b06fe8',
+  '#e85a7a',
+  '#4ac8c2',
+  '#9aa3ad',
+] as const;
 
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';

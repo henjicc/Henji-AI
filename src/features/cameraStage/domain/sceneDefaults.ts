@@ -1,0 +1,62 @@
+import { v4 as uuidv4 } from 'uuid'
+import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
+import type {
+  StageCameraObject,
+  StageCharacterObject,
+  StagePrimitiveKind,
+  StagePrimitiveObject,
+  StageTransform,
+} from './sceneTypes'
+
+/** 几何体类型的中文显示名（对齐参考产品的几何体库范围） */
+export const PRIMITIVE_KIND_LABELS: Record<StagePrimitiveKind, string> = {
+  box: '立方体',
+  sphere: '球体',
+  cylinder: '圆柱体',
+  cone: '圆锥',
+  pyramid: '棱锥',
+  torus: '环状体',
+}
+
+export const PRIMITIVE_KINDS: StagePrimitiveKind[] = ['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus']
+
+export function createIdentityTransform(): StageTransform {
+  return {
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 },
+  }
+}
+
+/** 按已有对象数量轮换取默认颜色，避免新对象千篇一律 */
+export function pickDefaultColor(objectCount: number): string {
+  return CAMERA_STAGE_OBJECT_PALETTE_HEX[objectCount % CAMERA_STAGE_OBJECT_PALETTE_HEX.length]
+}
+
+export function createPrimitiveObject(
+  kind: StagePrimitiveKind,
+  name: string,
+  color: string,
+): StagePrimitiveObject {
+  const transform = createIdentityTransform()
+  // 几何体默认落在地面上方而不是嵌进地面
+  transform.position.y = kind === 'torus' ? 0.75 : 0.5
+  return { id: uuidv4(), type: 'primitive', kind, name, transform, color, visible: true }
+}
+
+export function createCharacterObject(name: string, color: string): StageCharacterObject {
+  return {
+    id: uuidv4(),
+    type: 'character',
+    name,
+    transform: createIdentityTransform(),
+    color,
+    visible: true,
+  }
+}
+
+export function createCameraObject(name: string, color: string): StageCameraObject {
+  const transform = createIdentityTransform()
+  transform.position = { x: 0, y: 1.5, z: 4 }
+  return { id: uuidv4(), type: 'camera', name, transform, color, visible: true, fov: 50 }
+}
