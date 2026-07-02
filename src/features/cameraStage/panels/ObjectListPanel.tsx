@@ -44,7 +44,7 @@ const ObjectListPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full w-60 flex-col border-r border-border-dark bg-surface-dark">
+    <div className="flex h-full w-full flex-col bg-surface-dark">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <span className="text-sm font-medium text-text-dark">场景对象</span>
         <span className="text-xs text-text-muted">{objects.length}</span>

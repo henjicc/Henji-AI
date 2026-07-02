@@ -4,16 +4,15 @@ import { Dropdown, UiButton, UiIconButton, UiOptionButton } from '@/components/u
 import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
 import { exportSceneScreenshot } from './export/cameraStageScreenshot'
-import ObjectListPanel from './panels/ObjectListPanel'
-import PropertyPanel from './panels/PropertyPanel'
+import CameraStageDock from './layout/CameraStageDock'
+import type { CameraStageDockHandle } from './layout/CameraStageDock'
 import { saveCurrentProject } from './projects/cameraStageProjectService'
-import StageScene from './scene/StageScene'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
 import { useCameraStageStore } from './store/cameraStageStore'
 
 /**
- * 运镜控制编辑器编排容器：左对象列表 + 中三维视图 + 右属性面板。
- * 只做布局与接线，不承载业务实现。
+ * 运镜控制编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
+ * 只做布局与接线，不承载业务实现；面板布局由 CameraStageDock（dockview）管理。
  */
 
 const GIZMO_MODES: Array<{ id: StageGizmoMode; label: string }> = [
@@ -35,7 +34,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
-  const selectedId = useCameraStageStore((state) => state.selectedId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const projectName = useCameraStageStore((state) => state.currentProjectName)
   const cameras = getCameraObjects(objects)
@@ -45,6 +43,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const [shotHint, setShotHint] = useState<string | null>(null)
   const [shooting, setShooting] = useState(false)
   const captureRef = useRef<StageCaptureFn | null>(null)
+  const dockRef = useRef<CameraStageDockHandle>(null)
 
   const canScreenshot = viewMode === 'camera' && !!activeCamera
 
@@ -52,6 +51,16 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     setActiveCameraId(cameraId)
     setSelected(cameraId)
   }
+
+  const handleSave = useCallback(async (): Promise<void> => {
+    setSaveState('saving')
+    try {
+      await saveCurrentProject()
+      setSaveState('saved')
+    } catch {
+      setSaveState('error')
+    }
+  }, [])
 
   const handleScreenshot = useCallback(async (): Promise<void> => {
     const dataUrl = captureRef.current?.()
@@ -71,16 +80,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       setShotHint('截图导出失败')
     } finally {
       setShooting(false)
-    }
-  }, [])
-
-  const handleSave = useCallback(async (): Promise<void> => {
-    setSaveState('saving')
-    try {
-      await saveCurrentProject()
-      setSaveState('saved')
-    } catch {
-      setSaveState('error')
     }
   }, [])
 
@@ -122,11 +121,69 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       : '保存'
 
   return (
-    <div className="flex h-full flex-1 overflow-hidden bg-app">
-      <ObjectListPanel />
-      <div className="relative min-w-0 flex-1">
-        <StageScene captureRef={captureRef} />
-        <div className="absolute right-3 top-3 flex items-center gap-2">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-app">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
+        {onBackToList && (
+          <UiIconButton
+            showBorder={false}
+            appearance="hover-only"
+            className="h-7 w-7"
+            title="返回工程列表"
+            onClick={onBackToList}
+          >
+            <ArrowLeft size={15} />
+          </UiIconButton>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          <UiOptionButton
+            active={viewMode === 'director'}
+            onClick={() => setViewMode('director')}
+            className="py-1.5 text-xs"
+          >
+            导演视角
+          </UiOptionButton>
+          <UiOptionButton
+            active={viewMode === 'camera'}
+            disabled={!activeCamera}
+            onClick={() => setViewMode('camera')}
+            className="py-1.5 text-xs"
+          >
+            机位视角
+          </UiOptionButton>
+          {activeCamera && (
+            <Dropdown<string>
+              value={activeCamera.id}
+              display={activeCamera.name}
+              options={cameras.map((camera) => ({ label: camera.name, value: camera.id }))}
+              onSelect={handleCameraSelect}
+              className="min-w-28"
+              buttonClassName="h-7 py-1.5 text-xs"
+              buttonLabelClassName="text-xs"
+              optionLabelClassName="text-xs"
+              minWidthStrategy="options"
+              panelWidthStrategy="options"
+            />
+          )}
+        </div>
+
+        {viewMode === 'director' && (
+          <div className="flex items-center gap-1.5 border-l border-border-dark pl-2">
+            {GIZMO_MODES.map((item) => (
+              <UiOptionButton
+                key={item.id}
+                active={gizmoMode === item.id}
+                onClick={() => setGizmoMode(item.id)}
+                className="py-1.5 text-xs"
+              >
+                {item.label}
+              </UiOptionButton>
+            ))}
+          </div>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          {shotHint && <span className="max-w-64 truncate text-xs text-text-muted">{shotHint}</span>}
           <span className="max-w-40 truncate text-xs text-text-muted" title={projectName}>
             {projectName}
           </span>
@@ -142,6 +199,15 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
           </UiButton>
           <UiButton
             size="sm"
+            variant="ghost"
+            onClick={() => dockRef.current?.resetLayout()}
+            title="恢复默认面板布局"
+            className="py-1.5 text-xs"
+          >
+            重置布局
+          </UiButton>
+          <UiButton
+            size="sm"
             onClick={() => void handleSave()}
             disabled={saveState === 'saving'}
             className="py-1.5 text-xs"
@@ -149,80 +215,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             {saveLabel}
           </UiButton>
         </div>
-        {shotHint && (
-          <div className="absolute right-3 top-12 max-w-72 truncate rounded-md bg-surface-dark px-2.5 py-1.5 text-xs text-text-dark shadow-lg">
-            {shotHint}
-          </div>
-        )}
-        <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-          {onBackToList && (
-            <div className="flex">
-              <UiIconButton
-                showBorder={false}
-                appearance="hover-only"
-                className="h-7 w-7"
-                title="返回工程列表"
-                onClick={onBackToList}
-              >
-                <ArrowLeft size={15} />
-              </UiIconButton>
-            </div>
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            <UiOptionButton
-              active={viewMode === 'director'}
-              onClick={() => setViewMode('director')}
-              className="py-1.5 text-xs"
-            >
-              导演视角
-            </UiOptionButton>
-            <UiOptionButton
-              active={viewMode === 'camera'}
-              disabled={!activeCamera}
-              onClick={() => setViewMode('camera')}
-              className="py-1.5 text-xs"
-            >
-              机位视角
-            </UiOptionButton>
-            {activeCamera && (
-              <Dropdown<string>
-                value={activeCamera.id}
-                display={activeCamera.name}
-                options={cameras.map((camera) => ({ label: camera.name, value: camera.id }))}
-                onSelect={handleCameraSelect}
-                className="min-w-28"
-                buttonClassName="h-7 py-1.5 text-xs"
-                buttonLabelClassName="text-xs"
-                optionLabelClassName="text-xs"
-                minWidthStrategy="options"
-                panelWidthStrategy="options"
-              />
-            )}
-          </div>
-          {viewMode === 'director' && (
-            <div className="flex gap-1.5">
-              {GIZMO_MODES.map((item) => (
-                <UiOptionButton
-                  key={item.id}
-                  active={gizmoMode === item.id}
-                  onClick={() => setGizmoMode(item.id)}
-                  className="py-1.5 text-xs"
-                >
-                  {item.label}
-                </UiOptionButton>
-              ))}
-            </div>
-          )}
-          <div className="text-xs text-text-muted">
-            {viewMode === 'camera'
-              ? `当前取景：${activeCamera?.name ?? '未选择机位'}`
-              : selectedId
-              ? '拖拽 gizmo 变换选中对象，点空白处取消选中'
-              : '左键点击选中对象，左键拖拽环绕，滚轮缩放，右键拖拽平移'}
-          </div>
-        </div>
       </div>
-      <PropertyPanel />
+
+      <div className="relative min-h-0 flex-1">
+        <CameraStageDock ref={dockRef} captureRef={captureRef} />
+      </div>
     </div>
   )
 }

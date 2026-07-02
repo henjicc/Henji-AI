@@ -64,7 +64,7 @@ const PropertyPanel: React.FC = () => {
 
   if (!selected) {
     return (
-      <div className="flex h-full w-72 flex-col border-l border-border-dark bg-surface-dark">
+      <div className="flex h-full w-full flex-col bg-surface-dark">
         <div className="px-3 pb-2 pt-3 text-sm font-medium text-text-dark">属性</div>
         <div className="px-3 pt-4 text-center text-xs text-text-muted">
           选中一个场景对象后在这里编辑属性
@@ -81,7 +81,7 @@ const PropertyPanel: React.FC = () => {
     : VEC3_ROWS
 
   return (
-    <div className="flex h-full w-72 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-l border-border-dark bg-surface-dark">
+    <div className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-surface-dark">
       <div className="px-3 pb-2 pt-3 text-sm font-medium text-text-dark">属性</div>
       <div className="flex flex-col gap-4 px-3 pb-4">
         <div className="flex flex-col gap-2">
