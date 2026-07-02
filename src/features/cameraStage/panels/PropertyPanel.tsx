@@ -4,6 +4,7 @@ import { UiButton, UiInput, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import type { StageObject, StageVec3 } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import CameraSettingsSection from './CameraSettingsSection'
 import CharacterPoseSection from './CharacterPoseSection'
 
 /** 右侧属性面板：名称/颜色/变换（位置、旋转、缩放）与对象类型专属字段 */
@@ -75,6 +76,9 @@ const PropertyPanel: React.FC = () => {
   const handleUniformScale = (next: number): void => {
     updateTransform(selected.id, { scale: { x: next, y: next, z: next } })
   }
+  const transformRows = selected.type === 'camera'
+    ? VEC3_ROWS.filter((row) => row.key === 'position')
+    : VEC3_ROWS
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-l border-border-dark bg-surface-dark">
@@ -114,7 +118,7 @@ const PropertyPanel: React.FC = () => {
 
         <div className="flex flex-col gap-3">
           <SectionTitle>变换</SectionTitle>
-          {VEC3_ROWS.map((row) => (
+          {transformRows.map((row) => (
             <Vec3Row
               key={row.key}
               label={row.label}
@@ -125,7 +129,8 @@ const PropertyPanel: React.FC = () => {
               onChange={(next) => updateTransform(selected.id, { [row.key]: next })}
             />
           ))}
-          <div>
+          {selected.type !== 'camera' && (
+            <div>
             <div className="mb-1 text-xs text-text-muted">统一缩放</div>
             <NumberInput
               value={selected.transform.scale.x}
@@ -137,30 +142,13 @@ const PropertyPanel: React.FC = () => {
               wheelStep
               onChange={handleUniformScale}
             />
-          </div>
+            </div>
+          )}
         </div>
 
         {selected.type === 'character' && <CharacterPoseSection object={selected} />}
 
-        {selected.type === 'camera' && (
-          <div className="flex flex-col gap-2">
-            <SectionTitle>相机</SectionTitle>
-            <div>
-              <div className="mb-1 text-xs text-text-muted">视野角 FOV（°）</div>
-              <NumberInput
-                value={selected.fov}
-                step={1}
-                min={10}
-                max={120}
-                precision={0}
-                widthClassName="w-full"
-                commitOnChange
-                wheelStep
-                onChange={(next) => updateObject(selected.id, { fov: next })}
-              />
-            </div>
-          </div>
-        )}
+        {selected.type === 'camera' && <CameraSettingsSection object={selected} />}
 
         <div className="flex items-center justify-between">
           <SectionTitle>显示</SectionTitle>

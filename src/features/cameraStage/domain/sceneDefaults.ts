@@ -64,5 +64,14 @@ export function createCharacterObject(name: string, color: string): StageCharact
 export function createCameraObject(name: string, color: string): StageCameraObject {
   const transform = createIdentityTransform()
   transform.position = { x: 0, y: 1.5, z: 4 }
-  return { id: uuidv4(), type: 'camera', name, transform, color, visible: true, fov: 50 }
+  return {
+    id: uuidv4(),
+    type: 'camera',
+    name,
+    transform,
+    color,
+    visible: true,
+    fov: 50,
+    lookAt: { mode: 'manual', target: { x: 0, y: 1, z: 0 } },
+  }
 }

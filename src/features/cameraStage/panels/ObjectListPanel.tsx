@@ -13,7 +13,7 @@ type AddOptionValue = StagePrimitiveKind | 'character' | 'camera'
 const ADD_OPTIONS: Array<{ label: string; value: AddOptionValue }> = [
   ...PRIMITIVE_KINDS.map((kind) => ({ label: PRIMITIVE_KIND_LABELS[kind], value: kind as AddOptionValue })),
   { label: '角色', value: 'character' },
-  { label: '机位相机（占位）', value: 'camera' },
+  { label: '机位相机', value: 'camera' },
 ]
 
 const TypeIcon: React.FC<{ object: StageObject }> = ({ object }) => {
@@ -25,6 +25,7 @@ const TypeIcon: React.FC<{ object: StageObject }> = ({ object }) => {
 const ObjectListPanel: React.FC = () => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
+  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const updateObject = useCameraStageStore((state) => state.updateObject)
@@ -74,6 +75,9 @@ const ObjectListPanel: React.FC = () => {
               >
                 <span className="shrink-0 text-text-muted"><TypeIcon object={object} /></span>
                 <span className="truncate">{object.name}</span>
+                {object.type === 'camera' && object.id === activeCameraId && (
+                  <span className="ml-auto shrink-0 text-[11px] text-text-muted">取景</span>
+                )}
               </UiOptionButton>
               <UiIconButton
                 showBorder={false}

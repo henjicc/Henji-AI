@@ -1,7 +1,14 @@
-import React, { Suspense, useEffect, useRef } from 'react'
+import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
+import { BufferGeometry, Vector3 } from 'three'
 import type { Group } from 'three'
-import type { StageCharacterObject, StageObject, StagePrimitiveKind } from '../domain/sceneTypes'
+import type {
+  StageCameraObject,
+  StageCharacterObject,
+  StageObject,
+  StagePrimitiveKind,
+  StageVec3,
+} from '../domain/sceneTypes'
 import CharacterModel from './CharacterModel'
 import { useCharacterModelUrl } from './useCharacterModelUrl'
 
@@ -20,6 +27,10 @@ interface StageObjectMeshProps {
   onSelect: (id: string) => void
   /** 挂载/卸载时向场景注册 three.js 节点，供 TransformControls 使用 */
   onRegister: (id: string, node: Group | null) => void
+  /** 相机对象的实际注视点；仅 camera 类型需要 */
+  cameraLookAtTarget?: StageVec3
+  /** 机位视角下隐藏相机图标/视锥体，避免编辑辅助进入实际取景画面 */
+  showCameraHelpers: boolean
 }
 
 const PrimitiveGeometry: React.FC<{ kind: StagePrimitiveKind }> = ({ kind }) => {
@@ -94,7 +105,76 @@ const CharacterMesh: React.FC<{ object: StageCharacterObject; selected: boolean 
   )
 }
 
-const StageObjectMesh: React.FC<StageObjectMeshProps> = ({ object, selected, onSelect, onRegister }) => {
+const CameraHelperMesh: React.FC<{
+  object: StageCameraObject
+  selected: boolean
+  lookAtTarget: StageVec3
+}> = ({ object, selected, lookAtTarget }) => {
+  const helperRef = useRef<Group>(null)
+  const target = useMemo(
+    () => new Vector3(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z),
+    [lookAtTarget.x, lookAtTarget.y, lookAtTarget.z],
+  )
+  const frustumGeometry = useMemo(() => {
+    const distance = 1.1
+    const fov = Math.min(120, Math.max(10, object.fov)) * DEG2RAD
+    const halfHeight = Math.tan(fov / 2) * distance
+    const halfWidth = halfHeight * 1.55
+    const origin = new Vector3(0, 0, 0)
+    const corners = [
+      new Vector3(-halfWidth, halfHeight, -distance),
+      new Vector3(halfWidth, halfHeight, -distance),
+      new Vector3(halfWidth, -halfHeight, -distance),
+      new Vector3(-halfWidth, -halfHeight, -distance),
+    ]
+    const points = [
+      origin, corners[0],
+      origin, corners[1],
+      origin, corners[2],
+      origin, corners[3],
+      corners[0], corners[1],
+      corners[1], corners[2],
+      corners[2], corners[3],
+      corners[3], corners[0],
+    ]
+    return new BufferGeometry().setFromPoints(points)
+  }, [object.fov])
+
+  useEffect(() => () => frustumGeometry.dispose(), [frustumGeometry])
+
+  useLayoutEffect(() => {
+    helperRef.current?.lookAt(target)
+  }, [target])
+
+  return (
+    <group ref={helperRef}>
+      <mesh>
+        <boxGeometry args={[0.45, 0.32, 0.5]} />
+        <StageMaterial color={object.color} selected={selected} />
+      </mesh>
+      <mesh position={[0, 0, -0.42]} rotation={[-Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[0.16, 0.35, 24]} />
+        <StageMaterial color={object.color} selected={selected} />
+      </mesh>
+      <lineSegments geometry={frustumGeometry}>
+        <lineBasicMaterial
+          color={object.color}
+          transparent
+          opacity={selected ? 1 : 0.7}
+        />
+      </lineSegments>
+    </group>
+  )
+}
+
+const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
+  object,
+  selected,
+  onSelect,
+  onRegister,
+  cameraLookAtTarget,
+  showCameraHelpers,
+}) => {
   const groupRef = useRef<Group>(null)
   const { transform } = object
 
@@ -114,12 +194,14 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({ object, selected, onS
         name={object.id}
         visible={object.visible}
         position={[transform.position.x, transform.position.y, transform.position.z]}
-        rotation={[
-          transform.rotation.x * DEG2RAD,
-          transform.rotation.y * DEG2RAD,
-          transform.rotation.z * DEG2RAD,
-        ]}
-        scale={[transform.scale.x, transform.scale.y, transform.scale.z]}
+        rotation={object.type === 'camera'
+          ? [0, 0, 0]
+          : [
+              transform.rotation.x * DEG2RAD,
+              transform.rotation.y * DEG2RAD,
+              transform.rotation.z * DEG2RAD,
+            ]}
+        scale={object.type === 'camera' ? [1, 1, 1] : [transform.scale.x, transform.scale.y, transform.scale.z]}
       >
         {object.type === 'primitive' && (
           <mesh onClick={handleClick}>
@@ -132,17 +214,13 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({ object, selected, onS
             <CharacterMesh object={object} selected={selected} />
           </group>
         )}
-        {object.type === 'camera' && (
-          // 2.3 之前的机位占位：机身 + 指向 -Z（three.js 相机朝向约定）的镜头锥
+        {object.type === 'camera' && showCameraHelpers && cameraLookAtTarget && (
           <group onClick={handleClick}>
-            <mesh>
-              <boxGeometry args={[0.45, 0.32, 0.5]} />
-              <StageMaterial color={object.color} selected={selected} />
-            </mesh>
-            <mesh position={[0, 0, -0.42]} rotation={[-Math.PI / 2, 0, 0]}>
-              <coneGeometry args={[0.16, 0.35, 24]} />
-              <StageMaterial color={object.color} selected={selected} />
-            </mesh>
+            <CameraHelperMesh
+              object={object}
+              selected={selected}
+              lookAtTarget={cameraLookAtTarget}
+            />
           </group>
         )}
       </group>

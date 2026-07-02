@@ -26,6 +26,10 @@ export type StagePrimitiveKind = 'box' | 'sphere' | 'cylinder' | 'cone' | 'pyram
 
 export type StageObjectType = 'primitive' | 'character' | 'camera'
 
+export type StageCameraLookAt =
+  | { mode: 'manual'; target: StageVec3 }
+  | { mode: 'object'; objectId: string; fallbackTarget: StageVec3 }
+
 interface StageObjectBase {
   id: string
   type: StageObjectType
@@ -53,6 +57,8 @@ export interface StageCameraObject extends StageObjectBase {
   type: 'camera'
   /** 视野角（度） */
   fov: number
+  /** 机位实际取景朝向：手动坐标或锁定角色对象 */
+  lookAt: StageCameraLookAt
 }
 
 export type StageObject = StagePrimitiveObject | StageCharacterObject | StageCameraObject
@@ -65,6 +71,8 @@ export interface StageObjectPatch {
   transform?: StageTransform
   /** 仅 camera 对象有效 */
   fov?: number
+  /** 仅 camera 对象有效 */
+  lookAt?: StageCameraLookAt
   /** 仅 character 对象有效 */
   variant?: StageBodyVariantId
   /** 仅 character 对象有效 */
@@ -72,3 +80,4 @@ export interface StageObjectPatch {
 }
 
 export type StageGizmoMode = 'translate' | 'rotate' | 'scale'
+export type StageViewMode = 'director' | 'camera'

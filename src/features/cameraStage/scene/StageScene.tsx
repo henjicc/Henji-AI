@@ -1,10 +1,13 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Grid, OrbitControls, TransformControls } from '@react-three/drei'
 import type { Group } from 'three'
 import { CAMERA_STAGE_COLOR_HEX } from '@/core/theme/colorTokens'
+import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
+import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import StageObjectMesh from './StageObjectMesh'
+import StageViewportCamera from './StageViewportCamera'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -17,6 +20,8 @@ const StageScene: React.FC = () => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
+  const viewMode = useCameraStageStore((state) => state.viewMode)
+  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
 
@@ -57,6 +62,22 @@ const StageScene: React.FC = () => {
   }, [updateTransform])
 
   const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
+  const selectedObject = selectedId ? objects.find((item) => item.id === selectedId) : undefined
+  const transformMode = selectedObject?.type === 'camera' ? 'translate' : gizmoMode
+  const cameraLookAtTargets = useMemo(() => {
+    const targets = new Map<string, ReturnType<typeof resolveCameraLookAtTarget>>()
+    for (const object of objects) {
+      if (object.type === 'camera') {
+        targets.set(object.id, resolveCameraLookAtTarget(object, objects))
+      }
+    }
+    return targets
+  }, [objects])
+  const activeCamera = objects.find(
+    (item): item is StageCameraObject => item.id === activeCameraId && item.type === 'camera',
+  )
+  const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
+  const isCameraView = viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
 
   return (
     <Canvas
@@ -66,6 +87,12 @@ const StageScene: React.FC = () => {
     >
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 8, 4]} intensity={1.2} />
+      {isCameraView && (
+        <StageViewportCamera
+          cameraObject={activeCamera}
+          lookAtTarget={activeCameraTarget}
+        />
+      )}
       <Grid
         infiniteGrid
         cellSize={0.5}
@@ -81,16 +108,18 @@ const StageScene: React.FC = () => {
           selected={object.id === selectedId}
           onSelect={setSelected}
           onRegister={registerNode}
+          cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
+          showCameraHelpers={!isCameraView}
         />
       ))}
-      {selectedNode && (
+      {selectedNode && !isCameraView && (
         <TransformControls
           object={selectedNode}
-          mode={gizmoMode}
+          mode={transformMode}
           onObjectChange={handleGizmoChange}
         />
       )}
-      <OrbitControls makeDefault />
+      {!isCameraView && <OrbitControls makeDefault />}
     </Canvas>
   )
 }
