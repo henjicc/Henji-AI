@@ -9,6 +9,8 @@ docs/rust-genai
 docs/ref
 release/
 release2/
+resources-source/
+public/camera-stage-verify/
 # Dependencies
 node_modules/
 npm-debug.log*

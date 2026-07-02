@@ -1,17 +1,22 @@
-import React, { useState } from 'react'
+import React, { Suspense, useEffect, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Grid, OrbitControls, TransformControls } from '@react-three/drei'
-import type { Object3D } from 'three'
+import { Grid, OrbitControls, TransformControls, useAnimations, useGLTF } from '@react-three/drei'
+import * as THREE from 'three'
+import type { Group, Object3D } from 'three'
 import { UiOptionButton } from '@/components/ui'
 import { CAMERA_STAGE_COLOR_HEX } from '@/core/theme/colorTokens'
 
 /**
- * 运镜控制 1.1 技术验证组件（临时代码）
+ * 运镜控制 1.1/1.2 技术验证组件（临时代码）
  *
  * 只用于验证 three.js + @react-three/fiber + @react-three/drei 在
- * Electron sandbox 环境下的渲染与交互可行性，验证通过后按 2.1 的
- * 正式数据模型重写，不保留本文件结构。
+ * Electron sandbox 环境下的渲染与交互可行性，以及 Quaternius 免费资源
+ * 骨骼/动画加载可行性；验证通过后按 2.1/2.2 的正式数据模型重写，
+ * 不保留本文件结构。
+ *
+ * 验证用模型临时放在 public/camera-stage-verify/（仅验证期占位），
+ * 正式资源落地路径由 1.2 执行记录和后续任务另行确定。
  */
 
 type GizmoMode = 'translate' | 'rotate' | 'scale'
@@ -21,6 +26,37 @@ const GIZMO_MODES: Array<{ id: GizmoMode; label: string }> = [
   { id: 'rotate', label: '旋转' },
   { id: 'scale', label: '缩放' },
 ]
+
+// 打包态用 file:// 协议加载页面，绝对路径 `/xxx` 会解析到磁盘根目录而非应用目录，
+// 必须用相对路径；正式资源加载方式（2.x/3.x）应改走 henji-media:// 协议而非 public/ 静态资源。
+const VERIFY_MODEL_URL = './camera-stage-verify/UAL1_Standard.glb'
+
+/**
+ * Quaternius Universal Animation Library 加载验证（1.2 步骤 3-4）：
+ * 用 SkeletonHelper 确认骨骼层级、用 AnimationMixer 播放一个动作片段。
+ */
+const QuaterniusCharacterVerify: React.FC = () => {
+  const groupRef = useRef<Group>(null)
+  const { scene, animations } = useGLTF(VERIFY_MODEL_URL)
+  const { actions, names } = useAnimations(animations, groupRef)
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log(`[运镜控制验证] Quaternius 动画片段数量：${names.length}，前 5 个：${names.slice(0, 5).join('、')}`)
+
+    const skeletonHelper = new THREE.SkeletonHelper(scene)
+    scene.add(skeletonHelper)
+
+    const firstClipName = names[0]
+    if (firstClipName) {
+      actions[firstClipName]?.reset().play()
+    }
+  }, [scene, names, actions])
+
+  return <primitive ref={groupRef} object={scene} position={[0, 0, -1.8]} scale={1.2} />
+}
+
+useGLTF.preload(VERIFY_MODEL_URL)
 
 const CameraStageVerify: React.FC = () => {
   const [selected, setSelected] = useState<Object3D | null>(null)
@@ -57,6 +93,9 @@ const CameraStageVerify: React.FC = () => {
           <meshStandardMaterial color={CAMERA_STAGE_COLOR_HEX.objectCool} />
         </mesh>
         {selected && <TransformControls object={selected} mode={mode} />}
+        <Suspense fallback={null}>
+          <QuaterniusCharacterVerify />
+        </Suspense>
         <OrbitControls makeDefault />
       </Canvas>
       <div className="absolute left-4 top-4 flex flex-col gap-2">
