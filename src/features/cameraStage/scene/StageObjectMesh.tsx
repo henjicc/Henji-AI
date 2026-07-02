@@ -1,12 +1,15 @@
-import React, { useEffect, useRef } from 'react'
+import React, { Suspense, useEffect, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Group } from 'three'
-import type { StageObject, StagePrimitiveKind } from '../domain/sceneTypes'
+import type { StageCharacterObject, StageObject, StagePrimitiveKind } from '../domain/sceneTypes'
+import CharacterModel from './CharacterModel'
+import { useCharacterModelUrl } from './useCharacterModelUrl'
 
 /**
  * 单个场景对象的三维渲染：
  * - primitive 按 kind 渲染基础几何体
- * - character/camera 在 2.1 阶段渲染为占位模型，分别由 2.2/2.3 替换为真实实现
+ * - character 渲染内置骨骼模型（加载中/加载失败/非桌面运行时回退占位模型）
+ * - camera 在 2.3 之前渲染为占位模型
  */
 
 const DEG2RAD = Math.PI / 180
@@ -45,6 +48,52 @@ const StageMaterial: React.FC<{ color: string; selected: boolean }> = ({ color, 
   />
 )
 
+/** 角色占位模型：胶囊身体 + 球形头，总高约 1.7（模型加载中/失败时的回退渲染） */
+const CharacterPlaceholder: React.FC<{ color: string; selected: boolean }> = ({ color, selected }) => (
+  <>
+    <mesh position={[0, 0.7, 0]}>
+      <capsuleGeometry args={[0.22, 0.95, 8, 16]} />
+      <StageMaterial color={color} selected={selected} />
+    </mesh>
+    <mesh position={[0, 1.5, 0]}>
+      <sphereGeometry args={[0.18, 24, 24]} />
+      <StageMaterial color={color} selected={selected} />
+    </mesh>
+  </>
+)
+
+/** 模型加载失败时回退占位渲染，避免单个角色资源问题拖垮整个三维视图 */
+class CharacterErrorBoundary extends React.Component<
+  { fallback: React.ReactNode; children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+
+  render(): React.ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
+const CharacterMesh: React.FC<{ object: StageCharacterObject; selected: boolean }> = ({ object, selected }) => {
+  const modelUrl = useCharacterModelUrl()
+  const placeholder = <CharacterPlaceholder color={object.color} selected={selected} />
+
+  if (!modelUrl) {
+    return placeholder
+  }
+  return (
+    <CharacterErrorBoundary fallback={placeholder}>
+      <Suspense fallback={placeholder}>
+        <CharacterModel object={object} selected={selected} url={modelUrl} />
+      </Suspense>
+    </CharacterErrorBoundary>
+  )
+}
+
 const StageObjectMesh: React.FC<StageObjectMeshProps> = ({ object, selected, onSelect, onRegister }) => {
   const groupRef = useRef<Group>(null)
   const { transform } = object
@@ -79,16 +128,8 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({ object, selected, onS
           </mesh>
         )}
         {object.type === 'character' && (
-          // 2.2 之前的角色占位：胶囊身体 + 球形头，总高约 1.7（贴近真人比例）
           <group onClick={handleClick}>
-            <mesh position={[0, 0.7, 0]}>
-              <capsuleGeometry args={[0.22, 0.95, 8, 16]} />
-              <StageMaterial color={object.color} selected={selected} />
-            </mesh>
-            <mesh position={[0, 1.5, 0]}>
-              <sphereGeometry args={[0.18, 24, 24]} />
-              <StageMaterial color={object.color} selected={selected} />
-            </mesh>
+            <CharacterMesh object={object} selected={selected} />
           </group>
         )}
         {object.type === 'camera' && (

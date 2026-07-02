@@ -57,5 +57,8 @@ export function createElectronMedia(): MediaPlatform {
     getPathForFile(file: File): string {
       return getNative().media.getPathForFile(file)
     },
+    async getBundledResourcePath(relativePath: string): Promise<string | null> {
+      return await getNative().media.getBundledResourcePath(relativePath)
+    },
   }
 }

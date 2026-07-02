@@ -4,6 +4,7 @@ import { UiButton, UiInput, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import type { StageObject, StageVec3 } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import CharacterPoseSection from './CharacterPoseSection'
 
 /** 右侧属性面板：名称/颜色/变换（位置、旋转、缩放）与对象类型专属字段 */
 
@@ -138,6 +139,8 @@ const PropertyPanel: React.FC = () => {
             />
           </div>
         </div>
+
+        {selected.type === 'character' && <CharacterPoseSection object={selected} />}
 
         {selected.type === 'camera' && (
           <div className="flex flex-col gap-2">

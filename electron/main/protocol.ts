@@ -52,6 +52,8 @@ function inferMimeFromPath(targetPath: string): string {
   if (lower.endsWith('.ogg')) return 'audio/ogg'
   if (lower.endsWith('.m4a')) return 'audio/mp4'
   if (lower.endsWith('.pcm')) return 'audio/pcm'
+  if (lower.endsWith('.glb')) return 'model/gltf-binary'
+  if (lower.endsWith('.gltf')) return 'model/gltf+json'
   return 'application/octet-stream'
 }
 

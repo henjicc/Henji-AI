@@ -1,10 +1,13 @@
 /**
  * 运镜控制场景核心数据模型（纯数据定义，禁止引入 UI/渲染依赖）。
  *
- * 场景 = 对象列表；对象分三类：几何体（primitive）、角色（character，2.2 扩展姿态字段）、
+ * 场景 = 对象列表；对象分三类：几何体（primitive）、角色（character，含体型/姿态）、
  * 机位相机（camera，2.3 扩展取景字段）。旋转统一用角度制存储（UI 友好），
  * 渲染层负责与 three.js 的弧度制互转。
  */
+
+import type { StageBodyVariantId } from './bodyVariants'
+import type { StageCharacterPose } from './poseTypes'
 
 export interface StageVec3 {
   x: number
@@ -38,9 +41,11 @@ export interface StagePrimitiveObject extends StageObjectBase {
   kind: StagePrimitiveKind
 }
 
-/** 角色对象：2.1 阶段仅占位渲染，体型/姿态字段由 2.2 扩展 */
+/** 角色对象：内置骨骼模型渲染，姿态为 FK 逐关节欧拉偏移，体型为同骨架比例变体 */
 export interface StageCharacterObject extends StageObjectBase {
   type: 'character'
+  variant: StageBodyVariantId
+  pose: StageCharacterPose
 }
 
 /** 机位相机对象：2.1 阶段仅占位渲染，取景/注视目标字段由 2.3 扩展 */
@@ -60,6 +65,10 @@ export interface StageObjectPatch {
   transform?: StageTransform
   /** 仅 camera 对象有效 */
   fov?: number
+  /** 仅 character 对象有效 */
+  variant?: StageBodyVariantId
+  /** 仅 character 对象有效 */
+  pose?: StageCharacterPose
 }
 
 export type StageGizmoMode = 'translate' | 'rotate' | 'scale'

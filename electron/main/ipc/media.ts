@@ -1,4 +1,5 @@
 import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
+import { resolveBundledResourcePath } from '../services/media/bundledResources'
 import { parseRecord, registerIpcHandler } from './registry'
 
 interface AllowRootPayload {
@@ -7,6 +8,10 @@ interface AllowRootPayload {
 
 interface IsPathAllowedPayload {
   targetPath: string
+}
+
+interface BundledResourcePayload {
+  relativePath: string
 }
 
 function parseAllowRootPayload(input: unknown): AllowRootPayload {
@@ -27,6 +32,15 @@ function parseIsPathAllowedPayload(input: unknown): IsPathAllowedPayload {
   return { targetPath }
 }
 
+function parseBundledResourcePayload(input: unknown): BundledResourcePayload {
+  const record = parseRecord(input)
+  const relativePath = record.relativePath
+  if (typeof relativePath !== 'string' || relativePath.length === 0) {
+    throw new Error('Expected non-empty string field "relativePath"')
+  }
+  return { relativePath }
+}
+
 export function registerMediaIpc(): void {
   registerIpcHandler<AllowRootPayload, void>('media:allowRoot', parseAllowRootPayload, ({ rootPath }) => {
     allowMediaRoot(rootPath)
@@ -35,4 +49,12 @@ export function registerMediaIpc(): void {
   registerIpcHandler<IsPathAllowedPayload, boolean>('media:isPathAllowed', parseIsPathAllowedPayload, ({ targetPath }) => {
     return isPathWithinAllowedMediaRoots(targetPath)
   })
+
+  registerIpcHandler<BundledResourcePayload, string | null>(
+    'media:getBundledResourcePath',
+    parseBundledResourcePayload,
+    ({ relativePath }) => {
+      return resolveBundledResourcePath(relativePath)
+    },
+  )
 }

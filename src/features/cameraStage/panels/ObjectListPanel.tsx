@@ -12,7 +12,7 @@ type AddOptionValue = StagePrimitiveKind | 'character' | 'camera'
 
 const ADD_OPTIONS: Array<{ label: string; value: AddOptionValue }> = [
   ...PRIMITIVE_KINDS.map((kind) => ({ label: PRIMITIVE_KIND_LABELS[kind], value: kind as AddOptionValue })),
-  { label: '角色（占位）', value: 'character' },
+  { label: '角色', value: 'character' },
   { label: '机位相机（占位）', value: 'camera' },
 ]
 

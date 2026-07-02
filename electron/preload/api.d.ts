@@ -481,6 +481,9 @@ export interface HenjiMediaApi {
   /** 直接拿渲染层 File 对象对应的本地文件系统路径（webUtils.getPathForFile），
    *  文件不是来自真实磁盘文件（如剪贴板生成的合成 Blob）时返回空字符串。 */
   getPathForFile(file: File): string
+  /** 解析 resources/ 下随应用分发的内置只读资源（如运镜控制角色 GLB）的绝对路径，
+   *  并把所在根目录注册进 henji-media:// 白名单；文件不存在或越界时返回 null。 */
+  getBundledResourcePath(relativePath: string): Promise<string | null>
 }
 
 export interface HenjiClipboardFileEntry {

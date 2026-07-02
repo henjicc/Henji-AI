@@ -28,7 +28,8 @@
     "electron:dpi-check": "node scripts/electron-phase4-dpi-check.cjs",
     "electron:updater-e2e": "node scripts/electron-phase4-updater-e2e.cjs",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
-    "release": "node scripts/release.cjs"
+    "release": "node scripts/release.cjs",
+    "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
@@ -57,6 +58,7 @@
     "remark-gfm": "^4.0.1",
     "sharp": "^0.35.2",
     "three": "^0.169.0",
+    "three-stdlib": "^2.36.1",
     "uuid": "^13.0.0",
     "yauzl": "^3.4.0",
     "zustand": "^5.0.11"

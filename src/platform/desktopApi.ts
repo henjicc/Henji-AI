@@ -35,6 +35,20 @@ export async function isPathAllowedForMedia(targetPath: string): Promise<boolean
   return await getPlatform().media.isPathAllowed(targetPath)
 }
 
+/**
+ * 拿随应用分发的内置只读资源（resources/ 下相对路径）的可展示 URL：
+ * 主进程解析绝对路径并放行媒体协议后，转成 henji-media:// URL 返回。
+ * 非桌面运行时（裸浏览器 Vite 调试）或资源不存在时返回 null。
+ */
+export async function getBundledResourceUrl(relativePath: string): Promise<string | null> {
+  if (!isDesktopRuntime()) {
+    return null
+  }
+  const media = getPlatform().media
+  const absolutePath = await media.getBundledResourcePath(relativePath)
+  return absolutePath ? media.toDisplaySrc(absolutePath) : null
+}
+
 export async function readFile(path: string): Promise<Uint8Array<ArrayBuffer>> {
   const bytes = await getPlatform().system.fs.readFile(path)
   const normalized = new Uint8Array(bytes.byteLength)

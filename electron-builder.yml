@@ -11,6 +11,8 @@ extraResources:
     to: resources/model-manifest.json
   - from: resources/progress-seeds.json
     to: resources/progress-seeds.json
+  - from: resources/camera-stage
+    to: resources/camera-stage
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/sharp/**

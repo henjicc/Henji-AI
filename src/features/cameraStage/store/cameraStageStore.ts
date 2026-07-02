@@ -6,12 +6,15 @@ import {
   createPrimitiveObject,
   pickDefaultColor,
 } from '../domain/sceneDefaults'
+import { clonePose } from '../domain/poseTypes'
+import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type {
   StageGizmoMode,
   StageObject,
   StageObjectPatch,
   StagePrimitiveKind,
   StageTransform,
+  StageVec3,
 } from '../domain/sceneTypes'
 
 interface CameraStageState {
@@ -26,6 +29,10 @@ interface CameraStageState {
   setGizmoMode: (mode: StageGizmoMode) => void
   updateObject: (id: string, patch: StageObjectPatch) => void
   updateTransform: (id: string, patch: Partial<StageTransform>) => void
+  /** 更新角色单个关节的欧拉偏移（角度制） */
+  updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3) => void
+  /** 一键应用预设姿势（整体替换当前姿态） */
+  applyPosePreset: (id: string, preset: StagePosePreset) => void
 }
 
 /** 生成同类对象的递增序号名，如"立方体 2" */
@@ -88,6 +95,22 @@ export const useCameraStageStore = create<CameraStageState>((set) => ({
     set((state) => ({
       objects: state.objects.map((item) =>
         item.id === id ? { ...item, transform: { ...item.transform, ...patch } } : item,
+      ),
+    })),
+
+  updatePoseJoint: (id, jointId, euler) =>
+    set((state) => ({
+      objects: state.objects.map((item) =>
+        item.id === id && item.type === 'character'
+          ? { ...item, pose: { ...item.pose, joints: { ...item.pose.joints, [jointId]: euler } } }
+          : item,
+      ),
+    })),
+
+  applyPosePreset: (id, preset) =>
+    set((state) => ({
+      objects: state.objects.map((item) =>
+        item.id === id && item.type === 'character' ? { ...item, pose: clonePose(preset) } : item,
       ),
     })),
 }))

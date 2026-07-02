@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
+import { POSE_PRESETS } from './posePresets.gen'
+import { clonePose, createEmptyPose } from './poseTypes'
 import type {
   StageCameraObject,
   StageCharacterObject,
@@ -45,6 +47,8 @@ export function createPrimitiveObject(
 }
 
 export function createCharacterObject(name: string, color: string): StageCharacterObject {
+  // 新角色默认用"站立"预设而不是绑定姿态（T-pose），更贴近摆拍的起点
+  const standPreset = POSE_PRESETS.find((item) => item.id === 'stand')
   return {
     id: uuidv4(),
     type: 'character',
@@ -52,6 +56,8 @@ export function createCharacterObject(name: string, color: string): StageCharact
     transform: createIdentityTransform(),
     color,
     visible: true,
+    variant: 'standard',
+    pose: standPreset ? clonePose(standPreset) : createEmptyPose(),
   }
 }
 
