@@ -30,6 +30,25 @@ const GIZMO_MODES: Array<{ id: GizmoMode; label: string }> = [
 // 打包态用 file:// 协议加载页面，绝对路径 `/xxx` 会解析到磁盘根目录而非应用目录，
 // 必须用相对路径；正式资源加载方式（2.x/3.x）应改走 henji-media:// 协议而非 public/ 静态资源。
 const VERIFY_MODEL_URL = './camera-stage-verify/UAL1_Standard.glb'
+const VERIFY_PROP_URL = './camera-stage-verify/Bench.glb'
+
+/** CC0 道具模型加载验证（1.2 步骤 5）：确认静态 GLB 道具可正常加载显示。 */
+const PropVerify: React.FC = () => {
+  const { scene } = useGLTF(VERIFY_PROP_URL)
+
+  useEffect(() => {
+    let meshCount = 0
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) meshCount += 1
+    })
+    // eslint-disable-next-line no-console
+    console.log(`[运镜控制验证] 道具 Bench.glb 加载成功，网格数量：${meshCount}`)
+  }, [scene])
+
+  return <primitive object={scene} position={[3, 0, -1]} />
+}
+
+useGLTF.preload(VERIFY_PROP_URL)
 
 /**
  * Quaternius Universal Animation Library 加载验证（1.2 步骤 3-4）：
@@ -95,6 +114,7 @@ const CameraStageVerify: React.FC = () => {
         {selected && <TransformControls object={selected} mode={mode} />}
         <Suspense fallback={null}>
           <QuaterniusCharacterVerify />
+          <PropVerify />
         </Suspense>
         <OrbitControls makeDefault />
       </Canvas>
