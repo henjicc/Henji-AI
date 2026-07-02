@@ -55,6 +55,14 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
   return { id, name }
 }
 
+/** 新建空白工程：重置为空场景并立即保存入库，返回新工程标识 */
+export async function createNewProject(
+  name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+): Promise<SavedProjectInfo> {
+  useCameraStageStore.getState().newScene(name)
+  return await saveCurrentProject()
+}
+
 /** 加载指定工程到场景，成功返回 true；工程不存在返回 false */
 export async function loadProjectIntoScene(projectId: string): Promise<boolean> {
   const record = await getCameraStageProjectRecord(projectId)

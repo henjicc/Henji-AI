@@ -46,6 +46,8 @@ interface CameraStageState {
   applyPosePreset: (id: string, preset: StagePosePreset) => void
   /** 关联到某个已保存工程（保存/加载后调用），仅更新工程标识不动场景数据 */
   bindProject: (id: string, name: string) => void
+  /** 重置为空白新场景（新建工程用）：清空对象与工程标识，复位界面态 */
+  newScene: (name: string) => void
   /** 用工程快照整体重置场景（加载工程用）；同时复位选中/视角等界面态 */
   loadSnapshot: (snapshot: StageSceneSnapshotInput, project: { id: string; name: string }) => void
 }
@@ -175,6 +177,17 @@ export const useCameraStageStore = create<CameraStageState>((set) => ({
     })),
 
   bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
+
+  newScene: (name) =>
+    set({
+      objects: [],
+      selectedId: null,
+      gizmoMode: 'translate',
+      viewMode: 'director',
+      activeCameraId: null,
+      currentProjectId: null,
+      currentProjectName: name,
+    }),
 
   loadSnapshot: (snapshot, project) =>
     set(() => {

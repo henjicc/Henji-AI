@@ -6,6 +6,8 @@ import { CAMERA_STAGE_COLOR_HEX } from '@/core/theme/colorTokens'
 import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import StageCaptureBridge from './StageCaptureBridge'
+import type { StageCaptureFn } from './StageCaptureBridge'
 import StageObjectMesh from './StageObjectMesh'
 import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
@@ -17,7 +19,12 @@ import StageTransformControls from './StageTransformControls'
 
 const RAD2DEG = 180 / Math.PI
 
-const StageScene: React.FC = () => {
+interface StageSceneProps {
+  /** 截图函数注册位：机位视角下读取当前帧为 PNG dataURL */
+  captureRef?: React.MutableRefObject<StageCaptureFn | null>
+}
+
+const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
@@ -83,9 +90,12 @@ const StageScene: React.FC = () => {
   return (
     <Canvas
       camera={{ position: [5, 4, 7], fov: 50 }}
+      // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
+      gl={{ preserveDrawingBuffer: true }}
       style={{ background: CAMERA_STAGE_COLOR_HEX.stageBg }}
       onPointerMissed={() => setSelected(null)}
     >
+      {captureRef && <StageCaptureBridge captureRef={captureRef} />}
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 8, 4]} intensity={1.2} />
       {isCameraView && (

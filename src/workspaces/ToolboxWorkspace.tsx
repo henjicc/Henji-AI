@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { ArrowLeft, Clapperboard } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UiIconButton, UiOptionButton } from '@/components/ui'
-import CameraStageEditor from '@/features/cameraStage/CameraStageEditor'
+import CameraStageApp from '@/features/cameraStage/CameraStageApp'
 
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
@@ -30,7 +30,7 @@ const TOOLS: ToolboxToolMeta[] = [
 function renderTool(id: ToolboxToolId): React.ReactNode {
   switch (id) {
     case 'cameraStage':
-      return <CameraStageEditor />
+      return <CameraStageApp />
   }
 }
 
