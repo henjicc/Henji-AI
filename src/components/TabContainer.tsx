@@ -4,7 +4,7 @@ import { useI18n } from '@/hooks/useI18n'
 // 懒加载工作区组件
 const GenerationWorkspace = lazy(() => import('../workspaces/GenerationWorkspace'))
 const CanvasWorkspace = lazy(() => import('../workspaces/CanvasWorkspace'))
-const ToolboxPlaceholder = lazy(() => import('../workspaces/ToolboxPlaceholder'))
+const ToolboxWorkspace = lazy(() => import('../workspaces/ToolboxWorkspace'))
 
 interface TabContainerProps {
     activeTab: string
@@ -54,7 +54,7 @@ const TabContainer: React.FC<TabContainerProps> = ({ activeTab }) => {
             {visitedTabs.has('tools') && (
                 <div className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
-                        <ToolboxPlaceholder />
+                        <ToolboxWorkspace />
                     </Suspense>
                 </div>
             )}

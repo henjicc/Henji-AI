@@ -39,6 +39,8 @@ const Vec3Row: React.FC<Vec3RowProps> = ({ label, value, step, precision, min, o
           min={min}
           widthClassName="w-full"
           className="min-w-0 flex-1"
+          commitOnChange
+          wheelStep
           onChange={(next) => onChange({ ...value, [axis]: next })}
         />
       ))}
@@ -130,6 +132,8 @@ const PropertyPanel: React.FC = () => {
               min={0.01}
               precision={2}
               widthClassName="w-full"
+              commitOnChange
+              wheelStep
               onChange={handleUniformScale}
             />
           </div>
@@ -147,6 +151,8 @@ const PropertyPanel: React.FC = () => {
                 max={120}
                 precision={0}
                 widthClassName="w-full"
+                commitOnChange
+                wheelStep
                 onChange={(next) => updateObject(selected.id, { fov: next })}
               />
             </div>

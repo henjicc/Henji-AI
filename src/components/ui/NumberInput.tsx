@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { UiIconButton, UiInput } from './primitives'
 
 type NumberInputProps = {
@@ -12,10 +12,14 @@ type NumberInputProps = {
   className?: string
   precision?: number
   disabled?: boolean
+  /** 输入过程中只要是合法数字就实时提交（默认失焦/回车才提交），适合三维编辑等需要即时反馈的场景 */
+  commitOnChange?: boolean
+  /** 悬浮时滚轮直接步进并提交（无需先聚焦），会阻止容器滚动 */
+  wheelStep?: boolean
 }
 
 export default function NumberInput(props: NumberInputProps) {
-  const { label, value, onChange, min, max, step = 1, widthClassName = 'w-24', className, precision, disabled = false } = props
+  const { label, value, onChange, min, max, step = 1, widthClassName = 'w-24', className, precision, disabled = false, commitOnChange = false, wheelStep = false } = props
 
   // 处理 undefined 值，使用 min 或 0 作为默认值
   const safeValue = value ?? (min ?? 0)
@@ -23,7 +27,8 @@ export default function NumberInput(props: NumberInputProps) {
   // 使用内部状态存储输入值，允许用户输入过程中的中间状态
   const [inputValue, setInputValue] = useState(safeValue.toString())
   const [isFocused, setIsFocused] = useState(false)
-  
+  const inputRef = useRef<HTMLInputElement>(null)
+
   const clamp = (v: number) => {
     let x = v
     if (typeof min === 'number') x = Math.max(min, x)
@@ -54,15 +59,46 @@ export default function NumberInput(props: NumberInputProps) {
   if (!isFocused && safeValue.toString() !== inputValue) {
     setInputValue(safeValue.toString())
   }
-  
+
+  const handleInputChange = (raw: string) => {
+    setInputValue(raw)
+    if (!commitOnChange) return
+    const parsed = parseFloat(raw)
+    // 只有完整合法数字才实时提交，"-"、"1." 之类的中间态留到失焦再处理
+    if (Number.isFinite(parsed) && String(parsed) === raw.trim()) {
+      onChange(clamp(parsed))
+    }
+  }
+
+  const stepBy = (direction: 1 | -1) => {
+    const next = clamp(safeValue + direction * step)
+    onChange(next)
+    setInputValue(next.toString())
+  }
+
+  // 悬浮滚轮步进：React 的 onWheel 是 passive 监听，preventDefault 无效，
+  // 必须用原生非 passive 监听阻止容器滚动
+  useEffect(() => {
+    if (!wheelStep || disabled) return
+    const element = inputRef.current
+    if (!element) return
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      stepBy(event.deltaY < 0 ? 1 : -1)
+    }
+    element.addEventListener('wheel', handleWheel, { passive: false })
+    return () => element.removeEventListener('wheel', handleWheel)
+  })
+
   return (
     <div className={className}>
       {label ? <label className="block text-sm font-medium mb-1 text-zinc-300">{label}</label> : null}
       <div className={`relative inline-block ${widthClassName === 'w-full' ? 'w-full' : ''}`}>
         <UiInput
+          ref={inputRef}
           type="number"
           value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
+          onChange={e => handleInputChange(e.target.value)}
           onBlur={handleBlur}
           onFocus={handleFocus}
           onKeyDown={e => {
@@ -81,22 +117,14 @@ export default function NumberInput(props: NumberInputProps) {
           <UiIconButton
             type="button"
             showBorder={false}
-            onClick={() => {
-              const next = clamp(safeValue + step)
-              onChange(next)
-              setInputValue(next.toString())
-            }}
+            onClick={() => stepBy(1)}
             className="h-4 w-6 border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
             disabled={disabled}
           >▲</UiIconButton>
           <UiIconButton
             type="button"
             showBorder={false}
-            onClick={() => {
-              const next = clamp(safeValue - step)
-              onChange(next)
-              setInputValue(next.toString())
-            }}
+            onClick={() => stepBy(-1)}
             className="h-4 w-6 border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
             disabled={disabled}
           >▼</UiIconButton>

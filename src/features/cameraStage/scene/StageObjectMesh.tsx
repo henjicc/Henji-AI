@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Group } from 'three'
 import type { StageObject, StagePrimitiveKind } from '../domain/sceneTypes'
@@ -15,6 +15,8 @@ interface StageObjectMeshProps {
   object: StageObject
   selected: boolean
   onSelect: (id: string) => void
+  /** 挂载/卸载时向场景注册 three.js 节点，供 TransformControls 使用 */
+  onRegister: (id: string, node: Group | null) => void
 }
 
 const PrimitiveGeometry: React.FC<{ kind: StagePrimitiveKind }> = ({ kind }) => {
@@ -43,18 +45,23 @@ const StageMaterial: React.FC<{ color: string; selected: boolean }> = ({ color, 
   />
 )
 
-const StageObjectMesh = forwardRef<Group, StageObjectMeshProps>(
-  ({ object, selected, onSelect }, ref) => {
-    const { transform } = object
+const StageObjectMesh: React.FC<StageObjectMeshProps> = ({ object, selected, onSelect, onRegister }) => {
+  const groupRef = useRef<Group>(null)
+  const { transform } = object
 
-    const handleClick = (event: ThreeEvent<MouseEvent>): void => {
-      event.stopPropagation()
-      onSelect(object.id)
-    }
+  useEffect(() => {
+    onRegister(object.id, groupRef.current)
+    return () => onRegister(object.id, null)
+  }, [object.id, onRegister])
 
-    return (
+  const handleClick = (event: ThreeEvent<MouseEvent>): void => {
+    event.stopPropagation()
+    onSelect(object.id)
+  }
+
+  return (
       <group
-        ref={ref}
+        ref={groupRef}
         name={object.id}
         visible={object.visible}
         position={[transform.position.x, transform.position.y, transform.position.z]}
@@ -98,10 +105,7 @@ const StageObjectMesh = forwardRef<Group, StageObjectMeshProps>(
           </group>
         )}
       </group>
-    )
-  },
-)
-
-StageObjectMesh.displayName = 'StageObjectMesh'
+  )
+}
 
 export default StageObjectMesh

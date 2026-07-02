@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Grid, OrbitControls, TransformControls } from '@react-three/drei'
 import type { Group } from 'three'
@@ -20,14 +20,24 @@ const StageScene: React.FC = () => {
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
 
-  const objectNodesRef = useRef(new Map<string, Group>())
+  // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
+  // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
+  // 表现为刚添加的对象要点别处再点回来 gizmo 才出现）
+  const [objectNodes, setObjectNodes] = useState<ReadonlyMap<string, Group>>(new Map())
+  const objectNodesRef = useRef(objectNodes)
+  objectNodesRef.current = objectNodes
 
   const registerNode = useCallback((id: string, node: Group | null): void => {
-    if (node) {
-      objectNodesRef.current.set(id, node)
-    } else {
-      objectNodesRef.current.delete(id)
-    }
+    setObjectNodes((prev) => {
+      if (node ? prev.get(id) === node : !prev.has(id)) return prev
+      const next = new Map(prev)
+      if (node) {
+        next.set(id, node)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
   }, [])
 
   const handleGizmoChange = useCallback((): void => {
@@ -46,7 +56,7 @@ const StageScene: React.FC = () => {
     })
   }, [updateTransform])
 
-  const selectedNode = selectedId ? objectNodesRef.current.get(selectedId) : undefined
+  const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
 
   return (
     <Canvas
@@ -70,7 +80,7 @@ const StageScene: React.FC = () => {
           object={object}
           selected={object.id === selectedId}
           onSelect={setSelected}
-          ref={(node) => registerNode(object.id, node)}
+          onRegister={registerNode}
         />
       ))}
       {selectedNode && (
