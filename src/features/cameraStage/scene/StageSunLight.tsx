@@ -31,9 +31,9 @@ const StageSunLight: React.FC<{ settings: StageSceneSettings }> = ({ settings })
 
     return {
       directionalColor: colorToHex(sunColor),
-      directionalIntensity: sunlight.enabled ? sunlight.intensity * (0.12 + daylight * 1.05) : 0,
-      ambientIntensity: 0.16 + (sunlight.enabled ? sunlight.intensity * (0.1 + daylight * 0.14) : 0),
-      hemisphereIntensity: 0.28 + (sunlight.enabled ? sunlight.intensity * (0.08 + daylight * 0.22) : 0),
+      directionalIntensity: sunlight.enabled ? sunlight.intensity * (0.24 + daylight * 1.35) : 0,
+      ambientIntensity: 0.22 + (sunlight.enabled ? sunlight.intensity * (0.12 + daylight * 0.2) : 0),
+      hemisphereIntensity: 0.34 + (sunlight.enabled ? sunlight.intensity * (0.1 + daylight * 0.32) : 0),
       skyColor: colorToHex(new Color(sky.color).clone().offsetHSL(0, 0, warmFactor * 0.04)),
       groundColor: colorToHex(new Color(ground.color).clone().offsetHSL(0, 0, -0.02)),
       position: [Math.cos(orbit) * distance, height, Math.sin(orbit) * distance] as [number, number, number],

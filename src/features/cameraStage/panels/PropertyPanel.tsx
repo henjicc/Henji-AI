@@ -15,7 +15,7 @@ import SceneSettingsPanel from './SceneSettingsPanel'
 type Vec3Key = 'position' | 'rotation' | 'scale'
 
 const VEC3_ROWS: Array<{ key: Vec3Key; label: string; step: number; precision: number }> = [
-  { key: 'position', label: '位置（场景单位）', step: 0.1, precision: 2 },
+  { key: 'position', label: '位置（约米）', step: 0.1, precision: 2 },
   { key: 'rotation', label: '旋转（°）', step: 5, precision: 1 },
   { key: 'scale', label: '缩放（倍）', step: 0.1, precision: 2 },
 ]

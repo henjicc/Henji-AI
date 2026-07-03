@@ -8,7 +8,7 @@
  * 加载 v2 的整体 Vec3 轨道时自动拆分为分量轨道。
  * v4 起并入场景级设置（背景色/网格显隐）；加载 v3 及以下工程视为默认设置。
  * v5 起摄像机对象新增 aspectRatio（画幅比例）字段；加载 v4 及以下工程时给已有摄像机补默认 16:9。
- * v6 起场景设置拆分为 ground / sky / sunlight；加载 v5 及以下工程时把旧背景色/网格迁移到新结构。
+ * v6 起场景设置拆分为 ground / sky / sunlight / fog；加载 v5 及以下工程时把旧背景色/网格迁移到新结构。
  */
 
 import { createDefaultAnimation } from './animationTypes'
@@ -74,10 +74,12 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
     const groundRecord = record.ground as Record<string, unknown> | undefined
     const skyRecord = record.sky as Record<string, unknown> | undefined
     const sunlightRecord = record.sunlight as Record<string, unknown> | undefined
+    const fogRecord = record.fog as Record<string, unknown> | undefined
     const pattern = groundRecord?.pattern
     const density = Number(groundRecord?.density)
     const intensity = Number(sunlightRecord?.intensity)
     const timeOfDay = Number(sunlightRecord?.timeOfDay)
+    const fogDistance = Number(fogRecord?.distance)
 
     return {
       ground: {
@@ -87,7 +89,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
             ? pattern
             : fallback.ground.pattern,
         density:
-          Number.isFinite(density) && density >= 1 && density <= 24
+          Number.isFinite(density) && density >= 1 && density <= 64
             ? density
             : fallback.ground.density,
       },
@@ -106,6 +108,13 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
             ? timeOfDay
             : fallback.sunlight.timeOfDay,
       },
+      fog: {
+        enabled: typeof fogRecord?.enabled === 'boolean' ? fogRecord.enabled : fallback.fog.enabled,
+        distance:
+          Number.isFinite(fogDistance) && fogDistance >= 30 && fogDistance <= 200
+            ? fogDistance
+            : fallback.fog.distance,
+      },
     }
   }
 
@@ -119,6 +128,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
       color: typeof record.backgroundColor === 'string' ? record.backgroundColor : fallback.sky.color,
     },
     sunlight: fallback.sunlight,
+    fog: fallback.fog,
   }
 }
 

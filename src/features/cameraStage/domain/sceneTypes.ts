@@ -111,9 +111,15 @@ export interface StageSunlightSettings {
   timeOfDay: number
 }
 
+export interface StageFogSettings {
+  enabled: boolean
+  distance: number
+}
+
 /** 场景级设置（未选中对象时的属性面板展示，随工程持久化） */
 export interface StageSceneSettings {
   ground: StageGroundSettings
   sky: StageSkySettings
   sunlight: StageSunlightSettings
+  fog: StageFogSettings
 }

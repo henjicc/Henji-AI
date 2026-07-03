@@ -119,6 +119,8 @@ export interface CameraStageState {
   setSceneSunlightEnabled: (enabled: boolean) => void
   setSceneSunlightIntensity: (intensity: number) => void
   setSceneSunlightTimeOfDay: (timeOfDay: number) => void
+  setSceneFogEnabled: (enabled: boolean) => void
+  setSceneFogDistance: (distance: number) => void
   /** 请求把视口平滑对准当前选中对象（无选中对象时不生效） */
   requestFocusSelected: () => void
 }
@@ -476,7 +478,7 @@ export const useCameraStageStore = create<CameraStageState>()(
     set((state) => ({
       sceneSettings: {
         ...state.sceneSettings,
-        ground: { ...state.sceneSettings.ground, density: Math.max(1, Math.min(24, density)) },
+        ground: { ...state.sceneSettings.ground, density: Math.max(1, Math.min(64, density)) },
       },
     })),
 
@@ -503,6 +505,22 @@ export const useCameraStageStore = create<CameraStageState>()(
       sceneSettings: {
         ...state.sceneSettings,
         sunlight: { ...state.sceneSettings.sunlight, timeOfDay: Math.max(0, Math.min(24, timeOfDay)) },
+      },
+    })),
+
+  setSceneFogEnabled: (enabled) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        fog: { ...state.sceneSettings.fog, enabled },
+      },
+    })),
+
+  setSceneFogDistance: (distance) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        fog: { ...state.sceneSettings.fog, distance: Math.max(30, Math.min(200, distance)) },
       },
     })),
 

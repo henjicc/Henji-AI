@@ -109,7 +109,7 @@ export function createDefaultSceneSettings(): StageSceneSettings {
     ground: {
       color: CAMERA_STAGE_COLOR_HEX.groundBase,
       pattern: 'grid',
-      density: 8,
+      density: 10,
     },
     sky: {
       color: CAMERA_STAGE_COLOR_HEX.stageBg,
@@ -117,7 +117,11 @@ export function createDefaultSceneSettings(): StageSceneSettings {
     sunlight: {
       enabled: true,
       intensity: 1,
-      timeOfDay: 14,
+      timeOfDay: 12,
+    },
+    fog: {
+      enabled: true,
+      distance: 90,
     },
   }
 }

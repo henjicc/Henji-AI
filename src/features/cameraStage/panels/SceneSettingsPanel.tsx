@@ -25,6 +25,8 @@ const SceneSettingsPanel: React.FC = () => {
   const setSceneSunlightEnabled = useCameraStageStore((state) => state.setSceneSunlightEnabled)
   const setSceneSunlightIntensity = useCameraStageStore((state) => state.setSceneSunlightIntensity)
   const setSceneSunlightTimeOfDay = useCameraStageStore((state) => state.setSceneSunlightTimeOfDay)
+  const setSceneFogEnabled = useCameraStageStore((state) => state.setSceneFogEnabled)
+  const setSceneFogDistance = useCameraStageStore((state) => state.setSceneFogDistance)
 
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto bg-surface-dark">
@@ -32,13 +34,17 @@ const SceneSettingsPanel: React.FC = () => {
       <div className="flex flex-col gap-4 px-3 pb-4">
         <div className="flex flex-col gap-3">
           <SectionTitle>地面</SectionTitle>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-text-muted">底色</span>
-            <UiColorInput
-              value={sceneSettings.ground.color}
-              onChange={(event) => setSceneGroundColor(event.target.value)}
-            />
-          </div>
+          {sceneSettings.ground.pattern !== 'checker' ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-text-muted">底色</span>
+              <UiColorInput
+                value={sceneSettings.ground.color}
+                onChange={(event) => setSceneGroundColor(event.target.value)}
+              />
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted">棋盘固定为黑白，仅受光照和雾影响。</div>
+          )}
           <div className="flex flex-col gap-1.5">
             <div className="text-xs text-text-muted">样式</div>
             <Dropdown<StageGroundPattern>
@@ -54,7 +60,7 @@ const SceneSettingsPanel: React.FC = () => {
             <div className="flex items-center gap-1.5">
               <UiRangeInput
                 min={1}
-                max={24}
+                max={64}
                 step={1}
                 value={sceneSettings.ground.density}
                 onChange={(event) => setSceneGroundDensity(Number(event.target.value))}
@@ -62,7 +68,7 @@ const SceneSettingsPanel: React.FC = () => {
               <NumberInput
                 value={sceneSettings.ground.density}
                 min={1}
-                max={24}
+                max={64}
                 step={1}
                 precision={0}
                 widthClassName="w-16"
@@ -132,7 +138,41 @@ const SceneSettingsPanel: React.FC = () => {
           </div>
         </div>
 
-        <div className="pt-2 text-center text-xs text-text-muted">选中一个场景对象后在这里编辑属性</div>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <SectionTitle>雾</SectionTitle>
+            <UiSwitch checked={sceneSettings.fog.enabled} onCheckedChange={setSceneFogEnabled} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <div className="text-xs text-text-muted">淡出距离</div>
+            <div className="flex items-center gap-1.5">
+              <UiRangeInput
+                min={30}
+                max={200}
+                step={1}
+                value={sceneSettings.fog.distance}
+                onChange={(event) => setSceneFogDistance(Number(event.target.value))}
+              />
+              <NumberInput
+                value={sceneSettings.fog.distance}
+                min={30}
+                max={200}
+                step={1}
+                precision={0}
+                widthClassName="w-16"
+                className="shrink-0"
+                commitOnChange
+                wheelStep
+                onChange={setSceneFogDistance}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2 text-center text-xs text-text-muted">
+          场景按 1 单位约等于 1 米设计，默认立方体约为 1 x 1 x 1 米。
+        </div>
+        <div className="text-center text-xs text-text-muted">选中一个场景对象后在这里编辑属性</div>
       </div>
     </div>
   )

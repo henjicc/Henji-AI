@@ -93,6 +93,8 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   )
   const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
   const isCameraView = viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
+  const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
+  const fogFar = Math.max(fogNear + 1, sceneSettings.fog.distance)
 
   return (
     <Canvas
@@ -102,6 +104,9 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       style={{ background: sceneSettings.sky.color }}
       onPointerMissed={() => setSelected(null)}
     >
+      {sceneSettings.fog.enabled && (
+        <fog attach="fog" args={[sceneSettings.sky.color, fogNear, fogFar]} />
+      )}
       {captureRef && <StageCaptureBridge captureRef={captureRef} />}
       <StagePlaybackDriver />
       <StageSunLight settings={sceneSettings} />
