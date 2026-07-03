@@ -11,6 +11,7 @@ import {
   pickDefaultColor,
 } from '../domain/sceneDefaults'
 import { getCameraObjects } from '../domain/cameraUtils'
+import { getDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
@@ -59,7 +60,7 @@ export interface CameraStageState {
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
-  /** 深拷贝复制对象（含角色姿态/机位设置），名称自动递增，复制后自动选中 */
+  /** 深拷贝复制对象（含角色姿态/摄像机设置），名称自动递增，复制后自动选中 */
   duplicateObject: (id: string) => void
   removeObject: (id: string) => void
   setSelected: (id: string | null) => void
@@ -193,10 +194,15 @@ export function endHistorySession(): void {
   historySessionPast = null
 }
 
-/** 生成同类对象的递增序号名，如"立方体 2" */
+/** 生成同类对象的递增序号名，如"摄像机01"；按已用最大编号 +1，避免删除中间对象后再新增撞号 */
 function nextName(objects: StageObject[], base: string): string {
-  const count = objects.filter((item) => item.name.startsWith(base)).length
-  return count === 0 ? base : `${base} ${count + 1}`
+  let maxN = 0
+  for (const item of objects) {
+    if (!item.name.startsWith(base)) continue
+    const suffix = item.name.slice(base.length)
+    if (/^\d+$/.test(suffix)) maxN = Math.max(maxN, Number(suffix))
+  }
+  return `${base}${String(maxN + 1).padStart(2, '0')}`
 }
 
 function firstCameraId(objects: StageObject[]): string | null {
@@ -245,10 +251,19 @@ export const useCameraStageStore = create<CameraStageState>()(
   addCamera: () =>
     set((state) => {
       const object = createCameraObject(
-        nextName(state.objects, '机位'),
+        nextName(state.objects, '摄像机'),
         pickDefaultColor(state.objects.length),
+        getDirectorView() ?? undefined,
       )
-      return { objects: [...state.objects, object], selectedId: object.id, activeCameraId: object.id }
+      // 新摄像机默认位置/朝向就是当前自由视角，添加后直接切到摄像机视角：
+      // 一是让顶部视角按钮的高亮立刻和实际画面对上，二是隐藏所有摄像机图标（含它自己），
+      // 避免因为新摄像机就摆在刚才的视点上，导致自由视角下看到自己的图标近距离怼脸
+      return {
+        objects: [...state.objects, object],
+        selectedId: object.id,
+        activeCameraId: object.id,
+        viewMode: 'camera',
+      }
     }),
 
   duplicateObject: (id) =>

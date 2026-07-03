@@ -2,7 +2,7 @@
  * 运镜控制场景核心数据模型（纯数据定义，禁止引入 UI/渲染依赖）。
  *
  * 场景 = 对象列表；对象分三类：几何体（primitive）、角色（character，含体型/姿态）、
- * 机位相机（camera，2.3 扩展取景字段）。旋转统一用角度制存储（UI 友好），
+ * 摄像机（camera，2.3 扩展取景字段）。旋转统一用角度制存储（UI 友好），
  * 渲染层负责与 three.js 的弧度制互转。
  */
 
@@ -30,6 +30,14 @@ export type StageCameraLookAt =
   | { mode: 'manual'; target: StageVec3 }
   | { mode: 'object'; objectId: string; fallbackTarget: StageVec3 }
 
+export type StageCameraAspectRatioPreset = '16:9' | '4:3' | '1:1' | '9:16' | 'custom'
+
+/** 摄像机画幅比例：preset 供 UI 回显选中项，ratio 是宽/高的解析结果，渲染层只需要 ratio */
+export interface StageCameraAspectRatio {
+  preset: StageCameraAspectRatioPreset
+  ratio: number
+}
+
 interface StageObjectBase {
   id: string
   type: StageObjectType
@@ -52,13 +60,15 @@ export interface StageCharacterObject extends StageObjectBase {
   pose: StageCharacterPose
 }
 
-/** 机位相机对象：2.1 阶段仅占位渲染，取景/注视目标字段由 2.3 扩展 */
+/** 摄像机对象：2.1 阶段仅占位渲染，取景/注视目标字段由 2.3 扩展 */
 export interface StageCameraObject extends StageObjectBase {
   type: 'camera'
   /** 视野角（度） */
   fov: number
-  /** 机位实际取景朝向：手动坐标或锁定角色对象 */
+  /** 摄像机实际取景朝向：手动坐标或锁定角色对象 */
   lookAt: StageCameraLookAt
+  /** 画幅比例（宽/高），驱动取景框线框与摄像机视角压暗遮罩 */
+  aspectRatio: StageCameraAspectRatio
 }
 
 export type StageObject = StagePrimitiveObject | StageCharacterObject | StageCameraObject
@@ -73,6 +83,8 @@ export interface StageObjectPatch {
   fov?: number
   /** 仅 camera 对象有效 */
   lookAt?: StageCameraLookAt
+  /** 仅 camera 对象有效 */
+  aspectRatio?: StageCameraAspectRatio
   /** 仅 character 对象有效 */
   variant?: StageBodyVariantId
   /** 仅 character 对象有效 */

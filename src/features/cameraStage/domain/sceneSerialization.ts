@@ -7,20 +7,21 @@
  * v3 起关键帧轨道按分量存储（位置/旋转/缩放/关节拆成 X/Y/Z 三条 scalar 轨道）；
  * 加载 v2 的整体 Vec3 轨道时自动拆分为分量轨道。
  * v4 起并入场景级设置（背景色/网格显隐）；加载 v3 及以下工程视为默认设置。
+ * v5 起摄像机对象新增 aspectRatio（画幅比例）字段；加载 v4 及以下工程时给已有摄像机补默认 16:9。
  */
 
 import { createDefaultAnimation } from './animationTypes'
 import type { StageKeyframe, StageSceneAnimation, StageTrack } from './animationTypes'
 import { createDefaultSceneSettings } from './sceneDefaults'
-import type { StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
+import type { StageCameraObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 4
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 5
 
 export interface StageSceneSnapshot {
   schemaVersion: number
   objects: StageObject[]
-  /** 当前取景机位（导演/机位视角切换用），无机位时为 null */
+  /** 当前取景摄像机（自由/摄像机视角切换用），无摄像机时为 null */
   activeCameraId: string | null
   /** 关键帧动画数据（v2 引入） */
   animation: StageSceneAnimation
@@ -74,6 +75,16 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
   }
 }
 
+/** v4→v5：给缺少 aspectRatio 的摄像机对象补默认 16:9，非摄像机对象原样保留 */
+function withDefaultCameraAspectRatio(objects: StageObject[]): StageObject[] {
+  return objects.map((object) => {
+    if (object.type !== 'camera') return object
+    const camera = object as StageCameraObject & { aspectRatio?: StageCameraObject['aspectRatio'] }
+    if (camera.aspectRatio) return object
+    return { ...camera, aspectRatio: { preset: '16:9', ratio: 16 / 9 } }
+  })
+}
+
 /** v2→v3：把整体 Vec3 值的轨道拆成 X/Y/Z 三条分量 scalar 轨道；非 Vec3 轨道原样保留 */
 function splitVec3Track(track: StageTrack): StageTrack[] {
   const first = track.keyframes[0]?.value
@@ -110,7 +121,11 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
     )
   }
 
-  const objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
+  let objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
+  // v4 及以下工程的摄像机对象无 aspectRatio 字段 → 补默认 16:9
+  if (version < 5) {
+    objects = withDefaultCameraAspectRatio(objects)
+  }
   const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
   // v1 工程无 animation 字段 → 视为无动画；v2+ 解析已有动画；v2 的整体 Vec3 轨道拆成分量轨道
   let animation = version >= 2 ? parseAnimation(record.animation) : createDefaultAnimation()

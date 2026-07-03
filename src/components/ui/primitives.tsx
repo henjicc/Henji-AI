@@ -215,7 +215,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       }
 
       return active
-        ? `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_ACTIVE_CLASS}`
+        ? UI_OPTION_ITEM_ACTIVE_CLASS
         : `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_HOVER_CLASS}`;
     })();
 

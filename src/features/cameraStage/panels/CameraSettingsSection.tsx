@@ -1,8 +1,14 @@
-import React from 'react'
+import React, { useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
-import { Dropdown, UiButton, UiRangeInput } from '@/components/ui'
+import { Dropdown, UiRangeInput } from '@/components/ui'
 import { getObjectLookAtPoint, resolveCameraLookAtTarget } from '../domain/cameraUtils'
-import type { StageCameraLookAt, StageCameraObject, StageVec3 } from '../domain/sceneTypes'
+import { CAMERA_ASPECT_RATIO_PRESETS } from '../domain/sceneDefaults'
+import type {
+  StageCameraAspectRatioPreset,
+  StageCameraLookAt,
+  StageCameraObject,
+  StageVec3,
+} from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 
@@ -13,6 +19,51 @@ const LOOK_AT_MODE_OPTIONS: Array<{ label: string; value: LookAtMode; disabled?:
   { label: '手动坐标', value: 'manual' },
   { label: '锁定角色', value: 'object' },
 ]
+
+const CUSTOM_ASPECT_RATIO_INITIAL_HEIGHT = 9
+
+/** 自定义画幅比例的宽/高输入：用 key={cameraId} 挂载重置，避免切换摄像机后残留上一台的编辑态 */
+const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: number) => void }> = ({
+  ratio,
+  onChange,
+}) => {
+  const [width, setWidth] = useState(Math.max(1, Math.round(ratio * CUSTOM_ASPECT_RATIO_INITIAL_HEIGHT)))
+  const [height, setHeight] = useState(CUSTOM_ASPECT_RATIO_INITIAL_HEIGHT)
+
+  const commit = (nextWidth: number, nextHeight: number): void => {
+    if (nextWidth > 0 && nextHeight > 0) onChange(nextWidth / nextHeight)
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <NumberInput
+        value={width}
+        min={1}
+        precision={0}
+        widthClassName="w-16"
+        commitOnChange
+        wheelStep
+        onChange={(next) => {
+          setWidth(next)
+          commit(next, height)
+        }}
+      />
+      <span className="text-xs text-text-muted">:</span>
+      <NumberInput
+        value={height}
+        min={1}
+        precision={0}
+        widthClassName="w-16"
+        commitOnChange
+        wheelStep
+        onChange={(next) => {
+          setHeight(next)
+          commit(width, next)
+        }}
+      />
+    </div>
+  )
+}
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="text-xs font-medium uppercase tracking-wide text-text-muted">{children}</div>
@@ -57,10 +108,7 @@ function createObjectLookAt(objectId: string, fallbackTarget: StageVec3): StageC
 
 const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object }) => {
   const objects = useCameraStageStore((state) => state.objects)
-  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const updateObject = useCameraStageStore((state) => state.updateObject)
-  const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
-  const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const characters = objects.filter((item) => item.type === 'character')
   const resolvedTarget = resolveCameraLookAtTarget(object, objects)
   const lookAt = object.lookAt
@@ -95,25 +143,22 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
     updateObject(object.id, { lookAt: createManualLookAt(target) })
   }
 
-  const handleUseAsViewport = (): void => {
-    setActiveCameraId(object.id)
-    setViewMode('camera')
+  const handleAspectPresetSelect = (preset: StageCameraAspectRatioPreset): void => {
+    const found = CAMERA_ASPECT_RATIO_PRESETS.find((item) => item.value === preset)
+    if (!found) return
+    updateObject(object.id, { aspectRatio: { preset, ratio: found.ratio ?? object.aspectRatio.ratio } })
   }
+
+  const handleCustomRatioChange = (ratio: number): void => {
+    updateObject(object.id, { aspectRatio: { preset: 'custom', ratio } })
+  }
+
+  const aspectPresetLabel =
+    CAMERA_ASPECT_RATIO_PRESETS.find((item) => item.value === object.aspectRatio.preset)?.label ?? '自定义'
 
   return (
     <div className="flex flex-col gap-3">
       <SectionTitle>相机</SectionTitle>
-      <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text-muted">取景机位</div>
-        <UiButton
-          size="sm"
-          disabled={activeCameraId === object.id}
-          onClick={handleUseAsViewport}
-        >
-          {activeCameraId === object.id ? '当前取景机位' : '设为取景机位'}
-        </UiButton>
-      </div>
-
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-1 text-xs text-text-muted">
           <KeyframeStopwatch objectId={object.id} groupPath="fov" />
@@ -139,6 +184,27 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
             wheelStep
             onChange={(next) => updateObject(object.id, { fov: next })}
           />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <div className="text-xs text-text-muted">画幅比例</div>
+        <div className="flex items-center gap-1.5">
+          <Dropdown<StageCameraAspectRatioPreset>
+            value={object.aspectRatio.preset}
+            display={aspectPresetLabel}
+            options={CAMERA_ASPECT_RATIO_PRESETS.map((item) => ({ label: item.label, value: item.value }))}
+            onSelect={handleAspectPresetSelect}
+            className="w-full"
+            minWidthStrategy="none"
+          />
+          {object.aspectRatio.preset === 'custom' && (
+            <CustomAspectRatioInputs
+              key={object.id}
+              ratio={object.aspectRatio.ratio}
+              onChange={handleCustomRatioChange}
+            />
+          )}
         </div>
       </div>
 

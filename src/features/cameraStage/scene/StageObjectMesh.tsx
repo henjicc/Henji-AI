@@ -31,7 +31,7 @@ interface StageObjectMeshProps {
   onRegister: (id: string, node: Group | null) => void
   /** 相机对象的实际注视点；仅 camera 类型需要 */
   cameraLookAtTarget?: StageVec3
-  /** 机位视角下隐藏相机图标/视锥体，避免编辑辅助进入实际取景画面 */
+  /** 摄像机视角下隐藏相机图标/视锥体，避免编辑辅助进入实际取景画面 */
   showCameraHelpers: boolean
 }
 
@@ -122,7 +122,7 @@ const CameraHelperMesh: React.FC<{
     const distance = 1.1
     const fov = Math.min(120, Math.max(10, object.fov)) * DEG2RAD
     const halfHeight = Math.tan(fov / 2) * distance
-    const halfWidth = halfHeight * 1.55
+    const halfWidth = halfHeight * object.aspectRatio.ratio
     const origin = new Vector3(0, 0, 0)
     const corners = [
       new Vector3(-halfWidth, halfHeight, distance),
@@ -141,7 +141,7 @@ const CameraHelperMesh: React.FC<{
       corners[3], corners[0],
     ]
     return new BufferGeometry().setFromPoints(points)
-  }, [object.fov])
+  }, [object.fov, object.aspectRatio.ratio])
 
   useEffect(() => () => frustumGeometry.dispose(), [frustumGeometry])
 

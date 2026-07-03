@@ -3,12 +3,14 @@ import { CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/
 import { POSE_PRESETS } from './posePresets.gen'
 import { clonePose, createEmptyPose } from './poseTypes'
 import type {
+  StageCameraAspectRatioPreset,
   StageCameraObject,
   StageCharacterObject,
   StagePrimitiveKind,
   StagePrimitiveObject,
   StageSceneSettings,
   StageTransform,
+  StageVec3,
 } from './sceneTypes'
 
 /** 几何体类型的中文显示名（对齐参考产品的几何体库范围） */
@@ -22,6 +24,19 @@ export const PRIMITIVE_KIND_LABELS: Record<StagePrimitiveKind, string> = {
 }
 
 export const PRIMITIVE_KINDS: StagePrimitiveKind[] = ['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus']
+
+/** 摄像机画幅比例预设表：ratio 为 null 表示"自定义"，由用户手动输入宽高再算 */
+export const CAMERA_ASPECT_RATIO_PRESETS: Array<{
+  value: StageCameraAspectRatioPreset
+  label: string
+  ratio: number | null
+}> = [
+  { value: '16:9', label: '16:9', ratio: 16 / 9 },
+  { value: '4:3', label: '4:3', ratio: 4 / 3 },
+  { value: '1:1', label: '1:1', ratio: 1 },
+  { value: '9:16', label: '9:16', ratio: 9 / 16 },
+  { value: 'custom', label: '自定义', ratio: null },
+]
 
 export function createIdentityTransform(): StageTransform {
   return {
@@ -62,9 +77,13 @@ export function createCharacterObject(name: string, color: string): StageCharact
   }
 }
 
-export function createCameraObject(name: string, color: string): StageCameraObject {
+export function createCameraObject(
+  name: string,
+  color: string,
+  initialView?: { position: StageVec3; target: StageVec3 },
+): StageCameraObject {
   const transform = createIdentityTransform()
-  transform.position = { x: 0, y: 1.5, z: 4 }
+  transform.position = initialView ? { ...initialView.position } : { x: 0, y: 1.5, z: 4 }
   return {
     id: uuidv4(),
     type: 'camera',
@@ -73,7 +92,8 @@ export function createCameraObject(name: string, color: string): StageCameraObje
     color,
     visible: true,
     fov: 50,
-    lookAt: { mode: 'manual', target: { x: 0, y: 1, z: 0 } },
+    lookAt: { mode: 'manual', target: initialView ? { ...initialView.target } : { x: 0, y: 1, z: 0 } },
+    aspectRatio: { preset: '16:9', ratio: 16 / 9 },
   }
 }
 

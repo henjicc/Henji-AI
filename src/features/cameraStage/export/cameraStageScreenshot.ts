@@ -3,7 +3,7 @@ import { createLogger } from '@/core/logging'
 import { toDisplaySrc } from '@/platform/desktopApi'
 
 /**
- * 机位截图导出：把 Canvas 读出的 PNG dataURL 落盘。
+ * 摄像机截图导出：把 Canvas 读出的 PNG dataURL 落盘。
  * - 存进 Media 目录并返回 henji-media:// URL（供编辑器内预览"最近一次截图"）
  * - 另存到系统下载目录（用户可在生成/画布的图片输入位置直接选用，走通完整闭环）
  */
@@ -36,7 +36,7 @@ export async function exportSceneScreenshot(
     const savedPath = await saveImageSourceToDownloads(dataUrl, buildFileName(projectName))
     return { mediaUrl, savedPath }
   } catch (error) {
-    logger.error('[cameraStage] 机位截图导出失败', error)
+    logger.error('[cameraStage] 摄像机截图导出失败', error)
     throw error
   }
 }

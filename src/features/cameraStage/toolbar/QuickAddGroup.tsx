@@ -6,7 +6,7 @@ import { PRIMITIVE_KIND_LABELS } from '../domain/sceneDefaults'
 import type { StagePrimitiveKind } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
-/** 顶部工具栏图标化快速添加栏：几何体/角色/机位一击添加并自动选中 */
+/** 顶部工具栏图标化快速添加栏：几何体/角色/摄像机一击添加并自动选中 */
 
 type QuickAddValue = StagePrimitiveKind | 'character' | 'camera'
 
@@ -24,7 +24,7 @@ const QUICK_ADD_ICONS: Record<QuickAddValue, LucideIcon> = {
 const QUICK_ADD_LABELS: Record<QuickAddValue, string> = {
   ...PRIMITIVE_KIND_LABELS,
   character: '角色',
-  camera: '机位相机',
+  camera: '摄像机',
 }
 
 const QUICK_ADD_ORDER: QuickAddValue[] = [

@@ -9,12 +9,12 @@ interface StageViewportCameraProps {
   lookAtTarget: StageVec3
 }
 
-/** 机位视角真实渲染相机：位置/FOV/lookAt 完全来自当前机位对象数据 */
+/** 摄像机视角真实渲染相机：位置/FOV/lookAt 完全来自当前摄像机对象数据 */
 const StageViewportCamera: React.FC<StageViewportCameraProps> = ({ cameraObject, lookAtTarget }) => {
   const cameraRef = useRef<ThreePerspectiveCamera>(null)
   const { position } = cameraObject.transform
 
-  // 播放期命令式采样：机位视角下真实渲染相机的位置/FOV 直接由采样值驱动（不写 store）
+  // 播放期命令式采样：摄像机视角下真实渲染相机的位置/FOV 直接由采样值驱动（不写 store）
   useEffect(() => {
     const unregs: Array<() => void> = []
     unregs.push(

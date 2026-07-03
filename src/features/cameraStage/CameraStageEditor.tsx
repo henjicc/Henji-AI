@@ -3,6 +3,7 @@ import { ArrowLeft, Camera, Redo2, Undo2 } from 'lucide-react'
 import { Dropdown, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
 import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
+import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
 import { exportSceneScreenshot } from './export/cameraStageScreenshot'
 import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
@@ -80,8 +81,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     }
     setShooting(true)
     try {
+      const croppedDataUrl = activeCamera
+        ? await cropDataUrlToAspectRatio(dataUrl, activeCamera.aspectRatio.ratio)
+        : dataUrl
       const { savedPath } = await exportSceneScreenshot(
-        dataUrl,
+        croppedDataUrl,
         useCameraStageStore.getState().currentProjectName,
       )
       const fileName = savedPath.split(/[\\/]/).pop() ?? savedPath
@@ -91,7 +95,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     } finally {
       setShooting(false)
     }
-  }, [])
+  }, [activeCamera])
 
   // 保存成功/失败提示 1.6s 后回到常态
   useEffect(() => {
@@ -173,7 +177,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             onClick={() => setViewMode('director')}
             className="py-1.5 text-xs"
           >
-            导演视角
+            自由视角
           </UiOptionButton>
           <UiOptionButton
             active={viewMode === 'camera'}
@@ -181,7 +185,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             onClick={() => setViewMode('camera')}
             className="py-1.5 text-xs"
           >
-            机位视角
+            摄像机视角
           </UiOptionButton>
           {activeCamera && (
             <Dropdown<string>
@@ -210,7 +214,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
                   key={item.id}
                   active={gizmoMode === item.id}
                   disabled={disabled}
-                  title={disabled ? '机位相机仅支持移动（W/E/R 切换）' : undefined}
+                  title={disabled ? '摄像机仅支持移动（W/E/R 切换）' : undefined}
                   onClick={() => setGizmoMode(item.id)}
                   className="py-1.5 text-xs"
                 >
@@ -230,7 +234,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             size="sm"
             onClick={() => void handleScreenshot()}
             disabled={!canScreenshot || shooting}
-            title={canScreenshot ? '导出当前机位取景截图' : '切换到机位视角后可截图'}
+            title={canScreenshot ? '导出当前摄像机取景截图' : '切换到摄像机视角后可截图'}
             className="py-1.5 text-xs"
           >
             <Camera size={13} className="mr-1" />

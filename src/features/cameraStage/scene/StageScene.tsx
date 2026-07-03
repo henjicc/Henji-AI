@@ -6,6 +6,8 @@ import { CAMERA_STAGE_COLOR_HEX } from '@/core/theme/colorTokens'
 import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import DirectorViewTracker from './DirectorViewTracker'
+import StageCameraViewControls from './StageCameraViewControls'
 import StageCaptureBridge from './StageCaptureBridge'
 import type { StageCaptureFn } from './StageCaptureBridge'
 import StageFocusController from './StageFocusController'
@@ -22,7 +24,7 @@ import StageTransformControls from './StageTransformControls'
 const RAD2DEG = 180 / Math.PI
 
 interface StageSceneProps {
-  /** 截图函数注册位：机位视角下读取当前帧为 PNG dataURL */
+  /** 截图函数注册位：摄像机视角下读取当前帧为 PNG dataURL */
   captureRef?: React.MutableRefObject<StageCaptureFn | null>
 }
 
@@ -103,10 +105,18 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 8, 4]} intensity={1.2} />
       {isCameraView && (
-        <StageViewportCamera
-          cameraObject={activeCamera}
-          lookAtTarget={activeCameraTarget}
-        />
+        <>
+          <StageViewportCamera
+            cameraObject={activeCamera}
+            lookAtTarget={activeCameraTarget}
+          />
+          {activeCamera.lookAt.mode === 'manual' && (
+            <StageCameraViewControls
+              cameraObject={activeCamera}
+              lookAtTarget={activeCameraTarget}
+            />
+          )}
+        </>
       )}
       {sceneSettings.gridVisible && (
         <Grid
@@ -140,6 +150,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
         <>
           <OrbitControls makeDefault />
           <StageFocusController />
+          <DirectorViewTracker />
         </>
       )}
     </Canvas>

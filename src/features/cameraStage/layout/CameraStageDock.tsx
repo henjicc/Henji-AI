@@ -15,6 +15,7 @@ import {
 import 'dockview-react/dist/styles/dockview.css'
 import ObjectListPanel from '../panels/ObjectListPanel'
 import PropertyPanel from '../panels/PropertyPanel'
+import StageAspectRatioOverlay from '../scene/StageAspectRatioOverlay'
 import StageScene from '../scene/StageScene'
 import TimelinePanel from '../timeline/TimelinePanel'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
@@ -34,7 +35,12 @@ const ViewportCaptureContext = createContext<React.MutableRefObject<StageCapture
 
 const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
   const captureRef = useContext(ViewportCaptureContext)
-  return <StageScene captureRef={captureRef ?? undefined} />
+  return (
+    <div className="relative h-full w-full">
+      <StageScene captureRef={captureRef ?? undefined} />
+      <StageAspectRatioOverlay />
+    </div>
+  )
 }
 
 const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
