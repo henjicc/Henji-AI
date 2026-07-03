@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
+import { getAnimatablePropByPath } from '../domain/animatableProps'
 import { parseKeyframeKey, useCameraStageStore } from '../store/cameraStageStore'
 import EasingCurveEditor from './EasingCurveEditor'
+import GraphEditor, { type GraphTrack } from './GraphEditor'
+import { axisColor } from './graphColors'
 import PlaybackControls from './PlaybackControls'
 import TimeRuler from './TimeRuler'
 import TimelineTrackList from './TimelineTrackList'
@@ -20,6 +23,7 @@ const TimelinePanel: React.FC = () => {
   const duration = useCameraStageStore((state) => state.animation.duration)
   const fps = useCameraStageStore((state) => state.animation.fps)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
+  const selectedId = useCameraStageStore((state) => state.selectedId)
   const selectedKeyframes = useCameraStageStore((state) => state.selectedKeyframes)
   const seek = useCameraStageStore((state) => state.seek)
   const setSelectedKeyframes = useCameraStageStore((state) => state.setSelectedKeyframes)
@@ -27,6 +31,9 @@ const TimelinePanel: React.FC = () => {
 
   const [mode, setMode] = useState<TimeRulerMode>('seconds')
   const [pxPerSecond, setPxPerSecond] = useState(120)
+  const [graphView, setGraphView] = useState(false)
+  const [viewportHeight, setViewportHeight] = useState(240)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [easing, setEasing] = useState<{ target: EasingEditTarget; anchor: { x: number; y: number } } | null>(
     null,
   )
@@ -34,6 +41,38 @@ const TimelinePanel: React.FC = () => {
   const selectedSet = useMemo(() => new Set(selectedKeyframes), [selectedKeyframes])
   const contentWidth = Math.max(TIMELINE_MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond) + 40)
   const tree = useMemo(() => buildTimelineTree(objects, tracks), [objects, tracks])
+  const hasTree = tree.length > 0
+  const graphHeight = Math.max(160, viewportHeight - TIMELINE_RULER_HEIGHT - 2)
+
+  // 曲线视图绘制「选中对象的 scalar 轨道」（颜色不入曲线）
+  const plottedTracks = useMemo<GraphTrack[]>(() => {
+    const object = tree.find((item) => item.objectId === selectedId)
+    if (!object) return []
+    const result: GraphTrack[] = []
+    for (const group of object.groups) {
+      for (const row of group.childRows) {
+        if (getAnimatablePropByPath(row.path)?.valueType !== 'scalar') continue
+        result.push({
+          objectId: object.objectId,
+          path: row.path,
+          label: group.isVec3 ? `${group.label}·${row.label}` : group.label,
+          track: row.track,
+        })
+      }
+    }
+    return result
+  }, [tree, selectedId])
+
+  // 曲线视图图高跟随面板高度
+  useEffect(() => {
+    const element = scrollRef.current
+    if (!element) return
+    const update = (): void => setViewportHeight(element.clientHeight)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [hasTree])
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -82,6 +121,8 @@ const TimelinePanel: React.FC = () => {
         onModeChange={setMode}
         pxPerSecond={pxPerSecond}
         onPxPerSecondChange={(value) => setPxPerSecond(clampPxPerSecond(value))}
+        graphView={graphView}
+        onGraphViewChange={setGraphView}
       />
 
       {tree.length === 0 ? (
@@ -90,6 +131,7 @@ const TimelinePanel: React.FC = () => {
         </div>
       ) : (
         <div
+          ref={scrollRef}
           className="relative flex-1 overflow-auto focus:outline-none"
           tabIndex={0}
           onKeyDown={handleKeyDown}
@@ -115,15 +157,47 @@ const TimelinePanel: React.FC = () => {
               />
             </div>
 
-            <TimelineTrackList
-              tree={tree}
-              pxPerSecond={pxPerSecond}
-              contentWidth={contentWidth}
-              duration={duration}
-              fps={fps}
-              selectedSet={selectedSet}
-              onOpenEasing={openEasing}
-            />
+            {graphView ? (
+              <div className="flex" style={{ height: graphHeight }}>
+                <div
+                  className="sticky left-0 z-10 flex shrink-0 flex-col gap-1 overflow-y-auto border-r border-border-dark bg-app p-1.5"
+                  style={{ width: TIMELINE_LABEL_WIDTH }}
+                >
+                  {plottedTracks.length === 0 ? (
+                    <span className="px-1 text-[11px] text-text-muted">选中一个对象查看其属性曲线</span>
+                  ) : (
+                    plottedTracks.map((graph) => (
+                      <div key={graph.path} className="flex items-center gap-1.5 px-1">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-sm"
+                          style={{ backgroundColor: axisColor(graph.path) }}
+                        />
+                        <span className="truncate text-[11px] text-text-muted">{graph.label}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <GraphEditor
+                  tracks={plottedTracks}
+                  pxPerSecond={pxPerSecond}
+                  contentWidth={contentWidth}
+                  height={graphHeight}
+                  duration={duration}
+                  fps={fps}
+                  selectedKeys={selectedSet}
+                />
+              </div>
+            ) : (
+              <TimelineTrackList
+                tree={tree}
+                pxPerSecond={pxPerSecond}
+                contentWidth={contentWidth}
+                duration={duration}
+                fps={fps}
+                selectedSet={selectedSet}
+                onOpenEasing={openEasing}
+              />
+            )}
 
             {/* 播放头：竖线 + 顶端向下三角（对齐常见时间轴/AE 的时间指针形态） */}
             <div

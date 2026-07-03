@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Pause, Play, Repeat, SkipBack, ZoomIn } from 'lucide-react'
+import { Pause, Play, Repeat, SkipBack, Spline, ZoomIn } from 'lucide-react'
 import { UiIconButton, UiInput, UiOptionButton, UiRangeInput } from '@/components/ui'
 import {
   TIMELINE_MAX_PX_PER_SECOND,
@@ -64,6 +64,8 @@ interface PlaybackControlsProps {
   onModeChange: (mode: TimeRulerMode) => void
   pxPerSecond: number
   onPxPerSecondChange: (value: number) => void
+  graphView: boolean
+  onGraphViewChange: (value: boolean) => void
 }
 
 const PlaybackControls: React.FC<PlaybackControlsProps> = ({
@@ -71,6 +73,8 @@ const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onModeChange,
   pxPerSecond,
   onPxPerSecondChange,
+  graphView,
+  onGraphViewChange,
 }) => {
   const playing = useCameraStageStore((state) => state.playback.playing)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
@@ -124,6 +128,16 @@ const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <UiIconButton
+          showBorder={false}
+          appearance="hover-only"
+          active={graphView}
+          className="h-7 w-7"
+          title={graphView ? '切回关键帧视图' : '切到曲线（图表编辑器）视图'}
+          onClick={() => onGraphViewChange(!graphView)}
+        >
+          <Spline size={15} />
+        </UiIconButton>
         <div className="flex items-center gap-1">
           <UiOptionButton
             active={mode === 'seconds'}

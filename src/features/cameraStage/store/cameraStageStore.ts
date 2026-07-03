@@ -28,6 +28,7 @@ import {
   removeTrack,
   removeTrackKeyframe,
   setTrackKeyframeEasing,
+  setTrackKeyframeValue,
   upsertTrackKeyframe,
 } from './animationActions'
 import { applyAnimationAtTime } from './playbackSampling'
@@ -87,6 +88,8 @@ interface CameraStageState {
   keyframeAtCurrentTime: (objectId: string, path: string) => void
   removeKeyframe: (objectId: string, path: string, time: number) => void
   moveKeyframe: (objectId: string, path: string, fromTime: number, toTime: number) => void
+  /** 改某关键帧的值（曲线图里竖向拖点用） */
+  setKeyframeValue: (objectId: string, path: string, time: number, value: number) => void
   /** 批量设置若干关键帧的缓动（速度曲线编辑器用） */
   setKeyframesEasing: (
     targets: Array<{ objectId: string; path: string; time: number }>,
@@ -439,6 +442,11 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   moveKeyframe: (objectId, path, fromTime, toTime) =>
     set((state) => ({ animation: moveTrackKeyframe(state.animation, objectId, path, fromTime, toTime) })),
+
+  setKeyframeValue: (objectId, path, time, value) =>
+    set((state) => ({
+      animation: setTrackKeyframeValue(state.animation, objectId, path, time, value),
+    })),
 
   setKeyframesEasing: (targets, easing) =>
     set((state) => {

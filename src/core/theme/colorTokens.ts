@@ -46,7 +46,7 @@ export const CAMERA_STAGE_COLOR_HEX = {
   selectionOutline: '#4a90e8',
 } as const;
 
-// 运镜控制时间轴（第三阶段）配色：播放头 / 关键帧菱形 / 轨道分隔
+// 运镜控制时间轴（第三阶段）配色：播放头 / 关键帧菱形 / 轨道分隔 / 曲线图分量色
 export const CAMERA_STAGE_TIMELINE_HEX = {
   playhead: '#e8734a',
   keyframe: '#c9ccd2',
@@ -54,6 +54,13 @@ export const CAMERA_STAGE_TIMELINE_HEX = {
   keyframeEased: '#e8c84a',
   laneBorder: '#2a2a30',
   laneActive: '#202027',
+  // 曲线图分量色（对齐 AE：X 红 / Y 绿 / Z 蓝，其余走强调色）
+  axisX: '#e0555f',
+  axisY: '#5fbf6a',
+  axisZ: '#5a8fe0',
+  curveOther: '#c9a0e8',
+  curveGrid: '#26262c',
+  curveHandle: '#e8c84a',
 } as const;
 
 // 运镜控制新建对象默认颜色轮换盘（按对象序号取模）

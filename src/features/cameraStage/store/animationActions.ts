@@ -105,6 +105,22 @@ export function moveTrackKeyframe(
   return replaceTrackKeyframes(animation, objectId, path, keyframes)
 }
 
+export function setTrackKeyframeValue(
+  animation: StageSceneAnimation,
+  objectId: string,
+  path: string,
+  time: number,
+  value: StageKeyframeValue,
+): StageSceneAnimation {
+  const track = getTrack(animation, objectId, path)
+  if (!track) return animation
+  const index = indexOfKeyframeAtTime(track.keyframes, time)
+  if (index < 0) return animation
+  const keyframes = track.keyframes.slice()
+  keyframes[index] = { ...keyframes[index], value }
+  return replaceTrackKeyframes(animation, objectId, path, keyframes)
+}
+
 export function setTrackKeyframeEasing(
   animation: StageSceneAnimation,
   objectId: string,
