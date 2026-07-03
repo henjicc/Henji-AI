@@ -20,6 +20,13 @@ interface TransformEvent {
   value?: boolean
 }
 
+type StageTransformEventType = 'dragging-changed' | 'change' | 'objectChange'
+
+interface StageTransformEventSource {
+  addEventListener: (type: StageTransformEventType, listener: (event: TransformEvent) => void) => void
+  removeEventListener: (type: StageTransformEventType, listener: (event: TransformEvent) => void) => void
+}
+
 interface StageTransformHandle extends Object3D {
   tag?: 'fwd' | 'bwd' | string
 }
@@ -107,6 +114,7 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
   useEffect(() => {
     if (!defaultControls) return undefined
 
+    const controlEvents = controls as unknown as StageTransformEventSource
     const handleDraggingChanged = (event: TransformEvent): void => {
       defaultControls.enabled = !event.value
       // 一次 gizmo 拖拽合并为一条撤销记录：拖拽开始开会话，结束提交
@@ -116,13 +124,14 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
         endHistorySession()
       }
     }
-    controls.addEventListener('dragging-changed', handleDraggingChanged)
+    controlEvents.addEventListener('dragging-changed', handleDraggingChanged)
     return () => {
-      controls.removeEventListener('dragging-changed', handleDraggingChanged)
+      controlEvents.removeEventListener('dragging-changed', handleDraggingChanged)
     }
   }, [controls, defaultControls])
 
   useEffect(() => {
+    const controlEvents = controls as unknown as StageTransformEventSource
     const handleChange = (): void => {
       invalidate()
     }
@@ -130,11 +139,11 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
       onObjectChangeRef.current()
     }
 
-    controls.addEventListener('change', handleChange)
-    controls.addEventListener('objectChange', handleObjectChange)
+    controlEvents.addEventListener('change', handleChange)
+    controlEvents.addEventListener('objectChange', handleObjectChange)
     return () => {
-      controls.removeEventListener('change', handleChange)
-      controls.removeEventListener('objectChange', handleObjectChange)
+      controlEvents.removeEventListener('change', handleChange)
+      controlEvents.removeEventListener('objectChange', handleObjectChange)
     }
   }, [controls, invalidate])
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { UiIconButton, UiInput } from './primitives'
 
 type NumberInputProps = {
@@ -18,18 +18,27 @@ type NumberInputProps = {
   wheelStep?: boolean
 }
 
-export default function NumberInput(props: NumberInputProps) {
+function formatNumber(value: number, precision?: number): string {
+  if (!Number.isFinite(value)) return '0'
+  if (typeof precision !== 'number') return value.toString()
+
+  const fixed = value.toFixed(precision)
+  return fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+}
+
+export default function NumberInput(props: NumberInputProps): ReactElement {
   const { label, value, onChange, min, max, step = 1, widthClassName = 'w-24', className, precision, disabled = false, commitOnChange = false, wheelStep = false } = props
 
   // 处理 undefined 值，使用 min 或 0 作为默认值
   const safeValue = value ?? (min ?? 0)
+  const displayValue = formatNumber(safeValue, precision)
 
   // 使用内部状态存储输入值，允许用户输入过程中的中间状态
-  const [inputValue, setInputValue] = useState(safeValue.toString())
+  const [inputValue, setInputValue] = useState(displayValue)
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const clamp = (v: number) => {
+  const clamp = (v: number): number => {
     let x = v
     if (typeof min === 'number') x = Math.max(min, x)
     if (typeof max === 'number') x = Math.min(max, x)
@@ -41,26 +50,26 @@ export default function NumberInput(props: NumberInputProps) {
   }
   
   // 失去焦点时验证和修正数值
-  const handleBlur = () => {
+  const handleBlur = (): void => {
     setIsFocused(false)
     const raw = parseFloat(inputValue)
     const next = clamp(isNaN(raw) ? (min ?? 0) : raw)
     onChange(next)
-    setInputValue(next.toString())
+    setInputValue(formatNumber(next, precision))
   }
   
   // 获得焦点时更新输入值
-  const handleFocus = () => {
+  const handleFocus = (): void => {
     setIsFocused(true)
-    setInputValue(safeValue.toString())
+    setInputValue(displayValue)
   }
 
   // 当外部 value 变化且未聚焦时，同步到 inputValue
-  if (!isFocused && safeValue.toString() !== inputValue) {
-    setInputValue(safeValue.toString())
+  if (!isFocused && displayValue !== inputValue) {
+    setInputValue(displayValue)
   }
 
-  const handleInputChange = (raw: string) => {
+  const handleInputChange = (raw: string): void => {
     setInputValue(raw)
     if (!commitOnChange) return
     const parsed = parseFloat(raw)
@@ -70,10 +79,10 @@ export default function NumberInput(props: NumberInputProps) {
     }
   }
 
-  const stepBy = (direction: 1 | -1) => {
+  const stepBy = (direction: 1 | -1): void => {
     const next = clamp(safeValue + direction * step)
     onChange(next)
-    setInputValue(next.toString())
+    setInputValue(formatNumber(next, precision))
   }
 
   // 悬浮滚轮步进：React 的 onWheel 是 passive 监听，preventDefault 无效，

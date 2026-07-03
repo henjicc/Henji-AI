@@ -1,8 +1,9 @@
 import React from 'react'
+import { Lock, Unlock } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
-import { UiButton, UiInput, UiSwitch } from '@/components/ui'
+import { UiButton, UiIconButton, UiInput, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
-import type { StageObject, StageVec3 } from '../domain/sceneTypes'
+import type { StageObject, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
 import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 import CameraSettingsSection from './CameraSettingsSection'
@@ -13,9 +14,9 @@ import CharacterPoseSection from './CharacterPoseSection'
 type Vec3Key = 'position' | 'rotation' | 'scale'
 
 const VEC3_ROWS: Array<{ key: Vec3Key; label: string; step: number; precision: number }> = [
-  { key: 'position', label: '位置', step: 0.1, precision: 2 },
+  { key: 'position', label: '位置（场景单位）', step: 0.1, precision: 2 },
   { key: 'rotation', label: '旋转（°）', step: 5, precision: 1 },
-  { key: 'scale', label: '缩放', step: 0.1, precision: 2 },
+  { key: 'scale', label: '缩放（倍）', step: 0.1, precision: 2 },
 ]
 
 const AXES: Array<keyof StageVec3> = ['x', 'y', 'z']
@@ -28,16 +29,45 @@ interface Vec3RowProps {
   step: number
   precision: number
   min?: number
-  onChange: (next: StageVec3, changedPath: string) => void
+  onChange: (next: StageVec3, changedPaths?: string[]) => void
   /** 提供则在行首渲染码表按钮（可打关键帧的属性行） */
   keyframe?: { objectId: string; path: string }
+  scaleLocked?: boolean
+  onScaleLockedChange?: (locked: boolean) => void
 }
 
-const Vec3Row: React.FC<Vec3RowProps> = ({ label, pathKey, value, step, precision, min, onChange, keyframe }) => (
+const Vec3Row: React.FC<Vec3RowProps> = ({
+  label,
+  pathKey,
+  value,
+  step,
+  precision,
+  min,
+  onChange,
+  keyframe,
+  scaleLocked = false,
+  onScaleLockedChange,
+}) => (
   <div>
-    <div className="mb-1 flex items-center gap-1 text-xs text-text-muted">
-      {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} groupPath={keyframe.path} />}
-      <span>{label}</span>
+    <div className="mb-1 flex items-center justify-between gap-2 text-xs text-text-muted">
+      <div className="flex min-w-0 items-center gap-1">
+        {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} groupPath={keyframe.path} />}
+        <span>{label}</span>
+      </div>
+      {pathKey === 'scale' && onScaleLockedChange && (
+        <UiIconButton
+          type="button"
+          showBorder={false}
+          appearance="hover-only"
+          active={scaleLocked}
+          title={scaleLocked ? '已锁定等比缩放' : '独立缩放'}
+          aria-label={scaleLocked ? '关闭等比缩放' : '开启等比缩放'}
+          className="h-6 w-6 shrink-0"
+          onClick={() => onScaleLockedChange(!scaleLocked)}
+        >
+          {scaleLocked ? <Lock size={13} /> : <Unlock size={13} />}
+        </UiIconButton>
+      )}
     </div>
     <div className="flex gap-1.5">
       {AXES.map((axis) => (
@@ -61,7 +91,13 @@ const Vec3Row: React.FC<Vec3RowProps> = ({ label, pathKey, value, step, precisio
             className="min-w-0"
             commitOnChange
             wheelStep
-            onChange={(next) => onChange({ ...value, [axis]: next }, `transform.${pathKey}.${axis}`)}
+            onChange={(next) => {
+              const lockedScale = pathKey === 'scale' && scaleLocked
+              onChange(
+                lockedScale ? { x: next, y: next, z: next } : { ...value, [axis]: next },
+                lockedScale ? undefined : [`transform.${pathKey}.${axis}`],
+              )
+            }}
           />
         </div>
       ))}
@@ -78,6 +114,7 @@ const PropertyPanel: React.FC = () => {
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const updateObject = useCameraStageStore((state) => state.updateObject)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
+  const [scaleLocked, setScaleLocked] = React.useState(false)
 
   const selected: StageObject | undefined = objects.find((item) => item.id === selectedId)
 
@@ -92,9 +129,14 @@ const PropertyPanel: React.FC = () => {
     )
   }
 
-  const handleUniformScale = (next: number): void => {
+  const handleScaleLockedChange = (locked: boolean): void => {
+    setScaleLocked(locked)
+    if (!locked || selected.type === 'camera') return
+
+    const next = selected.transform.scale.x
     updateTransform(selected.id, { scale: { x: next, y: next, z: next } })
   }
+
   const transformRows = selected.type === 'camera'
     ? VEC3_ROWS.filter((row) => row.key === 'position')
     : VEC3_ROWS
@@ -155,24 +197,15 @@ const PropertyPanel: React.FC = () => {
               precision={row.precision}
               min={row.key === 'scale' ? 0.01 : undefined}
               keyframe={{ objectId: selected.id, path: `transform.${row.key}` }}
-              onChange={(next, changedPath) => updateTransform(selected.id, { [row.key]: next }, [changedPath])}
+              scaleLocked={row.key === 'scale' && scaleLocked}
+              onScaleLockedChange={row.key === 'scale' ? handleScaleLockedChange : undefined}
+              onChange={(next, changedPaths) => updateTransform(
+                selected.id,
+                { [row.key]: next } as Partial<StageTransform>,
+                changedPaths,
+              )}
             />
           ))}
-          {selected.type !== 'camera' && (
-            <div>
-            <div className="mb-1 text-xs text-text-muted">统一缩放</div>
-            <NumberInput
-              value={selected.transform.scale.x}
-              step={0.1}
-              min={0.01}
-              precision={2}
-              widthClassName="w-full"
-              commitOnChange
-              wheelStep
-              onChange={handleUniformScale}
-            />
-            </div>
-          )}
         </div>
 
         {selected.type === 'character' && <CharacterPoseSection object={selected} />}
