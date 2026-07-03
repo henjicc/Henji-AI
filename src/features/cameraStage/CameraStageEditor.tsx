@@ -5,11 +5,12 @@ import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
 import { exportSceneScreenshot } from './export/cameraStageScreenshot'
+import { useCameraStageAutosave } from './hooks/useCameraStageAutosave'
 import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
 import type { CameraStageDockHandle } from './layout/CameraStageDock'
-import { saveCurrentProject } from './projects/cameraStageProjectService'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
+import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
 import QuickAddGroup from './toolbar/QuickAddGroup'
@@ -40,17 +41,20 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
+  const currentProjectId = useCameraStageStore((state) => state.currentProjectId)
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
   const requestFocusSelected = useCameraStageStore((state) => state.requestFocusSelected)
   const projectName = useCameraStageStore((state) => state.currentProjectName)
+  const setSessionProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
+  const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
   const isCameraSelected = objects.find((item) => item.id === selectedId)?.type === 'camera'
 
   const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
+  const { saveState } = useCameraStageAutosave()
 
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [shotHint, setShotHint] = useState<string | null>(null)
   const [shooting, setShooting] = useState(false)
   const captureRef = useRef<StageCaptureFn | null>(null)
@@ -62,16 +66,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     setActiveCameraId(cameraId)
     setSelected(cameraId)
   }
-
-  const handleSave = useCallback(async (): Promise<void> => {
-    setSaveState('saving')
-    try {
-      await saveCurrentProject()
-      setSaveState('saved')
-    } catch {
-      setSaveState('error')
-    }
-  }, [])
 
   const handleScreenshot = useCallback(async (): Promise<void> => {
     const dataUrl = captureRef.current?.()
@@ -97,13 +91,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     }
   }, [activeCamera])
 
-  // 保存成功/失败提示 1.6s 后回到常态
-  useEffect(() => {
-    if (saveState !== 'saved' && saveState !== 'error') return
-    const timer = window.setTimeout(() => setSaveState('idle'), 1600)
-    return () => window.clearTimeout(timer)
-  }, [saveState])
-
   // 截图提示 3s 后消失
   useEffect(() => {
     if (!shotHint) return
@@ -111,27 +98,27 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     return () => window.clearTimeout(timer)
   }, [shotHint])
 
+  useEffect(() => {
+    setSessionProjectId(currentProjectId)
+  }, [currentProjectId, setSessionProjectId])
+
+  useEffect(() => {
+    setSessionViewMode(viewMode)
+  }, [setSessionViewMode, viewMode])
+
   // 编辑器作用域快捷键：W/E/R 切 gizmo、F 聚焦选中对象、Delete 删除、Ctrl+D 复制、
-  // Ctrl/Cmd+S 保存、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做
+  // Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做
   useCameraStageShortcuts({
     selectedId,
     setGizmoMode,
     removeObject,
     duplicateObject,
     requestFocusSelected,
-    handleSave: () => void handleSave(),
     undo,
     redo,
   })
 
-  const saveLabel =
-    saveState === 'saving'
-      ? '保存中…'
-      : saveState === 'saved'
-      ? '已保存'
-      : saveState === 'error'
-      ? '保存失败'
-      : '保存'
+  const autosaveErrorLabel = saveState === 'error' ? '自动保存失败' : null
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-app">
@@ -227,6 +214,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
 
         <div className="ml-auto flex items-center gap-2">
           {shotHint && <span className="max-w-64 truncate text-xs text-text-muted">{shotHint}</span>}
+          {autosaveErrorLabel && (
+            <span className="max-w-28 truncate text-xs text-text-muted" title={autosaveErrorLabel}>
+              {autosaveErrorLabel}
+            </span>
+          )}
           <span className="max-w-40 truncate text-xs text-text-muted" title={projectName}>
             {projectName}
           </span>
@@ -248,14 +240,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             className="py-1.5 text-xs"
           >
             重置布局
-          </UiButton>
-          <UiButton
-            size="sm"
-            onClick={() => void handleSave()}
-            disabled={saveState === 'saving'}
-            className="py-1.5 text-xs"
-          >
-            {saveLabel}
           </UiButton>
         </div>
       </div>

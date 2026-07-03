@@ -3,7 +3,7 @@ import type { StageGizmoMode } from '../domain/sceneTypes'
 
 /**
  * 编辑器作用域快捷键：W/E/R 切 gizmo 模式、F 聚焦选中对象、Delete/Backspace 删除选中、
- * Ctrl/Cmd+D 复制选中、Ctrl/Cmd+S 保存、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做。
+ * Ctrl/Cmd+D 复制选中、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做。
  * 输入框/可编辑区域内不拦截，交给原生行为。
  */
 
@@ -13,7 +13,6 @@ interface UseCameraStageShortcutsParams {
   removeObject: (id: string) => void
   duplicateObject: (id: string) => void
   requestFocusSelected: () => void
-  handleSave: () => void
   undo: () => void
   redo: () => void
 }
@@ -33,7 +32,6 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
     removeObject,
     duplicateObject,
     requestFocusSelected,
-    handleSave,
     undo,
     redo,
   } = params
@@ -44,10 +42,7 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
       const key = event.key.toLowerCase()
 
       if (event.ctrlKey || event.metaKey) {
-        if (key === 's') {
-          event.preventDefault()
-          handleSave()
-        } else if (key === 'z') {
+        if (key === 'z') {
           event.preventDefault()
           if (event.shiftKey) redo()
           else undo()
@@ -74,5 +69,5 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [selectedId, setGizmoMode, removeObject, duplicateObject, requestFocusSelected, handleSave, undo, redo])
+  }, [selectedId, setGizmoMode, removeObject, duplicateObject, requestFocusSelected, undo, redo])
 }

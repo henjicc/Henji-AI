@@ -12,6 +12,7 @@ import type {
   CameraStageProjectPlatformSummary,
 } from '@/platform/contracts/cameraStageProjects'
 import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
+import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import {
   CAMERA_STAGE_DEFAULT_PROJECT_NAME,
   clearCameraStageHistory,
@@ -30,10 +31,20 @@ export interface SavedProjectInfo {
   name: string
 }
 
-/** 保存当前场景为工程；新场景自动生成 id，返回保存后的工程标识 */
-export async function saveCurrentProject(): Promise<SavedProjectInfo> {
+export interface CameraStageProjectDraft {
+  id: string
+  name: string
+  record: CameraStageProjectPlatformRecord
+  fingerprint: string
+}
+
+function createDraftFingerprint(projectId: string, name: string, sceneJson: string): string {
+  return `${projectId}\u0000${name}\u0000${sceneJson}`
+}
+
+/** 基于当前 store 场景生成一份待保存工程草稿，供手动保存/自动保存共用。 */
+export function createCurrentProjectDraft(now: number = Date.now()): CameraStageProjectDraft {
   const state = useCameraStageStore.getState()
-  const now = Date.now()
   const id = state.currentProjectId ?? uuidv4()
   const name = state.currentProjectName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME
   const sceneJson = serializeScene({
@@ -51,14 +62,30 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
     objectCount: state.objects.length,
     sceneJson,
   }
+  return {
+    id,
+    name,
+    record,
+    fingerprint: createDraftFingerprint(id, name, sceneJson),
+  }
+}
+
+/** 持久化工程草稿并把工程 id/name 绑定回当前编辑态。 */
+export async function saveProjectDraft(draft: CameraStageProjectDraft): Promise<SavedProjectInfo> {
   try {
-    await upsertCameraStageProjectRecord(record)
+    await upsertCameraStageProjectRecord(draft.record)
   } catch (error) {
-    logger.error('[cameraStage] 保存工程失败', error, { projectId: id })
+    logger.error('[cameraStage] 保存工程失败', error, { projectId: draft.id })
     throw error
   }
-  useCameraStageStore.getState().bindProject(id, name)
-  return { id, name }
+  useCameraStageStore.getState().bindProject(draft.id, draft.name)
+  useCameraStageSessionStore.getState().setLastProjectId(draft.id)
+  return { id: draft.id, name: draft.name }
+}
+
+/** 保存当前场景为工程；新场景自动生成 id，返回保存后的工程标识 */
+export async function saveCurrentProject(): Promise<SavedProjectInfo> {
+  return await saveProjectDraft(createCurrentProjectDraft())
 }
 
 /** 新建空白工程：重置为空场景并立即保存入库，返回新工程标识 */
@@ -66,6 +93,7 @@ export async function createNewProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
 ): Promise<SavedProjectInfo> {
   useCameraStageStore.getState().newScene(name)
+  useCameraStageSessionStore.getState().setLastProjectId(null)
   clearCameraStageHistory()
   return await saveCurrentProject()
 }
@@ -86,6 +114,7 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
     },
     { id: record.id, name: record.name },
   )
+  useCameraStageSessionStore.getState().setLastProjectId(record.id)
   clearCameraStageHistory()
   return true
 }
@@ -105,4 +134,8 @@ export async function renameProject(projectId: string, name: string): Promise<vo
 
 export async function deleteProject(projectId: string): Promise<void> {
   await deleteCameraStageProjectRecord(projectId)
+  const session = useCameraStageSessionStore.getState()
+  if (session.lastProjectId === projectId) {
+    session.setLastProjectId(null)
+  }
 }

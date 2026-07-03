@@ -1,6 +1,10 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import CameraStageEditor from './CameraStageEditor'
+import { loadProjectIntoScene } from './projects/cameraStageProjectService'
 import CameraStageProjectList from './projects/CameraStageProjectList'
+import { persistDirectorView } from './scene/directorViewState'
+import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
+import { useCameraStageStore } from './store/cameraStageStore'
 
 /**
  * 运镜控制入口：管理"工程列表 ↔ 场景编辑器"两级视图。
@@ -8,12 +12,57 @@ import CameraStageProjectList from './projects/CameraStageProjectList'
  */
 
 const CameraStageApp: React.FC = () => {
-  const [view, setView] = useState<'list' | 'editor'>('list')
+  const view = useCameraStageSessionStore((state) => state.appView)
+  const lastProjectId = useCameraStageSessionStore((state) => state.lastProjectId)
+  const stageViewMode = useCameraStageSessionStore((state) => state.stageViewMode)
+  const setAppView = useCameraStageSessionStore((state) => state.setAppView)
+  const setLastProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
+  const [restoring, setRestoring] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const restoreLastSession = async (): Promise<void> => {
+      if (view !== 'editor') {
+        if (!cancelled) setRestoring(false)
+        return
+      }
+      if (!lastProjectId) {
+        setAppView('list')
+        if (!cancelled) setRestoring(false)
+        return
+      }
+
+      const currentProjectId = useCameraStageStore.getState().currentProjectId
+      const shouldLoadProject = currentProjectId !== lastProjectId
+      const ok = shouldLoadProject ? await loadProjectIntoScene(lastProjectId) : true
+      if (!ok) {
+        setAppView('list')
+        setLastProjectId(null)
+        if (!cancelled) setRestoring(false)
+        return
+      }
+
+      useCameraStageStore.getState().setViewMode(stageViewMode)
+      if (!cancelled) setRestoring(false)
+    }
+
+    void restoreLastSession()
+
+    return () => {
+      cancelled = true
+      persistDirectorView()
+    }
+  }, [lastProjectId, setAppView, setLastProjectId, stageViewMode, view])
+
+  if (restoring) {
+    return <div className="flex h-full items-center justify-center bg-app text-sm text-text-muted">恢复上次视图中…</div>
+  }
 
   if (view === 'editor') {
-    return <CameraStageEditor onBackToList={() => setView('list')} />
+    return <CameraStageEditor onBackToList={() => setAppView('list')} />
   }
-  return <CameraStageProjectList onEnterEditor={() => setView('editor')} />
+  return <CameraStageProjectList onEnterEditor={() => setAppView('editor')} />
 }
 
 export default CameraStageApp

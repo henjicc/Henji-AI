@@ -7,6 +7,7 @@ import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import DirectorViewTracker from './DirectorViewTracker'
+import StageDirectorViewRestorer from './StageDirectorViewRestorer'
 import StageCameraViewControls from './StageCameraViewControls'
 import StageCaptureBridge from './StageCaptureBridge'
 import type { StageCaptureFn } from './StageCaptureBridge'
@@ -149,6 +150,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       {!isCameraView && (
         <>
           <OrbitControls makeDefault />
+          <StageDirectorViewRestorer />
           <StageFocusController />
           <DirectorViewTracker />
         </>
