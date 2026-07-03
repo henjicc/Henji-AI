@@ -34,7 +34,7 @@ interface Vec3RowProps {
 const Vec3Row: React.FC<Vec3RowProps> = ({ label, value, step, precision, min, onChange, keyframe }) => (
   <div>
     <div className="mb-1 flex items-center gap-1 text-xs text-text-muted">
-      {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} path={keyframe.path} />}
+      {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} groupPath={keyframe.path} />}
       <span>{label}</span>
     </div>
     <div className="flex gap-1.5">
@@ -105,7 +105,7 @@ const PropertyPanel: React.FC = () => {
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1">
-            <KeyframeStopwatch objectId={selected.id} path="color" />
+            <KeyframeStopwatch objectId={selected.id} groupPath="color" />
             <SectionTitle>颜色</SectionTitle>
           </div>
           <div className="flex items-center gap-1.5">

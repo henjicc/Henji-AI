@@ -35,7 +35,7 @@ interface JointSlidersProps {
 const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, objectId, jointId, onChange }) => (
   <div className="flex flex-col gap-1">
     <div className="flex items-center gap-1 text-xs text-text-muted">
-      <KeyframeStopwatch objectId={objectId} path={poseJointPath(jointId)} />
+      <KeyframeStopwatch objectId={objectId} groupPath={poseJointPath(jointId)} />
       <span>{jointName}</span>
     </div>
     {AXES.map((axis) => (

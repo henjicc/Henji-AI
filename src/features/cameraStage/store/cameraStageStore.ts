@@ -19,7 +19,7 @@ import {
   type StagePlaybackState,
   type StageSceneAnimation,
 } from '../domain/animationTypes'
-import { getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
+import { getAnimatableGroupByPath, getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
 import {
   getTrack,
   hasKeyframeAtTime,
@@ -79,7 +79,9 @@ interface CameraStageState {
   loadSnapshot: (snapshot: StageSceneSnapshotInput, project: { id: string; name: string }) => void
 
   /* ---- 关键帧动画动作（tracked：进撤销历史） ---- */
-  /** 码表三态切换：无轨道→建轨并以当前值当前时间打点；有轨道当前时间无点→打点；有点→删点 */
+  /** 分组码表：整组（vec3 的 X/Y/Z 或单值）在当前时间统一打/删点（属性面板/时间轴父行用） */
+  toggleKeyframeGroup: (objectId: string, groupPath: string) => void
+  /** 单条 scalar/color 轨道码表三态切换（时间轴分量子行用） */
   toggleKeyframe: (objectId: string, path: string) => void
   /** 在当前时间以对象当前值强制打点（属性行改值自动打点用） */
   keyframeAtCurrentTime: (objectId: string, path: string) => void
@@ -301,7 +303,10 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
-      const paths = Object.keys(patch).map((key) => `transform.${key}`)
+      // 分量化：每个变更的变换属性展开为 X/Y/Z 三条分量路径分别自动打点
+      const paths = Object.keys(patch).flatMap((key) =>
+        ['x', 'y', 'z'].map((axis) => `transform.${key}.${axis}`),
+      )
       const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
       return animation === state.animation ? { objects } : { objects, animation }
     }),
@@ -315,10 +320,11 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
+      const base = poseJointPath(jointId)
       const animation = autoKeyPaths(
         state.animation,
         object,
-        [poseJointPath(jointId)],
+        ['x', 'y', 'z'].map((axis) => `${base}.${axis}`),
         state.playback.currentTime,
       )
       return animation === state.animation ? { objects } : { objects, animation }
@@ -372,6 +378,30 @@ export const useCameraStageStore = create<CameraStageState>()(
         playback: createDefaultPlayback(),
         selectedKeyframes: [],
       }
+    }),
+
+  toggleKeyframeGroup: (objectId, groupPath) =>
+    set((state) => {
+      const object = state.objects.find((item) => item.id === objectId)
+      const group = getAnimatableGroupByPath(groupPath)
+      if (!object || !group) return {}
+      const time = state.playback.currentTime
+      const allKeyed = group.children.every((child) =>
+        hasKeyframeAtTime(state.animation, objectId, child.path, time),
+      )
+      let animation = state.animation
+      if (allKeyed) {
+        // 整组均已有点 → 删除各分量在当前时间的点
+        for (const child of group.children) {
+          animation = removeTrackKeyframe(animation, objectId, child.path, time)
+        }
+      } else {
+        // 否则补齐各分量在当前时间的点（缺则建轨）
+        for (const child of group.children) {
+          animation = upsertTrackKeyframe(animation, objectId, child.path, time, child.getValue(object))
+        }
+      }
+      return { animation }
     }),
 
   toggleKeyframe: (objectId, path) =>

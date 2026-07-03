@@ -116,7 +116,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-1 text-xs text-text-muted">
-          <KeyframeStopwatch objectId={object.id} path="fov" />
+          <KeyframeStopwatch objectId={object.id} groupPath="fov" />
           <span>视野角 FOV（°）</span>
         </div>
         <div className="flex items-center gap-1.5">

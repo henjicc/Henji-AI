@@ -62,6 +62,7 @@ async function bundleModule(relEntry) {
 async function main() {
   const engine = await bundleModule('src/features/cameraStage/domain/keyframeEngine.ts')
   const actions = await bundleModule('src/features/cameraStage/store/animationActions.ts')
+  const serialization = await bundleModule('src/features/cameraStage/domain/sceneSerialization.ts')
   const {
     cubicBezierEase,
     sampleTrack,
@@ -141,8 +142,49 @@ async function main() {
   animation = removeTrackKeyframe(animation, 'o', 'transform.position', 4)
   assert(getTrack(animation, 'o', 'transform.position') === undefined, '删空关键帧后轨道自动移除')
 
+  console.log('序列化版本迁移 v2→v3（整体 Vec3 轨道拆成分量轨道）:')
+  const { deserializeScene } = serialization.mod
+  const v2 = JSON.stringify({
+    schemaVersion: 2,
+    objects: [],
+    activeCameraId: null,
+    animation: {
+      duration: 5,
+      fps: 30,
+      tracks: [
+        {
+          objectId: 'o',
+          propertyPath: 'transform.position',
+          keyframes: [
+            { time: 0, value: { x: 1, y: 2, z: 3 }, easing: 'linear' },
+            { time: 2, value: { x: 4, y: 5, z: 6 }, easing: 'easeIn' },
+          ],
+        },
+        {
+          objectId: 'o',
+          propertyPath: 'fov',
+          keyframes: [{ time: 0, value: 50, easing: 'linear' }],
+        },
+      ],
+    },
+  })
+  const migrated = deserializeScene(v2)
+  const paths = migrated.animation.tracks.map((t) => t.propertyPath).sort()
+  assert(
+    paths.join(',') === 'fov,transform.position.x,transform.position.y,transform.position.z',
+    `Vec3 轨道拆成 3 分量、scalar 轨道保留 (${paths.join(',')})`,
+  )
+  const xTrack = migrated.animation.tracks.find((t) => t.propertyPath === 'transform.position.x')
+  assert(
+    xTrack.keyframes[0].value === 1 && xTrack.keyframes[1].value === 4 && xTrack.keyframes[1].easing === 'easeIn',
+    'X 分量取标量值并保留各帧缓动',
+  )
+  const v1 = deserializeScene(JSON.stringify({ schemaVersion: 1, objects: [], activeCameraId: null }))
+  assert(v1.animation.tracks.length === 0 && v1.schemaVersion === 3, 'v1 工程按无动画兼容、版本归一到 3')
+
   await engine.cleanup()
   await actions.cleanup()
+  await serialization.cleanup()
 
   if (failures > 0) {
     console.error(`\n关键帧引擎验证失败：${failures} 项`)

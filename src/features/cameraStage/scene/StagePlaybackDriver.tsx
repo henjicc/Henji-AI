@@ -1,7 +1,9 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { getAnimatablePropByPath } from '../domain/animatableProps'
+import { listAnimatableGroups } from '../domain/animatableProps'
 import { sampleTrack } from '../domain/keyframeEngine'
+import type { StageTrack } from '../domain/animationTypes'
+import type { StageVec3 } from '../domain/sceneTypes'
 import { runPlaybackAppliers } from '../store/playbackAppliers'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
@@ -50,12 +52,35 @@ const StagePlaybackDriver: React.FC = () => {
     }
     timeRef.current = t
 
-    for (const track of tracks) {
-      const descriptor = getAnimatablePropByPath(track.propertyPath)
-      if (!descriptor) continue
-      const value = sampleTrack(track, t, descriptor.valueType)
-      if (value === undefined) continue
-      runPlaybackAppliers(track.objectId, track.propertyPath, value)
+    if (tracks.length > 0) {
+      // 轨道按 objectId::path 建索引，再按「分组」聚合分量采样后调用组级 applier
+      const trackByKey = new Map<string, StageTrack>()
+      for (const track of tracks) trackByKey.set(`${track.objectId}::${track.propertyPath}`, track)
+
+      for (const object of state.objects) {
+        for (const group of listAnimatableGroups(object)) {
+          if (group.valueType === 'vec3') {
+            const base = group.getBaseValue(object) as StageVec3
+            const out: StageVec3 = { ...base }
+            let hit = false
+            for (const child of group.children) {
+              const track = trackByKey.get(`${object.id}::${child.path}`)
+              if (!track || !child.axis) continue
+              const sampled = sampleTrack(track, t, 'scalar')
+              if (sampled === undefined) continue
+              out[child.axis] = sampled as number
+              hit = true
+            }
+            if (hit) runPlaybackAppliers(object.id, group.groupPath, out)
+          } else {
+            const child = group.children[0]
+            const track = trackByKey.get(`${object.id}::${child.path}`)
+            if (!track) continue
+            const sampled = sampleTrack(track, t, group.valueType)
+            if (sampled !== undefined) runPlaybackAppliers(object.id, group.groupPath, sampled)
+          }
+        }
+      }
     }
 
     if (reachedEnd || t - lastPushRef.current >= PLAYHEAD_PUSH_INTERVAL) {
