@@ -16,6 +16,7 @@ import 'dockview-react/dist/styles/dockview.css'
 import ObjectListPanel from '../panels/ObjectListPanel'
 import PropertyPanel from '../panels/PropertyPanel'
 import StageScene from '../scene/StageScene'
+import TimelinePanel from '../timeline/TimelinePanel'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 
 /**
@@ -24,7 +25,7 @@ import type { StageCaptureFn } from '../scene/StageCaptureBridge'
  * dockview 只做布局容器；面板内容全部复用现有 Ui* 面板组件。
  */
 
-const LAYOUT_STORAGE_KEY = 'henji.cameraStage.dockLayout.v1'
+const LAYOUT_STORAGE_KEY = 'henji.cameraStage.dockLayout.v2'
 
 /** 视口面板通过 context 拿截图注册位（layout 反序列化后 params 不含 ref，故走 context 而非 params） */
 const ViewportCaptureContext = createContext<React.MutableRefObject<StageCaptureFn | null> | null>(
@@ -38,11 +39,13 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
 
 const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
 const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <PropertyPanel />
+const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <TimelinePanel />
 
 const DOCK_COMPONENTS = {
   viewport: ViewportPanel,
   objects: ObjectsPanel,
   properties: PropertiesPanel,
+  timeline: TimelineDockPanel,
 }
 
 function buildDefaultLayout(api: DockviewApi): void {
@@ -60,6 +63,13 @@ function buildDefaultLayout(api: DockviewApi): void {
     component: 'properties',
     title: '属性',
     position: { referencePanel: 'objects', direction: 'below' },
+  })
+  api.addPanel({
+    id: 'timeline',
+    component: 'timeline',
+    title: '时间轴',
+    position: { referencePanel: 'viewport', direction: 'below' },
+    initialHeight: 220,
   })
 }
 

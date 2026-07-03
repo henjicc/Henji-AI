@@ -9,7 +9,6 @@
 import {
   KEYFRAME_TIME_EPSILON,
   type StageAnimatableValueType,
-  type StageBezierEasing,
   type StageEasing,
   type StageKeyframe,
   type StageKeyframeValue,

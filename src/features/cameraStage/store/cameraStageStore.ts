@@ -16,7 +16,6 @@ import {
   createDefaultAnimation,
   createDefaultPlayback,
   type StageEasing,
-  type StageKeyframeValue,
   type StagePlaybackState,
   type StageSceneAnimation,
 } from '../domain/animationTypes'
@@ -110,6 +109,17 @@ interface CameraStageState {
 /** 时间轴关键帧唯一键（选中集合、拖拽标识用） */
 export function keyframeKey(objectId: string, path: string, time: number): string {
   return `${objectId}::${path}::${time.toFixed(4)}`
+}
+
+/** 解析关键帧唯一键（objectId / path 均不含 '::'，故可安全按分隔符还原） */
+export function parseKeyframeKey(
+  key: string,
+): { objectId: string; path: string; time: number } | null {
+  const parts = key.split('::')
+  if (parts.length !== 3) return null
+  const time = Number(parts[2])
+  if (!Number.isFinite(time)) return null
+  return { objectId: parts[0], path: parts[1], time }
 }
 
 /** 新场景默认工程名 */

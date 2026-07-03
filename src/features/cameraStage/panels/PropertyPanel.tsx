@@ -4,6 +4,7 @@ import { UiButton, UiInput, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import type { StageObject, StageVec3 } from '../domain/sceneTypes'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
+import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 import CameraSettingsSection from './CameraSettingsSection'
 import CharacterPoseSection from './CharacterPoseSection'
 
@@ -26,11 +27,16 @@ interface Vec3RowProps {
   precision: number
   min?: number
   onChange: (next: StageVec3) => void
+  /** 提供则在行首渲染码表按钮（可打关键帧的属性行） */
+  keyframe?: { objectId: string; path: string }
 }
 
-const Vec3Row: React.FC<Vec3RowProps> = ({ label, value, step, precision, min, onChange }) => (
+const Vec3Row: React.FC<Vec3RowProps> = ({ label, value, step, precision, min, onChange, keyframe }) => (
   <div>
-    <div className="mb-1 text-xs text-text-muted">{label}</div>
+    <div className="mb-1 flex items-center gap-1 text-xs text-text-muted">
+      {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} path={keyframe.path} />}
+      <span>{label}</span>
+    </div>
     <div className="flex gap-1.5">
       {AXES.map((axis) => (
         <NumberInput
@@ -98,7 +104,10 @@ const PropertyPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <SectionTitle>颜色</SectionTitle>
+          <div className="flex items-center gap-1">
+            <KeyframeStopwatch objectId={selected.id} path="color" />
+            <SectionTitle>颜色</SectionTitle>
+          </div>
           <div className="flex items-center gap-1.5">
             <UiInput
               type="color"
@@ -131,6 +140,7 @@ const PropertyPanel: React.FC = () => {
               step={row.step}
               precision={row.precision}
               min={row.key === 'scale' ? 0.01 : undefined}
+              keyframe={{ objectId: selected.id, path: `transform.${row.key}` }}
               onChange={(next) => updateTransform(selected.id, { [row.key]: next })}
             />
           ))}

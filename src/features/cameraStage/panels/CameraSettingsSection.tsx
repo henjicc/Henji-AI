@@ -4,6 +4,7 @@ import { Dropdown, UiButton, UiRangeInput } from '@/components/ui'
 import { getObjectLookAtPoint, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraLookAt, StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 
 type LookAtMode = StageCameraLookAt['mode']
 
@@ -114,7 +115,10 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <div className="text-xs text-text-muted">视野角 FOV（°）</div>
+        <div className="flex items-center gap-1 text-xs text-text-muted">
+          <KeyframeStopwatch objectId={object.id} path="fov" />
+          <span>视野角 FOV（°）</span>
+        </div>
         <div className="flex items-center gap-1.5">
           <UiRangeInput
             min={10}
