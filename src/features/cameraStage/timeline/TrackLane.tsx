@@ -63,6 +63,7 @@ const TrackLane: React.FC<TrackLaneProps> = ({
     event: React.PointerEvent<HTMLDivElement>,
     time: number,
   ): void => {
+    if (event.button !== 0) return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     selectKeyframe(time, event.shiftKey)
@@ -98,7 +99,8 @@ const TrackLane: React.FC<TrackLaneProps> = ({
   ): void => {
     event.preventDefault()
     event.stopPropagation()
-    setSelectedKeyframes([keyframeKey(track.objectId, track.propertyPath, time)])
+    const key = keyframeKey(track.objectId, track.propertyPath, time)
+    if (!selectedKeys.has(key)) setSelectedKeyframes([key])
     onOpenEasing({ objectId: track.objectId, path: track.propertyPath, time }, {
       x: event.clientX,
       y: event.clientY,
@@ -128,9 +130,18 @@ const TrackLane: React.FC<TrackLaneProps> = ({
             key={key}
             role="button"
             tabIndex={-1}
+            data-keyframe-keys={key}
             aria-label={`关键帧 ${keyframe.time.toFixed(2)}s`}
-            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 cursor-pointer rounded-[1px]"
-            style={{ left: timeToX(keyframe.time, pxPerSecond), backgroundColor: color }}
+            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-[1px] ${
+              isEased(keyframe.easing) ? 'h-3.5 w-2.5' : 'h-2.5 w-2.5 rotate-45'
+            }`}
+            style={{
+              left: timeToX(keyframe.time, pxPerSecond),
+              backgroundColor: color,
+              clipPath: isEased(keyframe.easing)
+                ? 'polygon(0 0, 100% 0, 62% 50%, 100% 100%, 0 100%, 38% 50%)'
+                : undefined,
+            }}
             onPointerDown={(event) => handlePointerDown(event, keyframe.time)}
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}

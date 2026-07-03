@@ -19,6 +19,9 @@ export const HANDLE_MIN_Y = -0.5
 export const HANDLE_MAX_Y = 1.5
 
 export function easingToHandles(easing: StageEasing): CurveHandles {
+  if (easing === 'linear') {
+    return { out: [1 / 3, 1 / 3], in: [2 / 3, 2 / 3] }
+  }
   const [x1, y1, x2, y2] = resolveEasingControlPoints(easing)
   return { out: [x1, y1], in: [x2, y2] }
 }

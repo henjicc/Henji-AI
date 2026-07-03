@@ -67,9 +67,9 @@ interface CameraStageState {
   setViewMode: (mode: StageViewMode) => void
   setActiveCameraId: (id: string | null) => void
   updateObject: (id: string, patch: StageObjectPatch) => void
-  updateTransform: (id: string, patch: Partial<StageTransform>) => void
+  updateTransform: (id: string, patch: Partial<StageTransform>, autoKeyPaths?: string[]) => void
   /** 更新角色单个关节的欧拉偏移（角度制） */
-  updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3) => void
+  updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3, autoKeyPaths?: string[]) => void
   /** 一键应用预设姿势（整体替换当前姿态） */
   applyPosePreset: (id: string, preset: StagePosePreset) => void
   /** 关联到某个已保存工程（保存/加载后调用），仅更新工程标识不动场景数据 */
@@ -299,7 +299,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       return animation === state.animation ? { objects } : { objects, animation }
     }),
 
-  updateTransform: (id, patch) =>
+  updateTransform: (id, patch, explicitAutoKeyPaths) =>
     set((state) => {
       const objects = state.objects.map((item) =>
         item.id === id ? { ...item, transform: { ...item.transform, ...patch } } : item,
@@ -307,14 +307,14 @@ export const useCameraStageStore = create<CameraStageState>()(
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
       // 分量化：每个变更的变换属性展开为 X/Y/Z 三条分量路径分别自动打点
-      const paths = Object.keys(patch).flatMap((key) =>
+      const paths = explicitAutoKeyPaths ?? Object.keys(patch).flatMap((key) =>
         ['x', 'y', 'z'].map((axis) => `transform.${key}.${axis}`),
       )
       const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
       return animation === state.animation ? { objects } : { objects, animation }
     }),
 
-  updatePoseJoint: (id, jointId, euler) =>
+  updatePoseJoint: (id, jointId, euler, explicitAutoKeyPaths) =>
     set((state) => {
       const objects = state.objects.map((item) =>
         item.id === id && item.type === 'character'
@@ -324,12 +324,8 @@ export const useCameraStageStore = create<CameraStageState>()(
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
       const base = poseJointPath(jointId)
-      const animation = autoKeyPaths(
-        state.animation,
-        object,
-        ['x', 'y', 'z'].map((axis) => `${base}.${axis}`),
-        state.playback.currentTime,
-      )
+      const paths = explicitAutoKeyPaths ?? ['x', 'y', 'z'].map((axis) => `${base}.${axis}`)
+      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
       return animation === state.animation ? { objects } : { objects, animation }
     }),
 

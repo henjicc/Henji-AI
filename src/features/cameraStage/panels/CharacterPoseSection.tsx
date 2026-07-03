@@ -29,41 +29,48 @@ interface JointSlidersProps {
   value: StageVec3
   objectId: string
   jointId: StagePoseJointId
-  onChange: (next: StageVec3) => void
+  onChange: (next: StageVec3, changedPath: string) => void
 }
 
-const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, objectId, jointId, onChange }) => (
-  <div className="flex flex-col gap-1">
-    <div className="flex items-center gap-1 text-xs text-text-muted">
-      <KeyframeStopwatch objectId={objectId} groupPath={poseJointPath(jointId)} />
-      <span>{jointName}</span>
-    </div>
-    {AXES.map((axis) => (
-      <div key={axis} className="flex items-center gap-1.5">
-        <span className="w-3 shrink-0 text-center text-[11px] text-text-muted">{AXIS_LABELS[axis]}</span>
-        <UiRangeInput
-          min={-180}
-          max={180}
-          step={1}
-          value={value[axis]}
-          onChange={(event) => onChange({ ...value, [axis]: Number(event.target.value) })}
-        />
-        <NumberInput
-          value={value[axis]}
-          min={-180}
-          max={180}
-          step={1}
-          precision={0}
-          widthClassName="w-14"
-          className="shrink-0"
-          commitOnChange
-          wheelStep
-          onChange={(next) => onChange({ ...value, [axis]: next })}
-        />
+const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, objectId, jointId, onChange }) => {
+  const basePath = poseJointPath(jointId)
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1 text-xs text-text-muted">
+        <KeyframeStopwatch objectId={objectId} groupPath={basePath} />
+        <span>{jointName}</span>
       </div>
-    ))}
-  </div>
-)
+      {AXES.map((axis) => {
+        const path = `${basePath}.${axis}`
+        return (
+          <div key={axis} className="flex items-center gap-1.5">
+            <KeyframeStopwatch objectId={objectId} path={path} className="h-4 w-4" />
+            <span className="w-3 shrink-0 text-center text-[11px] text-text-muted">{AXIS_LABELS[axis]}</span>
+            <UiRangeInput
+              min={-180}
+              max={180}
+              step={1}
+              value={value[axis]}
+              onChange={(event) => onChange({ ...value, [axis]: Number(event.target.value) }, path)}
+            />
+            <NumberInput
+              value={value[axis]}
+              min={-180}
+              max={180}
+              step={1}
+              precision={0}
+              widthClassName="w-14"
+              className="shrink-0"
+              commitOnChange
+              wheelStep
+              onChange={(next) => onChange({ ...value, [axis]: next }, path)}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ object }) => {
   const updateObject = useCameraStageStore((state) => state.updateObject)
@@ -71,8 +78,8 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
   const applyPosePreset = useCameraStageStore((state) => state.applyPosePreset)
   const [openGroupId, setOpenGroupId] = useState<string | null>(null)
 
-  const handleJointChange = (jointId: StagePoseJointId, next: StageVec3): void => {
-    updatePoseJoint(object.id, jointId, next)
+  const handleJointChange = (jointId: StagePoseJointId, next: StageVec3, changedPath: string): void => {
+    updatePoseJoint(object.id, jointId, next, [changedPath])
   }
 
   return (
@@ -132,7 +139,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
                         objectId={object.id}
                         jointId={joint.id}
                         value={object.pose.joints[joint.id] ?? ZERO_EULER}
-                        onChange={(next) => handleJointChange(joint.id, next)}
+                        onChange={(next, changedPath) => handleJointChange(joint.id, next, changedPath)}
                       />
                     ))}
                   </div>

@@ -46,6 +46,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
   return (
     <div
       ref={rulerRef}
+      data-timeline-ruler="true"
       className="relative cursor-ew-resize select-none bg-surface-dark"
       style={{ width: contentWidth, height: TIMELINE_RULER_HEIGHT }}
       onPointerDown={handlePointerDown}

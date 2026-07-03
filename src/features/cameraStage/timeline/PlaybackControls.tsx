@@ -133,7 +133,7 @@ const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           appearance="hover-only"
           active={graphView}
           className="h-7 w-7"
-          title={graphView ? '切回关键帧视图' : '切到曲线（图表编辑器）视图'}
+          title={graphView ? '切回关键帧视图' : '切到速度图表视图'}
           onClick={() => onGraphViewChange(!graphView)}
         >
           <Spline size={15} />

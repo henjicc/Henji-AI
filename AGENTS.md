@@ -5,6 +5,7 @@
 
 - 允许在完成一组相关改动、验证通过或需要保存阶段性成果时自主提交 commit
 - commit 信息使用中文，简洁说明本次改动目的
+- 以桌面应用而非普通网页的思维进行开发，遵循前后端职责分离原则。前端主要负责界面展示、用户交互、轻量状态管理和即时视觉反馈；后端负责核心业务逻辑、文件系统、数据库、网络请求、数据处理、复杂计算、批量任务、长耗时任务以及需要系统权限的能力。前后端通过清晰、稳定、最小化的接口通信，避免前端直接依赖底层实现。不得仅因为前端实现方便，就将本应属于后端的业务逻辑或系统能力堆积在前端。判断标准：移除当前界面后仍然成立、仍然需要执行或可能被其他界面复用的逻辑，原则上应放在后端或独立核心模块中。
 - 提交前优先检查工作区，避免把无关文件、临时截图、日志、安装包或自动生成但非必要的产物误提交
 - 当前分支基线是 Electron；旧 Tauri/Rust 代码已从工作树移除，如需回看只通过 Git 历史或外部备份对照
 - 涉及鼠标操作（拖拽、点击、悬浮、画布交互等需要实际操作 UI 才能验证的场景）的测试，不要自己上手操作和验证；改完后把具体的操作步骤和验证点写清楚，交给用户自己来测试
@@ -146,6 +147,20 @@ npm run lint                   # 前端 lint
 - 全局 Provider（如拖拽、全局菜单、通知）只允许在应用根层挂载一次
 - 禁止在多个根容器重复包裹同一 Provider，避免事件重复订阅与状态分叉
 
+### 9. 画布节点组成规范
+
+新建/改造画布节点时，优先从标准化的"参数行组件"拼装，而不是从零写 UI；详细步骤与示例代码见 Skill `canvas-node-builder`。
+
+- **标准行组件**（`src/features/canvas/params/`）：
+  - `ModelInputRow` - 模型选择行
+  - `MediaInputRow` - 媒体输入行（图片/视频/音频；含本地上传、缩略图、拖拽排序、上游连线只读态）
+  - `NodeParamRows` - 标量参数逐行渲染（每参数一行，按 schema 自动生成，连线可覆盖）
+  - `NodeInputRows` - 上述三者的编排容器（模型行 → 媒体行 → 参数行），价格徽标统一走 `NodeHeader` 的 `rightSlot`
+- **通用生成节点**：直接复用 `src/features/canvas/nodes/shared/GenerationNodeShell.tsx`（AI 图片/视频/音频节点都是如此），无需单独写节点组件，行为差异全部由 `nodeRegistry.ts` 中的 `CanvasNodeDefinition` 声明驱动
+- **特殊节点**：节点有自己独有的交互（如分镜生成的格子编辑器）时，在标准行组件基础上叠加专属面板，而不是整个节点推倒重写；面板放节点同名子目录（如 `nodes/storyboardGen/`），节点主文件负责编排和接线，不在面板里重复实现模型选择/参数行
+- **媒体输入端口形态**：节点声明 `connectivity.targetHandleMode: 'rows'` + `ports.target.accepts` 后，媒体输入按类型生成专属端口并配 `MediaInputRow`；禁止继续手写单一 `id="target"` 的 Handle 来接收媒体
+- **禁止重复实现**：禁止在新节点里重新实现模型选择 chip、媒体上传缩略图、逐行参数布局——这些已是标准组件，再写一份即违反"禁止同功能多份实现"
+
 ## 目录结构
 
 ```text
@@ -218,46 +233,48 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
 
 ### 类型安全约束
 
-5. **循环初始化保护**
-   - `src/core/i18n/modelText.ts` 的共享字典因模型 barrel 循环初始化必须保留 `var`，禁止为满足 lint 改成 `const/let`。
-
-6. **`any` 治理：增量零新增**
+5. **`any` 治理：增量零新增**
    - 存量 `any` 允许逐步治理
    - 新增或修改代码时禁止引入新的裸 `any`
    - 若确需新增，必须同处写明原因与替换计划
 
-7. **导出函数显式返回类型**
+6. **导出函数显式返回类型**
    - 新增/修改的导出函数应补齐显式返回类型
 
 ### 配置与一致性约束
 
-8. **配置优于代码**
+7. **配置优于代码**
    - 使用模型定义，而不是 if-else 或 switch 硬编码模型行为
    - 如果你在添加基于 modelId 的分支，先考虑扩展 schema
 
-9. **UI 一致性约束**
+8. **UI 一致性约束**
    - 对话模式、画布模式、工具模式复用同一套 `Ui*` primitives
    - 禁止同功能多份实现
 
-10. **ReferenceTextarea 规范**
+9. **ReferenceTextarea 规范**
    - @引用标记插入/删除/空格归一化统一走 `src/core/inputs/referenceTokens.ts`
    - 高亮渲染统一走 `src/components/ui/referenceTextareaUtils.tsx`
    - 禁止在业务组件重复实现 @引用解析和高亮
 
-11. **文件上传控件规范**
+10. **文件上传控件规范**
    - 上传能力统一复用 `FileUploader` / `UiInput(type=file)`
    - 拖拽排序统一复用 `src/components/ui/fileUploader/useReorderDrag.ts`
    - 禁止在业务组件重复实现上传/排序基础交互
 
-12. **颜色硬编码约束**
+11. **颜色硬编码约束**
    - UI 代码禁止直接写十六进制颜色或 `rgb/rgba` 字面量
    - 颜色应沉淀到 `src/index.css`、`tailwind.config.js`、`src/core/theme/colorTokens.ts`
    - 图像处理/画布像素算法可例外，但应优先复用 token
 
-13. **画布实现单源约束**
+12. **画布实现单源约束**
    - `src/features/canvas/` 为当前主实现目录
    - `src/workspaces/canvas/` 视为历史/过渡目录，除迁移与删除外不新增功能
    - 新画布能力必须落在 `src/features/canvas/`
+
+13. **画布节点组成约束**
+   - 新建生成类节点优先复用 `GenerationNodeShell`；做不到时优先拼装 `ModelInputRow`/`MediaInputRow`/`NodeParamRows`
+   - 媒体输入统一走 `connectivity.targetHandleMode: 'rows'` + `MediaInputRow`，禁止新增手写的单一 `target` Handle 来接收媒体
+   - 特殊节点的专属 UI 只叠加在标准行组件之上，不替代标准行组件
 
 ## 添加新模型
 
@@ -449,6 +466,9 @@ powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include
 - `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互
 - `src/features/canvas/hooks/useCanvasShortcuts.ts` - 画布快捷键行为
 - `src/features/canvas/ui/CanvasOverlays.tsx` - 画布叠层 UI
+- `src/features/canvas/nodes/shared/GenerationNodeShell.tsx` - 生成类节点通用壳，标准逐行参数体系的典型消费者
+- `src/features/canvas/params/` - 标准化逐行参数组件（`ModelInputRow`/`MediaInputRow`/`NodeParamRows`/`NodeInputRows`）
+- `src/features/canvas/domain/nodeRegistry.ts` - 节点声明注册表（含文件顶部"新增画布节点 SOP"注释）
 - `resources/model-manifest.json` - 模型清单（自动生成，Git 忽略）
 - `resources/progress-seeds.json` - 进度学习 seeds（自动生成，Git 忽略）
 - `resources/progress-seeds.base.json` - 进度学习基础 seeds

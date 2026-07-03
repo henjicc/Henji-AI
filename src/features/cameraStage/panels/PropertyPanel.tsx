@@ -19,19 +19,21 @@ const VEC3_ROWS: Array<{ key: Vec3Key; label: string; step: number; precision: n
 ]
 
 const AXES: Array<keyof StageVec3> = ['x', 'y', 'z']
+const AXIS_LABELS: Record<keyof StageVec3, string> = { x: 'X', y: 'Y', z: 'Z' }
 
 interface Vec3RowProps {
   label: string
+  pathKey: Vec3Key
   value: StageVec3
   step: number
   precision: number
   min?: number
-  onChange: (next: StageVec3) => void
+  onChange: (next: StageVec3, changedPath: string) => void
   /** 提供则在行首渲染码表按钮（可打关键帧的属性行） */
   keyframe?: { objectId: string; path: string }
 }
 
-const Vec3Row: React.FC<Vec3RowProps> = ({ label, value, step, precision, min, onChange, keyframe }) => (
+const Vec3Row: React.FC<Vec3RowProps> = ({ label, pathKey, value, step, precision, min, onChange, keyframe }) => (
   <div>
     <div className="mb-1 flex items-center gap-1 text-xs text-text-muted">
       {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} groupPath={keyframe.path} />}
@@ -39,18 +41,29 @@ const Vec3Row: React.FC<Vec3RowProps> = ({ label, value, step, precision, min, o
     </div>
     <div className="flex gap-1.5">
       {AXES.map((axis) => (
-        <NumberInput
-          key={axis}
-          value={value[axis]}
-          step={step}
-          precision={precision}
-          min={min}
-          widthClassName="w-full"
-          className="min-w-0 flex-1"
-          commitOnChange
-          wheelStep
-          onChange={(next) => onChange({ ...value, [axis]: next })}
-        />
+        <div key={axis} className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-0.5 text-[10px] text-text-muted">
+            {keyframe && (
+              <KeyframeStopwatch
+                objectId={keyframe.objectId}
+                path={`${keyframe.path}.${axis}`}
+                className="h-4 w-4"
+              />
+            )}
+            <span>{AXIS_LABELS[axis]}</span>
+          </div>
+          <NumberInput
+            value={value[axis]}
+            step={step}
+            precision={precision}
+            min={min}
+            widthClassName="w-full"
+            className="min-w-0"
+            commitOnChange
+            wheelStep
+            onChange={(next) => onChange({ ...value, [axis]: next }, `transform.${pathKey}.${axis}`)}
+          />
+        </div>
       ))}
     </div>
   </div>
@@ -136,12 +149,13 @@ const PropertyPanel: React.FC = () => {
             <Vec3Row
               key={row.key}
               label={row.label}
+              pathKey={row.key}
               value={selected.transform[row.key]}
               step={row.step}
               precision={row.precision}
               min={row.key === 'scale' ? 0.01 : undefined}
               keyframe={{ objectId: selected.id, path: `transform.${row.key}` }}
-              onChange={(next) => updateTransform(selected.id, { [row.key]: next })}
+              onChange={(next, changedPath) => updateTransform(selected.id, { [row.key]: next }, [changedPath])}
             />
           ))}
           {selected.type !== 'camera' && (

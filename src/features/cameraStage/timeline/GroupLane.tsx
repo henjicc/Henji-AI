@@ -1,6 +1,6 @@
 import React, { useRef } from 'react'
 import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
-import { KEYFRAME_TIME_EPSILON, type StageTrack } from '../domain/animationTypes'
+import { KEYFRAME_TIME_EPSILON, type StageEasing, type StageTrack } from '../domain/animationTypes'
 import {
   beginHistorySession,
   endHistorySession,
@@ -45,6 +45,16 @@ function childKeysAtTime(objectId: string, tracks: StageTrack[], time: number): 
   return keys
 }
 
+function isEased(easing: StageEasing): boolean {
+  return easing !== 'linear'
+}
+
+function hasEasedKeyframeAtTime(tracks: StageTrack[], time: number): boolean {
+  return tracks.some((track) =>
+    track.keyframes.some((kf) => Math.abs(kf.time - time) <= KEYFRAME_TIME_EPSILON && isEased(kf.easing)),
+  )
+}
+
 const GroupLane: React.FC<GroupLaneProps> = ({
   objectId,
   childTracks,
@@ -68,6 +78,7 @@ const GroupLane: React.FC<GroupLaneProps> = ({
   }
 
   const handleDown = (event: React.PointerEvent<HTMLDivElement>, time: number): void => {
+    if (event.button !== 0) return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelectedKeyframes(childKeysAtTime(objectId, childTracks, time))
@@ -102,7 +113,8 @@ const GroupLane: React.FC<GroupLaneProps> = ({
   const openEasing = (event: React.MouseEvent, time: number): void => {
     event.preventDefault()
     event.stopPropagation()
-    setSelectedKeyframes(childKeysAtTime(objectId, childTracks, time))
+    const keys = childKeysAtTime(objectId, childTracks, time)
+    if (!keys.every((key) => selectedKeys.has(key))) setSelectedKeyframes(keys)
     onOpenEasing({ objectId, path: childTracks[0]?.propertyPath ?? '', time }, {
       x: event.clientX,
       y: event.clientY,
@@ -122,18 +134,27 @@ const GroupLane: React.FC<GroupLaneProps> = ({
       {times.map((time) => {
         const keys = childKeysAtTime(objectId, childTracks, time)
         const selected = keys.length > 0 && keys.every((key) => selectedKeys.has(key))
+        const eased = hasEasedKeyframeAtTime(childTracks, time)
         return (
           <div
             key={time}
             role="button"
             tabIndex={-1}
+            data-keyframe-keys={keys.join(',')}
             aria-label={`分组关键帧 ${time.toFixed(2)}s`}
-            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 cursor-pointer rounded-[1px]"
+            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-[1px] ${
+              eased ? 'h-3.5 w-2.5' : 'h-2.5 w-2.5 rotate-45'
+            }`}
             style={{
               left: timeToX(time, pxPerSecond),
               backgroundColor: selected
                 ? CAMERA_STAGE_TIMELINE_HEX.keyframeSelected
+                : eased
+                ? CAMERA_STAGE_TIMELINE_HEX.keyframeEased
                 : CAMERA_STAGE_TIMELINE_HEX.keyframe,
+              clipPath: eased
+                ? 'polygon(0 0, 100% 0, 62% 50%, 100% 100%, 0 100%, 38% 50%)'
+                : undefined,
             }}
             onPointerDown={(event) => handleDown(event, time)}
             onPointerMove={handleMove}

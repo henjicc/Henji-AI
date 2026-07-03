@@ -9,7 +9,7 @@ import PlaybackControls from './PlaybackControls'
 import TimeRuler from './TimeRuler'
 import TimelineTrackList from './TimelineTrackList'
 import { buildTimelineTree } from './timelineTree'
-import { clampPxPerSecond, timeToX, type TimeRulerMode } from './timeScale'
+import { clampPxPerSecond, timeToX, xToTime, type TimeRulerMode } from './timeScale'
 import { TIMELINE_LABEL_WIDTH, TIMELINE_MIN_CONTENT_WIDTH, TIMELINE_RULER_HEIGHT, type EasingEditTarget } from './timelineLayout'
 
 /**
@@ -28,15 +28,27 @@ const TimelinePanel: React.FC = () => {
   const seek = useCameraStageStore((state) => state.seek)
   const setSelectedKeyframes = useCameraStageStore((state) => state.setSelectedKeyframes)
   const removeKeyframe = useCameraStageStore((state) => state.removeKeyframe)
+  const setKeyframesEasing = useCameraStageStore((state) => state.setKeyframesEasing)
 
   const [mode, setMode] = useState<TimeRulerMode>('seconds')
   const [pxPerSecond, setPxPerSecond] = useState(120)
   const [graphView, setGraphView] = useState(false)
   const [viewportHeight, setViewportHeight] = useState(240)
+  const [marquee, setMarquee] = useState<{
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+    additive: boolean
+  } | null>(null)
+  const [isPanning, setIsPanning] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const panRef = useRef<{ pointerId: number; startX: number; scrollLeft: number } | null>(null)
+  const marqueeRef = useRef<typeof marquee>(null)
   const [easing, setEasing] = useState<{ target: EasingEditTarget; anchor: { x: number; y: number } } | null>(
     null,
   )
+  marqueeRef.current = marquee
 
   const selectedSet = useMemo(() => new Set(selectedKeyframes), [selectedKeyframes])
   const contentWidth = Math.max(TIMELINE_MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond) + 40)
@@ -97,13 +109,145 @@ const TimelinePanel: React.FC = () => {
     setEasing({ target, anchor })
   }, [])
 
+  const collectKeysInMarquee = useCallback((rect: DOMRect): string[] => {
+    const root = scrollRef.current
+    if (!root) return []
+    const next = new Set<string>()
+    root.querySelectorAll<Element>('[data-keyframe-keys]').forEach((element) => {
+      const bounds = element.getBoundingClientRect()
+      const intersects =
+        bounds.left <= rect.right &&
+        bounds.right >= rect.left &&
+        bounds.top <= rect.bottom &&
+        bounds.bottom >= rect.top
+      if (!intersects) return
+      const raw = element.getAttribute('data-keyframe-keys') ?? ''
+      raw.split(',').filter(Boolean).forEach((key) => next.add(key))
+    })
+    return [...next]
+  }, [])
+
+  const finishMarquee = useCallback((): void => {
+    const current = marqueeRef.current
+    if (!current) return
+    const left = Math.min(current.startX, current.currentX)
+    const top = Math.min(current.startY, current.currentY)
+    const width = Math.abs(current.currentX - current.startX)
+    const height = Math.abs(current.currentY - current.startY)
+    if (width < 3 && height < 3) {
+      setSelectedKeyframes([])
+      setMarquee(null)
+      return
+    }
+    const keys = collectKeysInMarquee(new DOMRect(left, top, width, height))
+    if (current.additive) {
+      const merged = new Set(useCameraStageStore.getState().selectedKeyframes)
+      keys.forEach((key) => merged.add(key))
+      setSelectedKeyframes([...merged])
+    } else {
+      setSelectedKeyframes(keys)
+    }
+    setMarquee(null)
+  }, [collectKeysInMarquee, setSelectedKeyframes])
+
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>): void => {
+      if (!event.altKey) return
+      event.preventDefault()
+      const scroller = scrollRef.current
+      if (!scroller) return
+      const rect = scroller.getBoundingClientRect()
+      const viewportContentX = event.clientX - rect.left - TIMELINE_LABEL_WIDTH
+      if (viewportContentX < 0) return
+      const anchorContentX = viewportContentX + scroller.scrollLeft
+      const anchorTime = Math.max(0, xToTime(anchorContentX, pxPerSecond))
+      const factor = Math.pow(1.0018, -event.deltaY)
+      const nextPxPerSecond = clampPxPerSecond(pxPerSecond * factor)
+      if (Math.abs(nextPxPerSecond - pxPerSecond) < 0.01) return
+      setPxPerSecond(nextPxPerSecond)
+      requestAnimationFrame(() => {
+        scroller.scrollLeft = Math.max(0, timeToX(anchorTime, nextPxPerSecond) - viewportContentX)
+      })
+    },
+    [pxPerSecond],
+  )
+
+  const shouldStartMarquee = (event: React.PointerEvent<HTMLDivElement>): boolean => {
+    if (event.button !== 0) return false
+    const target = event.target as Element | null
+    if (!target) return false
+    if (target.closest('[data-keyframe-keys], [data-graph-handle], [data-timeline-ruler="true"], [role="button"], button, input, textarea, select')) {
+      return false
+    }
+    const scroller = scrollRef.current
+    const rect = scroller?.getBoundingClientRect()
+    return !!rect && event.clientX - rect.left >= TIMELINE_LABEL_WIDTH
+  }
+
+  const handlePointerDownCapture = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    if (event.button === 1) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      panRef.current = { pointerId: event.pointerId, startX: event.clientX, scrollLeft: scroller.scrollLeft }
+      setIsPanning(true)
+      return
+    }
+    if (!shouldStartMarquee(event)) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setMarquee({
+      startX: event.clientX,
+      startY: event.clientY,
+      currentX: event.clientX,
+      currentY: event.clientY,
+      additive: event.shiftKey,
+    })
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const pan = panRef.current
+    const scroller = scrollRef.current
+    if (pan && scroller) {
+      scroller.scrollLeft = pan.scrollLeft - (event.clientX - pan.startX)
+      return
+    }
+    if (!marqueeRef.current) return
+    setMarquee((current) => (
+      current ? { ...current, currentX: event.clientX, currentY: event.clientY } : current
+    ))
+  }
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (panRef.current) {
+      panRef.current = null
+      setIsPanning(false)
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      return
+    }
+    if (!marqueeRef.current) return
+    finishMarquee()
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
   // 空格键播放/暂停（编辑器作用域全局；输入框内不拦截、无轨道时不响应）
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.code !== 'Space') return
       const target = event.target as HTMLElement | null
       const tag = target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (event.key === 'F9') {
+        const selected = useCameraStageStore.getState().selectedKeyframes
+        if (selected.length === 0) return
+        event.preventDefault()
+        const targets = selected
+          .map((key) => parseKeyframeKey(key))
+          .filter((item): item is { objectId: string; path: string; time: number } => item !== null)
+        setKeyframesEasing(targets, 'easeInOut')
+        return
+      }
+      if (event.code !== 'Space') return
       const state = useCameraStageStore.getState()
       if (state.animation.tracks.length === 0) return
       event.preventDefault()
@@ -112,7 +256,16 @@ const TimelinePanel: React.FC = () => {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [setKeyframesEasing])
+
+  const marqueeBox = marquee
+    ? {
+        left: Math.min(marquee.startX, marquee.currentX),
+        top: Math.min(marquee.startY, marquee.currentY),
+        width: Math.abs(marquee.currentX - marquee.startX),
+        height: Math.abs(marquee.currentY - marquee.startY),
+      }
+    : null
 
   return (
     <div className="flex h-full w-full flex-col bg-app">
@@ -132,9 +285,14 @@ const TimelinePanel: React.FC = () => {
       ) : (
         <div
           ref={scrollRef}
-          className="relative flex-1 overflow-auto focus:outline-none"
+          className={`relative flex-1 overflow-auto focus:outline-none ${isPanning ? 'cursor-grabbing' : ''}`}
           tabIndex={0}
           onKeyDown={handleKeyDown}
+          onWheel={handleWheel}
+          onPointerDownCapture={handlePointerDownCapture}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           onPointerDown={(event) => {
             // 点击空白（非菱形/非刻度）清空关键帧选择
             if (event.target === event.currentTarget) setSelectedKeyframes([])
@@ -185,6 +343,7 @@ const TimelinePanel: React.FC = () => {
                   duration={duration}
                   fps={fps}
                   selectedKeys={selectedSet}
+                  onOpenEasing={openEasing}
                 />
               </div>
             ) : (
@@ -221,6 +380,12 @@ const TimelinePanel: React.FC = () => {
               />
             </div>
           </div>
+          {marqueeBox && (
+            <div
+              className="pointer-events-none fixed z-50 border border-primary/70 bg-primary/15"
+              style={marqueeBox}
+            />
+          )}
         </div>
       )}
 
