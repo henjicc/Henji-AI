@@ -21,6 +21,10 @@ const SceneSettingsPanel: React.FC = () => {
   const setSceneGroundColor = useCameraStageStore((state) => state.setSceneGroundColor)
   const setSceneGroundPattern = useCameraStageStore((state) => state.setSceneGroundPattern)
   const setSceneGroundDensity = useCameraStageStore((state) => state.setSceneGroundDensity)
+  const setSceneGroundGridLineColor = useCameraStageStore((state) => state.setSceneGroundGridLineColor)
+  const setSceneGroundGridLineThickness = useCameraStageStore((state) => state.setSceneGroundGridLineThickness)
+  const setSceneGroundCheckerLightColor = useCameraStageStore((state) => state.setSceneGroundCheckerLightColor)
+  const setSceneGroundCheckerDarkColor = useCameraStageStore((state) => state.setSceneGroundCheckerDarkColor)
   const setSceneSkyColor = useCameraStageStore((state) => state.setSceneSkyColor)
   const setSceneSunlightEnabled = useCameraStageStore((state) => state.setSceneSunlightEnabled)
   const setSceneSunlightIntensity = useCameraStageStore((state) => state.setSceneSunlightIntensity)
@@ -42,9 +46,7 @@ const SceneSettingsPanel: React.FC = () => {
                 onChange={(event) => setSceneGroundColor(event.target.value)}
               />
             </div>
-          ) : (
-            <div className="text-xs text-text-muted">棋盘固定为黑白，仅受光照和雾影响。</div>
-          )}
+          ) : null}
           <div className="flex flex-col gap-1.5">
             <div className="text-xs text-text-muted">样式</div>
             <Dropdown<StageGroundPattern>
@@ -78,6 +80,59 @@ const SceneSettingsPanel: React.FC = () => {
                 onChange={setSceneGroundDensity}
               />
             </div>
+          )}
+          {sceneSettings.ground.pattern === 'grid' && (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-text-muted">线色</span>
+                <UiColorInput
+                  value={sceneSettings.ground.gridLineColor}
+                  onChange={(event) => setSceneGroundGridLineColor(event.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="text-xs text-text-muted">线粗</div>
+                <div className="flex items-center gap-1.5">
+                  <UiRangeInput
+                    min={0.2}
+                    max={3}
+                    step={0.05}
+                    value={sceneSettings.ground.gridLineThickness}
+                    onChange={(event) => setSceneGroundGridLineThickness(Number(event.target.value))}
+                  />
+                  <NumberInput
+                    value={sceneSettings.ground.gridLineThickness}
+                    min={0.2}
+                    max={3}
+                    step={0.05}
+                    precision={2}
+                    widthClassName="w-16"
+                    className="shrink-0"
+                    commitOnChange
+                    wheelStep
+                    onChange={setSceneGroundGridLineThickness}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+          {sceneSettings.ground.pattern === 'checker' && (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-text-muted">亮色</span>
+                <UiColorInput
+                  value={sceneSettings.ground.checkerLightColor}
+                  onChange={(event) => setSceneGroundCheckerLightColor(event.target.value)}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-text-muted">暗色</span>
+                <UiColorInput
+                  value={sceneSettings.ground.checkerDarkColor}
+                  onChange={(event) => setSceneGroundCheckerDarkColor(event.target.value)}
+                />
+              </div>
+            </>
           )}
         </div>
 

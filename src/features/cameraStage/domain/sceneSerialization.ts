@@ -77,6 +77,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
     const fogRecord = record.fog as Record<string, unknown> | undefined
     const pattern = groundRecord?.pattern
     const density = Number(groundRecord?.density)
+    const gridLineThickness = Number(groundRecord?.gridLineThickness)
     const intensity = Number(sunlightRecord?.intensity)
     const timeOfDay = Number(sunlightRecord?.timeOfDay)
     const fogDistance = Number(fogRecord?.distance)
@@ -92,6 +93,22 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
           Number.isFinite(density) && density >= 1 && density <= 64
             ? density
             : fallback.ground.density,
+        gridLineColor:
+          typeof groundRecord?.gridLineColor === 'string'
+            ? groundRecord.gridLineColor
+            : fallback.ground.gridLineColor,
+        gridLineThickness:
+          Number.isFinite(gridLineThickness) && gridLineThickness >= 0.2 && gridLineThickness <= 3
+            ? gridLineThickness
+            : fallback.ground.gridLineThickness,
+        checkerLightColor:
+          typeof groundRecord?.checkerLightColor === 'string'
+            ? groundRecord.checkerLightColor
+            : fallback.ground.checkerLightColor,
+        checkerDarkColor:
+          typeof groundRecord?.checkerDarkColor === 'string'
+            ? groundRecord.checkerDarkColor
+            : fallback.ground.checkerDarkColor,
       },
       sky: {
         color: typeof skyRecord?.color === 'string' ? skyRecord.color : fallback.sky.color,
@@ -123,6 +140,10 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
       color: fallback.ground.color,
       pattern: record.gridVisible === false ? 'none' : 'grid',
       density: fallback.ground.density,
+      gridLineColor: fallback.ground.gridLineColor,
+      gridLineThickness: fallback.ground.gridLineThickness,
+      checkerLightColor: fallback.ground.checkerLightColor,
+      checkerDarkColor: fallback.ground.checkerDarkColor,
     },
     sky: {
       color: typeof record.backgroundColor === 'string' ? record.backgroundColor : fallback.sky.color,

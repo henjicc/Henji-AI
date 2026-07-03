@@ -115,6 +115,10 @@ export interface CameraStageState {
   setSceneGroundColor: (color: string) => void
   setSceneGroundPattern: (pattern: StageSceneSettings['ground']['pattern']) => void
   setSceneGroundDensity: (density: number) => void
+  setSceneGroundGridLineColor: (color: string) => void
+  setSceneGroundGridLineThickness: (thickness: number) => void
+  setSceneGroundCheckerLightColor: (color: string) => void
+  setSceneGroundCheckerDarkColor: (color: string) => void
   setSceneSkyColor: (color: string) => void
   setSceneSunlightEnabled: (enabled: boolean) => void
   setSceneSunlightIntensity: (intensity: number) => void
@@ -479,6 +483,41 @@ export const useCameraStageStore = create<CameraStageState>()(
       sceneSettings: {
         ...state.sceneSettings,
         ground: { ...state.sceneSettings.ground, density: Math.max(1, Math.min(64, density)) },
+      },
+    })),
+
+  setSceneGroundGridLineColor: (color) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        ground: { ...state.sceneSettings.ground, gridLineColor: color },
+      },
+    })),
+
+  setSceneGroundGridLineThickness: (thickness) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        ground: {
+          ...state.sceneSettings.ground,
+          gridLineThickness: Math.max(0.2, Math.min(3, thickness)),
+        },
+      },
+    })),
+
+  setSceneGroundCheckerLightColor: (color) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        ground: { ...state.sceneSettings.ground, checkerLightColor: color },
+      },
+    })),
+
+  setSceneGroundCheckerDarkColor: (color) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        ground: { ...state.sceneSettings.ground, checkerDarkColor: color },
       },
     })),
 

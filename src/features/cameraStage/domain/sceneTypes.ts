@@ -99,6 +99,10 @@ export interface StageGroundSettings {
   color: string
   pattern: StageGroundPattern
   density: number
+  gridLineColor: string
+  gridLineThickness: number
+  checkerLightColor: string
+  checkerDarkColor: string
 }
 
 export interface StageSkySettings {

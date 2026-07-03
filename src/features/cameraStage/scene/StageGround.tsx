@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Grid } from '@react-three/drei'
-import { Color } from 'three'
 import type { MeshStandardMaterial, Shader } from 'three'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import type { StageGroundSettings } from '../domain/sceneTypes'
@@ -33,17 +32,16 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
 
   const checkerScale = useMemo(() => settings.density / CHECKER_BASE_CELL, [settings.density])
   const gridCellSize = useMemo(() => Math.max(0.04, GRID_BASE_CELL / settings.density), [settings.density])
-  const checkerDark = useMemo(() => hexToRgb(BLACK_HEX), [])
-  const checkerLight = useMemo(() => hexToRgb(WHITE_HEX), [])
-  const gridBaseColor = useMemo(() => new Color(settings.color), [settings.color])
-  const gridCellColor = useMemo(
-    () => `#${gridBaseColor.clone().offsetHSL(0, 0, 0.06).getHexString()}`,
-    [gridBaseColor],
+  const checkerDark = useMemo(
+    () => hexToRgb(settings.checkerDarkColor || BLACK_HEX),
+    [settings.checkerDarkColor],
   )
-  const gridSectionColor = useMemo(
-    () => `#${gridBaseColor.clone().offsetHSL(0, 0, 0.14).getHexString()}`,
-    [gridBaseColor],
+  const checkerLight = useMemo(
+    () => hexToRgb(settings.checkerLightColor || WHITE_HEX),
+    [settings.checkerLightColor],
   )
+  const gridCellColor = settings.gridLineColor
+  const gridSectionColor = settings.gridLineColor
 
   const handleCheckerCompile = useCallback(
     (shader: Shader): void => {
@@ -86,7 +84,9 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
     const checkerShader = checkerShaderRef.current
     if (!checkerShader) return
     checkerShader.uniforms.uCheckerScale.value = checkerScale
-  }, [checkerScale])
+    checkerShader.uniforms.uCheckerDark.value = checkerDark
+    checkerShader.uniforms.uCheckerLight.value = checkerLight
+  }, [checkerDark, checkerLight, checkerScale])
 
   useEffect(() => {
     if (settings.pattern !== 'checker') {
@@ -99,29 +99,37 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
 
   return (
     <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]}>
-        <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
-        {settings.pattern === 'checker' ? (
+      {settings.pattern === 'checker' ? (
+        <mesh
+          key={`ground-checker-${settings.checkerLightColor}-${settings.checkerDarkColor}`}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, -0.002, 0]}
+        >
+          <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
           <meshStandardMaterial
             ref={checkerMaterialRef}
             color={WHITE_HEX}
             onBeforeCompile={handleCheckerCompile}
             customProgramCacheKey={() => 'camera-stage-checker-ground'}
           />
-        ) : (
+        </mesh>
+      ) : (
+        <mesh key={`ground-${settings.pattern}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]}>
+          <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
           <meshStandardMaterial color={settings.color} />
-        )}
-      </mesh>
+        </mesh>
+      )}
       {settings.pattern === 'grid' && (
         <Grid
+          key={`ground-grid-${settings.density}-${settings.gridLineColor}-${settings.gridLineThickness}`}
           infiniteGrid
           position={[0, 0.001, 0]}
           cellSize={gridCellSize}
           sectionSize={gridCellSize * 5}
           cellColor={gridCellColor}
           sectionColor={gridSectionColor}
-          cellThickness={0.6}
-          sectionThickness={1.1}
+          cellThickness={settings.gridLineThickness}
+          sectionThickness={settings.gridLineThickness * 1.6}
           fadeDistance={46}
           fadeStrength={1.3}
         />

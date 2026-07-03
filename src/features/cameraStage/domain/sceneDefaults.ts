@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
+import { BLACK_HEX, CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { POSE_PRESETS } from './posePresets.gen'
 import { clonePose, createEmptyPose } from './poseTypes'
 import type {
@@ -110,6 +110,10 @@ export function createDefaultSceneSettings(): StageSceneSettings {
       color: CAMERA_STAGE_COLOR_HEX.groundBase,
       pattern: 'grid',
       density: 10,
+      gridLineColor: CAMERA_STAGE_COLOR_HEX.gridSection,
+      gridLineThickness: 0.9,
+      checkerLightColor: WHITE_HEX,
+      checkerDarkColor: BLACK_HEX,
     },
     sky: {
       color: CAMERA_STAGE_COLOR_HEX.stageBg,
