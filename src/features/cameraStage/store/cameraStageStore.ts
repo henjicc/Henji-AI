@@ -12,6 +12,26 @@ import { getCameraObjects } from '../domain/cameraUtils'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
+import {
+  createDefaultAnimation,
+  createDefaultPlayback,
+  type StageEasing,
+  type StageKeyframeValue,
+  type StagePlaybackState,
+  type StageSceneAnimation,
+} from '../domain/animationTypes'
+import { getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
+import {
+  getTrack,
+  hasKeyframeAtTime,
+  moveTrackKeyframe,
+  removeObjectTracks,
+  removeTrack,
+  removeTrackKeyframe,
+  setTrackKeyframeEasing,
+  upsertTrackKeyframe,
+} from './animationActions'
+import { applyAnimationAtTime } from './playbackSampling'
 import type {
   StageGizmoMode,
   StageObject,
@@ -32,6 +52,12 @@ interface CameraStageState {
   currentProjectId: string | null
   /** 当前工程名（新场景用默认名，保存后与工程记录一致） */
   currentProjectName: string
+  /** 关键帧动画数据（轨道 + 时长 + 帧率），进撤销历史、随工程持久化 */
+  animation: StageSceneAnimation
+  /** 播放界面态（不进撤销历史、不持久化） */
+  playback: StagePlaybackState
+  /** 时间轴当前选中的关键帧集合（objectId::path::time 键），界面态 */
+  selectedKeyframes: string[]
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
@@ -52,13 +78,73 @@ interface CameraStageState {
   newScene: (name: string) => void
   /** 用工程快照整体重置场景（加载工程用）；同时复位选中/视角等界面态 */
   loadSnapshot: (snapshot: StageSceneSnapshotInput, project: { id: string; name: string }) => void
+
+  /* ---- 关键帧动画动作（tracked：进撤销历史） ---- */
+  /** 码表三态切换：无轨道→建轨并以当前值当前时间打点；有轨道当前时间无点→打点；有点→删点 */
+  toggleKeyframe: (objectId: string, path: string) => void
+  /** 在当前时间以对象当前值强制打点（属性行改值自动打点用） */
+  keyframeAtCurrentTime: (objectId: string, path: string) => void
+  removeKeyframe: (objectId: string, path: string, time: number) => void
+  moveKeyframe: (objectId: string, path: string, fromTime: number, toTime: number) => void
+  /** 批量设置若干关键帧的缓动（速度曲线编辑器用） */
+  setKeyframesEasing: (
+    targets: Array<{ objectId: string; path: string; time: number }>,
+    easing: StageEasing,
+  ) => void
+  clearTrack: (objectId: string, path: string) => void
+  setDuration: (duration: number) => void
+  setFps: (fps: number) => void
+
+  /* ---- 播放/时间轴界面态动作（非 tracked） ---- */
+  play: () => void
+  pause: () => void
+  stop: () => void
+  /** 定位播放头：非播放态下同时把采样值落回对象（scrub），播放态仅移动播放头 */
+  seek: (time: number) => void
+  /** 播放驱动低频回写播放头（不落对象、不进历史） */
+  setPlaybackTime: (time: number) => void
+  toggleLoop: () => void
+  setSelectedKeyframes: (keys: string[]) => void
+}
+
+/** 时间轴关键帧唯一键（选中集合、拖拽标识用） */
+export function keyframeKey(objectId: string, path: string, time: number): string {
+  return `${objectId}::${path}::${time.toFixed(4)}`
 }
 
 /** 新场景默认工程名 */
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
-/** 撤销历史只跟踪场景数据切片（对象列表），界面态（选中/视角/工程标识）不入历史 */
-type TrackedState = Pick<CameraStageState, 'objects'>
+/** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
+type TrackedState = Pick<CameraStageState, 'objects' | 'animation'>
+
+/** 在暂停撤销跟踪的前提下把采样值落回对象（scrub/暂停/停止用，不污染历史与不自动打点） */
+function applySampledObjectsSilently(time: number): void {
+  const temporal = useCameraStageStore.temporal.getState()
+  const wasTracking = temporal.isTracking
+  if (wasTracking) temporal.pause()
+  useCameraStageStore.setState((state) => ({
+    objects: applyAnimationAtTime(state.objects, state.animation, time),
+  }))
+  if (wasTracking) temporal.resume()
+}
+
+/** AE 式自动打点：对存在轨道的路径，在给定时间以对象当前值 upsert 关键帧 */
+function autoKeyPaths(
+  animation: StageSceneAnimation,
+  object: StageObject,
+  paths: string[],
+  time: number,
+): StageSceneAnimation {
+  let next = animation
+  for (const path of paths) {
+    if (!getTrack(next, object.id, path)) continue
+    const descriptor = getAnimatablePropByPath(path)
+    if (!descriptor) continue
+    next = upsertTrackKeyframe(next, object.id, path, time, descriptor.getValue(object))
+  }
+  return next
+}
 
 /**
  * 会话式历史批处理：gizmo 拖拽、滑杆连续调整会触发大量 set，
@@ -110,6 +196,9 @@ export const useCameraStageStore = create<CameraStageState>()(
   activeCameraId: null,
   currentProjectId: null,
   currentProjectName: CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+  animation: createDefaultAnimation(),
+  playback: createDefaultPlayback(),
+  selectedKeyframes: [],
 
   addPrimitive: (kind) =>
     set((state) => {
@@ -145,6 +234,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       const activeCameraId = state.activeCameraId === id ? firstCameraId(objects) : state.activeCameraId
       return {
         objects,
+        animation: removeObjectTracks(state.animation, id),
         selectedId: state.selectedId === id ? null : state.selectedId,
         activeCameraId,
         viewMode: state.viewMode === 'camera' && !activeCameraId ? 'director' : state.viewMode,
@@ -180,34 +270,64 @@ export const useCameraStageStore = create<CameraStageState>()(
     }),
 
   updateObject: (id, patch) =>
-    set((state) => ({
-      objects: state.objects.map((item) =>
+    set((state) => {
+      const objects = state.objects.map((item) =>
         item.id === id ? ({ ...item, ...patch } as StageObject) : item,
-      ),
-    })),
+      )
+      const object = objects.find((item) => item.id === id)
+      if (!object) return { objects }
+      // color / fov 是可动画标量/颜色属性，有轨道时自动打点
+      const paths: string[] = []
+      if ('color' in patch) paths.push('color')
+      if ('fov' in patch) paths.push('fov')
+      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
+      return animation === state.animation ? { objects } : { objects, animation }
+    }),
 
   updateTransform: (id, patch) =>
-    set((state) => ({
-      objects: state.objects.map((item) =>
+    set((state) => {
+      const objects = state.objects.map((item) =>
         item.id === id ? { ...item, transform: { ...item.transform, ...patch } } : item,
-      ),
-    })),
+      )
+      const object = objects.find((item) => item.id === id)
+      if (!object) return { objects }
+      const paths = Object.keys(patch).map((key) => `transform.${key}`)
+      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
+      return animation === state.animation ? { objects } : { objects, animation }
+    }),
 
   updatePoseJoint: (id, jointId, euler) =>
-    set((state) => ({
-      objects: state.objects.map((item) =>
+    set((state) => {
+      const objects = state.objects.map((item) =>
         item.id === id && item.type === 'character'
           ? { ...item, pose: { ...item.pose, joints: { ...item.pose.joints, [jointId]: euler } } }
           : item,
-      ),
-    })),
+      )
+      const object = objects.find((item) => item.id === id)
+      if (!object) return { objects }
+      const animation = autoKeyPaths(
+        state.animation,
+        object,
+        [poseJointPath(jointId)],
+        state.playback.currentTime,
+      )
+      return animation === state.animation ? { objects } : { objects, animation }
+    }),
 
   applyPosePreset: (id, preset) =>
-    set((state) => ({
-      objects: state.objects.map((item) =>
+    set((state) => {
+      const objects = state.objects.map((item) =>
         item.id === id && item.type === 'character' ? { ...item, pose: clonePose(preset) } : item,
-      ),
-    })),
+      )
+      const object = objects.find((item) => item.id === id)
+      if (!object || object.type !== 'character') return { objects }
+      // 预设整体替换姿态：对所有已有关节轨道自动打点
+      const paths = state.animation.tracks
+        .filter((track) => track.objectId === id && track.propertyPath.startsWith('pose.joints.'))
+        .map((track) => track.propertyPath)
+      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
+      return animation === state.animation ? { objects } : { objects, animation }
+    }),
 
   bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
 
@@ -220,6 +340,9 @@ export const useCameraStageStore = create<CameraStageState>()(
       activeCameraId: null,
       currentProjectId: null,
       currentProjectName: name,
+      animation: createDefaultAnimation(),
+      playback: createDefaultPlayback(),
+      selectedKeyframes: [],
     }),
 
   loadSnapshot: (snapshot, project) =>
@@ -235,15 +358,109 @@ export const useCameraStageStore = create<CameraStageState>()(
         activeCameraId,
         currentProjectId: project.id,
         currentProjectName: project.name,
+        animation: snapshot.animation ?? createDefaultAnimation(),
+        playback: createDefaultPlayback(),
+        selectedKeyframes: [],
       }
     }),
+
+  toggleKeyframe: (objectId, path) =>
+    set((state) => {
+      const object = state.objects.find((item) => item.id === objectId)
+      const descriptor = getAnimatablePropByPath(path)
+      if (!object || !descriptor) return {}
+      const time = state.playback.currentTime
+      if (hasKeyframeAtTime(state.animation, objectId, path, time)) {
+        return { animation: removeTrackKeyframe(state.animation, objectId, path, time) }
+      }
+      return {
+        animation: upsertTrackKeyframe(state.animation, objectId, path, time, descriptor.getValue(object)),
+      }
+    }),
+
+  keyframeAtCurrentTime: (objectId, path) =>
+    set((state) => {
+      const object = state.objects.find((item) => item.id === objectId)
+      const descriptor = getAnimatablePropByPath(path)
+      if (!object || !descriptor) return {}
+      return {
+        animation: upsertTrackKeyframe(
+          state.animation,
+          objectId,
+          path,
+          state.playback.currentTime,
+          descriptor.getValue(object),
+        ),
+      }
+    }),
+
+  removeKeyframe: (objectId, path, time) =>
+    set((state) => ({ animation: removeTrackKeyframe(state.animation, objectId, path, time) })),
+
+  moveKeyframe: (objectId, path, fromTime, toTime) =>
+    set((state) => ({ animation: moveTrackKeyframe(state.animation, objectId, path, fromTime, toTime) })),
+
+  setKeyframesEasing: (targets, easing) =>
+    set((state) => {
+      let animation = state.animation
+      for (const target of targets) {
+        animation = setTrackKeyframeEasing(animation, target.objectId, target.path, target.time, easing)
+      }
+      return animation === state.animation ? {} : { animation }
+    }),
+
+  clearTrack: (objectId, path) =>
+    set((state) => ({ animation: removeTrack(state.animation, objectId, path) })),
+
+  setDuration: (duration) =>
+    set((state) => ({
+      animation: { ...state.animation, duration: Math.max(0.1, duration) },
+    })),
+
+  setFps: (fps) =>
+    set((state) => ({ animation: { ...state.animation, fps: Math.max(1, Math.round(fps)) } })),
+
+  play: () =>
+    set((state) => {
+      if (state.animation.tracks.length === 0) return {}
+      // 播放到末尾后再按播放，从头开始
+      const atEnd = state.playback.currentTime >= state.animation.duration
+      return {
+        playback: { ...state.playback, playing: true, currentTime: atEnd ? 0 : state.playback.currentTime },
+      }
+    }),
+
+  pause: () => {
+    // 先按当前播放头把采样值落回对象（另一次 set，避免嵌套 setState），再置暂停
+    applySampledObjectsSilently(useCameraStageStore.getState().playback.currentTime)
+    set((state) => ({ playback: { ...state.playback, playing: false } }))
+  },
+
+  stop: () => {
+    applySampledObjectsSilently(0)
+    set((state) => ({ playback: { ...state.playback, playing: false, currentTime: 0 } }))
+  },
+
+  seek: (time) => {
+    const state = useCameraStageStore.getState()
+    const clamped = Math.max(0, Math.min(state.animation.duration, time))
+    if (!state.playback.playing) applySampledObjectsSilently(clamped)
+    set((current) => ({ playback: { ...current.playback, currentTime: clamped } }))
+  },
+
+  setPlaybackTime: (time) =>
+    set((state) => ({ playback: { ...state.playback, currentTime: time } })),
+
+  toggleLoop: () => set((state) => ({ playback: { ...state.playback, loop: !state.playback.loop } })),
+
+  setSelectedKeyframes: (keys) => set({ selectedKeyframes: keys }),
     }),
     {
       limit: 100,
-      // 只跟踪场景数据切片；界面态变更不入历史
-      partialize: (state): TrackedState => ({ objects: state.objects }),
-      // 对象数组走不可变更新，引用相等即无实质变化 → 跳过记录（避免选中/视角变更污染历史）
-      equality: (a, b) => a.objects === b.objects,
+      // 跟踪场景数据 + 动画轨道切片；界面态/播放态变更不入历史
+      partialize: (state): TrackedState => ({ objects: state.objects, animation: state.animation }),
+      // 对象数组与动画对象都走不可变更新，引用相等即无实质变化 → 跳过记录
+      equality: (a, b) => a.objects === b.objects && a.animation === b.animation,
       handleSet: (handleSet) => {
         historyRecord = handleSet
         return (pastState) => {

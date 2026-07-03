@@ -36,7 +36,11 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
   const now = Date.now()
   const id = state.currentProjectId ?? uuidv4()
   const name = state.currentProjectName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME
-  const sceneJson = serializeScene({ objects: state.objects, activeCameraId: state.activeCameraId })
+  const sceneJson = serializeScene({
+    objects: state.objects,
+    activeCameraId: state.activeCameraId,
+    animation: state.animation,
+  })
 
   const record: CameraStageProjectPlatformRecord = {
     id,
@@ -73,7 +77,7 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
   }
   const snapshot = deserializeScene(record.sceneJson)
   useCameraStageStore.getState().loadSnapshot(
-    { objects: snapshot.objects, activeCameraId: snapshot.activeCameraId },
+    { objects: snapshot.objects, activeCameraId: snapshot.activeCameraId, animation: snapshot.animation },
     { id: record.id, name: record.name },
   )
   clearCameraStageHistory()

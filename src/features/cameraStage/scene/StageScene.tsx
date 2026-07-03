@@ -9,6 +9,7 @@ import { useCameraStageStore } from '../store/cameraStageStore'
 import StageCaptureBridge from './StageCaptureBridge'
 import type { StageCaptureFn } from './StageCaptureBridge'
 import StageObjectMesh from './StageObjectMesh'
+import StagePlaybackDriver from './StagePlaybackDriver'
 import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
 
@@ -96,6 +97,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       onPointerMissed={() => setSelected(null)}
     >
       {captureRef && <StageCaptureBridge captureRef={captureRef} />}
+      <StagePlaybackDriver />
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 8, 4]} intensity={1.2} />
       {isCameraView && (

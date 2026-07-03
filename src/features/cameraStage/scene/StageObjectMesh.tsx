@@ -1,7 +1,8 @@
 import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import { BufferGeometry, Vector3 } from 'three'
-import type { Group } from 'three'
+import type { Group, MeshStandardMaterial } from 'three'
+import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type {
   StageCameraObject,
   StageCharacterObject,
@@ -198,12 +199,55 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
   showCameraHelpers,
 }) => {
   const groupRef = useRef<Group>(null)
+  const materialRef = useRef<MeshStandardMaterial>(null)
   const { transform } = object
 
   useEffect(() => {
     onRegister(object.id, groupRef.current)
     return () => onRegister(object.id, null)
   }, [object.id, onRegister])
+
+  // 播放期命令式采样：变换直改本对象容器 group，颜色直改 primitive 材质（不写 store）
+  useEffect(() => {
+    const unregs: Array<() => void> = []
+    unregs.push(
+      registerPlaybackApplier(object.id, 'transform.position', (value) => {
+        const group = groupRef.current
+        if (!group) return
+        const v = value as StageVec3
+        group.position.set(v.x, v.y, v.z)
+      }),
+    )
+    if (object.type !== 'camera') {
+      unregs.push(
+        registerPlaybackApplier(object.id, 'transform.rotation', (value) => {
+          const group = groupRef.current
+          if (!group) return
+          const v = value as StageVec3
+          group.rotation.set(v.x * DEG2RAD, v.y * DEG2RAD, v.z * DEG2RAD)
+        }),
+      )
+      unregs.push(
+        registerPlaybackApplier(object.id, 'transform.scale', (value) => {
+          const group = groupRef.current
+          if (!group) return
+          const v = value as StageVec3
+          group.scale.set(v.x, v.y, v.z)
+        }),
+      )
+    }
+    if (object.type === 'primitive') {
+      unregs.push(
+        registerPlaybackApplier(object.id, 'color', (value) => {
+          const material = materialRef.current
+          if (!material) return
+          material.color.set(value as string)
+          material.emissive.set(value as string)
+        }),
+      )
+    }
+    return () => unregs.forEach((unregister) => unregister())
+  }, [object.id, object.type])
 
   const handleClick = (event: ThreeEvent<MouseEvent>): void => {
     event.stopPropagation()
@@ -228,7 +272,12 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
         {object.type === 'primitive' && (
           <mesh onClick={handleClick}>
             <PrimitiveGeometry kind={object.kind} />
-            <StageMaterial color={object.color} selected={selected} />
+            <meshStandardMaterial
+              ref={materialRef}
+              color={object.color}
+              emissive={object.color}
+              emissiveIntensity={selected ? 0.35 : 0}
+            />
           </mesh>
         )}
         {object.type === 'character' && (

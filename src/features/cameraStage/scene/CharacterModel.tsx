@@ -5,7 +5,9 @@ import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
 import { POSE_JOINT_BONES } from '../domain/poseTypes'
 import type { StagePoseJointId } from '../domain/poseTypes'
-import type { StageCharacterObject } from '../domain/sceneTypes'
+import { poseJointPath } from '../domain/animatableProps'
+import { registerPlaybackApplier } from '../store/playbackAppliers'
+import type { StageCharacterObject, StageVec3 } from '../domain/sceneTypes'
 
 /**
  * 角色骨骼模型渲染：加载内置 GLB（骨架 + 蒙皮网格），按对象数据应用
@@ -105,6 +107,31 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
         .add(hipsOffset ? new Vector3(hipsOffset.x, hipsOffset.y, hipsOffset.z) : new Vector3())
     }
   }, [rig, object.pose])
+
+  // 播放期命令式采样：逐关节欧拉偏移直改骨骼、颜色直改共享材质（不写 store）
+  useEffect(() => {
+    const euler = new Euler()
+    const quat = new Quaternion()
+    const unregs: Array<() => void> = (Object.keys(POSE_JOINT_BONES) as StagePoseJointId[]).map(
+      (jointId) =>
+        registerPlaybackApplier(object.id, poseJointPath(jointId), (value) => {
+          const bone = rig.bones.get(POSE_JOINT_BONES[jointId])
+          const rest = rig.restQuaternions.get(POSE_JOINT_BONES[jointId])
+          if (!bone || !rest) return
+          const v = value as StageVec3
+          euler.set(v.x * DEG2RAD, v.y * DEG2RAD, v.z * DEG2RAD, 'XYZ')
+          quat.setFromEuler(euler)
+          bone.quaternion.copy(rest).multiply(quat)
+        }),
+    )
+    unregs.push(
+      registerPlaybackApplier(object.id, 'color', (value) => {
+        material.color.set(value as string)
+        material.emissive.set(value as string)
+      }),
+    )
+    return () => unregs.forEach((unregister) => unregister())
+  }, [object.id, rig, material])
 
   // 体型变体：头部骨骼缩放（头身比），整体缩放走容器 group
   const variant = getBodyVariant(object.variant)
