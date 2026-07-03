@@ -105,12 +105,19 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       onPointerMissed={() => setSelected(null)}
     >
       {sceneSettings.fog.enabled && (
-        <fog attach="fog" args={[sceneSettings.sky.color, fogNear, fogFar]} />
+        <fog
+          key={`scene-fog-${sceneSettings.sky.color}-${fogNear}-${fogFar}`}
+          attach="fog"
+          args={[sceneSettings.sky.color, fogNear, fogFar]}
+        />
       )}
       {captureRef && <StageCaptureBridge captureRef={captureRef} />}
       <StagePlaybackDriver />
       <StageSunLight settings={sceneSettings} />
-      <StageGround settings={sceneSettings.ground} />
+      <StageGround
+        key={`stage-ground-${sceneSettings.ground.pattern}`}
+        settings={sceneSettings.ground}
+      />
       {isCameraView && (
         <>
           <StageViewportCamera
