@@ -120,10 +120,30 @@ export interface StageFogSettings {
   distance: number
 }
 
+export interface StageNameLabelSettings {
+  textColor: string
+  backgroundColor: string
+  backgroundOpacity: number
+  followObjectColor: boolean
+  scale: number
+  offset: StageVec3
+  shadowColor: string
+  shadowOpacity: number
+  shadowBlur: number
+  shadowDistance: number
+  shadowAngle: number
+}
+
+export interface StageDisplaySettings {
+  showNameLabels: boolean
+  nameLabel: StageNameLabelSettings
+}
+
 /** 场景级设置（未选中对象时的属性面板展示，随工程持久化） */
 export interface StageSceneSettings {
   ground: StageGroundSettings
   sky: StageSkySettings
   sunlight: StageSunlightSettings
   fog: StageFogSettings
+  display: StageDisplaySettings
 }

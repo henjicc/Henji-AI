@@ -127,5 +127,21 @@ export function createDefaultSceneSettings(): StageSceneSettings {
       enabled: true,
       distance: 90,
     },
+    display: {
+      showNameLabels: false,
+      nameLabel: {
+        textColor: WHITE_HEX,
+        backgroundColor: CAMERA_STAGE_COLOR_HEX.groundBase,
+        backgroundOpacity: 0.9,
+        followObjectColor: false,
+        scale: 1,
+        offset: { x: 0, y: 0.18, z: 0 },
+        shadowColor: BLACK_HEX,
+        shadowOpacity: 0.45,
+        shadowBlur: 6,
+        shadowDistance: 2,
+        shadowAngle: 90,
+      },
+    },
   }
 }

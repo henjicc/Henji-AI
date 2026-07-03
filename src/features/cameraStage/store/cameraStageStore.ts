@@ -125,6 +125,18 @@ export interface CameraStageState {
   setSceneSunlightTimeOfDay: (timeOfDay: number) => void
   setSceneFogEnabled: (enabled: boolean) => void
   setSceneFogDistance: (distance: number) => void
+  setSceneShowNameLabels: (showNameLabels: boolean) => void
+  setSceneNameLabelTextColor: (color: string) => void
+  setSceneNameLabelBackgroundColor: (color: string) => void
+  setSceneNameLabelBackgroundOpacity: (opacity: number) => void
+  setSceneNameLabelFollowObjectColor: (follow: boolean) => void
+  setSceneNameLabelScale: (scale: number) => void
+  setSceneNameLabelOffset: (offset: StageVec3) => void
+  setSceneNameLabelShadowColor: (color: string) => void
+  setSceneNameLabelShadowOpacity: (opacity: number) => void
+  setSceneNameLabelShadowBlur: (blur: number) => void
+  setSceneNameLabelShadowDistance: (distance: number) => void
+  setSceneNameLabelShadowAngle: (angle: number) => void
   /** 请求把视口平滑对准当前选中对象（无选中对象时不生效） */
   requestFocusSelected: () => void
 }
@@ -560,6 +572,160 @@ export const useCameraStageStore = create<CameraStageState>()(
       sceneSettings: {
         ...state.sceneSettings,
         fog: { ...state.sceneSettings.fog, distance: Math.max(30, Math.min(200, distance)) },
+      },
+    })),
+
+  setSceneShowNameLabels: (showNameLabels) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: { ...state.sceneSettings.display, showNameLabels },
+      },
+    })),
+
+  setSceneNameLabelTextColor: (color) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: { ...state.sceneSettings.display.nameLabel, textColor: color },
+        },
+      },
+    })),
+
+  setSceneNameLabelBackgroundColor: (color) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: { ...state.sceneSettings.display.nameLabel, backgroundColor: color },
+        },
+      },
+    })),
+
+  setSceneNameLabelBackgroundOpacity: (opacity) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            backgroundOpacity: Math.max(0, Math.min(1, opacity)),
+          },
+        },
+      },
+    })),
+
+  setSceneNameLabelFollowObjectColor: (follow) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: { ...state.sceneSettings.display.nameLabel, followObjectColor: follow },
+        },
+      },
+    })),
+
+  setSceneNameLabelScale: (scale) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            scale: Math.max(0.5, Math.min(2.5, scale)),
+          },
+        },
+      },
+    })),
+
+  setSceneNameLabelOffset: (offset) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            offset: {
+              x: Math.max(-3, Math.min(3, offset.x)),
+              y: Math.max(-3, Math.min(3, offset.y)),
+              z: Math.max(-3, Math.min(3, offset.z)),
+            },
+          },
+        },
+      },
+    })),
+
+  setSceneNameLabelShadowColor: (color) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: { ...state.sceneSettings.display.nameLabel, shadowColor: color },
+        },
+      },
+    })),
+
+  setSceneNameLabelShadowOpacity: (opacity) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            shadowOpacity: Math.max(0, Math.min(1, opacity)),
+          },
+        },
+      },
+    })),
+
+  setSceneNameLabelShadowBlur: (blur) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            shadowBlur: Math.max(0, Math.min(24, blur)),
+          },
+        },
+      },
+    })),
+
+  setSceneNameLabelShadowDistance: (distance) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            shadowDistance: Math.max(0, Math.min(24, distance)),
+          },
+        },
+      },
+    })),
+
+  setSceneNameLabelShadowAngle: (angle) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        display: {
+          ...state.sceneSettings.display,
+          nameLabel: {
+            ...state.sceneSettings.display.nameLabel,
+            shadowAngle: ((angle % 360) + 360) % 360,
+          },
+        },
       },
     })),
 

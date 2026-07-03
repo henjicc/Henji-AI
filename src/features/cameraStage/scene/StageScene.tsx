@@ -141,6 +141,8 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           onRegister={registerNode}
           cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
           showCameraHelpers={!isCameraView}
+          showNameLabel={sceneSettings.display.showNameLabels && !(isCameraView && object.id === activeCamera?.id)}
+          nameLabelSettings={sceneSettings.display.nameLabel}
         />
       ))}
       {selectedNode && !isCameraView && (

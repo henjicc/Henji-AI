@@ -9,6 +9,9 @@
  * v4 起并入场景级设置（背景色/网格显隐）；加载 v3 及以下工程视为默认设置。
  * v5 起摄像机对象新增 aspectRatio（画幅比例）字段；加载 v4 及以下工程时给已有摄像机补默认 16:9。
  * v6 起场景设置拆分为 ground / sky / sunlight / fog；加载 v5 及以下工程时把旧背景色/网格迁移到新结构。
+ * v7 起场景设置新增 display.showNameLabels；加载 v6 及以下工程时默认不显示名称标签。
+ * v8 起名称标签新增文字色/背景色/大小/位置偏移；加载 v7 及以下工程时回退默认标签样式。
+ * v9 起名称标签新增背景跟随对象色、背景透明度与文字阴影参数；加载 v8 及以下工程时回退默认阴影样式。
  */
 
 import { createDefaultAnimation } from './animationTypes'
@@ -17,7 +20,7 @@ import { createDefaultSceneSettings } from './sceneDefaults'
 import type { StageCameraObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 6
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 9
 
 export interface StageSceneSnapshot {
   schemaVersion: number
@@ -75,12 +78,24 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
     const skyRecord = record.sky as Record<string, unknown> | undefined
     const sunlightRecord = record.sunlight as Record<string, unknown> | undefined
     const fogRecord = record.fog as Record<string, unknown> | undefined
+    const displayRecord = record.display as Record<string, unknown> | undefined
+    const nameLabelRecord = displayRecord?.nameLabel as Record<string, unknown> | undefined
     const pattern = groundRecord?.pattern
     const density = Number(groundRecord?.density)
     const gridLineThickness = Number(groundRecord?.gridLineThickness)
     const intensity = Number(sunlightRecord?.intensity)
     const timeOfDay = Number(sunlightRecord?.timeOfDay)
     const fogDistance = Number(fogRecord?.distance)
+    const labelScale = Number(nameLabelRecord?.scale)
+    const backgroundOpacity = Number(nameLabelRecord?.backgroundOpacity)
+    const shadowOpacity = Number(nameLabelRecord?.shadowOpacity)
+    const shadowBlur = Number(nameLabelRecord?.shadowBlur)
+    const shadowDistance = Number(nameLabelRecord?.shadowDistance)
+    const shadowAngle = Number(nameLabelRecord?.shadowAngle)
+    const offsetRecord = nameLabelRecord?.offset as Record<string, unknown> | undefined
+    const offsetX = Number(offsetRecord?.x)
+    const offsetY = Number(offsetRecord?.y)
+    const offsetZ = Number(offsetRecord?.z)
 
     return {
       ground: {
@@ -132,6 +147,68 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
             ? fogDistance
             : fallback.fog.distance,
       },
+      display: {
+        showNameLabels:
+          typeof displayRecord?.showNameLabels === 'boolean'
+            ? displayRecord.showNameLabels
+            : fallback.display.showNameLabels,
+        nameLabel: {
+          textColor:
+            typeof nameLabelRecord?.textColor === 'string'
+              ? nameLabelRecord.textColor
+              : fallback.display.nameLabel.textColor,
+          backgroundColor:
+            typeof nameLabelRecord?.backgroundColor === 'string'
+              ? nameLabelRecord.backgroundColor
+              : fallback.display.nameLabel.backgroundColor,
+          backgroundOpacity:
+            Number.isFinite(backgroundOpacity) && backgroundOpacity >= 0 && backgroundOpacity <= 1
+              ? backgroundOpacity
+              : fallback.display.nameLabel.backgroundOpacity,
+          followObjectColor:
+            typeof nameLabelRecord?.followObjectColor === 'boolean'
+              ? nameLabelRecord.followObjectColor
+              : fallback.display.nameLabel.followObjectColor,
+          scale:
+            Number.isFinite(labelScale) && labelScale >= 0.5 && labelScale <= 2.5
+              ? labelScale
+              : fallback.display.nameLabel.scale,
+          offset: {
+            x:
+              Number.isFinite(offsetX) && offsetX >= -3 && offsetX <= 3
+                ? offsetX
+                : fallback.display.nameLabel.offset.x,
+            y:
+              Number.isFinite(offsetY) && offsetY >= -3 && offsetY <= 3
+                ? offsetY
+                : fallback.display.nameLabel.offset.y,
+            z:
+              Number.isFinite(offsetZ) && offsetZ >= -3 && offsetZ <= 3
+                ? offsetZ
+                : fallback.display.nameLabel.offset.z,
+          },
+          shadowColor:
+            typeof nameLabelRecord?.shadowColor === 'string'
+              ? nameLabelRecord.shadowColor
+              : fallback.display.nameLabel.shadowColor,
+          shadowOpacity:
+            Number.isFinite(shadowOpacity) && shadowOpacity >= 0 && shadowOpacity <= 1
+              ? shadowOpacity
+              : fallback.display.nameLabel.shadowOpacity,
+          shadowBlur:
+            Number.isFinite(shadowBlur) && shadowBlur >= 0 && shadowBlur <= 24
+              ? shadowBlur
+              : fallback.display.nameLabel.shadowBlur,
+          shadowDistance:
+            Number.isFinite(shadowDistance) && shadowDistance >= 0 && shadowDistance <= 24
+              ? shadowDistance
+              : fallback.display.nameLabel.shadowDistance,
+          shadowAngle:
+            Number.isFinite(shadowAngle)
+              ? ((shadowAngle % 360) + 360) % 360
+              : fallback.display.nameLabel.shadowAngle,
+        },
+      },
     }
   }
 
@@ -150,6 +227,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
     },
     sunlight: fallback.sunlight,
     fog: fallback.fog,
+    display: fallback.display,
   }
 }
 

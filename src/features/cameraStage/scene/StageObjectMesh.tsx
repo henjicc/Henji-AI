@@ -6,12 +6,14 @@ import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type {
   StageCameraObject,
   StageCharacterObject,
+  StageNameLabelSettings,
   StageObject,
   StagePrimitiveKind,
   StageVec3,
 } from '../domain/sceneTypes'
 import CameraModel from './CameraModel'
 import CharacterModel from './CharacterModel'
+import StageObjectNameLabel from './StageObjectNameLabel'
 import { useCameraModelUrl, useCharacterModelUrl } from './useCharacterModelUrl'
 
 /**
@@ -33,6 +35,9 @@ interface StageObjectMeshProps {
   cameraLookAtTarget?: StageVec3
   /** 摄像机视角下隐藏相机图标/视锥体，避免编辑辅助进入实际取景画面 */
   showCameraHelpers: boolean
+  /** 场景级名称标签开关；激活后在对象上方渲染朝向摄像机的标签 */
+  showNameLabel: boolean
+  nameLabelSettings: StageNameLabelSettings
 }
 
 const PrimitiveGeometry: React.FC<{ kind: StagePrimitiveKind }> = ({ kind }) => {
@@ -197,8 +202,11 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
   onRegister,
   cameraLookAtTarget,
   showCameraHelpers,
+  showNameLabel,
+  nameLabelSettings,
 }) => {
   const groupRef = useRef<Group>(null)
+  const contentRef = useRef<Group>(null)
   const materialRef = useRef<MeshStandardMaterial>(null)
   const { transform } = object
 
@@ -269,30 +277,39 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
             ]}
         scale={object.type === 'camera' ? [1, 1, 1] : [transform.scale.x, transform.scale.y, transform.scale.z]}
       >
-        {object.type === 'primitive' && (
-          <mesh onClick={handleClick}>
-            <PrimitiveGeometry kind={object.kind} />
-            <meshStandardMaterial
-              ref={materialRef}
-              color={object.color}
-              emissive={object.color}
-              emissiveIntensity={selected ? 0.35 : 0}
-            />
-          </mesh>
-        )}
-        {object.type === 'character' && (
-          <group onClick={handleClick}>
-            <CharacterMesh object={object} selected={selected} />
-          </group>
-        )}
-        {object.type === 'camera' && showCameraHelpers && cameraLookAtTarget && (
-          <group onClick={handleClick}>
-            <CameraHelperMesh
-              object={object}
-              selected={selected}
-              lookAtTarget={cameraLookAtTarget}
-            />
-          </group>
+        <group ref={contentRef}>
+          {object.type === 'primitive' && (
+            <mesh onClick={handleClick}>
+              <PrimitiveGeometry kind={object.kind} />
+              <meshStandardMaterial
+                ref={materialRef}
+                color={object.color}
+                emissive={object.color}
+                emissiveIntensity={selected ? 0.35 : 0}
+              />
+            </mesh>
+          )}
+          {object.type === 'character' && (
+            <group onClick={handleClick}>
+              <CharacterMesh object={object} selected={selected} />
+            </group>
+          )}
+          {object.type === 'camera' && showCameraHelpers && cameraLookAtTarget && (
+            <group onClick={handleClick}>
+              <CameraHelperMesh
+                object={object}
+                selected={selected}
+                lookAtTarget={cameraLookAtTarget}
+              />
+            </group>
+          )}
+        </group>
+        {showNameLabel && (
+          <StageObjectNameLabel
+            object={object}
+            targetRef={contentRef}
+            settings={nameLabelSettings}
+          />
         )}
       </group>
   )
