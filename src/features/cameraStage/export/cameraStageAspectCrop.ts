@@ -12,7 +12,11 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   })
 }
 
-export async function cropDataUrlToAspectRatio(dataUrl: string, ratio: number): Promise<string> {
+export async function cropDataUrlToAspectRatio(
+  dataUrl: string,
+  ratio: number,
+  backgroundColor?: string,
+): Promise<string> {
   const image = await loadImage(dataUrl)
   const sourceRatio = image.width / image.height
 
@@ -31,6 +35,10 @@ export async function cropDataUrlToAspectRatio(dataUrl: string, ratio: number): 
   canvas.height = Math.round(cropHeight)
   const ctx = canvas.getContext('2d')
   if (!ctx) return dataUrl
+  if (backgroundColor) {
+    ctx.fillStyle = backgroundColor
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
   ctx.drawImage(image, offsetX, offsetY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height)
   return canvas.toDataURL('image/png')
 }

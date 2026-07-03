@@ -100,10 +100,11 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
     <Canvas
       camera={{ position: [5, 4, 7], fov: 50 }}
       // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
-      gl={{ preserveDrawingBuffer: true }}
+      gl={{ preserveDrawingBuffer: true, alpha: false }}
       style={{ background: sceneSettings.sky.color }}
       onPointerMissed={() => setSelected(null)}
     >
+      <color attach="background" args={[sceneSettings.sky.color]} />
       {sceneSettings.fog.enabled && (
         <fog
           key={`scene-fog-${sceneSettings.sky.color}-${fogNear}-${fogFar}`}

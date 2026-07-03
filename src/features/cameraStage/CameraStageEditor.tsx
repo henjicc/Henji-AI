@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Redo2, Undo2 } from 'lucide-react'
-import { Dropdown, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { ArrowLeft, Camera, Clipboard, Redo2, Save, Undo2 } from 'lucide-react'
+import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
 import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
-import { exportSceneScreenshot } from './export/cameraStageScreenshot'
+import { copySceneScreenshotToClipboard, exportSceneScreenshot } from './export/cameraStageScreenshot'
 import { useCameraStageAutosave } from './hooks/useCameraStageAutosave'
 import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
@@ -48,6 +48,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const projectName = useCameraStageStore((state) => state.currentProjectName)
   const setSessionProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
   const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
+  const skyColor = useCameraStageStore((state) => state.sceneSettings.sky.color)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
   const isCameraSelected = objects.find((item) => item.id === selectedId)?.type === 'camera'
@@ -56,7 +57,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const { saveState } = useCameraStageAutosave()
 
   const [shotHint, setShotHint] = useState<string | null>(null)
-  const [shooting, setShooting] = useState(false)
+  const [shotAction, setShotAction] = useState<'save' | 'copy' | null>(null)
   const captureRef = useRef<StageCaptureFn | null>(null)
   const dockRef = useRef<CameraStageDockHandle>(null)
 
@@ -67,29 +68,53 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     setSelected(cameraId)
   }
 
-  const handleScreenshot = useCallback(async (): Promise<void> => {
+  const prepareScreenshotDataUrl = useCallback(async (): Promise<string | null> => {
     const dataUrl = captureRef.current?.()
     if (!dataUrl) {
       setShotHint('截图失败：未获取到画面')
-      return
+      return null
     }
-    setShooting(true)
+
+    return activeCamera
+      ? await cropDataUrlToAspectRatio(dataUrl, activeCamera.aspectRatio.ratio, skyColor)
+      : dataUrl
+  }, [activeCamera, skyColor])
+
+  const handleSaveScreenshot = useCallback(async (): Promise<void> => {
+    setShotAction('save')
     try {
-      const croppedDataUrl = activeCamera
-        ? await cropDataUrlToAspectRatio(dataUrl, activeCamera.aspectRatio.ratio)
-        : dataUrl
-      const { savedPath } = await exportSceneScreenshot(
-        croppedDataUrl,
+      const dataUrl = await prepareScreenshotDataUrl()
+      if (!dataUrl) return
+
+      const result = await exportSceneScreenshot(
+        dataUrl,
         useCameraStageStore.getState().currentProjectName,
       )
+      if (!result) return
+      const { savedPath, saveMode } = result
       const fileName = savedPath.split(/[\\/]/).pop() ?? savedPath
-      setShotHint(`已保存到下载文件夹：${fileName}`)
+      setShotHint(saveMode === 'quick' ? `已快速保存：${fileName}` : `已保存：${fileName}`)
     } catch {
       setShotHint('截图导出失败')
     } finally {
-      setShooting(false)
+      setShotAction(null)
     }
-  }, [activeCamera])
+  }, [prepareScreenshotDataUrl])
+
+  const handleCopyScreenshot = useCallback(async (): Promise<void> => {
+    setShotAction('copy')
+    try {
+      const dataUrl = await prepareScreenshotDataUrl()
+      if (!dataUrl) return
+
+      await copySceneScreenshotToClipboard(dataUrl)
+      setShotHint('已复制到剪贴板')
+    } catch {
+      setShotHint('截图复制失败')
+    } finally {
+      setShotAction(null)
+    }
+  }, [prepareScreenshotDataUrl])
 
   // 截图提示 3s 后消失
   useEffect(() => {
@@ -222,16 +247,50 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
           <span className="max-w-40 truncate text-xs text-text-muted" title={projectName}>
             {projectName}
           </span>
-          <UiButton
-            size="sm"
-            onClick={() => void handleScreenshot()}
-            disabled={!canScreenshot || shooting}
-            title={canScreenshot ? '导出当前摄像机取景截图' : '切换到摄像机视角后可截图'}
-            className="py-1.5 text-xs"
+          <PanelTrigger
+            disabled={!canScreenshot || !!shotAction}
+            panelWidth={156}
+            closeOnPanelClick
+            panelClassName="overflow-hidden p-1"
+            renderPanel={() => (
+              <div className="flex flex-col gap-1">
+                <UiButton
+                  size="sm"
+                  variant="ghost"
+                  disabled={!!shotAction}
+                  onClick={() => void handleSaveScreenshot()}
+                  className="w-full justify-start gap-2 rounded-md border-0 px-2.5"
+                >
+                  <Save size={13} />
+                  保存到本地
+                </UiButton>
+                <UiButton
+                  size="sm"
+                  variant="ghost"
+                  disabled={!!shotAction}
+                  onClick={() => void handleCopyScreenshot()}
+                  className="w-full justify-start gap-2 rounded-md border-0 px-2.5"
+                >
+                  <Clipboard size={13} />
+                  复制到剪贴板
+                </UiButton>
+              </div>
+            )}
           >
-            <Camera size={13} className="mr-1" />
-            {shooting ? '导出中…' : '截图'}
-          </UiButton>
+            {({ togglePanel }) => (
+              <UiButton
+                size="sm"
+                onClick={togglePanel}
+                disabled={!canScreenshot || !!shotAction}
+                title={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
+                className="py-1.5 text-xs"
+                data-panel-trigger-button
+              >
+                <Camera size={13} className="mr-1" />
+                {shotAction ? '处理中…' : '截图'}
+              </UiButton>
+            )}
+          </PanelTrigger>
           <UiButton
             size="sm"
             variant="ghost"
