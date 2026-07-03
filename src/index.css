@@ -969,10 +969,14 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 /* ── 运镜控制 dockview 主题映射 ──
- * dockview 自带 abyss 深色主题，这里只把关键 --dv-* 变量对齐到项目色板 token，
+ * 用复合选择器（.henji-cameraStage-dock.dockview-theme-abyss，特指度 0,2,0）压过
+ * abyss 主题自身的 .dockview-theme-abyss 规则（0,1,0），确保下列 --dv-* 覆盖始终生效，
+ * 否则 dockview 样式表加载在后会用回 abyss 默认（含 rgb(91,30,207) 紫色强调色）。
  * 让停靠面板的背景/标签/分隔线与应用整体一致。颜色一律引用 index.css 既有 token，
  * 不写死十六进制。变更 dockview 观感只在此处调整。 */
-.henji-cameraStage-dock {
+.henji-cameraStage-dock.dockview-theme-abyss {
+  /* 彻底中和 abyss 紫色强调色：所有引用它的地方（sash / 选中描边等）改用项目 accent */
+  --dv-color-abyss-accent: rgb(var(--accent-rgb));
   --dv-background-color: rgb(var(--app-rgb));
   --dv-group-view-background-color: rgb(var(--app-rgb));
   --dv-tabs-and-actions-container-background-color: rgb(var(--app-rgb));

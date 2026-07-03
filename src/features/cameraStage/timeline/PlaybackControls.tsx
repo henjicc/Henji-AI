@@ -1,7 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Pause, Play, Repeat, SkipBack, ZoomIn } from 'lucide-react'
-import NumberInput from '@/components/ui/NumberInput'
-import { UiIconButton, UiOptionButton, UiRangeInput } from '@/components/ui'
+import { UiIconButton, UiInput, UiOptionButton, UiRangeInput } from '@/components/ui'
 import {
   TIMELINE_MAX_PX_PER_SECOND,
   TIMELINE_MIN_PX_PER_SECOND,
@@ -11,6 +10,54 @@ import {
 import { useCameraStageStore } from '../store/cameraStageStore'
 
 /** 时间轴顶部播放控制条：播放/暂停、回首帧、循环、时间/时长、秒-帧刻度切换、缩放 */
+
+/** 内联时长编辑：平时显示为「5.00s / 150f」文本，点击就地变无边框输入，回车/失焦提交 */
+const InlineDuration: React.FC<{
+  value: number
+  mode: TimeRulerMode
+  fps: number
+  onChange: (seconds: number) => void
+}> = ({ value, mode, fps, onChange }) => {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const begin = (): void => {
+    setDraft(mode === 'frames' ? String(Math.round(value * fps)) : String(value))
+    setEditing(true)
+  }
+  const commit = (): void => {
+    const raw = Number.parseFloat(draft)
+    if (Number.isFinite(raw)) onChange(mode === 'frames' ? raw / Math.max(1, fps) : raw)
+    setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className="cursor-text rounded px-1 text-text-dark hover:bg-layer"
+        title="点击编辑总时长"
+        onClick={begin}
+      >
+        {formatTimecode(value, mode, fps)}
+      </span>
+    )
+  }
+  return (
+    <UiInput
+      autoFocus
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur()
+        else if (event.key === 'Escape') setEditing(false)
+      }}
+      className="h-5 !w-14 rounded border-0 bg-layer px-1 text-xs tabular-nums"
+    />
+  )
+}
 
 interface PlaybackControlsProps {
   mode: TimeRulerMode
@@ -73,17 +120,7 @@ const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       <div className="ml-1 flex items-center gap-1 tabular-nums text-xs text-text-muted">
         <span className="text-text-dark">{formatTimecode(currentTime, mode, fps)}</span>
         <span>/</span>
-        <NumberInput
-          value={duration}
-          step={0.5}
-          min={0.1}
-          precision={mode === 'frames' ? 0 : 2}
-          widthClassName="w-16"
-          className="shrink-0"
-          commitOnChange
-          wheelStep
-          onChange={(next) => setDuration(next)}
-        />
+        <InlineDuration value={duration} mode={mode} fps={fps} onChange={setDuration} />
       </div>
 
       <div className="ml-auto flex items-center gap-2">

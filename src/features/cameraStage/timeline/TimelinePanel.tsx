@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
@@ -104,6 +104,23 @@ const TimelinePanel: React.FC = () => {
 
   const openEasing = useCallback((target: EasingEditTarget, anchor: { x: number; y: number }): void => {
     setEasing({ target, anchor })
+  }, [])
+
+  // 空格键播放/暂停（编辑器作用域全局；输入框内不拦截、无轨道时不响应）
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space') return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      const state = useCameraStageStore.getState()
+      if (state.animation.tracks.length === 0) return
+      event.preventDefault()
+      if (state.playback.playing) state.pause()
+      else state.play()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   return (
@@ -220,14 +237,27 @@ const TimelinePanel: React.FC = () => {
               )
             })}
 
-            {/* 播放头 */}
+            {/* 播放头：竖线 + 顶端向下三角（对齐常见时间轴/AE 的时间指针形态） */}
             <div
               className="pointer-events-none absolute bottom-0 top-0 z-20"
               style={{
                 left: LABEL_WIDTH + timeToX(currentTime, pxPerSecond),
                 borderLeft: `1px solid ${CAMERA_STAGE_TIMELINE_HEX.playhead}`,
               }}
-            />
+            >
+              <div
+                className="absolute top-0"
+                style={{
+                  left: 0,
+                  transform: 'translateX(-50%)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '5px solid transparent',
+                  borderRight: '5px solid transparent',
+                  borderTop: `7px solid ${CAMERA_STAGE_TIMELINE_HEX.playhead}`,
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
