@@ -4,12 +4,14 @@ import { Dropdown, UiButton, UiIconButton, UiOptionButton } from '@/components/u
 import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
 import { exportSceneScreenshot } from './export/cameraStageScreenshot'
+import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
 import type { CameraStageDockHandle } from './layout/CameraStageDock'
 import { saveCurrentProject } from './projects/cameraStageProjectService'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
+import QuickAddGroup from './toolbar/QuickAddGroup'
 
 /**
  * 运镜控制编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
@@ -29,6 +31,7 @@ interface CameraStageEditorProps {
 
 const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) => {
   const objects = useCameraStageStore((state) => state.objects)
+  const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
@@ -36,9 +39,13 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
+  const removeObject = useCameraStageStore((state) => state.removeObject)
+  const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
+  const requestFocusSelected = useCameraStageStore((state) => state.requestFocusSelected)
   const projectName = useCameraStageStore((state) => state.currentProjectName)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
+  const isCameraSelected = objects.find((item) => item.id === selectedId)?.type === 'camera'
 
   const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
 
@@ -100,34 +107,18 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     return () => window.clearTimeout(timer)
   }, [shotHint])
 
-  // 编辑器作用域快捷键：Ctrl/Cmd+S 保存、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做
-  // （输入框内不拦截 S，交给原生行为；撤销重做直接读 temporal，避免依赖 canUndo 频繁重挂监听）
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!(event.ctrlKey || event.metaKey)) return
-      const target = event.target as HTMLElement | null
-      const tag = target?.tagName
-      const inEditable = tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable
-      const key = event.key.toLowerCase()
-      if (key === 's') {
-        if (inEditable) return
-        event.preventDefault()
-        void handleSave()
-      } else if (key === 'z') {
-        if (inEditable) return
-        event.preventDefault()
-        const temporal = useCameraStageStore.temporal.getState()
-        if (event.shiftKey) temporal.redo()
-        else temporal.undo()
-      } else if (key === 'y') {
-        if (inEditable) return
-        event.preventDefault()
-        useCameraStageStore.temporal.getState().redo()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleSave])
+  // 编辑器作用域快捷键：W/E/R 切 gizmo、F 聚焦选中对象、Delete 删除、Ctrl+D 复制、
+  // Ctrl/Cmd+S 保存、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Shift+Z / Ctrl+Y 重做
+  useCameraStageShortcuts({
+    selectedId,
+    setGizmoMode,
+    removeObject,
+    duplicateObject,
+    requestFocusSelected,
+    handleSave: () => void handleSave(),
+    undo,
+    redo,
+  })
 
   const saveLabel =
     saveState === 'saving'
@@ -208,18 +199,25 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
           )}
         </div>
 
+        <QuickAddGroup />
+
         {viewMode === 'director' && (
           <div className="flex items-center gap-1.5 border-l border-border-dark pl-2">
-            {GIZMO_MODES.map((item) => (
-              <UiOptionButton
-                key={item.id}
-                active={gizmoMode === item.id}
-                onClick={() => setGizmoMode(item.id)}
-                className="py-1.5 text-xs"
-              >
-                {item.label}
-              </UiOptionButton>
-            ))}
+            {GIZMO_MODES.map((item) => {
+              const disabled = isCameraSelected && item.id !== 'translate'
+              return (
+                <UiOptionButton
+                  key={item.id}
+                  active={gizmoMode === item.id}
+                  disabled={disabled}
+                  title={disabled ? '机位相机仅支持移动（W/E/R 切换）' : undefined}
+                  onClick={() => setGizmoMode(item.id)}
+                  className="py-1.5 text-xs"
+                >
+                  {item.label}
+                </UiOptionButton>
+              )
+            })}
           </div>
         )}
 

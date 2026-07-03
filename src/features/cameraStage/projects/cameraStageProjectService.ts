@@ -40,6 +40,7 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
     objects: state.objects,
     activeCameraId: state.activeCameraId,
     animation: state.animation,
+    sceneSettings: state.sceneSettings,
   })
 
   const record: CameraStageProjectPlatformRecord = {
@@ -77,7 +78,12 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
   }
   const snapshot = deserializeScene(record.sceneJson)
   useCameraStageStore.getState().loadSnapshot(
-    { objects: snapshot.objects, activeCameraId: snapshot.activeCameraId, animation: snapshot.animation },
+    {
+      objects: snapshot.objects,
+      activeCameraId: snapshot.activeCameraId,
+      animation: snapshot.animation,
+      sceneSettings: snapshot.sceneSettings,
+    },
     { id: record.id, name: record.name },
   )
   clearCameraStageHistory()

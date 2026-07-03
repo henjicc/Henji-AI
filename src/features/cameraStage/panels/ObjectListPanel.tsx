@@ -1,20 +1,10 @@
 import React from 'react'
-import { Box, Camera, Eye, EyeOff, Trash2, User } from 'lucide-react'
-import Dropdown from '@/components/ui/Dropdown'
+import { Box, Camera, Copy, Eye, EyeOff, Trash2, User } from 'lucide-react'
 import { UiIconButton, UiOptionButton } from '@/components/ui'
-import { PRIMITIVE_KINDS, PRIMITIVE_KIND_LABELS } from '../domain/sceneDefaults'
-import type { StageObject, StagePrimitiveKind } from '../domain/sceneTypes'
+import type { StageObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
-/** 左侧场景对象列表：添加入口 + 列表选中/显隐/删除 */
-
-type AddOptionValue = StagePrimitiveKind | 'character' | 'camera'
-
-const ADD_OPTIONS: Array<{ label: string; value: AddOptionValue }> = [
-  ...PRIMITIVE_KINDS.map((kind) => ({ label: PRIMITIVE_KIND_LABELS[kind], value: kind as AddOptionValue })),
-  { label: '角色', value: 'character' },
-  { label: '机位相机', value: 'camera' },
-]
+/** 左侧场景对象列表：列表选中/显隐/复制/删除；添加入口统一收在顶部工具栏快速添加栏 */
 
 const TypeIcon: React.FC<{ object: StageObject }> = ({ object }) => {
   if (object.type === 'character') return <User size={14} />
@@ -29,19 +19,7 @@ const ObjectListPanel: React.FC = () => {
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const updateObject = useCameraStageStore((state) => state.updateObject)
-  const addPrimitive = useCameraStageStore((state) => state.addPrimitive)
-  const addCharacter = useCameraStageStore((state) => state.addCharacter)
-  const addCamera = useCameraStageStore((state) => state.addCamera)
-
-  const handleAdd = (value: AddOptionValue): void => {
-    if (value === 'character') {
-      addCharacter()
-    } else if (value === 'camera') {
-      addCamera()
-    } else {
-      addPrimitive(value)
-    }
-  }
+  const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-dark">
@@ -49,20 +27,10 @@ const ObjectListPanel: React.FC = () => {
         <span className="text-sm font-medium text-text-dark">场景对象</span>
         <span className="text-xs text-text-muted">{objects.length}</span>
       </div>
-      <div className="px-3 pb-2">
-        <Dropdown<AddOptionValue>
-          display="＋ 添加对象"
-          options={ADD_OPTIONS}
-          onSelect={handleAdd}
-          className="w-full"
-          buttonClassName="w-full justify-center"
-          minWidthStrategy="none"
-        />
-      </div>
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {objects.length === 0 && (
           <div className="px-2 pt-6 text-center text-xs text-text-muted">
-            场景为空，点击上方"添加对象"开始搭建
+            场景为空，点击顶部工具栏的快速添加图标开始搭建
           </div>
         )}
         <div className="flex flex-col gap-1">
@@ -87,6 +55,15 @@ const ObjectListPanel: React.FC = () => {
                 onClick={() => updateObject(object.id, { visible: !object.visible })}
               >
                 {object.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+              </UiIconButton>
+              <UiIconButton
+                showBorder={false}
+                appearance="hover-only"
+                className="h-7 w-7 shrink-0"
+                title="复制 (Ctrl+D)"
+                onClick={() => duplicateObject(object.id)}
+              >
+                <Copy size={13} />
               </UiIconButton>
               <UiIconButton
                 showBorder={false}

@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import type { StoreApi } from 'zustand'
 import { temporal } from 'zundo'
+import { v4 as uuidv4 } from 'uuid'
 import {
   PRIMITIVE_KIND_LABELS,
   createCameraObject,
   createCharacterObject,
+  createDefaultSceneSettings,
   createPrimitiveObject,
   pickDefaultColor,
 } from '../domain/sceneDefaults'
@@ -19,30 +21,22 @@ import {
   type StagePlaybackState,
   type StageSceneAnimation,
 } from '../domain/animationTypes'
-import { getAnimatableGroupByPath, getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
-import {
-  getTrack,
-  hasKeyframeAtTime,
-  moveTrackKeyframe,
-  removeObjectTracks,
-  removeTrack,
-  removeTrackKeyframe,
-  setTrackKeyframeEasing,
-  setTrackKeyframeValue,
-  upsertTrackKeyframe,
-} from './animationActions'
+import { getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
+import { getTrack, removeObjectTracks, upsertTrackKeyframe } from './animationActions'
+import { createKeyframeSlice } from './keyframeSlice'
 import { applyAnimationAtTime } from './playbackSampling'
 import type {
   StageGizmoMode,
   StageObject,
   StageObjectPatch,
   StagePrimitiveKind,
+  StageSceneSettings,
   StageTransform,
   StageVec3,
   StageViewMode,
 } from '../domain/sceneTypes'
 
-interface CameraStageState {
+export interface CameraStageState {
   objects: StageObject[]
   selectedId: string | null
   gizmoMode: StageGizmoMode
@@ -58,9 +52,15 @@ interface CameraStageState {
   playback: StagePlaybackState
   /** 时间轴当前选中的关键帧集合（objectId::path::time 键），界面态 */
   selectedKeyframes: string[]
+  /** 场景级设置（背景色/网格显隐），随工程持久化，不进撤销历史 */
+  sceneSettings: StageSceneSettings
+  /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
+  focusToken: number
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
+  /** 深拷贝复制对象（含角色姿态/机位设置），名称自动递增，复制后自动选中 */
+  duplicateObject: (id: string) => void
   removeObject: (id: string) => void
   setSelected: (id: string | null) => void
   setGizmoMode: (mode: StageGizmoMode) => void
@@ -109,6 +109,12 @@ interface CameraStageState {
   setPlaybackTime: (time: number) => void
   toggleLoop: () => void
   setSelectedKeyframes: (keys: string[]) => void
+
+  /* ---- 场景设置 / 视口交互动作（非 tracked） ---- */
+  setSceneBackgroundColor: (color: string) => void
+  setSceneGridVisible: (visible: boolean) => void
+  /** 请求把视口平滑对准当前选中对象（无选中对象时不生效） */
+  requestFocusSelected: () => void
 }
 
 /** 时间轴关键帧唯一键（选中集合、拖拽标识用） */
@@ -214,6 +220,8 @@ export const useCameraStageStore = create<CameraStageState>()(
   animation: createDefaultAnimation(),
   playback: createDefaultPlayback(),
   selectedKeyframes: [],
+  sceneSettings: createDefaultSceneSettings(),
+  focusToken: 0,
 
   addPrimitive: (kind) =>
     set((state) => {
@@ -241,6 +249,20 @@ export const useCameraStageStore = create<CameraStageState>()(
         pickDefaultColor(state.objects.length),
       )
       return { objects: [...state.objects, object], selectedId: object.id, activeCameraId: object.id }
+    }),
+
+  duplicateObject: (id) =>
+    set((state) => {
+      const source = state.objects.find((item) => item.id === id)
+      if (!source) return {}
+      const clone = structuredClone(source)
+      clone.id = uuidv4()
+      clone.name = nextName(state.objects, source.name)
+      return {
+        objects: [...state.objects, clone],
+        selectedId: clone.id,
+        activeCameraId: clone.type === 'camera' ? clone.id : state.activeCameraId,
+      }
     }),
 
   removeObject: (id) =>
@@ -358,6 +380,8 @@ export const useCameraStageStore = create<CameraStageState>()(
       animation: createDefaultAnimation(),
       playback: createDefaultPlayback(),
       selectedKeyframes: [],
+      sceneSettings: createDefaultSceneSettings(),
+      focusToken: 0,
     }),
 
   loadSnapshot: (snapshot, project) =>
@@ -376,93 +400,12 @@ export const useCameraStageStore = create<CameraStageState>()(
         animation: snapshot.animation ?? createDefaultAnimation(),
         playback: createDefaultPlayback(),
         selectedKeyframes: [],
+        sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),
+        focusToken: 0,
       }
     }),
 
-  toggleKeyframeGroup: (objectId, groupPath) =>
-    set((state) => {
-      const object = state.objects.find((item) => item.id === objectId)
-      const group = getAnimatableGroupByPath(groupPath)
-      if (!object || !group) return {}
-      const time = state.playback.currentTime
-      const allKeyed = group.children.every((child) =>
-        hasKeyframeAtTime(state.animation, objectId, child.path, time),
-      )
-      let animation = state.animation
-      if (allKeyed) {
-        // 整组均已有点 → 删除各分量在当前时间的点
-        for (const child of group.children) {
-          animation = removeTrackKeyframe(animation, objectId, child.path, time)
-        }
-      } else {
-        // 否则补齐各分量在当前时间的点（缺则建轨）
-        for (const child of group.children) {
-          animation = upsertTrackKeyframe(animation, objectId, child.path, time, child.getValue(object))
-        }
-      }
-      return { animation }
-    }),
-
-  toggleKeyframe: (objectId, path) =>
-    set((state) => {
-      const object = state.objects.find((item) => item.id === objectId)
-      const descriptor = getAnimatablePropByPath(path)
-      if (!object || !descriptor) return {}
-      const time = state.playback.currentTime
-      if (hasKeyframeAtTime(state.animation, objectId, path, time)) {
-        return { animation: removeTrackKeyframe(state.animation, objectId, path, time) }
-      }
-      return {
-        animation: upsertTrackKeyframe(state.animation, objectId, path, time, descriptor.getValue(object)),
-      }
-    }),
-
-  keyframeAtCurrentTime: (objectId, path) =>
-    set((state) => {
-      const object = state.objects.find((item) => item.id === objectId)
-      const descriptor = getAnimatablePropByPath(path)
-      if (!object || !descriptor) return {}
-      return {
-        animation: upsertTrackKeyframe(
-          state.animation,
-          objectId,
-          path,
-          state.playback.currentTime,
-          descriptor.getValue(object),
-        ),
-      }
-    }),
-
-  removeKeyframe: (objectId, path, time) =>
-    set((state) => ({ animation: removeTrackKeyframe(state.animation, objectId, path, time) })),
-
-  moveKeyframe: (objectId, path, fromTime, toTime) =>
-    set((state) => ({ animation: moveTrackKeyframe(state.animation, objectId, path, fromTime, toTime) })),
-
-  setKeyframeValue: (objectId, path, time, value) =>
-    set((state) => ({
-      animation: setTrackKeyframeValue(state.animation, objectId, path, time, value),
-    })),
-
-  setKeyframesEasing: (targets, easing) =>
-    set((state) => {
-      let animation = state.animation
-      for (const target of targets) {
-        animation = setTrackKeyframeEasing(animation, target.objectId, target.path, target.time, easing)
-      }
-      return animation === state.animation ? {} : { animation }
-    }),
-
-  clearTrack: (objectId, path) =>
-    set((state) => ({ animation: removeTrack(state.animation, objectId, path) })),
-
-  setDuration: (duration) =>
-    set((state) => ({
-      animation: { ...state.animation, duration: Math.max(0.1, duration) },
-    })),
-
-  setFps: (fps) =>
-    set((state) => ({ animation: { ...state.animation, fps: Math.max(1, Math.round(fps)) } })),
+  ...createKeyframeSlice(set),
 
   play: () =>
     set((state) => {
@@ -498,6 +441,14 @@ export const useCameraStageStore = create<CameraStageState>()(
   toggleLoop: () => set((state) => ({ playback: { ...state.playback, loop: !state.playback.loop } })),
 
   setSelectedKeyframes: (keys) => set({ selectedKeyframes: keys }),
+
+  setSceneBackgroundColor: (color) =>
+    set((state) => ({ sceneSettings: { ...state.sceneSettings, backgroundColor: color } })),
+
+  setSceneGridVisible: (visible) =>
+    set((state) => ({ sceneSettings: { ...state.sceneSettings, gridVisible: visible } })),
+
+  requestFocusSelected: () => set((state) => ({ focusToken: state.focusToken + 1 })),
     }),
     {
       limit: 100,

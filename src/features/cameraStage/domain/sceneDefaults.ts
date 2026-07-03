@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
+import { CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import { POSE_PRESETS } from './posePresets.gen'
 import { clonePose, createEmptyPose } from './poseTypes'
 import type {
@@ -7,6 +7,7 @@ import type {
   StageCharacterObject,
   StagePrimitiveKind,
   StagePrimitiveObject,
+  StageSceneSettings,
   StageTransform,
 } from './sceneTypes'
 
@@ -74,4 +75,8 @@ export function createCameraObject(name: string, color: string): StageCameraObje
     fov: 50,
     lookAt: { mode: 'manual', target: { x: 0, y: 1, z: 0 } },
   }
+}
+
+export function createDefaultSceneSettings(): StageSceneSettings {
+  return { backgroundColor: CAMERA_STAGE_COLOR_HEX.stageBg, gridVisible: true }
 }

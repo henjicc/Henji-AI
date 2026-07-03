@@ -8,6 +8,7 @@ import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import StageCaptureBridge from './StageCaptureBridge'
 import type { StageCaptureFn } from './StageCaptureBridge'
+import StageFocusController from './StageFocusController'
 import StageObjectMesh from './StageObjectMesh'
 import StagePlaybackDriver from './StagePlaybackDriver'
 import StageViewportCamera from './StageViewportCamera'
@@ -31,6 +32,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
+  const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
 
@@ -93,7 +95,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       camera={{ position: [5, 4, 7], fov: 50 }}
       // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
       gl={{ preserveDrawingBuffer: true }}
-      style={{ background: CAMERA_STAGE_COLOR_HEX.stageBg }}
+      style={{ background: sceneSettings.backgroundColor }}
       onPointerMissed={() => setSelected(null)}
     >
       {captureRef && <StageCaptureBridge captureRef={captureRef} />}
@@ -106,14 +108,16 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           lookAtTarget={activeCameraTarget}
         />
       )}
-      <Grid
-        infiniteGrid
-        cellSize={0.5}
-        sectionSize={2.5}
-        cellColor={CAMERA_STAGE_COLOR_HEX.gridCell}
-        sectionColor={CAMERA_STAGE_COLOR_HEX.gridSection}
-        fadeDistance={40}
-      />
+      {sceneSettings.gridVisible && (
+        <Grid
+          infiniteGrid
+          cellSize={0.5}
+          sectionSize={2.5}
+          cellColor={CAMERA_STAGE_COLOR_HEX.gridCell}
+          sectionColor={CAMERA_STAGE_COLOR_HEX.gridSection}
+          fadeDistance={40}
+        />
+      )}
       {objects.map((object) => (
         <StageObjectMesh
           key={object.id}
@@ -132,7 +136,12 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           onObjectChange={handleGizmoChange}
         />
       )}
-      {!isCameraView && <OrbitControls makeDefault />}
+      {!isCameraView && (
+        <>
+          <OrbitControls makeDefault />
+          <StageFocusController />
+        </>
+      )}
     </Canvas>
   )
 }

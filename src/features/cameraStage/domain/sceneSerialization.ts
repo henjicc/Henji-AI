@@ -6,14 +6,16 @@
  * v2 起并入关键帧动画（tracks/duration/fps）；加载 v1 工程视为无动画。
  * v3 起关键帧轨道按分量存储（位置/旋转/缩放/关节拆成 X/Y/Z 三条 scalar 轨道）；
  * 加载 v2 的整体 Vec3 轨道时自动拆分为分量轨道。
+ * v4 起并入场景级设置（背景色/网格显隐）；加载 v3 及以下工程视为默认设置。
  */
 
 import { createDefaultAnimation } from './animationTypes'
 import type { StageKeyframe, StageSceneAnimation, StageTrack } from './animationTypes'
-import type { StageObject, StageVec3 } from './sceneTypes'
+import { createDefaultSceneSettings } from './sceneDefaults'
+import type { StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 3
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 4
 
 export interface StageSceneSnapshot {
   schemaVersion: number
@@ -22,12 +24,15 @@ export interface StageSceneSnapshot {
   activeCameraId: string | null
   /** 关键帧动画数据（v2 引入） */
   animation: StageSceneAnimation
+  /** 场景级设置（v4 引入） */
+  sceneSettings: StageSceneSettings
 }
 
 export interface StageSceneSnapshotInput {
   objects: StageObject[]
   activeCameraId: string | null
   animation: StageSceneAnimation
+  sceneSettings: StageSceneSettings
 }
 
 export function serializeScene(input: StageSceneSnapshotInput): string {
@@ -36,6 +41,7 @@ export function serializeScene(input: StageSceneSnapshotInput): string {
     objects: input.objects,
     activeCameraId: input.activeCameraId,
     animation: input.animation,
+    sceneSettings: input.sceneSettings,
   }
   return JSON.stringify(snapshot)
 }
@@ -54,6 +60,17 @@ function parseAnimation(raw: unknown): StageSceneAnimation {
     tracks,
     duration: Number.isFinite(duration) && duration > 0 ? duration : fallback.duration,
     fps: Number.isFinite(fps) && fps > 0 ? Math.round(fps) : fallback.fps,
+  }
+}
+
+/** 宽松解析场景设置字段：结构缺失/非法时逐字段回退默认值 */
+function parseSceneSettings(raw: unknown): StageSceneSettings {
+  const fallback = createDefaultSceneSettings()
+  if (!raw || typeof raw !== 'object') return fallback
+  const record = raw as Record<string, unknown>
+  return {
+    backgroundColor: typeof record.backgroundColor === 'string' ? record.backgroundColor : fallback.backgroundColor,
+    gridVisible: typeof record.gridVisible === 'boolean' ? record.gridVisible : fallback.gridVisible,
   }
 }
 
@@ -100,11 +117,14 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   if (version < 3 && animation.tracks.length > 0) {
     animation = { ...animation, tracks: animation.tracks.flatMap(splitVec3Track) }
   }
+  // v3 及以下工程无 sceneSettings 字段 → 视为默认设置
+  const sceneSettings = version >= 4 ? parseSceneSettings(record.sceneSettings) : createDefaultSceneSettings()
 
   return {
     schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
     objects,
     activeCameraId,
     animation,
+    sceneSettings,
   }
 }

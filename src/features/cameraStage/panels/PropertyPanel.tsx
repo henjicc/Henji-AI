@@ -8,6 +8,7 @@ import { beginHistorySession, endHistorySession, useCameraStageStore } from '../
 import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 import CameraSettingsSection from './CameraSettingsSection'
 import CharacterPoseSection from './CharacterPoseSection'
+import SceneSettingsPanel from './SceneSettingsPanel'
 
 /** 右侧属性面板：名称/颜色/变换（位置、旋转、缩放）与对象类型专属字段 */
 
@@ -119,14 +120,7 @@ const PropertyPanel: React.FC = () => {
   const selected: StageObject | undefined = objects.find((item) => item.id === selectedId)
 
   if (!selected) {
-    return (
-      <div className="flex h-full w-full flex-col bg-surface-dark">
-        <div className="px-3 pb-2 pt-3 text-sm font-medium text-text-dark">属性</div>
-        <div className="px-3 pt-4 text-center text-xs text-text-muted">
-          选中一个场景对象后在这里编辑属性
-        </div>
-      </div>
-    )
+    return <SceneSettingsPanel />
   }
 
   const handleScaleLockedChange = (locked: boolean): void => {
