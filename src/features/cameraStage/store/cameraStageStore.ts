@@ -112,8 +112,13 @@ export interface CameraStageState {
   setSelectedKeyframes: (keys: string[]) => void
 
   /* ---- 场景设置 / 视口交互动作（非 tracked） ---- */
-  setSceneBackgroundColor: (color: string) => void
-  setSceneGridVisible: (visible: boolean) => void
+  setSceneGroundColor: (color: string) => void
+  setSceneGroundPattern: (pattern: StageSceneSettings['ground']['pattern']) => void
+  setSceneGroundDensity: (density: number) => void
+  setSceneSkyColor: (color: string) => void
+  setSceneSunlightEnabled: (enabled: boolean) => void
+  setSceneSunlightIntensity: (intensity: number) => void
+  setSceneSunlightTimeOfDay: (timeOfDay: number) => void
   /** 请求把视口平滑对准当前选中对象（无选中对象时不生效） */
   requestFocusSelected: () => void
 }
@@ -457,11 +462,49 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   setSelectedKeyframes: (keys) => set({ selectedKeyframes: keys }),
 
-  setSceneBackgroundColor: (color) =>
-    set((state) => ({ sceneSettings: { ...state.sceneSettings, backgroundColor: color } })),
+  setSceneGroundColor: (color) =>
+    set((state) => ({
+      sceneSettings: { ...state.sceneSettings, ground: { ...state.sceneSettings.ground, color } },
+    })),
 
-  setSceneGridVisible: (visible) =>
-    set((state) => ({ sceneSettings: { ...state.sceneSettings, gridVisible: visible } })),
+  setSceneGroundPattern: (pattern) =>
+    set((state) => ({
+      sceneSettings: { ...state.sceneSettings, ground: { ...state.sceneSettings.ground, pattern } },
+    })),
+
+  setSceneGroundDensity: (density) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        ground: { ...state.sceneSettings.ground, density: Math.max(1, Math.min(24, density)) },
+      },
+    })),
+
+  setSceneSkyColor: (color) =>
+    set((state) => ({
+      sceneSettings: { ...state.sceneSettings, sky: { color } },
+    })),
+
+  setSceneSunlightEnabled: (enabled) =>
+    set((state) => ({
+      sceneSettings: { ...state.sceneSettings, sunlight: { ...state.sceneSettings.sunlight, enabled } },
+    })),
+
+  setSceneSunlightIntensity: (intensity) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        sunlight: { ...state.sceneSettings.sunlight, intensity: Math.max(0, Math.min(3, intensity)) },
+      },
+    })),
+
+  setSceneSunlightTimeOfDay: (timeOfDay) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        sunlight: { ...state.sceneSettings.sunlight, timeOfDay: Math.max(0, Math.min(24, timeOfDay)) },
+      },
+    })),
 
   requestFocusSelected: () => set((state) => ({ focusToken: state.focusToken + 1 })),
     }),

@@ -8,6 +8,7 @@
  * 加载 v2 的整体 Vec3 轨道时自动拆分为分量轨道。
  * v4 起并入场景级设置（背景色/网格显隐）；加载 v3 及以下工程视为默认设置。
  * v5 起摄像机对象新增 aspectRatio（画幅比例）字段；加载 v4 及以下工程时给已有摄像机补默认 16:9。
+ * v6 起场景设置拆分为 ground / sky / sunlight；加载 v5 及以下工程时把旧背景色/网格迁移到新结构。
  */
 
 import { createDefaultAnimation } from './animationTypes'
@@ -16,7 +17,7 @@ import { createDefaultSceneSettings } from './sceneDefaults'
 import type { StageCameraObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 5
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 6
 
 export interface StageSceneSnapshot {
   schemaVersion: number
@@ -69,9 +70,55 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
   const fallback = createDefaultSceneSettings()
   if (!raw || typeof raw !== 'object') return fallback
   const record = raw as Record<string, unknown>
+  if ('ground' in record || 'sky' in record || 'sunlight' in record) {
+    const groundRecord = record.ground as Record<string, unknown> | undefined
+    const skyRecord = record.sky as Record<string, unknown> | undefined
+    const sunlightRecord = record.sunlight as Record<string, unknown> | undefined
+    const pattern = groundRecord?.pattern
+    const density = Number(groundRecord?.density)
+    const intensity = Number(sunlightRecord?.intensity)
+    const timeOfDay = Number(sunlightRecord?.timeOfDay)
+
+    return {
+      ground: {
+        color: typeof groundRecord?.color === 'string' ? groundRecord.color : fallback.ground.color,
+        pattern:
+          pattern === 'none' || pattern === 'grid' || pattern === 'checker'
+            ? pattern
+            : fallback.ground.pattern,
+        density:
+          Number.isFinite(density) && density >= 1 && density <= 24
+            ? density
+            : fallback.ground.density,
+      },
+      sky: {
+        color: typeof skyRecord?.color === 'string' ? skyRecord.color : fallback.sky.color,
+      },
+      sunlight: {
+        enabled:
+          typeof sunlightRecord?.enabled === 'boolean' ? sunlightRecord.enabled : fallback.sunlight.enabled,
+        intensity:
+          Number.isFinite(intensity) && intensity >= 0 && intensity <= 3
+            ? intensity
+            : fallback.sunlight.intensity,
+        timeOfDay:
+          Number.isFinite(timeOfDay) && timeOfDay >= 0 && timeOfDay <= 24
+            ? timeOfDay
+            : fallback.sunlight.timeOfDay,
+      },
+    }
+  }
+
   return {
-    backgroundColor: typeof record.backgroundColor === 'string' ? record.backgroundColor : fallback.backgroundColor,
-    gridVisible: typeof record.gridVisible === 'boolean' ? record.gridVisible : fallback.gridVisible,
+    ground: {
+      color: fallback.ground.color,
+      pattern: record.gridVisible === false ? 'none' : 'grid',
+      density: fallback.ground.density,
+    },
+    sky: {
+      color: typeof record.backgroundColor === 'string' ? record.backgroundColor : fallback.sky.color,
+    },
+    sunlight: fallback.sunlight,
   }
 }
 
@@ -132,7 +179,7 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   if (version < 3 && animation.tracks.length > 0) {
     animation = { ...animation, tracks: animation.tracks.flatMap(splitVec3Track) }
   }
-  // v3 及以下工程无 sceneSettings 字段 → 视为默认设置
+  // v3 及以下工程无 sceneSettings 字段 → 视为默认设置；v4/v5 的旧结构在 parseSceneSettings 中迁移
   const sceneSettings = version >= 4 ? parseSceneSettings(record.sceneSettings) : createDefaultSceneSettings()
 
   return {

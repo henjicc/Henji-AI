@@ -6,6 +6,7 @@ import type {
   StageCameraAspectRatioPreset,
   StageCameraObject,
   StageCharacterObject,
+  StageGroundPattern,
   StagePrimitiveKind,
   StagePrimitiveObject,
   StageSceneSettings,
@@ -36,6 +37,12 @@ export const CAMERA_ASPECT_RATIO_PRESETS: Array<{
   { value: '1:1', label: '1:1', ratio: 1 },
   { value: '9:16', label: '9:16', ratio: 9 / 16 },
   { value: 'custom', label: '自定义', ratio: null },
+]
+
+export const GROUND_PATTERN_OPTIONS: Array<{ value: StageGroundPattern; label: string }> = [
+  { value: 'none', label: '纯色' },
+  { value: 'grid', label: '网格' },
+  { value: 'checker', label: '棋盘' },
 ]
 
 export function createIdentityTransform(): StageTransform {
@@ -98,5 +105,19 @@ export function createCameraObject(
 }
 
 export function createDefaultSceneSettings(): StageSceneSettings {
-  return { backgroundColor: CAMERA_STAGE_COLOR_HEX.stageBg, gridVisible: true }
+  return {
+    ground: {
+      color: CAMERA_STAGE_COLOR_HEX.groundBase,
+      pattern: 'grid',
+      density: 8,
+    },
+    sky: {
+      color: CAMERA_STAGE_COLOR_HEX.stageBg,
+    },
+    sunlight: {
+      enabled: true,
+      intensity: 1,
+      timeOfDay: 14,
+    },
+  }
 }

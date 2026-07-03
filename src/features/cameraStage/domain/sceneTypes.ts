@@ -93,11 +93,27 @@ export interface StageObjectPatch {
 
 export type StageGizmoMode = 'translate' | 'rotate' | 'scale'
 export type StageViewMode = 'director' | 'camera'
+export type StageGroundPattern = 'none' | 'grid' | 'checker'
+
+export interface StageGroundSettings {
+  color: string
+  pattern: StageGroundPattern
+  density: number
+}
+
+export interface StageSkySettings {
+  color: string
+}
+
+export interface StageSunlightSettings {
+  enabled: boolean
+  intensity: number
+  timeOfDay: number
+}
 
 /** 场景级设置（未选中对象时的属性面板展示，随工程持久化） */
 export interface StageSceneSettings {
-  /** 场景背景色（hex） */
-  backgroundColor: string
-  /** 地面参考网格显隐 */
-  gridVisible: boolean
+  ground: StageGroundSettings
+  sky: StageSkySettings
+  sunlight: StageSunlightSettings
 }

@@ -37,8 +37,12 @@ export const STORYBOARD_NOTE_TEXT_HEX = '#E5E5E5';
 // 运镜控制三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
 export const CAMERA_STAGE_COLOR_HEX = {
   stageBg: '#18181c',
+  groundBase: '#24242a',
   gridCell: '#303036',
   gridSection: '#4a4a52',
+  sunlightNight: '#8FA8D8',
+  sunlightWarm: '#FFD2A6',
+  sunlightNoon: '#FFF6E0',
   objectWarm: '#e8734a',
   objectCool: '#4a90e8',
   characterPlaceholder: '#d9a441',

@@ -1,8 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Grid, OrbitControls } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 import type { Group } from 'three'
-import { CAMERA_STAGE_COLOR_HEX } from '@/core/theme/colorTokens'
 import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
@@ -12,8 +11,10 @@ import StageCameraViewControls from './StageCameraViewControls'
 import StageCaptureBridge from './StageCaptureBridge'
 import type { StageCaptureFn } from './StageCaptureBridge'
 import StageFocusController from './StageFocusController'
+import StageGround from './StageGround'
 import StageObjectMesh from './StageObjectMesh'
 import StagePlaybackDriver from './StagePlaybackDriver'
+import StageSunLight from './StageSunLight'
 import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
 
@@ -98,13 +99,13 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       camera={{ position: [5, 4, 7], fov: 50 }}
       // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
       gl={{ preserveDrawingBuffer: true }}
-      style={{ background: sceneSettings.backgroundColor }}
+      style={{ background: sceneSettings.sky.color }}
       onPointerMissed={() => setSelected(null)}
     >
       {captureRef && <StageCaptureBridge captureRef={captureRef} />}
       <StagePlaybackDriver />
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 8, 4]} intensity={1.2} />
+      <StageSunLight settings={sceneSettings} />
+      <StageGround settings={sceneSettings.ground} />
       {isCameraView && (
         <>
           <StageViewportCamera
@@ -118,16 +119,6 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
             />
           )}
         </>
-      )}
-      {sceneSettings.gridVisible && (
-        <Grid
-          infiniteGrid
-          cellSize={0.5}
-          sectionSize={2.5}
-          cellColor={CAMERA_STAGE_COLOR_HEX.gridCell}
-          sectionColor={CAMERA_STAGE_COLOR_HEX.gridSection}
-          fadeDistance={40}
-        />
       )}
       {objects.map((object) => (
         <StageObjectMesh
