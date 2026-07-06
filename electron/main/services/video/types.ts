@@ -33,3 +33,35 @@ export interface GenerateVideoThumbnailPayloadDto {
 export interface GenerateVideoThumbnailResultDto {
   dataUrl: string
 }
+
+export interface StartVideoFrameExportPayloadDto {
+  frameCount: number
+  fps: number
+  width: number
+  height: number
+  fileNameStem: string
+}
+
+export interface StartVideoFrameExportResultDto {
+  sessionId: string
+}
+
+export interface AppendVideoFrameExportPayloadDto {
+  sessionId: string
+  frameIndex: number
+  dataUrl: string
+}
+
+export interface FinishVideoFrameExportPayloadDto {
+  sessionId: string
+  targetPath?: string
+}
+
+export interface VideoFrameExportResultDto {
+  mediaPath: string
+  savedPath: string
+  durationSeconds: number
+  frameCount: number
+  width: number
+  height: number
+}

@@ -1,11 +1,22 @@
+import {
+  appendVideoFrameExport,
+  cancelVideoFrameExport,
+  finishVideoFrameExport,
+  startVideoFrameExport,
+} from '../services/video/frame-export'
 import { compressVideoToFit, generateVideoThumbnail, generateVideoThumbnailBytes, readVideoInfo, trimVideoSource } from '../services/video/ops'
 import type {
+  AppendVideoFrameExportPayloadDto,
   CompressVideoToFitPayloadDto,
   CompressVideoToFitResultDto,
+  FinishVideoFrameExportPayloadDto,
   GenerateVideoThumbnailPayloadDto,
   GenerateVideoThumbnailResultDto,
+  StartVideoFrameExportPayloadDto,
+  StartVideoFrameExportResultDto,
   TrimVideoSourcePayloadDto,
   TrimVideoSourceResultDto,
+  VideoFrameExportResultDto,
   VideoInfoResultDto,
 } from '../services/video/types'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
@@ -35,6 +46,26 @@ export function registerVideoIpc(): void {
       const bytes = await generateVideoThumbnailBytes(source, maxSize)
       return { bytes }
     }
+  )
+  registerIpcHandler<StartVideoFrameExportPayloadDto, StartVideoFrameExportResultDto>(
+    'video:startFrameExport',
+    parseStartFrameExportPayload,
+    (payload) => startVideoFrameExport(payload)
+  )
+  registerIpcHandler<AppendVideoFrameExportPayloadDto, { frameIndex: number }>(
+    'video:appendFrameExport',
+    parseAppendFrameExportPayload,
+    (payload) => appendVideoFrameExport(payload)
+  )
+  registerIpcHandler<FinishVideoFrameExportPayloadDto, VideoFrameExportResultDto>(
+    'video:finishFrameExport',
+    parseFinishFrameExportPayload,
+    (payload) => finishVideoFrameExport(payload)
+  )
+  registerIpcHandler<string, void>(
+    'video:cancelFrameExport',
+    (input) => parseStringField(input, 'sessionId'),
+    (sessionId) => cancelVideoFrameExport(sessionId)
   )
 }
 
@@ -97,6 +128,63 @@ function readOptionalNumber(record: Record<string, unknown>, field: string): num
   if (value === undefined) return undefined
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`Expected finite number field "${field}"`)
+  }
+  return value
+}
+
+function parseStartFrameExportPayload(input: unknown): StartVideoFrameExportPayloadDto {
+  const record = parseRecord(input)
+  return {
+    frameCount: readPositiveInteger(record, 'frameCount'),
+    fps: readBoundedNumber(record, 'fps', 1, 120),
+    width: readPositiveInteger(record, 'width'),
+    height: readPositiveInteger(record, 'height'),
+    fileNameStem: readString(record, 'fileNameStem'),
+  }
+}
+
+function parseAppendFrameExportPayload(input: unknown): AppendVideoFrameExportPayloadDto {
+  const record = parseRecord(input)
+  return {
+    sessionId: readString(record, 'sessionId'),
+    frameIndex: readInteger(record, 'frameIndex'),
+    dataUrl: readString(record, 'dataUrl'),
+  }
+}
+
+function parseFinishFrameExportPayload(input: unknown): FinishVideoFrameExportPayloadDto {
+  const record = parseRecord(input)
+  const targetPath = record.targetPath
+  if (targetPath !== undefined && typeof targetPath !== 'string') {
+    throw new Error('Expected string field "targetPath"')
+  }
+  return {
+    sessionId: readString(record, 'sessionId'),
+    targetPath,
+  }
+}
+
+function readInteger(record: Record<string, unknown>, field: string): number {
+  const value = readNumber(record, field)
+  if (!Number.isInteger(value)) throw new Error(`Expected integer field "${field}"`)
+  return value
+}
+
+function readPositiveInteger(record: Record<string, unknown>, field: string): number {
+  const value = readInteger(record, field)
+  if (value <= 0) throw new Error(`Expected positive integer field "${field}"`)
+  return value
+}
+
+function readBoundedNumber(
+  record: Record<string, unknown>,
+  field: string,
+  min: number,
+  max: number,
+): number {
+  const value = readNumber(record, field)
+  if (value < min || value > max) {
+    throw new Error(`Expected field "${field}" to be between ${min} and ${max}`)
   }
   return value
 }

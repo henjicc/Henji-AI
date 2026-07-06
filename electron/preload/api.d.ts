@@ -404,12 +404,44 @@ export interface HenjiVideoCompressVideoToFitResult {
   sizeBytes: number
 }
 
+export interface HenjiVideoStartFrameExportPayload {
+  frameCount: number
+  fps: number
+  width: number
+  height: number
+  fileNameStem: string
+}
+
+export interface HenjiVideoAppendFrameExportPayload {
+  sessionId: string
+  frameIndex: number
+  dataUrl: string
+}
+
+export interface HenjiVideoFinishFrameExportPayload {
+  sessionId: string
+  targetPath?: string
+}
+
+export interface HenjiVideoFrameExportResult {
+  mediaPath: string
+  savedPath: string
+  durationSeconds: number
+  frameCount: number
+  width: number
+  height: number
+}
+
 export interface HenjiVideoApi {
   readVideoInfo(source: string): Promise<HenjiVideoInfoResult>
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
   compressVideoToFit(payload: HenjiVideoCompressVideoToFitPayload): Promise<HenjiVideoCompressVideoToFitResult>
   generateThumbnail(payload: { source: string; timeOffsetSeconds?: number }): Promise<{ dataUrl: string }>
   generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
+  startFrameExport(payload: HenjiVideoStartFrameExportPayload): Promise<{ sessionId: string }>
+  appendFrameExport(payload: HenjiVideoAppendFrameExportPayload): Promise<{ frameIndex: number }>
+  finishFrameExport(payload: HenjiVideoFinishFrameExportPayload): Promise<HenjiVideoFrameExportResult>
+  cancelFrameExport(sessionId: string): Promise<void>
 }
 
 export interface HenjiAudioExtractSamplesResult {

@@ -293,6 +293,10 @@ const videoApi: HenjiVideoApi = {
   compressVideoToFit: (payload) => nativeInvoke('video:compressVideoToFit', payload),
   generateThumbnail: (payload) => nativeInvoke('video:generateThumbnail', payload),
   generateThumbnailBytes: (payload) => nativeInvoke('video:generateThumbnailBytes', payload),
+  startFrameExport: (payload) => nativeInvoke('video:startFrameExport', payload),
+  appendFrameExport: (payload) => nativeInvoke('video:appendFrameExport', payload),
+  finishFrameExport: (payload) => nativeInvoke('video:finishFrameExport', payload),
+  cancelFrameExport: (sessionId) => nativeInvoke('video:cancelFrameExport', { sessionId }),
 }
 
 const audioApi: HenjiAudioApi = {

@@ -1,10 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Clipboard, Redo2, Save, Undo2 } from 'lucide-react'
+import { ArrowLeft, Camera, Clipboard, Film, Redo2, Save, Undo2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { cancelVideoFrameExport } from '@/commands/video'
 import { getCameraObjects } from './domain/cameraUtils'
 import type { StageGizmoMode } from './domain/sceneTypes'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
 import { copySceneScreenshotToClipboard, exportSceneScreenshot } from './export/cameraStageScreenshot'
+import {
+  exportCameraStageVideo,
+  waitForCameraStageRender,
+  type CameraStageVideoExportProgress,
+  type CameraStageVideoResolutionPreset,
+} from './export/cameraStageVideo'
 import { useCameraStageAutosave } from './hooks/useCameraStageAutosave'
 import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
@@ -24,6 +31,11 @@ const GIZMO_MODES: Array<{ id: StageGizmoMode; label: string }> = [
   { id: 'translate', label: '移动' },
   { id: 'rotate', label: '旋转' },
   { id: 'scale', label: '缩放' },
+]
+
+const VIDEO_RESOLUTION_OPTIONS: Array<{ label: string; value: CameraStageVideoResolutionPreset }> = [
+  { label: '720p', value: '720p' },
+  { label: '1080p', value: '1080p' },
 ]
 
 interface CameraStageEditorProps {
@@ -49,6 +61,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const setSessionProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
   const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
   const skyColor = useCameraStageStore((state) => state.sceneSettings.sky.color)
+  const animation = useCameraStageStore((state) => state.animation)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
   const isCameraSelected = objects.find((item) => item.id === selectedId)?.type === 'camera'
@@ -58,10 +71,15 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
 
   const [shotHint, setShotHint] = useState<string | null>(null)
   const [shotAction, setShotAction] = useState<'save' | 'copy' | null>(null)
+  const [videoPreset, setVideoPreset] = useState<CameraStageVideoResolutionPreset>('720p')
+  const [videoProgress, setVideoProgress] = useState<CameraStageVideoExportProgress | null>(null)
   const captureRef = useRef<StageCaptureFn | null>(null)
   const dockRef = useRef<CameraStageDockHandle>(null)
+  const videoSessionRef = useRef<string | null>(null)
+  const videoCancelRef = useRef(false)
 
   const canScreenshot = viewMode === 'camera' && !!activeCamera
+  const canExportVideo = canScreenshot && animation.duration > 0 && animation.fps > 0
 
   const handleCameraSelect = (cameraId: string): void => {
     setActiveCameraId(cameraId)
@@ -116,6 +134,70 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
     }
   }, [prepareScreenshotDataUrl])
 
+  const handleExportVideo = useCallback(async (): Promise<void> => {
+    if (!activeCamera || !captureRef.current || videoProgress) return
+    const previousPlayback = useCameraStageStore.getState().playback
+    videoCancelRef.current = false
+    setVideoProgress({
+      phase: 'rendering',
+      doneFrames: 0,
+      totalFrames: Math.max(1, Math.round(animation.duration * animation.fps)),
+    })
+
+    if (previousPlayback.playing) {
+      useCameraStageStore.getState().pause()
+      await waitForCameraStageRender()
+    }
+
+    try {
+      const result = await exportCameraStageVideo({
+        projectName: useCameraStageStore.getState().currentProjectName,
+        cameraRatio: activeCamera.aspectRatio.ratio,
+        backgroundColor: skyColor,
+        fps: animation.fps,
+        durationSeconds: animation.duration,
+        resolutionPreset: videoPreset,
+        captureFrame: () => captureRef.current?.() ?? null,
+        seekFrame: async (time) => {
+          useCameraStageStore.getState().seek(time)
+          await waitForCameraStageRender()
+        },
+        onProgress: setVideoProgress,
+        onSession: (sessionId) => {
+          videoSessionRef.current = sessionId
+        },
+        isCancelled: () => videoCancelRef.current,
+      })
+      if (!result) {
+        if (videoCancelRef.current) {
+          setShotHint('已取消视频导出')
+        }
+      } else {
+        const fileName = result.savedPath.split(/[\\/]/).pop() ?? result.savedPath
+        setShotHint(`视频已导出：${fileName}`)
+      }
+    } catch {
+      setShotHint('视频导出失败')
+    } finally {
+      const latest = useCameraStageStore.getState()
+      latest.seek(Math.min(previousPlayback.currentTime, latest.animation.duration))
+      if (previousPlayback.playing && !videoCancelRef.current) {
+        useCameraStageStore.getState().play()
+      }
+      videoSessionRef.current = null
+      videoCancelRef.current = false
+      setVideoProgress(null)
+    }
+  }, [activeCamera, animation, skyColor, videoPreset, videoProgress])
+
+  const handleCancelVideoExport = useCallback((): void => {
+    videoCancelRef.current = true
+    const sessionId = videoSessionRef.current
+    if (sessionId) {
+      void cancelVideoFrameExport(sessionId)
+    }
+  }, [])
+
   // 截图提示 3s 后消失
   useEffect(() => {
     if (!shotHint) return
@@ -144,6 +226,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   })
 
   const autosaveErrorLabel = saveState === 'error' ? '自动保存失败' : null
+  const videoProgressLabel = videoProgress
+    ? videoProgress.phase === 'encoding'
+      ? '编码中…'
+      : `导出 ${videoProgress.doneFrames}/${videoProgress.totalFrames}`
+    : null
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-app">
@@ -238,6 +325,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          {videoProgressLabel && (
+            <span className="max-w-28 truncate text-xs text-text-muted" title={videoProgressLabel}>
+              {videoProgressLabel}
+            </span>
+          )}
           {shotHint && <span className="max-w-64 truncate text-xs text-text-muted">{shotHint}</span>}
           {autosaveErrorLabel && (
             <span className="max-w-28 truncate text-xs text-text-muted" title={autosaveErrorLabel}>
@@ -291,6 +383,60 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
               </UiButton>
             )}
           </PanelTrigger>
+          {videoProgress ? (
+            <UiButton
+              size="sm"
+              variant="ghost"
+              onClick={handleCancelVideoExport}
+              className="py-1.5 text-xs"
+            >
+              <X size={13} className="mr-1" />
+              取消导出
+            </UiButton>
+          ) : (
+            <PanelTrigger
+              disabled={!canExportVideo}
+              panelWidth={176}
+              panelClassName="overflow-hidden p-2"
+              renderPanel={() => (
+                <div className="flex flex-col gap-2">
+                  <Dropdown<CameraStageVideoResolutionPreset>
+                    value={videoPreset}
+                    display={videoPreset}
+                    options={VIDEO_RESOLUTION_OPTIONS}
+                    onSelect={setVideoPreset}
+                    className="w-full"
+                    buttonClassName="h-7 py-1.5 text-xs"
+                    buttonLabelClassName="text-xs"
+                    optionLabelClassName="text-xs"
+                    minWidthStrategy="none"
+                  />
+                  <UiButton
+                    size="sm"
+                    onClick={() => void handleExportVideo()}
+                    className="w-full justify-start gap-2 rounded-md px-2.5"
+                  >
+                    <Film size={13} />
+                    导出 MP4
+                  </UiButton>
+                </div>
+              )}
+            >
+              {({ togglePanel }) => (
+                <UiButton
+                  size="sm"
+                  onClick={togglePanel}
+                  disabled={!canExportVideo}
+                  title={canExportVideo ? '导出当前摄像机动画为 MP4' : '切换到摄像机视角后可导出视频'}
+                  className="py-1.5 text-xs"
+                  data-panel-trigger-button
+                >
+                  <Film size={13} className="mr-1" />
+                  导出视频
+                </UiButton>
+              )}
+            </PanelTrigger>
+          )}
           <UiButton
             size="sm"
             variant="ghost"
