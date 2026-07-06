@@ -1,8 +1,16 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import NumberInput from '@/components/ui/NumberInput'
-import { UiButton, UiOptionButton, UiRangeInput } from '@/components/ui'
+import { Dropdown, UiButton, UiOptionButton, UiRangeInput } from '@/components/ui'
 import { BODY_VARIANTS } from '../domain/bodyVariants'
+import {
+  CHARACTER_ANIMATION_CLIPS,
+  CHARACTER_POSE_MOTION_VALUE,
+  createClipMotion,
+  createPoseMotion,
+  getCharacterMotionClipLabel,
+} from '../domain/characterMotion'
+import type { StageCharacterAnimationClipName } from '../domain/characterMotion'
 import { POSE_JOINT_GROUPS } from '../domain/poseTypes'
 import { POSE_PRESETS } from '../domain/posePresets.gen'
 import type { StagePoseJointId } from '../domain/poseTypes'
@@ -19,6 +27,12 @@ import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 const AXES: Array<keyof StageVec3> = ['x', 'y', 'z']
 const AXIS_LABELS: Record<keyof StageVec3, string> = { x: 'X', y: 'Y', z: 'Z' }
 const ZERO_EULER: StageVec3 = { x: 0, y: 0, z: 0 }
+type CharacterMotionValue = typeof CHARACTER_POSE_MOTION_VALUE | StageCharacterAnimationClipName
+
+const MOTION_OPTIONS: Array<{ label: string; value: CharacterMotionValue }> = [
+  { label: '静态姿势', value: CHARACTER_POSE_MOTION_VALUE },
+  ...CHARACTER_ANIMATION_CLIPS.map((clip) => ({ label: clip.label, value: clip.clipName })),
+]
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="text-xs font-medium uppercase tracking-wide text-text-muted">{children}</div>
@@ -77,13 +91,67 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
   const updatePoseJoint = useCameraStageStore((state) => state.updatePoseJoint)
   const applyPosePreset = useCameraStageStore((state) => state.applyPosePreset)
   const [openGroupId, setOpenGroupId] = useState<string | null>(null)
+  const motion = object.motion ?? createPoseMotion()
+  const motionValue: CharacterMotionValue =
+    motion.mode === 'clip' ? motion.clipName : CHARACTER_POSE_MOTION_VALUE
+  const motionDisplay =
+    motion.mode === 'clip' ? getCharacterMotionClipLabel(motion.clipName) : '静态姿势'
 
   const handleJointChange = (jointId: StagePoseJointId, next: StageVec3, changedPath: string): void => {
     updatePoseJoint(object.id, jointId, next, [changedPath])
   }
 
+  const handleMotionSelect = (value: CharacterMotionValue): void => {
+    updateObject(object.id, {
+      motion:
+        value === CHARACTER_POSE_MOTION_VALUE
+          ? createPoseMotion()
+          : createClipMotion(value, motion.mode === 'clip' ? motion.speed : 1),
+    })
+  }
+
+  const handleMotionSpeedChange = (speed: number): void => {
+    if (motion.mode !== 'clip') return
+    updateObject(object.id, { motion: createClipMotion(motion.clipName, speed) })
+  }
+
   return (
     <>
+      <div className="flex flex-col gap-2">
+        <SectionTitle>动作</SectionTitle>
+        <Dropdown<CharacterMotionValue>
+          value={motionValue}
+          display={motionDisplay}
+          options={MOTION_OPTIONS}
+          onSelect={handleMotionSelect}
+          className="w-full"
+          minWidthStrategy="none"
+        />
+        {motion.mode === 'clip' && (
+          <div className="flex items-center gap-1.5">
+            <UiRangeInput
+              min={0.1}
+              max={3}
+              step={0.05}
+              value={motion.speed}
+              onChange={(event) => handleMotionSpeedChange(Number(event.target.value))}
+            />
+            <NumberInput
+              value={motion.speed}
+              min={0.1}
+              max={3}
+              step={0.05}
+              precision={2}
+              widthClassName="w-16"
+              className="shrink-0"
+              commitOnChange
+              wheelStep
+              onChange={handleMotionSpeedChange}
+            />
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-col gap-2">
         <SectionTitle>体型</SectionTitle>
         <div className="flex flex-wrap gap-1.5">

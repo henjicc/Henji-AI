@@ -12,15 +12,17 @@
  * v7 起场景设置新增 display.showNameLabels；加载 v6 及以下工程时默认不显示名称标签。
  * v8 起名称标签新增文字色/背景色/大小/位置偏移；加载 v7 及以下工程时回退默认标签样式。
  * v9 起名称标签新增背景跟随对象色、背景透明度与文字阴影参数；加载 v8 及以下工程时回退默认阴影样式。
+ * v10 起角色对象新增 motion（静态姿势 / 内置 GLB 动作片段）；加载 v9 及以下工程时回退静态姿势。
  */
 
+import { normalizeCharacterMotion } from './characterMotion'
 import { createDefaultAnimation } from './animationTypes'
 import type { StageKeyframe, StageSceneAnimation, StageTrack } from './animationTypes'
 import { createDefaultSceneSettings } from './sceneDefaults'
-import type { StageCameraObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
+import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 9
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 10
 
 export interface StageSceneSnapshot {
   schemaVersion: number
@@ -241,6 +243,15 @@ function withDefaultCameraAspectRatio(objects: StageObject[]): StageObject[] {
   })
 }
 
+/** v9→v10：给角色对象补 motion，并顺手规范非法动作字段 */
+function withNormalizedCharacterMotion(objects: StageObject[]): StageObject[] {
+  return objects.map((object) => {
+    if (object.type !== 'character') return object
+    const character = object as StageCharacterObject & { motion?: unknown }
+    return { ...character, motion: normalizeCharacterMotion(character.motion) }
+  })
+}
+
 /** v2→v3：把整体 Vec3 值的轨道拆成 X/Y/Z 三条分量 scalar 轨道；非 Vec3 轨道原样保留 */
 function splitVec3Track(track: StageTrack): StageTrack[] {
   const first = track.keyframes[0]?.value
@@ -282,6 +293,7 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   if (version < 5) {
     objects = withDefaultCameraAspectRatio(objects)
   }
+  objects = withNormalizedCharacterMotion(objects)
   const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
   // v1 工程无 animation 字段 → 视为无动画；v2+ 解析已有动画；v2 的整体 Vec3 轨道拆成分量轨道
   let animation = version >= 2 ? parseAnimation(record.animation) : createDefaultAnimation()

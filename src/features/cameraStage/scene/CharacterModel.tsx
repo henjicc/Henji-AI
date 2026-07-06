@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { Bone, Group, MeshStandardMaterial, Quaternion, Euler, Vector3, Mesh } from 'three'
+import { useFrame } from '@react-three/fiber'
+import { AnimationMixer, Bone, Euler, Group, LoopRepeat, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
+import type { AnimationAction } from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
+import { DEFAULT_CHARACTER_MOTION } from '../domain/characterMotion'
 import { POSE_JOINT_BONES } from '../domain/poseTypes'
 import type { StagePoseJointId } from '../domain/poseTypes'
 import { poseJointPath } from '../domain/animatableProps'
@@ -61,9 +64,17 @@ function buildRig(source: Group): CharacterRig {
 const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }) => {
   const gltf = useGLTF(url)
   const rig = useMemo(() => buildRig(gltf.scene as Group), [gltf.scene])
+  const mixer = useMemo(() => new AnimationMixer(rig.scene), [rig])
+  const actionRef = useRef<AnimationAction | null>(null)
   const material = useMemo(() => new MeshStandardMaterial(), [])
+  const motion = object.motion ?? DEFAULT_CHARACTER_MOTION
+  const activeClip = useMemo(() => {
+    if (motion.mode !== 'clip') return null
+    return gltf.animations.find((clip) => clip.name === motion.clipName) ?? null
+  }, [gltf.animations, motion])
 
   useEffect(() => () => material.dispose(), [material])
+  useEffect(() => () => mixer.uncacheRoot(rig.scene), [mixer, rig.scene])
 
   // 纯色材质覆盖：GLB 自带材质替换为单一颜色（对齐一期"纯色渲染"美术方向）
   useEffect(() => {
@@ -83,6 +94,7 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
 
   // FK 姿态应用：受控关节 = 绑定姿态 × 欧拉偏移；未记录的关节回到绑定姿态
   useEffect(() => {
+    if (motion.mode === 'clip' && activeClip) return
     const euler = new Euler()
     const offset = new Quaternion()
     for (const [jointId, boneName] of Object.entries(POSE_JOINT_BONES)) {
@@ -106,7 +118,39 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
         .copy(rig.pelvisRestPosition)
         .add(hipsOffset ? new Vector3(hipsOffset.x, hipsOffset.y, hipsOffset.z) : new Vector3())
     }
-  }, [rig, object.pose])
+  }, [activeClip, rig, object.pose, motion.mode])
+
+  // 仅在片段本身变化时重建 action；速度变化走下方 timeScale effect，避免拖动速度滑杆时动画从头重播
+  useEffect(() => {
+    mixer.stopAllAction()
+    actionRef.current = null
+    if (!activeClip) return undefined
+
+    const action = mixer.clipAction(activeClip, rig.scene)
+    action.reset()
+    action.setLoop(LoopRepeat, Infinity)
+    action.clampWhenFinished = false
+    action.enabled = true
+    action.play()
+    mixer.update(0)
+    actionRef.current = action
+
+    return () => {
+      action.stop()
+      actionRef.current = null
+    }
+  }, [activeClip, mixer, rig.scene])
+
+  useEffect(() => {
+    if (motion.mode !== 'clip' || !actionRef.current) return
+    actionRef.current.timeScale = motion.speed
+  }, [motion])
+
+  useFrame((_, delta) => {
+    if (motion.mode === 'clip' && activeClip) {
+      mixer.update(Math.min(delta, 0.1))
+    }
+  })
 
   // 播放期命令式采样：逐关节欧拉偏移直改骨骼、颜色直改共享材质（不写 store）
   useEffect(() => {

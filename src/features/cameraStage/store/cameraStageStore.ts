@@ -10,6 +10,7 @@ import {
   createPrimitiveObject,
   pickDefaultColor,
 } from '../domain/sceneDefaults'
+import { createPoseMotion } from '../domain/characterMotion'
 import { getCameraObjects } from '../domain/cameraUtils'
 import { getDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
@@ -378,7 +379,11 @@ export const useCameraStageStore = create<CameraStageState>()(
     set((state) => {
       const objects = state.objects.map((item) =>
         item.id === id && item.type === 'character'
-          ? { ...item, pose: { ...item.pose, joints: { ...item.pose.joints, [jointId]: euler } } }
+          ? {
+            ...item,
+            pose: { ...item.pose, joints: { ...item.pose.joints, [jointId]: euler } },
+            motion: createPoseMotion(),
+          }
           : item,
       )
       const object = objects.find((item) => item.id === id)
@@ -392,7 +397,9 @@ export const useCameraStageStore = create<CameraStageState>()(
   applyPosePreset: (id, preset) =>
     set((state) => {
       const objects = state.objects.map((item) =>
-        item.id === id && item.type === 'character' ? { ...item, pose: clonePose(preset) } : item,
+        item.id === id && item.type === 'character'
+          ? { ...item, pose: clonePose(preset), motion: createPoseMotion() }
+          : item,
       )
       const object = objects.find((item) => item.id === id)
       if (!object || object.type !== 'character') return { objects }

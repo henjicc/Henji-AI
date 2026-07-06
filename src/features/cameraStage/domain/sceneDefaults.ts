@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { BLACK_HEX, CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { createPoseMotion } from './characterMotion'
 import { POSE_PRESETS } from './posePresets.gen'
 import { clonePose, createEmptyPose } from './poseTypes'
 import type {
@@ -81,6 +82,7 @@ export function createCharacterObject(name: string, color: string): StageCharact
     visible: true,
     variant: 'standard',
     pose: standPreset ? clonePose(standPreset) : createEmptyPose(),
+    motion: createPoseMotion(),
   }
 }
 

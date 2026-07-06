@@ -7,6 +7,7 @@
  */
 
 import type { StageBodyVariantId } from './bodyVariants'
+import type { StageCharacterMotion } from './characterMotion'
 import type { StageCharacterPose } from './poseTypes'
 
 export interface StageVec3 {
@@ -58,6 +59,7 @@ export interface StageCharacterObject extends StageObjectBase {
   type: 'character'
   variant: StageBodyVariantId
   pose: StageCharacterPose
+  motion: StageCharacterMotion
 }
 
 /** 摄像机对象：2.1 阶段仅占位渲染，取景/注视目标字段由 2.3 扩展 */
@@ -89,6 +91,8 @@ export interface StageObjectPatch {
   variant?: StageBodyVariantId
   /** 仅 character 对象有效 */
   pose?: StageCharacterPose
+  /** 仅 character 对象有效 */
+  motion?: StageCharacterMotion
 }
 
 export type StageGizmoMode = 'translate' | 'rotate' | 'scale'
