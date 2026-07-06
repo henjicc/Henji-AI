@@ -294,10 +294,12 @@ export function UnifiedLogViewer(): JSX.Element {
             <div className="px-3 py-6 text-center text-xs text-text-muted">暂无日志</div>
           ) : (
             filteredEvents.map((event) => (
-              <button
+              <UiButton
                 key={event.id}
                 type="button"
-                className={`w-full border-b border-zinc-700/40 px-3 py-2 text-left text-xs transition-colors ${
+                variant="ghost"
+                size="sm"
+                className={`h-auto w-full flex-col items-stretch justify-start rounded-none border-x-0 border-t-0 border-b border-zinc-700/40 bg-transparent px-3 py-2 text-left text-xs font-normal transition-colors ${
                   selectedId === event.id ? 'bg-brand-600/30 text-text-dark' : 'hover:bg-zinc-700/30 text-text-muted'
                 }`}
                 onClick={() => setSelectedId(event.id)}
@@ -327,7 +329,7 @@ export function UnifiedLogViewer(): JSX.Element {
                   {event.modelId ? <span>model:{event.modelId}</span> : null}
                   {event.providerId ? <span>provider:{event.providerId}</span> : null}
                 </div>
-              </button>
+              </UiButton>
             ))
           )}
         </div>

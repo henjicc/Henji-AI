@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Grid } from '@react-three/drei'
-import type { MeshStandardMaterial, Shader } from 'three'
+import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import type { StageGroundSettings } from '../domain/sceneTypes'
 
@@ -8,8 +8,8 @@ const GROUND_SIZE = 160
 const CHECKER_BASE_CELL = 2
 const GRID_BASE_CELL = 2
 
-interface CheckerShader extends Shader {
-  uniforms: Shader['uniforms'] & {
+interface CheckerShader extends WebGLProgramParametersWithUniforms {
+  uniforms: WebGLProgramParametersWithUniforms['uniforms'] & {
     uCheckerScale: { value: number }
     uCheckerDark: { value: [number, number, number] }
     uCheckerLight: { value: [number, number, number] }
@@ -44,7 +44,7 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
   const gridSectionColor = settings.gridLineColor
 
   const handleCheckerCompile = useCallback(
-    (shader: Shader): void => {
+    (shader: WebGLProgramParametersWithUniforms): void => {
       const checkerShader = shader as CheckerShader
       checkerShader.uniforms.uCheckerScale = { value: checkerScale }
       checkerShader.uniforms.uCheckerDark = { value: checkerDark }
