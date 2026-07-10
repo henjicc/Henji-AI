@@ -1,64 +1,72 @@
 # 日志调试中心 - 交接说明（写给下一个执行者）
 
-面向任务：1.2 LLM请求响应完整捕获
+面向任务：1.3 完整捕获开关与脱敏策略统一
 
-## 本任务（1.1）留下了什么
+## 1.2 留下了什么
 
-主进程现在有了自己的 logger 能力，位于 `electron/main/services/logging/`（原 `electron/main/services/logging.ts` 单文件已删除，改成了目录）。
+LLM 与 AI 生成两条主链路现在都由**主进程直接落盘**请求/响应/失败事件，不再依赖"渲染层转发再桥接"。
 
-### 怎么用 `createMainLogger`
+### 事件一览（都在 `henji-YYYY-MM-DD.log`，`source: 'backend'`）
+
+| domain | event | 触发点 | 内容 |
+|---|---|---|---|
+| `llm-runtime` | `llm_runtime.chat_stream.request_json` | 发起 HTTP 请求前 | `context.requestBody`（sanitize 后的 OpenAI 兼容 payload） |
+| `llm-runtime` | `llm_runtime.chat_stream.response_json` | SSE 流结束后 | `context.output`/`context.reasoningOutput`（sanitize 后）+ `elapsedMs`/`inputChars`/`outputChars` |
+| `llm-runtime` | `llm_runtime.chat_stream.failed` | catch 分支 | `error`（结构化 name/message/stack）+ `context.normalizedMessage` |
+| `ai-runtime` | `generation.runtime.request_json` | `generate()`/`continuePolling()` 调用 provider 前 | `context.requestBody`（sanitize 后） |
+| `ai-runtime` | `generation.runtime.response_json` | trace 构建后 | `context.responseBody`（复用 `buildGenerateTrace`/`buildContinuePollingTrace` 里已经 sanitize 过的 `trace.responseBody`，不重复 sanitize） |
+| `ai-runtime` | `ai_runtime.generate.failed` | `generate()` catch 分支（1.1 已有） | — |
+
+前端侧仍保留、但语义收窄的事件：
+
+- `commands.llmRuntime` 的 `llm_runtime.chat_stream.invoke_failed`：只在 IPC 调用本身 reject 时记录，代表"前端视角确认调用失败"，不再与后端 `chat_stream.failed` 撞名重复。
+
+### `sanitizeJsonValue` / `isSensitiveKey` 现在在哪、怎么用
 
 ```ts
-import { createMainLogger } from '../logging' // 相对路径按你的文件位置调整
+import { sanitizeJsonValue, isSensitiveKey } from '../logging' // 相对路径按你的文件位置调整
 
-const logger = createMainLogger('llm-runtime') // domain 建议用点分层级，如 'llm-runtime.chat-stream'
-
-logger.info('后端收到聊天请求', {
-  event: 'llm_runtime.chat_stream.request', // 建议显式传 event，不传会由 message 自动推断（不够语义化）
-  requestId,
-  modelId,
-  providerId,
-  context: { route, method, requestBody },
-})
-
-logger.error('后端聊天请求失败', {
-  event: 'llm_runtime.chat_stream.failed',
-  requestId,
-  error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
-})
+const safeBody = sanitizeJsonValue(rawJsonValue) // depth 参数可选，默认 0，一般不用传
 ```
 
-- 接口对齐渲染层 `src/core/logging/logger.ts` 的 `createLogger`，但主进程版本参数更直白：`logger.info(message, meta?)`，`meta` 里能传 `event/requestId/taskId/modelId/providerId/context/error`。
-- 每条日志会**立即**落盘（`henji-YYYY-MM-DD.log`，`source: 'backend'`）并推给所有未销毁的 `BrowserWindow`（`henji://log-event`），不需要额外调用任何 flush。
-- 落盘失败会被静默吞掉（`main-logger.ts` 里 `.catch(() => undefined)`），不会抛出异常影响业务主流程——这是有意为之，日志不应该拖垮正常功能，但也意味着**写入失败你完全看不到报错**，如果怀疑日志没落盘，先检查磁盘权限/目录是否被占用。
+- 位置：`electron/main/services/logging/sanitize.ts`，经 `electron/main/services/logging/index.ts` 统一导出。
+- `ai-runtime/trace.ts` 现在只剩 `buildGenerateTrace`/`buildContinuePollingTrace` 两个函数（43 行），内部调用 `sanitizeJsonValue`，不再自己实现脱敏逻辑。
+- **当前脱敏/截断规则是硬编码的**，没有任何开关：
+  - 命中 `isSensitiveKey`（key 包含 `api_key`/`apikey`/`authorization`/`token`/`secret`/`password`，大小写不敏感）的字段直接替换成 `'***'`，**这条不可协商，1.3 只能在此基础上扩展，不能放松**。
+  - `data:` 开头的字符串（base64 图片/视频/音频）按 `DATA_URI_HEAD_LEN=96` / `TAIL_LEN=32` 截断，中间显示 `...(len=N, data-uri)...`。
+  - 长度 ≥512 且形似 base64 的字符串按 `BASE64_HEAD_LEN=160` / `TAIL_LEN=48` 截断。
+  - 普通长字符串（含 LLM 的长文本回复）超过 `LONG_STRING_HEAD_LEN=1200 + LONG_STRING_TAIL_LEN=240` 才截断。
+- **00-任务总览"重要记录"里已经定了 1.3 的方向**："完整捕获模式保留图片 base64 原文，音频/视频仍摘要"——这意味着 1.3 大概率要给 `sanitizeJsonValue` 加一个可配置的"捕获模式"参数（至少区分"截断"与"完整"两档，且区分数据类型），而不是全局一刀切开关。当前实现里 `MAX_DEPTH`/`*_HEAD_LEN`/`*_TAIL_LEN` 都是模块顶层 `const`，1.3 改造时这些常量大概率要变成可传入参数或从配置读取。
 
-### 文件与目录结构
+### `logPreviewOnly` 是什么、为什么存在
 
-```
-electron/main/services/logging/
-├── types.ts        # MainLogEvent / LogEventBridgeDto / 保留策略常量
-├── writer.ts        # 落盘：getLogDir() / getLogFilePath() / writeLogEventsToFile()
-├── push.ts          # 推送 + 统一写入口：pushLogEvents() / appendLogEvents()（写完再推）
-├── main-logger.ts    # createMainLogger(domain)
-├── retention.ts       # runLogRetention()（app.whenReady 时调一次，1.2 不需要碰）
-└── index.ts          # 统一导出，其他模块只从这里 import
-```
+- 位置：`src/core/logging/logger.ts`，经 `src/core/logging/index.ts` 导出。
+- 签名：`logPreviewOnly(domain: string, message: string, meta?: LogCallMeta): void`。
+- 作用：写渲染层内存 store（`subscribeLogEvents` 能读到）+ 打印控制台，但**不**调用 `enqueueFrontendLogForBridge`，即不会把这条日志再桥接回主进程落盘一次。
+- 使用点（都是"主进程已经权威落盘过同一份数据，渲染层只需要本地展示"的场景）：
+  1. `initLoggerConfig()` 里对 `henji://runtime-request-preview` / `henji://llm-runtime-request-preview` 两个预览通道的处理。
+  2. `GenerationService.ts` 的 `recordRuntimeTrace()`（记 `generation.runtime.response_json`）。
+- **这两条预览通道本身没有删**（`henji://runtime-request-preview` in `ai-runtime/runtime.ts` 的 `emitPreview()`，`henji://llm-runtime-request-preview` in `llm/runtime.ts`），preload/platform/commands 五层都还在。原因：`UnifiedLogViewer`（挂在 `TestModePanel` 里）目前只读渲染层内存 store，`henji://log-event` 实时推送还没有任何代码把它塞进这个 store（那是 2.1 的活），直接删预览通道会让测试模式面板瞬间失去实时展示能力。**1.3 大概率不用管这个**，但如果 1.3 也要动 `logger.ts`/`GenerationService.ts`，记得这段历史，不要误删 `logPreviewOnly` 或预览通道。等 2.1 把独立日志窗口做出来、`UnifiedLogViewer`/`TestModePanel` 按计划删除后，预览通道和 `logPreviewOnly` 的调用点才应该一起清理。
 
-日志文件路径：`%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\henji-YYYY-MM-DD.log`（非 Windows 走 `app.getPath('appData')`），JSONL 格式，每行一个 `MainLogEvent`（含 `source: 'frontend' | 'backend'`）。
+## 尚未接"开关"的地方（1.3 的活）
 
-### 已有的坑 / 注意事项
+- `sanitizeJsonValue` 的截断阈值全是硬编码常量，没有读取任何配置/开关。
+- LLM 与 AI 生成两条链路目前**默认永远截断**（没有"完整捕获"这一档），1.3 需要设计开关存储位置（大概率是 `settingsStore` 或类似的设置项，具体看 1.3 任务文件）、开关如何传导到主进程（IPC？还是主进程自己读一份配置文件？）、以及 `sanitizeJsonValue` 怎么按开关状态改变行为（尤其是"图片 base64 保留原文，音频/视频仍摘要"这种按数据类型区分的要求，现在的实现是不区分数据类型统一走 `data:` 前缀判断+固定长度截断，需要重新设计参数)。
+- `src/utils/testMode.ts` 的 `recordApiTrace()`/`api.trace` 事件**完全没有改**，它是独立于本次改造之外的测试模式 opt-in 调试功能（用户手动打开"测试模式"+"输出参数"两个开关才会触发），内部直接把 `trace.requestBody`/`trace.responseBody` 原样塞进日志 context（这两个值已经是 sanitize 后的，因为来自主进程返回的 `trace` 对象）。1.3 如果要统一"完整捕获"语义，需要想清楚这个通道要不要也纳入统一开关，还是保持独立。
 
-1. **不要再新建 `services/logging.ts` 平铺文件**——目录已经占用了这个 import 路径（`import ... from '../services/logging'` 会自动解析到 `logging/index.ts`），如果你在同级再建一个 `logging.ts` 文件，Node 模块解析会优先选文件，把目录整个短路掉。
-2. **`appendLogEvents` 在 `push.ts` 里，不在 `index.ts` 里定义**（虽然 `index.ts` 会 re-export 它）——这是为了避免 `main-logger.ts` 和 `index.ts` 之间循环依赖，见 `decisions.md`。如果你要新增文件依赖 `appendLogEvents`，直接从 `./push` 或者聚合出口 `../logging`（即 `index.ts`）import 都可以，不会有循环依赖问题，只是新增文件不要反过来被 `push.ts`/`main-logger.ts` import。
-3. **渲染层订阅通道已经打通到"能订阅"这一步，但没有任何消费方**——`window.henjiNative.logging.onLogEvent(handler)`（preload）→ `src/platform/adapters/electron/logging.ts` 的 `listenLogEvent`（platform 契约）→ `src/commands/logging.ts` 的 `listenLogEvent()`。2.1 建日志窗口时直接调用 `src/commands/logging.ts` 里的 `listenLogEvent`，不要再重新声明一遍 IPC 通道。
-4. **1.2 要捕获 LLM 完整请求/响应时，注意脱敏问题不属于本任务范围**——`createMainLogger` 本身不做任何脱敏/截断，事件里的 `context`/`error` 原样落盘。API key 等敏感字段的打码逻辑在 `electron/main/services/ai-runtime/trace.ts` 的 `isSensitiveKey`，1.2/1.3 如果要在 LLM 链路记录敏感信息，记得复用或对齐这套脱敏逻辑，不要绕过。
-5. **前端桥接事件与后端事件现在写同一个文件**，判断来源看每行 JSON 的 `source` 字段，不要再假设"前端日志在 `frontend-*.log`，后端日志在别的地方"——旧的 `frontend-YYYY-MM-DD.log` 文件不会再有新内容写入，但也不会被删除或合并，纯粹自然过期（保留策略只清理 `henji-*.log`）。
-6. **`emitPreview`（`henji://runtime-request-preview` / `henji://llm-runtime-request-preview`）没有被本任务替换**——`ai-runtime/runtime.ts` 的 `generate()` 现在是"`emitPreview` 推给渲染层再桥接回写"和"`createMainLogger` 直接落盘"两条路径**同时存在**（试点阶段有意保留双路径，方便对照验证）。1.2/1.3 如果要清理旧的 `emitPreview` 绕路链路，需要单独确认再动，不在本次任务范围内自动做了。
+## 之前（1.1）留下的坑，依然有效
 
-## 快速自检命令（改完 1.2 也应该跑一遍）
+1. 不要在 `electron/main/services/logging/` 同级再建平铺 `logging.ts` 文件。
+2. `appendLogEvents` 在 `push.ts` 里定义，`index.ts` 只 re-export。
+3. 渲染层订阅通道 `listenLogEvent` 目前仍然没有任何代码把推送事件写入 `src/core/logging/store.ts` 的内存 store——这是 2.1（日志窗口）的工作范围，1.2 也没有动它。
+4. API key 等敏感字段的打码逻辑现在唯一入口是 `electron/main/services/logging/sanitize.ts` 的 `isSensitiveKey`（1.2 从 `trace.ts` 搬过来的），1.3 扩展脱敏策略时改这里，不要在别处再复制一份判断逻辑。
+5. 前端桥接事件与后端事件写同一个文件，看 `source` 字段区分来源；旧 `frontend-*.log` 自然过期，不受清理逻辑影响。
+
+## 快速自检命令（改完 1.3 也应该跑一遍）
 
 ```bash
 npx tsc -p tsconfig.electron.json --noEmit
 npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
 npm run lint
+npx tsc --noEmit
 ```

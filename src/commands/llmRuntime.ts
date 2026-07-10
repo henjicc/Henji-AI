@@ -40,23 +40,11 @@ export async function llmChatStream(
   onEvent: (event: LlmStreamEvent) => void
 ): Promise<void> {
   ensureDesktopRuntime()
-  const handleEvent = (event: LlmStreamEvent): void => {
-    if (event.type === 'Error') {
-      logger.error('[LlmRuntimeCmd] LLM 请求失败', event.data, {
-        event: 'llm_runtime.chat_stream.failed',
-        requestId: request.requestId,
-        providerId: request.providerId,
-        modelId: request.modelId,
-        context: {
-          request,
-          streamError: event.data,
-        },
-      })
-    }
-    onEvent(event)
-  }
+  // 流内 Error 事件对应的失败事实已由主进程 `llm/runtime.ts` 直接记录为
+  // `llm_runtime.chat_stream.failed`（含完整脱敏请求/错误信息），这里不再重复记录同一事实，
+  // 只保留 IPC 调用本身失败（`invoke_failed`）这一前端独有视角。
   try {
-    await getPlatform().llmRuntime.chatStream(request, handleEvent)
+    await getPlatform().llmRuntime.chatStream(request, onEvent)
   } catch (error) {
     logger.error('[LlmRuntimeCmd] LLM 请求调用失败', error, {
       event: 'llm_runtime.chat_stream.invoke_failed',

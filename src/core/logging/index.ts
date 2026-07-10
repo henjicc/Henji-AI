@@ -1,4 +1,4 @@
-export { createLogger, initLoggerConfig } from './logger'
+export { createLogger, initLoggerConfig, logPreviewOnly } from './logger'
 export { getLogConfig, refreshLogConfigByRuntime, setLogConfig } from './config'
 export { clearLogEvents, getLogEvents, subscribeLogEvents } from './store'
 export { flushFrontendLogBridge } from './bridge'

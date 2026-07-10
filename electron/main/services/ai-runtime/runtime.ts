@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
-import { createMainLogger } from '../logging'
+import { createMainLogger, sanitizeJsonValue } from '../logging'
 import { AiRuntimeError } from './errors'
 import { getManifestStore, reloadManifestStore } from './manifest'
 import { saveMediaFromUrl } from './media-store'
@@ -89,6 +89,17 @@ export async function generate(
       route: builtRequest.route,
       requestBody: preprocessedBody,
     })
+    logger.info('后端发起生成请求', {
+      event: 'generation.runtime.request_json',
+      requestId,
+      modelId: request.modelId,
+      providerId,
+      context: {
+        method: builtRequest.method,
+        route: builtRequest.route,
+        requestBody: sanitizeJsonValue(preprocessedBody),
+      },
+    })
 
     const providerResult = await executeGenerate(providerId, {
       apiKey,
@@ -112,6 +123,18 @@ export async function generate(
       ? await saveMediaPaths(providerResult.url)
       : undefined
 
+    logger.info('后端生成响应', {
+      event: 'generation.runtime.response_json',
+      requestId,
+      modelId: request.modelId,
+      providerId,
+      context: {
+        phase: trace.phase,
+        route: trace.route,
+        method: trace.method,
+        responseBody: trace.responseBody,
+      },
+    })
     logger.info('后端生成结果', {
       event: 'ai_runtime.generate.result',
       requestId,
@@ -165,6 +188,18 @@ export async function continuePolling(
       route: builtRequest.route,
       requestBody: builtRequest.body,
     })
+    logger.info('后端发起轮询请求', {
+      event: 'generation.runtime.request_json',
+      requestId,
+      taskId: request.taskId.trim(),
+      modelId: request.modelId,
+      providerId,
+      context: {
+        method: 'GET',
+        route: builtRequest.route,
+        requestBody: sanitizeJsonValue(builtRequest.body),
+      },
+    })
 
     const providerResult = await executeContinuePolling(providerId, {
       apiKey,
@@ -182,6 +217,19 @@ export async function continuePolling(
       request.taskId.trim(),
       providerResult.metadata
     )
+    logger.info('后端轮询响应', {
+      event: 'generation.runtime.response_json',
+      requestId,
+      taskId: request.taskId.trim(),
+      modelId: request.modelId,
+      providerId,
+      context: {
+        phase: trace.phase,
+        route: trace.route,
+        method: trace.method,
+        responseBody: trace.responseBody,
+      },
+    })
     const filePath = await saveMediaPaths(providerResult.url)
     const responseResult = {
       status: providerResult.status,

@@ -1,6 +1,7 @@
 import type { WebContents } from 'electron'
 import { getLlmProviderApiKey } from '../keystore'
 import { preprocessRequestBody } from '../ai-runtime/upload'
+import { createMainLogger, sanitizeJsonValue } from '../logging'
 import { clearLlmTask, isLlmTaskCancelled, registerLlmTask, cancelLlmTask } from './task-registry'
 import {
   buildOpenAiCompatiblePayload,
@@ -9,6 +10,14 @@ import {
   streamOpenAiCompatibleChat,
 } from './streaming'
 import type { JsonObject, JsonValue, LlmChatMessage, LlmChatRequestDto, LlmStreamEmitter } from './types'
+
+// 主进程直接记录 LLM 请求/响应/失败三类事件，替代 emitPreview -> 渲染层 -> 桥接回写 的绕路链路
+// （预览通道 `henji://llm-runtime-request-preview` 仍保留，但只用于渲染层即时展示，不再承担落盘职责）。
+const logger = createMainLogger('llm-runtime')
+
+function toLogError(error: unknown): unknown {
+  return error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+}
 
 export async function llmChatStream(
   request: LlmChatRequestDto,
@@ -32,6 +41,7 @@ export async function llmChatStream(
     const endpoint = request.providerId.trim().toLowerCase() === 'ppio'
       ? resolvePpioChatEndpoint(processedRequest.baseUrl)
       : resolveOpenAiCompatibleEndpoint(processedRequest)
+    const requestPayload = buildOpenAiCompatiblePayload(processedRequest)
 
     webContents?.send('henji://llm-runtime-request-preview', {
       requestId: taskId,
@@ -39,7 +49,18 @@ export async function llmChatStream(
       providerId: processedRequest.providerId,
       method: 'POST',
       route: endpoint,
-      requestBody: buildOpenAiCompatiblePayload(processedRequest),
+      requestBody: requestPayload,
+    })
+    logger.info('后端发起 LLM 请求', {
+      event: 'llm_runtime.chat_stream.request_json',
+      requestId: taskId,
+      modelId: processedRequest.modelId,
+      providerId: processedRequest.providerId,
+      context: {
+        method: 'POST',
+        route: endpoint,
+        requestBody: sanitizeJsonValue(requestPayload),
+      },
     })
 
     const output = await streamOpenAiCompatibleChat({
@@ -54,19 +75,45 @@ export async function llmChatStream(
       throw new Error(`[task_cancelled] LLM task cancelled: ${taskId}`)
     }
 
+    const elapsedMs = Date.now() - startedAtMs
+    const outputChars = output.output.length + output.reasoningOutput.length
+
+    logger.info('后端 LLM 响应完成', {
+      event: 'llm_runtime.chat_stream.response_json',
+      requestId: taskId,
+      modelId: processedRequest.modelId,
+      providerId: processedRequest.providerId,
+      context: {
+        startedAtMs,
+        elapsedMs,
+        inputChars,
+        outputChars,
+        output: sanitizeJsonValue(output.output),
+        reasoningOutput: sanitizeJsonValue(output.reasoningOutput),
+      },
+    })
+
     emit({
       type: 'Done',
       data: {
         providerId: processedRequest.providerId,
         modelId: processedRequest.modelId,
         startedAtMs,
-        elapsedMs: Date.now() - startedAtMs,
+        elapsedMs,
         inputChars,
-        outputChars: output.output.length + output.reasoningOutput.length,
+        outputChars,
       },
     })
   } catch (error) {
     const message = normalizeLlmError(taskId, error)
+    logger.error('后端 LLM 请求失败', {
+      event: 'llm_runtime.chat_stream.failed',
+      requestId: taskId,
+      modelId: request.modelId,
+      providerId: request.providerId,
+      context: { normalizedMessage: message },
+      error: toLogError(error),
+    })
     emit({ type: 'Error', data: message })
     throw new Error(message)
   } finally {

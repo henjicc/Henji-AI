@@ -1,4 +1,4 @@
-import { createLogger } from '@/core/logging'
+import { createLogger, logPreviewOnly } from '@/core/logging'
 
 const logger = createLogger('core.services.GenerationService')
 /**
@@ -499,7 +499,9 @@ function recordRuntimeTrace(
     return
   }
 
-  logger.info('[GenerationService] API原始响应(JSON)', {
+  // 主进程（ai-runtime/runtime.ts）已经用同一份 trace 直接落盘 generation.runtime.response_json，
+  // 这里只做渲染层"实时预览"（控制台 + 测试模式面板），不再经 logger.info 桥接重复写入 henji-*.log。
+  logPreviewOnly('core.services.GenerationService', '[GenerationService] API原始响应(JSON)', {
     event: 'generation.runtime.response_json',
     requestId: trace.requestId,
     taskId: trace.taskId,

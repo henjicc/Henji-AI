@@ -28,3 +28,25 @@
 ### 下一任务
 
 1.2 LLM请求响应完整捕获，可直接使用本任务提供的 `createMainLogger`，详见 `handoff.md`。
+
+## 1.2 LLM请求响应完整捕获
+
+- 状态：已完成（自动化检查全通过；运行时行为需人工验证，见 `test-report.md`）
+- 完成日期：2026-07-10
+
+### 完成内容
+
+1. `sanitizeJsonValue`/`isSensitiveKey` 脱敏截断逻辑从 `ai-runtime/trace.ts` 抽到新文件 `electron/main/services/logging/sanitize.ts`，经 `logging/index.ts` 统一导出；`trace.ts` 瘦身为纯 trace 构建函数。
+2. `electron/main/services/llm/runtime.ts` 接入 `createMainLogger('llm-runtime')`：新增 `llm_runtime.chat_stream.request_json`（请求前）、`llm_runtime.chat_stream.response_json`（流结束后，含 output/reasoningOutput/耗时/字符数）、`llm_runtime.chat_stream.failed`（catch 分支）三类事件，一次性解决"成功响应完全没有记录"的问题。
+3. `electron/main/services/ai-runtime/runtime.ts` 的 `generate()` 与 `continuePolling()` 都补上 `generation.runtime.request_json` / `generation.runtime.response_json` 直接落盘（`continuePolling()` 此前完全没有接入 `createMainLogger`，1.1 只试点了 `generate()`）。
+4. 预览通道（`henji://runtime-request-preview` / `henji://llm-runtime-request-preview`）**保留**但切断落盘职责：`src/core/logging/logger.ts` 新增 `logPreviewOnly()`（只写内存 store + 控制台，不桥接落盘），`initLoggerConfig()` 里两个监听器与 `GenerationService.ts` 的 `recordRuntimeTrace()` 都改调用它，消除"渲染层转发再桥接"造成的同一事实重复落盘。
+5. `src/commands/llmRuntime.ts` 删除对流内 `Error` 事件的重复日志记录（原 `chat_stream.failed`），前端只保留 IPC 调用失败视角的 `invoke_failed`，与后端权威的 `chat_stream.failed` 不再撞名重复。
+6. `UnifiedLogViewer.tsx` 的 `EVENT_DISPLAY_MAP` 补 4 个新/漏收事件条目。
+
+### 未完成 / 待验证
+
+- 真实 LLM 成功对话、错误 API key 失败对话、AI 生成链路请求/响应、JSONL 去重与脱敏抽查均未实际触发验证，已在 `test-report.md` 写清步骤交给用户。
+
+### 下一任务
+
+1.3 完整捕获开关与脱敏策略统一，可直接复用本任务新增的 `sanitizeJsonValue`/`isSensitiveKey`/`logPreviewOnly`，详见 `handoff.md`。

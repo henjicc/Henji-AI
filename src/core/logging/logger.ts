@@ -715,6 +715,42 @@ function writeToConsole(event: LogEvent): void {
   console.groupEnd()
 }
 
+/**
+ * 记录一条"仅本地展示"的日志事件：写入内存 store（供 `UnifiedLogViewer` 等消费）并打印到
+ * 控制台，但**不**经 `enqueueFrontendLogForBridge` 桥接回主进程落盘。
+ *
+ * 用于 `henji://runtime-request-preview` / `henji://llm-runtime-request-preview` 预览通道，
+ * 以及 `GenerationService` 里从返回结果 `trace` 派生出的展示日志——这些事实主进程已经
+ * 通过 `createMainLogger` 直接落盘一次，渲染层这里只做"实时预览"，避免同一份请求/响应
+ * 内容经"渲染层转发再桥接"重复写入 `henji-*.log`。
+ */
+export function logPreviewOnly(domain: string, message: string, meta: LogCallMeta = {}): void {
+  const level: LogLevel = 'info'
+  if (!isDomainEnabled(domain) || !shouldLogLevel(level)) {
+    return
+  }
+
+  const sanitizedContext = sanitizeLogPayload(meta.context)
+  const event: LogEvent = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    timestamp: new Date().toISOString(),
+    level,
+    domain,
+    event: meta.event || inferEvent(message, level),
+    message,
+    requestId: meta.requestId,
+    taskId: meta.taskId,
+    modelId: meta.modelId,
+    providerId: meta.providerId,
+    context: sanitizedContext,
+    error: undefined,
+    source: 'frontend',
+  }
+
+  appendLogEvent(event)
+  writeToConsole(event)
+}
+
 function createInternalLogger(ctx: LoggerContext): Logger {
   const logAt = (level: LogLevel, args: DynamicValue[]): void => {
     if (!isDomainEnabled(ctx.domain) || !shouldLogLevel(level)) {
@@ -798,9 +834,11 @@ export function initLoggerConfig(): void {
   }
 
   if (isDesktopRuntime()) {
+    // 两路预览通道只负责渲染层"实时预览"（控制台 + 测试模式面板的统一日志查看器），
+    // 落盘职责已移交主进程（`ai-runtime/runtime.ts` / `llm/runtime.ts` 的 `createMainLogger`），
+    // 这里改用 `logPreviewOnly` 避免同一份请求内容经桥接重复写入 `henji-*.log`。
     void listenRuntimeRequestPreview((payload) => {
-      const runtimePreviewLogger = createLogger('core.services.GenerationService')
-      runtimePreviewLogger.info('最终请求参数(JSON)', {
+      logPreviewOnly('core.services.GenerationService', '最终请求参数(JSON)', {
         event: 'generation.runtime.request_json',
         requestId: payload.requestId,
         taskId: payload.taskId,
@@ -819,8 +857,7 @@ export function initLoggerConfig(): void {
     })
 
     void listenLlmRuntimeRequestPreview((payload) => {
-      const runtimePreviewLogger = createLogger('commands.llmRuntime')
-      runtimePreviewLogger.info('LLM 实际请求参数(JSON)', {
+      logPreviewOnly('commands.llmRuntime', 'LLM 实际请求参数(JSON)', {
         event: 'llm_runtime.chat_stream.request_json',
         requestId: payload.requestId,
         modelId: payload.modelId,

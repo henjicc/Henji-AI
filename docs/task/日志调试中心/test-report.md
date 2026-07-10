@@ -89,3 +89,81 @@
 ---
 
 以上 A~F 步骤中，A/B/C 只需要一次正常的 `electron:dev` 会话即可覆盖；D/E/F 需要额外制造测试文件，做完记得手动清理测试用的假日志文件，避免污染真实日志目录。
+
+## 1.2 LLM请求响应完整捕获
+
+### 自动化检查（已执行，全部通过）
+
+| 命令 | 结果 |
+|---|---|
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过，无报错 |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过，无报错/警告 |
+| `npm run lint`（`eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0`） | 通过，无报错/警告 |
+| `npx tsc --noEmit`（全仓库，含 `src`，用于确认 `GenerationService.ts`/`logger.ts` 改动没有破坏渲染层类型链路） | 通过，无报错 |
+| `npm run check:colors` | 通过 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run gen:model-manifest` | 通过（61 个模型，本任务未改模型定义，仅确认脚本链路未被破坏） |
+| 新增/修改文件裸 `any` 排查（覆盖本次全部改动文件逐一 grep） | 无命中，未新增裸 `any` |
+
+未执行 `npm run electron:build` / `npm run electron:smoke`：按项目约定较费时间，本次纯类型/静态检查已覆盖改动风险面。
+
+### 验收标准逐项对照
+
+| 验收标准 | 状态 | 说明 |
+|---|---|---|
+| 成功 LLM 对话后 JSONL 含同 requestId 的 `request_json`/`response_json`，内容与界面一致 | **待人工验证** | 见下方步骤 G |
+| 失败调用（错误 API key）后有 error 级别事件，含可读错误信息 | **待人工验证** | 见步骤 H |
+| AI 生成链路（任选一个图像模型）请求/响应事件同样直接由主进程记录 | **待人工验证** | 见步骤 I |
+| 所有捕获事件中 api_key/authorization 类字段为 `***` | **待人工验证** | 复用既有 `isSensitiveKey`，逻辑未改动，但需要实际抽查 JSONL 确认没有遗漏字段，见步骤 J |
+| 同一事实不再经"渲染层转发再桥接"重复落盘（文件中无重复事件） | **待人工验证** | 见步骤 K |
+| 类型/静态检查通过；无新增裸 any | 已通过 | 见上表 |
+
+以下步骤涉及启动真实 Electron 应用、真实调用 LLM/AI 生成接口（需要真实 API key），按项目约定交给用户执行。
+
+---
+
+### 步骤 G：验证 LLM 成功对话的 request_json / response_json
+
+1. 重启 `npm run electron:dev`（本次改动涉及主进程，必须重启）。
+2. 在应用内配置一个有效的 LLM Provider API key（PPIO/OpenAI/DeepSeek 均可），发起一次正常对话，等待完整回复出现在界面上。
+3. 打开日志目录：`%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\`，找到当天的 `henji-YYYY-MM-DD.log`。
+4. 搜索 `llm_runtime.chat_stream.request_json`，确认：
+   - 该行 `"source":"backend"`、`"domain":"llm-runtime"`；
+   - `context.requestBody` 是完整的 OpenAI 兼容 payload（含 `model`/`messages`/`stream` 等字段），你发送的 prompt 文本能在 `messages` 里找到（除非超过 1200+240 字符会被截断，正常长度的对话内容应完整可见）。
+5. 搜索同一个 `requestId`（与上一步是同一个字符串）对应的 `llm_runtime.chat_stream.response_json` 行，确认：
+   - `context.output` 与界面上实际显示的回复文本一致（同样受 1200+240 字符截断限制，短回复应逐字一致）；
+   - 如果模型开了推理/reasoning，`context.reasoningOutput` 也应该有内容；
+   - `context.elapsedMs`/`context.inputChars`/`context.outputChars` 数值合理。
+
+### 步骤 H：验证 LLM 失败对话的 error 事件
+
+1. 承接步骤 G 的窗口，把该 Provider 的 API key 改成一个明显错误的值（比如加个后缀）。
+2. 再发起一次对话，界面上应该出现请求失败的提示。
+3. 在同一份 `henji-YYYY-MM-DD.log` 里搜索 `llm_runtime.chat_stream.failed`，确认：
+   - `"level":"error"`、`"source":"backend"`；
+   - `error` 字段是结构化对象（含 `name`/`message`，可能有 `stack`）；
+   - `context.normalizedMessage` 是可读的错误描述（应该能看出是 HTTP 4xx/401 之类的鉴权失败，而不是一串看不懂的堆栈）。
+4. 顺便确认：改完 key 之后是否**还能**在同一份文件里找到一条 `commands.llmRuntime` 域、`event` 为 `llm_runtime.chat_stream.invoke_failed` 的 `"source":"frontend"` 记录——这条应该存在（IPC 调用确实失败了），但**不应该**再看到 `"source":"frontend"` 且 `event` 为 `llm_runtime.chat_stream.failed` 的记录（这条已经被本次改动删除，只有 `"source":"backend"` 的 `chat_stream.failed` 才应该出现）。
+
+### 步骤 I：验证 AI 生成链路的 request_json / response_json
+
+1. 在应用内正常触发一次 AI 图片生成任务（任选一个已配置 API key 的图像模型）。
+2. 等待生成成功后，在 `henji-YYYY-MM-DD.log` 里搜索 `generation.runtime.request_json`，确认 `"source":"backend"`、`"domain":"ai-runtime"`，`context.requestBody` 是发给供应商的最终请求体。
+3. 搜索同一个 `requestId` 对应的 `generation.runtime.response_json`，确认 `context.responseBody` 是供应商返回的原始响应结构（图片 URL/base64 等，图片数据本身按 sanitize 规则会被截断成 `...(len=N, ...)...` 形式，这是预期行为，不算异常）。
+4. 如果条件允许，触发一次需要轮询的生成任务（比如某些视频模型），确认轮询阶段也能在文件里搜到 `generation.runtime.request_json`/`response_json`（`continuePolling()` 本次是新接入的，之前完全没有这两个事件，值得重点确认）。
+
+### 步骤 J：抽查敏感字段打码
+
+1. 结合步骤 G/I 产生的日志行，搜索 `api_key`、`authorization`、`Authorization`，确认所有命中的值都是字符串 `"***"`，没有任何一处出现明文 key 或 token。
+2. 如果应用里配置了多个 Provider 的 key，可以多触发几次不同 Provider 的请求，扩大抽查覆盖面。
+
+### 步骤 K：确认无重复落盘
+
+1. 用编辑器打开 `henji-YYYY-MM-DD.log`，针对步骤 G/I 里用到的同一个 `requestId`，统计一下：
+   - `llm_runtime.chat_stream.request_json`/`response_json` 应该各**只出现一次**（`source:"backend"`）；
+   - `generation.runtime.request_json`/`response_json` 应该各**只出现一次**（`source:"backend"`）——注意如果测试模式（`Ctrl+Alt+Shift+T`）是打开状态且"输出参数"选项也打开，会额外看到一条 `api.trace`（`source:"frontend"`），这是独立的 opt-in 调试通道，字段结构和 `generation.runtime.response_json` 不同（多了 `model`/`type`/`prompt` 归纳字段），**不算重复**，属于本次决策里明确保留的行为（见 `decisions.md`）；如果测试模式是关闭状态，则完全不应该出现 `api.trace`。
+2. 如果发现同一个 `requestId` 下 `generation.runtime.response_json` 或 `llm_runtime.chat_stream.request_json` 出现了两条内容几乎相同、只有 `source` 不同的记录，说明去重没有生效，需要回头检查 `logPreviewOnly` 是否被正确接入（预期：这类事件现在应该只有 `source:"backend"` 一条，不应该再看到对应的 `source:"frontend"` 副本）。
+
+---
+
+以上 G~K 步骤需要真实的 LLM/AI 生成 API key 才能触发，且涉及主动构造错误场景（步骤 H），按项目约定由用户手动执行；完成后如果发现任何一条不符合预期，请把对应日志行原文贴出来，方便定位是 sanitize 规则问题还是事件接入位置问题。
