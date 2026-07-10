@@ -106,3 +106,18 @@
 - `src/features/cameraStage/store/shotSlice.ts`：允许同模式但空卡的简易工程初始化首卡。
 - `src/features/cameraStage/store/shotSlice.test.ts`：新增简易工程首卡初始化回归用例。
 - `docs/task/运镜控制简易模式/`：更新 2.4 任务、总览及五类记录。
+
+## 3.1 摄像机效果器
+
+### 新增
+
+- `src/features/cameraStage/domain/cameraEffectors.ts`：确定性摄像机效果器采样纯函数。
+- `src/features/cameraStage/domain/cameraEffectors.test.ts`：确定性、零强度与频率测试。
+
+### 修改
+
+- `src/features/cameraStage/store/playbackAppliers.ts`：applier 增加精确采样时间参数。
+- `src/features/cameraStage/scene/StagePlaybackDriver.tsx`：效果器摄像机逐帧下发基础/采样位置。
+- `src/features/cameraStage/scene/StageViewportCamera.tsx`：对真实取景相机叠加确定性局部偏移。
+- `src/features/cameraStage/panels/CameraSettingsSection.tsx`：增加效果器参数 UI。
+- `docs/task/运镜控制简易模式/`：更新 3.1 任务、总览、重要记录及五类任务记录。

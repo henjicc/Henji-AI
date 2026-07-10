@@ -11,7 +11,7 @@
 
 import type { StageKeyframeValue } from '../domain/animationTypes'
 
-export type PlaybackApplyFn = (value: StageKeyframeValue) => void
+export type PlaybackApplyFn = (value: StageKeyframeValue, time: number) => void
 
 function keyOf(objectId: string, path: string): string {
   return `${objectId}::${path}`
@@ -45,8 +45,9 @@ export function runPlaybackAppliers(
   objectId: string,
   path: string,
   value: StageKeyframeValue,
+  time: number,
 ): void {
   const set = appliers.get(keyOf(objectId, path))
   if (!set) return
-  for (const fn of set) fn(value)
+  for (const fn of set) fn(value, time)
 }

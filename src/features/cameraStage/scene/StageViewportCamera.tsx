@@ -1,8 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { PerspectiveCamera } from '@react-three/drei'
 import type { PerspectiveCamera as ThreePerspectiveCamera } from 'three'
 import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
+import { sampleCameraEffectorOffsets } from '../domain/cameraEffectors'
+import { useCameraStageStore } from '../store/cameraStageStore'
 
 interface StageViewportCameraProps {
   cameraObject: StageCameraObject
@@ -14,17 +16,27 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({ cameraObject,
   const cameraRef = useRef<ThreePerspectiveCamera>(null)
   const { position } = cameraObject.transform
 
+  const applyCameraSample = useCallback((camera: ThreePerspectiveCamera, basePosition: StageVec3, time: number): void => {
+    camera.position.set(basePosition.x, basePosition.y, basePosition.z)
+    camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z)
+    const { positionOffset, rotationOffset } = sampleCameraEffectorOffsets(cameraObject.effectors, time)
+    camera.translateX(positionOffset.x)
+    camera.translateY(positionOffset.y)
+    camera.translateZ(positionOffset.z)
+    camera.rotateX(rotationOffset.x)
+    camera.rotateY(rotationOffset.y)
+    camera.rotateZ(rotationOffset.z)
+    camera.updateProjectionMatrix()
+  }, [cameraObject.effectors, lookAtTarget.x, lookAtTarget.y, lookAtTarget.z])
+
   // 播放期命令式采样：摄像机视角下真实渲染相机的位置/FOV 直接由采样值驱动（不写 store）
   useEffect(() => {
     const unregs: Array<() => void> = []
     unregs.push(
-      registerPlaybackApplier(cameraObject.id, 'transform.position', (value) => {
+      registerPlaybackApplier(cameraObject.id, 'transform.position', (value, time) => {
         const camera = cameraRef.current
         if (!camera) return
-        const v = value as StageVec3
-        camera.position.set(v.x, v.y, v.z)
-        camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z)
-        camera.updateProjectionMatrix()
+        applyCameraSample(camera, value as StageVec3, time)
       }),
     )
     unregs.push(
@@ -36,20 +48,21 @@ const StageViewportCamera: React.FC<StageViewportCameraProps> = ({ cameraObject,
       }),
     )
     return () => unregs.forEach((unregister) => unregister())
-  }, [cameraObject.id, lookAtTarget.x, lookAtTarget.y, lookAtTarget.z])
+  }, [applyCameraSample, cameraObject.id])
 
   useLayoutEffect(() => {
     const camera = cameraRef.current
     if (!camera) return
-    camera.position.set(position.x, position.y, position.z)
     camera.fov = cameraObject.fov
-    camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z)
-    camera.updateProjectionMatrix()
+    applyCameraSample(camera, position, useCameraStageStore.getState().playback.currentTime)
   }, [
     cameraObject.fov,
+    cameraObject.effectors,
+    applyCameraSample,
     lookAtTarget.x,
     lookAtTarget.y,
     lookAtTarget.z,
+    position,
     position.x,
     position.y,
     position.z,

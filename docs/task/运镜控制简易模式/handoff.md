@@ -103,3 +103,10 @@
 - `KeyframeStopwatch` 已在简易模式统一返回 null，专业模式及旧工程仍保留码表。
 - 简易时间轴继续复用 `ShotTimelinePanel`，本阶段没有复制或改写 2.2/2.3 UI。
 - 40/40 单测及静态检查通过；真实 Electron 的模式选择、重开持久化和顶栏展示待用户按 `test-report.md` 验收。
+
+## 3.1 完成交接（供 3.2/3.3）
+
+- 效果器只改 `StageViewportCamera` 的 Three 相机，不写 store、不生成轨道；3.2 烘焙时保留摄像机 `effectors` 配置即可，无需把偏移烘成关键帧。
+- `PlaybackApplyFn` 现为 `(value, time)`；新增 applier 应继续使用驱动传入的精确时间，不要改用节流后的 store 播放头。
+- 启用效果器的静态摄像机在播放中也会逐帧下发 position；关闭后仍保持原有行为。
+- 3.3 需由用户在真实 Electron 验证播放/scrub/MP4 同时刻一致，以及保存重开后 transform 未污染。

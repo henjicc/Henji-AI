@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
-import { Dropdown, UiRangeInput } from '@/components/ui'
+import { Dropdown, UiRangeInput, UiSwitch } from '@/components/ui'
 import { getObjectLookAtPoint, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import { CAMERA_ASPECT_RATIO_PRESETS } from '../domain/sceneDefaults'
 import type {
@@ -9,6 +9,7 @@ import type {
   StageCameraObject,
   StageVec3,
 } from '../domain/sceneTypes'
+import type { StageCameraEffector } from '../domain/shotTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 
@@ -21,6 +22,10 @@ const LOOK_AT_MODE_OPTIONS: Array<{ label: string; value: LookAtMode; disabled?:
 ]
 
 const CUSTOM_ASPECT_RATIO_INITIAL_HEIGHT = 9
+const EFFECTOR_DEFAULTS: Record<StageCameraEffector['kind'], Omit<StageCameraEffector, 'id' | 'kind'>> = {
+  handheld: { enabled: false, intensity: 1, frequency: 1.4 },
+  breathing: { enabled: false, intensity: 1, frequency: 0.25 },
+}
 
 /** 自定义画幅比例的宽/高输入：用 key={cameraId} 挂载重置，避免切换摄像机后残留上一台的编辑态 */
 const CustomAspectRatioInputs: React.FC<{ ratio: number; onChange: (ratio: number) => void }> = ({
@@ -156,6 +161,43 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
   const aspectPresetLabel =
     CAMERA_ASPECT_RATIO_PRESETS.find((item) => item.value === object.aspectRatio.preset)?.label ?? '自定义'
 
+  const updateEffector = (kind: StageCameraEffector['kind'], patch: Partial<StageCameraEffector>): void => {
+    const current = object.effectors.find((effector) => effector.kind === kind)
+    const next: StageCameraEffector = current
+      ? { ...current, ...patch }
+      : { id: `camera-${kind}`, kind, ...EFFECTOR_DEFAULTS[kind], ...patch }
+    updateObject(object.id, {
+      effectors: [...object.effectors.filter((effector) => effector.kind !== kind), next],
+    })
+  }
+
+  const renderEffector = (kind: StageCameraEffector['kind'], label: string): React.ReactNode => {
+    const effector = object.effectors.find((item) => item.kind === kind)
+    const value = effector ?? { id: `camera-${kind}`, kind, ...EFFECTOR_DEFAULTS[kind] }
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-text-muted">{label}</span>
+          <UiSwitch checked={value.enabled} onCheckedChange={(enabled) => updateEffector(kind, { enabled })} />
+        </div>
+        {value.enabled && (
+          <>
+            <label className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="w-10 shrink-0">强度</span>
+              <UiRangeInput min={0} max={2} step={0.05} value={value.intensity}
+                onChange={(event) => updateEffector(kind, { intensity: Number(event.target.value) })} />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="w-10 shrink-0">频率</span>
+              <UiRangeInput min={0.05} max={3} step={0.05} value={value.frequency}
+                onChange={(event) => updateEffector(kind, { frequency: Number(event.target.value) })} />
+            </label>
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <SectionTitle>相机</SectionTitle>
@@ -242,6 +284,10 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
           />
         </div>
       )}
+
+      <SectionTitle>效果器</SectionTitle>
+      {renderEffector('handheld', '手持晃动')}
+      {renderEffector('breathing', '呼吸推拉')}
     </div>
   )
 }
