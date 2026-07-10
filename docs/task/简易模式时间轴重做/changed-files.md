@@ -1,4 +1,30 @@
-# 简易模式时间轴重做 · 变更文件清单（第一阶段：1.1 + 1.2 + 1.3）
+# 简易模式时间轴重做 · 变更文件清单（第一阶段：1.1 + 1.2 + 1.3；第二阶段：2.1 + 2.2 + 2.3）
+
+## 第二阶段新增文件
+
+```
+src/features/cameraStage/simple/timeline/useClipTrim.ts        # 2.1：块右边缘 trim 拖拽 hook
+src/features/cameraStage/simple/timeline/useClipReorder.ts     # 2.2：块身重排拖拽 hook + computeInsertIndex 纯函数
+src/features/cameraStage/simple/timeline/useClipReorder.test.ts # 2.2：computeInsertIndex 单测
+```
+
+## 第二阶段修改文件
+
+```
+src/features/cameraStage/simple/ShotTimelinePanel.tsx           # 2.2：接入 reorderShot 提交；2.3：pxPerSecond 改 state + 滚轮缩放 + 初始自适应 + 帧刻度切换
+src/features/cameraStage/simple/timeline/ShotClipTrack.tsx       # 2.1/2.2：接入 useClipTrim/useClipReorder，本地覆盖布局、浮签、插入指示线
+src/features/cameraStage/simple/timeline/StaticClipBlock.tsx     # 2.1/2.2：新增右边缘 trim 命中区、块身重排事件透传，导出 ClipBlockPointerHandlers 类型
+src/features/cameraStage/simple/timeline/TransitionClipBlock.tsx # 2.1：新增右边缘 trim 命中区（与 PanelTrigger 兄弟节点叠加）
+```
+
+## 第二阶段对应提交
+
+- `完成：2.1 块边缘拖拽调时长 + 2.2 变宽块拖拽重排`
+- `完成：2.3 滚轮缩放与阶段打磨`
+
+---
+
+# 第一阶段：1.1 + 1.2 + 1.3
 
 ## 新增文件
 

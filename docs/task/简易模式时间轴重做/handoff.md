@@ -1,6 +1,6 @@
-# 简易模式时间轴重做 · 交接说明（给第二/第三阶段）
+# 简易模式时间轴重做 · 交接说明（给第三阶段）
 
-第一阶段（1.1~1.3）已完成，简易模式时间轴是端到端可用的比例块轨道。本文件写清第二阶段（trim/重排/缩放）和第三阶段（多机位）需要知道的接口、数据结构与约定，避免重复造轮子或破坏既有不变量。
+第一、二阶段（1.1~1.3、2.1~2.3）已完成，简易模式时间轴是端到端可用、带完整编辑手感（trim/重排/滚轮缩放）的比例块轨道。本文件写清第三阶段（多机位）需要知道的接口、数据结构与约定，避免重复造轮子或破坏既有不变量。第二阶段新增的接口见文末新增章节。
 
 ## 目录结构（新增文件都在这里）
 
@@ -15,10 +15,14 @@ src/features/cameraStage/simple/
     ├── shotTimecodeFormat.test.ts
     ├── shotTimelineLayout.ts      # 布局常量（SHOT_CLIP_TRACK_HEIGHT=64），故意与组件文件分开避免 react-refresh 警告
     ├── ShotTimecodeText.tsx       # Ctrl+点击循环切换时间码格式（组件）
-    ├── ShotClipTrack.tsx          # 块轨道编排：调 buildClipLayout，渲染 StaticClipBlock/TransitionClipBlock + 添加块
-    ├── StaticClipBlock.tsx        # 静止块：名称/时长/选中态/播放头态/双击重命名/悬浮删除
-    ├── TransitionClipBlock.tsx    # 过渡块：自身即 PanelTrigger 触发器，弹 TransitionPopover
-    └── TransitionPopover.tsx      # 过渡参数气泡内容：时长(帧)+批量速度预设+可折叠逐对象细节
+    ├── ShotClipTrack.tsx          # 块轨道编排：调 buildClipLayout，渲染 StaticClipBlock/TransitionClipBlock + 添加块；
+    │                               # 2.1/2.2 起还负责接 useClipTrim/useClipReorder 两个 hook、trim 本地覆盖布局、浮签/插入指示线
+    ├── StaticClipBlock.tsx        # 静止块：名称/时长/选中态/播放头态/双击重命名/悬浮删除/块身拖拽重排/右边缘 trim
+    ├── TransitionClipBlock.tsx    # 过渡块：自身即 PanelTrigger 触发器，弹 TransitionPopover；右边缘叠加 trim 命中区
+    ├── TransitionPopover.tsx      # 过渡参数气泡内容：时长(帧)+批量速度预设+可折叠逐对象细节
+    ├── useClipTrim.ts             # 2.1：块右边缘 PR 式 trim 拖拽 hook（本地预览 + 松手一次性提交）
+    ├── useClipReorder.ts          # 2.2：静止块块身拖拽重排 hook（含可单测的 computeInsertIndex 纯函数）
+    └── useClipReorder.test.ts
 ```
 
 `simple/ShotCard.tsx`、`simple/TransitionDetailPanel.tsx` 已删除（分别被 `StaticClipBlock`/新气泡替代），不要再引用。
@@ -52,7 +56,7 @@ function isTimeInTransition(shots: StageShot[], time: number, fps: number): bool
 
 **重要**：`buildClipLayout` 的 `pxPerSecond` 只影响 `x`/`width`，不影响 `startTime`/`endTime`/`kind`/`shotId`/`index`。如果只需要时间判断（不需要渲染坐标），可以传任意正数（面板里的"选中跟随播放头"逻辑就是传 `1`）。
 
-## 关键组件 Props
+## 关键组件 Props（第二阶段结束后的最终形态）
 
 ### `ShotClipTrack`
 
@@ -68,29 +72,43 @@ interface ShotClipTrackProps {
   onSelectShot: (id: string) => void
   onRenameShot: (id: string, name: string) => void
   onRemoveShot: (id: string) => void
-  onUpdateShotTiming: (id: string, patch: ShotTimingPatch) => void        // 来自 store，透传给 TransitionClipBlock 改时长
+  onUpdateShotTiming: (id: string, patch: ShotTimingPatch) => void        // 来自 store，透传给 TransitionClipBlock 改时长；trim 拖拽提交也走它
   onUpdateShotTransition: (id: string, patch: ShotTransitionPatch) => void // 透传给 TransitionPopover
+  onReorderShot: (id: string, toIndex: number) => void                    // 2.2 新增：重排拖拽提交，透传自 store reorderShot
   onAddShot: () => void
 }
 ```
 
-**2.1（trim）落点**：`StaticClipBlock` 目前没有边缘拖拽把手；trim 应该在 `StaticClipBlock.tsx` 里新增右边缘拖拽区域（参考 `useReorderDrag.ts` 的"拖拽中只改本地视觉状态，松手一次性提交"模式），提交时调用 `onUpdateShotTiming(shotId, { hold: quantizeToFrame(clampHold(newHold, fps), fps) })`（`quantizeToFrame`/`clampHold` 已在 `shotClipGeometry.ts` 导出，直接复用，不要重新实现钳制/量化）。
+内部行为（3.x 如需改动块轨道渲染逻辑要知道）：
 
-**2.2（重排）落点**：`ShotClipTrack.tsx` 目前渲染逻辑是纯粹按 `buildClipLayout` 顺序绝对定位，没有拖拽重排。`reorderShot(id, toIndex)` action 在 store 里已经存在（`shotSlice.ts`），1.2 移除了旧的 `useReorderDrag` 接线（它假设等宽卡片，不适配变宽块），2.2 需要重新设计一套适配"变宽块"的拖拽重排交互，不能照抄旧 204px 硬编码偏移那套。
-
-**2.3（滚轮缩放）落点**：`ShotTimelinePanel.tsx` 目前 `pxPerSecond` 是硬编码常量 `SHOT_TRACK_PX_PER_SECOND = 120`（不是 state）。2.3 需要改成 `useState` 并接入滚轮缩放，参考专业模式 `timeline/TimelinePanel.tsx` 的 `handleWheel`（`clampPxPerSecond`/`TIMELINE_MIN_PX_PER_SECOND`/`TIMELINE_MAX_PX_PER_SECOND` 已在 `timeline/timeScale.ts` 导出，直接复用）。
+- 接入 `useClipTrim({ fps, pxPerSecond, onCommit: onUpdateShotTiming })`：拖拽中用预览值覆盖对应卡的 `hold`/`transitionDuration` 生成 `layoutShots`，再走 `buildClipLayout(layoutShots, pxPerSecond)` 重算真实布局（不是另开一套几何算法）。传给 `StaticClipBlock`/`TransitionClipBlock` 的 `shot` prop 用的是 `layoutShots[block.index]`，不是原始 `shots[block.index]`——**3.x 如果要在块上叠加机位徽标，读取的 `shot.cameraId`（3.1 新增字段）在 trim 拖拽中依然是原值，只有 `hold`/`transitionDuration` 被覆盖，不受影响**。
+- 接入 `useClipReorder({ staticBlocks, trackRef, onReorder: onReorderShot, onSelect: onSelectShot })`：`staticBlocks` 从当前 `layout` 派生（`{ shotId, x, width }[]`）。
+- trim 实时预览浮签、重排插入指示线都是 `ShotClipTrack.tsx` 内联的 `pointer-events-none` 绝对定位 `<div>`，没有拆独立组件（决策 D5）。
 
 ### `StaticClipBlock` / `TransitionClipBlock`
 
 ```ts
+/** 块身重排 / 右边缘 trim 共用的一组 pointer 事件透传，导出自 StaticClipBlock.tsx 供 TransitionClipBlock 复用类型 */
+interface ClipBlockPointerHandlers {
+  onPointerDown: (event: React.PointerEvent) => void
+  onPointerMove: (event: React.PointerEvent) => void
+  onPointerUp: (event: React.PointerEvent) => void
+  onPointerCancel: (event: React.PointerEvent) => void
+}
+
 interface StaticClipBlockProps {
   shot: StageShot
   block: ShotClipBlock   // kind 必为 'static'
   selected: boolean
   isPlayhead: boolean    // 播放头当前落在本块（跟随高亮，非选中态）
-  onSelect: () => void
+  onSelect: () => void   // 仅供键盘 Enter/Space 用；指针点击选卡走 reorderHandlers 内部的点击判定
   onRename: (name: string) => void
   onRemove: () => void
+  reorderHandlers: ClipBlockPointerHandlers  // 挂在块身 wrapper 上：pointerdown 记录起点，阈值内当点击、超阈值当重排拖拽
+  dragging: boolean          // 本块是否正在被重排拖拽（跟手视觉：z-30 + opacity-70 + translateX）
+  dragOffsetX: number        // 重排拖拽中的水平位移 px，仅 dragging 为 true 时生效
+  trimHandlers: ClipBlockPointerHandlers  // 挂在右边缘 6px 命中区
+  trimming: boolean          // 本块右边缘是否正在被 trim（边框高亮）
 }
 
 interface TransitionClipBlockProps {
@@ -102,14 +120,16 @@ interface TransitionClipBlockProps {
   fps: number
   updateShotTiming: (id: string, patch: ShotTimingPatch) => void
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
+  trimHandlers: ClipBlockPointerHandlers  // 挂在右边缘 6px 命中区（与 PanelTrigger 是兄弟节点，后渲染盖在其上，不会误触发气泡）
+  trimming: boolean
 }
 ```
 
-极窄块保底最小可视宽度 16px（`MIN_VISUAL_WIDTH`/`MIN_TRANSITION_WIDTH` 常量），硬切命中区 16px（`HARD_CUT_HIT_WIDTH`）——2.1 做 trim 拖拽把手时注意不要和这个最小宽度保底冲突（拖到极窄时视觉宽度是保底值，不是真实 `block.width`，边缘把手的命中判定建议用真实 `block.width` 而不是渲染宽度）。
+极窄块保底最小可视宽度 16px（`MIN_VISUAL_WIDTH`/`MIN_TRANSITION_WIDTH` 常量），硬切命中区 16px（`HARD_CUT_HIT_WIDTH`），trim 边缘命中区 6px（`w-1.5`）——三者共存已在 2.1 验证过不冲突。**3.x 如果要在块内新增机位徽标之类的展示元素，注意不要挤占块身 wrapper 的 pointer 事件（`reorderHandlers` 挂在最外层 `<div>` 上），徽标本身建议用 `pointer-events-none` 或明确 `stopPropagation`（参照删除按钮/重命名输入框的处理方式），否则会打断块身拖拽重排手势。**
 
 ### 时间码组件复用
 
-`simple/timeline/ShotTimecodeText.tsx`（`<ShotTimecodeText currentTime duration fps />`）已经是完整实现（Ctrl+点击循环 纯秒/纯帧/秒:帧），第二阶段如果有别的地方需要展示时间码（比如 trim 拖拽时的实时数值提示），直接复用这个组件或复用 `shotTimecodeFormat.ts` 里的 `formatShotTimecode`/`nextShotTimecodeMode` 纯函数，不要重新写格式化逻辑。
+`simple/timeline/ShotTimecodeText.tsx`（`<ShotTimecodeText currentTime duration fps />`）与 `shotTimecodeFormat.ts` 的 `formatShotTimecode` 纯函数已被 2.1 的 trim 浮签复用（`formatShotTimecode(value, 'secondsFrames', fps)`），无需再重复实现格式化逻辑。
 
 ## 捕获守卫（3.2 需要知道）
 
@@ -137,8 +157,14 @@ function logCaptureSkipped(selectedShotId: string): void
 
 `scene/StageScene.tsx` 已经有 `isSimpleTransitionReadOnly` 判断和门槛（`editorMode==='simple' && isTimeInTransition(...)`），`scene/StageTransitionReadOnlyOverlay.tsx` 是独立的纯展示 overlay，挂载在 `layout/CameraStageDock.tsx` 的 `ViewportPanel` 里、与 `StageAspectRatioOverlay` 同级。3.2 如果要在过渡段内额外处理"渲染机位切换"，建议复用同一个 `isSimpleTransitionReadOnly`/`isTimeInTransition` 判断，不要另起一套时间段判断逻辑。
 
+## 第二阶段（2.1~2.3）交付内容速览
+
+- **2.1 trim**：静止块/过渡块右边缘拖拽调时长，1 帧吸附，拖拽中只改 `ShotClipTrack` 内的 hook 本地状态、不写 store，松手才调一次 `onUpdateShotTiming` 提交（单条撤销历史）。停留时长（hold）**现在有 UI 入口了**（右边缘拖拽），过渡时长仍可在气泡里精确输入帧数，两个入口共存。
+- **2.2 重排**：静止块块身拖拽换序，4px 阈值区分点击/拖拽，松手一次性调 `onReorderShot` 提交；过渡块跟随前面的静止卡自然移动（数据层面无需额外处理）。插入位置用 `useClipReorder.ts` 导出的纯函数 `computeInsertIndex` 计算，已单测覆盖边界情况。
+- **2.3 滚轮缩放**：`ShotTimelinePanel.tsx` 的 `pxPerSecond` 改为 `useState`，Alt+滚轮锚点缩放（决策 D6：与专业模式保持一致，未做 Ctrl/无修饰滚轮触发）；面板挂载/可视宽度变化/总时长变化时自动 `clampPxPerSecond(可视宽度/总时长)` 铺满可见区域，用户手动缩放一次后停止自动介入（`userZoomedRef`）；标尺缩放到 200px/s 以上自动切帧刻度。
+
 ## 已知限制 / 未完成事项
 
-- 时长精确编辑目前只有过渡时长（气泡里的"帧"输入框）；**停留时长（hold）目前完全没有 UI 入口**（旧的数字输入框在 1.2 被移除，2.1 的 trim 拖拽是唯一计划中的替代方案）。第二阶段动手前请确认这一点，不要假设"停留时长已经有地方能改"。
-- 块身拖拽重排（2.2）、块边缘 trim（2.1）、滚轮缩放（2.3）均未实现，当前 `pxPerSecond` 固定 120。
-- `TransitionClipBlock` 目前没有"机位不同禁用"相关 prop，3.2 需要时自行扩展。
+- `TransitionClipBlock` 目前没有"机位不同禁用"相关 prop，3.2 需要时自行扩展（见上方"关键组件 Props"里 `TransitionClipBlockProps` 现状）。
+- trim/重排两个 hook 目前只服务于简易模式时间轴，未做成跨模式通用组件；如果专业模式未来也要类似手感，需要单独评估复用边界，不要直接跨域 import。
+- 滚轮缩放的"用户已手动缩放"状态（`userZoomedRef`）是面板内部 ref，不持久化、不跟随工程保存；每次重新打开工程/切换 dock 面板都会从自适应缩放重新开始，这是当前的预期行为（未与用户单独确认是否需要记忆缩放级别，3.x 若涉及需另行确认）。
