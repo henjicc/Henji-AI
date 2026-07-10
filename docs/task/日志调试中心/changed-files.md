@@ -119,3 +119,19 @@
 - `src/App.tsx`：挂载 `useLogWindowShortcut()`（与 `useDevToolsShortcut()` 同级，不随 Tab 切换卸载）。
 - `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：删除 `testMode.options.logCaptureMode.*`；新增 `testMode.logsWindow.*`（打开日志窗口按钮文案）与顶层 `logsWindow.*` 命名空间（日志窗口标题、工具栏、列表、详情面板文案）。
 - `.gitignore`：第 52 行 `logs` 改为 `/logs`（锚定仓库根目录），修复该规则误伤新建 `src/features/logs/` 目录导致其被 Git 静默忽略的问题，决策见 `decisions.md`。
+
+## 2.2 请求链路视图与错误复制
+
+### 新增
+
+- `src/features/logs/components/JsonTree.tsx`：轻量 JSON 折叠树，自实现（129 行），按层级展开/折叠 + 长字符串默认收起点击展开。
+- `src/features/logs/components/RequestChainView.tsx`：请求链路时间线视图（`UiModal` 承载，纵向时间线 + 就地展开单条 JSON + 整链路复制入口）。
+- `src/features/logs/copyFormats.ts`：复制格式化模块，导出 `eventToMarkdown`/`eventToJson`/`chainToMarkdown`/`chainToJson`/`copyTextToClipboard`。
+
+### 修改
+
+- `src/features/logs/logStore.ts`：新增导出 `selectEventsByRequestId(events, requestId)` 选择器（按 requestId 过滤 + 按 timestamp 升序排序，签名与 handoff.md 建议略有差异，见 `decisions.md`）。
+- `src/features/logs/components/LogEventDetail.tsx`：`<pre>{JSON.stringify(...)}}` 替换为 `<JsonTree value={event} />`；新增复制 Markdown/JSON 按钮（带"已复制"临时反馈）；新增 `onViewChain` prop 与"查看完整链路"按钮（仅 `requestId` 存在时显示）。
+- `src/features/logs/components/LogFilterToolbar.tsx`：新增 `errorOnly`/`onErrorOnlyChange` prop 与对应 `UiCheckbox`（只看错误开关）；新增 `onLookupRequestId` prop、本地 requestId 输入框（支持 Enter 提交）+ "查看完整链路"按钮。
+- `src/features/logs/LogsPanel.tsx`：新增 `errorOnly`/`chainRequestId` 状态；`filteredEvents` 追加 errorOnly 过滤；新增 `chainEvents`（`useMemo` 包 `selectEventsByRequestId`，基于完整 `events` 不受当前过滤条件影响）；渲染 `RequestChainView` 弹层；`LogEventDetail`/`LogFilterToolbar` 接线新增 props。
+- `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：新增 `logsWindow.toolbar.errorOnly`/`chainLookupPlaceholder`、`logsWindow.detail.jsonTree.{expandString,collapseString}`、`logsWindow.chain.{title,viewButton,count,empty}`、`logsWindow.copy.{markdown,json,copied}`（中英文）。

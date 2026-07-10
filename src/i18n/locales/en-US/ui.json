@@ -424,6 +424,8 @@
         "all": "All domains"
       },
       "keywordPlaceholder": "Filter by keyword (message/context/error)",
+      "errorOnly": "Errors only",
+      "chainLookupPlaceholder": "Enter/paste requestId to view chain",
       "pause": "Pause",
       "resume": "Resume",
       "clear": "Clear",
@@ -439,7 +441,22 @@
     },
     "detail": {
       "empty": "Select a log entry on the left to see details",
-      "truncatedNotice": "This event was truncated for exceeding the size limit, original size {{bytes}} bytes"
+      "truncatedNotice": "This event was truncated for exceeding the size limit, original size {{bytes}} bytes",
+      "jsonTree": {
+        "expandString": "Expand ({{count}} chars)",
+        "collapseString": "Collapse"
+      }
+    },
+    "chain": {
+      "title": "Request chain",
+      "viewButton": "View full chain",
+      "count": "{{count}} events",
+      "empty": "No events found for this requestId"
+    },
+    "copy": {
+      "markdown": "Copy Markdown",
+      "json": "Copy JSON",
+      "copied": "Copied"
     }
   },
   "imageEditor": {

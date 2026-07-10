@@ -1,8 +1,84 @@
 # 日志调试中心 - 交接说明（写给下一个执行者）
 
-面向任务：2.2 请求链路视图与错误复制（2.1 日志窗口骨架已完成）
+面向任务：2.3 历史日志回读（2.1 日志窗口骨架、2.2 请求链路视图与错误复制均已完成）
 
-## 2.1 留下了什么（2.2 最需要看这部分）
+## 2.2 留下了什么（2.3 最需要看这部分）
+
+### 文件结构增量（在 2.1 基础上新增/修改）
+
+```
+src/features/logs/
+├── copyFormats.ts                      新增：事件/链路 → Markdown/JSON 格式化 + 剪贴板写入
+├── logStore.ts                          新增导出 selectEventsByRequestId(events, requestId)
+├── LogsPanel.tsx                        新增 errorOnly/chainRequestId 状态，接线 RequestChainView
+└── components/
+    ├── JsonTree.tsx                    新增：轻量 JSON 折叠树（自实现，无第三方依赖）
+    ├── RequestChainView.tsx            新增：请求链路时间线（UiModal 承载）
+    ├── LogEventDetail.tsx              修改：JSON 展示换成 JsonTree + 复制按钮 + 查看链路入口
+    └── LogFilterToolbar.tsx            修改：新增"只看错误"开关 + requestId 链路查询输入框
+```
+
+### `copyFormats.ts` 的函数签名（2.3 如果要做"历史日志"的复制/导出，可直接复用）
+
+```ts
+export function eventToMarkdown(event: DisplayLogEvent): string
+export function eventToJson(event: DisplayLogEvent): string
+export function chainToMarkdown(events: DisplayLogEvent[]): string   // 内部会按 timestamp 升序排序，调用方不需要预先排序
+export function chainToJson(events: DisplayLogEvent[]): string        // 同上
+export async function copyTextToClipboard(text: string): Promise<void>  // navigator.clipboard.writeText 封装
+```
+
+这四个格式化函数只依赖 `DisplayLogEvent`（`eventDisplay.ts` 的类型），不关心事件来自实时推送还是历史文件读取——**2.3 如果历史日志读回来的数据也能整形成 `DisplayLogEvent` 形状，这几个函数可以直接复用，不需要为历史日志再写一套复制/导出逻辑**。
+
+### `JsonTree.tsx` 的 Props（2.3 如果历史日志详情面板要展示 JSON，直接复用这个组件，不要重新实现）
+
+```ts
+interface JsonTreeProps {
+  value: DynamicValue        // 任意 JSON 兼容值，通常传整个 event 对象
+  label?: string              // 根节点标签，省略则不显示
+  defaultExpandDepth?: number // 默认展开的层级深度，默认 1
+}
+```
+
+无状态依赖外部 store，纯展示组件，接受任意 `DynamicValue`。历史日志详情面板（如果 2.3 要做）直接 `<JsonTree value={historyEvent} />` 即可。
+
+### `selectEventsByRequestId` 的签名与 2.1 handoff 建议不同（执行时调整，决策见 `decisions.md`）
+
+```ts
+export function selectEventsByRequestId(events: DisplayLogEvent[], requestId: string): DisplayLogEvent[]
+```
+
+接收调用方已持有的 `events` 数组（不是内部读取 `logWindowStore.getSnapshot()`），这样 `LogsPanel.tsx` 能用 `useMemo` 包一层让链路视图随新事件到达自动刷新。**这个选择器目前只对内存缓冲里的事件生效**（`useLogWindowStore()` 拿到的 `events`，上限 5000 条，应用/窗口重启后清空）——如果 2.3 做历史日志回读后想要"链路查询覆盖历史文件里的事件"，这个函数需要扩展或旁边加一个新的历史版本，当前实现没有考虑跨会话/跨文件的场景。
+
+### `RequestChainView.tsx` 的 Props（2.3 大概率不需要直接复用，但如果要做"历史日志的链路视图"可参考同款结构）
+
+```ts
+interface RequestChainViewProps {
+  isOpen: boolean
+  onClose: () => void
+  requestId: string
+  events: DisplayLogEvent[]  // 调用方必须已经按时间升序排好序（selectEventsByRequestId 的输出）
+}
+```
+
+用 `UiModal` 承载（`src/components/ui/primitives.tsx` 现成组件），不是常驻布局的一部分。如果 2.3 要在历史日志页面也提供"查看完整链路"，可以直接复用这个组件（只要喂给它符合 `DisplayLogEvent` 形状、已排序的事件数组即可）。
+
+### 剪贴板能力的最终落点：`navigator.clipboard.writeText`，preload 未新增方法
+
+`electron/preload/api.d.ts` 的 `HenjiClipboardApi` **仍然**只有 `readClipboardFiles`/`readText`/`writeImageFromPath`/`writeImageFromSource`，2.2 没有新增 `writeText` 方法。复制到剪贴板的能力封装在 `src/features/logs/copyFormats.ts` 的 `copyTextToClipboard(text)`，直接调用 `navigator.clipboard.writeText(text)`。**如果 2.3 或其他后续任务也需要"复制文本到剪贴板"的能力，直接复用这个函数（`import { copyTextToClipboard } from '@/features/logs/copyFormats'`），不要在别处重新写一遍 `navigator.clipboard.writeText` 调用**——除非 2.3 的场景不在 `src/features/logs/` 目录下，那种情况下再考虑是否要把这个函数挪到更通用的位置（比如 `src/utils/`），或者按 CLAUDE.md 约定给 `HenjiClipboardApi` 补一个正式的 `writeText` PAL 方法。
+
+### 错误可见性与"只看错误"开关现状
+
+`LogsPanel.tsx` 的 `errorOnly` 是一个独立于 `levelFilter` 的布尔状态（不是把 `levelFilter` 强制设为 `'error'`），两者在 `filteredEvents` 的 `useMemo` 里是"与"关系（`.filter((event) => !errorOnly || event.level === 'error')` 追加在 `levelFilter` 过滤之后）。如果 2.3 的历史日志页面也想要"只看错误"，可以复用同样的独立布尔 + 追加 filter 的模式，不需要和 `levelFilter` 耦合。
+
+### JSON 折叠树没有做的事（如果 2.3 需要，自行判断是否要扩展）
+
+- 没有"全部展开/全部折叠"的一键按钮，只能逐层点击。
+- 没有搜索/高亮匹配字段的能力。
+- 长字符串阈值（200 字符）和默认展开深度（1 层）是写死的常量（`JsonTree.tsx` 顶部 `LONG_STRING_THRESHOLD`/`DEFAULT_EXPAND_DEPTH`），没有做成可配置 prop（`defaultExpandDepth` 是唯一暴露的可选 prop）。
+- 这些都是"够用但不完整"的取舍，2.2 任务范围内没有要求这些能力，如果后续任务或用户反馈需要，再单独扩展。
+
+## 2.1 留下了什么
 
 ### 文件结构
 

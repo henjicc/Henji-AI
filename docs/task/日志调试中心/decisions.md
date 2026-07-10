@@ -169,3 +169,36 @@
 - 排查确认：仓库当前任何位置都没有实际使用到这条规则本意指向的根级 `logs/` 目录（本项目的运行时日志走 `%LOCALAPPDATA%\...\logs\`，在应用数据目录而非仓库内，不受这条 `.gitignore` 规则影响），这条规则大概率是早期从通用 Node.js `.gitignore` 模板带入、从未真正派上用场，属于历史遗留配置。
 - 修复：把 `.gitignore` 第 52 行 `logs` 改为 `/logs`（锚定到仓库根目录），只忽略仓库根级可能出现的 `logs/` 目录，不再影响任意深度的同名目录。修复后 `git status --short -- src/features/logs .gitignore` 确认 `src/features/logs/` 恢复为可提交的未跟踪目录。
 - 这不是任务文件要求的改动，但如果不修复，本任务新建的核心目录会被静默排除在版本控制之外，属于必须顺手处理的阻塞项，记录在此避免后续误以为是有意为之。
+
+## 2.2 请求链路视图与错误复制
+
+### 决策：不新建 `LogDetailPanel.tsx`，直接改造 2.1 已有的 `LogEventDetail.tsx`
+
+- 任务文件"涉及内容"把 `LogDetailPanel.tsx` 列为新增文件，但 handoff.md 已经明确指出"'详情'就是右侧固定的一栏……这个能力已经存在（右侧栏），2.2 主要是给这个详情面板换成折叠 JSON 树 + 加'查看完整链路'入口按钮，不需要重新设计交互骨架"。
+- 如果照单新建 `LogDetailPanel.tsx` 并让它与 `LogEventDetail.tsx` 并存（或用新文件替换旧文件但保留旧文件名不变），要么产生两份功能重叠的详情面板组件（违反"禁止同功能多份实现"），要么需要一次无意义的改名重构（新文件内容与旧文件定位完全相同，只是换个文件名）。
+- 选择：直接在 `LogEventDetail.tsx` 原地修改——替换 JSON 展示方式为 `JsonTree`，新增复制按钮与"查看完整链路"入口，不改文件名、不新建文件。
+
+### 决策：`selectEventsByRequestId` 接收 `events` 数组参数，而非 handoff.md 建议的内部读取 `logWindowStore.getSnapshot()`
+
+- handoff.md 给出的建议签名是 `selectEventsByRequestId(requestId: string): DisplayLogEvent[]`，内部调用 `logWindowStore.getSnapshot()`。
+- 实际实现改为 `selectEventsByRequestId(events: DisplayLogEvent[], requestId: string): DisplayLogEvent[]`，由调用方（`LogsPanel.tsx`）传入已经从 `useLogWindowStore()` 拿到的 `events`。
+- 理由：`LogsPanel.tsx` 已经通过 `useLogWindowStore()` 订阅了实时更新的 `events`，链路弹层打开期间如果有新事件到达（比如打开链路视图时轮询还没结束，后续的 `response_json`/`failed` 事件才刚到达），用 `useMemo` 包一层 `selectEventsByRequestId(events, chainRequestId)` 能让链路视图随 `events` 引用变化自动重新计算、跟着刷新；如果签名维持"内部读取 store 快照"，链路视图要么在弹层打开的瞬间拍一次快照就不再更新（体验不如实时刷新），要么需要额外订阅 `logWindowStore` 变化（重复一份 `useLogWindowStore()` 已经在做的订阅逻辑，属于同功能多份实现）。
+- 与 `LogsPanel.tsx` 里其他派生状态（`domainOptions`/`filteredEvents`）的写法（`useMemo` 依赖 `events`）保持一致，不引入新的数据获取模式。
+
+### 决策：复制到剪贴板直接用 `navigator.clipboard.writeText`，不给 `HenjiClipboardApi` 新增 `writeText` IPC
+
+- handoff.md 已经把这个取舍留给 2.2 判断："如果 `navigator.clipboard.writeText` 在打包后的 Electron 环境实测有权限问题再切到 PAL 方案"。
+- 选择直接用 `navigator.clipboard.writeText()`（封装进 `copyFormats.ts` 的 `copyTextToClipboard`），不新增 preload 方法/IPC 通道。
+- 理由：Electron 渲染进程（`contextIsolation: true`/`sandbox: true`）默认允许同进程内 `navigator.clipboard.writeText` 调用，不需要主进程授权；日志窗口是纯调试功能，复制文本这种低风险操作走 PAL 增加的价值（多一层 IPC 往返、preload 白名单、类型定义）与实际收益不成比例。如果后续用户实测在打包环境下遇到权限问题，再补 `HenjiClipboardApi.writeText` + 三层 PAL 封装，不属于本次范围内的过度设计。
+
+### 决策：JsonTree 内部的类型区分颜色沿用 2.1 已确立的"Tailwind 命名色板直写"模式，不新增 `styleTokens.ts` 条目
+
+- `JsonTree.tsx` 用 `text-emerald-400`（字符串）/`text-sky-400`（数字）/`text-amber-400`（布尔）区分 JSON 值类型，`RequestChainView.tsx` 用 `bg-red-500`（错误事件时间线圆点）。
+- 排查确认 2.1 的 `LogEventRow.tsx`（`border-l-red-500/60`）与 `LogEventList.tsx`（`border-yellow-500/30`/`bg-yellow-500/10`/`text-yellow-500/90`）已经在日志模块内直接使用 Tailwind 默认色板的具名类（不是 `styleTokens.ts` 里的语义 token，也不是十六进制字面量），`check-color-tokens.cjs` 只检测十六进制颜色直写与任意值十六进制 Tailwind 类，不检测具名颜色类，属于允许的用法。
+- 选择延续同一模式而不是新造一套语义 token：JSON 语法高亮这种"按数据类型区分颜色"的需求是日志/调试工具的通用惯例，不属于项目主题色系统需要覆盖的场景（不随主题切换变化语义），新增专门的 `colorTokens.ts` 常量或 `styleTokens.ts` 条目对这么小范围的用途是不必要的抽象。
+
+### 决策：请求链路视图用 `UiModal` 弹层承载，而不是嵌入主布局的第三栏或替换详情面板
+
+- 任务文件实施方案第 2 条只说"详情面板提供'查看完整链路'入口……展示为纵向时间线"，未指定具体承载形式。
+- 排查确认 `src/components/ui/primitives.tsx` 已有现成的 `UiModal`（居中弹层 + 遮罩 + 标题栏 + 关闭按钮，`createPortal` 到 `document.body`，被全仓库多处复用），选择直接复用而不是在 `LogsPanel.tsx` 的两栏网格布局基础上再加一栏或做临时布局切换。
+- 理由：链路视图是"查看完整链路"这个动作触发的临时性、聚焦性内容（用户想看完这条链路就关掉，回到主列表），弹层语义比常驻的第三栏更贴切，且不需要改动现有两栏布局的响应式规则；`UiModal` 是"通用优先"要求下应该复用的现成组件，不新增弹层实现。

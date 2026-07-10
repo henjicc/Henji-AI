@@ -424,6 +424,8 @@
         "all": "全部域"
       },
       "keywordPlaceholder": "关键词筛选（message/context/error）",
+      "errorOnly": "只看错误",
+      "chainLookupPlaceholder": "输入/粘贴 requestId 查链路",
       "pause": "暂停",
       "resume": "恢复",
       "clear": "清空",
@@ -439,7 +441,22 @@
     },
     "detail": {
       "empty": "请选择左侧日志查看详情",
-      "truncatedNotice": "该事件因体积超限已被截断，原始大小 {{bytes}} 字节"
+      "truncatedNotice": "该事件因体积超限已被截断，原始大小 {{bytes}} 字节",
+      "jsonTree": {
+        "expandString": "展开（{{count}} 字符）",
+        "collapseString": "收起"
+      }
+    },
+    "chain": {
+      "title": "请求链路",
+      "viewButton": "查看完整链路",
+      "count": "共 {{count}} 条事件",
+      "empty": "未找到该 requestId 关联的事件"
+    },
+    "copy": {
+      "markdown": "复制 Markdown",
+      "json": "复制 JSON",
+      "copied": "已复制"
     }
   },
   "imageEditor": {

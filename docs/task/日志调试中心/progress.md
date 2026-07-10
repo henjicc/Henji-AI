@@ -136,3 +136,42 @@
 ### 下一任务
 
 2.2 请求链路视图与错误复制，可直接在本任务的 `logStore.ts`/`eventDisplay.ts`/`LogsPanel.tsx` 基础上扩展，详见 `handoff.md`。
+
+## 2.2 请求链路视图与错误复制
+
+- 状态：已完成（自动化检查全通过；交互行为需人工验证，见 `test-report.md`）
+- 完成日期：2026-07-10
+
+### 完成内容
+
+1. **JSON 折叠树**：新增 `src/features/logs/components/JsonTree.tsx`（129 行），自实现轻量组件，不引入第三方依赖——按层级展开/折叠对象与数组（默认展开 1 层），长字符串（>200 字符）默认收起、点击展开；数字/布尔/字符串/null 用不同颜色区分（复用 Tailwind 命名色板，如 `text-emerald-400`/`text-sky-400`/`text-amber-400`，与 2.1 `LogEventRow.tsx`/`LogEventList.tsx` 已有的 `red-500`/`yellow-500` 直写模式一致，非十六进制字面量，`check:colors` 可正常识别放行）。
+2. **详情面板升级**：`LogEventDetail.tsx` 的 `<pre>{JSON.stringify(...)}}` 整体替换为 `<JsonTree value={event} />`；新增"复制 Markdown"/"复制 JSON"按钮（点击后按钮文案临时变为"已复制"，1.5 秒后恢复）；有 `requestId` 时新增"查看完整链路"按钮。
+3. **请求链路视图**：新增 `src/features/logs/components/RequestChainView.tsx`，用 `UiModal` 承载，纵向时间线展示同一 requestId 下按时间升序排列的全部事件（每条前面有圆点标记，错误事件用红色圆点区分），显示相对首条事件的耗时（`+Nms`），点击某条事件可就地展开该事件的 `JsonTree`；顶部提供整条链路复制 Markdown/JSON 按钮。
+4. **链路聚合选择器**：`logStore.ts` 新增 `selectEventsByRequestId(events, requestId)` 纯函数，按 `requestId` 过滤 + 按 `timestamp` 升序排序；接收调用方已持有的 `events` 数组而不是内部重新读取 store 快照（详见 `decisions.md`，为了让链路视图能随新事件到达自动刷新）。
+5. **复制格式化模块**：新增 `src/features/logs/copyFormats.ts`，导出 `eventToMarkdown`/`eventToJson`/`chainToMarkdown`/`chainToJson`/`copyTextToClipboard` 五个函数。Markdown 格式含模型/provider/时间/requestId 等元信息 + context/error 的 ```json 代码块；`copyTextToClipboard` 用 `navigator.clipboard.writeText` 兜底（preload 当前无"写文本到剪贴板"方法，决策见 `decisions.md`）。
+6. **只看错误开关**：`LogsPanel.tsx` 新增 `errorOnly` 状态，`LogFilterToolbar.tsx` 新增对应 `UiCheckbox`，过滤逻辑追加 `.filter((event) => !errorOnly || event.level === 'error')`。
+7. **requestId 链路查询入口**：`LogFilterToolbar.tsx` 新增本地输入框 + "查看完整链路"按钮（支持 Enter 键提交），触发 `onLookupRequestId(requestId)` 回调；链路查询始终基于完整事件缓冲（不受当前来源/级别/domain/关键词/只看错误过滤影响），确保能看到该 requestId 下的全部事件。
+8. i18n：`logsWindow.toolbar.errorOnly`/`logsWindow.toolbar.chainLookupPlaceholder`、`logsWindow.detail.jsonTree.{expandString,collapseString}`、`logsWindow.chain.{title,viewButton,count,empty}`、`logsWindow.copy.{markdown,json,copied}`（中英文均已补齐）。
+
+### 与任务文件的偏差（均为执行时判断，详见 `decisions.md`）
+
+- 未新建 `LogDetailPanel.tsx`：2.1 已经建好详情面板骨架（`LogEventDetail.tsx`），handoff.md 已明确说明 2.2 应该"给这个详情面板换成折叠 JSON 树 + 加入口按钮，不需要重新设计交互骨架"，因此直接修改 `LogEventDetail.tsx` 而非新建同功能文件。
+
+### 验收标准逐项对照（自查，未做真实交互验证）
+
+| 验收标准 | 状态 |
+|---|---|
+| 任意日志行可打开详情，JSON 按层级折叠展开，超长字符串默认收起 | 代码走查确认，**待人工验证** |
+| 一次 LLM 调用的请求/响应/结果事件可按 requestId 聚合为时间线视图 | 代码走查确认，**待人工验证** |
+| 错误事件在列表中视觉突出，"只看错误"开关可用 | 错误突出在 2.1 已实现（`LogEventRow.tsx` 红色左边框），"只看错误"开关本任务新增，**待人工验证** |
+| 单条事件与整条链路均可复制为 Markdown 与 JSON，Markdown 粘贴后代码块格式正确 | 代码走查确认，**待人工验证**（需实际粘贴到文本编辑器核对） |
+| lint / check:colors / 原生控件检查通过；任务总览已同步更新 | 已通过，见 `test-report.md`；任务总览同步见 `00-任务总览.md` |
+
+### 未完成 / 待验证
+
+- 全部交互类验收点（JSON 折叠展开、链路聚合时序、复制 Markdown/JSON 粘贴格式、只看错误开关）均未实际操作，已在 `test-report.md` 写清步骤交给用户。
+- 历史日志回读（2.3）仍未开始，链路视图当前只能查询内存缓冲内的事件（上限 5000 条，且应用/窗口重启后清空），跨会话的历史链路查询留给 2.3。
+
+### 下一任务
+
+2.3 历史日志回读，可与本任务并行，详见 `handoff.md`。

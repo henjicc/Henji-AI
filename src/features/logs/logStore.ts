@@ -116,6 +116,23 @@ function ensureLogWindowSubscription(): void {
   })
 }
 
+/**
+ * 按 requestId 聚合出"一次请求的完整链路"，按时间升序排列（请求 → 轮询/流式 → 结果/失败）。
+ * 接收调用方已持有的 `events` 数组（通常是 `useLogWindowStore()` 返回的完整缓冲，不受当前
+ * 过滤条件限制），而不是内部再读一次 `logWindowStore.getSnapshot()`——这样链路视图能随新事件
+ * 到达自动刷新（`events` 引用变化触发调用方的 `useMemo` 重算），不需要额外订阅。
+ */
+export function selectEventsByRequestId(events: DisplayLogEvent[], requestId: string): DisplayLogEvent[] {
+  if (!requestId) {
+    return []
+  }
+
+  return events
+    .filter((event) => event.requestId === requestId)
+    .slice()
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+}
+
 export interface UseLogWindowStoreResult {
   events: DisplayLogEvent[]
   paused: boolean

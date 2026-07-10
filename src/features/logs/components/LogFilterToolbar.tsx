@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { getLogCaptureMode } from '@/commands/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -20,14 +20,20 @@ interface LogFilterToolbarProps {
   domainOptions: string[]
   keyword: string
   onKeywordChange: (value: string) => void
+  /** "只看错误"快捷开关：等价于把级别过滤收窄到 error，但独立于 levelFilter 单独展示。 */
+  errorOnly: boolean
+  onErrorOnlyChange: (value: boolean) => void
   paused: boolean
   onTogglePause: () => void
   onClear: () => void
+  /** 按 requestId 直接查链路（工具栏输入/粘贴 requestId 后触发，不受当前过滤条件影响）。 */
+  onLookupRequestId: (requestId: string) => void
 }
 
 /**
- * 日志窗口工具栏：来源/级别/domain/关键词过滤 + 暂停恢复 + 清空 + 完整捕获开关。
- * 完整捕获开关（原挂在 TestModePanel）在此落地，交互与状态读写方式不变（见 2.1 decisions.md）。
+ * 日志窗口工具栏：来源/级别/domain/关键词过滤 + 只看错误 + 暂停恢复 + 清空 +
+ * 完整捕获开关 + requestId 链路查询。完整捕获开关（原挂在 TestModePanel）在此落地，
+ * 交互与状态读写方式不变（见 2.1 decisions.md）。
  */
 export function LogFilterToolbar({
   sourceFilter,
@@ -39,13 +45,24 @@ export function LogFilterToolbar({
   domainOptions,
   keyword,
   onKeywordChange,
+  errorOnly,
+  onErrorOnlyChange,
   paused,
   onTogglePause,
   onClear,
+  onLookupRequestId,
 }: LogFilterToolbarProps): JSX.Element {
   const { t } = useI18n('ui')
   const captureMode = useSettingsStore((state) => state.logCaptureMode)
   const setCaptureMode = useSettingsStore((state) => state.setLogCaptureMode)
+  const [chainQuery, setChainQuery] = useState('')
+
+  function handleChainLookup(): void {
+    const trimmed = chainQuery.trim()
+    if (trimmed) {
+      onLookupRequestId(trimmed)
+    }
+  }
 
   useEffect(() => {
     // 日志窗口是独立渲染进程，`logCaptureMode` 本地默认值 standard 未必等于主进程真实状态
@@ -103,12 +120,34 @@ export function LogFilterToolbar({
         className="min-w-[220px] flex-1"
       />
 
+      <label className="flex items-center gap-1.5 text-xs text-text-muted">
+        <UiCheckbox checked={errorOnly} onCheckedChange={onErrorOnlyChange} />
+        {t('logsWindow.toolbar.errorOnly')}
+      </label>
+
       <UiButton type="button" size="sm" variant="ghost" onClick={onTogglePause}>
         {paused ? t('logsWindow.toolbar.resume') : t('logsWindow.toolbar.pause')}
       </UiButton>
       <UiButton type="button" size="sm" variant="ghost" onClick={onClear}>
         {t('logsWindow.toolbar.clear')}
       </UiButton>
+
+      <div className="flex items-center gap-1">
+        <UiInput
+          value={chainQuery}
+          onChange={(event) => setChainQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              handleChainLookup()
+            }
+          }}
+          placeholder={t('logsWindow.toolbar.chainLookupPlaceholder')}
+          className="w-40"
+        />
+        <UiButton type="button" size="sm" variant="ghost" onClick={handleChainLookup}>
+          {t('logsWindow.chain.viewButton')}
+        </UiButton>
+      </div>
 
       <label className="flex items-center gap-1.5 text-xs text-text-muted" title={t('logsWindow.toolbar.captureMode.description')}>
         <UiCheckbox
