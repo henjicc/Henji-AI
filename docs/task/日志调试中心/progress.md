@@ -175,3 +175,44 @@
 ### 下一任务
 
 2.3 历史日志回读，可与本任务并行，详见 `handoff.md`。
+
+## 2.3 历史日志回读
+
+- 状态：已完成（自动化检查全通过；交互行为需人工验证，见 `test-report.md`）
+- 完成日期：2026-07-10
+- **第二阶段（日志窗口）全部完成**（2.1 + 2.2 + 2.3 均已交付），下一步进入第三阶段（AI友好与治理，任务 3.1）。
+
+### 完成内容
+
+1. **主进程查询服务**：新增 `electron/main/services/logging/query.ts`（195 行）——
+   - `listLogDates()`：扫描日志目录，识别 `henji-YYYY-MM-DD.log` 文件名，提取日期并按降序返回。
+   - `queryLogEvents(params)`：按日期用 `readline` 流式逐行读取 JSONL，不整文件进内存；服务端过滤 level/source/domainPrefix（前缀匹配）/requestId/keyword（大小写不敏感，命中 domain/event/message/requestId/taskId/modelId/providerId/context/error 任一字段）；分页用"`beforeTimestamp` 游标 + 大小为 `limit` 的滚动缓冲区"实现"最近 N 条匹配事件"语义（内存占用恒为 `O(limit)`，与文件大小无关），返回按时间降序排列；JSON 解析失败的行跳过并计入 `corruptedLines`，不中断查询；目标文件不存在时返回空结果而非报错。
+2. **IPC + 五层 PAL**：新增 `logging:listDates`/`logging:query` 两个 IPC（`electron/main/ipc/logging.ts`，含入参校验），`electron/preload/api.d.ts`/`electron/preload/index.ts` 补齐 `HenjiLogQueryParams`/`HenjiLogQueryResult`/`HenjiLoggingApi.listLogDates`/`queryLogEvents`；`src/platform/contracts/logging.ts`/`src/platform/adapters/electron/logging.ts`/`src/commands/logging.ts` 同步补齐 `LogQueryParams`/`LogQueryResult`/`listLogDates()`/`queryLogEvents()`（桌面运行时之外静默返回空结果）。
+3. **历史数据源 hook**：新增 `src/features/logs/useLogHistoryQuery.ts`（163 行）——独立于 `logStore.ts`（拆分理由见 `decisions.md`），拉取日期列表（进入历史模式即重新拉取一次，跨天场景下保持与实际文件一致）、按当前过滤条件（level/source/domainPrefix/keyword，均下沉到查询参数）查询选中日期、`beforeTimestamp` 游标翻页、`useRef` 计数器处理请求竞态（旧的慢请求结果不会覆盖新请求）。
+4. **页面模式切换**：`LogFilterToolbar.tsx` 新增"实时/历史"模式切换按钮组；历史模式下工具栏把暂停/恢复/清空按钮换成日期下拉选择器（`historyDates`），并显示"已跳过 N 行损坏日志"提示（`historyCorruptedLines` 大于 0 时）。`LogsPanel.tsx` 新增 `mode` 状态，`events`/`filteredEvents`/`domainOptions` 根据模式切换数据源（历史模式下 level/source/domain/keyword 已由查询参数下沉过滤，前端只补一层 `errorOnly` 客户端过滤——`errorOnly` 不在任务约定的下沉字段范围内，决策见 `decisions.md`）。
+5. **列表两层"加载更早"**：`LogEventList.tsx` 新增 `remoteHasMore`/`onLoadMoreRemote`/`remoteLoading` 可选 prop（默认值使实时模式零改动），"加载更早"按钮优先展开本地已加载但未可见的部分，全部展开完且服务端还有更早数据时才触发远程翻页，等待期间按钮文案变为"加载中..."并禁用。
+6. **历史模式链路查询**：`LogsPanel.tsx` 新增 `historyChainEvents` 状态与对应 `useEffect`——历史模式下"查看完整链路"不复用 `selectEventsByRequestId`（只服务内存缓冲），而是另发一次 `queryLogEvents({ date, requestId, limit: 500 })` 查询，结果本地补 id、按时间升序排序后喂给已有的 `RequestChainView`（组件本身不改）。
+7. **详情/复制能力零改动直接可用**：历史事件补 `id` 后就是标准 `DisplayLogEvent` 形状，`LogEventDetail.tsx`/`copyFormats.ts`/`JsonTree.tsx` 全部零改动即可在历史模式下正常工作。
+8. i18n：新增 `logsWindow.toolbar.mode.{live,history}`、`logsWindow.toolbar.historyDate.{empty,corrupted}`、`logsWindow.list.loading`（中英文均已补齐）。
+
+### 验收标准逐项对照（自查，未做真实交互验证）
+
+| 验收标准 | 状态 |
+|---|---|
+| 重启应用后能在历史模式看到重启前的日志事件 | 设计上成立（历史模式直接查磁盘文件，不依赖内存缓冲），**待人工验证** |
+| 日期列表与实际存在的日志文件一致 | 代码走查确认（`listLogDates()` 直接扫描目录，历史模式每次进入都重新拉取），**待人工验证** |
+| 历史模式下过滤（级别/来源/domain/requestId/关键词）由主进程执行，大文件不整体传给渲染层（分页生效） | 代码走查确认（`query.ts` 流式读取 + 滚动缓冲区，内存占用与 `limit` 成正比），**待人工验证** |
+| 历史事件的详情、链路、复制功能可用 | 代码走查确认（复用 2.1/2.2 组件，历史链路另发查询），**待人工验证** |
+| 文件中混入损坏行不导致查询失败 | 代码走查确认（`JSON.parse` 逐行 try/catch，失败计数跳过），**待人工验证** |
+| 类型/静态检查通过；任务总览已同步更新 | 已通过，见 `test-report.md`；任务总览同步见 `00-任务总览.md` |
+
+### 未完成 / 待验证
+
+- 全部交互类验收点（重启后历史回读、日期列表正确性、过滤下沉、损坏行容错、详情/链路/复制在历史模式下可用）均未实际操作，已在 `test-report.md` 写清步骤（AD~AI）交给用户。
+- 主控复核已补强同毫秒多事件翻页（文件行号游标）与“可解析但结构不合法 JSON”容错；`npx tsc -p tsconfig.electron.json --noEmit`、Electron eslint、`npm run lint` 于修正后重新通过，详情见 `test-report.md`。
+- domain 过滤下拉选项在历史模式下退化为"当前已加载页面里出现过的 domain"（非全量当日 domain 集合），是有意的复杂度取舍，决策见 `decisions.md`。
+- 历史链路查询作用域限定在"当前选中日期"内，不跨日期查找同一 requestId（正常场景下一次请求的完整链路不会跨天）。
+
+### 下一阶段（第三阶段-AI友好与治理，任务 3.1）
+
+详见 `handoff.md`——3.1 的查询脚本需要和本任务 `query.ts` 的"读文件过滤语义"保持一致（字段含义、大小写规则等），具体细节已写入 `handoff.md`。

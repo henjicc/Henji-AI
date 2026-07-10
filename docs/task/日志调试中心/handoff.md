@@ -1,6 +1,70 @@
 # 日志调试中心 - 交接说明（写给下一个执行者）
 
-面向任务：2.3 历史日志回读（2.1 日志窗口骨架、2.2 请求链路视图与错误复制均已完成）
+面向任务：3.1 日志查询脚本与AI访问约定（第二阶段-日志窗口 2.1/2.2/2.3 均已完成，第二阶段全部交付）
+
+## 2.3 留下了什么（3.1 最需要看这部分）
+
+### 主控复核后的分页与容错语义（3.1 不应误改）
+
+- `LogQueryParams` 除 `beforeTimestamp` 外新增 `beforeLine?: number`，`LogQueryResult` 新增 `nextBeforeLine?: number`。日志窗口的连续翻页使用行号游标：下一页只读取当前页最旧事件所在行之前的数据，避免同一毫秒多条事件共用 timestamp 时发生漏项；`beforeTimestamp` 保留为独立的 ISO 时间边界过滤。
+- `beforeLine` 只能用于同一日期、同一过滤条件下的连续查询；IPC 仅接受非负整数，`limit` 仅接受有限 number。3.1 独立脚本若要实现分页，应保持“不重不漏”的稳定游标语义，不必复制 GUI 的行号字段。
+- `queryLogEvents` 会把 JSON 语法错误、以及可解析但不符合 `MainLogEvent` 必填字段/枚举约束的行一并计入 `corruptedLines` 后跳过；其余合法行继续返回，不允许一条异常数据中断整天查询。
+
+### `query.ts` 的位置与两个导出函数
+
+- 位置：`electron/main/services/logging/query.ts`（233 行），经 `electron/main/services/logging/index.ts` 统一导出。
+- `listLogDates(): Promise<string[]>`：扫描 `getLogDir()`（`writer.ts` 导出，`%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\`），用正则 `^henji-(\d{4}-\d{2}-\d{2})\.log$` 识别日志文件，提取日期部分，**按日期字符串降序**（`b.localeCompare(a)`，最新的在前）返回。目录不存在时返回空数组（不抛错）。
+- `queryLogEvents(params: LogQueryParams): Promise<LogQueryResult>`：按日期流式查询，**3.1 的 Node 查询脚本如果要复用同一套"读文件过滤语义"，应该按下面的字段含义与规则对齐**（不需要复用这份 TS 代码本身——3.1 大概率是独立的 Node 脚本，跑在项目脚本环境而非 Electron 主进程里，但过滤逻辑的行为应该和这里保持一致，否则用户会遇到"日志窗口历史模式查到的结果"和"AI 用查询脚本查到的结果"对不上的困惑）。
+
+### `LogQueryParams` 字段形状与过滤规则（3.1 对齐的核心）
+
+```ts
+export interface LogQueryParams {
+  date: string              // 必填，格式 YYYY-MM-DD，对应 henji-YYYY-MM-DD.log 文件；格式不对直接抛错
+  level?: MainLogLevel      // 精确匹配，'trace' | 'debug' | 'info' | 'warn' | 'error'；不传 = 不过滤
+  source?: MainLogSource    // 精确匹配，'frontend' | 'backend'；不传 = 不过滤
+  domainPrefix?: string     // 前缀匹配：event.domain.startsWith(domainPrefix)；传完整 domain 字符串等价于精确匹配
+  requestId?: string        // 精确匹配（区分大小写，requestId 本身是 UUID 一类的标识符，不需要模糊）
+  keyword?: string          // 大小写不敏感的子串匹配，见下方"关键词匹配字段清单"
+  beforeTimestamp?: string  // 分页游标：只保留 event.timestamp < beforeTimestamp 的事件（字符串比较，依赖 ISO 8601 timestamp 天然可比）
+  limit?: number            // 单页最大返回条数，默认 200，上限 2000（Math.min(Math.max(limit, 1), 2000)，越界值会被夹紧而不是报错）
+}
+```
+
+**关键词匹配字段清单**（`matchesKeyword` 内部逻辑，`query.ts` 与前端 `eventDisplay.ts` 的 `matchesKeyword` 各自独立实现但字段清单完全一致，3.1 若要在脚本里做等价的关键词过滤应该覆盖同一组字段）：`domain`、`event`、`message`、`requestId`、`taskId`、`modelId`、`providerId`、`context`（非字符串值先 `JSON.stringify` 再参与匹配，`JSON.stringify` 失败时该字段视为空字符串参与匹配，不中断整体匹配）、`error`（同上）。全部转小写后判断 `keyword.toLowerCase()` 是否是某个字段的子串，命中任意一个字段即算匹配。
+
+### `LogQueryResult` 字段形状
+
+```ts
+export interface LogQueryResult {
+  events: MainLogEvent[]   // 命中事件，按 timestamp 降序排列（最新在前）
+  hasMore: boolean          // true 表示还有更早的匹配事件未返回（用于"加载更早"分页判断）
+  corruptedLines: number    // 本次查询中 JSON.parse 失败被跳过的行数
+}
+```
+
+### 分页语义：游标（`beforeTimestamp`）+ 滚动缓冲区，不是数值 `offset`
+
+- `query.ts` 单次流式遍历目标文件（不整文件进内存），对每一行：`JSON.parse` 失败则 `corruptedLines++` 并跳过（继续下一行，不中断查询）；解析成功后应用 `matchesFilters`（level/source/domainPrefix/requestId/beforeTimestamp/keyword 全部满足才算命中）；命中后 push 进一个大小为 `limit` 的数组，超出 `limit` 时 `shift()` 掉最旧的一条（数组元素随文件读取顺序天然按时间升序排列，`shift()` 淘汰的正是当前已见范围内最旧的一条）。
+- 遍历结束后，这个数组就是"`beforeTimestamp` 之前最近 `limit` 条匹配事件"（升序），反转一次得到降序输出；`hasMore = totalMatched > limit`（`totalMatched` 是一个独立计数器，每次命中过滤条件就 +1，不受滚动缓冲区淘汰影响）。
+- "加载更早"翻页：调用方把上一页最后一条（最旧一条）事件的 `timestamp` 作为下一次查询的 `beforeTimestamp` 传入。
+- **3.1 若要写一个独立 Node 脚本做等价查询，不强制照抄这个"滚动缓冲区"实现**（比如脚本场景下如果读入内存开销可接受，完全可以用更简单的"读全部匹配行再 slice"），但如果 3.1 也想支持分页/条数限制，语义上应该保持"游标 + 最近 N 条"这个心智模型一致，避免用户在 GUI 历史模式和脚本两条路径之间来回切换时对"分页"的理解产生偏差。
+
+### `listLogDates`/`queryLogEvents` 对应的 IPC 通道与渲染层调用方式（3.1 大概率不需要，仅供参考）
+
+- IPC：`logging:listDates`（无入参）、`logging:query`（入参 `LogQueryParams`，主进程侧在 `electron/main/ipc/logging.ts` 的 `parseLogQueryPayload` 做了完整的运行时类型校验，非法 `date` 格式/非法 `level`/`source` 枚举值会直接被拒绝抛错，不会静默吞掉）。
+- 渲染层封装：`src/commands/logging.ts` 的 `listLogDates()`/`queryLogEvents(params)`，桌面运行时之外静默返回空结果（不抛错）。
+- 3.1 的查询脚本预期是独立 Node 脚本（不经过 Electron IPC，直接用 Node `fs`/`readline` 读取日志目录），这条 IPC 链路只是"GUI 历史模式怎么复用同一个 `query.ts`"的实现细节，不是 3.1 需要复用的部分——3.1 应该关注的是上面"`LogQueryParams` 字段形状与过滤规则"这一节的**语义**，而不是这条 IPC 通道本身。
+
+### 日志文件路径与命名规则（3.1 脚本需要自己定位文件，规则与 `writer.ts`/`query.ts` 完全一致）
+
+- 目录：`getLogDir()`（`writer.ts`）= Windows 下 `%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\`（其他平台走 `app.getPath('appData')`，但项目当前主要面向 Windows）。
+- 文件名：`henji-YYYY-MM-DD.log`（`MAIN_LOG_FILE_PREFIX = 'henji-'`，`types.ts` 导出，`writer.ts`/`retention.ts`/`query.ts` 三处共用同一个常量，3.1 的独立脚本无法直接 import 这个 TS 常量，需要在脚本里硬编码同样的前缀字符串 `'henji-'` 和后缀 `.log`，或者从 `electron/main/services/logging/types.ts` 源文件读取——如果 3.1 决定脚本运行在纯 Node 环境不经过 TS 编译，建议在脚本注释里注明"前缀/后缀规则需要与 `types.ts` 的 `MAIN_LOG_FILE_PREFIX` 保持同步"，避免未来改文件命名规则时脚本悄悄失效）。
+- 每行一个 JSON（`MainLogEvent` 结构：`timestamp`/`level`/`domain`/`event`/`message`/`requestId?`/`taskId?`/`modelId?`/`providerId?`/`context?`/`error?`/`source`/`truncatedByLimit?`），无缩进无包裹（JSONL 标准格式，`writer.ts` 用 `JSON.stringify(event)` 逐行拼接 `\n` 分隔）。
+
+### 敏感字段脱敏已在写入时完成，3.1 脚本不需要重复处理
+
+- `sanitize.ts` 的 `isSensitiveKey`/`sanitizeJsonValue` 在事件**写入文件之前**已经执行过（`push.ts` 的 `appendLogEvents` 调用链路），日志文件里的 `api_key`/`authorization`/`token`/`secret`/`password` 等字段已经是 `'***'`，3.1 的查询脚本直接读文件拿到的就是已脱敏的内容，不需要在脚本层再做一遍脱敏。
 
 ## 2.2 留下了什么（2.3 最需要看这部分）
 

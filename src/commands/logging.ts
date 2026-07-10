@@ -1,8 +1,8 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
-import type { LogCaptureMode, LogEventPushDto } from '@/platform/contracts/logging'
+import type { LogCaptureMode, LogEventPushDto, LogQueryParams, LogQueryResult } from '@/platform/contracts/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
-export type { LogCaptureMode, LogEventPushDto }
+export type { LogCaptureMode, LogEventPushDto, LogQueryParams, LogQueryResult }
 
 export async function logFrontendEvents(events: LogEventBridgeDto[]): Promise<void> {
   if (!isDesktopRuntime() || events.length === 0) {
@@ -59,4 +59,29 @@ export async function openLogWindow(): Promise<void> {
   }
 
   await getPlatform().logging.openLogWindow()
+}
+
+/**
+ * 列出当前存在的历史日志文件对应的日期（降序，最近的在前）。桌面运行时之外静默返回空数组。
+ * 用于历史模式的日期选择器（2.3 历史日志回读）。
+ */
+export async function listLogDates(): Promise<string[]> {
+  if (!isDesktopRuntime()) {
+    return []
+  }
+
+  return await getPlatform().logging.listLogDates()
+}
+
+/**
+ * 按日期流式查询历史日志事件，过滤（level/source/domainPrefix/requestId/keyword）与分页
+ * （beforeTimestamp 游标 + limit）均在主进程完成，不整文件传给渲染层。
+ * 桌面运行时之外静默返回空结果。
+ */
+export async function queryLogEvents(params: LogQueryParams): Promise<LogQueryResult> {
+  if (!isDesktopRuntime()) {
+    return { events: [], hasMore: false, corruptedLines: 0 }
+  }
+
+  return await getPlatform().logging.queryLogEvents(params)
 }

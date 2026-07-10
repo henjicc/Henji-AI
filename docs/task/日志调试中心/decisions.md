@@ -197,8 +197,71 @@
 - 排查确认 2.1 的 `LogEventRow.tsx`（`border-l-red-500/60`）与 `LogEventList.tsx`（`border-yellow-500/30`/`bg-yellow-500/10`/`text-yellow-500/90`）已经在日志模块内直接使用 Tailwind 默认色板的具名类（不是 `styleTokens.ts` 里的语义 token，也不是十六进制字面量），`check-color-tokens.cjs` 只检测十六进制颜色直写与任意值十六进制 Tailwind 类，不检测具名颜色类，属于允许的用法。
 - 选择延续同一模式而不是新造一套语义 token：JSON 语法高亮这种"按数据类型区分颜色"的需求是日志/调试工具的通用惯例，不属于项目主题色系统需要覆盖的场景（不随主题切换变化语义），新增专门的 `colorTokens.ts` 常量或 `styleTokens.ts` 条目对这么小范围的用途是不必要的抽象。
 
+## 2.3 历史日志回读
+
+### 决策：分页语义选"游标（beforeTimestamp）+ 滚动缓冲区"而非数值 `offset`
+
+- 任务文件"实施方案"把"offset+limit 或'最后 N 条'"并列为两个可选分页方案，标注可执行时确认。
+- 选择：`queryLogEvents(params)`（`electron/main/services/logging/query.ts`）用 `readline` 单次流式遍历文件，维护一个大小为 `limit` 的滚动缓冲区（命中过滤条件就 push，超出 `limit` 就 shift 掉最旧的一条），遍历结束时缓冲区即"游标之前最近 limit 条匹配事件"，反转一次得到按时间降序（最新在前）的结果；`hasMore` 用一个独立计数器 `totalMatched > limit` 判断。"加载更早"翻页通过 `beforeTimestamp` 传入上一页最后一条（最旧一条）事件的 `timestamp`。
+- 理由：
+  1. 数值 `offset` 需要先知道"从文件开头数第 N 条匹配"，对"渲染层想要的是最新事件优先"这个 UX 目标（与实时模式列表倒序展示一致）不友好——用 `offset=0` 天然拿到的是全天最早的事件，不是用户真正关心的"最近发生了什么"；要拿到"最新 N 条"要么要两遍扫描（先数总数再算 skip 量），要么要维护游标。
+  2. "游标 + 滚动缓冲区"方案只需单次流式遍历，内存占用恒为 `O(limit)`，与文件大小无关，直接满足任务文件"流式逐行读取，不整文件进内存；按过滤参数命中后收集直至 limit"的约束（这里的"收集直至 limit"用滚动缓冲区实现，超出后旧的自动淘汰，语义上等价于"持续收集直到遍历结束，最终只保留最近 limit 条"）。
+  3. 用 `beforeTimestamp`（稳定的时间戳字符串）而不是数值索引做游标，对"翻页期间文件可能有新行追加"更健壮（虽然历史模式选中的是已经跨天归档的日期，正常不会再追加，但游标方案不依赖"文件行数不变"这个假设，更稳）。
+
+### 决策：`errorOnly` 不下沉为服务端查询参数，历史模式沿用与实时模式相同的"客户端追加 filter"模式
+
+- 任务文件"实施方案"列出的可下沉过滤字段是"level / source / domain 前缀 / requestId / 关键词"，明确不包含 `errorOnly`。
+- 排查确认：`errorOnly` 在 2.2 的实现里是独立于 `levelFilter` 的布尔开关（"与"关系，`!errorOnly || event.level === 'error'`），如果历史模式把 `errorOnly` 硬编码映射成查询参数 `level: 'error'`，会跟用户同时选中的 `levelFilter`（比如 `warn`）冲突——服务端 `level` 参数只能做精确匹配，无法表达"levelFilter 是 warn 同时 errorOnly 也开启"这种两个条件的"与"语义（结果应为空，但如果直接覆盖成 `level: 'error'` 会静默改变用户选择的 levelFilter 语义）。
+- 选择：`useLogHistoryQuery.ts` 的查询参数只映射 `level`/`source`/`domainPrefix`/`keyword`，不传 `errorOnly`；`LogsPanel.tsx` 对 `history.events` 返回结果额外追加 `.filter((event) => !errorOnly || event.level === 'error')`，与实时模式分支写法完全对称，复用同一套"独立布尔 + 追加 filter"心智模型（2.1/2.2 handoff 已经建议过这个模式）。
+- 代价：极端情况下（`errorOnly` 开启但当前页里 error 事件很少）单页展示条数可能明显少于 `PAGE_SIZE`，需要连续点几次"加载更早"才能凑够可读内容——这与实时模式的既有行为一致（`LogEventList.tsx` 的可见条数本来就建立在已经过滤后的数组上），不算新增的不一致体验。
+
+### 决策：历史模式的 domain 过滤器复用现有下拉 UI，选项来源退化为"当前已加载页面里出现过的 domain"（非全量）
+
+- `query.ts` 的 `domainPrefix` 参数设计为前缀匹配（任务文件原话"domain 前缀"），但 `LogFilterToolbar.tsx` 现有的 domain 控件是下拉选择（精确值），不是自由文本输入。
+- 选择：不新增一个"历史模式专用文本输入框"控件（会造成"同一过滤维度两种不同交互形态"的不一致体验，且要多维护一份 UI 分支），继续复用下拉控件；`domainOptions` 在历史模式下由 `history.events`（当前已加载的分页数据）动态收集，而不是"当天文件里全部出现过的 domain"（后者需要额外一次全量扫描或维护索引，超出本任务"日期选择器通常只有 1-2 项，实现保持通用即可，不需要为很多天历史做专门优化"的复杂度预算）。
+- 代价：翻开第一页时如果某个 domain 只出现在更早的分页里，下拉框暂时看不到它；用户勾了"加载更早"之后该 domain 才会出现在下拉选项里。由于 `domainPrefix` 本身是前缀匹配，用户也可以不依赖下拉框、直接在别处（比如工具栏 requestId 输入框）间接定位，实际影响可控；如果后续用户反馈这个体验不够用，再考虑把 domain 控件在历史模式下换成自由文本输入（服务端接口已经支持前缀匹配，改动量很小）。
+
+### 决策：历史模式的链路查询（"查看完整链路"）另起一次 `queryLogEvents({ requestId, date })` 主进程查询，不复用 `selectEventsByRequestId`
+
+- `selectEventsByRequestId`（`logStore.ts`）只能在调用方已持有的 `events` 数组（实时内存缓冲，上限 5000 条、重启清空）里过滤，2.1 handoff 已经明确标注"如果 2.3 做历史日志回读后想要链路查询覆盖历史文件里的事件，这个函数需要扩展或旁边加一个新的历史版本"。
+- 选择：`LogsPanel.tsx` 新增一个 `useEffect`，历史模式下检测到 `chainRequestId` 变化时，直接调用 `queryLogEvents({ date: history.selectedDate, requestId: chainRequestId, limit: CHAIN_QUERY_LIMIT(500) })`（不传 `beforeTimestamp`，即"该 requestId 在选中日期下最近 500 条匹配事件"，对单次请求链路而言足够覆盖全部关联事件），结果本地补 id、按时间升序排序后喂给 `RequestChainView`（复用组件本身，不改它的 props 形状）。
+- 理由：不修改 `selectEventsByRequestId` 的签名（保持"只服务内存缓冲"的单一职责，符合它 2.2 决策已确立的定位），也不需要为了"跨数据源统一"而引入更复杂的抽象——链路查询的数据源切换（内存缓冲 vs 主进程查询）逻辑收在 `LogsPanel.tsx` 一处（`chainEvents = mode === 'history' ? historyChainEvents : liveChainEvents`），下游 `RequestChainView`/`LogEventDetail` 完全不感知这个差异，符合"同一套列表/过滤/详情/链路 UI"的任务目标。
+- 链路查询的作用域限定在"当前选中日期"，不会跨日期查找同一 requestId（正常情况下一次请求的完整链路不会跨天，退化到"日期选择器通常只有 1-2 项"这条重要记录同样适用）。
+
+### 决策：新增独立文件 `src/features/logs/useLogHistoryQuery.ts` 承载历史查询状态，不把这部分逻辑塞进 `logStore.ts`
+
+- 任务文件"涉及内容"把 `logStore.ts` 列为需要修改的文件（隐含"历史数据通路与分页状态"可能直接加在这里）。
+- 排查确认：`logStore.ts`（2.1/2.2 累计到 161 行）当前职责是"订阅主进程实时推送、维护有上限的易失内存缓冲、暂停/恢复"，生命周期与数据来源都和"按需查询磁盘文件、支持向后翻页、查询期间要处理竞态（旧请求结果需要被丢弃）"的历史查询逻辑明显不同——硬塞进同一个文件会让 `logStore.ts` 同时维护两种完全不同生命周期的状态机，违反"如果描述时需要用到'和'，优先拆分"的单一职责约束。
+- 选择：新建 `useLogHistoryQuery.ts`（163 行，一个自包含的 React Hook：拉取日期列表 + 按当前过滤条件查询选中日期 + 翻页 + 请求竞态处理），`LogsPanel.tsx` 像使用其他 hook 一样调用它；`logStore.ts` 保持原样不动（只是"涉及内容"清单里没有精确预判到这个拆分决策，实际改动落在新文件而非该文件本身）。
+- 请求竞态处理：用 `useRef` 存一个递增的 `requestSeq`，每次发起查询前自增并记录当前序号，查询返回后比对序号是否仍是"最新一次"，不是则丢弃结果不落地——避免"快速切换日期/过滤条件时，旧的慢请求结果覆盖新请求结果"的经典竞态 bug。
+
+### 决策：`LogEventList.tsx` 扩展为支持"本地展开 + 远程翻页"两层"加载更早"，而不是新建历史模式专用列表组件
+
+- 任务目标要求"从主进程 JSONL 文件加载当天日志进入同一套列表/过滤/详情/链路 UI"，2.1 已有的 `LogEventList.tsx` 是"只渲染最近 N 条 + 加载更早本地展开"的增量渲染实现，语义上只解决"已加载数据太多不能一次性渲染"，没有"服务端还有更多数据未加载"这一层。
+- 选择：给 `LogEventList.tsx` 新增三个可选 prop（`remoteHasMore`/`onLoadMoreRemote`/`remoteLoading`，默认值让实时模式零改动），"加载更早"按钮点击时优先展开本地已加载但未可见的部分（`hasMoreLocal`），全部展开完且 `remoteHasMore` 为真时才触发 `onLoadMoreRemote()` 向主进程要下一页；按钮文案在等待远程分页时显示"加载中..."并临时禁用。
+- 理由：新建一个历史模式专属列表组件会直接违反任务目标"同一套…UI"的要求，也会造成"同功能多份实现"（列表行渲染、选中态、空状态提示等逻辑要复制一遍）；用可选 prop 扩展现有组件是成本最低、侵入性最小的方案，实时模式调用方（`LogsPanel.tsx` 的 live 分支）不传这三个新 prop 即完全不受影响。
+
+### 决策：`useLogHistoryQuery.ts` 每次进入历史模式都重新拉取一次 `listLogDates()`，不做"只拉一次"的缓存
+
+- 排查确认：日志保留策略是 1 天 + 目录总大小上限（重要记录 005），日志窗口打开期间应用持续运行时，理论上存在"跨天导致旧文件过期、新文件出现"的情况（虽然概率低，日志窗口通常不会开一整天以上）。
+- 选择：`enabled`（`mode === 'history'`）变为 `true` 时都重新拉取一次日期列表，并且用 `current && list.includes(current) ? current : list[0] || ''` 保留用户已选日期（除非该日期已经不在新列表里，才回退到最新日期）。
+- 理由：这是一个成本很低（单次 IPC 调用，`readdir` 一个通常只有 1-2 个文件的目录）但能避免"日期列表与实际存在的日志文件不一致"这条验收标准长期潜在失效的选择，不需要额外的定时刷新或文件系统监听。
+
+### 决策：历史模式复制/导出直接复用 2.2 的 `copyFormats.ts`，不新增历史专属格式化函数
+
+- `handoff.md` 已经指出 `copyFormats.ts` 的四个格式化函数"只依赖 `DisplayLogEvent`，不关心事件来自实时推送还是历史文件读取"。
+- 排查确认：`useLogHistoryQuery.ts`/`LogsPanel.tsx` 里历史事件在补 `id` 字段后就是完整的 `DisplayLogEvent` 形状（`LogEventPushDto & { id: string }`），与实时事件结构完全一致。
+- 选择：不做任何改动，历史模式下 `LogEventDetail.tsx`/`RequestChainView.tsx` 的复制按钮天然可用（`eventToMarkdown`/`eventToJson`/`chainToMarkdown`/`chainToJson`/`copyTextToClipboard` 零改动）。
+
 ### 决策：请求链路视图用 `UiModal` 弹层承载，而不是嵌入主布局的第三栏或替换详情面板
 
 - 任务文件实施方案第 2 条只说"详情面板提供'查看完整链路'入口……展示为纵向时间线"，未指定具体承载形式。
 - 排查确认 `src/components/ui/primitives.tsx` 已有现成的 `UiModal`（居中弹层 + 遮罩 + 标题栏 + 关闭按钮，`createPortal` 到 `document.body`，被全仓库多处复用），选择直接复用而不是在 `LogsPanel.tsx` 的两栏网格布局基础上再加一栏或做临时布局切换。
 - 理由：链路视图是"查看完整链路"这个动作触发的临时性、聚焦性内容（用户想看完这条链路就关掉，回到主列表），弹层语义比常驻的第三栏更贴切，且不需要改动现有两栏布局的响应式规则；`UiModal` 是"通用优先"要求下应该复用的现成组件，不新增弹层实现。
+
+### 复核修正：GUI 翻页改用文件行号游标，保留 `beforeTimestamp` 作为时间边界过滤
+
+- 原实现仅把上一页最旧事件的 `timestamp` 作为下一页 `beforeTimestamp`，同一毫秒内连续写入多条事件时，严格小于比较会跳过其余同 timestamp 行。
+- 选择：`queryLogEvents` 新增 `beforeLine` / `nextBeforeLine`；滚动缓冲区同时保留事件的源文件行号，GUI 下一页传回最旧事件的行号，只读取该行之前的内容。这样不会重复或遗漏同毫秒事件，仍保持流式读取与 `O(limit)` 缓冲。
+- `beforeTimestamp` 不删除，仍支持外部调用按 ISO 时间边界查询；`beforeLine` 只作为同一文件分页的稳定游标。IPC 对行号做非负整数校验，非有限 `limit` 也会拒绝，避免异常参数使限制失效。
+- 同次复核把“可解析但不是日志对象”的 JSON（例如 `null`、数组、缺少必填字段的对象）与语法损坏行同样计入 `corruptedLines` 并跳过，确保历史文件混入此类数据不会导致查询崩溃。

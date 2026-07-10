@@ -7,10 +7,14 @@ import type { LogLevel } from '../eventDisplay'
 
 export type SourceFilter = 'all' | 'frontend' | 'backend'
 export type LevelFilter = 'all' | LogLevel
+/** 实时模式：订阅内存缓冲；历史模式：从主进程按日期查询磁盘日志文件（2.3 历史日志回读）。 */
+export type LogViewMode = 'live' | 'history'
 
 const LEVEL_VALUES: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error']
 
 interface LogFilterToolbarProps {
+  mode: LogViewMode
+  onModeChange: (mode: LogViewMode) => void
   sourceFilter: SourceFilter
   onSourceFilterChange: (value: SourceFilter) => void
   levelFilter: LevelFilter
@@ -28,6 +32,12 @@ interface LogFilterToolbarProps {
   onClear: () => void
   /** 按 requestId 直接查链路（工具栏输入/粘贴 requestId 后触发，不受当前过滤条件影响）。 */
   onLookupRequestId: (requestId: string) => void
+  /** 历史模式专用：日期列表（来自 `listLogDates`）、当前选中日期、切换回调。实时模式下忽略。 */
+  historyDates: string[]
+  selectedHistoryDate: string
+  onSelectedHistoryDateChange: (date: string) => void
+  /** 历史模式当前查询期间跳过的损坏行数，非历史模式或无损坏行时为 0。 */
+  historyCorruptedLines: number
 }
 
 /**
@@ -36,6 +46,8 @@ interface LogFilterToolbarProps {
  * 交互与状态读写方式不变（见 2.1 decisions.md）。
  */
 export function LogFilterToolbar({
+  mode,
+  onModeChange,
   sourceFilter,
   onSourceFilterChange,
   levelFilter,
@@ -51,6 +63,10 @@ export function LogFilterToolbar({
   onTogglePause,
   onClear,
   onLookupRequestId,
+  historyDates,
+  selectedHistoryDate,
+  onSelectedHistoryDateChange,
+  historyCorruptedLines,
 }: LogFilterToolbarProps): JSX.Element {
   const { t } = useI18n('ui')
   const captureMode = useSettingsStore((state) => state.logCaptureMode)
@@ -81,6 +97,25 @@ export function LogFilterToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border-dark/50 bg-panel/60 px-3 py-2">
+      <div className="flex items-center gap-1 rounded-md border border-border-dark/50 bg-black/10 p-0.5">
+        <UiButton
+          type="button"
+          size="sm"
+          variant={mode === 'live' ? 'primary' : 'ghost'}
+          onClick={() => onModeChange('live')}
+        >
+          {t('logsWindow.toolbar.mode.live')}
+        </UiButton>
+        <UiButton
+          type="button"
+          size="sm"
+          variant={mode === 'history' ? 'primary' : 'ghost'}
+          onClick={() => onModeChange('history')}
+        >
+          {t('logsWindow.toolbar.mode.history')}
+        </UiButton>
+      </div>
+
       <UiSelect
         value={sourceFilter}
         onChange={(event) => onSourceFilterChange(event.target.value as SourceFilter)}
@@ -125,12 +160,38 @@ export function LogFilterToolbar({
         {t('logsWindow.toolbar.errorOnly')}
       </label>
 
-      <UiButton type="button" size="sm" variant="ghost" onClick={onTogglePause}>
-        {paused ? t('logsWindow.toolbar.resume') : t('logsWindow.toolbar.pause')}
-      </UiButton>
-      <UiButton type="button" size="sm" variant="ghost" onClick={onClear}>
-        {t('logsWindow.toolbar.clear')}
-      </UiButton>
+      {mode === 'live' ? (
+        <>
+          <UiButton type="button" size="sm" variant="ghost" onClick={onTogglePause}>
+            {paused ? t('logsWindow.toolbar.resume') : t('logsWindow.toolbar.pause')}
+          </UiButton>
+          <UiButton type="button" size="sm" variant="ghost" onClick={onClear}>
+            {t('logsWindow.toolbar.clear')}
+          </UiButton>
+        </>
+      ) : (
+        <>
+          <UiSelect
+            value={selectedHistoryDate}
+            onChange={(event) => onSelectedHistoryDateChange(event.target.value)}
+            className="w-40"
+            disabled={historyDates.length === 0}
+          >
+            {historyDates.length === 0 ? (
+              <option value="">{t('logsWindow.toolbar.historyDate.empty')}</option>
+            ) : (
+              historyDates.map((date) => (
+                <option key={date} value={date}>{date}</option>
+              ))
+            )}
+          </UiSelect>
+          {historyCorruptedLines > 0 && (
+            <span className="text-[11px] text-yellow-500/90">
+              {t('logsWindow.toolbar.historyDate.corrupted', { count: historyCorruptedLines })}
+            </span>
+          )}
+        </>
+      )}
 
       <div className="flex items-center gap-1">
         <UiInput

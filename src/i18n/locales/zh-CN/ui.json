@@ -409,6 +409,10 @@
   "logsWindow": {
     "title": "痕迹AI - 日志",
     "toolbar": {
+      "mode": {
+        "live": "实时",
+        "history": "历史"
+      },
       "source": {
         "label": "来源",
         "all": "全部来源",
@@ -432,11 +436,16 @@
       "captureMode": {
         "title": "完整捕获",
         "description": "开启后长文本与图片不再截断；音频/视频与 API Key 等敏感字段仍会摘要/打码"
+      },
+      "historyDate": {
+        "empty": "暂无历史日志",
+        "corrupted": "已跳过 {{count}} 行损坏日志"
       }
     },
     "list": {
       "empty": "暂无日志",
       "loadMore": "加载更早的日志",
+      "loading": "加载中...",
       "paused": "已暂停，新日志已缓冲"
     },
     "detail": {

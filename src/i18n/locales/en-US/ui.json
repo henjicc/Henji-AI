@@ -409,6 +409,10 @@
   "logsWindow": {
     "title": "Henji AI - Logs",
     "toolbar": {
+      "mode": {
+        "live": "Live",
+        "history": "History"
+      },
       "source": {
         "label": "Source",
         "all": "All sources",
@@ -432,11 +436,16 @@
       "captureMode": {
         "title": "Full capture",
         "description": "When on, long text and images are no longer truncated; audio/video and sensitive fields like API keys are still summarized/masked."
+      },
+      "historyDate": {
+        "empty": "No history logs",
+        "corrupted": "Skipped {{count}} corrupted line(s)"
       }
     },
     "list": {
       "empty": "No logs yet",
       "loadMore": "Load older logs",
+      "loading": "Loading...",
       "paused": "Paused, new logs are buffered"
     },
     "detail": {

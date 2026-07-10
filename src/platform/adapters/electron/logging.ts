@@ -27,5 +27,11 @@ export function createElectronLogging(): LoggingPlatform {
     openLogWindow: async () => {
       await getNativeLogging().openLogWindow()
     },
+    listLogDates: async () => {
+      return await getNativeLogging().listLogDates()
+    },
+    queryLogEvents: async (params) => {
+      return await getNativeLogging().queryLogEvents(params)
+    },
   }
 }

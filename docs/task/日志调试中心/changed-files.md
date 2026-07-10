@@ -135,3 +135,24 @@
 - `src/features/logs/components/LogFilterToolbar.tsx`：新增 `errorOnly`/`onErrorOnlyChange` prop 与对应 `UiCheckbox`（只看错误开关）；新增 `onLookupRequestId` prop、本地 requestId 输入框（支持 Enter 提交）+ "查看完整链路"按钮。
 - `src/features/logs/LogsPanel.tsx`：新增 `errorOnly`/`chainRequestId` 状态；`filteredEvents` 追加 errorOnly 过滤；新增 `chainEvents`（`useMemo` 包 `selectEventsByRequestId`，基于完整 `events` 不受当前过滤条件影响）；渲染 `RequestChainView` 弹层；`LogEventDetail`/`LogFilterToolbar` 接线新增 props。
 - `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：新增 `logsWindow.toolbar.errorOnly`/`chainLookupPlaceholder`、`logsWindow.detail.jsonTree.{expandString,collapseString}`、`logsWindow.chain.{title,viewButton,count,empty}`、`logsWindow.copy.{markdown,json,copied}`（中英文）。
+
+## 2.3 历史日志回读
+
+### 新增
+
+- `electron/main/services/logging/query.ts`：历史日志文件查询服务（`listLogDates`/`queryLogEvents`，流式逐行读取，服务端过滤 + `beforeTimestamp` 时间边界 / `beforeLine` 文件行号游标分页，损坏行与结构非法 JSON 均跳过计数）。
+- `src/features/logs/useLogHistoryQuery.ts`：历史模式数据源 hook（日期列表、按过滤条件查询、翻页、请求竞态处理），与 `logStore.ts` 拆开维护（决策见 `decisions.md`）。
+
+### 修改
+
+- `electron/main/services/logging/index.ts`：新增导出 `listLogDates`/`queryLogEvents`/`LogQueryParams`/`LogQueryResult`。
+- `electron/main/ipc/logging.ts`：新增 IPC `logging:listDates`（无入参，返回 `string[]`）、`logging:query`（校验 `date`/`level`/`source`/`domainPrefix`/`requestId`/`keyword`/`beforeTimestamp`/`beforeLine`/`limit` 各字段类型；行号必须为非负整数，limit 必须有限）。
+- `electron/preload/api.d.ts`：新增 `HenjiLogQueryParams`/`HenjiLogQueryResult` 类型（含行号翻页游标），`HenjiLoggingApi` 新增 `listLogDates()`/`queryLogEvents(params)`。
+- `electron/preload/index.ts`：`loggingApi` 实现 `listLogDates`/`queryLogEvents`。
+- `src/platform/contracts/logging.ts`：新增 `LogQueryParams`/`LogQueryResult` 类型（含行号翻页游标），`LoggingPlatform` 新增 `listLogDates()`/`queryLogEvents(params)`。
+- `src/platform/adapters/electron/logging.ts`：实现上述两个方法。
+- `src/commands/logging.ts`：新增 `listLogDates()`/`queryLogEvents(params)` 命令桥封装（桌面运行时之外静默返回空结果），导出 `LogQueryParams`/`LogQueryResult` 类型。
+- `src/features/logs/components/LogFilterToolbar.tsx`：新增 `mode`/`onModeChange` 与"实时/历史"模式切换按钮组；新增 `historyDates`/`selectedHistoryDate`/`onSelectedHistoryDateChange`/`historyCorruptedLines` prop，历史模式下把暂停/恢复/清空按钮换成日期下拉选择器 + 损坏行数提示；导出新增 `LogViewMode` 类型。
+- `src/features/logs/components/LogEventList.tsx`：新增可选 prop `remoteHasMore`/`onLoadMoreRemote`/`remoteLoading`（默认值使实时模式零改动），"加载更早"按钮支持"本地展开 + 远程翻页"两层逻辑。
+- `src/features/logs/LogsPanel.tsx`：新增 `mode` 状态，接线 `useLogHistoryQuery`；`events`/`filteredEvents`/`domainOptions`/`filterSignature` 按模式切换数据源与过滤逻辑；新增 `historyChainEvents` 状态与对应 `useEffect`（历史模式链路查询另发 `queryLogEvents({ date, requestId, limit: 500 })`，不复用 `selectEventsByRequestId`）；`LogFilterToolbar`/`LogEventList` 接线新增 props。
+- `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：新增 `logsWindow.toolbar.mode.{live,history}`、`logsWindow.toolbar.historyDate.{empty,corrupted}`、`logsWindow.list.loading`（中英文）。

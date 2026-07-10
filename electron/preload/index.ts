@@ -317,6 +317,8 @@ const loggingApi: HenjiLoggingApi = {
   setCaptureConfig: (mode) => nativeInvoke('logging:setCaptureConfig', { mode }),
   getCaptureConfig: () => nativeInvoke('logging:getCaptureConfig'),
   openLogWindow: () => nativeInvoke('logging:openWindow'),
+  listLogDates: () => nativeInvoke('logging:listDates'),
+  queryLogEvents: (params) => nativeInvoke('logging:query', params),
 }
 
 const updaterApi: HenjiUpdaterApi = {

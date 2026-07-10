@@ -605,6 +605,27 @@ export interface HenjiLogEvent {
 /** 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。 */
 export type HenjiLogCaptureMode = 'standard' | 'full'
 
+/** 历史日志查询参数（2.3 历史日志回读），语义见 `electron/main/services/logging/query.ts`。 */
+export interface HenjiLogQueryParams {
+  date: string
+  level?: HenjiLogEvent['level']
+  source?: HenjiLogEvent['source']
+  domainPrefix?: string
+  requestId?: string
+  keyword?: string
+  beforeTimestamp?: string
+  beforeLine?: number
+  limit?: number
+}
+
+export interface HenjiLogQueryResult {
+  /** 命中事件，按时间戳降序排列（最新在前）。 */
+  events: HenjiLogEvent[]
+  hasMore: boolean
+  corruptedLines: number
+  nextBeforeLine?: number
+}
+
 export interface HenjiLoggingApi {
   logFrontendEvents(events: HenjiLogEventBridgeDto[]): Promise<void>
   onLogEvent(handler: (events: HenjiLogEvent[]) => void): () => void
@@ -612,6 +633,10 @@ export interface HenjiLoggingApi {
   getCaptureConfig(): Promise<HenjiLogCaptureMode>
   /** 打开（或聚焦已存在的）独立日志窗口（2.1 日志窗口骨架）。 */
   openLogWindow(): Promise<void>
+  /** 列出当前存在的日志文件对应的日期（降序），供历史模式日期选择器使用。 */
+  listLogDates(): Promise<string[]>
+  /** 按日期流式查询历史日志事件，过滤/分页均在主进程完成。 */
+  queryLogEvents(params: HenjiLogQueryParams): Promise<HenjiLogQueryResult>
 }
 
 export type HenjiUpdaterStatus =
