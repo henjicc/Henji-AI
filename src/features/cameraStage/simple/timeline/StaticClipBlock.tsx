@@ -7,18 +7,37 @@ import type { ShotClipBlock } from './shotClipGeometry'
 /** 极窄块（1 帧停留）保底最小可视宽度，避免无法点选（重要记录/01-实施方案 风险控制） */
 const MIN_VISUAL_WIDTH = 16
 
+/** 块身重排 / 右边缘 trim 共用的一组 pointer 事件透传（由父级 hook 提供，语义见各自 hook 定义） */
+export interface ClipBlockPointerHandlers {
+  onPointerDown: (event: React.PointerEvent) => void
+  onPointerMove: (event: React.PointerEvent) => void
+  onPointerUp: (event: React.PointerEvent) => void
+  onPointerCancel: (event: React.PointerEvent) => void
+}
+
 interface StaticClipBlockProps {
   shot: StageShot
   block: ShotClipBlock
   selected: boolean
   /** 播放头当前落在本块内（跟随高亮，非选中态） */
   isPlayhead: boolean
+  /** 键盘 Enter/Space 选卡（指针点击选卡走 reorderHandlers，见 2.2） */
   onSelect: () => void
   onRename: (name: string) => void
   onRemove: () => void
+  /** 块身：pointerdown 记录起点，超过阈值判定重排拖拽，未超过在 pointerup 时选卡 */
+  reorderHandlers: ClipBlockPointerHandlers
+  /** 本块是否正在被重排拖拽（跟手视觉态） */
+  dragging: boolean
+  /** 重排拖拽中的水平位移（px），仅 dragging 为 true 时生效 */
+  dragOffsetX: number
+  /** 右边缘：拖拽调整停留时长（trim） */
+  trimHandlers: ClipBlockPointerHandlers
+  /** 本块右边缘是否正在被 trim 拖拽（高亮态） */
+  trimming: boolean
 }
 
-/** 时间轴静止块：名称 + 停留时长，选中/播放头两种高亮态，双击重命名，悬浮删除 */
+/** 时间轴静止块：名称 + 停留时长，选中/播放头两种高亮态，双击重命名，悬浮删除，块身拖拽重排，右边缘 trim */
 const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
   shot,
   block,
@@ -27,6 +46,11 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
   onSelect,
   onRename,
   onRemove,
+  reorderHandlers,
+  dragging,
+  dragOffsetX,
+  trimHandlers,
+  trimming,
 }) => {
   const [editingName, setEditingName] = useState(false)
   const [draftName, setDraftName] = useState(shot.name)
@@ -57,9 +81,16 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
     <div
       role="button"
       tabIndex={0}
-      className={`group absolute inset-y-1 flex cursor-pointer flex-col justify-between overflow-hidden rounded-md border px-2 py-1.5 transition-colors ${shellClass}`}
-      style={{ left: block.x, width: Math.max(block.width, MIN_VISUAL_WIDTH) }}
-      onClick={onSelect}
+      className={`group absolute inset-y-1 flex cursor-grab flex-col justify-between overflow-hidden rounded-md border px-2 py-1.5 transition-colors ${shellClass} ${dragging ? 'z-30 cursor-grabbing opacity-70 shadow-lg' : ''} ${trimming ? 'border-accent' : ''}`}
+      style={{
+        left: block.x,
+        width: Math.max(block.width, MIN_VISUAL_WIDTH),
+        transform: dragging ? `translateX(${dragOffsetX}px)` : undefined,
+      }}
+      onPointerDown={reorderHandlers.onPointerDown}
+      onPointerMove={reorderHandlers.onPointerMove}
+      onPointerUp={reorderHandlers.onPointerUp}
+      onPointerCancel={reorderHandlers.onPointerCancel}
       onKeyDown={handleKeyDown}
       title={shot.name}
     >
@@ -71,6 +102,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
             value={draftName}
             className="h-6 min-w-0 flex-1 px-1 text-xs"
             onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
             onChange={(event) => setDraftName(event.target.value)}
             onBlur={commitName}
             onKeyDown={(event) => {
@@ -92,6 +124,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
           hoverVariant="danger"
           className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100"
           title="删除片段"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation()
             onRemove()
@@ -101,6 +134,16 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
         </UiIconButton>
       </div>
       <span className="truncate text-[10px] text-text-muted">{shot.hold.toFixed(2)}s</span>
+
+      {/* 右边缘 trim 命中区：调整停留时长，独立于块身重排手势 */}
+      <div
+        role="presentation"
+        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize"
+        onPointerDown={trimHandlers.onPointerDown}
+        onPointerMove={trimHandlers.onPointerMove}
+        onPointerUp={trimHandlers.onPointerUp}
+        onPointerCancel={trimHandlers.onPointerCancel}
+      />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { PanelTrigger } from '@/components/ui'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
 import type { ShotTimingPatch, ShotTransitionPatch } from '../../store/shotSlice'
+import type { ClipBlockPointerHandlers } from './StaticClipBlock'
 import type { ShotClipBlock } from './shotClipGeometry'
 import TransitionPopover from './TransitionPopover'
 
@@ -23,12 +24,18 @@ interface TransitionClipBlockProps {
   fps: number
   updateShotTiming: (id: string, patch: ShotTimingPatch) => void
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
+  /** 右边缘：拖拽调整过渡时长（trim），0 帧时可从硬切剪切线右缘拖回 >0 */
+  trimHandlers: ClipBlockPointerHandlers
+  /** 本块右边缘是否正在被 trim 拖拽（高亮态） */
+  trimming: boolean
 }
 
 /**
  * 时间轴过渡块：更矮/更弱视觉重量，显示时长；0 帧过渡渲染为可点击的剪切竖线。
  * 点击（含剪切线）在块上方弹出参数气泡（重要记录 004），替代旧底部抽屉；
  * 气泡容器用 PanelTrigger（aboveCenter），锚点取本组件自身尺寸，内容见 TransitionPopover。
+ * 右边缘叠加独立的 trim 命中区（晚于 PanelTrigger 渲染，天然盖在其上，不经过 stopPropagation
+ * 也不会触发气泡点击，两者是兄弟节点而非父子节点）。
  */
 const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
   shot,
@@ -39,6 +46,8 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
   fps,
   updateShotTiming,
   updateShotTransition,
+  trimHandlers,
+  trimming,
 }) => {
   const isHardCut = block.width <= 0
   const left = isHardCut ? block.x - HARD_CUT_HIT_WIDTH / 2 : block.x
@@ -84,12 +93,12 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               role="button"
               tabIndex={0}
               data-panel-trigger-button
-              title="硬切（0 帧过渡），点击可调整"
+              title="硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长"
               className="flex h-full w-full cursor-pointer items-center justify-center"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
-              <span className="h-full w-0.5 rounded-full bg-text-muted transition-colors hover:bg-accent" />
+              <span className={`h-full w-0.5 rounded-full transition-colors ${trimming ? 'bg-accent' : 'bg-text-muted hover:bg-accent'}`} />
             </div>
           ) : (
             <div
@@ -97,7 +106,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               tabIndex={0}
               data-panel-trigger-button
               title={`过渡 ${shot.transitionDuration.toFixed(2)}s`}
-              className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md border border-border-dark bg-layer/70 px-1 text-[10px] text-text-muted transition-colors hover:bg-layer"
+              className={`flex h-full w-full cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md border bg-layer/70 px-1 text-[10px] text-text-muted transition-colors hover:bg-layer ${trimming ? 'border-accent' : 'border-border-dark'}`}
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
@@ -107,6 +116,15 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
           )
         }}
       </PanelTrigger>
+      {/* 右边缘 trim 命中区：与 PanelTrigger 是兄弟节点、后渲染盖在其上，点击/拖拽不会触发气泡 */}
+      <div
+        role="presentation"
+        className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize"
+        onPointerDown={trimHandlers.onPointerDown}
+        onPointerMove={trimHandlers.onPointerMove}
+        onPointerUp={trimHandlers.onPointerUp}
+        onPointerCancel={trimHandlers.onPointerCancel}
+      />
     </div>
   )
 }

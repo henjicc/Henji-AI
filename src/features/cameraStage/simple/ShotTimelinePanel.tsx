@@ -31,6 +31,7 @@ const ShotTimelinePanel: React.FC = () => {
   const addShot = useCameraStageStore((state) => state.addShot)
   const selectShot = useCameraStageStore((state) => state.selectShot)
   const removeShot = useCameraStageStore((state) => state.removeShot)
+  const reorderShot = useCameraStageStore((state) => state.reorderShot)
   const updateShotName = useCameraStageStore((state) => state.updateShotName)
   const updateShotTiming = useCameraStageStore((state) => state.updateShotTiming)
   const updateShotTransition = useCameraStageStore((state) => state.updateShotTransition)
@@ -80,6 +81,7 @@ const ShotTimelinePanel: React.FC = () => {
             onRemoveShot={removeShot}
             onUpdateShotTiming={updateShotTiming}
             onUpdateShotTransition={updateShotTransition}
+            onReorderShot={reorderShot}
             onAddShot={addShot}
           />
           <div
