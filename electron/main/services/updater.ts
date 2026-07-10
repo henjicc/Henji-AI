@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import fs from 'node:fs'
 import path from 'node:path'
+import { createMainLogger } from './logging'
 
 export type UpdaterStatus =
   | 'idle'
@@ -46,6 +47,8 @@ export type UpdaterEventDto =
   | { type: 'error'; result: UpdaterCheckResultDto }
 
 const RELEASES_URL = 'https://github.com/henjicc/Henji-AI/releases'
+
+const logger = createMainLogger('main.updater')
 
 let currentStatus: UpdaterCheckResultDto = {
   status: 'idle',
@@ -103,6 +106,30 @@ function emitUpdaterEvent(event: UpdaterEventDto): void {
 
 function setStatus(type: UpdaterEventDto['type'], result: UpdaterCheckResultDto): UpdaterCheckResultDto {
   currentStatus = result
+  const context = {
+    status: result.status,
+    hasUpdate: result.hasUpdate,
+    currentVersion: result.currentVersion,
+    latestVersion: result.latestVersion,
+    progressPercent: result.progress?.percent,
+  }
+  if (type === 'error') {
+    logger.error('自动更新状态变更', {
+      event: 'updater.status.failed',
+      context,
+      error: result.errorMessage,
+    })
+  } else if (type === 'download-progress') {
+    logger.debug('自动更新下载进度', {
+      event: 'updater.download.progress',
+      context,
+    })
+  } else {
+    logger.info('自动更新状态变更', {
+      event: `updater.status.${type}`,
+      context,
+    })
+  }
   emitUpdaterEvent({ type, result } as UpdaterEventDto)
   return result
 }

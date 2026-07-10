@@ -368,6 +368,42 @@ npm run logs:query -- --chain <requestId> --json # 原始 JSONL，便于程序�
 
 可用 `--date YYYY-MM-DD` 查询指定日期，`--dir PATH` 覆盖日志目录；完整参数见 `npm run logs:query -- --help`。
 
+#### 新功能日志接入规范
+
+- 新功能只需在实际执行层创建 logger：渲染层/前端服务使用 `createLogger(domain)`；Electron 主进程服务使用 `createMainLogger(domain)`。两者都会自动进入主进程 JSONL 落盘、日志窗口实时/历史查询与 `npm run logs:query`，**不需要为新 domain/event 单独改 IPC、页面或查询脚本**。
+- domain 用小写点分层级，按代码归属命名，不包含模型 ID、用户输入或动态路径。前端增量前缀为 `app`、`commands.*`、`core.*`、`features.*`、`services.*`、`stores.*`、`hooks.*`、`components.*`、`contexts.*`、`workspaces.*`、`utils.*`、`models.*`；主进程新代码统一为 `main.<服务>`，例如 `main.ai_runtime`、`main.llm`、`main.project_package`、`main.updater`、`main.database`、`main.logging`。
+- 存量 domain **不批量重命名**，以免切断历史日志查询；例如现有 `ai-runtime`、`llm-runtime`、`core.services.GenerationService`、`commands.llmRuntime` 继续有效。新增代码遵循上面的增量命名，查询时可用 `--domain` 前缀同时覆盖同一类事件。
+
+| 主要链路 | 已有 domain（保持） | 新增时使用 |
+|---|---|---|
+| 生成 | `core.services.GenerationService`、`ai-runtime` | `core.services.*`、`main.ai_runtime` |
+| LLM | `commands.llmRuntime`、`llm-runtime`、`services.llm.*` | `commands.*`、`main.llm` |
+| 上传 / 画布结果持久化 | `services.upload.UploadService`、`features.canvas.generation.*` | `services.upload.*`、`features.canvas.*` |
+| 项目包 | `services.projectPackage.importProject`、`services.projectPackage.exportProject` | `services.projectPackage.*`、`main.project_package` |
+| 更新 / 数据库 | `services.updateChecker`、`services.database.DatabaseService` | `main.updater`、`main.database` |
+| 日志系统 | `features.logs.*`、`core.logging.*` | `features.logs.*`、`main.logging` |
+- event 采用 `模块.动作.阶段` 小写点分格式，例如 `project_package.export.start`、`project_package.export.completed`、`project_package.export.failed`。阶段优先使用 `start`、`progress`、`completed`、`failed`；需要记录原始协议载荷时使用 `request_json`、`response_json`。event 是稳定的机器查询键，`message` 只写面向人的简短描述。
+- 级别约定：`error` 为用户可感知或需处理的失败；`warn` 为已降级/可自愈异常；`info` 为关键业务边界（开始、完成、状态改变）；`debug` 为排查细节；`trace` 为高频细节。轮询、下载进度等高频事件优先 `debug`/`trace`，避免淹没正常查询。
+- 不记录 API key、token、cookie、授权头及其他密钥；请求/响应正文按完整捕获与脱敏策略处理。关联生成或 LLM 链路时传入稳定的 `requestId`，同时按需传 `taskId`、`modelId`、`providerId`。
+
+```ts
+// 渲染层或前端服务
+const logger = createLogger('features.canvas.persistence')
+logger.info('画布保存完成', {
+  event: 'canvas.save.completed',
+  context: { nodeCount },
+})
+
+// Electron 主进程服务
+const logger = createMainLogger('main.project_package')
+logger.error('项目包导入失败', {
+  event: 'project_package.import.failed',
+  error: { message: '...' },
+})
+```
+
+- 日志窗口的事件美化字典仅用于改善可读性，**可选**维护；未登记 event 仍会按 domain 兜底样式正常显示和查询，不得因未加字典阻塞功能开发或日志落盘。
+
 浏览器控制台：
 
 ```javascript

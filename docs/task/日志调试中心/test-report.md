@@ -563,3 +563,36 @@
 以上 AD~AI 步骤覆盖了本任务几乎全部验收点，其中步骤 AD 需要真实的"完全重启应用"操作，步骤 AH 需要手动编辑日志文件构造损坏数据，按项目约定由用户手动执行；完成后如果发现任何一条不符合预期，请描述具体现象（最好附日志文件片段或截图），方便定位是 `query.ts` 查询逻辑问题还是渲染层状态管理问题。
 
 至此，**第二阶段（日志窗口）全部完成**，进入第三阶段（AI友好与治理，任务 3.1）。
+
+## 3.2 日志接入规范与覆盖治理
+
+### 自动化检查（已执行，全部通过）
+
+| 命令 | 结果 |
+|---|---|
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过，无报错 |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过，无报错/警告 |
+| `npm run lint` | 通过，无报错/警告 |
+| `npm run check:colors` | 通过，未检测到颜色规范回归 |
+| `node --check scripts/query-logs.cjs` | 通过，无语法错误 |
+
+### 静态验收对照
+
+| 验收标准 | 状态 |
+|---|---|
+| `CLAUDE.md` 含 domain/event/级别、接入示例与可选美化说明 | 已通过 |
+| 存量 domain 对照与“不重命名”规则明确 | 已通过 |
+| 主要链路覆盖盘点写入任务记录 | 已通过 |
+| 项目包/更新器关键事件已接入主进程 logger | 代码走查通过，待人工验证可见性 |
+| lint 与任务总览同步 | 已通过 |
+
+### 步骤 AJ：验证新增主进程日志事件
+
+本阶段修改了 Electron 主进程，**请先重启 `npm run electron:dev`**。以下涉及真实窗口、点击和更新器环境，按项目约定由用户手动执行：
+
+1. 在应用内导出一个包含或不包含媒体的项目包，再导入该项目包；打开日志窗口，按 domain 过滤 `main.project_package`，确认依次出现 `project_package.export.start/completed` 和 `project_package.import.start/completed`。若故意选择无效包或不可写位置，确认会出现对应 `*.failed`，且操作本身仍按原有方式报错。
+2. 运行 `npm run logs:query -- --domain main.project_package --tail 20`，确认与日志窗口相同的事件能从 JSONL 查询到。
+3. 在开发环境触发一次更新检查（设置页原有入口即可），按 domain 过滤 `main.updater`；确认正常状态事件以 info 出现，下载进度为 debug，错误以 error 出现。开发环境未配置发布元数据时的“不提供更新”状态是预期结果。
+4. 运行 `npm run logs:query -- --domain main.updater --tail 20`，确认状态事件可查询。无需为这些 event 新增美化字典；未登记时应仍按 domain 兜底正常显示。
+
+至此，**日志调试中心 8/8 任务的自动化与代码实现均已完成**；此前各阶段列出的 Electron 运行时、窗口交互和冷启动 AI 查询验证仍待用户按本报告对应步骤完成。

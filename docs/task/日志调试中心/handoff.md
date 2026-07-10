@@ -319,3 +319,10 @@ npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
 npm run lint
 npx tsc --noEmit
 ```
+
+## 3.2 最终交接（全任务完成）
+
+- 8/8 计划任务均已完成，任务目录的状态以 `00-任务总览.md` 与 `progress.md` 为准。
+- `CLAUDE.md` 已有统一接入规则：前端 `createLogger(domain)`、主进程 `createMainLogger(domain)` 自动进入 JSONL、日志窗口和查询脚本；新 event 未登记美化字典不会阻塞展示或查询。
+- 新增主进程 domain 为 `main.project_package` 与 `main.updater`；存量 `ai-runtime`、`llm-runtime` 等保持不重命名。后续数据库或其他缺口按同一规范增量补点，不做全仓批量改名。
+- 自动化检查已通过；主进程已改，用户验证前必须重启 `npm run electron:dev`，按 `test-report.md` 的 AJ 步骤确认两类事件出现在日志窗口和 `npm run logs:query` 输出中。

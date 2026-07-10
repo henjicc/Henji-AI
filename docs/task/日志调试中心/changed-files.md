@@ -169,3 +169,13 @@
 - `src/features/logs/components/LogEventList.tsx`：新增可选 prop `remoteHasMore`/`onLoadMoreRemote`/`remoteLoading`（默认值使实时模式零改动），"加载更早"按钮支持"本地展开 + 远程翻页"两层逻辑。
 - `src/features/logs/LogsPanel.tsx`：新增 `mode` 状态，接线 `useLogHistoryQuery`；`events`/`filteredEvents`/`domainOptions`/`filterSignature` 按模式切换数据源与过滤逻辑；新增 `historyChainEvents` 状态与对应 `useEffect`（历史模式链路查询另发 `queryLogEvents({ date, requestId, limit: 500 })`，不复用 `selectEventsByRequestId`）；`LogFilterToolbar`/`LogEventList` 接线新增 props。
 - `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：新增 `logsWindow.toolbar.mode.{live,history}`、`logsWindow.toolbar.historyDate.{empty,corrupted}`、`logsWindow.list.loading`（中英文）。
+
+## 3.2 日志接入规范与覆盖治理
+
+### 修改
+
+- `CLAUDE.md`：在既有“日志系统”小节新增新功能接入规范、domain 对照、event/级别约定、前后端示例、脱敏要求和美化字典兜底说明。
+- `electron/main/services/project-package.ts`：接入 `main.project_package`，记录导入/导出 start/completed/failed 关键事件。
+- `electron/main/services/updater.ts`：接入 `main.updater`，在统一状态变更入口记录 info/debug/error 事件。
+- `docs/task/日志调试中心/{00-任务总览.md,progress.md,decisions.md,handoff.md,changed-files.md,test-report.md}`：同步 3.2 执行、盘点、测试与全任务完成状态。
+- `docs/task/日志调试中心/任务/第三阶段-AI友好与治理/3.2-日志接入规范与覆盖治理.md`：更新验收状态与执行记录。
