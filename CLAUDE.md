@@ -354,6 +354,20 @@ npm run electron:dev
 
 ## 调试工具（开发模式）
 
+### 日志系统
+
+- 日志为 JSONL，位于 `%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\henji-YYYY-MM-DD.log`（Windows；其他系统使用应用配置目录）；每行含 `level`、`domain`、`event`、`requestId`、`context`、`error`、`source` 等字段。
+- 调试时优先直接查询日志文件，不要先要求用户复制控制台输出；脚本会自动跳过损坏行：
+
+```bash
+npm run logs:query -- --level error --tail 50
+npm run logs:query -- --domain llm-runtime --grep timeout
+npm run logs:query -- --chain <requestId>       # 取该 LLM 调用的完整请求/响应链路
+npm run logs:query -- --chain <requestId> --json # 原始 JSONL，便于程序处理
+```
+
+可用 `--date YYYY-MM-DD` 查询指定日期，`--dir PATH` 覆盖日志目录；完整参数见 `npm run logs:query -- --help`。
+
 浏览器控制台：
 
 ```javascript

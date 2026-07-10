@@ -1,5 +1,18 @@
 # 日志调试中心 - 变更文件清单
 
+## 3.1 日志查询脚本与AI访问约定
+
+### 新增
+
+- `scripts/query-logs.cjs`：无依赖 JSONL 流式查询 CLI，支持日志路径定位、筛选、`--chain` 完整链路、`--json` 原始 JSONL 与损坏行容错。
+
+### 修改
+
+- `package.json`：新增 `logs:query` npm script。
+- `CLAUDE.md`：新增“日志系统”小节，记录固定路径、AI 优先排查约定与查询示例。
+- `docs/task/日志调试中心/任务/第三阶段-AI友好与治理/3.1-日志查询脚本与AI访问约定.md`：更新完成状态与执行记录。
+- `docs/task/日志调试中心/{00-任务总览.md,progress.md,decisions.md,handoff.md,changed-files.md,test-report.md}`：同步阶段进度、决策、交接与测试记录。
+
 ## 1.1 主进程日志中枢与统一落盘
 
 ### 新增

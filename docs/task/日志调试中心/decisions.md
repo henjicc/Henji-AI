@@ -1,5 +1,22 @@
 # 日志调试中心 - 执行期决策记录
 
+## 3.1 日志查询脚本与AI访问约定
+
+### 决策：查询脚本独立复现主进程的目录规则，并保留 `--dir` 测试/排障覆盖
+
+- 主进程 `writer.ts` 在 Windows 优先使用 `LOCALAPPDATA`，并写入 `com.henji.ai\Henji-AI\logs`；脚本在 Windows 使用完全相同的规则，避免 AI 因目录推断错误找不到日志。
+- 独立 Node 脚本不能直接调用 Electron 的 `app.getPath()`，非 Windows 回退到标准应用配置目录；`--dir` 既服务临时测试，也允许定位非默认部署目录，不修改真实日志。
+
+### 决策：`--chain` 默认输出完整事件，`--json` 保持严格 JSONL
+
+- 普通查询优先紧凑摘要，减少 AI 读取无关日志的上下文消耗；`--chain <requestId>` 的目标是拿到一次调用完整请求/响应，因此每条摘要后输出完整格式化 JSON，并忽略其他筛选条件，不会静默截断链路。
+- `--json` 无论普通查询还是链路查询都只向 stdout 输出原始单行 JSON，告警和损坏行提示只写 stderr，保证调用方能逐行 `JSON.parse`。
+
+### 决策：查询参数保持与历史日志服务一致的核心语义
+
+- `--domain` 使用前缀匹配；`--request-id` 与 `--event` 使用精确匹配；`--level` 按 `trace < debug < info < warn < error` 做最低级别筛选；`--grep` 对原始 JSON 行做大小写不敏感搜索。
+- 脚本不复用 Electron 主进程模块，避免把 Electron 运行时依赖引入命令行工具；两者通过稳定的 JSONL schema 与目录/命名约定协作。
+
 ## 1.1 主进程日志中枢与统一落盘
 
 ### 决策：`electron/main/services/logging.ts` 删除而非改为再导出

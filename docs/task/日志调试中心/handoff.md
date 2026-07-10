@@ -1,5 +1,19 @@
 # 日志调试中心 - 交接说明（写给下一个执行者）
 
+## 3.1 → 3.2 交接
+
+### 已交付
+
+- `scripts/query-logs.cjs` 是唯一的 AI/命令行日志查询入口，`npm run logs:query -- --help` 提供完整参数说明。默认路径是 `%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\henji-YYYY-MM-DD.log`，可用 `--dir` 覆盖。
+- 查询示例：`npm run logs:query -- --chain <requestId>` 取完整 LLM 请求/响应链路；需要机器消费时加 `--json`。普通筛选可组合 `--date`、`--domain`、`--level`、`--event`、`--grep`、`--source`、`--tail`。
+- `CLAUDE.md` 的“日志系统”小节是新 AI 会话的固定发现入口，已明确调试优先查日志文件而非要求用户粘贴控制台。
+
+### 3.2 注意事项
+
+- 日志接入规范应引用上述脚本和 JSONL schema，不新增 MCP server、额外数据库或第二条读取通道（重要记录 003）。
+- 新日志字段/事件继续遵守 `MainLogEvent` schema 与敏感信息脱敏约束；如调整落盘路径或文件名，必须同步更新 writer、脚本与 `CLAUDE.md`。
+- 本阶段未改 Electron 主进程/渲染代码；无需重启。真实 LLM 链路和冷启动 AI 验证仍由用户执行，步骤见 `test-report.md`。
+
 面向任务：3.1 日志查询脚本与AI访问约定（第二阶段-日志窗口 2.1/2.2/2.3 均已完成，第二阶段全部交付）
 
 ## 2.3 留下了什么（3.1 最需要看这部分）

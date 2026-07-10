@@ -1,5 +1,33 @@
 # 日志调试中心 - 测试报告
 
+## 3.1 日志查询脚本与AI访问约定
+
+### 自动化检查（已执行，全部通过）
+
+| 命令 / 检查 | 结果 |
+|---|---|
+| `node --check scripts/query-logs.cjs` | 通过，无语法错误 |
+| 临时 JSONL fixture：`--level warn --tail 10` | 通过，只返回 warn/error 两条，验证最低级别与 tail |
+| 临时 JSONL fixture：`--chain req-chain` | 通过，按文件顺序输出 request/response 两条事件及完整 `context` JSON |
+| 临时 JSONL fixture：`--grep timeout --source frontend --json` + PowerShell `ConvertFrom-Json` | 通过，筛选结果 1 条且逐行 JSON 可解析 |
+| 临时 fixture 混入 `not-json` 与结构非法 JSON | 通过，脚本跳过 2 行并向 stderr 提示，不中断查询 |
+| `npm run logs:query -- --help` | 通过，参数说明与示例正常显示 |
+| `npm run lint` | 通过，无报错/警告 |
+| `npm run check:colors` | 通过，未检测到颜色规范违规 |
+| `git diff --check` | 通过，无空白错误 |
+
+未执行 `npm run electron:build` / `npm run electron:smoke`：本阶段仅新增独立 Node 脚本、npm 入口和指引文档，未改 Electron/渲染运行时代码；脚本语法、行为 fixture 和前端静态检查已覆盖本次风险面。
+
+### 用户人工验证（待执行）
+
+本阶段不涉及鼠标 UI 操作。请在已启动并完成一次真实 LLM 对话后执行：
+
+1. 从日志窗口任一 LLM 事件复制 `requestId`，执行 `npm run logs:query -- --chain <requestId>`；确认请求事件和响应/失败事件都出现，且 `context` 中内容与日志窗口一致。
+2. 分别执行 `npm run logs:query -- --date <当天日期>`、`npm run logs:query -- --level error`、`npm run logs:query -- --grep <已知关键词>`，确认筛选符合预期；对任意命中结果加 `--json`，确认每行可被 JSON 工具解析。
+3. 新开一个没有本任务历史对话的 AI 编程会话，只给出“查一下刚才那次 LLM 请求发了什么”；确认其能阅读 `CLAUDE.md`，定位日志与查询命令并自行完成排查，而不要求复制控制台输出。
+
+本阶段仅脚本和文档改动：**✔️无需重启** `npm run electron:dev`。
+
 ## 1.1 主进程日志中枢与统一落盘
 
 ### 自动化检查（已执行，全部通过）

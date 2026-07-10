@@ -1,5 +1,26 @@
 # 日志调试中心 - 进度记录
 
+## 3.1 日志查询脚本与AI访问约定
+
+- 状态：已完成（自动化检查通过；真实日志与冷启动 AI 会话验证待用户配合）
+- 完成日期：2026-07-10
+
+### 完成内容
+
+1. 新增 `scripts/query-logs.cjs`（250 行，纯 Node、无第三方依赖）：按 JSONL 流式逐行查询，支持 `--date`（默认 UTC 今天）、`--request-id`、`--chain`、`--domain` 前缀、`--level` 最低级别、`--event`、`--grep`、`--tail`、`--source`、`--json` 和 `--dir`。
+2. 默认每行输出时间、级别、domain、event、requestId 与消息摘要；`--json` 输出未包装的原始 JSONL；`--chain <requestId>` 输出该链路全部事件及完整 JSON，确保 LLM 请求/响应内容可直接取回。
+3. 脚本默认日志目录与主进程 writer 的 Windows 规则一致：优先 `%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs`；其他平台回退应用配置目录。损坏或不符合 schema 的行跳过并仅写 stderr，不会使 JSON 输出失效。
+4. `package.json` 新增 `npm run logs:query`；`CLAUDE.md` 新增“日志系统”小节，说明路径、常用查询和调试时优先查文件的约定。
+
+### 未完成 / 待验证
+
+- 用户需对真实 LLM 调用执行 `npm run logs:query -- --chain <requestId>`，确认请求与响应事件都可取回；详细步骤见 `test-report.md`。
+- 用户需在全新 AI 会话中仅提供“查一下刚才那次 LLM 请求发了什么”类指令，确认 AI 能只靠 `CLAUDE.md` 自主完成查询。
+
+### 下一任务
+
+3.2 日志接入规范与覆盖治理：以本任务的 `CLAUDE.md` 日志位置和 `logs:query` 命令为既定访问入口，不应新增 MCP server 或第二套日志读取通道。
+
 ## 1.1 主进程日志中枢与统一落盘
 
 - 状态：已完成（自动化检查全通过；运行时行为需人工验证，见 `test-report.md`）
