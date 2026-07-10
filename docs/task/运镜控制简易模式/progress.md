@@ -94,3 +94,9 @@
 - 工程服务在转换后清空撤销历史、立即保存，并记录 start/completed/failed；保存失败保持专业内存态并提示重试保存。
 - 顶栏复用 `EditorModeBadge`、`UiModal` 与 `UiButton` 提供不可逆确认；专业工程不能通过 `setEditorMode` 返回简易。
 - 验证：44/44 单测、lint、前后端 tsc、颜色与 diff 检查通过；真实 Electron 操作待用户验收。
+
+## 3.3 整体回归与验收 —— 自动验收阻塞
+
+- 44/44 单测、manifest、颜色、模型 i18n、前后端 lint/tsc、Electron build 与治理扫描通过。
+- `npm run electron:smoke` 在构建前后均因窗口资源 403 失败，现有输出没有请求 URL，阶段不能通过。
+- 未执行鼠标/UI；完整手动步骤已写入 3.3 文件和 `test-report.md`。v10 夹具与最终闭环未完成。

@@ -1,5 +1,21 @@
 # 简易模式时间轴重做 · 测试报告（第一阶段：1.1 + 1.2 + 1.3；第二阶段：2.1 + 2.2 + 2.3）
 
+## 第三阶段 3.4 整体回归与验收（2026-07-11）
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 单元测试 | `npm run test` | ✅ 11 个测试文件、97 条用例全部通过。 |
+| 模型生成与一致性 | `npm run gen:model-manifest`、`npm run check:model-i18n` | ✅ 61 个模型 manifest 已生成；i18n 校验通过。 |
+| 颜色与前端 lint | `npm run check:colors`、`npm run lint` | ✅ 均通过，lint 为 0 error / 0 warning。 |
+| Electron 静态检查 | `npx tsc -p tsconfig.electron.json --noEmit`、`npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | ✅ 均无报错。 |
+| 完整构建 | `npm run electron:build` | ✅ 成功；manifest/seeds/构建产物为自动生成或忽略内容。 |
+| Electron smoke | `npm run electron:smoke` | ⚠️ 在 `scripts/electron-phase4-smoke.cjs:214` 复现资源 403；与计划已知既有阻塞一致，非本任务新增失败。 |
+| 治理复查 | `git diff --check`、原生控件/颜色/`any` grep、文件行数检查 | ✅ 无空白错误；原生控件仅在 `primitives.tsx`；本任务改动面无颜色硬编码或新增裸 `any`；新增文件均 ≤400 行。 |
+
+### 人工验收状态
+
+⚠️ 未执行。真实 Electron 的鼠标/拖拽/悬浮交互、双机位 MP4 逐帧切换与兼容流必须由用户按 `3.4-整体回归与验收.md` 的三条总清单验证；在收到结果前不能将整体任务标记为完成。
+
 ## 第三阶段 3.3 视频导出机位切换
 
 | 检查项 | 命令 | 结果 |

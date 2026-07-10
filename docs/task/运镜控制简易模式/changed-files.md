@@ -132,3 +132,8 @@
 - `src/features/cameraStage/simple/EditorModeBadge.tsx`：不可逆确认弹窗、执行态和保存失败提示。
 - `src/features/cameraStage/store/shotSlice.test.ts`：新增动画、motionSchedule、effectors、清 shots 与单向锁定回归测试。
 - `docs/task/运镜控制简易模式/`：更新 3.2 任务、总览及五类任务记录。
+
+## 3.3 整体回归与验收（阻塞记录）
+
+- 未修改业务源码。
+- 更新 3.3 任务文件、`00-任务总览.md` 与五类记录，写入自动结果、阻断、手动清单和交接；未新建无关目录或独立总结文档。

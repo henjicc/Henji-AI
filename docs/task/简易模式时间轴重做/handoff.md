@@ -176,3 +176,10 @@ function logCaptureSkipped(selectedShotId: string): void
 - `CameraStageVideoExportOptions` 新增必填的 `renderCameraCount`、`isMultiCamera`、`hasInconsistentCameraAspectRatio`，调用导出服务时必须传入；start 日志已据此记录多机位上下文。
 - `areCameraAspectRatiosConsistent(cameras)` 是旧工程/异常数据的防御校验。它不阻断导出；入口显示提示，导出服务写 `camera_stage.video_export.aspect_ratio_inconsistent` 告警。
 - 真实 Electron 手测尚待用户执行：双机位 MP4 切换点与预览逐帧一致、首机位改画幅同步、单机位与取消导出无回归。
+
+## 3.4 整体回归验收状态（交给用户）
+
+- 实现提交已齐：`24c728e`（3.1）、`17c3f43`（3.2）、`0cbc7d3`（3.3）；3.4 未改功能代码，仅完成回归、治理复查与文档收口。
+- 自动验收已通过：`npm run test` 97/97、模型 manifest、颜色/i18n、前端 lint、Electron 类型/lint、完整 `electron:build` 均成功；治理四项也通过。
+- 已知环境阻塞：`npm run electron:smoke` 仍在 `scripts/electron-phase4-smoke.cjs:214` 复现资源 403，和计划列明的既有问题一致；该项需在外部资源可用后单独修复/复跑。
+- 待用户在 `npm run electron:dev` 执行 3.4 任务文件的三条总手测流（单机位编辑、多机位预览/MP4、旧工程/专业模式/烘焙兼容）。通过后才可把任务总览和 3.4 标记为全部完成并提交文档。

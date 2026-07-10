@@ -68,3 +68,10 @@
 - 决定：保留现有逐帧 `seek(time)` 导出路径。`StageScene` 已由 `useRenderCameraId` 基于 `buildRenderCameraSchedule` 派生渲染机位，`StageViewportCamera` 将其置为 Three 默认相机，`StageCaptureBridge` 离屏捕获该默认相机；导出因此天然复用实时预览的机位选择与硬切边界。
 - 画幅补充：按重要记录 007，`CameraStageEditor` 一律传首摄像机的 `aspectRatio.ratio` 给导出服务。参与机位画幅只做非阻断防御校验：异常时提示用户并记录告警，仍按首摄像机画幅输出。
 - 影响范围：`CameraStageEditor.tsx`、`cameraStageVideo.ts`、`cameraUtils.ts`；不改 `StageScene`/`StageCaptureBridge`。
+
+## 决策 D8：既有 smoke 资源 403 不阻断本任务自动验收，但不替代人工验收
+
+- 日期：2026-07-11（3.4 回归时）
+- 背景：全量 `npm run electron:smoke` 在 `scripts/electron-phase4-smoke.cjs:214` 失败，错误为资源加载 403；该位置与现象已在 3.4 计划中列为上一任务遗留。
+- 决定：将本次结果准确记为“仅复现既有 smoke 阻塞”，不对无关联的功能代码做猜测性修改；其余自动检查与治理检查均通过。由于 smoke 不能替代真实视口/拖拽/导出视觉验证，整体任务状态保持等待用户手测。
+- 影响范围：仅 3.4 验收状态与测试记录，不改变产品实现。
