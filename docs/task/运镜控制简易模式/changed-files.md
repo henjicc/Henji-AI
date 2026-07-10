@@ -1,5 +1,18 @@
 # 运镜控制简易模式 · 改动文件清单
 
+## 2.3 过渡细节层面板
+
+### 新增
+
+- `src/features/cameraStage/simple/TransitionDetailPanel.tsx`：过渡抽屉、差异对象列表与空态。
+- `src/features/cameraStage/simple/TransitionObjectRow.tsx`：速度、延迟、摄像机预设参数、角色动作覆盖行。
+
+### 修改
+
+- `src/features/cameraStage/domain/shotCompiler.ts`：导出与编译口径一致的 `diffShotObjects`。
+- `src/features/cameraStage/simple/ShotTimelinePanel.tsx`：接入默认收起的过渡入口和下方详情抽屉，写回 `updateShotTransition`。
+- `docs/task/运镜控制简易模式/` 内任务总览、五类记录与 2.3 任务文件：同步状态、决策、交接和验证记录。
+
 ## 1.1 简易模式数据模型与工程持久化
 
 ### 新增

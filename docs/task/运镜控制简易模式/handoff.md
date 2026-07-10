@@ -1,5 +1,13 @@
 # 运镜控制简易模式 · 任务交接
 
+## 2.3 完成交接（交给 2.4）
+
+- `ShotTimelinePanel.tsx` 已叠加默认收起的过渡详情抽屉；2.4 做模式接入时只需保留简易模式入口，不要复制该面板。
+- 详情层统一通过 store `updateShotTransition` 写回并即时编译，撤销由现有 zundo tracked shots 承担。
+- `shotCompiler.ts` 已导出 `diffShotObjects(fromShot, toShot, objects)`；后续需要展示变化对象时必须复用，不另写 diff。
+- 摄像机与角色细节基于对象类型而非 modelId；全部使用现有 Ui*。
+- 自动静态验证全通过；真实 Electron 展开、播放节奏、预设效果和撤销需用户按 `test-report.md` 验收。
+
 ## 2.2 完成交接（交给 2.3）
 
 - 简易面板入口 `simple/ShotTimelinePanel.tsx`、卡片 `ShotCard.tsx`；2.3 在其上叠加细节入口，不复制卡片或播放条。

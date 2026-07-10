@@ -109,6 +109,23 @@ function hasPropertyChanged(valueType: StageAnimatableValueType, a: StageKeyfram
   return Math.abs((a as number) - (b as number)) > SCALAR_EPSILON
 }
 
+/** 返回两张镜头卡之间确有可动画属性变化的对象 id；UI 与编译器共享同一注册表和差异容差。 */
+export function diffShotObjects(fromShot: StageShot, toShot: StageShot, objects: StageObject[]): string[] {
+  const changedObjectIds: string[] = []
+  for (const object of objects) {
+    const fromState = fromShot.objectStates[object.id]
+    const toState = toShot.objectStates[object.id]
+    if (!fromState || !toState) continue
+    const fromObject = mergeStateIntoObject(object, fromState)
+    const toObject = mergeStateIntoObject(object, toState)
+    const changed = listAnimatableGroups(object).some((group) => group.children.some((descriptor) => (
+      hasPropertyChanged(descriptor.valueType, descriptor.getValue(fromObject), descriptor.getValue(toObject))
+    )))
+    if (changed) changedObjectIds.push(object.id)
+  }
+  return changedObjectIds
+}
+
 function isCameraPositionAxisPath(propertyPath: string): boolean {
   return (
     propertyPath === 'transform.position.x' ||
