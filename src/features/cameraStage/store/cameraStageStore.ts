@@ -77,6 +77,8 @@ export interface CameraStageState {
   removeShot: (id: string) => void
   reorderShot: (id: string, toIndex: number) => void
   selectShot: (id: string) => void
+  /** 只更新 selectedShotId，不应用快照/不移动播放头（界面态，不进撤销历史）；scrub 跟随选中用 */
+  setSelectedShotIdOnly: (id: string) => void
   updateShotTiming: (id: string, patch: ShotTimingPatch) => void
   updateShotName: (id: string, name: string) => void
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void

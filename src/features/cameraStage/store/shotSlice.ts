@@ -21,6 +21,7 @@ export type ShotSliceActions = Pick<
   | 'removeShot'
   | 'reorderShot'
   | 'selectShot'
+  | 'setSelectedShotIdOnly'
   | 'updateShotTiming'
   | 'updateShotName'
   | 'updateShotTransition'
@@ -144,6 +145,15 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
         objects: applyShotToObjects(state.objects, state.shots[index]),
         playback: { ...state.playback, playing: false, currentTime: time },
       }
+    }),
+    /**
+     * 只切换选中卡，不应用快照、不移动播放头（界面态，不进撤销历史）。
+     * 用于播放头 scrub 落入某静止段时的"选中跟随"（重要记录 003 前置逻辑）：
+     * 静止段内采样值本就等于卡快照，重复调用 selectShot 只会多余地污染撤销历史。
+     */
+    setSelectedShotIdOnly: (id) => set((state) => {
+      if (state.selectedShotId === id) return {}
+      return { selectedShotId: id }
     }),
     updateShotTiming: (id, patch) => set((state) => {
       const fps = state.animation.fps
