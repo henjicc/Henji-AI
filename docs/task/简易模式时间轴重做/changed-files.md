@@ -1,5 +1,20 @@
 # 简易模式时间轴重做 · 变更文件清单（第一阶段：1.1 + 1.2 + 1.3；第二阶段：2.1 + 2.2 + 2.3）
 
+## 第三阶段新增修改（3.3 视频导出机位切换）
+
+```
+src/features/cameraStage/CameraStageEditor.tsx          # 按渲染机位时间表统计参与机位；首摄像机画幅导出；旧数据画幅异常提示
+src/features/cameraStage/export/cameraStageVideo.ts     # 导出入参补机位统计/画幅异常标记；start/告警结构化日志
+src/features/cameraStage/domain/cameraUtils.ts          # 新增参与机位画幅一致性纯校验
+src/features/cameraStage/domain/cameraUtils.test.ts     # 新增画幅一致性单测，并修正既有联合类型访问以通过前端 tsc
+docs/task/简易模式时间轴重做/任务/第三阶段-多机位硬切/3.3-视频导出机位切换.md
+docs/task/简易模式时间轴重做/progress.md
+docs/task/简易模式时间轴重做/decisions.md
+docs/task/简易模式时间轴重做/handoff.md
+docs/task/简易模式时间轴重做/changed-files.md
+docs/task/简易模式时间轴重做/test-report.md
+```
+
 ## 第二阶段新增文件
 
 ```

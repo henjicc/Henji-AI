@@ -1,5 +1,23 @@
 # 简易模式时间轴重做 · 测试报告（第一阶段：1.1 + 1.2 + 1.3；第二阶段：2.1 + 2.2 + 2.3）
 
+## 第三阶段 3.3 视频导出机位切换
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 单元测试 | `npm run test` | ✅ 11 个测试文件、97 条用例全部通过；新增 `areCameraAspectRatiosConsistent` 的统一/不一致画幅覆盖。 |
+| 前端 lint | `npm run lint` | ✅ 0 error / 0 warning。 |
+| 前端类型检查 | `npx tsc --noEmit` | ✅ 无报错（同时修正了 `cameraUtils.test.ts` 中已有的联合类型未缩窄访问）。 |
+| 主进程类型检查 | `npx tsc -p tsconfig.electron.json --noEmit` | ✅ 无报错。 |
+| 主进程 lint | `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | ✅ 0 报错。 |
+| 颜色规范 | `npm run check:colors` | ✅ 通过。 |
+| 静态卫生 | `git diff --check`、原生控件/颜色硬编码搜索 | ✅ 无空白错误；本阶段修改 UI 文件无原生控件或颜色硬编码。 |
+
+### 待用户手测
+
+- 双机位简易工程导出 MP4：在硬切点前后逐帧对照实时预览，画面应切换到与时间表一致的机位。
+- 单机位工程导出、取消导出和首摄像机画幅变更后的导出分辨率应无回归。
+- 用旧工程不一致画幅数据触发兜底：界面提示不阻断导出，日志中心可检索 `camera_stage.video_export.aspect_ratio_inconsistent`。
+
 ## 第二阶段自动化检查结果（2.3 完成时的最终状态）
 
 | 检查项 | 命令 | 结果 |

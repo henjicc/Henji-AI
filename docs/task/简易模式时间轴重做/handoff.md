@@ -168,3 +168,11 @@ function logCaptureSkipped(selectedShotId: string): void
 - `TransitionClipBlock` 目前没有"机位不同禁用"相关 prop，3.2 需要时自行扩展（见上方"关键组件 Props"里 `TransitionClipBlockProps` 现状）。
 - trim/重排两个 hook 目前只服务于简易模式时间轴，未做成跨模式通用组件；如果专业模式未来也要类似手感，需要单独评估复用边界，不要直接跨域 import。
 - 滚轮缩放的"用户已手动缩放"状态（`userZoomedRef`）是面板内部 ref，不持久化、不跟随工程保存；每次重新打开工程/切换 dock 面板都会从自适应缩放重新开始，这是当前的预期行为（未与用户单独确认是否需要记忆缩放级别，3.x 若涉及需另行确认）。
+
+## 3.3 视频导出机位切换交接
+
+- 导出不维护独立机位状态：`CameraStageEditor` 逐帧 `seek`，`StageScene` 的 `useRenderCameraId` 派生机位，`StageViewportCamera` 成为默认相机，`StageCaptureBridge` 捕获该相机。后续不要在导出循环里写 `activeCameraId` 或另造时间表。
+- 导出画幅固定由 `getCameraObjects(objects)[0]`（首摄像机）提供，符合重要记录 007；不要回退到当前 `activeCamera`。
+- `CameraStageVideoExportOptions` 新增必填的 `renderCameraCount`、`isMultiCamera`、`hasInconsistentCameraAspectRatio`，调用导出服务时必须传入；start 日志已据此记录多机位上下文。
+- `areCameraAspectRatiosConsistent(cameras)` 是旧工程/异常数据的防御校验。它不阻断导出；入口显示提示，导出服务写 `camera_stage.video_export.aspect_ratio_inconsistent` 告警。
+- 真实 Electron 手测尚待用户执行：双机位 MP4 切换点与预览逐帧一致、首机位改画幅同步、单机位与取消导出无回归。

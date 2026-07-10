@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Clipboard, Film, Redo2, Save, Undo2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
 import { cancelVideoFrameExport } from '@/commands/video'
-import { getCameraObjects } from './domain/cameraUtils'
+import { areCameraAspectRatiosConsistent, getCameraObjects } from './domain/cameraUtils'
+import { buildRenderCameraSchedule } from './domain/renderCameraSchedule'
 import type { StageGizmoMode } from './domain/sceneTypes'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
 import { copySceneScreenshotToClipboard, exportSceneScreenshot } from './export/cameraStageScreenshot'
@@ -137,12 +138,31 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
 
   const handleExportVideo = useCallback(async (): Promise<void> => {
     if (!activeCamera || !captureRef.current || videoProgress) return
-    const previousPlayback = useCameraStageStore.getState().playback
+    const exportState = useCameraStageStore.getState()
+    const exportCameras = getCameraObjects(exportState.objects)
+    const exportCamera = exportCameras[0]
+    if (!exportCamera) return
+    const renderCameraSchedule = exportState.editorMode === 'simple'
+      ? buildRenderCameraSchedule(exportState.shots, exportState.activeCameraId)
+      : []
+    const renderCameraIds = new Set(
+      (renderCameraSchedule.length > 0
+        ? renderCameraSchedule.map((entry) => entry.cameraId)
+        : [exportState.activeCameraId]
+      ).filter((cameraId): cameraId is string => !!cameraId),
+    )
+    const renderCameras = exportCameras.filter((camera) => renderCameraIds.has(camera.id))
+    const hasInconsistentCameraAspectRatio = !areCameraAspectRatiosConsistent(renderCameras)
+    if (hasInconsistentCameraAspectRatio) {
+      setShotHint('检测到机位画幅不一致，将按首摄像机画幅导出')
+    }
+
+    const previousPlayback = exportState.playback
     videoCancelRef.current = false
     setVideoProgress({
       phase: 'rendering',
       doneFrames: 0,
-      totalFrames: Math.max(1, Math.round(animation.duration * animation.fps)),
+      totalFrames: Math.max(1, Math.round(exportState.animation.duration * exportState.animation.fps)),
     })
 
     if (previousPlayback.playing) {
@@ -152,10 +172,14 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
 
     try {
       const result = await exportCameraStageVideo({
-        projectName: useCameraStageStore.getState().currentProjectName,
-        cameraRatio: activeCamera.aspectRatio.ratio,
-        fps: animation.fps,
-        durationSeconds: animation.duration,
+        projectName: exportState.currentProjectName,
+        // 重要记录 007：首摄像机的画幅是工程级最终导出画幅，所有后续机位必须与其保持一致。
+        cameraRatio: exportCamera.aspectRatio.ratio,
+        renderCameraCount: renderCameras.length,
+        isMultiCamera: renderCameras.length > 1,
+        hasInconsistentCameraAspectRatio,
+        fps: exportState.animation.fps,
+        durationSeconds: exportState.animation.duration,
         resolutionPreset: videoPreset,
         captureFrame: async (targetSize) => captureRef.current?.(targetSize) ?? null,
         disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
@@ -189,7 +213,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       videoCancelRef.current = false
       setVideoProgress(null)
     }
-  }, [activeCamera, animation, videoPreset, videoProgress])
+  }, [activeCamera, videoPreset, videoProgress])
 
   const handleCancelVideoExport = useCallback((): void => {
     videoCancelRef.current = true

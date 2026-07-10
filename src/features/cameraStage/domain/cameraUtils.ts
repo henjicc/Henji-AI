@@ -26,6 +26,20 @@ export function getCameraObjects(objects: StageObject[]): StageCameraObject[] {
   return objects.filter((item): item is StageCameraObject => item.type === 'camera')
 }
 
+/**
+ * 校验一组参与渲染的摄像机是否使用同一画幅。正常工程由首摄像机画幅规则保证此不变量；
+ * 本函数仅为旧工程数据或未来写入口遗漏时的导出前防御性兜底，不参与画幅的业务写入。
+ */
+export function areCameraAspectRatiosConsistent(cameras: StageCameraObject[]): boolean {
+  const referenceRatio = cameras[0]?.aspectRatio.ratio
+  if (referenceRatio === undefined) return true
+  if (!Number.isFinite(referenceRatio)) return false
+  return cameras.every((camera) => (
+    Number.isFinite(camera.aspectRatio.ratio)
+    && Math.abs(camera.aspectRatio.ratio - referenceRatio) < Number.EPSILON
+  ))
+}
+
 /** 校验 id 是否指向场景中一台真实存在的摄像机对象；activeCameraId 等字段写入前的通用兜底判断 */
 export function isCameraId(objects: StageObject[], id: string | null | undefined): boolean {
   return !!id && objects.some((item) => item.id === id && item.type === 'camera')

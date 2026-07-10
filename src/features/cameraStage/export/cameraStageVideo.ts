@@ -26,6 +26,12 @@ export interface CameraStageVideoExportResult {
 export interface CameraStageVideoExportOptions {
   projectName: string
   cameraRatio: number
+  /** 本次导出会实际参与渲染的机位数量（由导出入口按渲染机位时间表统计） */
+  renderCameraCount: number
+  /** 参与机位是否超过一台；与 renderCameraCount 同源，供日志检索使用 */
+  isMultiCamera: boolean
+  /** 旧工程或异常写入导致的画幅不一致防御标记；不阻断导出，但必须留下告警日志 */
+  hasInconsistentCameraAspectRatio: boolean
   fps: number
   durationSeconds: number
   resolutionPreset: CameraStageVideoResolutionPreset
@@ -92,8 +98,26 @@ export async function exportCameraStageVideo(
     logger.info('离屏视频导出开始', {
       event: 'camera_stage.video_export.start',
       taskId: sessionId,
-      context: { width, height, frameCount, fps: options.fps },
+      context: {
+        width,
+        height,
+        frameCount,
+        fps: options.fps,
+        renderCameraCount: options.renderCameraCount,
+        isMultiCamera: options.isMultiCamera,
+      },
     })
+    if (options.hasInconsistentCameraAspectRatio) {
+      logger.warn('检测到参与导出的摄像机画幅不一致，按首摄像机画幅继续导出', {
+        event: 'camera_stage.video_export.aspect_ratio_inconsistent',
+        taskId: sessionId,
+        context: {
+          renderCameraCount: options.renderCameraCount,
+          isMultiCamera: options.isMultiCamera,
+          cameraRatio: options.cameraRatio,
+        },
+      })
+    }
 
     for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
       throwIfCancelled(options)

@@ -60,3 +60,11 @@
 - 决定：以"与专业模式行为保持一致"为准，直接复用 Alt+滚轮触发（`event.altKey`），未额外实现
   Ctrl+滚轮或无修饰滚轮触发缩放（无修饰滚轮已占用垂直/水平滚动语义，不能同时挪作缩放用）。
 - 影响范围：`ShotTimelinePanel.tsx` 的 `handleWheel`。
+
+## 决策 D7：视频导出复用实时视口的渲染机位派生，不建立第二套机位状态
+
+- 日期：2026-07-11（3.3 执行时）
+- 背景：视频导出需要在每帧按机位时间表硬切，必须与 3.2 播放/scrub 的边界完全一致。若导出单独维护一份机位索引或直接写 `activeCameraId`，会造成两套状态源、污染编辑机位并引入边界漂移风险。
+- 决定：保留现有逐帧 `seek(time)` 导出路径。`StageScene` 已由 `useRenderCameraId` 基于 `buildRenderCameraSchedule` 派生渲染机位，`StageViewportCamera` 将其置为 Three 默认相机，`StageCaptureBridge` 离屏捕获该默认相机；导出因此天然复用实时预览的机位选择与硬切边界。
+- 画幅补充：按重要记录 007，`CameraStageEditor` 一律传首摄像机的 `aspectRatio.ratio` 给导出服务。参与机位画幅只做非阻断防御校验：异常时提示用户并记录告警，仍按首摄像机画幅输出。
+- 影响范围：`CameraStageEditor.tsx`、`cameraStageVideo.ts`、`cameraUtils.ts`；不改 `StageScene`/`StageCaptureBridge`。

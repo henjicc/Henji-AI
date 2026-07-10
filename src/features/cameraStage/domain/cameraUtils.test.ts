@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { createCameraObject, createPrimitiveObject, pickDefaultColor } from './sceneDefaults'
-import { applyObjectPatch, isFirstCamera } from './cameraUtils'
+import { applyObjectPatch, areCameraAspectRatiosConsistent, getCameraObjects, isFirstCamera } from './cameraUtils'
+
+describe('areCameraAspectRatiosConsistent', () => {
+  it('空集合和统一画幅的机位通过校验', () => {
+    const cameraA = createCameraObject('摄像机01', pickDefaultColor(0))
+    const cameraB = createCameraObject('摄像机02', pickDefaultColor(1))
+    cameraB.aspectRatio = { ...cameraA.aspectRatio }
+
+    expect(areCameraAspectRatiosConsistent([])).toBe(true)
+    expect(areCameraAspectRatiosConsistent([cameraA, cameraB])).toBe(true)
+  })
+
+  it('旧工程中参与渲染的机位画幅意外不一致时返回 false', () => {
+    const cameraA = createCameraObject('摄像机01', pickDefaultColor(0))
+    const cameraB = createCameraObject('摄像机02', pickDefaultColor(1))
+    cameraB.aspectRatio = { preset: '1:1', ratio: 1 }
+
+    expect(areCameraAspectRatiosConsistent([cameraA, cameraB])).toBe(false)
+  })
+})
 
 describe('isFirstCamera', () => {
   it('按对象数组插入顺序判定最早创建的摄像机', () => {
@@ -38,11 +57,11 @@ describe('applyObjectPatch（重要记录 007：摄像机画幅一致性）', ()
     const cameraB = createCameraObject('摄像机02', pickDefaultColor(1))
     const objects = [cameraA, cameraB]
     const next = applyObjectPatch(objects, cameraB.id, { aspectRatio: { preset: 'custom', ratio: 3 }, name: '副机位' })
-    const nextCameraB = next.find((item) => item.id === cameraB.id)
+    const nextCameraB = getCameraObjects(next).find((item) => item.id === cameraB.id)
     expect(nextCameraB?.aspectRatio).toEqual(cameraB.aspectRatio)
     expect(nextCameraB?.name).toBe('副机位')
     // 首摄像机不受影响
-    expect(next.find((item) => item.id === cameraA.id)?.aspectRatio).toEqual(cameraA.aspectRatio)
+    expect(getCameraObjects(next).find((item) => item.id === cameraA.id)?.aspectRatio).toEqual(cameraA.aspectRatio)
   })
 
   it('非画幅补丁走原有 map 逻辑，不受机位判定影响', () => {
