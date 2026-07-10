@@ -16,7 +16,8 @@ import { getDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
-import type { StageEditorMode, StageShot } from '../domain/shotTypes'
+import { createShot, type StageEditorMode, type StageShot } from '../domain/shotTypes'
+import { compileShotsToAnimation } from '../domain/shotCompiler'
 import {
   createDefaultAnimation,
   createDefaultPlayback,
@@ -27,6 +28,14 @@ import {
 import { getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
 import { getTrack, removeObjectTracks, upsertTrackKeyframe } from './animationActions'
 import { createKeyframeSlice } from './keyframeSlice'
+import {
+  compileSimpleEdit,
+  createShotSlice,
+  syncAddedObjectToShots,
+  syncRemovedObjectFromShots,
+  type ShotTimingPatch,
+  type ShotTransitionPatch,
+} from './shotSlice'
 import { applyAnimationAtTime } from './playbackSampling'
 import type {
   StageGizmoMode,
@@ -61,8 +70,17 @@ export interface CameraStageState {
   editorMode: StageEditorMode
   /** 镜头卡列表，随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
   shots: StageShot[]
+  selectedShotId: string | null
   /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
   focusToken: number
+  addShot: () => void
+  removeShot: (id: string) => void
+  reorderShot: (id: string, toIndex: number) => void
+  selectShot: (id: string) => void
+  updateShotTiming: (id: string, patch: ShotTimingPatch) => void
+  updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
+  captureIntoSelectedShot: (objectIds?: string[]) => void
+  setEditorMode: (mode: StageEditorMode) => void
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
@@ -167,7 +185,7 @@ export function parseKeyframeKey(
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
-type TrackedState = Pick<CameraStageState, 'objects' | 'animation'>
+type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'shots' | 'editorMode'>
 
 /** 在暂停撤销跟踪的前提下把采样值落回对象（scrub/暂停/停止用，不污染历史与不自动打点） */
 function applySampledObjectsSilently(time: number): void {
@@ -242,6 +260,8 @@ function isCameraId(objects: StageObject[], id: string | null): boolean {
   return !!id && objects.some((item) => item.id === id && item.type === 'camera')
 }
 
+const initialShot = createShot([], '片段 1')
+
 export const useCameraStageStore = create<CameraStageState>()(
   temporal(
     (set) => ({
@@ -257,7 +277,8 @@ export const useCameraStageStore = create<CameraStageState>()(
   selectedKeyframes: [],
   sceneSettings: createDefaultSceneSettings(),
   editorMode: 'simple',
-  shots: [],
+  shots: [initialShot],
+  selectedShotId: initialShot.id,
   focusToken: 0,
 
   addPrimitive: (kind) =>
@@ -267,7 +288,10 @@ export const useCameraStageStore = create<CameraStageState>()(
         nextName(state.objects, PRIMITIVE_KIND_LABELS[kind]),
         pickDefaultColor(state.objects.length),
       )
-      return { objects: [...state.objects, object], selectedId: object.id }
+      const objects = [...state.objects, object]
+      if (state.editorMode !== 'simple') return { objects, selectedId: object.id }
+      const shots = syncAddedObjectToShots(state.shots, object)
+      return { objects, shots, animation: compileShotsToAnimation(shots, objects), selectedId: object.id }
     }),
 
   addCharacter: () =>
@@ -276,7 +300,10 @@ export const useCameraStageStore = create<CameraStageState>()(
         nextName(state.objects, '角色'),
         pickDefaultColor(state.objects.length),
       )
-      return { objects: [...state.objects, object], selectedId: object.id }
+      const objects = [...state.objects, object]
+      if (state.editorMode !== 'simple') return { objects, selectedId: object.id }
+      const shots = syncAddedObjectToShots(state.shots, object)
+      return { objects, shots, animation: compileShotsToAnimation(shots, objects), selectedId: object.id }
     }),
 
   addCamera: () =>
@@ -289,8 +316,11 @@ export const useCameraStageStore = create<CameraStageState>()(
       // 新摄像机默认位置/朝向就是当前自由视角，添加后直接切到摄像机视角：
       // 一是让顶部视角按钮的高亮立刻和实际画面对上，二是隐藏所有摄像机图标（含它自己），
       // 避免因为新摄像机就摆在刚才的视点上，导致自由视角下看到自己的图标近距离怼脸
+      const objects = [...state.objects, object]
+      const shots = state.editorMode === 'simple' ? syncAddedObjectToShots(state.shots, object) : state.shots
       return {
-        objects: [...state.objects, object],
+        objects,
+        ...(state.editorMode === 'simple' ? { shots, animation: compileShotsToAnimation(shots, objects) } : {}),
         selectedId: object.id,
         activeCameraId: object.id,
         viewMode: 'camera',
@@ -304,8 +334,11 @@ export const useCameraStageStore = create<CameraStageState>()(
       const clone = structuredClone(source)
       clone.id = uuidv4()
       clone.name = nextName(state.objects, source.name)
+      const objects = [...state.objects, clone]
+      const shots = state.editorMode === 'simple' ? syncAddedObjectToShots(state.shots, clone) : state.shots
       return {
-        objects: [...state.objects, clone],
+        objects,
+        ...(state.editorMode === 'simple' ? { shots, animation: compileShotsToAnimation(shots, objects) } : {}),
         selectedId: clone.id,
         activeCameraId: clone.type === 'camera' ? clone.id : state.activeCameraId,
       }
@@ -315,9 +348,13 @@ export const useCameraStageStore = create<CameraStageState>()(
     set((state) => {
       const objects = state.objects.filter((item) => item.id !== id)
       const activeCameraId = state.activeCameraId === id ? firstCameraId(objects) : state.activeCameraId
+      const shots = state.editorMode === 'simple' ? syncRemovedObjectFromShots(state.shots, id) : state.shots
       return {
         objects,
-        animation: removeObjectTracks(state.animation, id),
+        animation: state.editorMode === 'simple'
+          ? compileShotsToAnimation(shots, objects)
+          : removeObjectTracks(state.animation, id),
+        ...(state.editorMode === 'simple' ? { shots } : {}),
         selectedId: state.selectedId === id ? null : state.selectedId,
         activeCameraId,
         viewMode: state.viewMode === 'camera' && !activeCameraId ? 'director' : state.viewMode,
@@ -359,6 +396,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
+      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
       // color / fov 是可动画标量/颜色属性，有轨道时自动打点
       const paths: string[] = []
       if ('color' in patch) paths.push('color')
@@ -374,6 +412,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
+      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
       // 分量化：每个变更的变换属性展开为 X/Y/Z 三条分量路径分别自动打点
       const paths = explicitAutoKeyPaths ?? Object.keys(patch).flatMap((key) =>
         ['x', 'y', 'z'].map((axis) => `transform.${key}.${axis}`),
@@ -395,6 +434,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
+      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
       const base = poseJointPath(jointId)
       const paths = explicitAutoKeyPaths ?? ['x', 'y', 'z'].map((axis) => `${base}.${axis}`)
       const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
@@ -410,6 +450,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object || object.type !== 'character') return { objects }
+      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
       // 预设整体替换姿态：对所有已有关节轨道自动打点
       const paths = state.animation.tracks
         .filter((track) => track.objectId === id && track.propertyPath.startsWith('pose.joints.'))
@@ -421,7 +462,9 @@ export const useCameraStageStore = create<CameraStageState>()(
   bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
 
   newScene: (name) =>
-    set({
+    set(() => {
+      const shots = [createShot([], '片段 1')]
+      return {
       objects: [],
       selectedId: null,
       gizmoMode: 'translate',
@@ -434,8 +477,10 @@ export const useCameraStageStore = create<CameraStageState>()(
       selectedKeyframes: [],
       sceneSettings: createDefaultSceneSettings(),
       editorMode: 'simple',
-      shots: [],
+      shots,
+      selectedShotId: shots[0].id,
       focusToken: 0,
+      }
     }),
 
   loadSnapshot: (snapshot, project) =>
@@ -457,11 +502,13 @@ export const useCameraStageStore = create<CameraStageState>()(
         sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),
         editorMode: snapshot.editorMode ?? 'pro',
         shots: snapshot.shots ?? [],
+        selectedShotId: snapshot.shots?.[0]?.id ?? null,
         focusToken: 0,
       }
     }),
 
   ...createKeyframeSlice(set),
+  ...createShotSlice(set),
 
   play: () =>
     set((state) => {
@@ -752,9 +799,18 @@ export const useCameraStageStore = create<CameraStageState>()(
     {
       limit: 100,
       // 跟踪场景数据 + 动画轨道切片；界面态/播放态变更不入历史
-      partialize: (state): TrackedState => ({ objects: state.objects, animation: state.animation }),
+      partialize: (state): TrackedState => ({
+        objects: state.objects,
+        animation: state.animation,
+        shots: state.shots,
+        editorMode: state.editorMode,
+      }),
       // 对象数组与动画对象都走不可变更新，引用相等即无实质变化 → 跳过记录
-      equality: (a, b) => a.objects === b.objects && a.animation === b.animation,
+      equality: (a, b) =>
+        a.objects === b.objects &&
+        a.animation === b.animation &&
+        a.shots === b.shots &&
+        a.editorMode === b.editorMode,
       handleSet: (handleSet) => {
         historyRecord = handleSet
         return (pastState) => {

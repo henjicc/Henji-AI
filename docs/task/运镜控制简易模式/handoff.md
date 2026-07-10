@@ -1,5 +1,14 @@
 # 运镜控制简易模式 · 任务交接
 
+## 2.1 完成交接（交给 2.2）
+
+- `CameraStageState` 已提供 `selectedShotId` 及 `addShot/removeShot/reorderShot/selectShot/updateShotTiming/updateShotTransition/captureIntoSelectedShot/setEditorMode`。
+- `selectShot(id)` 会应用该卡完整对象快照并把播放头定位到卡起点；2.2 面板无需自行计算或写 objects。
+- 所有 shots 变更均同步重编译完整 `animation`，其中 `motionSchedule` 已保留；UI 禁止另行拼接 animation。
+- 自动记录已接在用户编辑 action，播放与 scrub 不写卡；2.2 只需调用 store action。
+- `selectedShotId` 是非持久化界面态，加载时默认首卡；镜头卡顺序本身由 shots 数组表达。
+- 全量自动验证 36/36，lint 与前后端 tsc 通过。真实 Electron 交互按 `test-report.md` 由用户在 2.2 完成后验收。
+
 ## 1.4 完成交接（交给 2.1 / 2.3 / 3.2）
 
 - `compileShotsToAnimation` 返回类型仍是 `StageSceneAnimation`，但该类型现含必需字段 `motionSchedule`；空编译与默认动画均返回空数组，旧持久化数据由 `parseAnimation` 补空数组。

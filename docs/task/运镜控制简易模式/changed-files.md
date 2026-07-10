@@ -58,3 +58,15 @@
 - `src/features/cameraStage/domain/shotCompiler.test.ts`：新增角色编译集成用例。
 - `src/features/cameraStage/scene/CharacterModel.tsx`：按播放头消费时间表并以区间起点作为动作 seek 原点。
 - `docs/task/运镜控制简易模式/` 下计划与五类任务记录：同步 1.4 完成状态、设计决策、测试与交接。
+
+## 2.1 简易模式 store 分片与自动记录
+
+### 新增
+
+- `src/features/cameraStage/store/shotSlice.ts`（181 行）：镜头卡动作、自动记录/编译与对象同步辅助函数，结构化 debug 日志。
+- `src/features/cameraStage/store/shotSlice.test.ts`：4 个 store 集成用例。
+
+### 修改
+
+- `src/features/cameraStage/store/cameraStageStore.ts`：接入 slice、自动记录分叉、对象结构同步、默认首卡、zundo 跟踪扩展。
+- `docs/task/运镜控制简易模式/` 下 2.1 任务文件、总览与五类任务记录：同步完成状态、决策、测试和交接。

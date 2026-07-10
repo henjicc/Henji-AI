@@ -38,3 +38,10 @@
 - **速度按水平位移计算**：走跑与面朝方向忽略 Y 轴高度变化，避免角色乘电梯/跳高时误触发跑步。阈值定稿为 `<0.1m/s` 不触发、`0.1～<1.8` Walk、`1.8～<4` Jog、`>=4` Sprint，一期播放速度固定 1。
 - **朝向覆盖通用 rotation.y 两点轨道**：有效位移时生成 0% 原朝向、15% 移动朝向、85% 移动朝向、100% B 卡朝向四点；用角度展开保证相邻点最短旋转。其他旋转分量与无位移场景仍走通用差异编译。
 - **`motionOverride` 不强制无位移角色播放动作**：覆盖项只替换已经触发移动推断的动作选择；低于阈值仍不生成 schedule，避免“角色未移动但因过渡详情残留而原地跑步”。
+
+## 2.1 简易模式 store 分片与自动记录
+
+- **不新增独立 motionSchedule store 字段**：每次 shots 变化直接保存 `compileShotsToAnimation` 返回的完整 `StageSceneAnimation`，确保 `motionSchedule` 与轨道、duration、fps 同生同灭且不会被截断。
+- **自动记录采用 action 显式分叉**：仅 `updateObject/updateTransform/updatePoseJoint/applyPosePreset` 在 `editorMode==='simple' && !playback.playing` 时写回选中卡；不订阅 objects，因此播放采样和 scrub 静默落值不会污染卡片。
+- **对象结构变化同步全部卡片**：新增/复制对象以创建当下状态补入每张卡；删除对象同时清理 `objectStates/perObject/cameraMoves`，再基于清理后的 shots 重编译。
+- **selectedShotId 是界面态，不进撤销跟踪/持久化**：shots 与 editorMode 进入 zundo；选中项加载时回到首卡，删除选中卡时选择相邻卡。

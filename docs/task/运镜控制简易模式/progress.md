@@ -43,3 +43,13 @@
 - `sceneSerialization.parseAnimation` 对旧动画缺少 schedule 时回退空数组。
 - 验证：`npm run test` 32/32、`npm run lint`、前端 tsc、Electron tsc 全通过。
 - 遗留：真实角色视口动作需等 2.2 提供镜头卡交互后，由用户按任务文件步骤手动验收。
+
+## 2.1 简易模式 store 分片与自动记录 —— 已完成
+
+- 日期：2026-07-10
+- 新增 `shotSlice.ts`：提供 `selectedShotId` 配套动作、镜头卡 CRUD/重排/选择、时长与过渡更新、手动捕获、模式切换及对象增删同步纯辅助函数。
+- 简易模式用户编辑通过同一个 `set` 同时提交 `objects + shots + animation`；播放态不自动记录，scrub 仍走原有静默采样入口。
+- `TrackedState` 加入 `shots/editorMode`；选卡应用完整对象快照并把播放头定位到对应卡起点。
+- 新场景默认创建“片段 1”；加载工程选择首卡；项目保存/加载字段透传已由 1.1 完成，无需重复修改。
+- 验证：`npm run test` 36/36、`npm run lint`、`npx tsc --noEmit`、Electron tsc 全通过。
+- 遗留：真实 Electron 镜头卡交互须待 2.2 UI 接入后由用户手动验收。
