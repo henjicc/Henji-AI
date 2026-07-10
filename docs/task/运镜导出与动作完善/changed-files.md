@@ -54,3 +54,16 @@
   - 同步 2.2 的实施、决策、交接、验证与状态。
 - `docs/task/运镜导出与动作完善/任务/第二阶段-健壮性与性能/2.2-导出会话与产物清理.md`
   - 更新为待验证并记录实际实现。
+
+## 3.1 编码真实进度推送
+
+- `electron/main/services/video/frame-export.ts`、`electron/main/services/video/types.ts`、`electron/main/ipc/video.ts`
+  - 解析 ffmpeg stderr 的已编码帧数，通过发起导出的 webContents 定向推送带 sessionId 的进度事件。
+- `electron/preload/index.ts`、`electron/preload/api.d.ts`
+  - 新增 `onFrameExportProgress` 白名单订阅与注销函数。
+- `src/platform/contracts/video.ts`、`src/platform/adapters/electron/video.ts`、`src/commands/video.ts`
+  - 将编码进度订阅扩展至 PAL 与前端命令桥。
+- `src/features/cameraStage/export/cameraStageVideo.ts`、`src/features/cameraStage/CameraStageEditor.tsx`
+  - 当前会话消费真实进度、finally 清理订阅，并显示“编码 x/y”。
+- `docs/task/运镜导出与动作完善/{00-任务总览,重要记录,progress,decisions,handoff,changed-files,test-report}.md`
+  - 同步第三阶段确认、3.1 实现、验证与交接。

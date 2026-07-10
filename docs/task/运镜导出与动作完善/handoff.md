@@ -32,3 +32,11 @@
 - 模块级会话增加 `lastActivity`，追加帧与开始编码会刷新；5 分钟扫描器清理 30 分钟空闲会话，且不阻止应用退出。
 - `window.ts` 已在 reload、render-process-gone、webContents destroyed、window closed 清理所有会话；用户需在真实 Electron 窗口验证取消/刷新路径。
 - 导出文件名现在使用本地时间。涉及 Electron 主进程，下一次验收前必须重启 `npm run electron:dev`。
+
+## 3.1 编码真实进度推送（待主控审查）
+
+- `frame-export.ts` 在 ffmpeg stderr 增量中解析 `frame=\s*(\d+)`；每个递增帧数均经会话回调推送，成功关闭时补发总帧数。
+- `video:startFrameExport` 捕获调用方 `event.sender`，仅向该未销毁的 webContents 发送 `video:frameExportProgress`，payload 为 `{ sessionId, encodedFrames }`。
+- preload、PAL、`src/commands/video.ts` 新增 `onFrameExportProgress` / `onVideoFrameExportProgress` 订阅并返回注销函数。
+- `cameraStageVideo.ts` 对当前 sessionId 过滤进度，并在 `finally` 注销；编码开始显示 `0/total`，`CameraStageEditor` 显示“编码 x/y”。
+- 四项静态检查通过。需要真实 Electron 窗口验证进度增长及编码阶段取消；涉及主进程/preload，需重启 `npm run electron:dev`。

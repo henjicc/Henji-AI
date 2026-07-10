@@ -2,6 +2,7 @@ import {
   appendVideoFrameExport,
   cancelVideoFrameExport,
   finishVideoFrameExport,
+  onVideoFrameExportProgress,
   startVideoFrameExport,
 } from '@/commands/video'
 import { createLogger } from '@/core/logging'
@@ -70,6 +71,14 @@ export async function exportCameraStageVideo(
   const { width, height } = resolveVideoExportSize(options.cameraRatio, options.resolutionPreset)
   const frameCount = Math.max(1, Math.round(options.durationSeconds * options.fps))
   let sessionId: string | null = null
+  const unsubscribeProgress = onVideoFrameExportProgress((progress) => {
+    if (progress.sessionId !== sessionId) return
+    options.onProgress({
+      phase: 'encoding',
+      doneFrames: Math.min(progress.encodedFrames, frameCount),
+      totalFrames: frameCount,
+    })
+  })
 
   try {
     const session = await startVideoFrameExport({
@@ -100,7 +109,7 @@ export async function exportCameraStageVideo(
     }
 
     throwIfCancelled(options)
-    options.onProgress({ phase: 'encoding', doneFrames: frameCount, totalFrames: frameCount })
+    options.onProgress({ phase: 'encoding', doneFrames: 0, totalFrames: frameCount })
     const result = await finishVideoFrameExport({ sessionId, targetPath })
     sessionId = null
     options.onSession(null)
@@ -118,6 +127,8 @@ export async function exportCameraStageVideo(
     if (options.isCancelled()) return null
     logger.error('[cameraStage] 动画视频导出失败', error)
     throw error
+  } finally {
+    unsubscribeProgress()
   }
 }
 

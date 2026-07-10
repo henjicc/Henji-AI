@@ -432,6 +432,11 @@ export interface HenjiVideoFrameExportResult {
   height: number
 }
 
+export interface HenjiVideoFrameExportProgress {
+  sessionId: string
+  encodedFrames: number
+}
+
 export interface HenjiVideoApi {
   readVideoInfo(source: string): Promise<HenjiVideoInfoResult>
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
@@ -442,6 +447,7 @@ export interface HenjiVideoApi {
   appendFrameExport(payload: HenjiVideoAppendFrameExportPayload): Promise<{ frameIndex: number }>
   finishFrameExport(payload: HenjiVideoFinishFrameExportPayload): Promise<HenjiVideoFrameExportResult>
   cancelFrameExport(sessionId: string): Promise<void>
+  onFrameExportProgress(listener: (progress: HenjiVideoFrameExportProgress) => void): () => void
 }
 
 export interface HenjiAudioExtractSamplesResult {

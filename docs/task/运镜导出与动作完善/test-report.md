@@ -87,3 +87,24 @@
 ### 重启说明
 
 ⚠️ 需要重启
+
+## 3.1 编码真实进度推送
+
+### 自动检查
+
+| 命令 | 结果 | 说明 |
+|---|---|---|
+| `npm run lint` | 通过 | ESLint 渲染层零警告退出。 |
+| `npx tsc --noEmit` | 通过 | 渲染层 TypeScript 类型检查零错误退出。 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 | Electron 主进程/预加载类型检查零错误退出。 |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过 | Electron 源码 ESLint 零警告退出。 |
+
+### 待用户手动验证（真实 Electron 窗口）
+
+1. 重启 `npm run electron:dev`，打开包含至少 10 秒动画的运镜控制工程并导出 MP4。
+2. 逐帧渲染完成后，确认工具栏编码提示从“编码 0/总帧数”开始，随后持续增长，最终达到总帧数；导出的视频可正常播放。
+3. 在编码阶段点击“取消导出”，确认导出停止、无控制台报错；再次导出，确认只有新会话的编码数字更新，未出现重复或跳变的旧事件。
+
+### 重启说明
+
+⚠️ 需要重启

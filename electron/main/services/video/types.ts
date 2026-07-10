@@ -57,6 +57,11 @@ export interface FinishVideoFrameExportPayloadDto {
   targetPath?: string
 }
 
+export interface VideoFrameExportProgressDto {
+  sessionId: string
+  encodedFrames: number
+}
+
 export interface VideoFrameExportResultDto {
   mediaPath: string
   savedPath: string

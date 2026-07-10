@@ -31,6 +31,7 @@ interface VideoFrameExportSession {
   lastActivity: number
   canceled: boolean
   child: ChildProcessWithoutNullStreams | null
+  onEncodingProgress: ((sessionId: string, encodedFrames: number) => void) | null
 }
 
 const sessions = new Map<string, VideoFrameExportSession>()
@@ -53,6 +54,7 @@ sessionSweepTimer.unref()
 
 export async function startVideoFrameExport(
   payload: StartVideoFrameExportPayloadDto,
+  onEncodingProgress?: (sessionId: string, encodedFrames: number) => void,
 ): Promise<StartVideoFrameExportResultDto> {
   await cleanupStagedVideoArtifactsOnce()
   const sessionId = crypto.randomUUID()
@@ -69,6 +71,7 @@ export async function startVideoFrameExport(
     lastActivity: Date.now(),
     canceled: false,
     child: null,
+    onEncodingProgress: onEncodingProgress ?? null,
   })
   logger.info('视频帧导出会话已创建', {
     event: 'video_frame_export.session.started',
@@ -215,8 +218,21 @@ async function encodeFrames(session: VideoFrameExportSession, outputPath: string
     ])
     session.child = child
     let stderr = ''
+    let progressBuffer = ''
+    let lastEncodedFrames = 0
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString()
+      const output = chunk.toString()
+      stderr += output
+      progressBuffer += output
+      const matches = progressBuffer.matchAll(/frame=\s*(\d+)/g)
+      for (const match of matches) {
+        const encodedFrames = Number(match[1])
+        if (encodedFrames > lastEncodedFrames) {
+          lastEncodedFrames = encodedFrames
+          emitEncodingProgress(session, Math.min(encodedFrames, session.frameCount))
+        }
+      }
+      progressBuffer = progressBuffer.slice(-64)
     })
     child.on('error', reject)
     child.on('close', (code) => {
@@ -225,10 +241,19 @@ async function encodeFrames(session: VideoFrameExportSession, outputPath: string
         reject(new Error('Video export has been canceled'))
         return
       }
-      if (code === 0) resolve()
+      if (code === 0) {
+        emitEncodingProgress(session, session.frameCount)
+        resolve()
+      }
       else reject(new Error(`ffmpeg video export failed with code ${code}\n${stderr}`))
     })
   })
+}
+
+function emitEncodingProgress(session: VideoFrameExportSession, encodedFrames: number): void {
+  if (session.canceled || !session.onEncodingProgress) return
+  session.lastActivity = Date.now()
+  session.onEncodingProgress(session.id, encodedFrames)
 }
 
 async function cleanupExpiredVideoFrameExports(): Promise<void> {

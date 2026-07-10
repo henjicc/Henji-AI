@@ -14,6 +14,7 @@ import type {
   GenerateVideoThumbnailResultDto,
   StartVideoFrameExportPayloadDto,
   StartVideoFrameExportResultDto,
+  VideoFrameExportProgressDto,
   TrimVideoSourcePayloadDto,
   TrimVideoSourceResultDto,
   VideoFrameExportResultDto,
@@ -50,7 +51,14 @@ export function registerVideoIpc(): void {
   registerIpcHandler<StartVideoFrameExportPayloadDto, StartVideoFrameExportResultDto>(
     'video:startFrameExport',
     parseStartFrameExportPayload,
-    (payload) => startVideoFrameExport(payload)
+    (payload, event) => startVideoFrameExport(payload, (sessionId, encodedFrames) => {
+      if (event.sender.isDestroyed()) return
+      const progress: VideoFrameExportProgressDto = {
+        sessionId,
+        encodedFrames,
+      }
+      event.sender.send('video:frameExportProgress', progress)
+    })
   )
   registerIpcHandler<AppendVideoFrameExportPayloadDto, { frameIndex: number }>(
     'video:appendFrameExport',

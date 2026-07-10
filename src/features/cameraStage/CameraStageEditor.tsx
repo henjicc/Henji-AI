@@ -228,7 +228,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const autosaveErrorLabel = saveState === 'error' ? '自动保存失败' : null
   const videoProgressLabel = videoProgress
     ? videoProgress.phase === 'encoding'
-      ? '编码中…'
+      ? `编码 ${videoProgress.doneFrames}/${videoProgress.totalFrames}`
       : `导出 ${videoProgress.doneFrames}/${videoProgress.totalFrames}`
     : null
 

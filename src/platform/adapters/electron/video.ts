@@ -19,5 +19,6 @@ export function createElectronVideo(): VideoPlatform {
     appendFrameExport: (payload) => getNativeVideo().appendFrameExport(payload),
     finishFrameExport: (payload) => getNativeVideo().finishFrameExport(payload),
     cancelFrameExport: (sessionId) => getNativeVideo().cancelFrameExport(sessionId),
+    onFrameExportProgress: (listener) => getNativeVideo().onFrameExportProgress(listener),
   }
 }

@@ -57,6 +57,11 @@ export interface VideoFrameExportResult {
   height: number
 }
 
+export interface VideoFrameExportProgress {
+  sessionId: string
+  encodedFrames: number
+}
+
 /**
  * 视频本地处理原生命令（ffmpeg/ffprobe）。
  */
@@ -68,4 +73,5 @@ export interface VideoPlatform {
   appendFrameExport(payload: AppendVideoFrameExportPayload): Promise<{ frameIndex: number }>
   finishFrameExport(payload: FinishVideoFrameExportPayload): Promise<VideoFrameExportResult>
   cancelFrameExport(sessionId: string): Promise<void>
+  onFrameExportProgress(listener: (progress: VideoFrameExportProgress) => void): () => void
 }

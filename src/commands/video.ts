@@ -7,6 +7,7 @@ import type {
   StartVideoFrameExportResult,
   TrimVideoSourceResult,
   VideoFrameExportResult,
+  VideoFrameExportProgress,
   VideoInfoResult,
 } from '@/platform/contracts/video'
 
@@ -49,4 +50,10 @@ export async function finishVideoFrameExport(
 
 export async function cancelVideoFrameExport(sessionId: string): Promise<void> {
   await getPlatform().video.cancelFrameExport(sessionId)
+}
+
+export function onVideoFrameExportProgress(
+  listener: (progress: VideoFrameExportProgress) => void,
+): () => void {
+  return getPlatform().video.onFrameExportProgress(listener)
 }

@@ -30,6 +30,7 @@ import type {
   HenjiUpdaterApi,
   HenjiUpdaterEvent,
   HenjiVideoApi,
+  HenjiVideoFrameExportProgress,
   HenjiWindowApi,
   HenjiWindowStatePayload,
 } from './api'
@@ -297,6 +298,15 @@ const videoApi: HenjiVideoApi = {
   appendFrameExport: (payload) => nativeInvoke('video:appendFrameExport', payload),
   finishFrameExport: (payload) => nativeInvoke('video:finishFrameExport', payload),
   cancelFrameExport: (sessionId) => nativeInvoke('video:cancelFrameExport', { sessionId }),
+  onFrameExportProgress: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiVideoFrameExportProgress): void => {
+      handler(payload)
+    }
+    ipcRenderer.on('video:frameExportProgress', listener)
+    return () => {
+      ipcRenderer.removeListener('video:frameExportProgress', listener)
+    }
+  },
 }
 
 const audioApi: HenjiAudioApi = {
