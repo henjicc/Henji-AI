@@ -37,11 +37,21 @@ export interface StageShotObjectState {
 
 export type StageSpeedPreset = 'uniform' | 'easeInOut' | 'fastStart' | 'slowStart'
 
-/** 摄像机运镜预设判别联合骨架（参数细化在 1.3 定稿） */
+/**
+ * 摄像机运镜预设判别联合（参数于 1.3 定稿）。
+ * - direct：两点直插（默认值，无参数）。
+ * - orbit：绕世界 Y 轴、以 lookAt 目标为圆心环绕，起始机位半径/高度不变，扫过 degrees。
+ *   终点语义（重要记录 003 已定稿）：终点由环绕几何决定，覆盖/忽略 B 卡摆放的机位。
+ * - dollyIn/dollyOut：沿"机位→目标"连线按 distanceRatio 缩放距离（0.5=推到一半距离，>1=拉远）。
+ * - truck：在水平面内垂直于视线方向平移 offset（横移）。
+ * - crane：沿世界 Y 轴平移 height（升降）。
+ */
 export type StageCameraMove =
   | { kind: 'direct' }
   | { kind: 'orbit'; degrees: number; direction: 'cw' | 'ccw' }
-  | { kind: 'dollyIn' | 'dollyOut' }
+  | { kind: 'dollyIn' | 'dollyOut'; distanceRatio: number }
+  | { kind: 'truck'; offset: number }
+  | { kind: 'crane'; height: number }
 
 /** 单个对象在过渡段的细节覆盖：速度预设 / 错峰延迟 / 动作覆盖 */
 export interface StageShotTransitionObjectDetail {
@@ -162,11 +172,25 @@ function normalizeCameraMove(raw: unknown): StageCameraMove | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const record = raw as Record<string, unknown>
   if (record.kind === 'direct') return { kind: 'direct' }
-  if (record.kind === 'dollyIn' || record.kind === 'dollyOut') return { kind: record.kind }
+  if (record.kind === 'dollyIn' || record.kind === 'dollyOut') {
+    const distanceRatio = Number(record.distanceRatio)
+    return {
+      kind: record.kind,
+      distanceRatio: Number.isFinite(distanceRatio) && distanceRatio >= 0 ? distanceRatio : 0.5,
+    }
+  }
   if (record.kind === 'orbit') {
     const degrees = Number(record.degrees)
     const direction = record.direction === 'ccw' ? 'ccw' : 'cw'
     return { kind: 'orbit', degrees: Number.isFinite(degrees) ? degrees : 0, direction }
+  }
+  if (record.kind === 'truck') {
+    const offset = Number(record.offset)
+    return { kind: 'truck', offset: Number.isFinite(offset) ? offset : 0 }
+  }
+  if (record.kind === 'crane') {
+    const height = Number(record.height)
+    return { kind: 'crane', height: Number.isFinite(height) ? height : 0 }
   }
   return undefined
 }

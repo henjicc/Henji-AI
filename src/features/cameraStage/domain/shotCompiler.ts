@@ -9,10 +9,12 @@
  * （速度预设映射缓动、错峰延迟钳制起止时间、停留段补同值守护点防止跨卡插值污染）。
  *
  * 扩展点（1.3/1.4 在本文件基础上扩展，不改变整体结构）：
- * - 摄像机运镜预设：见 compileTransitionPoints 内 TODO(1.3)。
+ * - 摄像机运镜预设：已由 1.3 接入，见 compileCameraPositionGroup / compileCameraMoveSamples
+ *   （几何实现在 shotCameraMovePresets.ts）。
  * - 角色自动走跑：见 compileObjectTransition 内 TODO(1.4)。
  */
 
+import type { AnimatableGroup } from './animatableProps'
 import { listAnimatableGroups } from './animatableProps'
 import {
   CAMERA_STAGE_DEFAULT_FPS,
@@ -24,7 +26,8 @@ import {
   type StageTrack,
 } from './animationTypes'
 import { upsertKeyframe } from './keyframeEngine'
-import type { StageObject } from './sceneTypes'
+import type { StageObject, StageVec3 } from './sceneTypes'
+import { compileCameraMoveSamples } from './shotCameraMovePresets'
 import type { StageCameraMove, StageShot, StageShotObjectState, StageSpeedPreset } from './shotTypes'
 
 /** scalar 属性差异容差：|a-b| 不超过该值视为未变化 */
@@ -104,20 +107,25 @@ function hasPropertyChanged(valueType: StageAnimatableValueType, a: StageKeyfram
   return Math.abs((a as number) - (b as number)) > SCALAR_EPSILON
 }
 
+function isCameraPositionAxisPath(propertyPath: string): boolean {
+  return (
+    propertyPath === 'transform.position.x' ||
+    propertyPath === 'transform.position.y' ||
+    propertyPath === 'transform.position.z'
+  )
+}
+
 /**
- * 生成某属性在本段过渡的关键帧点（过渡开始/结束两点）。
+ * 生成某属性在本段过渡的关键帧点（过渡开始/结束两点，direct 两点直插）。
  *
- * TODO(1.3)：当 object 是摄像机且本段 cameraMoves[cameraId].kind !== 'direct' 时，
- * 应改为调用运镜预设编译函数（orbit/dollyIn/dollyOut），返回多点关键帧近似运镜轨迹，
- * 而不是这里的两点直插；建议只对 transform.position 分组的路径生效，fov/color 等其他
- * 属性仍走本函数的直插逻辑。object/move 两个参数当前未使用，是特意保留给 1.3 在此函数
- * 内部做分支判断用的（避免 1.3 改签名时还要在调用处重新传参）。建议签名：
- *   function compileCameraMovePreset(
- *     move: Exclude<StageCameraMove, { kind: 'direct' }>,
- *     fromValue: StageKeyframeValue, toValue: StageKeyframeValue,
- *     segStart: number, segEnd: number, easing: StageEasingPreset,
- *   ): StageKeyframe[]
- * 当前占位：不区分 move.kind，一律按 direct 两点插值（1.3 完成前的安全默认行为）。
+ * 1.3 说明（原 TODO 已解决）：摄像机运镜预设（orbit/dollyIn/dollyOut/truck/crane）需要
+ * X/Y/Z 三分量整体的向量几何（如绕 Y 轴旋转、垂直视线方向平移），单分量 scalar 签名无法
+ * 独立算出正确结果，因此实际拦截点不在本函数内部，而是在 compileObjectTransition 的
+ * transform.position 分组循环入口（见 compileCameraPositionGroup），三分量一次性算出、
+ * 一次性写入三条轨道。本函数保留 propertyPath 参数只做防御性校验：一旦摄像机运镜位置分量
+ * 意外流入本函数（说明分组拦截条件与此处判断条件不一致，编译器内部不变量被破坏），直接
+ * 抛错，避免静默退化为错误的两点直插。fov/color 等非位置属性、以及 direct/未设置运镜的
+ * 摄像机位置分量，继续走本函数的两点直插逻辑。
  */
 function compileTransitionPoints(
   object: StageObject,
@@ -127,11 +135,53 @@ function compileTransitionPoints(
   segStart: number,
   segEnd: number,
   easing: StageEasingPreset,
+  propertyPath: string,
 ): StageKeyframe[] {
+  if (object.type === 'camera' && move !== undefined && move.kind !== 'direct' && isCameraPositionAxisPath(propertyPath)) {
+    throw new Error(
+      `[cameraStage] 摄像机运镜预设的位置分量（${propertyPath}）应在 compileObjectTransition 的 ` +
+        'transform.position 分组处被拦截（见 compileCameraPositionGroup），不应走两点直插逻辑；' +
+        '命中此错误说明拦截条件与本函数的判断条件不一致，请检查 isCameraPositionMoveGroup / isCameraPositionAxisPath',
+    )
+  }
   return [
     { time: segStart, value: fromValue, easing },
     { time: segEnd, value: toValue, easing: 'linear' },
   ]
+}
+
+function isCameraPositionMoveGroup(
+  object: StageObject,
+  group: AnimatableGroup,
+  move: StageCameraMove | undefined,
+): boolean {
+  return object.type === 'camera' && group.groupPath === 'transform.position' && move !== undefined && move.kind !== 'direct'
+}
+
+/** 编译摄像机运镜预设在本段过渡的位置轨道：三分量一次性算出采样点，写入 x/y/z 三条 scalar 轨道 */
+function compileCameraPositionGroup(
+  trackMap: TrackMap,
+  cameraId: string,
+  fromPosition: StageVec3,
+  move: Exclude<StageCameraMove, { kind: 'direct' }>,
+  targetPosition: StageVec3,
+  segStart: number,
+  segEnd: number,
+  easing: StageEasingPreset,
+  holdGuard: HoldGuard,
+): void {
+  const samples = compileCameraMoveSamples(move, fromPosition, targetPosition, segStart, segEnd, easing)
+  const endPosition = samples[samples.length - 1].position
+  const axes: Array<'x' | 'y' | 'z'> = ['x', 'y', 'z']
+  for (const axis of axes) {
+    const propertyPath = `transform.position.${axis}`
+    for (const sample of samples) {
+      writeKeyframe(trackMap, cameraId, propertyPath, { time: sample.time, value: sample.position[axis], easing: sample.easing })
+    }
+    if (holdGuard.enabled) {
+      writeKeyframe(trackMap, cameraId, propertyPath, { time: holdGuard.time, value: endPosition[axis], easing: 'linear' })
+    }
+  }
 }
 
 type TrackMap = Map<string, StageKeyframe[]>
@@ -172,17 +222,33 @@ function compileObjectTransition(
   segEnd: number,
   easing: StageEasingPreset,
   holdGuard: HoldGuard,
+  cameraLookAtTarget?: StageVec3,
 ): void {
   const fromObject = mergeStateIntoObject(object, fromState)
   const toObject = mergeStateIntoObject(object, toState)
 
   for (const group of listAnimatableGroups(object)) {
+    if (isCameraPositionMoveGroup(object, group, move)) {
+      compileCameraPositionGroup(
+        trackMap,
+        object.id,
+        fromState.transform.position,
+        move as Exclude<StageCameraMove, { kind: 'direct' }>,
+        cameraLookAtTarget ?? fromState.transform.position,
+        segStart,
+        segEnd,
+        easing,
+        holdGuard,
+      )
+      continue
+    }
+
     for (const descriptor of group.children) {
       const fromValue = descriptor.getValue(fromObject)
       const toValue = descriptor.getValue(toObject)
       if (!hasPropertyChanged(descriptor.valueType, fromValue, toValue)) continue
 
-      const points = compileTransitionPoints(object, move, fromValue, toValue, segStart, segEnd, easing)
+      const points = compileTransitionPoints(object, move, fromValue, toValue, segStart, segEnd, easing, descriptor.path)
       for (const point of points) {
         writeKeyframe(trackMap, object.id, descriptor.path, point)
       }
@@ -191,6 +257,28 @@ function compileObjectTransition(
       }
     }
   }
+}
+
+/**
+ * 解析摄像机运镜预设的取景目标点：取过渡起始卡（fromShot）快照中的 lookAt 解析结果。
+ * 一期简化（对齐任务文件"当前情况"约定）：object 模式取目标对象在 fromShot 快照中的位置，
+ * 不追踪目标自身在本段过渡中的移动；朝向偏移逻辑对齐 cameraUtils.ts 的 getObjectLookAtPoint
+ * （角色目标取胸口高度，即 position.y + 1 * scale.y），只是取值源从"当前场景对象"换成"镜头卡快照"。
+ */
+function resolveShotLookAtTarget(cameraState: StageShotObjectState, fromShot: StageShot, objects: StageObject[]): StageVec3 {
+  const lookAt = cameraState.lookAt
+  if (!lookAt) return { x: 0, y: 0, z: 0 }
+  if (lookAt.mode === 'manual') return { ...lookAt.target }
+
+  const liveTarget = objects.find((item) => item.id === lookAt.objectId)
+  const targetState = fromShot.objectStates[lookAt.objectId]
+  if (!liveTarget || !targetState) return { ...lookAt.fallbackTarget }
+
+  const { position } = targetState.transform
+  if (liveTarget.type === 'character') {
+    return { x: position.x, y: position.y + 1 * targetState.transform.scale.y, z: position.z }
+  }
+  return { ...position }
 }
 
 function finalizeTracks(trackMap: TrackMap): StageTrack[] {
@@ -240,8 +328,12 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
       const easing = resolveSpeedPresetEasing(detail?.speedPreset)
       const [segStart, segEnd] = applyTransitionDelay(seg.transitionStart, seg.transitionEnd, detail?.delay ?? 0)
       const move = object.type === 'camera' ? fromShot.transition.cameraMoves[object.id] : undefined
+      const cameraLookAtTarget =
+        object.type === 'camera' && move !== undefined && move.kind !== 'direct'
+          ? resolveShotLookAtTarget(fromState, fromShot, objects)
+          : undefined
 
-      compileObjectTransition(trackMap, object, fromState, toState, move, segStart, segEnd, easing, holdGuard)
+      compileObjectTransition(trackMap, object, fromState, toState, move, segStart, segEnd, easing, holdGuard, cameraLookAtTarget)
     }
   }
 

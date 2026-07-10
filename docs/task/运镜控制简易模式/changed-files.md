@@ -29,3 +29,16 @@
 ### 修改
 
 - `package.json`：`devDependencies` 新增 `vitest@^1.6.1`；`scripts` 新增 `"test": "vitest run"`。
+
+## 1.3 摄像机运镜预设编译
+
+### 新增
+
+- `src/features/cameraStage/domain/shotCameraMovePresets.ts`（207 行）：运镜预设几何与采样纯函数。导出 `compileCameraMoveSamples`（统一入口）、`CameraMoveKeyframePoint` 类型、`ORBIT_DEGREES_PER_KEYFRAME`/`STAGE_CAMERA_MOVE_DEFAULTS` 常量；内部实现 `orbitSamples`/`dollySamples`/`truckSamples`/`craneSamples` 与向量数学（`addVec3`/`subVec3`/`scaleVec3`/`rotateAroundY`）、缓动数值反解（`invertEasing`）。
+- `src/features/cameraStage/domain/shotCameraMovePresets.test.ts`（165 行，10 个用例）：orbit 半径恒定/角度差/采样密度/方向/退化、dolly 距离比例、truck 正交性、crane 升降、时间重映射（easeInOut 非均匀/linear 均匀）。
+
+### 修改
+
+- `src/features/cameraStage/domain/shotTypes.ts`（237→260 行）：`StageCameraMove` 判别联合从骨架（`direct`/`orbit`/`dollyIn`/`dollyOut`，dolly 无参数）扩展为定稿版（`dollyIn`/`dollyOut` 补 `distanceRatio` 参数；新增 `truck: { offset }`、`crane: { height }`）；`normalizeCameraMove` 同步扩展解析与安全兜底。
+- `src/features/cameraStage/domain/shotCompiler.ts`（249→341 行）：新增 `isCameraPositionAxisPath`/`isCameraPositionMoveGroup`/`compileCameraPositionGroup`/`resolveShotLookAtTarget` 四个函数；`compileTransitionPoints` 增加 `propertyPath` 参数与防御性断言（详见 decisions.md）；`compileObjectTransition` 增加可选参数 `cameraLookAtTarget?: StageVec3`，分组循环内对摄像机 `transform.position` 分组做特殊拦截；`compileShotsToAnimation` 主循环内新增 `cameraLookAtTarget` 解析与透传。原 TODO(1.3) 注释已替换为指向新函数的说明。
+- `src/features/cameraStage/domain/shotCompiler.test.ts`（214→271 行，13→15 个用例）：新增 `describe('摄像机运镜预设接入（1.3）')` 块，含 2 个集成用例（orbit 编译产物几何验证、fov 变化不受运镜预设误伤）。

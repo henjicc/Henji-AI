@@ -175,6 +175,63 @@ describe('compileShotsToAnimation', () => {
     expect(animation.duration).toBeCloseTo(1.25, 5)
   })
 
+  describe('摄像机运镜预设接入（1.3）', () => {
+    it('含 orbit 的过渡编译产物：x/y/z 轨道可被 sampleTrack 采样，中间时刻位置在圆弧上（到目标距离恒定，容差内）', () => {
+      const target = { x: 0, y: 0, z: 0 }
+      const startPosition = { x: 0, y: 2, z: 5 }
+      const camera = createCameraObject('Camera', pickDefaultColor(2), { position: startPosition, target })
+
+      const shotA = createShot([camera], '卡1')
+      shotA.hold = 0
+      shotA.transitionDuration = 4
+      shotA.transition.cameraMoves[camera.id] = { kind: 'orbit', degrees: 180, direction: 'cw' }
+      // B 卡机位刻意保留创建时的默认快照（未手动摆到环绕落点），验证环绕几何覆盖 B 卡机位（重要记录 003）
+      const shotB = createShot([camera], '卡2')
+
+      const animation = compileShotsToAnimation([shotA, shotB], [camera])
+      const trackX = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.x')
+      const trackY = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.y')
+      const trackZ = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.z')
+      expect(trackX).toBeDefined()
+      expect(trackY).toBeDefined()
+      expect(trackZ).toBeDefined()
+
+      const startDistance = Math.hypot(
+        startPosition.x - target.x,
+        startPosition.y - target.y,
+        startPosition.z - target.z,
+      )
+      for (const time of [1, 2, 3]) {
+        const x = sampleTrack(trackX as StageTrack, time, 'scalar') as number
+        const y = sampleTrack(trackY as StageTrack, time, 'scalar') as number
+        const z = sampleTrack(trackZ as StageTrack, time, 'scalar') as number
+        const dist = Math.hypot(x - target.x, y - target.y, z - target.z)
+        // 相邻关键帧之间是线性插值弦近似圆弧，容差覆盖 15° 分段的弦-弧误差（远小于半径量级）
+        expect(Math.abs(dist - startDistance)).toBeLessThan(0.15)
+      }
+
+      // 终点应落在环绕几何的 180° 落点（z ≈ -5），而不是 B 卡快照里未改动的原始机位（z ≈ 5）
+      const endZ = sampleTrack(trackZ as StageTrack, 4, 'scalar') as number
+      expect(endZ).toBeCloseTo(-5, 1)
+    })
+
+    it('非 direct 运镜的位置分量不会误伤 fov 变化：fov 仍走两点直插', () => {
+      const target = { x: 0, y: 0, z: 0 }
+      const camera = createCameraObject('Camera', pickDefaultColor(2), { position: { x: 0, y: 2, z: 5 }, target })
+
+      const shotA = createShot([camera], '卡1')
+      shotA.transition.cameraMoves[camera.id] = { kind: 'dollyIn', distanceRatio: 0.5 }
+      const shotB = createShot([camera], '卡2')
+      shotB.objectStates[camera.id] = { ...shotB.objectStates[camera.id], fov: 70 }
+
+      const animation = compileShotsToAnimation([shotA, shotB], [camera])
+      const fovTrack = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'fov')
+      expect(fovTrack).toBeDefined()
+      expect(fovTrack?.keyframes).toHaveLength(2)
+      expect(fovTrack?.keyframes[1].value).toBeCloseTo(70, 5)
+    })
+  })
+
   it('产物 propertyPath 均可被 animatableProps 注册表解析；对象缺快照时该卡不参与该对象差异', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const character = createCharacterObject('Character', pickDefaultColor(1))

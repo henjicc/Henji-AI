@@ -4,28 +4,30 @@
 
 两者都在 `src/features/cameraStage/domain/shotCompiler.ts` 基础上扩展，互相独立、可并行；不需要改动 `compileShotsToAnimation` 的外层结构（时间轴布点、错峰延迟、停留段守护点、去重）。
 
-- **编译器主入口**：`compileShotsToAnimation(shots: StageShot[], objects: StageObject[]): StageSceneAnimation`，纯函数，已跑通 13 个单元测试（`shotCompiler.test.ts`），可直接作为 1.3/1.4 修改前后的回归基线（跑 `npm run test`）。
+- **编译器主入口**：`compileShotsToAnimation(shots: StageShot[], objects: StageObject[]): StageSceneAnimation`，纯函数。1.3 完成后当前共 25 个单元测试全部通过（`shotCompiler.test.ts` 15 个 + `shotCameraMovePresets.test.ts` 10 个），可直接作为 1.4 修改前后的回归基线（跑 `npm run test`）。
 - **测试基建已就绪**：`npm run test`（vitest run）。新增用例直接加进 `shotCompiler.test.ts`，或视体积另开 `shotCompilerXxx.test.ts`；`vitest.config.ts` 已配置 `@/` alias，无需再改配置。
+- **1.4 需要注意**：`compileObjectTransition` 函数签名末尾新增了一个可选参数 `cameraLookAtTarget?: StageVec3`（1.3 引入，见下方"1.3 摄像机运镜预设编译扩展点"里的说明），1.4 若要扩展该函数请追加在参数列表末尾，不要调整已有参数顺序。
 
-### 1.3 摄像机运镜预设编译扩展点
+### 1.3 摄像机运镜预设编译扩展点（已完成，供 1.4/2.3 参考）
 
-- 位置：`shotCompiler.ts` 的 `compileTransitionPoints` 函数（约第 122 行），函数头部已有 TODO(1.3) 注释块。
-- 现状：函数签名 `compileTransitionPoints(object: StageObject, move: StageCameraMove | undefined, fromValue, toValue, segStart, segEnd, easing): StageKeyframe[]`，`object`/`move` 两个参数当前**故意未使用**（预留），函数体目前不区分 `move.kind`，一律返回 `[{time:segStart,value:fromValue,easing},{time:segEnd,value:toValue,easing:'linear'}]`（direct 两点直插）。
-- 需要做的事：在函数内部加分支——当 `object.type === 'camera' && move !== undefined && move.kind !== 'direct'` 时，改为调用新的运镜预设编译函数（建议命名 `compileCameraMovePreset`，建议放新文件 `shotCameraMovePresets.ts`，避免 `shotCompiler.ts` 继续膨胀），返回多点关键帧数组来近似 orbit/dollyIn/dollyOut 的运镜轨迹。
-- 建议签名（供参考，1.3 可按需调整）：
-  ```ts
-  function compileCameraMovePreset(
-    move: Exclude<StageCameraMove, { kind: 'direct' }>,
-    fromValue: StageKeyframeValue,
-    toValue: StageKeyframeValue,
-    segStart: number,
-    segEnd: number,
-    easing: StageEasingPreset,
-  ): StageKeyframe[]
-  ```
-- **重要范围提示**：这个分支只应该拦截 `transform.position` 分组的路径（`transform.position.x/y/z`）。`compileObjectTransition` 对同一个摄像机对象会为 `fov`、`color` 等其它变化属性也调用 `compileTransitionPoints`，这些属性应该继续走直插逻辑，不要被运镜预设分支误伤。当前 `compileTransitionPoints` 函数签名里没有 `descriptor`/`propertyPath` 参数，1.3 接入时大概率需要给函数加一个 `propertyPath: string` 参数（`compileObjectTransition` 调用处已经有 `descriptor.path` 可传）来做这个判断。
-- 摄像机对象上只有 `transform.position`（`transform.rotation`/`scale` 对摄像机不可动画，见 `animatableProps.ts` 的 `TRANSFORM_GROUPS`），所以运镜预设只需要考虑位置轨道；朝向由 `lookAt` 字段驱动（不是关键帧轨道，渲染时实时计算，不在本编译器职责内）。
-- `StageCameraMove` 目前只有骨架（`{kind:'orbit',degrees,direction}`、`{kind:'dollyIn'|'dollyOut'}`），参数是否够用由 1.3 自行判断，需要更多参数（如环绕中心、dolly 距离）可以扩展 `shotTypes.ts` 的类型定义。
+- **实现位置与最终签名（与本文件之前给的建议不同，见下方"与建议的差异"）**：
+  - 几何纯函数：新文件 `src/features/cameraStage/domain/shotCameraMovePresets.ts`，统一入口 `compileCameraMoveSamples(move, fromPosition, targetPosition, segStart, segEnd, easing): CameraMoveKeyframePoint[]`（`CameraMoveKeyframePoint = { time, position: StageVec3, easing }`）。
+  - 编译器接入：`shotCompiler.ts` 新增 `compileCameraPositionGroup(trackMap, cameraId, fromPosition, move, targetPosition, segStart, segEnd, easing, holdGuard)`，在 `compileObjectTransition` 的分组循环入口拦截 `object.type === 'camera' && group.groupPath === 'transform.position' && move.kind !== 'direct'`（判断函数 `isCameraPositionMoveGroup`），一次性算出 x/y/z 三分量采样点并写入三条轨道，然后 `continue` 跳过该分组原本的逐分量循环。
+- **与本文件之前给 1.3 的建议的差异（重要，避免后续任务按旧建议去找代码）**：原建议是在 `compileTransitionPoints`（逐分量 scalar 调用）内部按 `move.kind` 分支。实际发现走不通——orbit 的绕轴旋转、truck 的垂直视线平移都需要 X/Y/Z 三分量整体向量，单分量签名算不出正确结果。因此实际拦截点上移到 `compileObjectTransition` 的分组循环入口（见上）。`compileTransitionPoints` 确实按建议加了 `propertyPath: string` 参数，但它现在的作用是**防御性断言**（一旦摄像机运镜位置分量意外流入该函数就直接 `throw`），不再是分支入口。完整理由见 `decisions.md` 的"1.3 摄像机运镜预设编译"小节。
+- **`compileObjectTransition` 函数签名变化（1.4 需要知道）**：末尾新增了一个**可选**参数 `cameraLookAtTarget?: StageVec3`，只在 `compileShotsToAnimation` 主循环里"摄像机 + 非 direct 运镜"的场景下才会被传值（其余场景传 `undefined`，函数内部有 `?? fromState.transform.position` 兜底，不会因为 `undefined` 崩溃）。这是一个**追加在末尾的可选参数**，不影响已有调用方式；1.4 如果要给 `compileObjectTransition` 也加一个"动作时间表"相关的输出参数（如累加结构），建议同样以"追加在参数列表末尾的可选参数/可变引用"的形式加，不要调整现有参数顺序，避免互相冲突。函数内部的分组循环里，摄像机 `transform.position` 分组已被 1.3 拦截并 `continue`，但 `object.type === 'character'` 的分支（1.4 的场景）完全不受影响——`isCameraPositionMoveGroup` 第一个条件就是 `object.type === 'camera'`，角色对象永远不会命中这个分支，1.4 可以放心在同一个函数体内（分组循环之外，或角色专属逻辑处）添加自己的钩子。
+- `StageCameraMove` 判别联合已在 `shotTypes.ts` 定稿为 5 种：`direct`（无参数）、`orbit: { degrees: number; direction: 'cw'|'ccw' }`、`dollyIn`/`dollyOut: { distanceRatio: number }`、`truck: { offset: number }`、`crane: { height: number }`，一期预设清单全部实现，未省略任何一种。
+- 摄像机对象上只有 `transform.position` 可动画（`transform.rotation`/`scale` 对摄像机不可动画，见 `animatableProps.ts` 的 `TRANSFORM_GROUPS`），朝向由 `lookAt` 字段驱动，执行时重新验证过（见 `decisions.md`），结论未过时：不涉及旋转轨道。
+- 环绕（orbit）等预设的目标点解析：新增 `resolveShotLookAtTarget(cameraState, fromShot, objects)`（`shotCompiler.ts`），取过渡起始卡快照中的 lookAt 解析结果，一期不追踪目标自身在本段过渡中的移动。
+
+### 交给 2.3（过渡细节层 UI）需要暴露的运镜预设参数
+
+- 摄像机过渡的细节层需要提供一个"运镜预设"选择器（`StageCameraMove.kind`：direct/orbit/dollyIn/dollyOut/truck/crane），选中不同 kind 后展示对应参数输入：
+  - `orbit`：`degrees`（建议输入框或 ±90/180/270/360 快捷值，任务文件给的参考档位）+ `direction`（`cw`/`ccw` 二选一）。
+  - `dollyIn`/`dollyOut`：`distanceRatio`（数值输入，建议 UI 提示"0.5 = 推到一半距离"这类语义说明；`STAGE_CAMERA_MOVE_DEFAULTS`（`shotCameraMovePresets.ts`）里有推荐默认值 `dollyInRatio: 0.5`/`dollyOutRatio: 1.8` 可直接复用）。
+  - `truck`：`offset`（数值输入，默认参考 `STAGE_CAMERA_MOVE_DEFAULTS.truckOffset = 2`）。
+  - `crane`：`height`（数值输入，默认参考 `STAGE_CAMERA_MOVE_DEFAULTS.craneHeight = 2`）。
+- **重要交互提示（对齐重要记录 003 定稿）**：选中非 direct 运镜预设后，本段过渡摄像机的终点由几何计算决定，会覆盖/忽略用户在 B 卡上手动摆放的机位。2.3 设计交互时建议在 UI 上明确提示这一点（如"启用运镜预设后，终点机位将按预设参数自动计算，与该卡摆放位置无关"），避免用户误以为需要去 B 卡精确摆放机位。
+- 运镜预设只对摄像机对象生效（`StageShotTransition.cameraMoves` 本身就是 `Record<cameraObjectId, StageCameraMove>`），2.3 的选择器应该只出现在摄像机对象的过渡细节面板上。
 
 ### 1.4 角色自动走跑与朝向推断扩展点
 
