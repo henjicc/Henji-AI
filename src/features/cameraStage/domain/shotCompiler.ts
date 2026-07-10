@@ -66,7 +66,20 @@ export interface ShotTimelineSegment {
   transitionEnd: number
 }
 
-/** 顺序累加 hold + transitionDuration 得每张卡的停留/过渡时间点；末卡只算 hold */
+/**
+ * 相邻两卡是否均已指定机位且机位不同（重要记录 005：多机位强制硬切）。
+ * 只要有一侧未指定机位（cameraId 为 null，沿用全局值），就不视为"机位不同"，
+ * 因为此时无法确定该段实际是否跨机位——保持与改动前一致的行为，避免旧工程/单机位工程误判。
+ */
+function hasForcedHardCut(current: StageShot, next: StageShot): boolean {
+  return !!current.cameraId && !!next.cameraId && current.cameraId !== next.cameraId
+}
+
+/**
+ * 顺序累加 hold + 过渡时长得每张卡的停留/过渡时间点；末卡只算 hold。
+ * 相邻两卡机位不同时，该段过渡的"有效时长"在这里被视为 0（强制硬切，重要记录 005）；
+ * `shot.transitionDuration` 本身不被改写，机位改回相同后布点自动恢复原时长。
+ */
 export function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
   const timeline: ShotTimelineSegment[] = []
   let cursor = 0
@@ -74,7 +87,10 @@ export function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
     const holdStart = cursor
     const transitionStart = holdStart + Math.max(0, shot.hold)
     const isLast = index === shots.length - 1
-    const transitionEnd = isLast ? transitionStart : transitionStart + Math.max(0, shot.transitionDuration)
+    const nextShot = isLast ? undefined : shots[index + 1]
+    const effectiveTransitionDuration =
+      !isLast && nextShot && hasForcedHardCut(shot, nextShot) ? 0 : Math.max(0, shot.transitionDuration)
+    const transitionEnd = isLast ? transitionStart : transitionStart + effectiveTransitionDuration
     timeline.push({ holdStart, transitionStart, transitionEnd })
     cursor = transitionEnd
   })

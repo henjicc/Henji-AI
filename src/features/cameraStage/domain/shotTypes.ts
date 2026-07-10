@@ -77,6 +77,12 @@ export interface StageShot {
   transitionDuration: number
   objectStates: Record<string, StageShotObjectState>
   transition: StageShotTransition
+  /**
+   * 拍摄机位（可选，重要记录 005）：null/缺失 = 未指定，渲染/导出时沿用全局 activeCameraId。
+   * 建卡时取当前 activeCameraId；相邻两卡机位均已指定且不同时，两卡之间的过渡在布点层
+   * （buildShotTimeline）强制视为 0 时长硬切，本字段与 transitionDuration 本身不互相改写。
+   */
+  cameraId: string | null
 }
 
 /** 摄像机效果器（3.1 实装，本任务仅类型 + 默认空数组） */
@@ -129,8 +135,11 @@ export function captureShotObjectState(object: StageObject): StageShotObjectStat
   return state
 }
 
-/** 由当前场景对象列表新建一张镜头卡：捕获全部对象状态，过渡细节留空由编译器按默认规则处理 */
-export function createShot(objects: StageObject[], name: string): StageShot {
+/**
+ * 由当前场景对象列表新建一张镜头卡：捕获全部对象状态，过渡细节留空由编译器按默认规则处理。
+ * `cameraId` 建卡时取调用方当前的 activeCameraId；省略/传 null 表示未指定机位（沿用全局值）。
+ */
+export function createShot(objects: StageObject[], name: string, cameraId: string | null = null): StageShot {
   const objectStates: Record<string, StageShotObjectState> = {}
   for (const object of objects) {
     objectStates[object.id] = captureShotObjectState(object)
@@ -142,6 +151,7 @@ export function createShot(objects: StageObject[], name: string): StageShot {
     transitionDuration: STAGE_SHOT_DEFAULT_TRANSITION_DURATION,
     objectStates,
     transition: { perObject: {}, cameraMoves: {} },
+    cameraId,
   }
 }
 
@@ -240,6 +250,8 @@ function normalizeShot(raw: unknown): StageShot | undefined {
         : STAGE_SHOT_DEFAULT_TRANSITION_DURATION,
     objectStates,
     transition: normalizeShotTransition(record.transition),
+    // 旧工程无该字段 → null（未指定机位，沿用全局 activeCameraId，行为与改动前完全一致）
+    cameraId: typeof record.cameraId === 'string' && record.cameraId ? record.cameraId : null,
   }
 }
 

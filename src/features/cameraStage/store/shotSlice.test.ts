@@ -154,4 +154,58 @@ describe('简易模式 store 分片', () => {
     baked.setEditorMode('simple')
     expect(useCameraStageStore.getState().editorMode).toBe('pro')
   })
+
+  it('建卡默认沿用当前 activeCameraId 作为拍摄机位', () => {
+    useCameraStageStore.getState().addCamera()
+    const cameraId = useCameraStageStore.getState().activeCameraId
+    expect(cameraId).toBeTruthy()
+    useCameraStageStore.getState().addShot()
+    const shots = useCameraStageStore.getState().shots
+    expect(shots[shots.length - 1].cameraId).toBe(cameraId)
+  })
+
+  it('updateShotCamera 更新机位并触发重编译（机位不同的相邻卡强制硬切）', () => {
+    useCameraStageStore.getState().addCamera()
+    const cameraA = useCameraStageStore.getState().activeCameraId
+    if (!cameraA) throw new Error('测试需要摄像机 A')
+    useCameraStageStore.getState().updateShotCamera(useCameraStageStore.getState().shots[0].id, cameraA)
+    useCameraStageStore.getState().addCamera()
+    const cameraB = useCameraStageStore.getState().activeCameraId
+    if (!cameraB) throw new Error('测试需要摄像机 B')
+    useCameraStageStore.getState().addShot()
+    const shots1 = useCameraStageStore.getState().shots
+    useCameraStageStore.getState().updateShotCamera(shots1[1].id, cameraB)
+
+    const state = useCameraStageStore.getState()
+    expect(state.shots[1].cameraId).toBe(cameraB)
+    // 机位不同 → 相邻卡之间强制硬切，animation.duration 应等于两卡的 hold 之和（过渡有效时长 0）
+    const expectedDuration = state.shots[0].hold + state.shots[1].hold
+    expect(state.animation.duration).toBeCloseTo(expectedDuration, 5)
+  })
+
+  it('新建摄像机在已有摄像机时继承首摄像机画幅，且非首摄像机画幅补丁被钳制忽略', () => {
+    useCameraStageStore.getState().addCamera()
+    const cameraA = useCameraStageStore.getState().objects.find((item) => item.type === 'camera')
+    if (!cameraA) throw new Error('测试需要摄像机 A')
+    useCameraStageStore.getState().updateObject(cameraA.id, { aspectRatio: { preset: 'custom', ratio: 2.5 } })
+
+    useCameraStageStore.getState().addCamera()
+    const cameraB = useCameraStageStore.getState().objects.find(
+      (item) => item.type === 'camera' && item.id !== cameraA.id,
+    )
+    if (!cameraB) throw new Error('测试需要摄像机 B')
+    expect(cameraB.type === 'camera' ? cameraB.aspectRatio : null).toEqual({ preset: 'custom', ratio: 2.5 })
+
+    // 非首摄像机改画幅被钳制忽略
+    useCameraStageStore.getState().updateObject(cameraB.id, { aspectRatio: { preset: '1:1', ratio: 1 } })
+    const afterIgnored = useCameraStageStore.getState().objects.find((item) => item.id === cameraB.id)
+    expect(afterIgnored?.type === 'camera' ? afterIgnored.aspectRatio : null).toEqual({ preset: 'custom', ratio: 2.5 })
+
+    // 首摄像机再次改画幅，联动同步非首摄像机
+    useCameraStageStore.getState().updateObject(cameraA.id, { aspectRatio: { preset: '16:9', ratio: 16 / 9 } })
+    const after = useCameraStageStore.getState().objects
+    for (const item of after) {
+      if (item.type === 'camera') expect(item.aspectRatio).toEqual({ preset: '16:9', ratio: 16 / 9 })
+    }
+  })
 })

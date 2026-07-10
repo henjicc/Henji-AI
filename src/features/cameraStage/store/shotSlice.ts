@@ -25,6 +25,7 @@ export type ShotSliceActions = Pick<
   | 'updateShotTiming'
   | 'updateShotName'
   | 'updateShotTransition'
+  | 'updateShotCamera'
   | 'captureIntoSelectedShot'
   | 'setEditorMode'
   | 'bakeToProMode'
@@ -132,7 +133,7 @@ function shotStartTime(shots: StageShot[], index: number): number {
 export function createShotSlice(set: StoreApi<CameraStageState>['setState']): ShotSliceActions {
   return {
     addShot: () => set((state) => {
-      const shot = createShot(state.objects, `片段 ${state.shots.length + 1}`)
+      const shot = createShot(state.objects, `片段 ${state.shots.length + 1}`, state.activeCameraId)
       const selectedIndex = state.shots.findIndex((item) => item.id === state.selectedShotId)
       const insertIndex = selectedIndex < 0 ? state.shots.length : selectedIndex + 1
       const shots = [...state.shots.slice(0, insertIndex), shot, ...state.shots.slice(insertIndex)]
@@ -207,6 +208,19 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       } : shot)
       return { shots, animation: compile(shots, state.objects) }
     }),
+    /**
+     * 修改某张镜头卡的拍摄机位（重要记录 005）。重编译是必须的：机位变化可能触发或解除
+     * 与相邻卡之间的强制硬切（buildShotTimeline 的有效过渡时长会随之变化）。
+     */
+    updateShotCamera: (id, cameraId) => set((state) => {
+      const shots = state.shots.map((shot) => shot.id === id ? { ...shot, cameraId } : shot)
+      logger.debug('更新镜头卡拍摄机位', {
+        event: 'simple_mode.shot.camera_updated',
+        shotId: id,
+        cameraId,
+      })
+      return { shots, animation: compile(shots, state.objects) }
+    }),
     captureIntoSelectedShot: (objectIds) => set((state) => {
       if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return {}
       if (!canCaptureAtCurrentTime(state)) {
@@ -219,7 +233,9 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
     setEditorMode: (editorMode: StageEditorMode) => set((state) => {
       if (state.editorMode === 'pro' && editorMode === 'simple') return {}
       if (editorMode === state.editorMode && !(editorMode === 'simple' && state.shots.length === 0)) return {}
-      const shots = editorMode === 'simple' && state.shots.length === 0 ? [createShot(state.objects, '片段 1')] : state.shots
+      const shots = editorMode === 'simple' && state.shots.length === 0
+        ? [createShot(state.objects, '片段 1', state.activeCameraId)]
+        : state.shots
       return { editorMode, shots, selectedShotId: shots[0]?.id ?? null,
         ...(editorMode === 'simple' ? { animation: compile(shots, state.objects) } : {}) }
     }),

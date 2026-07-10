@@ -3,7 +3,7 @@ import { getAnimatablePropByPath } from './animatableProps'
 import type { StageTrack } from './animationTypes'
 import { sampleTrack } from './keyframeEngine'
 import { createCameraObject, createCharacterObject, createPrimitiveObject, pickDefaultColor } from './sceneDefaults'
-import { compileShotsToAnimation } from './shotCompiler'
+import { buildShotTimeline, compileShotsToAnimation } from './shotCompiler'
 import { createShot } from './shotTypes'
 
 describe('compileShotsToAnimation', () => {
@@ -299,5 +299,67 @@ describe('compileShotsToAnimation', () => {
       expect(getAnimatablePropByPath(track.propertyPath)).toBeDefined()
       expect(track.objectId).not.toBe(box.id)
     }
+  })
+})
+
+describe('buildShotTimeline 强制硬切（重要记录 005）', () => {
+  it('相邻两卡机位不同时，有效过渡时长视为 0，原始 transitionDuration 不被改写', () => {
+    const shotA = createShot([], '卡1', 'camera-a')
+    const shotB = createShot([], '卡2', 'camera-b')
+    shotA.hold = 1
+    shotA.transitionDuration = 2
+    shotB.hold = 1
+
+    const timeline = buildShotTimeline([shotA, shotB])
+    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 1 })
+    expect(shotA.transitionDuration).toBe(2)
+  })
+
+  it('未指定机位的卡（cameraId 为 null）不触发强制硬切，行为与改动前一致', () => {
+    const shotA = createShot([], '卡1')
+    const shotB = createShot([], '卡2')
+    shotA.hold = 1
+    shotA.transitionDuration = 2
+    shotB.hold = 1
+
+    const timeline = buildShotTimeline([shotA, shotB])
+    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
+  })
+
+  it('机位相同的相邻卡保留真实过渡时长', () => {
+    const shotA = createShot([], '卡1', 'camera-a')
+    const shotB = createShot([], '卡2', 'camera-a')
+    shotA.hold = 1
+    shotA.transitionDuration = 2
+    shotB.hold = 1
+
+    const timeline = buildShotTimeline([shotA, shotB])
+    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
+  })
+
+  it('机位不同的强制硬切会让编译产物在过渡起点直接跳变（无插值关键帧对）', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    const shotA = createShot([camera], '卡1', 'camera-a')
+    const shotB = createShot([camera], '卡2', 'camera-b')
+    shotA.hold = 1
+    shotA.transitionDuration = 2
+    shotB.hold = 1
+    shotB.objectStates[camera.id] = {
+      ...shotB.objectStates[camera.id],
+      transform: {
+        ...shotB.objectStates[camera.id].transform,
+        position: { ...shotB.objectStates[camera.id].transform.position, x: 5 },
+      },
+    }
+
+    const animation = compileShotsToAnimation([shotA, shotB], [camera])
+    const positionXTrack = animation.tracks.find(
+      (track) => track.objectId === camera.id && track.propertyPath === 'transform.position.x',
+    )
+    expect(positionXTrack).toBeDefined()
+    // 强制硬切：过渡起止时间重合（=1），只保留跳变后的目标值，没有跨时间的插值区间
+    const keyframesAtCut = positionXTrack!.keyframes.filter((kf) => Math.abs(kf.time - 1) < 1e-6)
+    expect(keyframesAtCut).toHaveLength(1)
+    expect(keyframesAtCut[0].value).toBe(5)
   })
 })

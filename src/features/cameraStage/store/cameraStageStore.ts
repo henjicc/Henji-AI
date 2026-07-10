@@ -11,7 +11,7 @@ import {
   pickDefaultColor,
 } from '../domain/sceneDefaults'
 import { createPoseMotion } from '../domain/characterMotion'
-import { getCameraObjects } from '../domain/cameraUtils'
+import { applyObjectPatch, getCameraObjects } from '../domain/cameraUtils'
 import { getDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
@@ -82,6 +82,8 @@ export interface CameraStageState {
   updateShotTiming: (id: string, patch: ShotTimingPatch) => void
   updateShotName: (id: string, name: string) => void
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
+  /** 修改镜头卡拍摄机位（重要记录 005）；null = 取消指定，沿用全局 activeCameraId */
+  updateShotCamera: (id: string, cameraId: string | null) => void
   captureIntoSelectedShot: (objectIds?: string[]) => void
   setEditorMode: (mode: StageEditorMode) => void
   /** 将简易镜头卡单向固化为专业关键帧工程；专业工程调用时无操作。 */
@@ -313,21 +315,27 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   addCamera: () =>
     set((state) => {
+      const existingCameras = getCameraObjects(state.objects)
       const object = createCameraObject(
         nextName(state.objects, '摄像机'),
         pickDefaultColor(state.objects.length),
         getDirectorView() ?? undefined,
       )
+      // 重要记录 007：已存在其他摄像机时，新摄像机画幅直接继承首摄像机当前值，
+      // 不给用户可独立编辑的初始值（画幅一致性从创建时就保证，不依赖导出时再校验）。
+      const finalObject = existingCameras[0]
+        ? { ...object, aspectRatio: { ...existingCameras[0].aspectRatio } }
+        : object
       // 新摄像机默认位置/朝向就是当前自由视角，添加后直接切到摄像机视角：
       // 一是让顶部视角按钮的高亮立刻和实际画面对上，二是隐藏所有摄像机图标（含它自己），
       // 避免因为新摄像机就摆在刚才的视点上，导致自由视角下看到自己的图标近距离怼脸
-      const objects = [...state.objects, object]
-      const shots = state.editorMode === 'simple' ? syncAddedObjectToShots(state.shots, object) : state.shots
+      const objects = [...state.objects, finalObject]
+      const shots = state.editorMode === 'simple' ? syncAddedObjectToShots(state.shots, finalObject) : state.shots
       return {
         objects,
         ...(state.editorMode === 'simple' ? { shots, animation: compileShotsToAnimation(shots, objects) } : {}),
-        selectedId: object.id,
-        activeCameraId: object.id,
+        selectedId: finalObject.id,
+        activeCameraId: finalObject.id,
         viewMode: 'camera',
       }
     }),
@@ -396,9 +404,9 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   updateObject: (id, patch) =>
     set((state) => {
-      const objects = state.objects.map((item) =>
-        item.id === id ? ({ ...item, ...patch } as StageObject) : item,
-      )
+      // aspectRatio 走 applyObjectPatch：非首摄像机的画幅补丁被钳制忽略，首摄像机改画幅
+      // 联动同步其余摄像机（重要记录 007），其余字段行为与直接 map 一致
+      const objects = applyObjectPatch(state.objects, id, patch)
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
       if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])

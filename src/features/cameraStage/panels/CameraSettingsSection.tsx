@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
 import { Dropdown, UiRangeInput, UiSwitch } from '@/components/ui'
-import { getObjectLookAtPoint, resolveCameraLookAtTarget } from '../domain/cameraUtils'
+import { getObjectLookAtPoint, isFirstCamera, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import { CAMERA_ASPECT_RATIO_PRESETS } from '../domain/sceneDefaults'
 import type {
   StageCameraAspectRatioPreset,
@@ -116,6 +116,8 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
   const updateObject = useCameraStageStore((state) => state.updateObject)
   const characters = objects.filter((item) => item.type === 'character')
   const resolvedTarget = resolveCameraLookAtTarget(object, objects)
+  // 重要记录 007：画幅一致性只由首个摄像机决定，非首摄像机画幅字段只读
+  const isPrimaryCamera = isFirstCamera(objects, object.id)
   const lookAt = object.lookAt
   const selectedCharacter = lookAt.mode === 'object'
     ? characters.find((item) => item.id === lookAt.objectId)
@@ -239,8 +241,9 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
             onSelect={handleAspectPresetSelect}
             className="w-full"
             minWidthStrategy="none"
+            disabled={!isPrimaryCamera}
           />
-          {object.aspectRatio.preset === 'custom' && (
+          {isPrimaryCamera && object.aspectRatio.preset === 'custom' && (
             <CustomAspectRatioInputs
               key={object.id}
               ratio={object.aspectRatio.ratio}
@@ -248,6 +251,9 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
             />
           )}
         </div>
+        {!isPrimaryCamera && (
+          <div className="text-[11px] text-text-muted">画幅由首个摄像机决定，如需更改请编辑首个摄像机</div>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
