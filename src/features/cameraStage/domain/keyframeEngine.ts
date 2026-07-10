@@ -85,8 +85,73 @@ export function cubicBezierEase(
 }
 
 export function easeProgress(easing: StageEasing, u: number): number {
+  if (easing === 'hold') return u >= 1 ? 1 : 0
   const [x1, y1, x2, y2] = resolveEasingControlPoints(easing)
   return cubicBezierEase(x1, y1, x2, y2, u)
+}
+
+function hermiteScalar(a: number, b: number, tangentA: number, tangentB: number, u: number): number {
+  const u2 = u * u
+  const u3 = u2 * u
+  return (2 * u3 - 3 * u2 + 1) * a
+    + (u3 - 2 * u2 + u) * tangentA
+    + (-2 * u3 + 3 * u2) * b
+    + (u3 - u2) * tangentB
+}
+
+function smoothTangent(
+  previous: StageKeyframe | undefined,
+  current: StageKeyframe,
+  next: StageKeyframe | undefined,
+  span: number,
+  axis?: keyof StageVec3,
+): number {
+  if (!previous || !next) {
+    if (!next) return 0
+    const from = axis ? (current.value as StageVec3)[axis] : current.value as number
+    const to = axis ? (next.value as StageVec3)[axis] : next.value as number
+    return to - from
+  }
+  const elapsed = Math.max(KEYFRAME_TIME_EPSILON, next.time - previous.time)
+  const before = axis ? (previous.value as StageVec3)[axis] : previous.value as number
+  const after = axis ? (next.value as StageVec3)[axis] : next.value as number
+  return ((after - before) / elapsed) * span
+}
+
+function interpolateSmoothSegment(
+  keyframes: StageKeyframe[],
+  index: number,
+  u: number,
+  type: StageAnimatableValueType,
+): StageKeyframeValue | undefined {
+  if (type === 'color') return undefined
+  const a = keyframes[index]
+  const b = keyframes[index + 1]
+  if (a.continuity !== 'smooth' && b.continuity !== 'smooth') return undefined
+  // hold = 硬切段（机位切换等），必须保持阶跃跳变，不参与平滑；
+  // 相邻段是硬切时也不让切线"穿过"跳变点，按单侧边界处理。
+  if (a.easing === 'hold') return undefined
+  const span = b.time - a.time
+  const previous = index > 0 && keyframes[index - 1].easing !== 'hold' ? keyframes[index - 1] : undefined
+  const next = b.easing !== 'hold' ? keyframes[index + 2] : undefined
+  if (type === 'scalar') {
+    const tangentA = a.continuity === 'smooth' ? smoothTangent(previous, a, b, span) : 0
+    const tangentB = b.continuity === 'smooth' ? smoothTangent(a, b, next, span) : 0
+    return hermiteScalar(a.value as number, b.value as number, tangentA, tangentB, u)
+  }
+  const result = {} as StageVec3
+  for (const axis of ['x', 'y', 'z'] as const) {
+    const tangentA = a.continuity === 'smooth' ? smoothTangent(previous, a, b, span, axis) : 0
+    const tangentB = b.continuity === 'smooth' ? smoothTangent(a, b, next, span, axis) : 0
+    result[axis] = hermiteScalar(
+      (a.value as StageVec3)[axis],
+      (b.value as StageVec3)[axis],
+      tangentA,
+      tangentB,
+      u,
+    )
+  }
+  return result
 }
 
 /* ---------- 值插值 ---------- */
@@ -176,6 +241,8 @@ export function sampleTrack(
   const b = keyframes[i + 1]
   const span = b.time - a.time
   const u = span <= KEYFRAME_TIME_EPSILON ? 0 : (time - a.time) / span
+  const smoothValue = interpolateSmoothSegment(keyframes, i, u, type)
+  if (smoothValue !== undefined) return smoothValue
   const f = easeProgress(a.easing, u)
   return interpolateValue(a.value, b.value, f, type)
 }

@@ -82,20 +82,26 @@ export function hasForcedHardCut(current: StageShot, next: StageShot): boolean {
  * `shot.transitionDuration` 本身不被改写，机位改回相同后布点自动恢复原时长。
  */
 export function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
-  const timeline: ShotTimelineSegment[] = []
-  let cursor = 0
-  shots.forEach((shot, index) => {
-    const holdStart = cursor
-    const transitionStart = holdStart + Math.max(0, shot.hold)
-    const isLast = index === shots.length - 1
-    const nextShot = isLast ? undefined : shots[index + 1]
-    const effectiveTransitionDuration =
-      !isLast && nextShot && hasForcedHardCut(shot, nextShot) ? 0 : Math.max(0, shot.transitionDuration)
-    const transitionEnd = isLast ? transitionStart : transitionStart + effectiveTransitionDuration
-    timeline.push({ holdStart, transitionStart, transitionEnd })
-    cursor = transitionEnd
+  // 旧工程可能仍带有 hold；在保存迁移完成前继续按旧时长还原绝对点位，避免打开后节奏突变。
+  const needsLegacyTiming = shots.some((shot) => shot.hold > 0)
+    || shots.some((shot, index) => index > 0 && shot.time <= shots[index - 1].time)
+  if (needsLegacyTiming) {
+    let cursor = 0
+    return shots.map((shot, index) => {
+      const holdStart = cursor
+      const transitionStart = holdStart + Math.max(0, shot.hold)
+      const transitionEnd = index === shots.length - 1
+        ? transitionStart
+        : transitionStart + Math.max(0, shot.transitionDuration)
+      cursor = transitionEnd
+      return { holdStart, transitionStart, transitionEnd }
+    })
+  }
+  return shots.map((shot, index) => {
+    const time = Math.max(0, shot.time)
+    const nextTime = shots[index + 1] ? Math.max(time, shots[index + 1].time) : time
+    return { holdStart: time, transitionStart: time, transitionEnd: nextTime }
   })
-  return timeline
 }
 
 /** 把镜头卡快照的可动画字段合并进当前场景对象，复用 animatableProps 的取值逻辑而不重写一份 */
@@ -349,14 +355,17 @@ function resolveShotLookAtTarget(cameraState: StageShotObjectState, fromShot: St
   return { ...position }
 }
 
-function finalizeTracks(trackMap: TrackMap): StageTrack[] {
+function finalizeTracks(trackMap: TrackMap, shots: StageShot[]): StageTrack[] {
   const tracks: StageTrack[] = []
   for (const [key, keyframes] of trackMap) {
     const separatorIndex = key.indexOf(TRACK_KEY_SEPARATOR)
     tracks.push({
       objectId: key.slice(0, separatorIndex),
       propertyPath: key.slice(separatorIndex + TRACK_KEY_SEPARATOR.length),
-      keyframes,
+      keyframes: keyframes.map((keyframe) => {
+        const shot = shots.find((item) => Math.abs(item.time - keyframe.time) <= 1e-4)
+        return shot ? { ...keyframe, continuity: shot.continuity } : keyframe
+      }),
     })
   }
   return tracks
@@ -382,11 +391,7 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
     const fromShot = shots[i]
     const toShot = shots[i + 1]
     const seg = timeline[i]
-    const nextSeg = timeline[i + 1]
-    const holdGuard: HoldGuard = {
-      enabled: i + 1 < shots.length - 1 && toShot.hold > 0,
-      time: nextSeg.transitionStart,
-    }
+    const holdGuard: HoldGuard = { enabled: false, time: seg.transitionEnd }
 
     for (const object of objects) {
       const fromState = fromShot.objectStates[object.id]
@@ -394,9 +399,13 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
       if (!fromState || !toState) continue
 
       const detail = fromShot.transition.perObject[object.id]
-      const easing = resolveSpeedPresetEasing(detail?.speedPreset)
+      const easing = hasForcedHardCut(fromShot, toShot)
+        ? 'hold'
+        : resolveSpeedPresetEasing(detail?.speedPreset)
       const [segStart, segEnd] = applyTransitionDelay(seg.transitionStart, seg.transitionEnd, detail?.delay ?? 0)
-      const move = object.type === 'camera' ? fromShot.transition.cameraMoves[object.id] : undefined
+      const move = object.type === 'camera' && !hasForcedHardCut(fromShot, toShot)
+        ? fromShot.transition.cameraMoves[object.id]
+        : undefined
       const cameraLookAtTarget =
         object.type === 'camera' && move !== undefined && move.kind !== 'direct'
           ? resolveShotLookAtTarget(fromState, fromShot, objects)
@@ -419,5 +428,5 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
     }
   }
 
-  return { tracks: finalizeTracks(trackMap), motionSchedule, duration, fps: CAMERA_STAGE_DEFAULT_FPS }
+  return { tracks: finalizeTracks(trackMap, shots), motionSchedule, duration, fps: CAMERA_STAGE_DEFAULT_FPS }
 }

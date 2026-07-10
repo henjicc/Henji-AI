@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { CircleDot, Plus } from 'lucide-react'
+import { UiIconButton } from '@/components/ui'
 import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { PlaybackButtons } from '../timeline/PlaybackControls'
@@ -7,7 +9,8 @@ import { clampPxPerSecond, timeToX, xToTime, type TimeRulerMode } from '../timel
 import { TIMELINE_RULER_HEIGHT } from '../timeline/timelineLayout'
 import ShotClipTrack from './timeline/ShotClipTrack'
 import ShotTimecodeText from './timeline/ShotTimecodeText'
-import { buildClipLayout, findClipAtTime } from './timeline/shotClipGeometry'
+import { formatShotTimecode } from './timeline/shotTimecodeFormat'
+import { quantizeToFrame } from './timeline/shotClipGeometry'
 import { SHOT_CLIP_TRACK_HEIGHT } from './timeline/shotTimelineLayout'
 
 /**
@@ -35,18 +38,39 @@ const ShotTimelinePanel: React.FC = () => {
   const addShot = useCameraStageStore((state) => state.addShot)
   const selectShot = useCameraStageStore((state) => state.selectShot)
   const removeShot = useCameraStageStore((state) => state.removeShot)
-  const reorderShot = useCameraStageStore((state) => state.reorderShot)
+  const moveShotTime = useCameraStageStore((state) => state.moveShotTime)
   const updateShotName = useCameraStageStore((state) => state.updateShotName)
   const updateShotTiming = useCameraStageStore((state) => state.updateShotTiming)
   const updateShotTransition = useCameraStageStore((state) => state.updateShotTransition)
   const updateShotCamera = useCameraStageStore((state) => state.updateShotCamera)
+  const updateShotContinuity = useCameraStageStore((state) => state.updateShotContinuity)
+  const simpleAutoKeyframe = useCameraStageStore((state) => state.simpleAutoKeyframe)
+  const setSimpleAutoKeyframe = useCameraStageStore((state) => state.setSimpleAutoKeyframe)
   const setSelectedShotIdOnly = useCameraStageStore((state) => state.setSelectedShotIdOnly)
   const seek = useCameraStageStore((state) => state.seek)
+
+  // 简易模式与专业模式保持一致：焦点不在输入控件时，空格播放/暂停。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || event.repeat) return
+      const target = event.target as HTMLElement | null
+      const tagName = target?.tagName
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable) return
+      const state = useCameraStageStore.getState()
+      if (state.shots.length === 0 || state.animation.duration <= 0) return
+      event.preventDefault()
+      if (state.playback.playing) state.pause()
+      else state.play()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   /** 用户是否已手动滚轮缩放过：一旦为 true，停止随时长变化自动自适应铺满，尊重用户当前缩放 */
   const userZoomedRef = useRef(false)
   const [pxPerSecond, setPxPerSecond] = useState(clampPxPerSecond(120))
+  const [viewportWidth, setViewportWidth] = useState(MIN_CONTENT_WIDTH)
 
   // 初始自适应：面板挂载 / 可视宽度变化 / 总时长变化时，取 clampPxPerSecond(可视宽度 / 总时长)
   // 让整条时间轴默认尽量铺满可见区域；用户手动缩放过后不再介入。
@@ -54,9 +78,10 @@ const ShotTimelinePanel: React.FC = () => {
     const container = scrollRef.current
     if (!container) return undefined
     const applyAutoFit = (): void => {
-      if (userZoomedRef.current || duration <= 0) return
       const visibleWidth = container.clientWidth
       if (visibleWidth <= 0) return
+      setViewportWidth(visibleWidth)
+      if (userZoomedRef.current || duration <= 0) return
       setPxPerSecond(clampPxPerSecond(visibleWidth / duration))
     }
     applyAutoFit()
@@ -65,7 +90,9 @@ const ShotTimelinePanel: React.FC = () => {
     return () => observer.disconnect()
   }, [duration])
 
-  const contentWidth = Math.max(MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond))
+  // 轨道在最后一个关键帧之后始终保留至少一屏空白，允许播放头进入未来时间。
+  const contentWidth = Math.max(MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond) + viewportWidth)
+  const rulerDuration = xToTime(contentWidth, pxPerSecond)
   const rulerMode: TimeRulerMode = pxPerSecond >= FRAME_TICK_PX_PER_SECOND ? 'frames' : 'seconds'
 
   // Alt+滚轮锚点缩放：指针所在时间点缩放后保持不动（照抄专业模式 TimelinePanel.handleWheel）。
@@ -89,32 +116,51 @@ const ShotTimelinePanel: React.FC = () => {
     })
   }, [pxPerSecond])
 
-  // 选中跟随播放头，但只在静止段内跟（重要记录 003 前置逻辑）：
-  // 只 set selectedShotId，不调用 selectShot，避免重复应用快照污染撤销历史。
+  // 播放头吸附到某关键帧时同步选中，但不重复应用快照。
   useEffect(() => {
-    const layout = buildClipLayout(shots, 1)
-    const block = findClipAtTime(layout, currentTime)
-    if (!block || block.kind !== 'static' || block.shotId === selectedShotId) return
-    setSelectedShotIdOnly(block.shotId)
-  }, [shots, currentTime, selectedShotId, setSelectedShotIdOnly])
+    const epsilon = 1 / (2 * Math.max(1, fps))
+    const shot = shots.find((item) => Math.abs(item.time - currentTime) <= epsilon)
+    if (!shot || shot.id === selectedShotId) return
+    setSelectedShotIdOnly(shot.id)
+  }, [shots, currentTime, fps, selectedShotId, setSelectedShotIdOnly])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-app">
       <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border-dark bg-surface-dark px-2">
         <PlaybackButtons canPlay={shots.length > 0 && duration > 0} />
         <ShotTimecodeText currentTime={currentTime} duration={duration} fps={fps} />
-        <span className="ml-auto text-xs text-text-muted">镜头卡</span>
+        <UiIconButton
+          showBorder={false}
+          appearance="hover-only"
+          className="ml-4 h-7 w-7"
+          title="在播放头位置添加关键帧"
+          onClick={addShot}
+        >
+          <Plus size={16} />
+        </UiIconButton>
+        <UiIconButton
+          showBorder={false}
+          appearance="hover-only"
+          className={`h-7 w-7 ${simpleAutoKeyframe ? 'bg-accent/10 text-accent' : 'text-text-muted'}`}
+          title={simpleAutoKeyframe ? '自动关键帧已开启' : '开启自动关键帧'}
+          aria-pressed={simpleAutoKeyframe}
+          onClick={() => setSimpleAutoKeyframe(!simpleAutoKeyframe)}
+        >
+          <CircleDot size={15} />
+        </UiIconButton>
+        <span className="ml-auto text-xs text-text-muted">状态关键帧</span>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto" onWheel={handleWheel}>
         <div className="relative inline-block min-w-full">
           <TimeRuler
-            duration={duration}
+            duration={rulerDuration}
             pxPerSecond={pxPerSecond}
             contentWidth={contentWidth}
             mode={rulerMode}
             fps={fps}
-            onScrub={seek}
+            formatLabel={(time) => formatShotTimecode(time, 'secondsFrames', fps)}
+            onScrub={(time) => seek(quantizeToFrame(time, fps))}
           />
           <ShotClipTrack
             shots={shots}
@@ -130,8 +176,8 @@ const ShotTimelinePanel: React.FC = () => {
             onUpdateShotTiming={updateShotTiming}
             onUpdateShotTransition={updateShotTransition}
             onUpdateShotCamera={updateShotCamera}
-            onReorderShot={reorderShot}
-            onAddShot={addShot}
+            onMoveShotTime={moveShotTime}
+            onUpdateShotContinuity={updateShotContinuity}
           />
           <div
             className="pointer-events-none absolute z-20"

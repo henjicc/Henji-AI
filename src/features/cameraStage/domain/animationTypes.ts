@@ -15,7 +15,7 @@ export type StageKeyframeValue = number | StageVec3 | string
 export type StageAnimatableValueType = 'scalar' | 'vec3' | 'color'
 
 /** 缓动预设名，参数对齐 CSS 标准 ease 系列 */
-export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut'
+export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'hold'
 
 /**
  * 自定义贝塞尔缓动：等价 CSS `cubic-bezier(out[0], out[1], in[0], in[1])`。
@@ -35,6 +35,8 @@ export interface StageKeyframe {
   value: StageKeyframeValue
   /** 本关键帧到下一关键帧区间的缓动；末关键帧的 easing 无意义 */
   easing: StageEasing
+  /** smooth 时用相邻点计算 Hermite 切线，使速度经过本点时连续。 */
+  continuity?: 'stop' | 'smooth'
 }
 
 export interface StageTrack {

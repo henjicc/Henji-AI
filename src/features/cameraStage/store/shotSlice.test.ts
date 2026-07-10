@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createDefaultAnimation, createDefaultPlayback } from '../domain/animationTypes'
+import { compileShotsToAnimation } from '../domain/shotCompiler'
 import { createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { createShot } from '../domain/shotTypes'
 import { clearCameraStageHistory, useCameraStageStore } from './cameraStageStore'
@@ -12,28 +13,34 @@ function resetSimpleStore(): void {
     editorMode: 'simple',
     shots: [shot],
     selectedShotId: shot.id,
-    animation: createDefaultAnimation(),
+    animation: compileShotsToAnimation([shot], [object]),
     playback: createDefaultPlayback(),
+    simpleAutoKeyframe: false,
   })
   clearCameraStageHistory()
+}
+
+function addShotAt(time: number): void {
+  useCameraStageStore.getState().seek(time)
+  useCameraStageStore.getState().addShot()
 }
 
 describe('简易模式 store 分片', () => {
   beforeEach(resetSimpleStore)
 
-  it('同为简易模式但尚无镜头卡时会初始化片段 1', () => {
+  it('同为简易模式但尚无关键帧时会初始化关键帧 1', () => {
     useCameraStageStore.setState({ shots: [], selectedShotId: null })
     useCameraStageStore.getState().setEditorMode('simple')
     const state = useCameraStageStore.getState()
     expect(state.shots).toHaveLength(1)
-    expect(state.shots[0].name).toBe('片段 1')
+    expect(state.shots[0].name).toBe('关键帧 1')
     expect(state.selectedShotId).toBe(state.shots[0].id)
   })
 
   it('编辑对象时原子写回选中卡并保留完整编译产物', () => {
     const initial = useCameraStageStore.getState()
     const objectId = initial.objects[0].id
-    initial.addShot()
+    addShotAt(2)
     useCameraStageStore.getState().updateTransform(objectId, { position: { x: 4, y: 0, z: 0 } })
 
     const state = useCameraStageStore.getState()
@@ -51,7 +58,7 @@ describe('简易模式 store 分片', () => {
   it('播放头不在选中卡静止段内时不捕获编辑（过渡段/别的卡静止段均不写回，物体本身仍更新）', () => {
     const initial = useCameraStageStore.getState()
     const objectId = initial.objects[0].id
-    initial.addShot()
+    addShotAt(2)
     const secondId = useCameraStageStore.getState().selectedShotId
     if (!secondId) throw new Error('新增镜头卡后应存在选中项')
 
@@ -81,9 +88,34 @@ describe('简易模式 store 分片', () => {
     expect(useCameraStageStore.getState().shots[0].objectStates[objectId].transform.position.x).toBe(0)
   })
 
+  it('拖动关键帧按帧吸附并自动重算相邻过渡时长', () => {
+    addShotAt(2)
+    const before = useCameraStageStore.getState()
+    const second = before.shots[1]
+    before.moveShotTime(second.id, 1.019)
+
+    const state = useCameraStageStore.getState()
+    expect(state.shots[1].time).toBeCloseTo(31 / 30, 10)
+    expect(state.shots[0].transitionDuration).toBeCloseTo(31 / 30, 10)
+    expect(state.animation.duration).toBeCloseTo(31 / 30, 10)
+  })
+
+  it('自动关键帧开启后，在过渡区编辑会于播放头所在帧插入状态点', () => {
+    const objectId = useCameraStageStore.getState().objects[0].id
+    addShotAt(2)
+    useCameraStageStore.getState().seek(1)
+    useCameraStageStore.getState().setSimpleAutoKeyframe(true)
+    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 6, y: 0, z: 0 } })
+
+    const state = useCameraStageStore.getState()
+    expect(state.shots).toHaveLength(3)
+    const inserted = state.shots.find((shot) => Math.abs(shot.time - 1) < 1e-6)
+    expect(inserted?.objectStates[objectId].transform.position.x).toBe(6)
+    expect(state.selectedShotId).toBe(inserted?.id)
+  })
+
   it('简易模式零轨道但有镜头卡时长时仍可播放，专业模式保持禁用', () => {
-    const simple = useCameraStageStore.getState()
-    simple.addShot()
+    addShotAt(2)
     const compiled = useCameraStageStore.getState()
     expect(compiled.animation.tracks).toHaveLength(0)
     expect(compiled.animation.duration).toBeGreaterThan(0)
@@ -101,7 +133,7 @@ describe('简易模式 store 分片', () => {
 
   it('新增与删除对象同步所有卡片且清理过渡详情', () => {
     const state = useCameraStageStore.getState()
-    state.addShot()
+    addShotAt(2)
     state.addCamera()
     const added = useCameraStageStore.getState()
     const cameraId = added.objects.find((object) => object.type === 'camera')?.id
@@ -117,7 +149,7 @@ describe('简易模式 store 分片', () => {
   it('选择镜头卡会应用快照并定位到卡片起点', () => {
     const first = useCameraStageStore.getState()
     const objectId = first.objects[0].id
-    first.addShot()
+    addShotAt(2)
     const secondId = useCameraStageStore.getState().selectedShotId
     if (!secondId) throw new Error('新增镜头卡后应存在选中项')
     useCameraStageStore.getState().updateTransform(objectId, { position: { x: 3, y: 0, z: 0 } })
@@ -136,7 +168,7 @@ describe('简易模式 store 分片', () => {
     if (!camera) throw new Error('测试需要摄像机')
     const effectors = [{ id: 'handheld', kind: 'handheld' as const, enabled: true, intensity: 0.5, frequency: 1.2 }]
     useCameraStageStore.getState().updateObject(camera.id, { effectors })
-    useCameraStageStore.getState().addShot()
+    addShotAt(2)
     const before = useCameraStageStore.getState()
     const expectedAnimation = structuredClone(before.animation)
 
@@ -159,7 +191,7 @@ describe('简易模式 store 分片', () => {
     useCameraStageStore.getState().addCamera()
     const cameraId = useCameraStageStore.getState().activeCameraId
     expect(cameraId).toBeTruthy()
-    useCameraStageStore.getState().addShot()
+    addShotAt(2)
     const shots = useCameraStageStore.getState().shots
     expect(shots[shots.length - 1].cameraId).toBe(cameraId)
   })
@@ -172,15 +204,14 @@ describe('简易模式 store 分片', () => {
     useCameraStageStore.getState().addCamera()
     const cameraB = useCameraStageStore.getState().activeCameraId
     if (!cameraB) throw new Error('测试需要摄像机 B')
-    useCameraStageStore.getState().addShot()
+    addShotAt(2)
     const shots1 = useCameraStageStore.getState().shots
     useCameraStageStore.getState().updateShotCamera(shots1[1].id, cameraB)
 
     const state = useCameraStageStore.getState()
     expect(state.shots[1].cameraId).toBe(cameraB)
-    // 机位不同 → 相邻卡之间强制硬切，animation.duration 应等于两卡的 hold 之和（过渡有效时长 0）
-    const expectedDuration = state.shots[0].hold + state.shots[1].hold
-    expect(state.animation.duration).toBeCloseTo(expectedDuration, 5)
+    // 机位不同 → 区间保留，画面在后关键帧时刻执行阶跃硬切。
+    expect(state.animation.duration).toBeCloseTo(2, 5)
   })
 
   it('新建摄像机在已有摄像机时继承首摄像机画幅，且非首摄像机画幅补丁被钳制忽略', () => {

@@ -67,13 +67,14 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
   return (
     <div className="flex max-h-full flex-col gap-3 overflow-y-auto p-3">
       <div className="text-xs font-medium text-text-dark">
-        片段 {shotIndex + 1} → 片段 {shotIndex + 2} 的过渡
+        关键帧 {shotIndex + 1} → 关键帧 {shotIndex + 2}
       </div>
 
       {camerasDiffer && (
         <div className="rounded-md border border-border-dark bg-layer/60 px-2 py-1.5 text-[11px] leading-5 text-text-muted">
           机位切换：{cameraDisplayName(objects, shot.cameraId)} → {cameraDisplayName(objects, nextShot.cameraId)}，
-          此处强制为硬切，过渡时长不生效（不支持跨机位带时长过渡）。如需恢复过渡效果，请把两侧机位改为相同。
+          区间末端执行硬切，不在两台机位之间插值。调整区间时长会移动后一个关键帧并改变切换时刻；
+          如需连续运镜，请把两侧机位改为相同。
         </div>
       )}
 
@@ -85,7 +86,6 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
             min={0}
             step={1}
             value={durationFrames}
-            disabled={camerasDiffer}
             className="h-8 w-24 px-2 text-xs"
             onChange={(event) => onDurationFramesChange(Math.max(0, Math.round(Number(event.target.value))))}
           />

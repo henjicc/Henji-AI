@@ -71,9 +71,12 @@ export interface CameraStageState {
   /** 镜头卡列表，随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
   shots: StageShot[]
   selectedShotId: string | null
+  /** 非关键帧时间编辑场景时，是否自动插入状态关键帧。 */
+  simpleAutoKeyframe: boolean
   /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
   focusToken: number
   addShot: () => void
+  moveShotTime: (id: string, time: number) => void
   removeShot: (id: string) => void
   reorderShot: (id: string, toIndex: number) => void
   selectShot: (id: string) => void
@@ -84,6 +87,8 @@ export interface CameraStageState {
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
   /** 修改镜头卡拍摄机位（重要记录 005）；null = 取消指定，沿用全局 activeCameraId */
   updateShotCamera: (id: string, cameraId: string | null) => void
+  updateShotContinuity: (id: string, continuity: StageShot['continuity']) => void
+  setSimpleAutoKeyframe: (enabled: boolean) => void
   captureIntoSelectedShot: (objectIds?: string[]) => void
   setEditorMode: (mode: StageEditorMode) => void
   /** 将简易镜头卡单向固化为专业关键帧工程；专业工程调用时无操作。 */
@@ -263,7 +268,7 @@ function firstCameraId(objects: StageObject[]): string | null {
   return getCameraObjects(objects)[0]?.id ?? null
 }
 
-const initialShot = createShot([], '片段 1')
+const initialShot = createShot([], '关键帧 1')
 
 export const useCameraStageStore = create<CameraStageState>()(
   temporal(
@@ -275,13 +280,14 @@ export const useCameraStageStore = create<CameraStageState>()(
   activeCameraId: null,
   currentProjectId: null,
   currentProjectName: CAMERA_STAGE_DEFAULT_PROJECT_NAME,
-  animation: createDefaultAnimation(),
+  animation: compileShotsToAnimation([initialShot], []),
   playback: createDefaultPlayback(),
   selectedKeyframes: [],
   sceneSettings: createDefaultSceneSettings(),
   editorMode: 'simple',
   shots: [initialShot],
   selectedShotId: initialShot.id,
+  simpleAutoKeyframe: false,
   focusToken: 0,
 
   addPrimitive: (kind) =>
@@ -472,7 +478,7 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   newScene: (name) =>
     set(() => {
-      const shots = [createShot([], '片段 1')]
+      const shots = [createShot([], '关键帧 1')]
       return {
       objects: [],
       selectedId: null,
@@ -481,13 +487,14 @@ export const useCameraStageStore = create<CameraStageState>()(
       activeCameraId: null,
       currentProjectId: null,
       currentProjectName: name,
-      animation: createDefaultAnimation(),
+      animation: compileShotsToAnimation(shots, []),
       playback: createDefaultPlayback(),
       selectedKeyframes: [],
       sceneSettings: createDefaultSceneSettings(),
       editorMode: 'simple',
       shots,
       selectedShotId: shots[0].id,
+      simpleAutoKeyframe: false,
       focusToken: 0,
       }
     }),
@@ -512,6 +519,7 @@ export const useCameraStageStore = create<CameraStageState>()(
         editorMode: snapshot.editorMode ?? 'pro',
         shots: snapshot.shots ?? [],
         selectedShotId: snapshot.shots?.[0]?.id ?? null,
+        simpleAutoKeyframe: false,
         focusToken: 0,
       }
     }),
@@ -545,7 +553,10 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   seek: (time) => {
     const state = useCameraStageStore.getState()
-    const clamped = Math.max(0, Math.min(state.animation.duration, time))
+    // 简易模式允许把播放头放到最后关键帧之后，以便在未来时间直接添加关键帧。
+    const clamped = state.editorMode === 'simple'
+      ? Math.max(0, time)
+      : Math.max(0, Math.min(state.animation.duration, time))
     if (!state.playback.playing) applySampledObjectsSilently(clamped)
     set((current) => ({ playback: { ...current.playback, currentTime: clamped } }))
   },

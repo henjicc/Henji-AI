@@ -25,19 +25,19 @@ describe('quantizeToFrame', () => {
 })
 
 describe('clampHold', () => {
-  it('钳到至少 1 帧', () => {
-    expect(clampHold(0, FPS)).toBeCloseTo(1 / FPS, 10)
-    expect(clampHold(-1, FPS)).toBeCloseTo(1 / FPS, 10)
-    expect(clampHold(0.001, FPS)).toBeCloseTo(1 / FPS, 10)
+  it('关键帧模式允许零停留，负值钳到 0', () => {
+    expect(clampHold(0, FPS)).toBe(0)
+    expect(clampHold(-1, FPS)).toBe(0)
+    expect(clampHold(0.001, FPS)).toBeCloseTo(0.001, 10)
   })
 
   it('高于 1 帧的值原样通过', () => {
     expect(clampHold(2, FPS)).toBe(2)
   })
 
-  it('与 quantizeToFrame 组合后停留不可能小于 1 帧', () => {
+  it('与 quantizeToFrame 组合后可保持零时长关键帧', () => {
     const value = quantizeToFrame(clampHold(0, FPS), FPS)
-    expect(value).toBeGreaterThanOrEqual(1 / FPS)
+    expect(value).toBe(0)
   })
 })
 

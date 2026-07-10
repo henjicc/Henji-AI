@@ -59,7 +59,7 @@ const EasingCurveEditor: React.FC<EasingCurveEditorProps> = ({ target, anchor, o
   const handlesRef = useRef(handles)
   handlesRef.current = handles
   const [kind, setKind] = useState<'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'custom'>(
-    typeof initial === 'string' ? initial : 'custom',
+    typeof initial === 'string' && initial !== 'hold' ? initial : 'custom',
   )
 
   // 批量目标：优先当前选中的全部关键帧，否则退回右键/双击的单个目标

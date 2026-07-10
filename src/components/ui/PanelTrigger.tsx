@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
 import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
 
@@ -17,6 +18,10 @@ type PanelTriggerProps = {
   /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45，与画布节点行内紧凑触发器保持一致时可调小） */
   gap?: number
   panelHeight?: number
+  /**
+   * 是否在点击面板内容后关闭。交互型面板默认保持打开；
+   * 纯动作菜单应显式传入 true，或用函数只匹配会完成选择的元素。
+   */
   closeOnPanelClick?: boolean | ((target: Node) => boolean)
   renderPanel: () => React.ReactNode
   stableHeight?: boolean
@@ -46,7 +51,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     alignment = 'bottomLeft',
     gap: gapProp = 45,
     panelHeight: _panelHeight,
-    closeOnPanelClick = true,
+    closeOnPanelClick,
     renderPanel,
     stableHeight,
     stableHeightKey,
@@ -126,15 +131,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       if (inTrigger) return
       if (inPortaledPanelControl) return
       if (inPanel) {
-        if (open) {
-          if (typeof closeOnPanelClick === 'function') {
-            const shouldClose = closeOnPanelClick(target)
-            if (shouldClose) {
-              closePanel()
-            }
-          } else if (closeOnPanelClick === true) {
-            closePanel()
-          }
+        if (open && shouldClosePanelAfterInternalClick(closeOnPanelClick, target)) {
+          closePanel()
         }
         return
       }

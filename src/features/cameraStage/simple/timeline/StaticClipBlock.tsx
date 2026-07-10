@@ -1,16 +1,14 @@
 import React, { useMemo, useState } from 'react'
-import { Trash2 } from 'lucide-react'
-import { Dropdown, UiIconButton, UiInput } from '@/components/ui'
+import { Diamond, Trash2 } from 'lucide-react'
+import { Dropdown, PanelTrigger, UiButton, UiInput } from '@/components/ui'
 import type { StageCameraObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
 import type { ShotClipBlock } from './shotClipGeometry'
+import { formatShotTimecode } from './shotTimecodeFormat'
 
-/** 极窄块（1 帧停留）保底最小可视宽度，避免无法点选（重要记录/01-实施方案 风险控制） */
-const MIN_VISUAL_WIDTH = 16
-/** 机位下拉"跟随默认"选项的哨兵值（Dropdown 的 value 类型不支持 null，用固定字符串占位） */
+const KEYFRAME_HIT_SIZE = 24
 const DEFAULT_CAMERA_OPTION_VALUE = '__default__'
 
-/** 块身重排 / 右边缘 trim 共用的一组 pointer 事件透传（由父级 hook 提供，语义见各自 hook 定义） */
 export interface ClipBlockPointerHandlers {
   onPointerDown: (event: React.PointerEvent) => void
   onPointerMove: (event: React.PointerEvent) => void
@@ -22,167 +20,147 @@ interface StaticClipBlockProps {
   shot: StageShot
   block: ShotClipBlock
   selected: boolean
-  /** 播放头当前落在本块内（跟随高亮，非选中态） */
   isPlayhead: boolean
-  /** 键盘 Enter/Space 选卡（指针点击选卡走 reorderHandlers，见 2.2） */
+  fps: number
   onSelect: () => void
   onRename: (name: string) => void
   onRemove: () => void
-  /** 块身：pointerdown 记录起点，超过阈值判定重排拖拽，未超过在 pointerup 时选卡 */
-  reorderHandlers: ClipBlockPointerHandlers
-  /** 本块是否正在被重排拖拽（跟手视觉态） */
+  /** 菱形拖拽（改关键帧绝对时间）的 pointer 事件，来自 useKeyframeTimeDrag */
+  dragHandlers: ClipBlockPointerHandlers
   dragging: boolean
-  /** 重排拖拽中的水平位移（px），仅 dragging 为 true 时生效 */
-  dragOffsetX: number
-  /** 右边缘：拖拽调整停留时长（trim） */
-  trimHandlers: ClipBlockPointerHandlers
-  /** 本块右边缘是否正在被 trim 拖拽（高亮态） */
-  trimming: boolean
-  /** 场景内全部摄像机，供机位徽标下拉选择（重要记录 005/3.2） */
+  /** 拖拽刚结束时返回 true 一次，用于吞掉浏览器补发的 click，避免拖完误弹面板 */
+  consumeClickSuppression: () => boolean
   cameras: StageCameraObject[]
-  /** 修改本卡拍摄机位；传 null = 取消指定，沿用全局 activeCameraId */
   onSelectCamera: (cameraId: string | null) => void
+  onUpdateContinuity: (continuity: StageShot['continuity']) => void
 }
 
-/** 时间轴静止块：名称 + 停留时长，选中/播放头两种高亮态，双击重命名，悬浮删除，块身拖拽重排，右边缘 trim */
+/** 关键帧只以菱形占据时间坐标；名称、机位和通过方式收进点击浮层。 */
 const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
   shot,
   block,
   selected,
   isPlayhead,
+  fps,
   onSelect,
   onRename,
   onRemove,
-  reorderHandlers,
+  dragHandlers,
   dragging,
-  dragOffsetX,
-  trimHandlers,
-  trimming,
+  consumeClickSuppression,
   cameras,
   onSelectCamera,
+  onUpdateContinuity,
 }) => {
-  const [editingName, setEditingName] = useState(false)
   const [draftName, setDraftName] = useState(shot.name)
-
-  const cameraOptions = useMemo(
-    () => [
-      { label: '跟随默认', value: DEFAULT_CAMERA_OPTION_VALUE },
-      ...cameras.map((camera) => ({ label: camera.name, value: camera.id })),
-    ],
-    [cameras],
-  )
+  const cameraOptions = useMemo(() => [
+    { label: '跟随默认', value: DEFAULT_CAMERA_OPTION_VALUE },
+    ...cameras.map((camera) => ({ label: camera.name, value: camera.id })),
+  ], [cameras])
   const cameraLabel = shot.cameraId
     ? cameras.find((camera) => camera.id === shot.cameraId)?.name ?? '未知机位'
     : '跟随默认'
-  const handleCameraSelect = (value: string): void => {
-    onSelectCamera(value === DEFAULT_CAMERA_OPTION_VALUE ? null : value)
-  }
 
   const commitName = (): void => {
     onRename(draftName)
-    setEditingName(false)
   }
-
-  const beginRename = (event: React.SyntheticEvent): void => {
-    event.stopPropagation()
-    setDraftName(shot.name)
-    setEditingName(true)
-  }
-
-  const handleKeyDown = (event: React.KeyboardEvent): void => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      onSelect()
-    }
-  }
-
-  const shellClass = selected
-    ? 'border-accent bg-accent/10'
-    : 'border-border-dark bg-surface-dark hover:bg-layer'
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      className={`group absolute inset-y-1 flex cursor-grab flex-col justify-between overflow-hidden rounded-md border px-2 py-1.5 transition-colors ${shellClass} ${dragging ? 'z-30 cursor-grabbing opacity-70 shadow-lg' : ''} ${trimming ? 'border-accent' : ''}`}
+      className="absolute top-1/2 z-20"
       style={{
-        left: block.x,
-        width: Math.max(block.width, MIN_VISUAL_WIDTH),
-        transform: dragging ? `translateX(${dragOffsetX}px)` : undefined,
+        left: block.x - KEYFRAME_HIT_SIZE / 2,
+        width: KEYFRAME_HIT_SIZE,
+        height: KEYFRAME_HIT_SIZE,
+        transform: 'translateY(-50%)',
       }}
-      onPointerDown={reorderHandlers.onPointerDown}
-      onPointerMove={reorderHandlers.onPointerMove}
-      onPointerUp={reorderHandlers.onPointerUp}
-      onPointerCancel={reorderHandlers.onPointerCancel}
-      onKeyDown={handleKeyDown}
-      title={shot.name}
     >
-      {isPlayhead && <div className="absolute inset-x-1 top-0 h-0.5 rounded-full bg-accent" />}
-      <div className="flex min-w-0 items-center gap-1">
-        {editingName ? (
-          <UiInput
-            autoFocus
-            value={draftName}
-            className="h-6 min-w-0 flex-1 px-1 text-xs"
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            onChange={(event) => setDraftName(event.target.value)}
-            onBlur={commitName}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.currentTarget.blur()
-              else if (event.key === 'Escape') setEditingName(false)
-            }}
-          />
-        ) : (
-          <span
-            className="min-w-0 flex-1 truncate text-xs text-text-dark"
-            onDoubleClick={beginRename}
-          >
-            {shot.name}
-          </span>
+      <PanelTrigger
+        alignment="aboveCenter"
+        gap={8}
+        panelWidth={292}
+        className="h-full w-full"
+        renderPanel={() => (
+          <div className="grid gap-3 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium text-text-dark">状态关键帧</div>
+                <div className="mt-0.5 font-mono text-[10px] text-text-muted">
+                  {formatShotTimecode(shot.time, 'secondsFrames', fps)}
+                </div>
+              </div>
+              <UiButton
+                variant="ghost"
+                className="h-7 w-7 border-0 p-0 text-text-muted hover:text-danger"
+                title="删除关键帧"
+                onClick={onRemove}
+              >
+                <Trash2 size={13} />
+              </UiButton>
+            </div>
+            <label className="grid gap-1 text-[11px] text-text-muted">
+              名称
+              <UiInput
+                value={draftName}
+                className="h-8 text-xs"
+                onChange={(event) => setDraftName(event.target.value)}
+                onBlur={commitName}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.currentTarget.blur()
+                }}
+              />
+            </label>
+            <Dropdown<string>
+              label="拍摄机位"
+              value={shot.cameraId ?? DEFAULT_CAMERA_OPTION_VALUE}
+              display={cameraLabel}
+              options={cameraOptions}
+              onSelect={(value) => onSelectCamera(value === DEFAULT_CAMERA_OPTION_VALUE ? null : value)}
+              disabled={cameras.length === 0}
+            />
+            <Dropdown<StageShot['continuity']>
+              label="经过本关键帧时"
+              value={shot.continuity}
+              display={shot.continuity === 'smooth' ? '无缝通过' : '停靠'}
+              options={[
+                { label: '停靠（速度降为 0）', value: 'stop' },
+                { label: '无缝通过（保持速度连续）', value: 'smooth' },
+              ]}
+              onSelect={onUpdateContinuity}
+            />
+          </div>
         )}
-        <UiIconButton
-          showBorder={false}
-          appearance="hover-only"
-          hoverVariant="danger"
-          className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100"
-          title="删除片段"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation()
-            onRemove()
-          }}
-        >
-          <Trash2 size={11} />
-        </UiIconButton>
-      </div>
-      <div className="flex min-w-0 items-center justify-between gap-1">
-        <span className="truncate text-[10px] text-text-muted">{shot.hold.toFixed(2)}s</span>
-        {/* 机位徽标：点击弹机位选择下拉（复用 Dropdown），阻断 pointerdown 冒泡避免误触块身重排 */}
-        <div className="shrink-0" onPointerDown={(event) => event.stopPropagation()}>
-          <Dropdown<string>
-            value={shot.cameraId ?? DEFAULT_CAMERA_OPTION_VALUE}
-            display={cameraLabel}
-            options={cameraOptions}
-            onSelect={handleCameraSelect}
-            disabled={cameras.length === 0}
-            minWidthStrategy="none"
-            panelWidthStrategy="options"
-            buttonClassName="!h-4 !w-auto !rounded !px-1 !py-0 gap-0.5"
-            buttonLabelClassName="text-[9px] leading-none"
-          />
-        </div>
-      </div>
-
-      {/* 右边缘 trim 命中区：调整停留时长，独立于块身重排手势 */}
-      <div
-        role="presentation"
-        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize"
-        onPointerDown={trimHandlers.onPointerDown}
-        onPointerMove={trimHandlers.onPointerMove}
-        onPointerUp={trimHandlers.onPointerUp}
-        onPointerCancel={trimHandlers.onPointerCancel}
-      />
+      >
+        {({ togglePanel }) => (
+          <div
+            role="button"
+            tabIndex={0}
+            data-panel-trigger-button
+            className={`flex h-full w-full cursor-grab items-center justify-center rounded-full transition-transform hover:scale-110 ${dragging ? 'cursor-grabbing opacity-70' : ''}`}
+            onPointerDown={dragHandlers.onPointerDown}
+            onPointerMove={dragHandlers.onPointerMove}
+            onPointerUp={dragHandlers.onPointerUp}
+            onPointerCancel={dragHandlers.onPointerCancel}
+            onClick={() => {
+              if (consumeClickSuppression()) return
+              onSelect()
+              togglePanel()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              onSelect()
+              togglePanel()
+            }}
+            title={`${shot.name} · ${formatShotTimecode(shot.time, 'secondsFrames', fps)}`}
+          >
+            <Diamond
+              size={selected || isPlayhead ? 16 : 14}
+              className={selected || isPlayhead ? 'fill-accent text-accent' : 'fill-surface-dark text-text-muted'}
+            />
+          </div>
+        )}
+      </PanelTrigger>
     </div>
   )
 }

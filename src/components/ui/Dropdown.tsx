@@ -55,6 +55,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
@@ -85,7 +86,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!ref.current) return
-      if (!ref.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const inTrigger = ref.current.contains(target)
+      const inPanel = panelRef.current?.contains(target) ?? false
+      if (!inTrigger && !inPanel) {
         if (open) {
           setClosing(true)
           setTimeout(() => { setOpen(false); setClosing(false) }, 200)
@@ -192,7 +196,9 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       {(open || closing) && (
         portal && fixedPos ? (
           createPortal(
-            <div className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            <div
+              ref={panelRef}
+              className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
               style={{
                 position: 'fixed',
                 top: fixedPos.top,
@@ -235,6 +241,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           )
         ) : (
           <div
+            ref={panelRef}
             className={`absolute left-0 z-50 mt-1 ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"

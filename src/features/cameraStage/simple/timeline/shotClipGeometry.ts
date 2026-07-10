@@ -20,9 +20,9 @@ export function quantizeToFrame(seconds: number, fps: number): number {
   return Math.round(seconds * safeFps) / safeFps
 }
 
-/** 停留时长钳制：≥ 1 帧（停留为 0 没有意义，不允许） */
-export function clampHold(seconds: number, fps: number): number {
-  return Math.max(1 / Math.max(1, fps), seconds)
+/** hold 仅用于旧工程兼容；关键帧模式允许为 0。 */
+export function clampHold(seconds: number, _fps: number): number {
+  return Math.max(0, seconds)
 }
 
 /** 过渡时长钳制：≥ 0（0 = 合法的硬切特殊形式）；fps 保留参数位与 clampHold 签名对齐，暂无需使用 */
@@ -117,5 +117,7 @@ export function isTimeInTransition(shots: StageShot[], time: number, fps: number
   const ranges = getShotTimeRanges(shots)
   if (ranges.length === 0) return false
   const eps = halfFrameEpsilon(fps)
+  const timelineEnd = ranges[ranges.length - 1].transitionEnd
+  if (time > timelineEnd + eps) return false
   return !ranges.some((range) => inStaticSegment(range, time, eps))
 }

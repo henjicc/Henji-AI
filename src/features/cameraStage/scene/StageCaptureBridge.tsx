@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import { Vector4, WebGLRenderTarget } from 'three'
 import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { resolveCenteredCaptureView } from './captureFraming'
 
 /**
  * 截图桥：Canvas 内部注册两类捕获能力。
@@ -128,8 +129,15 @@ async function captureOffscreenPng(
 
   const resources = getResources()
   const exportCamera = camera.clone()
-  exportCamera.aspect = options.width / options.height
-  exportCamera.updateProjectionMatrix()
+  const captureView = resolveCenteredCaptureView(camera.aspect, options)
+  exportCamera.setViewOffset(
+    captureView.fullWidth,
+    captureView.fullHeight,
+    captureView.offsetX,
+    captureView.offsetY,
+    captureView.width,
+    captureView.height,
+  )
 
   const previousTarget = gl.getRenderTarget()
   const previousAutoClear = gl.autoClear

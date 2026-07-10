@@ -12,8 +12,9 @@ const StageTransitionReadOnlyOverlay: React.FC = () => {
   const shots = useCameraStageStore((state) => state.shots)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const fps = useCameraStageStore((state) => state.animation.fps)
+  const simpleAutoKeyframe = useCameraStageStore((state) => state.simpleAutoKeyframe)
 
-  const show = editorMode === 'simple' && isTimeInTransition(shots, currentTime, fps)
+  const show = editorMode === 'simple' && !simpleAutoKeyframe && isTimeInTransition(shots, currentTime, fps)
   if (!show) return null
 
   return (

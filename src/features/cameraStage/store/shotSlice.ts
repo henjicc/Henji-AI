@@ -19,6 +19,7 @@ const logger = createLogger('features.cameraStage.simple')
 export type ShotSliceActions = Pick<
   CameraStageState,
   | 'addShot'
+  | 'moveShotTime'
   | 'removeShot'
   | 'reorderShot'
   | 'selectShot'
@@ -27,6 +28,8 @@ export type ShotSliceActions = Pick<
   | 'updateShotName'
   | 'updateShotTransition'
   | 'updateShotCamera'
+  | 'updateShotContinuity'
+  | 'setSimpleAutoKeyframe'
   | 'captureIntoSelectedShot'
   | 'setEditorMode'
   | 'bakeToProMode'
@@ -102,6 +105,29 @@ function canCaptureAtCurrentTime(state: CameraStageState): boolean {
   return isTimeInShotStaticSegment(state.shots, state.selectedShotId, state.playback.currentTime, state.animation.fps)
 }
 
+function shotAtTime(shots: StageShot[], time: number, fps: number): StageShot | undefined {
+  const epsilon = 1 / (2 * Math.max(1, fps))
+  return shots.find((shot) => Math.abs(shot.time - time) <= epsilon)
+}
+
+function syncTransitionDurations(shots: StageShot[]): StageShot[] {
+  return shots.map((shot, index) => ({
+    ...shot,
+    hold: 0,
+    transitionDuration: Math.max(0, (shots[index + 1]?.time ?? shot.time) - shot.time),
+  }))
+}
+
+function insertCapturedShot(
+  state: CameraStageState,
+  objects: StageObject[],
+): { shots: StageShot[]; shot: StageShot } {
+  const time = quantizeToFrame(state.playback.currentTime, state.animation.fps)
+  const shot = createShot(objects, `关键帧 ${state.shots.length + 1}`, state.activeCameraId, time)
+  const shots = syncTransitionDurations([...state.shots, shot].sort((a, b) => a.time - b.time))
+  return { shots, shot }
+}
+
 function logCaptureSkipped(selectedShotId: string): void {
   logger.debug('播放头不在选中卡静止段内，跳过自动记录', {
     event: 'simple_mode.capture.skipped_in_transition',
@@ -114,34 +140,41 @@ export function compileSimpleEdit(
   objects: StageObject[],
   objectIds: string[],
 ): Partial<CameraStageState> {
-  if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return { objects }
+  if (state.editorMode !== 'simple' || state.playback.playing) return { objects }
   if (!canCaptureAtCurrentTime(state)) {
-    logCaptureSkipped(state.selectedShotId)
+    if (state.simpleAutoKeyframe) {
+      const inserted = insertCapturedShot(state, objects)
+      logger.debug('自动插入状态关键帧', {
+        event: 'simple_mode.auto_keyframe.inserted',
+        shotId: inserted.shot.id,
+        time: inserted.shot.time,
+      })
+      return {
+        objects,
+        shots: inserted.shots,
+        selectedShotId: inserted.shot.id,
+        animation: compile(inserted.shots, objects),
+      }
+    }
+    if (state.selectedShotId) logCaptureSkipped(state.selectedShotId)
     return { objects }
   }
   const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, objects, objectIds)
   return { objects, shots, animation: compile(shots, objects) }
 }
 
-function shotStartTime(shots: StageShot[], index: number): number {
-  let time = 0
-  for (let cursor = 0; cursor < index; cursor += 1) {
-    time += Math.max(0, shots[cursor].hold) + Math.max(0, shots[cursor].transitionDuration)
-  }
-  return time
-}
-
 export function createShotSlice(set: StoreApi<CameraStageState>['setState']): ShotSliceActions {
   return {
     addShot: () => set((state) => {
-      const shot = createShot(state.objects, `片段 ${state.shots.length + 1}`, state.activeCameraId)
-      const selectedIndex = state.shots.findIndex((item) => item.id === state.selectedShotId)
-      const insertIndex = selectedIndex < 0 ? state.shots.length : selectedIndex + 1
-      const shots = [...state.shots.slice(0, insertIndex), shot, ...state.shots.slice(insertIndex)]
+      const time = quantizeToFrame(state.playback.currentTime, state.animation.fps)
+      const existing = shotAtTime(state.shots, time, state.animation.fps)
+      if (existing) {
+        const shots = captureObjectsIntoShot(state.shots, existing.id, state.objects)
+        return { shots, selectedShotId: existing.id, animation: compile(shots, state.objects) }
+      }
+      const shot = createShot(state.objects, `关键帧 ${state.shots.length + 1}`, state.activeCameraId, time)
+      const shots = syncTransitionDurations([...state.shots, shot].sort((a, b) => a.time - b.time))
       logger.debug('新增简易模式镜头卡', { event: 'simple_mode.shot.added', shotCount: shots.length })
-      // 播放头随选中同步跳到新卡起点（对齐 selectShot 的语义）：新卡创建时已从当前对象状态取快照，
-      // 播放头留在旧位置会导致刚建卡就落在"别的卡静止段/过渡段"，被 1.3 的捕获守卫拦截，无法继续编辑新卡。
-      const time = shotStartTime(shots, insertIndex)
       return {
         shots,
         selectedShotId: shot.id,
@@ -149,10 +182,30 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
         playback: { ...state.playback, playing: false, currentTime: time },
       }
     }),
+    moveShotTime: (id, requestedTime) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === id)
+      if (index < 0) return {}
+      const frame = 1 / Math.max(1, state.animation.fps)
+      const minimum = index === 0 ? 0 : state.shots[index - 1].time + frame
+      const maximum = index === state.shots.length - 1
+        ? Number.POSITIVE_INFINITY
+        : state.shots[index + 1].time - frame
+      const time = Math.min(maximum, Math.max(minimum, quantizeToFrame(requestedTime, state.animation.fps)))
+      if (Math.abs(time - state.shots[index].time) < 1e-6) return {}
+      const shots = syncTransitionDurations(
+        state.shots.map((shot) => shot.id === id ? { ...shot, time } : shot).sort((a, b) => a.time - b.time),
+      )
+      logger.debug('移动状态关键帧', { event: 'simple_mode.keyframe.moved', shotId: id, time })
+      return {
+        shots,
+        animation: compile(shots, state.objects),
+        playback: { ...state.playback, playing: false, currentTime: time },
+      }
+    }),
     removeShot: (id) => set((state) => {
       const index = state.shots.findIndex((shot) => shot.id === id)
       if (index < 0) return {}
-      const shots = state.shots.filter((shot) => shot.id !== id)
+      const shots = syncTransitionDurations(state.shots.filter((shot) => shot.id !== id))
       const selectedShotId = state.selectedShotId === id
         ? shots[Math.min(index, shots.length - 1)]?.id ?? null
         : state.selectedShotId
@@ -161,16 +214,18 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
     reorderShot: (id, toIndex) => set((state) => {
       const fromIndex = state.shots.findIndex((shot) => shot.id === id)
       if (fromIndex < 0 || state.shots.length < 2) return {}
+      const times = state.shots.map((shot) => shot.time)
       const shots = [...state.shots]
       const [shot] = shots.splice(fromIndex, 1)
       shots.splice(Math.max(0, Math.min(shots.length, toIndex)), 0, shot)
-      return { shots, animation: compile(shots, state.objects) }
+      const retimed = syncTransitionDurations(shots.map((shot, index) => ({ ...shot, time: times[index] })))
+      return { shots: retimed, animation: compile(retimed, state.objects) }
     }),
     selectShot: (id) => set((state) => {
       const index = state.shots.findIndex((shot) => shot.id === id)
       if (index < 0) return {}
       const shot = state.shots[index]
-      const time = shotStartTime(state.shots, index)
+      const time = shot.time
       // 点卡 = 进入该卡的拍摄视角编辑（显式用户动作，允许写 store，重要记录 005/3.2）；
       // 卡未指定机位，或机位指向已删除的对象时，activeCameraId 保持不变（不写入无效 id）。
       const activeCameraId = isCameraId(state.objects, shot.cameraId) ? (shot.cameraId as string) : state.activeCameraId
@@ -192,13 +247,30 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
     }),
     updateShotTiming: (id, patch) => set((state) => {
       const fps = state.animation.fps
-      const shots = state.shots.map((shot) => shot.id === id ? {
+      let shots = state.shots.map((shot) => shot.id === id ? {
         ...shot,
         ...(patch.hold === undefined ? {} : { hold: quantizeToFrame(clampHold(patch.hold, fps), fps) }),
         ...(patch.transitionDuration === undefined
           ? {}
           : { transitionDuration: quantizeToFrame(clampTransition(patch.transitionDuration, fps), fps) }),
       } : shot)
+      if (patch.transitionDuration !== undefined) {
+        const index = shots.findIndex((shot) => shot.id === id)
+        if (index >= 0 && shots[index + 1]) {
+          const nextTime = quantizeToFrame(
+            shots[index].time + clampTransition(patch.transitionDuration, fps),
+            fps,
+          )
+          const afterNext = shots[index + 2]
+          const upper = afterNext === undefined
+            ? nextTime
+            : afterNext.time - 1 / Math.max(1, fps)
+          shots = shots.map((shot, shotIndex) => shotIndex === index + 1
+            ? { ...shot, time: Math.min(upper, nextTime) }
+            : shot)
+        }
+      }
+      shots = syncTransitionDurations(shots)
       return { shots, animation: compile(shots, state.objects) }
     }),
     updateShotName: (id, name) => set((state) => ({
@@ -227,9 +299,22 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       })
       return { shots, animation: compile(shots, state.objects) }
     }),
+    updateShotContinuity: (id, continuity) => set((state) => {
+      const shots = state.shots.map((shot) => shot.id === id ? { ...shot, continuity } : shot)
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    setSimpleAutoKeyframe: (enabled) => set({ simpleAutoKeyframe: enabled }),
     captureIntoSelectedShot: (objectIds) => set((state) => {
       if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return {}
       if (!canCaptureAtCurrentTime(state)) {
+        if (state.simpleAutoKeyframe) {
+          const inserted = insertCapturedShot(state, state.objects)
+          return {
+            shots: inserted.shots,
+            selectedShotId: inserted.shot.id,
+            animation: compile(inserted.shots, state.objects),
+          }
+        }
         logCaptureSkipped(state.selectedShotId)
         return {}
       }
@@ -240,7 +325,7 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       if (state.editorMode === 'pro' && editorMode === 'simple') return {}
       if (editorMode === state.editorMode && !(editorMode === 'simple' && state.shots.length === 0)) return {}
       const shots = editorMode === 'simple' && state.shots.length === 0
-        ? [createShot(state.objects, '片段 1', state.activeCameraId)]
+        ? [createShot(state.objects, '关键帧 1', state.activeCameraId)]
         : state.shots
       return { editorMode, shots, selectedShotId: shots[0]?.id ?? null,
         ...(editorMode === 'simple' ? { animation: compile(shots, state.objects) } : {}) }

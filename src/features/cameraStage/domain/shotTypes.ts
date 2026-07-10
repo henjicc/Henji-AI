@@ -71,6 +71,10 @@ export interface StageShot {
   id: string
   /** 默认"片段 N" */
   name: string
+  /** 状态关键帧在时间轴上的绝对时间（秒，写入时按 fps 量化）。 */
+  time: number
+  /** 到达本关键帧时是否保持速度连续；stop = 在本点停靠，smooth = 无缝通过。 */
+  continuity: 'stop' | 'smooth'
   /** 停留时长（秒，≥0） */
   hold: number
   /** 到下一卡过渡时长（秒，末卡忽略） */
@@ -94,7 +98,8 @@ export interface StageCameraEffector {
   frequency: number
 }
 
-export const STAGE_SHOT_DEFAULT_HOLD = 0.5
+/** 新建简易模式状态是零时长关键帧；hold 仅保留用于兼容旧工程数据。 */
+export const STAGE_SHOT_DEFAULT_HOLD = 0
 export const STAGE_SHOT_DEFAULT_TRANSITION_DURATION = 2
 const STAGE_SHOT_DEFAULT_NAME = '片段'
 
@@ -139,7 +144,12 @@ export function captureShotObjectState(object: StageObject): StageShotObjectStat
  * 由当前场景对象列表新建一张镜头卡：捕获全部对象状态，过渡细节留空由编译器按默认规则处理。
  * `cameraId` 建卡时取调用方当前的 activeCameraId；省略/传 null 表示未指定机位（沿用全局值）。
  */
-export function createShot(objects: StageObject[], name: string, cameraId: string | null = null): StageShot {
+export function createShot(
+  objects: StageObject[],
+  name: string,
+  cameraId: string | null = null,
+  time = 0,
+): StageShot {
   const objectStates: Record<string, StageShotObjectState> = {}
   for (const object of objects) {
     objectStates[object.id] = captureShotObjectState(object)
@@ -147,6 +157,8 @@ export function createShot(objects: StageObject[], name: string, cameraId: strin
   return {
     id: uuidv4(),
     name,
+    time: Math.max(0, time),
+    continuity: 'stop',
     hold: STAGE_SHOT_DEFAULT_HOLD,
     transitionDuration: STAGE_SHOT_DEFAULT_TRANSITION_DURATION,
     objectStates,
@@ -230,11 +242,12 @@ function normalizeShotTransition(raw: unknown): StageShotTransition {
 }
 
 /** 宽松解析单张镜头卡：objectStates 内部结构信任类型转换（与 sceneSerialization 对 objects 的处理一致） */
-function normalizeShot(raw: unknown): StageShot | undefined {
+function normalizeShot(raw: unknown, fallbackTime: number): StageShot | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const record = raw as Record<string, unknown>
   const hold = Number(record.hold)
   const transitionDuration = Number(record.transitionDuration)
+  const time = Number(record.time)
   const objectStates =
     record.objectStates && typeof record.objectStates === 'object'
       ? (record.objectStates as Record<string, StageShotObjectState>)
@@ -243,6 +256,8 @@ function normalizeShot(raw: unknown): StageShot | undefined {
   return {
     id: typeof record.id === 'string' && record.id ? record.id : uuidv4(),
     name: typeof record.name === 'string' && record.name ? record.name : STAGE_SHOT_DEFAULT_NAME,
+    time: Number.isFinite(time) && time >= 0 ? time : fallbackTime,
+    continuity: record.continuity === 'smooth' ? 'smooth' : 'stop',
     hold: Number.isFinite(hold) && hold >= 0 ? hold : STAGE_SHOT_DEFAULT_HOLD,
     transitionDuration:
       Number.isFinite(transitionDuration) && transitionDuration >= 0
@@ -259,11 +274,15 @@ function normalizeShot(raw: unknown): StageShot | undefined {
 export function normalizeShots(raw: unknown): StageShot[] {
   if (!Array.isArray(raw)) return []
   const shots: StageShot[] = []
+  let legacyCursor = 0
   for (const item of raw) {
-    const shot = normalizeShot(item)
-    if (shot) shots.push(shot)
+    const shot = normalizeShot(item, legacyCursor)
+    if (shot) {
+      shots.push(shot)
+      legacyCursor = shot.time + Math.max(0, shot.hold) + Math.max(0, shot.transitionDuration)
+    }
   }
-  return shots
+  return shots.sort((a, b) => a.time - b.time)
 }
 
 /** 宽松解析编辑器模式：非法值回退为 pro（旧工程/损坏数据一律按专业模式打开，行为最保守） */

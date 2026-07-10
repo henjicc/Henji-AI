@@ -303,7 +303,7 @@ describe('compileShotsToAnimation', () => {
 })
 
 describe('buildShotTimeline 强制硬切（重要记录 005）', () => {
-  it('相邻两卡机位不同时，有效过渡时长视为 0，原始 transitionDuration 不被改写', () => {
+  it('相邻两卡机位不同时，布点保留真实区间时长（硬切改由编译产物的 hold 缓动在区间末端表达），原始 transitionDuration 不被改写', () => {
     const shotA = createShot([], '卡1', 'camera-a')
     const shotB = createShot([], '卡2', 'camera-b')
     shotA.hold = 1
@@ -311,7 +311,7 @@ describe('buildShotTimeline 强制硬切（重要记录 005）', () => {
     shotB.hold = 1
 
     const timeline = buildShotTimeline([shotA, shotB])
-    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 1 })
+    expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
     expect(shotA.transitionDuration).toBe(2)
   })
 
@@ -337,7 +337,7 @@ describe('buildShotTimeline 强制硬切（重要记录 005）', () => {
     expect(timeline[0]).toEqual({ holdStart: 0, transitionStart: 1, transitionEnd: 3 })
   })
 
-  it('机位不同的强制硬切会让编译产物在过渡起点直接跳变（无插值关键帧对）', () => {
+  it('机位不同的强制硬切编译为 hold 缓动：区间内保持起点值，到区间末端直接跳变到目标值', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const shotA = createShot([camera], '卡1', 'camera-a')
     const shotB = createShot([camera], '卡2', 'camera-b')
@@ -357,9 +357,16 @@ describe('buildShotTimeline 强制硬切（重要记录 005）', () => {
       (track) => track.objectId === camera.id && track.propertyPath === 'transform.position.x',
     )
     expect(positionXTrack).toBeDefined()
-    // 强制硬切：过渡起止时间重合（=1），只保留跳变后的目标值，没有跨时间的插值区间
-    const keyframesAtCut = positionXTrack!.keyframes.filter((kf) => Math.abs(kf.time - 1) < 1e-6)
-    expect(keyframesAtCut).toHaveLength(1)
-    expect(keyframesAtCut[0].value).toBe(5)
+    // 硬切段：过渡起点关键帧保持 A 值且缓动为 hold，目标值只在区间末端（=3）出现
+    const startKeyframe = positionXTrack!.keyframes.find((kf) => Math.abs(kf.time - 1) < 1e-6)
+    expect(startKeyframe).toBeDefined()
+    expect(startKeyframe!.value).toBe(0)
+    expect(startKeyframe!.easing).toBe('hold')
+    const endKeyframe = positionXTrack!.keyframes.find((kf) => Math.abs(kf.time - 3) < 1e-6)
+    expect(endKeyframe).toBeDefined()
+    expect(endKeyframe!.value).toBe(5)
+    // 采样验证：区间内不插值，末端才跳变
+    expect(sampleTrack(positionXTrack!, 2.9, 'scalar')).toBe(0)
+    expect(sampleTrack(positionXTrack!, 3, 'scalar')).toBe(5)
   })
 })

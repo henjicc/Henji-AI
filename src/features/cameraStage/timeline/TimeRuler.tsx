@@ -12,6 +12,8 @@ interface TimeRulerProps {
   mode: TimeRulerMode
   fps: number
   onScrub: (time: number) => void
+  /** 可选主刻度格式化；简易模式用 hh:mm:ss:ff，专业模式保留原格式。 */
+  formatLabel?: (time: number) => string
 }
 
 const TimeRuler: React.FC<TimeRulerProps> = ({
@@ -21,6 +23,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
   mode,
   fps,
   onScrub,
+  formatLabel,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null)
   const ticks = generateTicks(duration, pxPerSecond, mode, fps)
@@ -64,7 +67,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
         >
           {tick.label && (
             <span className="absolute left-1 top-0 whitespace-nowrap text-[10px] leading-none text-text-muted">
-              {tick.label}
+              {formatLabel ? formatLabel(tick.time) : tick.label}
             </span>
           )}
         </div>
