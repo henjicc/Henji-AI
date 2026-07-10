@@ -49,7 +49,7 @@ export interface StartVideoFrameExportResultDto {
 export interface AppendVideoFrameExportPayloadDto {
   sessionId: string
   frameIndex: number
-  dataUrl: string
+  bytes: Uint8Array
 }
 
 export interface FinishVideoFrameExportPayloadDto {

@@ -148,7 +148,7 @@ function parseAppendFrameExportPayload(input: unknown): AppendVideoFrameExportPa
   return {
     sessionId: readString(record, 'sessionId'),
     frameIndex: readInteger(record, 'frameIndex'),
-    dataUrl: readString(record, 'dataUrl'),
+    bytes: readNonEmptyUint8Array(record, 'bytes'),
   }
 }
 
@@ -173,6 +173,14 @@ function readInteger(record: Record<string, unknown>, field: string): number {
 function readPositiveInteger(record: Record<string, unknown>, field: string): number {
   const value = readInteger(record, field)
   if (value <= 0) throw new Error(`Expected positive integer field "${field}"`)
+  return value
+}
+
+function readNonEmptyUint8Array(record: Record<string, unknown>, field: string): Uint8Array {
+  const value = record[field]
+  if (!(value instanceof Uint8Array) || value.byteLength === 0) {
+    throw new Error(`Expected non-empty Uint8Array field "${field}"`)
+  }
   return value
 }
 

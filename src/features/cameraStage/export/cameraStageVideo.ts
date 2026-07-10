@@ -7,7 +7,7 @@ import {
 import { createLogger } from '@/core/logging'
 import { QUICK_DOWNLOAD_SETTING_SPECS, readLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 import { join, saveDialog, toDisplaySrc } from '@/platform/desktopApi'
-import { cropDataUrlToAspectRatio } from './cameraStageAspectCrop'
+import { cropDataUrlToAspectRatioBytes } from './cameraStageAspectCrop'
 
 const logger = createLogger('cameraStage.videoExport')
 
@@ -89,13 +89,13 @@ export async function exportCameraStageVideo(
       await waitForCameraStageRender()
       const rawDataUrl = options.captureFrame()
       if (!rawDataUrl) throw new Error('未获取到当前帧画面')
-      const dataUrl = await cropDataUrlToAspectRatio(
+      const bytes = await cropDataUrlToAspectRatioBytes(
         rawDataUrl,
         options.cameraRatio,
         options.backgroundColor,
         { width, height },
       )
-      await appendVideoFrameExport({ sessionId, frameIndex, dataUrl })
+      await appendVideoFrameExport({ sessionId, frameIndex, bytes })
       options.onProgress({ phase: 'rendering', doneFrames: frameIndex + 1, totalFrames: frameCount })
     }
 

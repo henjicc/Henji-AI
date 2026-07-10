@@ -21,6 +21,30 @@
 
 ✔️无需重启
 
+## 2.1 帧数据二进制传输
+
+### 自动检查
+
+| 命令 | 结果 | 说明 |
+|---|---|---|
+| `npm run lint` | 通过 | ESLint 零警告退出。 |
+| `npx tsc --noEmit` | 通过 | 渲染层 TypeScript 类型检查零错误退出。 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 | Electron 主进程/预加载类型检查零错误退出。 |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过 | Electron 源码 ESLint 零警告退出。 |
+| `git diff --check` | 通过 | 未发现补丁空白错误。 |
+| 旧帧载荷检索 | 通过 | 未发现 `decodePngDataUrl`、`appendVideoFrameExport` 的 dataURL 载荷或 IPC 旧字段解析。 |
+
+### 待用户手动验证（真实 Electron 窗口）
+
+1. 重启 `npm run electron:dev`，打开包含运镜控制场景的工程。
+2. 分别选择 720p 和 1080p，各导出一次 MP4；确认导出成功、产物可播放且画面比例、背景与场景内容正确。
+3. 对比一次 1080p 导出的进度速度，确认不慢于改造前的同类导出。
+4. 使用截图保存和复制到剪贴板各执行一次，确认截图功能与裁剪画面正常。
+
+### 重启说明
+
+⚠️ 需要重启
+
 ## 1.2 动作片段与关节采样互斥
 
 ### 自动检查

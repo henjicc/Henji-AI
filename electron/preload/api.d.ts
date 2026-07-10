@@ -415,7 +415,7 @@ export interface HenjiVideoStartFrameExportPayload {
 export interface HenjiVideoAppendFrameExportPayload {
   sessionId: string
   frameIndex: number
-  dataUrl: string
+  bytes: Uint8Array
 }
 
 export interface HenjiVideoFinishFrameExportPayload {

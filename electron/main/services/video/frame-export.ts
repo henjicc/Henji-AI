@@ -62,9 +62,8 @@ export async function appendVideoFrameExport(
     throw new Error('Frame index is out of range')
   }
 
-  const bytes = decodePngDataUrl(payload.dataUrl)
   const framePath = path.join(session.dir, `frame-${String(payload.frameIndex).padStart(6, '0')}.png`)
-  await fs.promises.writeFile(framePath, bytes)
+  await fs.promises.writeFile(framePath, payload.bytes)
   session.frames.add(payload.frameIndex)
   return { frameIndex: payload.frameIndex }
 }
@@ -109,12 +108,6 @@ function getSession(sessionId: string): VideoFrameExportSession {
   const session = sessions.get(sessionId)
   if (!session) throw new Error('Video export session was not found')
   return session
-}
-
-function decodePngDataUrl(dataUrl: string): Buffer {
-  const match = /^data:image\/png;base64,([a-zA-Z0-9+/=]+)$/.exec(dataUrl)
-  if (!match) throw new Error('Expected PNG data URL frame')
-  return Buffer.from(match[1], 'base64')
 }
 
 function assertCompleteFrameSet(session: VideoFrameExportSession): void {

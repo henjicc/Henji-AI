@@ -9,6 +9,14 @@
 - 1.2 要处理 clip 动作与关节关键帧的互斥，注意保留本任务的时间轴驱动，不要恢复墙钟 `delta` 推进。
 - 仅渲染层改动，Electron 开发模式应热更新；无需重启 `npm run electron:dev`。
 
+## 2.1 帧数据二进制传输（待主控审查）
+
+- `cropDataUrlToAspectRatioBytes()` 与既有 dataURL 裁剪共用画布裁剪逻辑，视频导出改向其请求 PNG 字节。
+- `AppendVideoFrameExportPayload`、preload、主进程 DTO 与 IPC 解析已统一为非空 `Uint8Array` 的 `bytes` 字段；commands/adapters/preload 透传层由该契约类型约束。
+- 主进程直接 `writeFile(framePath, payload.bytes)`，`decodePngDataUrl` 已删除。
+- 四项静态检查均通过。涉及 preload/主进程，用户验收前须重启 `npm run electron:dev`。
+- 下一任务 2.2 需基于当前 `frame-export.ts` 的会话清理逻辑继续加固，不应恢复 dataURL/base64 帧传输。
+
 ## 1.2 动作片段与关节采样互斥（已完成）
 
 - `CharacterModel.tsx` 已把播放期 applier 拆为关节与颜色两个 effect。
