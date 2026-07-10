@@ -103,6 +103,7 @@ export function createCameraObject(
     fov: 50,
     lookAt: { mode: 'manual', target: initialView ? { ...initialView.target } : { x: 0, y: 1, z: 0 } },
     aspectRatio: { preset: '16:9', ratio: 16 / 9 },
+    effectors: [],
   }
 }
 

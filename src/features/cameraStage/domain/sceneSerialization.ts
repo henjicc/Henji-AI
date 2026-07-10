@@ -13,16 +13,21 @@
  * v8 起名称标签新增文字色/背景色/大小/位置偏移；加载 v7 及以下工程时回退默认标签样式。
  * v9 起名称标签新增背景跟随对象色、背景透明度与文字阴影参数；加载 v8 及以下工程时回退默认阴影样式。
  * v10 起角色对象新增 motion（静态姿势 / 内置 GLB 动作片段）；加载 v9 及以下工程时回退静态姿势。
+ * v11 起并入简易模式数据：editorMode（编辑器模式）与 shots（镜头卡列表）随工程持久化，摄像机对象
+ * 新增 effectors（效果器列表，一期仅摄像机）；加载 v10 及以下工程时 editorMode 回退为 'pro'、
+ * shots 回退为空数组，已有摄像机补空 effectors。
  */
 
 import { normalizeCharacterMotion } from './characterMotion'
 import { createDefaultAnimation } from './animationTypes'
 import type { StageKeyframe, StageSceneAnimation, StageTrack } from './animationTypes'
 import { createDefaultSceneSettings } from './sceneDefaults'
+import { normalizeEditorMode, normalizeShots } from './shotTypes'
+import type { StageEditorMode, StageShot } from './shotTypes'
 import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 10
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 11
 
 export interface StageSceneSnapshot {
   schemaVersion: number
@@ -33,6 +38,10 @@ export interface StageSceneSnapshot {
   animation: StageSceneAnimation
   /** 场景级设置（v4 引入） */
   sceneSettings: StageSceneSettings
+  /** 编辑器模式（v11 引入）：simple = 镜头卡模式，pro = 现有关键帧模式 */
+  editorMode: StageEditorMode
+  /** 镜头卡列表（v11 引入），仅 simple 模式使用 */
+  shots: StageShot[]
 }
 
 export interface StageSceneSnapshotInput {
@@ -40,6 +49,8 @@ export interface StageSceneSnapshotInput {
   activeCameraId: string | null
   animation: StageSceneAnimation
   sceneSettings: StageSceneSettings
+  editorMode: StageEditorMode
+  shots: StageShot[]
 }
 
 export function serializeScene(input: StageSceneSnapshotInput): string {
@@ -49,6 +60,8 @@ export function serializeScene(input: StageSceneSnapshotInput): string {
     activeCameraId: input.activeCameraId,
     animation: input.animation,
     sceneSettings: input.sceneSettings,
+    editorMode: input.editorMode,
+    shots: input.shots,
   }
   return JSON.stringify(snapshot)
 }
@@ -252,6 +265,15 @@ function withNormalizedCharacterMotion(objects: StageObject[]): StageObject[] {
   })
 }
 
+/** v10→v11：给摄像机对象补 effectors，非法/缺失时回退空数组 */
+function withDefaultCameraEffectors(objects: StageObject[]): StageObject[] {
+  return objects.map((object) => {
+    if (object.type !== 'camera') return object
+    const camera = object as StageCameraObject & { effectors?: unknown }
+    return { ...camera, effectors: Array.isArray(camera.effectors) ? camera.effectors : [] }
+  })
+}
+
 /** v2→v3：把整体 Vec3 值的轨道拆成 X/Y/Z 三条分量 scalar 轨道；非 Vec3 轨道原样保留 */
 function splitVec3Track(track: StageTrack): StageTrack[] {
   const first = track.keyframes[0]?.value
@@ -294,6 +316,8 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
     objects = withDefaultCameraAspectRatio(objects)
   }
   objects = withNormalizedCharacterMotion(objects)
+  // v10 及以下工程的摄像机对象无 effectors 字段 → 补空数组；同时顺手规范非法数据
+  objects = withDefaultCameraEffectors(objects)
   const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
   // v1 工程无 animation 字段 → 视为无动画；v2+ 解析已有动画；v2 的整体 Vec3 轨道拆成分量轨道
   let animation = version >= 2 ? parseAnimation(record.animation) : createDefaultAnimation()
@@ -302,6 +326,9 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   }
   // v3 及以下工程无 sceneSettings 字段 → 视为默认设置；v4/v5 的旧结构在 parseSceneSettings 中迁移
   const sceneSettings = version >= 4 ? parseSceneSettings(record.sceneSettings) : createDefaultSceneSettings()
+  // v10 及以下工程无 editorMode/shots 字段 → 一律视为专业工程、无镜头卡
+  const editorMode = version >= 11 ? normalizeEditorMode(record.editorMode) : 'pro'
+  const shots = version >= 11 ? normalizeShots(record.shots) : []
 
   return {
     schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
@@ -309,5 +336,7 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
     activeCameraId,
     animation,
     sceneSettings,
+    editorMode,
+    shots,
   }
 }

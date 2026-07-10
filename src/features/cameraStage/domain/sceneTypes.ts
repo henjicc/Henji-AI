@@ -9,6 +9,7 @@
 import type { StageBodyVariantId } from './bodyVariants'
 import type { StageCharacterMotion } from './characterMotion'
 import type { StageCharacterPose } from './poseTypes'
+import type { StageCameraEffector } from './shotTypes'
 
 export interface StageVec3 {
   x: number
@@ -71,6 +72,8 @@ export interface StageCameraObject extends StageObjectBase {
   lookAt: StageCameraLookAt
   /** 画幅比例（宽/高），驱动取景框线框与摄像机视角压暗遮罩 */
   aspectRatio: StageCameraAspectRatio
+  /** 挂载的效果器（手持晃动等），采样层按 time 纯函数叠加，不产生关键帧（3.1 实装） */
+  effectors: StageCameraEffector[]
 }
 
 export type StageObject = StagePrimitiveObject | StageCharacterObject | StageCameraObject
@@ -93,6 +96,8 @@ export interface StageObjectPatch {
   pose?: StageCharacterPose
   /** 仅 character 对象有效 */
   motion?: StageCharacterMotion
+  /** 仅 camera 对象有效 */
+  effectors?: StageCameraEffector[]
 }
 
 export type StageGizmoMode = 'translate' | 'rotate' | 'scale'

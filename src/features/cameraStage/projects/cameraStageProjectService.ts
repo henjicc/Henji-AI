@@ -52,6 +52,8 @@ export function createCurrentProjectDraft(now: number = Date.now()): CameraStage
     activeCameraId: state.activeCameraId,
     animation: state.animation,
     sceneSettings: state.sceneSettings,
+    editorMode: state.editorMode,
+    shots: state.shots,
   })
 
   const record: CameraStageProjectPlatformRecord = {
@@ -111,6 +113,8 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
       activeCameraId: snapshot.activeCameraId,
       animation: snapshot.animation,
       sceneSettings: snapshot.sceneSettings,
+      editorMode: snapshot.editorMode,
+      shots: snapshot.shots,
     },
     { id: record.id, name: record.name },
   )

@@ -16,6 +16,7 @@ import { getDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
+import type { StageEditorMode, StageShot } from '../domain/shotTypes'
 import {
   createDefaultAnimation,
   createDefaultPlayback,
@@ -56,6 +57,10 @@ export interface CameraStageState {
   selectedKeyframes: string[]
   /** 场景级设置（背景色/网格显隐），随工程持久化，不进撤销历史 */
   sceneSettings: StageSceneSettings
+  /** 编辑器模式（simple=镜头卡模式，pro=现有关键帧模式），随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
+  editorMode: StageEditorMode
+  /** 镜头卡列表，随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
+  shots: StageShot[]
   /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
   focusToken: number
   addPrimitive: (kind: StagePrimitiveKind) => void
@@ -251,6 +256,8 @@ export const useCameraStageStore = create<CameraStageState>()(
   playback: createDefaultPlayback(),
   selectedKeyframes: [],
   sceneSettings: createDefaultSceneSettings(),
+  editorMode: 'simple',
+  shots: [],
   focusToken: 0,
 
   addPrimitive: (kind) =>
@@ -426,6 +433,8 @@ export const useCameraStageStore = create<CameraStageState>()(
       playback: createDefaultPlayback(),
       selectedKeyframes: [],
       sceneSettings: createDefaultSceneSettings(),
+      editorMode: 'simple',
+      shots: [],
       focusToken: 0,
     }),
 
@@ -446,6 +455,8 @@ export const useCameraStageStore = create<CameraStageState>()(
         playback: createDefaultPlayback(),
         selectedKeyframes: [],
         sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),
+        editorMode: snapshot.editorMode ?? 'pro',
+        shots: snapshot.shots ?? [],
         focusToken: 0,
       }
     }),
