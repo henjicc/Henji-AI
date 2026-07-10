@@ -10,6 +10,7 @@ import {
 } from '../domain/shotTypes'
 import type { StageCameraMove } from '../domain/shotTypes'
 import type { StageObject } from '../domain/sceneTypes'
+import { clampHold, clampTransition, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
 
 const logger = createLogger('features.cameraStage.simple')
@@ -145,10 +146,13 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       }
     }),
     updateShotTiming: (id, patch) => set((state) => {
+      const fps = state.animation.fps
       const shots = state.shots.map((shot) => shot.id === id ? {
         ...shot,
-        ...(patch.hold === undefined ? {} : { hold: Math.max(0, patch.hold) }),
-        ...(patch.transitionDuration === undefined ? {} : { transitionDuration: Math.max(0, patch.transitionDuration) }),
+        ...(patch.hold === undefined ? {} : { hold: quantizeToFrame(clampHold(patch.hold, fps), fps) }),
+        ...(patch.transitionDuration === undefined
+          ? {}
+          : { transitionDuration: quantizeToFrame(clampTransition(patch.transitionDuration, fps), fps) }),
       } : shot)
       return { shots, animation: compile(shots, state.objects) }
     }),
