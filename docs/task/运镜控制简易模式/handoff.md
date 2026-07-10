@@ -96,3 +96,10 @@
 
 - v10 及以下旧工程加载后 `editorMode` 固定为 `'pro'`（不会被误判成简易），符合重要记录 007"已有旧工程一律视为专业工程"的约定。
 - 新建工程（`newScene`）默认 `editorMode: 'simple'`，如果 2.4 做"新建工程选模式"的入口，需要让该入口能覆盖这个默认值（目前 `newScene(name)` 签名不接受 mode 参数，2.4 接线时可能要扩展签名或在调用方 set 之后立即覆盖）。
+## 2.4 完成交接（交给 3.2）
+
+- `simple/EditorModeBadge.tsx` 已接入顶栏；简易模式的“转为专业工程”当前是禁用占位，3.2 只在此接入单向烘焙，不要增加反向切换。
+- `createNewProject(name, mode='simple')` 已锁定新工程模式；简易首卡由 `setEditorMode('simple')` 的现有逻辑创建，勿复制 `createShot`。
+- `KeyframeStopwatch` 已在简易模式统一返回 null，专业模式及旧工程仍保留码表。
+- 简易时间轴继续复用 `ShotTimelinePanel`，本阶段没有复制或改写 2.2/2.3 UI。
+- 40/40 单测及静态检查通过；真实 Electron 的模式选择、重开持久化和顶栏展示待用户按 `test-report.md` 验收。

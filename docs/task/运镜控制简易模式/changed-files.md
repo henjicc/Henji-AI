@@ -90,3 +90,19 @@
 - 修改 `shotCompiler.ts` 导出布点函数；`PlaybackControls.tsx` 抽共用播放按钮；`CameraStageDock.tsx` 按模式切换。
 - 修改 `cameraStageStore.ts`、`shotSlice.ts` 新增 `updateShotName`；同步本任务目录内总览、任务和五类记录。
 - 修改 `cameraStageStore.ts`、`PlaybackControls.tsx`、`ShotTimelinePanel.tsx` 的播放可用性策略，并在 `shotSlice.test.ts` 新增零轨道简易播放/专业禁用回归测试。
+
+## 2.4 工程模式接入与专业功能收敛
+
+### 新增
+
+- `src/features/cameraStage/simple/EditorModeBadge.tsx`：编辑器顶栏模式徽标与 3.2 禁用占位入口。
+
+### 修改
+
+- `src/features/cameraStage/projects/cameraStageProjectService.ts`：创建服务接收模式、初始化简易首卡并记录结构化日志。
+- `src/features/cameraStage/projects/CameraStageProjectList.tsx`：新建工程模式选择弹窗。
+- `src/features/cameraStage/CameraStageEditor.tsx`：接入模式徽标（仅 2 行增量）。
+- `src/features/cameraStage/timeline/KeyframeStopwatch.tsx`：简易模式统一隐藏码表。
+- `src/features/cameraStage/store/shotSlice.ts`：允许同模式但空卡的简易工程初始化首卡。
+- `src/features/cameraStage/store/shotSlice.test.ts`：新增简易工程首卡初始化回归用例。
+- `docs/task/运镜控制简易模式/`：更新 2.4 任务、总览及五类记录。

@@ -21,6 +21,7 @@ import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
 import QuickAddGroup from './toolbar/QuickAddGroup'
+import EditorModeBadge from './simple/EditorModeBadge'
 
 /**
  * 运镜控制编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
@@ -339,6 +340,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
           <span className="max-w-40 truncate text-xs text-text-muted" title={projectName}>
             {projectName}
           </span>
+          <EditorModeBadge />
           <PanelTrigger
             disabled={!canScreenshot || !!shotAction}
             panelWidth={156}

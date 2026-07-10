@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import { UiButton, UiIconButton, UiInput, UiModal, UiOptionButton } from '@/components/ui'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
+import type { StageEditorMode } from '../domain/shotTypes'
 import {
   createNewProject,
   deleteProject,
@@ -36,6 +37,8 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const [renameTarget, setRenameTarget] = useState<CameraStageProjectPlatformSummary | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<CameraStageProjectPlatformSummary | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createMode, setCreateMode] = useState<StageEditorMode>('simple')
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -53,12 +56,13 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const handleCreate = useCallback(async (): Promise<void> => {
     setBusy(true)
     try {
-      await createNewProject()
+      await createNewProject(undefined, createMode)
+      setCreateDialogOpen(false)
       onEnterEditor()
     } finally {
       setBusy(false)
     }
-  }, [onEnterEditor])
+  }, [createMode, onEnterEditor])
 
   const handleOpen = useCallback(
     async (projectId: string): Promise<void> => {
@@ -99,7 +103,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
             <div className="text-lg font-medium text-text-dark">运镜控制</div>
             <div className="mt-1 text-sm text-text-muted">搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图</div>
           </div>
-          <UiButton onClick={() => void handleCreate()} disabled={busy}>
+          <UiButton onClick={() => { setCreateMode('simple'); setCreateDialogOpen(true) }} disabled={busy}>
             <Plus size={15} className="mr-1" />
             新建工程
           </UiButton>
@@ -156,6 +160,42 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
           </div>
         )}
       </div>
+
+      <UiModal
+        isOpen={createDialogOpen}
+        title="新建工程"
+        onClose={() => setCreateDialogOpen(false)}
+        footer={
+          <>
+            <UiButton variant="ghost" onClick={() => setCreateDialogOpen(false)}>取消</UiButton>
+            <UiButton onClick={() => void handleCreate()} disabled={busy}>创建工程</UiButton>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="text-sm text-text-muted">选择编辑方式。创建后模式会随工程保存。</div>
+          <div className="grid grid-cols-2 gap-2">
+            <UiOptionButton
+              variant="card"
+              active={createMode === 'simple'}
+              className="h-auto flex-col !items-start gap-1 p-3 text-left"
+              onClick={() => setCreateMode('simple')}
+            >
+              <span className="text-sm font-medium">简易模式 · 推荐</span>
+              <span className="text-xs text-text-muted">用镜头卡组织运镜，无需关键帧。</span>
+            </UiOptionButton>
+            <UiOptionButton
+              variant="card"
+              active={createMode === 'pro'}
+              className="h-auto flex-col !items-start gap-1 p-3 text-left"
+              onClick={() => setCreateMode('pro')}
+            >
+              <span className="text-sm font-medium">专业模式</span>
+              <span className="text-xs text-text-muted">使用关键帧时间轴进行精细编辑。</span>
+            </UiOptionButton>
+          </div>
+        </div>
+      </UiModal>
 
       <UiModal
         isOpen={!!renameTarget}

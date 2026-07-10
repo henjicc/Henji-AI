@@ -20,10 +20,13 @@ interface KeyframeStopwatchProps {
 }
 
 const KeyframeStopwatch: React.FC<KeyframeStopwatchProps> = ({ objectId, groupPath, path, className }) => {
+  const editorMode = useCameraStageStore((state) => state.editorMode)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const tracks = useCameraStageStore((state) => state.animation.tracks)
   const toggleKeyframeGroup = useCameraStageStore((state) => state.toggleKeyframeGroup)
   const toggleKeyframe = useCameraStageStore((state) => state.toggleKeyframe)
+
+  if (editorMode === 'simple') return null
 
   const isSingleTrack = typeof path === 'string'
   const group = !isSingleTrack && typeof groupPath === 'string' ? getAnimatableGroupByPath(groupPath) : undefined

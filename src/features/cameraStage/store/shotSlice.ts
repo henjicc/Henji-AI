@@ -170,7 +170,7 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       return shots === state.shots ? {} : { shots, animation: compile(shots, state.objects) }
     }),
     setEditorMode: (editorMode: StageEditorMode) => set((state) => {
-      if (editorMode === state.editorMode) return {}
+      if (editorMode === state.editorMode && !(editorMode === 'simple' && state.shots.length === 0)) return {}
       const shots = editorMode === 'simple' && state.shots.length === 0 ? [createShot(state.objects, '片段 1')] : state.shots
       return { editorMode, shots, selectedShotId: shots[0]?.id ?? null,
         ...(editorMode === 'simple' ? { animation: compile(shots, state.objects) } : {}) }

@@ -21,6 +21,15 @@ function resetSimpleStore(): void {
 describe('简易模式 store 分片', () => {
   beforeEach(resetSimpleStore)
 
+  it('同为简易模式但尚无镜头卡时会初始化片段 1', () => {
+    useCameraStageStore.setState({ shots: [], selectedShotId: null })
+    useCameraStageStore.getState().setEditorMode('simple')
+    const state = useCameraStageStore.getState()
+    expect(state.shots).toHaveLength(1)
+    expect(state.shots[0].name).toBe('片段 1')
+    expect(state.selectedShotId).toBe(state.shots[0].id)
+  })
+
   it('编辑对象时原子写回选中卡并保留完整编译产物', () => {
     const initial = useCameraStageStore.getState()
     const objectId = initial.objects[0].id

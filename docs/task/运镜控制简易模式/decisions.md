@@ -60,3 +60,11 @@
 - **自动记录采用 action 显式分叉**：仅 `updateObject/updateTransform/updatePoseJoint/applyPosePreset` 在 `editorMode==='simple' && !playback.playing` 时写回选中卡；不订阅 objects，因此播放采样和 scrub 静默落值不会污染卡片。
 - **对象结构变化同步全部卡片**：新增/复制对象以创建当下状态补入每张卡；删除对象同时清理 `objectStates/perObject/cameraMoves`，再基于清理后的 shots 重编译。
 - **selectedShotId 是界面态，不进撤销跟踪/持久化**：shots 与 editorMode 进入 zundo；选中项加载时回到首卡，删除选中卡时选择相邻卡。
+
+## 2.4 工程模式接入与专业功能收敛
+
+- **模式在创建服务入口落定**：`createNewProject` 接收默认值为 `simple` 的 `StageEditorMode`，先 `newScene` 再调用既有 `setEditorMode`；后者已负责简易模式首卡创建与编译，避免复制 `createShot`/编译逻辑。
+- **码表在统一组件内收敛**：所有属性面板都经 `KeyframeStopwatch` 渲染码表，因此组件内按 `editorMode` 返回 null，专业模式逻辑完全复用原实现。
+- **不提前实现烘焙**：顶栏简易模式仅展示禁用的“转为专业工程”，模式仍由工程创建或旧工程迁移确定；单向烘焙留给 3.2。
+- **工程列表不展示模式徽标**：遵循重要记录 005，不扩展 summary/DB；模式徽标仅在编辑器顶栏显示。
+- **复用现有 UI primitive**：模式选择使用 `UiModal`、`UiOptionButton`，未新增通用组件或原生控件。

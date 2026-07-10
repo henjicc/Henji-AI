@@ -12,6 +12,7 @@ import type {
   CameraStageProjectPlatformSummary,
 } from '@/platform/contracts/cameraStageProjects'
 import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
+import type { StageEditorMode } from '../domain/shotTypes'
 import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import {
   CAMERA_STAGE_DEFAULT_PROJECT_NAME,
@@ -93,11 +94,28 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
 /** 新建空白工程：重置为空场景并立即保存入库，返回新工程标识 */
 export async function createNewProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+  mode: StageEditorMode = 'simple',
 ): Promise<SavedProjectInfo> {
+  logger.info('新建运镜工程开始', { event: 'camera_stage.project.create.start', mode })
   useCameraStageStore.getState().newScene(name)
+  useCameraStageStore.getState().setEditorMode(mode)
   useCameraStageSessionStore.getState().setLastProjectId(null)
   clearCameraStageHistory()
-  return await saveCurrentProject()
+  try {
+    const project = await saveCurrentProject()
+    logger.info('新建运镜工程完成', {
+      event: 'camera_stage.project.create.completed',
+      projectId: project.id,
+      mode,
+    })
+    return project
+  } catch (error) {
+    logger.error('新建运镜工程失败', error, {
+      event: 'camera_stage.project.create.failed',
+      mode,
+    })
+    throw error
+  }
 }
 
 /** 加载指定工程到场景，成功返回 true；工程不存在返回 false */
