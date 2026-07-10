@@ -40,3 +40,17 @@
   - 记录 2.1 实施、验证和交接信息。
 - `docs/task/运镜导出与动作完善/00-任务总览.md`、`任务/第二阶段-健壮性与性能/2.1-帧数据二进制传输.md`
   - 同步 2.1 进入待验证状态和实际执行记录。
+
+## 2.2 导出会话与产物清理
+
+- `electron/main/services/video/frame-export.ts`
+  - ffmpeg 改在会话临时目录编码，成功后才发布到 Uploads；跨卷复制使用隐藏 `.part` 暂存并在成功后改名。
+  - 增加 `lastActivity`、30 分钟空闲回收、Uploads 暂存残留回收、批量会话清理与结构化日志。
+- `electron/main/window.ts`
+  - 在渲染重载、渲染进程退出、webContents 销毁和窗口关闭时清理所有导出会话。
+- `src/features/cameraStage/export/cameraStageVideo.ts`
+  - 导出文件名时间戳改为本地 `YYYY-MM-DD-HH-mm-ss`。
+- `docs/task/运镜导出与动作完善/{00-任务总览,progress,decisions,handoff,changed-files,test-report}.md`
+  - 同步 2.2 的实施、决策、交接、验证与状态。
+- `docs/task/运镜导出与动作完善/任务/第二阶段-健壮性与性能/2.2-导出会话与产物清理.md`
+  - 更新为待验证并记录实际实现。

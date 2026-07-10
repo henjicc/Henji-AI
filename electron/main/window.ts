@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
 import { bindWindowStateEvents } from './ipc/window'
+import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 
@@ -24,7 +25,17 @@ export function createWindow(): BrowserWindow {
   })
 
   bindWindowStateEvents(win)
+  win.webContents.on('did-start-loading', () => {
+    void cleanupAllVideoFrameExports('renderer_reloading')
+  })
+  win.webContents.on('render-process-gone', () => {
+    void cleanupAllVideoFrameExports('renderer_process_gone')
+  })
+  win.webContents.once('destroyed', () => {
+    void cleanupAllVideoFrameExports('web_contents_destroyed')
+  })
   win.on('closed', () => {
+    void cleanupAllVideoFrameExports('window_closed')
     closeLogWindow()
   })
 

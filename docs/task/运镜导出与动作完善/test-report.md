@@ -64,3 +64,26 @@
 ### 重启说明
 
 ✔️无需重启
+
+## 2.2 导出会话与产物清理
+
+### 自动检查
+
+| 命令 | 结果 | 说明 |
+|---|---|---|
+| `npm run lint` | 通过 | ESLint 渲染层零警告退出。 |
+| `npx tsc --noEmit` | 通过 | 渲染层 TypeScript 类型检查零错误退出。 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 | Electron 主进程/预加载类型检查零错误退出。 |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过 | Electron 源码 ESLint 零警告退出。 |
+| `git diff --check` | 通过 | 未发现补丁空白错误。 |
+
+### 待用户手动验证（真实 Electron 窗口）
+
+1. 重启 `npm run electron:dev`，开始一段足够长的视频导出；进入“编码中”后点击取消。确认应用数据根的 `Uploads` 内未新增半截 `.mp4`，且 `%TEMP%` 下没有对应 `henji-camera-stage-export-*` 会话目录。
+2. 再次开始长视频导出，在逐帧渲染或编码阶段按 Ctrl+R（或开发者工具 Reload）刷新窗口。等待数秒后，确认 `%TEMP%` 的对应会话目录已删除；重新打开后可正常再次导出。
+3. 正常完成一次导出。确认 Uploads 与所选目标路径都有可播放的完整 MP4，且文件名时间与本机当前本地时间一致（不是 UTC 偏移）。
+4. 可选跨卷环境：将 `%TEMP%` 与应用数据根置于不同磁盘后完成导出，确认 Uploads 中未残留 `.henji-camera-stage-export-*.part` 文件。
+
+### 重启说明
+
+⚠️ 需要重启

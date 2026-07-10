@@ -138,11 +138,20 @@ async function resolveVideoTargetPath(fileNameStem: string): Promise<string | nu
 
 function buildFileName(projectName: string): string {
   const stem = projectName.trim() || '运镜控制'
-  const stamp = new Date()
-    .toISOString()
-    .replace(/[:T]/g, '-')
-    .replace(/\..+$/, '')
+  const now = new Date()
+  const stamp = [
+    now.getFullYear(),
+    padTimePart(now.getMonth() + 1),
+    padTimePart(now.getDate()),
+    padTimePart(now.getHours()),
+    padTimePart(now.getMinutes()),
+    padTimePart(now.getSeconds()),
+  ].join('-')
   return `${stem}-${stamp}`
+}
+
+function padTimePart(value: number): string {
+  return String(value).padStart(2, '0')
 }
 
 function ensureMp4Path(targetPath: string): string {
