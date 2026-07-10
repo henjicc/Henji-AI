@@ -11,7 +11,7 @@ import {
   pickDefaultColor,
 } from '../domain/sceneDefaults'
 import { createPoseMotion } from '../domain/characterMotion'
-import { applyObjectPatch, getCameraObjects } from '../domain/cameraUtils'
+import { applyObjectPatch, getCameraObjects, isCameraId } from '../domain/cameraUtils'
 import { getDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
@@ -261,10 +261,6 @@ function nextName(objects: StageObject[], base: string): string {
 
 function firstCameraId(objects: StageObject[]): string | null {
   return getCameraObjects(objects)[0]?.id ?? null
-}
-
-function isCameraId(objects: StageObject[], id: string | null): boolean {
-  return !!id && objects.some((item) => item.id === id && item.type === 'camera')
 }
 
 const initialShot = createShot([], '片段 1')

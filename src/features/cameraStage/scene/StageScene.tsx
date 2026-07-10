@@ -18,6 +18,7 @@ import StagePlaybackDriver from './StagePlaybackDriver'
 import StageSunLight from './StageSunLight'
 import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
+import { useRenderCameraId } from './useRenderCameraId'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -36,7 +37,9 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
-  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
+  // 渲染机位（重要记录 005，3.2）：简易模式播放/scrub 跨机位切换点时按时间表切换，与 activeCameraId
+  // （编辑机位，用户显式选择）区分；专业模式/无镜头卡时该 hook 直接回落 activeCameraId，行为不变。
+  const renderCameraId = useRenderCameraId()
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
@@ -94,7 +97,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
     return targets
   }, [objects])
   const activeCamera = objects.find(
-    (item): item is StageCameraObject => item.id === activeCameraId && item.type === 'camera',
+    (item): item is StageCameraObject => item.id === renderCameraId && item.type === 'camera',
   )
   const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
   const isCameraView = viewMode === 'camera' && !!activeCamera && !!activeCameraTarget

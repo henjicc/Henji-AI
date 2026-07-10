@@ -1,11 +1,14 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { UiIconButton, UiInput } from '@/components/ui'
+import { Dropdown, UiIconButton, UiInput } from '@/components/ui'
+import type { StageCameraObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
 import type { ShotClipBlock } from './shotClipGeometry'
 
 /** 极窄块（1 帧停留）保底最小可视宽度，避免无法点选（重要记录/01-实施方案 风险控制） */
 const MIN_VISUAL_WIDTH = 16
+/** 机位下拉"跟随默认"选项的哨兵值（Dropdown 的 value 类型不支持 null，用固定字符串占位） */
+const DEFAULT_CAMERA_OPTION_VALUE = '__default__'
 
 /** 块身重排 / 右边缘 trim 共用的一组 pointer 事件透传（由父级 hook 提供，语义见各自 hook 定义） */
 export interface ClipBlockPointerHandlers {
@@ -35,6 +38,10 @@ interface StaticClipBlockProps {
   trimHandlers: ClipBlockPointerHandlers
   /** 本块右边缘是否正在被 trim 拖拽（高亮态） */
   trimming: boolean
+  /** 场景内全部摄像机，供机位徽标下拉选择（重要记录 005/3.2） */
+  cameras: StageCameraObject[]
+  /** 修改本卡拍摄机位；传 null = 取消指定，沿用全局 activeCameraId */
+  onSelectCamera: (cameraId: string | null) => void
 }
 
 /** 时间轴静止块：名称 + 停留时长，选中/播放头两种高亮态，双击重命名，悬浮删除，块身拖拽重排，右边缘 trim */
@@ -51,9 +58,25 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
   dragOffsetX,
   trimHandlers,
   trimming,
+  cameras,
+  onSelectCamera,
 }) => {
   const [editingName, setEditingName] = useState(false)
   const [draftName, setDraftName] = useState(shot.name)
+
+  const cameraOptions = useMemo(
+    () => [
+      { label: '跟随默认', value: DEFAULT_CAMERA_OPTION_VALUE },
+      ...cameras.map((camera) => ({ label: camera.name, value: camera.id })),
+    ],
+    [cameras],
+  )
+  const cameraLabel = shot.cameraId
+    ? cameras.find((camera) => camera.id === shot.cameraId)?.name ?? '未知机位'
+    : '跟随默认'
+  const handleCameraSelect = (value: string): void => {
+    onSelectCamera(value === DEFAULT_CAMERA_OPTION_VALUE ? null : value)
+  }
 
   const commitName = (): void => {
     onRename(draftName)
@@ -133,7 +156,23 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
           <Trash2 size={11} />
         </UiIconButton>
       </div>
-      <span className="truncate text-[10px] text-text-muted">{shot.hold.toFixed(2)}s</span>
+      <div className="flex min-w-0 items-center justify-between gap-1">
+        <span className="truncate text-[10px] text-text-muted">{shot.hold.toFixed(2)}s</span>
+        {/* 机位徽标：点击弹机位选择下拉（复用 Dropdown），阻断 pointerdown 冒泡避免误触块身重排 */}
+        <div className="shrink-0" onPointerDown={(event) => event.stopPropagation()}>
+          <Dropdown<string>
+            value={shot.cameraId ?? DEFAULT_CAMERA_OPTION_VALUE}
+            display={cameraLabel}
+            options={cameraOptions}
+            onSelect={handleCameraSelect}
+            disabled={cameras.length === 0}
+            minWidthStrategy="none"
+            panelWidthStrategy="options"
+            buttonClassName="!h-4 !w-auto !rounded !px-1 !py-0 gap-0.5"
+            buttonLabelClassName="text-[9px] leading-none"
+          />
+        </div>
+      </div>
 
       {/* 右边缘 trim 命中区：调整停留时长，独立于块身重排手势 */}
       <div

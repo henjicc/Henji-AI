@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from 'react'
 import { Plus } from 'lucide-react'
 import { UiButton } from '@/components/ui'
+import { getCameraObjects } from '../../domain/cameraUtils'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
 import type { ShotTimingPatch, ShotTransitionPatch } from '../../store/shotSlice'
@@ -31,6 +32,7 @@ interface ShotClipTrackProps {
   onRemoveShot: (id: string) => void
   onUpdateShotTiming: (id: string, patch: ShotTimingPatch) => void
   onUpdateShotTransition: (id: string, patch: ShotTransitionPatch) => void
+  onUpdateShotCamera: (id: string, cameraId: string | null) => void
   onReorderShot: (id: string, toIndex: number) => void
   onAddShot: () => void
 }
@@ -54,10 +56,12 @@ const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
   onRemoveShot,
   onUpdateShotTiming,
   onUpdateShotTransition,
+  onUpdateShotCamera,
   onReorderShot,
   onAddShot,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null)
+  const cameras = useMemo(() => getCameraObjects(objects), [objects])
 
   const trim = useClipTrim({ fps, pxPerSecond, onCommit: onUpdateShotTiming })
 
@@ -141,6 +145,8 @@ const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
                   onPointerCancel: trim.handlePointerCancel,
                 }}
                 trimming={trim.preview?.shotId === block.shotId && trim.preview.kind === 'static'}
+                cameras={cameras}
+                onSelectCamera={(cameraId) => onUpdateShotCamera(block.shotId, cameraId)}
               />
             )
           }

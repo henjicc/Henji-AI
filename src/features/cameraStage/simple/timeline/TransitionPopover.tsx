@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Dropdown, UiButton, UiInput } from '@/components/ui'
+import { getCameraObjects } from '../../domain/cameraUtils'
 import { diffShotObjects } from '../../domain/shotCompiler'
 import type {
   StageCameraMove,
@@ -29,9 +30,16 @@ interface TransitionPopoverProps {
   shotIndex: number
   objects: StageObject[]
   fps: number
+  /** 两侧机位不同（重要记录 005）：时长输入禁用，展示跨机位硬切提示 */
+  camerasDiffer: boolean
   onDurationFramesChange: (frames: number) => void
   onDetailChange: (objectId: string, detail: StageShotTransitionObjectDetail) => void
   onCameraMoveChange: (objectId: string, move: StageCameraMove) => void
+}
+
+function cameraDisplayName(objects: StageObject[], cameraId: string | null): string {
+  if (!cameraId) return '默认机位'
+  return getCameraObjects(objects).find((camera) => camera.id === cameraId)?.name ?? '未知机位'
 }
 
 const TransitionPopover: React.FC<TransitionPopoverProps> = ({
@@ -40,6 +48,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
   shotIndex,
   objects,
   fps,
+  camerasDiffer,
   onDurationFramesChange,
   onDetailChange,
   onCameraMoveChange,
@@ -61,6 +70,13 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
         片段 {shotIndex + 1} → 片段 {shotIndex + 2} 的过渡
       </div>
 
+      {camerasDiffer && (
+        <div className="rounded-md border border-border-dark bg-layer/60 px-2 py-1.5 text-[11px] leading-5 text-text-muted">
+          机位切换：{cameraDisplayName(objects, shot.cameraId)} → {cameraDisplayName(objects, nextShot.cameraId)}，
+          此处强制为硬切，过渡时长不生效（不支持跨机位带时长过渡）。如需恢复过渡效果，请把两侧机位改为相同。
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-[11px] text-text-muted">
           时长（帧）
@@ -69,6 +85,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
             min={0}
             step={1}
             value={durationFrames}
+            disabled={camerasDiffer}
             className="h-8 w-24 px-2 text-xs"
             onChange={(event) => onDurationFramesChange(Math.max(0, Math.round(Number(event.target.value))))}
           />
@@ -83,7 +100,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
         />
       </div>
 
-      {durationFrames === 0 && (
+      {!camerasDiffer && durationFrames === 0 && (
         <div className="text-[11px] leading-5 text-text-muted">
           时长为 0 帧 = 硬切，前后画面直接切换；改为大于 0 的值即可恢复为过渡。
         </div>

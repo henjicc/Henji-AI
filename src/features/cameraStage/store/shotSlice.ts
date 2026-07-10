@@ -10,6 +10,7 @@ import {
 } from '../domain/shotTypes'
 import type { StageCameraMove } from '../domain/shotTypes'
 import type { StageObject } from '../domain/sceneTypes'
+import { isCameraId } from '../domain/cameraUtils'
 import { clampHold, clampTransition, isTimeInShotStaticSegment, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
 
@@ -168,10 +169,15 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
     selectShot: (id) => set((state) => {
       const index = state.shots.findIndex((shot) => shot.id === id)
       if (index < 0) return {}
+      const shot = state.shots[index]
       const time = shotStartTime(state.shots, index)
+      // 点卡 = 进入该卡的拍摄视角编辑（显式用户动作，允许写 store，重要记录 005/3.2）；
+      // 卡未指定机位，或机位指向已删除的对象时，activeCameraId 保持不变（不写入无效 id）。
+      const activeCameraId = isCameraId(state.objects, shot.cameraId) ? (shot.cameraId as string) : state.activeCameraId
       return {
         selectedShotId: id,
-        objects: applyShotToObjects(state.objects, state.shots[index]),
+        objects: applyShotToObjects(state.objects, shot),
+        activeCameraId,
         playback: { ...state.playback, playing: false, currentTime: time },
       }
     }),

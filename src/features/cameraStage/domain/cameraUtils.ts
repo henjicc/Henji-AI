@@ -26,6 +26,11 @@ export function getCameraObjects(objects: StageObject[]): StageCameraObject[] {
   return objects.filter((item): item is StageCameraObject => item.type === 'camera')
 }
 
+/** 校验 id 是否指向场景中一台真实存在的摄像机对象；activeCameraId 等字段写入前的通用兜底判断 */
+export function isCameraId(objects: StageObject[], id: string | null | undefined): boolean {
+  return !!id && objects.some((item) => item.id === id && item.type === 'camera')
+}
+
 /**
  * 首个摄像机判定（重要记录 007）：按对象数组插入顺序取最早创建的摄像机。
  * `objects` 数组本身只增不重排（新增 push 到末尾，删除用 filter，均保序），

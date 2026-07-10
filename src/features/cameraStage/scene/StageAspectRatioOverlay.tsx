@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getCameraObjects } from '../domain/cameraUtils'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { useRenderCameraId } from './useRenderCameraId'
 
 interface ViewportSize {
   width: number
@@ -17,8 +18,9 @@ const StageAspectRatioOverlay: React.FC = () => {
   const [size, setSize] = useState<ViewportSize>({ width: 0, height: 0 })
   const viewMode = useCameraStageStore((state) => state.viewMode)
   const objects = useCameraStageStore((state) => state.objects)
-  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
-  const activeCamera = getCameraObjects(objects).find((item) => item.id === activeCameraId)
+  // 画幅遮罩跟随渲染机位（重要记录 005，3.2），与视口渲染机位来源保持一致
+  const renderCameraId = useRenderCameraId()
+  const activeCamera = getCameraObjects(objects).find((item) => item.id === renderCameraId)
 
   useEffect(() => {
     const container = containerRef.current

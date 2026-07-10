@@ -1,6 +1,7 @@
 import React from 'react'
-import { Spline } from 'lucide-react'
+import { Camera, Spline } from 'lucide-react'
 import { PanelTrigger } from '@/components/ui'
+import { hasForcedHardCut } from '../../domain/shotCompiler'
 import type { StageObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
 import type { ShotTimingPatch, ShotTransitionPatch } from '../../store/shotSlice'
@@ -50,6 +51,9 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
   trimming,
 }) => {
   const isHardCut = block.width <= 0
+  // 两侧机位不同 → 布点层已强制硬切（3.1），这里额外区分"机位造成的硬切"与"用户手动拖到 0 帧的硬切"，
+  // 呈现与可编辑性不同：前者时长编辑不生效（record 005：不支持跨机位带时长过渡），后者仍可编辑。
+  const camerasDiffer = hasForcedHardCut(shot, nextShot)
   const left = isHardCut ? block.x - HARD_CUT_HIT_WIDTH / 2 : block.x
   const width = isHardCut ? HARD_CUT_HIT_WIDTH : Math.max(block.width, MIN_TRANSITION_WIDTH)
 
@@ -76,6 +80,7 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
             shotIndex={shotIndex}
             objects={objects}
             fps={fps}
+            camerasDiffer={camerasDiffer}
             onDurationFramesChange={handleDurationFramesChange}
             onDetailChange={handleDetailChange}
             onCameraMoveChange={handleCameraMoveChange}
@@ -93,12 +98,20 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
               role="button"
               tabIndex={0}
               data-panel-trigger-button
-              title="硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长"
+              title={
+                camerasDiffer
+                  ? '机位切换（强制硬切），点击查看详情'
+                  : '硬切（0 帧过渡），点击可调整；拖右缘可拉出过渡时长'
+              }
               className="flex h-full w-full cursor-pointer items-center justify-center"
               onClick={togglePanel}
               onKeyDown={handleKeyDown}
             >
-              <span className={`h-full w-0.5 rounded-full transition-colors ${trimming ? 'bg-accent' : 'bg-text-muted hover:bg-accent'}`} />
+              {camerasDiffer ? (
+                <Camera size={11} className="text-accent" />
+              ) : (
+                <span className={`h-full w-0.5 rounded-full transition-colors ${trimming ? 'bg-accent' : 'bg-text-muted hover:bg-accent'}`} />
+              )}
             </div>
           ) : (
             <div
@@ -116,15 +129,18 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
           )
         }}
       </PanelTrigger>
-      {/* 右边缘 trim 命中区：与 PanelTrigger 是兄弟节点、后渲染盖在其上，点击/拖拽不会触发气泡 */}
-      <div
-        role="presentation"
-        className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize"
-        onPointerDown={trimHandlers.onPointerDown}
-        onPointerMove={trimHandlers.onPointerMove}
-        onPointerUp={trimHandlers.onPointerUp}
-        onPointerCancel={trimHandlers.onPointerCancel}
-      />
+      {/* 右边缘 trim 命中区：与 PanelTrigger 是兄弟节点、后渲染盖在其上，点击/拖拽不会触发气泡；
+          机位不同时不渲染——拖拽调整的时长不会生效（record 005：不支持跨机位带时长过渡），避免误导 */}
+      {!camerasDiffer && (
+        <div
+          role="presentation"
+          className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-ew-resize"
+          onPointerDown={trimHandlers.onPointerDown}
+          onPointerMove={trimHandlers.onPointerMove}
+          onPointerUp={trimHandlers.onPointerUp}
+          onPointerCancel={trimHandlers.onPointerCancel}
+        />
+      )}
     </div>
   )
 }
