@@ -47,6 +47,24 @@ describe('简易模式 store 分片', () => {
     expect(useCameraStageStore.getState().shots[0].objectStates[objectId].transform.position.x).toBe(0)
   })
 
+  it('简易模式零轨道但有镜头卡时长时仍可播放，专业模式保持禁用', () => {
+    const simple = useCameraStageStore.getState()
+    simple.addShot()
+    const compiled = useCameraStageStore.getState()
+    expect(compiled.animation.tracks).toHaveLength(0)
+    expect(compiled.animation.duration).toBeGreaterThan(0)
+    compiled.play()
+    expect(useCameraStageStore.getState().playback.playing).toBe(true)
+
+    useCameraStageStore.setState({
+      editorMode: 'pro',
+      playback: createDefaultPlayback(),
+      animation: createDefaultAnimation(),
+    })
+    useCameraStageStore.getState().play()
+    expect(useCameraStageStore.getState().playback.playing).toBe(false)
+  })
+
   it('新增与删除对象同步所有卡片且清理过渡详情', () => {
     const state = useCameraStageStore.getState()
     state.addShot()

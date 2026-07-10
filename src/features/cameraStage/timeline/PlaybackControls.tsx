@@ -68,6 +68,33 @@ interface PlaybackControlsProps {
   onGraphViewChange: (value: boolean) => void
 }
 
+export const PlaybackButtons: React.FC<{ canPlay?: boolean }> = ({ canPlay }) => {
+  const playing = useCameraStageStore((state) => state.playback.playing)
+  const loop = useCameraStageStore((state) => state.playback.loop)
+  const trackCount = useCameraStageStore((state) => state.animation.tracks.length)
+  const playbackEnabled = canPlay ?? trackCount > 0
+  const play = useCameraStageStore((state) => state.play)
+  const pause = useCameraStageStore((state) => state.pause)
+  const stop = useCameraStageStore((state) => state.stop)
+  const toggleLoop = useCameraStageStore((state) => state.toggleLoop)
+
+  return (
+    <div className="flex items-center gap-1">
+      <UiIconButton showBorder={false} appearance="hover-only" className="h-7 w-7" title="回到起点" onClick={stop}>
+        <SkipBack size={14} />
+      </UiIconButton>
+      <UiIconButton showBorder={false} appearance="hover-only" className="h-7 w-7" disabled={!playbackEnabled}
+        title={playing ? '暂停' : '播放'} onClick={() => (playing ? pause() : play())}>
+        {playing ? <Pause size={15} /> : <Play size={15} />}
+      </UiIconButton>
+      <UiIconButton showBorder={false} appearance="hover-only" active={loop} className="h-7 w-7"
+        title="循环播放" onClick={toggleLoop}>
+        <Repeat size={14} />
+      </UiIconButton>
+    </div>
+  )
+}
+
 const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   mode,
   onModeChange,
@@ -76,50 +103,14 @@ const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   graphView,
   onGraphViewChange,
 }) => {
-  const playing = useCameraStageStore((state) => state.playback.playing)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
-  const loop = useCameraStageStore((state) => state.playback.loop)
   const duration = useCameraStageStore((state) => state.animation.duration)
   const fps = useCameraStageStore((state) => state.animation.fps)
-  const trackCount = useCameraStageStore((state) => state.animation.tracks.length)
-
-  const play = useCameraStageStore((state) => state.play)
-  const pause = useCameraStageStore((state) => state.pause)
-  const stop = useCameraStageStore((state) => state.stop)
-  const toggleLoop = useCameraStageStore((state) => state.toggleLoop)
   const setDuration = useCameraStageStore((state) => state.setDuration)
 
   return (
     <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
-      <UiIconButton
-        showBorder={false}
-        appearance="hover-only"
-        className="h-7 w-7"
-        title="回到起点"
-        onClick={() => stop()}
-      >
-        <SkipBack size={14} />
-      </UiIconButton>
-      <UiIconButton
-        showBorder={false}
-        appearance="hover-only"
-        className="h-7 w-7"
-        disabled={trackCount === 0}
-        title={playing ? '暂停' : '播放'}
-        onClick={() => (playing ? pause() : play())}
-      >
-        {playing ? <Pause size={15} /> : <Play size={15} />}
-      </UiIconButton>
-      <UiIconButton
-        showBorder={false}
-        appearance="hover-only"
-        active={loop}
-        className="h-7 w-7"
-        title="循环播放"
-        onClick={() => toggleLoop()}
-      >
-        <Repeat size={14} />
-      </UiIconButton>
+      <PlaybackButtons />
 
       <div className="ml-1 flex items-center gap-1 tabular-nums text-xs text-text-muted">
         <span className="text-text-dark">{formatTimecode(currentTime, mode, fps)}</span>

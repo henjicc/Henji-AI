@@ -18,6 +18,8 @@ import PropertyPanel from '../panels/PropertyPanel'
 import StageAspectRatioOverlay from '../scene/StageAspectRatioOverlay'
 import StageScene from '../scene/StageScene'
 import TimelinePanel from '../timeline/TimelinePanel'
+import ShotTimelinePanel from '../simple/ShotTimelinePanel'
+import { useCameraStageStore } from '../store/cameraStageStore'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { DockHeaderActions, DockTab } from './DockChrome'
 import { LAYOUT_STORAGE_KEY, resetLayout, restoreLayout } from './dockLayout'
@@ -45,7 +47,10 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
 
 const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
 const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <PropertyPanel />
-const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <TimelinePanel />
+const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => {
+  const editorMode = useCameraStageStore((state) => state.editorMode)
+  return editorMode === 'simple' ? <ShotTimelinePanel /> : <TimelinePanel />
+}
 
 const DOCK_COMPONENTS = {
   viewport: ViewportPanel,

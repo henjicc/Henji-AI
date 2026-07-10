@@ -1,5 +1,12 @@
 # 运镜控制简易模式 · 任务交接
 
+## 2.2 完成交接（交给 2.3）
+
+- 简易面板入口 `simple/ShotTimelinePanel.tsx`、卡片 `ShotCard.tsx`；2.3 在其上叠加细节入口，不复制卡片或播放条。
+- 当前卡区间走 `shotTimelineUtils.getShotAtTime`，底层复用 `buildShotTimeline`，后续不要另写时间累加。
+- store 新增 `updateShotName`；时长/过渡详情继续走 `updateShotTiming` / `updateShotTransition`。
+- 零轨道简易片段可正常启动播放；专业模式零轨道仍禁用。自动验证 39/39 及全部静态检查通过；真实 Electron 点击、拖拽和播放待用户验收。
+
 ## 2.1 完成交接（交给 2.2）
 
 - `CameraStageState` 已提供 `selectedShotId` 及 `addShot/removeShot/reorderShot/selectShot/updateShotTiming/updateShotTransition/captureIntoSelectedShot/setEditorMode`。

@@ -21,6 +21,7 @@ export type ShotSliceActions = Pick<
   | 'reorderShot'
   | 'selectShot'
   | 'updateShotTiming'
+  | 'updateShotName'
   | 'updateShotTransition'
   | 'captureIntoSelectedShot'
   | 'setEditorMode'
@@ -150,6 +151,9 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       } : shot)
       return { shots, animation: compile(shots, state.objects) }
     }),
+    updateShotName: (id, name) => set((state) => ({
+      shots: state.shots.map((shot) => shot.id === id ? { ...shot, name: name.trim() || shot.name } : shot),
+    })),
     updateShotTransition: (id, patch) => set((state) => {
       const shots = state.shots.map((shot) => shot.id === id ? {
         ...shot,

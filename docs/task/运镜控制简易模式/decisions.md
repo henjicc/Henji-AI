@@ -1,5 +1,13 @@
 # 运镜控制简易模式 · 补充设计决策
 
+## 2.2 镜头卡时间轴面板
+
+- 从专业 `PlaybackControls` 抽出无参数 `PlaybackButtons`，两种面板共用停止、播放/暂停与循环逻辑。
+- 导出编译器 `buildShotTimeline`，UI 工具只映射 shotId 和查找播放头卡，避免重复时间累加规则。
+- 用 shotId 数组适配统一 `useReorderDrag`；全部控件继续使用 `Ui*`。
+- 2.1 缺少重命名接口，补最小 `updateShotName`；名称不影响编译，不触发无意义重编译。
+- **播放可用性按模式定义**：共享按钮接收可选 `canPlay`；专业模式默认沿用“存在轨道”，简易模式使用“存在卡且 duration>0”。store `play()` 同步采用相同规则，保证零属性差异但有停留时长的卡片也能推进播放头。
+
 ## 1.1 简易模式数据模型与工程持久化
 
 - **`StageCameraEffector` 定义在 `shotTypes.ts` 而非 `sceneTypes.ts`**：按任务草案要求，`sceneTypes.ts` 用 `import type` 引用 `shotTypes.ts` 的类型，`shotTypes.ts` 也用 `import type` 引用 `sceneTypes.ts` 的类型。两个方向都是纯类型导入，`isolatedModules` 下会被完全擦除，不产生运行时循环依赖，`tsc`/`vite`/`esbuild` 均验证通过。

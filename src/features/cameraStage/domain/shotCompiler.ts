@@ -58,7 +58,7 @@ function applyTransitionDelay(transitionStart: number, transitionEnd: number, de
   return [start, end]
 }
 
-interface ShotTimelineSegment {
+export interface ShotTimelineSegment {
   holdStart: number
   /** 过渡开始（= 停留结束） */
   transitionStart: number
@@ -67,7 +67,7 @@ interface ShotTimelineSegment {
 }
 
 /** 顺序累加 hold + transitionDuration 得每张卡的停留/过渡时间点；末卡只算 hold */
-function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
+export function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
   const timeline: ShotTimelineSegment[] = []
   let cursor = 0
   shots.forEach((shot, index) => {

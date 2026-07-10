@@ -78,6 +78,7 @@ export interface CameraStageState {
   reorderShot: (id: string, toIndex: number) => void
   selectShot: (id: string) => void
   updateShotTiming: (id: string, patch: ShotTimingPatch) => void
+  updateShotName: (id: string, name: string) => void
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
   captureIntoSelectedShot: (objectIds?: string[]) => void
   setEditorMode: (mode: StageEditorMode) => void
@@ -512,7 +513,10 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   play: () =>
     set((state) => {
-      if (state.animation.tracks.length === 0) return {}
+      const canPlay = state.editorMode === 'simple'
+        ? state.shots.length > 0 && state.animation.duration > 0
+        : state.animation.tracks.length > 0
+      if (!canPlay) return {}
       // 播放到末尾后再按播放，从头开始
       const atEnd = state.playback.currentTime >= state.animation.duration
       return {

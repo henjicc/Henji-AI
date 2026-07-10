@@ -70,3 +70,10 @@
 
 - `src/features/cameraStage/store/cameraStageStore.ts`：接入 slice、自动记录分叉、对象结构同步、默认首卡、zundo 跟踪扩展。
 - `docs/task/运镜控制简易模式/` 下 2.1 任务文件、总览与五类任务记录：同步完成状态、决策、测试和交接。
+
+## 2.2 镜头卡时间轴面板
+
+- 新增 `simple/ShotTimelinePanel.tsx`、`ShotCard.tsx`、`shotTimelineUtils.ts`、`shotTimelineUtils.test.ts`。
+- 修改 `shotCompiler.ts` 导出布点函数；`PlaybackControls.tsx` 抽共用播放按钮；`CameraStageDock.tsx` 按模式切换。
+- 修改 `cameraStageStore.ts`、`shotSlice.ts` 新增 `updateShotName`；同步本任务目录内总览、任务和五类记录。
+- 修改 `cameraStageStore.ts`、`PlaybackControls.tsx`、`ShotTimelinePanel.tsx` 的播放可用性策略，并在 `shotSlice.test.ts` 新增零轨道简易播放/专业禁用回归测试。
