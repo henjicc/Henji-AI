@@ -19,6 +19,8 @@ interface ShotClipTrackProps {
   contentWidth: number
   fps: number
   selectedShotId: string | null
+  /** 框选出的多个关键帧 id（含拖拽中的实时预览），命中的菱形高亮 */
+  multiSelectedShotIds: readonly string[]
   currentTime: number
   onSelectShot: (id: string) => void
   onRenameShot: (id: string, name: string) => void
@@ -38,6 +40,7 @@ const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
   contentWidth,
   fps,
   selectedShotId,
+  multiSelectedShotIds,
   currentTime,
   onSelectShot,
   onRenameShot,
@@ -60,6 +63,7 @@ const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
     return shots.map((shot) => shot.id === drag.preview?.shotId ? { ...shot, time: drag.preview.time } : shot)
   }, [drag.preview, shots])
   const layout = useMemo(() => buildClipLayout(layoutShots, pxPerSecond), [layoutShots, pxPerSecond])
+  const multiSelectedSet = useMemo(() => new Set(multiSelectedShotIds), [multiSelectedShotIds])
   const playheadShotId = useMemo(() => {
     const epsilon = 1 / (2 * Math.max(1, fps))
     return layoutShots.find((shot) => Math.abs(shot.time - currentTime) <= epsilon)?.id ?? null
@@ -81,7 +85,7 @@ const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
               key={`keyframe-${block.shotId}`}
               shot={shot}
               block={block}
-              selected={block.shotId === selectedShotId}
+              selected={block.shotId === selectedShotId || multiSelectedSet.has(block.shotId)}
               isPlayhead={playheadShotId === block.shotId}
               fps={fps}
               onSelect={() => onSelectShot(block.shotId)}

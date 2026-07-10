@@ -13,6 +13,7 @@ function resetSimpleStore(): void {
     editorMode: 'simple',
     shots: [shot],
     selectedShotId: shot.id,
+    selectedShotIds: [],
     animation: compileShotsToAnimation([shot], [object]),
     playback: createDefaultPlayback(),
     simpleAutoKeyframe: false,
@@ -112,6 +113,26 @@ describe('简易模式 store 分片', () => {
     const inserted = state.shots.find((shot) => Math.abs(shot.time - 1) < 1e-6)
     expect(inserted?.objectStates[objectId].transform.position.x).toBe(6)
     expect(state.selectedShotId).toBe(inserted?.id)
+  })
+
+  it('批量删除关键帧：单条撤销记录、清空框选、重算过渡与选中', () => {
+    addShotAt(1)
+    addShotAt(2)
+    addShotAt(3)
+    const state = useCameraStageStore.getState()
+    expect(state.shots).toHaveLength(4)
+    const removeIds = [state.shots[1].id, state.shots[2].id]
+    useCameraStageStore.setState({ selectedShotIds: removeIds })
+
+    state.removeShots(removeIds)
+    const removed = useCameraStageStore.getState()
+    expect(removed.shots).toHaveLength(2)
+    expect(removed.selectedShotIds).toEqual([])
+    expect(removed.shots[0].transitionDuration).toBeCloseTo(3, 10)
+    expect(removed.selectedShotId).toBe(removed.shots[1].id)
+
+    useCameraStageStore.temporal.getState().undo()
+    expect(useCameraStageStore.getState().shots).toHaveLength(4)
   })
 
   it('简易模式零轨道但有镜头卡时长时仍可播放，专业模式保持禁用', () => {

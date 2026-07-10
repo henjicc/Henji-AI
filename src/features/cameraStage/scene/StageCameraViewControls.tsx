@@ -17,6 +17,11 @@ interface StageCameraViewControlsProps {
  */
 const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ cameraObject, lookAtTarget }) => {
   const controlsRef = useRef<OrbitControlsImpl>(null)
+  // OrbitControls 的 change 事件不仅来自用户拖拽——播放头 scrub 采样驱动相机移动、
+  // 下方 effect 的 controls.update() 都会触发。写回 store 必须限定在用户交互期间
+  //（start~end 之间），否则 scrub 会把采样值当成用户编辑一路写回（自动关键帧开启时
+  // 表现为拖动播放头疯狂插关键帧）。
+  const interactingRef = useRef(false)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
   const updateObject = useCameraStageStore((state) => state.updateObject)
 
@@ -28,7 +33,18 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
     controls.update()
   }, [lookAtTarget.x, lookAtTarget.y, lookAtTarget.z, cameraObject.id])
 
+  const handleStart = (): void => {
+    interactingRef.current = true
+    beginHistorySession()
+  }
+
+  const handleEnd = (): void => {
+    interactingRef.current = false
+    endHistorySession()
+  }
+
   const handleChange = (): void => {
+    if (!interactingRef.current) return
     const controls = controlsRef.current
     if (!controls) return
     const camera = controls.object
@@ -45,8 +61,8 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      onStart={beginHistorySession}
-      onEnd={endHistorySession}
+      onStart={handleStart}
+      onEnd={handleEnd}
       onChange={handleChange}
     />
   )

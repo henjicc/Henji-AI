@@ -12,6 +12,7 @@ import ShotTimecodeText from './timeline/ShotTimecodeText'
 import { formatShotTimecode } from './timeline/shotTimecodeFormat'
 import { quantizeToFrame } from './timeline/shotClipGeometry'
 import { SHOT_CLIP_TRACK_HEIGHT } from './timeline/shotTimelineLayout'
+import { useShotMarqueeSelect } from './timeline/useShotMarqueeSelect'
 
 /**
  * 简易模式时间轴面板：工具条（播放控制 + 时间码）→ 时间标尺（可拖 scrub）→ 比例块轨道 → 播放头竖线贯穿。
@@ -47,6 +48,9 @@ const ShotTimelinePanel: React.FC = () => {
   const simpleAutoKeyframe = useCameraStageStore((state) => state.simpleAutoKeyframe)
   const setSimpleAutoKeyframe = useCameraStageStore((state) => state.setSimpleAutoKeyframe)
   const setSelectedShotIdOnly = useCameraStageStore((state) => state.setSelectedShotIdOnly)
+  const selectedShotIds = useCameraStageStore((state) => state.selectedShotIds)
+  const setSelectedShotIds = useCameraStageStore((state) => state.setSelectedShotIds)
+  const removeShots = useCameraStageStore((state) => state.removeShots)
   const seek = useCameraStageStore((state) => state.seek)
 
   // 简易模式与专业模式保持一致：焦点不在输入控件时，空格播放/暂停。
@@ -124,8 +128,42 @@ const ShotTimelinePanel: React.FC = () => {
     setSelectedShotIdOnly(shot.id)
   }, [shots, currentTime, fps, selectedShotId, setSelectedShotIdOnly])
 
+  const marquee = useShotMarqueeSelect({
+    containerRef: scrollRef,
+    shots,
+    pxPerSecond,
+    onCommit: setSelectedShotIds,
+  })
+  // 拖拽中显示实时预览集合，松手后显示已提交集合
+  const highlightedShotIds = marquee.previewIds ?? selectedShotIds
+
+  // Delete/Backspace 删除框选或当前选中的关键帧；Escape 清空框选。
+  // 挂在面板容器上（React 冒泡）并 stopPropagation，避免触发全局"删除选中场景对象"快捷键。
+  const handlePanelKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>): void => {
+    const target = event.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+    if (event.key === 'Escape') {
+      if (useCameraStageStore.getState().selectedShotIds.length > 0) {
+        event.stopPropagation()
+        setSelectedShotIds([])
+      }
+      return
+    }
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    const state = useCameraStageStore.getState()
+    const ids = state.selectedShotIds.length > 0
+      ? state.selectedShotIds
+      : state.selectedShotId
+        ? [state.selectedShotId]
+        : []
+    if (ids.length === 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    removeShots(ids)
+  }, [removeShots, setSelectedShotIds])
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-app">
+    <div className="flex h-full min-h-0 flex-col bg-app" onKeyDown={handlePanelKeyDown}>
       <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border-dark bg-surface-dark px-2">
         <PlaybackButtons canPlay={shots.length > 0 && duration > 0} />
         <ShotTimecodeText currentTime={currentTime} duration={duration} fps={fps} />
@@ -141,7 +179,8 @@ const ShotTimelinePanel: React.FC = () => {
         <UiIconButton
           showBorder={false}
           appearance="hover-only"
-          className={`h-7 w-7 ${simpleAutoKeyframe ? 'bg-accent/10 text-accent' : 'text-text-muted'}`}
+          active={simpleAutoKeyframe}
+          className="h-7 w-7"
           title={simpleAutoKeyframe ? '自动关键帧已开启' : '开启自动关键帧'}
           aria-pressed={simpleAutoKeyframe}
           onClick={() => setSimpleAutoKeyframe(!simpleAutoKeyframe)}
@@ -151,7 +190,16 @@ const ShotTimelinePanel: React.FC = () => {
         <span className="ml-auto text-xs text-text-muted">状态关键帧</span>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto" onWheel={handleWheel}>
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        className="min-h-0 flex-1 overflow-auto outline-none"
+        onWheel={handleWheel}
+        onPointerDown={marquee.handlePointerDown}
+        onPointerMove={marquee.handlePointerMove}
+        onPointerUp={marquee.handlePointerUp}
+        onPointerCancel={marquee.handlePointerCancel}
+      >
         <div className="relative inline-block min-w-full">
           <TimeRuler
             duration={rulerDuration}
@@ -169,6 +217,7 @@ const ShotTimelinePanel: React.FC = () => {
             contentWidth={contentWidth}
             fps={fps}
             selectedShotId={selectedShotId}
+            multiSelectedShotIds={highlightedShotIds}
             currentTime={currentTime}
             onSelectShot={selectShot}
             onRenameShot={updateShotName}
@@ -203,6 +252,18 @@ const ShotTimelinePanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {marquee.rect && (
+        <div
+          className="pointer-events-none fixed z-50 border border-accent bg-accent/10"
+          style={{
+            left: marquee.rect.left,
+            top: marquee.rect.top,
+            width: marquee.rect.width,
+            height: marquee.rect.height,
+          }}
+        />
+      )}
     </div>
   )
 }

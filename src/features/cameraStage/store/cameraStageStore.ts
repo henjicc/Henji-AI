@@ -71,6 +71,8 @@ export interface CameraStageState {
   /** 镜头卡列表，随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
   shots: StageShot[]
   selectedShotId: string | null
+  /** 时间轴框选出的多个状态关键帧 id（界面态，不持久化、不进撤销历史） */
+  selectedShotIds: string[]
   /** 非关键帧时间编辑场景时，是否自动插入状态关键帧。 */
   simpleAutoKeyframe: boolean
   /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
@@ -78,6 +80,9 @@ export interface CameraStageState {
   addShot: () => void
   moveShotTime: (id: string, time: number) => void
   removeShot: (id: string) => void
+  /** 批量删除状态关键帧（框选后按 Delete），一次 set 合并为单条撤销记录 */
+  removeShots: (ids: string[]) => void
+  setSelectedShotIds: (ids: string[]) => void
   reorderShot: (id: string, toIndex: number) => void
   selectShot: (id: string) => void
   /** 只更新 selectedShotId，不应用快照/不移动播放头（界面态，不进撤销历史）；scrub 跟随选中用 */
@@ -287,6 +292,7 @@ export const useCameraStageStore = create<CameraStageState>()(
   editorMode: 'simple',
   shots: [initialShot],
   selectedShotId: initialShot.id,
+  selectedShotIds: [],
   simpleAutoKeyframe: false,
   focusToken: 0,
 
@@ -494,6 +500,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       editorMode: 'simple',
       shots,
       selectedShotId: shots[0].id,
+      selectedShotIds: [],
       simpleAutoKeyframe: false,
       focusToken: 0,
       }
@@ -519,6 +526,7 @@ export const useCameraStageStore = create<CameraStageState>()(
         editorMode: snapshot.editorMode ?? 'pro',
         shots: snapshot.shots ?? [],
         selectedShotId: snapshot.shots?.[0]?.id ?? null,
+        selectedShotIds: [],
         simpleAutoKeyframe: false,
         focusToken: 0,
       }

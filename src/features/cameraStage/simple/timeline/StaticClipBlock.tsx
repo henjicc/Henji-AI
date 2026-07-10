@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { Diamond, Trash2 } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiInput } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiIconButton, UiInput } from '@/components/ui'
 import type { StageCameraObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
 import type { ShotClipBlock } from './shotClipGeometry'
@@ -89,14 +89,16 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                   {formatShotTimecode(shot.time, 'secondsFrames', fps)}
                 </div>
               </div>
-              <UiButton
-                variant="ghost"
-                className="h-7 w-7 border-0 p-0 text-text-muted hover:text-danger"
+              <UiIconButton
+                showBorder={false}
+                appearance="hover-only"
+                hoverVariant="danger"
+                className="h-7 w-7 shrink-0"
                 title="删除关键帧"
                 onClick={onRemove}
               >
                 <Trash2 size={13} />
-              </UiButton>
+              </UiIconButton>
             </div>
             <label className="grid gap-1 text-[11px] text-text-muted">
               名称

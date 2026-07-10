@@ -21,6 +21,8 @@ export type ShotSliceActions = Pick<
   | 'addShot'
   | 'moveShotTime'
   | 'removeShot'
+  | 'removeShots'
+  | 'setSelectedShotIds'
   | 'reorderShot'
   | 'selectShot'
   | 'setSelectedShotIdOnly'
@@ -209,7 +211,31 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       const selectedShotId = state.selectedShotId === id
         ? shots[Math.min(index, shots.length - 1)]?.id ?? null
         : state.selectedShotId
-      return { shots, selectedShotId, animation: compile(shots, state.objects) }
+      return {
+        shots,
+        selectedShotId,
+        selectedShotIds: state.selectedShotIds.filter((shotId) => shotId !== id),
+        animation: compile(shots, state.objects),
+      }
+    }),
+    removeShots: (ids) => set((state) => {
+      const idSet = new Set(ids)
+      const shots = syncTransitionDurations(state.shots.filter((shot) => !idSet.has(shot.id)))
+      if (shots.length === state.shots.length) return {}
+      const firstRemovedIndex = state.shots.findIndex((shot) => idSet.has(shot.id))
+      const selectedShotId = state.selectedShotId && !idSet.has(state.selectedShotId)
+        ? state.selectedShotId
+        : shots[Math.min(firstRemovedIndex, shots.length - 1)]?.id ?? null
+      logger.debug('批量删除状态关键帧', {
+        event: 'simple_mode.keyframe.batch_removed',
+        removedCount: state.shots.length - shots.length,
+        remainCount: shots.length,
+      })
+      return { shots, selectedShotId, selectedShotIds: [], animation: compile(shots, state.objects) }
+    }),
+    setSelectedShotIds: (ids) => set((state) => {
+      if (state.selectedShotIds.length === 0 && ids.length === 0) return {}
+      return { selectedShotIds: ids }
     }),
     reorderShot: (id, toIndex) => set((state) => {
       const fromIndex = state.shots.findIndex((shot) => shot.id === id)
@@ -231,6 +257,7 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       const activeCameraId = isCameraId(state.objects, shot.cameraId) ? (shot.cameraId as string) : state.activeCameraId
       return {
         selectedShotId: id,
+        selectedShotIds: [],
         objects: applyShotToObjects(state.objects, shot),
         activeCameraId,
         playback: { ...state.playback, playing: false, currentTime: time },
