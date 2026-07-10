@@ -5,6 +5,7 @@ import { AnimationMixer, Bone, Euler, Group, LoopRepeat, Mesh, MeshStandardMater
 import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
 import { DEFAULT_CHARACTER_MOTION } from '../domain/characterMotion'
+import { resolveCharacterMotionAtTime } from '../domain/animationTypes'
 import { POSE_JOINT_BONES } from '../domain/poseTypes'
 import type { StagePoseJointId } from '../domain/poseTypes'
 import { poseJointPath } from '../domain/animatableProps'
@@ -66,7 +67,13 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
   const rig = useMemo(() => buildRig(gltf.scene as Group), [gltf.scene])
   const mixer = useMemo(() => new AnimationMixer(rig.scene), [rig])
   const material = useMemo(() => new MeshStandardMaterial(), [])
-  const motion = object.motion ?? DEFAULT_CHARACTER_MOTION
+  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
+  const motionSchedule = useCameraStageStore((state) => state.animation.motionSchedule)
+  const resolvedMotion = useMemo(
+    () => resolveCharacterMotionAtTime(motionSchedule, object.id, currentTime, object.motion ?? DEFAULT_CHARACTER_MOTION),
+    [currentTime, motionSchedule, object.id, object.motion],
+  )
+  const motion = resolvedMotion.motion
   const activeClip = useMemo(() => {
     if (motion.mode !== 'clip') return null
     return gltf.animations.find((clip) => clip.name === motion.clipName) ?? null
@@ -140,7 +147,7 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
   useFrame(() => {
     if (motion.mode === 'clip' && activeClip) {
       const { currentTime } = useCameraStageStore.getState().playback
-      mixer.setTime(currentTime * motion.speed)
+      mixer.setTime(Math.max(0, currentTime - resolvedMotion.timeOrigin) * motion.speed)
     }
   })
 

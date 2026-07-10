@@ -7,6 +7,7 @@
  */
 
 import type { StageVec3 } from './sceneTypes'
+import type { StageCharacterMotion } from './characterMotion'
 
 /** 关键帧可承载三类值：标量（数值）、Vec3（逐分量）、颜色（hex 字符串） */
 export type StageKeyframeValue = number | StageVec3 | string
@@ -44,9 +45,40 @@ export interface StageTrack {
   keyframes: StageKeyframe[]
 }
 
+/** 简易模式编译出的角色临时动作区间；结束后切换到目标镜头卡动作。 */
+export interface StageCharacterMotionScheduleEntry {
+  objectId: string
+  startTime: number
+  endTime: number
+  motion: StageCharacterMotion
+  afterMotion: StageCharacterMotion
+}
+
+export interface ResolvedCharacterMotion {
+  motion: StageCharacterMotion
+  timeOrigin: number
+}
+
+/** 解析指定时刻的角色动作；区间结束后沿用目标卡动作，直到后续区间覆盖。 */
+export function resolveCharacterMotionAtTime(
+  schedule: StageCharacterMotionScheduleEntry[],
+  objectId: string,
+  time: number,
+  fallback: StageCharacterMotion,
+): ResolvedCharacterMotion {
+  let resolved: ResolvedCharacterMotion = { motion: fallback, timeOrigin: 0 }
+  for (const entry of schedule) {
+    if (entry.objectId !== objectId || time < entry.startTime) continue
+    if (time < entry.endTime) return { motion: entry.motion, timeOrigin: entry.startTime }
+    resolved = { motion: entry.afterMotion, timeOrigin: entry.endTime }
+  }
+  return resolved
+}
+
 /** 场景级动画状态：轨道集合 + 时长 + 帧率 */
 export interface StageSceneAnimation {
   tracks: StageTrack[]
+  motionSchedule: StageCharacterMotionScheduleEntry[]
   /** 秒 */
   duration: number
   /** 仅显示/导出用 */
@@ -65,7 +97,7 @@ export const CAMERA_STAGE_DEFAULT_DURATION = 5
 export const CAMERA_STAGE_DEFAULT_FPS = 30
 
 export function createDefaultAnimation(): StageSceneAnimation {
-  return { tracks: [], duration: CAMERA_STAGE_DEFAULT_DURATION, fps: CAMERA_STAGE_DEFAULT_FPS }
+  return { tracks: [], motionSchedule: [], duration: CAMERA_STAGE_DEFAULT_DURATION, fps: CAMERA_STAGE_DEFAULT_FPS }
 }
 
 export function createDefaultPlayback(): StagePlaybackState {

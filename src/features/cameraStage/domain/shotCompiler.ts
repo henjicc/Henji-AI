@@ -22,12 +22,14 @@ import {
   type StageEasingPreset,
   type StageKeyframe,
   type StageKeyframeValue,
+  type StageCharacterMotionScheduleEntry,
   type StageSceneAnimation,
   type StageTrack,
 } from './animationTypes'
 import { upsertKeyframe } from './keyframeEngine'
 import type { StageObject, StageVec3 } from './sceneTypes'
 import { compileCameraMoveSamples } from './shotCameraMovePresets'
+import { inferCharacterTransition } from './characterTransitionInference'
 import type { StageCameraMove, StageShot, StageShotObjectState, StageSpeedPreset } from './shotTypes'
 
 /** scalar 属性差异容差：|a-b| 不超过该值视为未变化 */
@@ -223,9 +225,40 @@ function compileObjectTransition(
   easing: StageEasingPreset,
   holdGuard: HoldGuard,
   cameraLookAtTarget?: StageVec3,
+  motionSchedule?: StageCharacterMotionScheduleEntry[],
+  motionOverride?: import('./characterMotion').StageCharacterMotion,
 ): void {
   const fromObject = mergeStateIntoObject(object, fromState)
   const toObject = mergeStateIntoObject(object, toState)
+  const characterInference = object.type === 'character'
+    ? inferCharacterTransition(fromState, toState, segEnd - segStart, motionOverride)
+    : null
+
+  if (characterInference?.motion && motionSchedule) {
+    motionSchedule.push({
+      objectId: object.id,
+      startTime: segStart,
+      endTime: segEnd,
+      motion: characterInference.motion,
+      afterMotion: toState.motion ?? (object.type === 'character' ? object.motion : { mode: 'pose' }),
+    })
+    for (const point of characterInference.facingYawKeyframes) {
+      writeKeyframe(trackMap, object.id, 'transform.rotation.y', {
+        time: segStart + (segEnd - segStart) * point.timeRatio,
+        value: point.yaw,
+        easing: 'easeInOut',
+      })
+    }
+    if (holdGuard.enabled) {
+      const targetYaw = characterInference.facingYawKeyframes[characterInference.facingYawKeyframes.length - 1]?.yaw
+        ?? toState.transform.rotation.y
+      writeKeyframe(trackMap, object.id, 'transform.rotation.y', {
+        time: holdGuard.time,
+        value: targetYaw,
+        easing: 'linear',
+      })
+    }
+  }
 
   for (const group of listAnimatableGroups(object)) {
     if (isCameraPositionMoveGroup(object, group, move)) {
@@ -244,6 +277,7 @@ function compileObjectTransition(
     }
 
     for (const descriptor of group.children) {
+      if (characterInference?.motion && descriptor.path === 'transform.rotation.y') continue
       const fromValue = descriptor.getValue(fromObject)
       const toValue = descriptor.getValue(toObject)
       if (!hasPropertyChanged(descriptor.valueType, fromValue, toValue)) continue
@@ -302,12 +336,13 @@ function finalizeTracks(trackMap: TrackMap): StageTrack[] {
  */
 export function compileShotsToAnimation(shots: StageShot[], objects: StageObject[]): StageSceneAnimation {
   if (shots.length === 0) {
-    return { tracks: [], duration: 0, fps: CAMERA_STAGE_DEFAULT_FPS }
+    return { tracks: [], motionSchedule: [], duration: 0, fps: CAMERA_STAGE_DEFAULT_FPS }
   }
 
   const timeline = buildShotTimeline(shots)
   const duration = timeline[timeline.length - 1].transitionEnd
   const trackMap: TrackMap = new Map()
+  const motionSchedule: StageCharacterMotionScheduleEntry[] = []
 
   for (let i = 0; i < shots.length - 1; i += 1) {
     const fromShot = shots[i]
@@ -333,9 +368,22 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
           ? resolveShotLookAtTarget(fromState, fromShot, objects)
           : undefined
 
-      compileObjectTransition(trackMap, object, fromState, toState, move, segStart, segEnd, easing, holdGuard, cameraLookAtTarget)
+      compileObjectTransition(
+        trackMap,
+        object,
+        fromState,
+        toState,
+        move,
+        segStart,
+        segEnd,
+        easing,
+        holdGuard,
+        cameraLookAtTarget,
+        motionSchedule,
+        detail?.motionOverride,
+      )
     }
   }
 
-  return { tracks: finalizeTracks(trackMap), duration, fps: CAMERA_STAGE_DEFAULT_FPS }
+  return { tracks: finalizeTracks(trackMap), motionSchedule, duration, fps: CAMERA_STAGE_DEFAULT_FPS }
 }

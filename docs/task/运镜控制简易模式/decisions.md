@@ -30,3 +30,11 @@
 - **环绕/运镜目标点解析新增 `resolveShotLookAtTarget`（shotCompiler.ts），不复用 `cameraUtils.ts` 的 `resolveCameraLookAtTarget`**：后者的入参是"当前场景实时对象数组"，返回的是目标对象**当前**位置；而 1.3 需要的是"过渡起始卡（fromShot）快照中的目标位置"（对齐任务文件"当前情况"给出的一期简化约定：目标自身在本段过渡中的移动不追踪，取过渡起始卡的目标位置）。两者数据源不同，无法直接复用，因此新写了一个从 `StageShot.objectStates` 取值的版本；但朝向偏移算法本身（`manual` 直接用 target；`object` 模式若目标是角色则取 `position.y + 1 * scale.y` 的胸口高度）完全对齐 `cameraUtils.ts` 的 `getObjectLookAtPoint`，只是数据来源换成快照，避免出现两套不一致的"目标点怎么算"逻辑。
 - **向量数学工具保留在 `shotCameraMovePresets.ts` 内部，未扩展/复用 `cameraUtils.ts`**：`cameraUtils.ts` 现有内容全部是"lookAt 目标解析"相关（`getObjectLookAtPoint`/`resolveCameraLookAtTarget`/`getCameraObjects`），关注点是"给定对象和 lookAt 配置，算出应该看向哪里"；而运镜预设需要的是"给定位置向量做加减/缩放/绕轴旋转"这类通用几何运算，两者关注点不同。加上 `shotCameraMovePresets.ts` 全部实现只有 207 行、体积充裕，向量工具函数（`addVec3`/`subVec3`/`scaleVec3`/`rotateAroundY`）保持 file-private 更符合"就近声明、不过度抽象"的原则，未来如果其他模块也需要这些通用向量运算，再考虑上提为共享工具。
 - **摄像机朝向机制验证结论（未过时）**：执行时重新读取 `src/features/cameraStage/scene/StageViewportCamera.tsx` 确认——真实渲染相机的朝向由 `camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z)` 在位置采样回调（`registerPlaybackApplier(cameraObject.id, 'transform.position', ...)`）与初始 `useLayoutEffect` 中每次都重新计算，不读取任何 `transform.rotation` 关键帧轨道；`animatableProps.ts` 的 `TRANSFORM_GROUPS` 对 `rotation`/`scale` 两个分组用 `notCamera` 过滤，摄像机对象在可动画属性注册表里本来就没有这两个分组。验证方式：`Grep` 定位到 `StageViewportCamera.tsx` 后通读全文件（71 行），逐行确认 `camera.position.set` 与 `camera.lookAt` 的调用时机和数据来源。结论与 handoff.md/任务文件给出的预判完全一致、未过时，因此本任务的运镜预设编译**只生成位置关键帧**，不涉及旋转轨道，不需要为"摄像机朝向"额外做任何编译或渲染层改动。
+
+## 1.4 角色自动走跑与朝向推断
+
+- **动作时间表采用方案 A 并归属 `StageSceneAnimation`**：它是镜头卡编译产物，不是 shots 权威源，也不是专业关键帧轨道；与 animation 一起进入 store/序列化可确保播放、scrub、导出读取同一份确定性数据，同时避免扩展 keyframeEngine/专业时间轴的值类型。
+- **时间表项显式携带 `afterMotion`**：仅记录过渡期间 motion 不足以表达“到达后恢复 B 卡动作”，而当前 store 对象的 motion 不保证等于任意镜头卡快照。解析器在区间结束后沿用 `afterMotion`，直到下一条时间表覆盖。
+- **速度按水平位移计算**：走跑与面朝方向忽略 Y 轴高度变化，避免角色乘电梯/跳高时误触发跑步。阈值定稿为 `<0.1m/s` 不触发、`0.1～<1.8` Walk、`1.8～<4` Jog、`>=4` Sprint，一期播放速度固定 1。
+- **朝向覆盖通用 rotation.y 两点轨道**：有效位移时生成 0% 原朝向、15% 移动朝向、85% 移动朝向、100% B 卡朝向四点；用角度展开保证相邻点最短旋转。其他旋转分量与无位移场景仍走通用差异编译。
+- **`motionOverride` 不强制无位移角色播放动作**：覆盖项只替换已经触发移动推断的动作选择；低于阈值仍不生成 schedule，避免“角色未移动但因过渡详情残留而原地跑步”。

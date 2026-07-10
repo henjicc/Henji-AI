@@ -7,6 +7,38 @@ import { compileShotsToAnimation } from './shotCompiler'
 import { createShot } from './shotTypes'
 
 describe('compileShotsToAnimation', () => {
+  it('角色位移生成转身轨道与可覆盖的动作时间表', () => {
+    const character = createCharacterObject('Character', pickDefaultColor(1))
+    const shotA = createShot([character], '卡1')
+    shotA.hold = 1
+    shotA.transitionDuration = 1
+    shotA.transition.perObject[character.id] = {
+      motionOverride: { mode: 'clip', clipName: 'Walk_Formal_Loop', speed: 0.8 },
+    }
+    const shotB = createShot([character], '卡2')
+    shotB.objectStates[character.id] = {
+      ...shotB.objectStates[character.id],
+      transform: {
+        ...shotB.objectStates[character.id].transform,
+        position: { ...shotB.objectStates[character.id].transform.position, x: 3 },
+      },
+    }
+    shotB.objectStates[character.id].motion = { mode: 'clip', clipName: 'Idle_Loop', speed: 1 }
+
+    const animation = compileShotsToAnimation([shotA, shotB], [character])
+    const yawTrack = animation.tracks.find((track) => track.propertyPath === 'transform.rotation.y')
+
+    expect(yawTrack?.keyframes).toHaveLength(4)
+    expect(yawTrack?.keyframes[1].value).toBeCloseTo(90, 5)
+    expect(animation.motionSchedule).toEqual([{
+      objectId: character.id,
+      startTime: 1,
+      endTime: 2,
+      motion: { mode: 'clip', clipName: 'Walk_Formal_Loop', speed: 0.8 },
+      afterMotion: { mode: 'clip', clipName: 'Idle_Loop', speed: 1 },
+    }])
+  })
+
   it('两卡仅一个对象位置变化时，只为变化分量建轨道，关键帧时间与 hold/过渡时长吻合', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
     const shotA = createShot([box], '卡1')

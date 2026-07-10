@@ -33,3 +33,13 @@
 - 新建单元测试 `shotCameraMovePresets.test.ts`（165 行，10 个用例）+ `shotCompiler.test.ts` 新增 2 个集成用例：覆盖 orbit 180° 半径恒定/角度差 180°、~15° 采样密度、cw/ccw 方向相反、degrees=0 退化、dollyIn/dollyOut 距离比例、truck 横移正交性、crane 升降、easeInOut 时间重映射非均匀、linear 时间重映射均匀、编译集成（orbit 产物可被 `sampleTrack` 采样且弦-弧误差在容差内、B 卡机位被几何覆盖）、fov 变化不受运镜预设误伤。
 - 验证：`npm run test`（25/25 通过，含 1.2 遗留 13 个用例全部仍通过）、`npm run lint`（通过）、`npx tsc --noEmit`（前端，通过）、`npx tsc -p tsconfig.electron.json --noEmit`（通过）。
 - 遗留：无功能性遗留，5 种预设（含 direct）全部实现。2.3（细节层 UI）需要暴露 `StageCameraMove` 全部参数（orbit 的 degrees/direction、dolly 的 distanceRatio、truck 的 offset、crane 的 height），详见 handoff.md。
+
+## 1.4 角色自动走跑与朝向推断 —— 已完成
+
+- 日期：2026-07-10
+- 新建 `characterTransitionInference.ts`：纯函数推断水平位移平均速度、Walk/Jog/Sprint 动作与朝向关键点；支持跨 ±180° 最短路径和 `motionOverride`。
+- `StageSceneAnimation` 新增 `motionSchedule`；编译器为有效角色位移生成四点 rotation.y 转身轨道及临时动作区间，区间结束恢复目标卡 motion。
+- `CharacterModel` 按 currentTime 解析 schedule，沿用 `AnimationMixer.setTime` 确定性 seek；未新增 motion 关键帧类型。
+- `sceneSerialization.parseAnimation` 对旧动画缺少 schedule 时回退空数组。
+- 验证：`npm run test` 32/32、`npm run lint`、前端 tsc、Electron tsc 全通过。
+- 遗留：真实角色视口动作需等 2.2 提供镜头卡交互后，由用户按任务文件步骤手动验收。

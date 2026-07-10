@@ -42,3 +42,19 @@
 - `src/features/cameraStage/domain/shotTypes.ts`（237→260 行）：`StageCameraMove` 判别联合从骨架（`direct`/`orbit`/`dollyIn`/`dollyOut`，dolly 无参数）扩展为定稿版（`dollyIn`/`dollyOut` 补 `distanceRatio` 参数；新增 `truck: { offset }`、`crane: { height }`）；`normalizeCameraMove` 同步扩展解析与安全兜底。
 - `src/features/cameraStage/domain/shotCompiler.ts`（249→341 行）：新增 `isCameraPositionAxisPath`/`isCameraPositionMoveGroup`/`compileCameraPositionGroup`/`resolveShotLookAtTarget` 四个函数；`compileTransitionPoints` 增加 `propertyPath` 参数与防御性断言（详见 decisions.md）；`compileObjectTransition` 增加可选参数 `cameraLookAtTarget?: StageVec3`，分组循环内对摄像机 `transform.position` 分组做特殊拦截；`compileShotsToAnimation` 主循环内新增 `cameraLookAtTarget` 解析与透传。原 TODO(1.3) 注释已替换为指向新函数的说明。
 - `src/features/cameraStage/domain/shotCompiler.test.ts`（214→271 行，13→15 个用例）：新增 `describe('摄像机运镜预设接入（1.3）')` 块，含 2 个集成用例（orbit 编译产物几何验证、fov 变化不受运镜预设误伤）。
+
+## 1.4 角色自动走跑与朝向推断
+
+### 新增
+
+- `src/features/cameraStage/domain/characterTransitionInference.ts`：角色位移、速度分级、朝向最短路径与覆盖动作推断纯函数。
+- `src/features/cameraStage/domain/characterTransitionInference.test.ts`：速度边界、低速阈值、跨 ±180°、motionOverride 共 6 个用例。
+
+### 修改
+
+- `src/features/cameraStage/domain/animationTypes.ts`：新增 `StageCharacterMotionScheduleEntry`、`motionSchedule` 与 `resolveCharacterMotionAtTime`。
+- `src/features/cameraStage/domain/sceneSerialization.ts`：动画宽松解析补 motionSchedule 兼容回退。
+- `src/features/cameraStage/domain/shotCompiler.ts`：接入角色推断、朝向轨道和动作时间表。
+- `src/features/cameraStage/domain/shotCompiler.test.ts`：新增角色编译集成用例。
+- `src/features/cameraStage/scene/CharacterModel.tsx`：按播放头消费时间表并以区间起点作为动作 seek 原点。
+- `docs/task/运镜控制简易模式/` 下计划与五类任务记录：同步 1.4 完成状态、设计决策、测试与交接。

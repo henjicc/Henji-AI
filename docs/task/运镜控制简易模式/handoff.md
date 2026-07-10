@@ -1,5 +1,15 @@
 # 运镜控制简易模式 · 任务交接
 
+## 1.4 完成交接（交给 2.1 / 2.3 / 3.2）
+
+- `compileShotsToAnimation` 返回类型仍是 `StageSceneAnimation`，但该类型现含必需字段 `motionSchedule`；空编译与默认动画均返回空数组，旧持久化数据由 `parseAnimation` 补空数组。
+- 时间表项为 `{ objectId, startTime, endTime, motion, afterMotion }`。`CharacterModel` 已通过 `resolveCharacterMotionAtTime` 消费，过渡内从区间起点 seek 临时 clip，结束后恢复目标卡动作。
+- 2.1 每次 shots 变化重编译并写入完整 animation 即可，不需另建 schedule store 字段；不要丢弃 `motionSchedule`。
+- 2.3 的 `motionOverride` 已贯通编译器；它只覆盖达到移动阈值后的自动分级，无位移/低速不会原地播放覆盖动作。
+- 3.2 烘焙为专业工程时必须保留 `animation.motionSchedule`；若未来引入专业离散动作轨道，再做显式转换，当前不要清空。
+- 朝向轨道路径是 `transform.rotation.y`，有效位移时为四点（0/15/85/100%）；Y 轴位移不参与走跑速度和朝向计算。
+- 真实视口手动验收尚未执行，需等 2.2 镜头卡 UI 可操作后按 `test-report.md` 步骤交给用户验证。
+
 ## 交给 1.3（摄像机运镜预设编译）与 1.4（角色自动走跑与朝向推断）需要知道的接口
 
 两者都在 `src/features/cameraStage/domain/shotCompiler.ts` 基础上扩展，互相独立、可并行；不需要改动 `compileShotsToAnimation` 的外层结构（时间轴布点、错峰延迟、停留段守护点、去重）。

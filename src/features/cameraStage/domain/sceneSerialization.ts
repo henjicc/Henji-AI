@@ -76,8 +76,12 @@ function parseAnimation(raw: unknown): StageSceneAnimation {
     : fallback.tracks
   const duration = Number(record.duration)
   const fps = Number(record.fps)
+  const motionSchedule = Array.isArray(record.motionSchedule)
+    ? (record.motionSchedule as StageSceneAnimation['motionSchedule'])
+    : fallback.motionSchedule
   return {
     tracks,
+    motionSchedule,
     duration: Number.isFinite(duration) && duration > 0 ? duration : fallback.duration,
     fps: Number.isFinite(fps) && fps > 0 ? Math.round(fps) : fallback.fps,
   }
