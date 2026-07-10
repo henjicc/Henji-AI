@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { AnimationMixer, Bone, Euler, Group, LoopRepeat, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
-import type { AnimationAction } from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { getBodyVariant } from '../domain/bodyVariants'
 import { DEFAULT_CHARACTER_MOTION } from '../domain/characterMotion'
 import { POSE_JOINT_BONES } from '../domain/poseTypes'
 import type { StagePoseJointId } from '../domain/poseTypes'
 import { poseJointPath } from '../domain/animatableProps'
+import { useCameraStageStore } from '../store/cameraStageStore'
 import { registerPlaybackApplier } from '../store/playbackAppliers'
 import type { StageCharacterObject, StageVec3 } from '../domain/sceneTypes'
 
@@ -65,7 +65,6 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
   const gltf = useGLTF(url)
   const rig = useMemo(() => buildRig(gltf.scene as Group), [gltf.scene])
   const mixer = useMemo(() => new AnimationMixer(rig.scene), [rig])
-  const actionRef = useRef<AnimationAction | null>(null)
   const material = useMemo(() => new MeshStandardMaterial(), [])
   const motion = object.motion ?? DEFAULT_CHARACTER_MOTION
   const activeClip = useMemo(() => {
@@ -120,10 +119,9 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
     }
   }, [activeClip, rig, object.pose, motion.mode])
 
-  // 仅在片段本身变化时重建 action；速度变化走下方 timeScale effect，避免拖动速度滑杆时动画从头重播
+  // 仅在片段本身变化时重建 action；播放位置和速度统一由时间轴驱动，避免速度调整时重播。
   useEffect(() => {
     mixer.stopAllAction()
-    actionRef.current = null
     if (!activeClip) return undefined
 
     const action = mixer.clipAction(activeClip, rig.scene)
@@ -133,22 +131,16 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
     action.enabled = true
     action.play()
     mixer.update(0)
-    actionRef.current = action
 
     return () => {
       action.stop()
-      actionRef.current = null
     }
   }, [activeClip, mixer, rig.scene])
 
-  useEffect(() => {
-    if (motion.mode !== 'clip' || !actionRef.current) return
-    actionRef.current.timeScale = motion.speed
-  }, [motion])
-
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (motion.mode === 'clip' && activeClip) {
-      mixer.update(Math.min(delta, 0.1))
+      const { currentTime } = useCameraStageStore.getState().playback
+      mixer.setTime(currentTime * motion.speed)
     }
   })
 
