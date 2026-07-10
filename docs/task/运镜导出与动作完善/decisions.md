@@ -31,3 +31,17 @@
 
 - 决策：ffmpeg stderr 增量解析出的编码帧数由发起 `startFrameExport` 的 IPC sender 定向推送，payload 带 `sessionId`；渲染层只消费当前会话事件并在导出 `finally` 注销订阅。
 - 原因：避免多窗口或连续导出串扰，且避免 preload 事件监听在取消、失败、完成后残留。
+
+## 2026-07-10：离屏渲染选型建议待用户确认
+
+- 建议：选择方案 B 的单 renderer + `WebGLRenderTarget` 变体；不创建第二个 WebGL renderer。
+- 依据：当前 `StageCaptureBridge` 位于 R3F Canvas 内部，可取得 `gl`、`scene` 和默认的 `StageViewportCamera`；逐帧 seek 后该相机已具备正确姿态。RenderTarget 能以目标尺寸直接渲染，且不会改动可见 canvas、R3F `size` 状态或视口相机。
+- 取舍：须实现像素读回、Y 翻转、颜色空间对齐、缓冲复用与 target dispose；换取导出期间无闪变、无视口分辨率依赖。方案 A 虽改动较少，但共享 renderer 尺寸与自动渲染的恢复风险不可接受为默认方案。
+- 状态：未定案，等待用户在方案 B 与方案 A 间确认后才实施。
+
+## 2026-07-10：离屏渲染采用方案 B
+
+- 决策：用户确认单 renderer + `WebGLRenderTarget` 变体；不创建第二个 WebGL renderer。
+- 落地：目标尺寸视频帧以克隆后的默认透视相机渲染到 target，读回 RGBA 后 Y 翻转并编码为 PNG bytes。视频路径不再执行 dataURL 居中裁剪/上采样；截图保持原链路。
+- 资源：每帧 finally 恢复 renderer target、viewport、scissor、scissor test 与 autoClear；视频导出 finally 和组件卸载均 dispose target。
+- 状态：已完成。

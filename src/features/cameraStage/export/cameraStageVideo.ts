@@ -8,7 +8,6 @@ import {
 import { createLogger } from '@/core/logging'
 import { QUICK_DOWNLOAD_SETTING_SPECS, readLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 import { join, saveDialog, toDisplaySrc } from '@/platform/desktopApi'
-import { cropDataUrlToAspectRatioBytes } from './cameraStageAspectCrop'
 
 const logger = createLogger('cameraStage.videoExport')
 
@@ -27,11 +26,11 @@ export interface CameraStageVideoExportResult {
 export interface CameraStageVideoExportOptions {
   projectName: string
   cameraRatio: number
-  backgroundColor: string
   fps: number
   durationSeconds: number
   resolutionPreset: CameraStageVideoResolutionPreset
-  captureFrame: () => string | null
+  captureFrame: (targetSize: { width: number; height: number }) => Promise<Uint8Array | null>
+  disposeCaptureFrame: () => void
   seekFrame: (time: number) => Promise<void>
   onProgress: (progress: CameraStageVideoExportProgress) => void
   onSession: (sessionId: string | null) => void
@@ -90,20 +89,19 @@ export async function exportCameraStageVideo(
     })
     sessionId = session.sessionId
     options.onSession(sessionId)
+    logger.info('离屏视频导出开始', {
+      event: 'camera_stage.video_export.start',
+      taskId: sessionId,
+      context: { width, height, frameCount, fps: options.fps },
+    })
 
     for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
       throwIfCancelled(options)
       const time = Math.min(options.durationSeconds, frameIndex / options.fps)
       await options.seekFrame(time)
       await waitForCameraStageRender()
-      const rawDataUrl = options.captureFrame()
-      if (!rawDataUrl) throw new Error('未获取到当前帧画面')
-      const bytes = await cropDataUrlToAspectRatioBytes(
-        rawDataUrl,
-        options.cameraRatio,
-        options.backgroundColor,
-        { width, height },
-      )
+      const bytes = await options.captureFrame({ width, height })
+      if (!bytes) throw new Error('未获取到当前离屏视频帧')
       await appendVideoFrameExport({ sessionId, frameIndex, bytes })
       options.onProgress({ phase: 'rendering', doneFrames: frameIndex + 1, totalFrames: frameCount })
     }
@@ -113,6 +111,11 @@ export async function exportCameraStageVideo(
     const result = await finishVideoFrameExport({ sessionId, targetPath })
     sessionId = null
     options.onSession(null)
+    logger.info('离屏视频导出完成', {
+      event: 'camera_stage.video_export.completed',
+      taskId: session.sessionId,
+      context: { width, height, frameCount },
+    })
     return {
       mediaUrl: toDisplaySrc(result.mediaPath),
       ...result,
@@ -124,11 +127,21 @@ export async function exportCameraStageVideo(
       })
     }
     options.onSession(null)
-    if (options.isCancelled()) return null
-    logger.error('[cameraStage] 动画视频导出失败', error)
+    if (options.isCancelled()) {
+      logger.info('离屏视频导出已取消', {
+        event: 'camera_stage.video_export.cancelled',
+        taskId: sessionId ?? undefined,
+      })
+      return null
+    }
+    logger.error('离屏视频导出失败', error, {
+      event: 'camera_stage.video_export.failed',
+      taskId: sessionId ?? undefined,
+    })
     throw error
   } finally {
     unsubscribeProgress()
+    options.disposeCaptureFrame()
   }
 }
 

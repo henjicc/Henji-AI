@@ -153,11 +153,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       const result = await exportCameraStageVideo({
         projectName: useCameraStageStore.getState().currentProjectName,
         cameraRatio: activeCamera.aspectRatio.ratio,
-        backgroundColor: skyColor,
         fps: animation.fps,
         durationSeconds: animation.duration,
         resolutionPreset: videoPreset,
-        captureFrame: () => captureRef.current?.() ?? null,
+        captureFrame: async (targetSize) => captureRef.current?.(targetSize) ?? null,
+        disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
         seekFrame: async (time) => {
           useCameraStageStore.getState().seek(time)
           await waitForCameraStageRender()
@@ -188,7 +188,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       videoCancelRef.current = false
       setVideoProgress(null)
     }
-  }, [activeCamera, animation, skyColor, videoPreset, videoProgress])
+  }, [activeCamera, animation, videoPreset, videoProgress])
 
   const handleCancelVideoExport = useCallback((): void => {
     videoCancelRef.current = true

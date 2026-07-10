@@ -40,3 +40,24 @@
 - preload、PAL、`src/commands/video.ts` 新增 `onFrameExportProgress` / `onVideoFrameExportProgress` 订阅并返回注销函数。
 - `cameraStageVideo.ts` 对当前 sessionId 过滤进度，并在 `finally` 注销；编码开始显示 `0/total`，`CameraStageEditor` 显示“编码 x/y”。
 - 四项静态检查通过。需要真实 Electron 窗口验证进度增长及编码阶段取消；涉及主进程/preload，需重启 `npm run electron:dev`。
+
+## 3.2 离屏渲染目标分辨率导出（已阻塞，待用户确认）
+
+- 技术定位已完成，未改产品代码：`StageCaptureBridge` 目前仅从 `gl.domElement` 读取视口 PNG；`exportCameraStageVideo` 再裁剪、缩放。
+- 推荐用户确认方案 B：扩展捕获桥以提供目标尺寸 PNG bytes，复用现有 renderer，使用 `WebGLRenderTarget` 对当前 scene 和克隆后的默认相机进行离屏渲染。不要新建第二 renderer。
+- 方案 B 实施时需：每次 seek/渲染完成后克隆默认相机并按输出宽高更新 aspect；复用 RenderTarget/RGBA 缓冲/2D 编码画布；`finally` 恢复 renderer target/clear 状态并 dispose；读回像素 Y 翻转，设置 target texture color space 与 renderer 输出一致。
+- 视频导出应改直接消费离屏 PNG bytes，去除视频路径中的 `cropDataUrlToAspectRatioBytes()`；截图继续走现有 `StageCaptureFn` dataURL + 裁剪，避免功能回归。
+- 用户确认前，不得实施步骤 2 或提交产品代码。仅渲染层预计可热更新；实际实现完成后再给出正式重启结论。
+
+## 3.2 离屏渲染目标分辨率导出（已完成）
+
+- 用户确认方案 B 后，`StageCaptureFn` 已支持带目标尺寸的异步离屏 PNG bytes 捕获，并为视频导出提供 `disposeOffscreen()`。
+- 每帧克隆默认透视相机、更新目标 aspect，复用 RenderTarget/RGBA 缓冲/翻转缓冲/2D 编码画布；target texture colorSpace 对齐 renderer 输出，Y 翻转后生成 PNG bytes。
+- 每帧 finally 恢复 renderer target、viewport、scissor、scissor test 与 autoClear；视频导出 finally 主动释放 target，组件卸载亦兜底释放。
+- `cameraStageVideo.ts` 已直接消费离屏 PNG bytes，视频路径不再调用 `cropDataUrlToAspectRatioBytes()`；截图无参捕获与 dataURL 裁剪保持不变。
+- 仅渲染层改动，Electron 开发模式会热更新；无需重启 `npm run electron:dev`。真实 Electron 验收仍待用户执行。
+
+## 最终任务状态
+
+- 六项计划任务均已实现、审查并提交；未遗留待实现代码。
+- 真实 Electron 手测尚未由用户执行，步骤集中在 `test-report.md`；涉及主进程/preload 的 2.1、2.2、3.1 验收前须重启开发进程。

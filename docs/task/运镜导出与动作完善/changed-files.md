@@ -67,3 +67,24 @@
   - 当前会话消费真实进度、finally 清理订阅，并显示“编码 x/y”。
 - `docs/task/运镜导出与动作完善/{00-任务总览,重要记录,progress,decisions,handoff,changed-files,test-report}.md`
   - 同步第三阶段确认、3.1 实现、验证与交接。
+
+## 3.2 离屏渲染目标分辨率导出（技术选型验证，未实施产品代码）
+
+- `docs/task/运镜导出与动作完善/重要记录.md`
+  - 记录 003 回填当前捕获/相机边界、A/B 风险比较、方案 B 推荐与待用户确认项。
+- `docs/task/运镜导出与动作完善/任务/第三阶段-导出体验增强/3.2-离屏渲染目标分辨率导出.md`
+  - 更新为已阻塞，写入架构定位和小规模验证结论。
+- `docs/task/运镜导出与动作完善/{progress,decisions,handoff,changed-files,test-report}.md`
+  - 记录选型状态、实施交接与当前无产品代码测试的事实。
+
+## 3.2 离屏渲染目标分辨率导出（方案 B 实现）
+
+- `src/features/cameraStage/scene/StageCaptureBridge.tsx`
+  - 扩展捕获契约：截图保持 dataURL，视频可按目标尺寸以同一 renderer 的 RenderTarget 离屏输出 PNG bytes。
+  - 复用 target、RGBA/翻转缓冲、2D 编码画布；处理 target colorSpace、Y 翻转、renderer 状态恢复和 target dispose。
+- `src/features/cameraStage/export/cameraStageVideo.ts`
+  - 视频逐帧链路直接消费离屏 PNG bytes，移除 dataURL 居中裁剪/上采样；补充导出 start/completed/cancelled/failed 结构化日志。
+- `src/features/cameraStage/CameraStageEditor.tsx`
+  - 为视频导出接线目标尺寸捕获及会话结束资源释放。
+- `docs/task/运镜导出与动作完善/{00-任务总览,重要记录,progress,decisions,handoff,changed-files,test-report}.md`
+  - 同步方案 B 确认、实施、验证和交接记录。
