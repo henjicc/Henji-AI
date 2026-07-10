@@ -99,7 +99,16 @@ npm run lint                   # 前端 lint
 - Electron 主进程能力经 `ipcMain` + preload 白名单暴露，保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`
 - `src/platform/adapters/electron/*` 是当前唯一桌面平台 adapter；未来新增桌面能力仍先扩展 PAL 契约，再由 Electron adapter 实现
 
-### 4. 严格解耦与体积治理
+### 4. 日志接入与调试（新增/改造功能必检）
+
+- 日志系统**不会自动推断新功能的业务事件**：新增或改造涉及网络请求、文件读写、长耗时任务、导入导出、状态流转或用户可见失败的功能时，必须在实际执行层判断并补充必要的结构化日志。
+- 渲染层/前端服务使用 `createLogger(domain)`；Electron 主进程服务使用 `createMainLogger(domain)`。只要通过这两个入口记录，事件会自动进入主进程 JSONL、日志窗口（实时/历史）和 `npm run logs:query`，**禁止**为新功能另建日志文件、查看器、IPC 或查询通道。
+- 关键链路最少覆盖 `start`、`completed`、`failed`；高频进度使用 `debug`/`trace`。关联 AI/生成任务时必须带稳定的 `requestId`，并按需带 `taskId`、`modelId`、`providerId`。
+- domain 使用既定分层前缀：前端按代码归属（如 `features.*`、`services.*`、`commands.*`），新主进程服务使用 `main.<服务>`；event 使用 `模块.动作.阶段`（如 `project_package.export.completed`）。存量 domain 不批量重命名。
+- 日志中不得包含 API key、token、cookie、授权头、密码等敏感信息。完整捕获只放开截断，不放开脱敏；详细规则和查询示例见 `CLAUDE.md` 的“日志系统”小节及 `docs/日志调试中心使用手册.md`。
+- 改动日志接入或主进程功能后，至少执行相应静态检查；涉及真实窗口、文件落盘或主进程事件可见性时，按项目约定写清用户手动验证步骤。
+
+### 5. 严格解耦与体积治理
 
 - **层级分离**: 组件不包含业务编排，业务层不直接实现 provider 协议，Runtime/Provider 不包含 UI 逻辑
 - **文件体积策略**:
@@ -113,7 +122,7 @@ npm run lint                   # 前端 lint
   - 模型定义不能导入 `services/` 或 `components/`
   - 使用 `core/`、`commands/`、`platform/` 作为层间桥梁
 
-### 5. UI Primitive 单点落地
+### 6. UI Primitive 单点落地
 
 - **统一入口**：业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
 - **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
@@ -126,7 +135,7 @@ npm run lint                   # 前端 lint
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 
-### 6. 画布模块拆分约定
+### 7. 画布模块拆分约定
 
 - `src/features/canvas/Canvas.tsx` 只保留编排与接线，不承载复杂业务实现
 - 画布行为优先放入 hooks：
@@ -136,18 +145,18 @@ npm run lint                   # 前端 lint
 - 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`
 - 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
 
-### 7. 主题与运行时样式落地约定
+### 8. 主题与运行时样式落地约定
 
 - `settingsStore` 中的 `themeTonePreset` / `uiRadiusPreset` / `accentColor` 变更后，必须同步到 `document.documentElement`（`data-*` 或 CSS 变量）
 - 禁止“有设置项但未生效”的状态长期存在；新增主题设置时需同时提交“状态 + 应用层同步器”
 - 主题状态必须单一数据源，避免多套 store 并存且互不联动
 
-### 8. 根级 Provider 挂载约定
+### 9. 根级 Provider 挂载约定
 
 - 全局 Provider（如拖拽、全局菜单、通知）只允许在应用根层挂载一次
 - 禁止在多个根容器重复包裹同一 Provider，避免事件重复订阅与状态分叉
 
-### 9. 画布节点组成规范
+### 10. 画布节点组成规范
 
 新建/改造画布节点时，优先从标准化的"参数行组件"拼装，而不是从零写 UI；详细步骤与示例代码见 Skill `canvas-node-builder`。
 
@@ -276,6 +285,11 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
    - 媒体输入统一走 `connectivity.targetHandleMode: 'rows'` + `MediaInputRow`，禁止新增手写的单一 `target` Handle 来接收媒体
    - 特殊节点的专属 UI 只叠加在标准行组件之上，不替代标准行组件
 
+14. **新功能日志接入约束**
+   - 新功能不会自动生成业务日志；新增/改造关键业务链路时，必须在实际执行层评估并补充必要的 `createLogger` / `createMainLogger` 日志
+   - 日志记录后自动进入现有 JSONL、日志窗口和 `logs:query`；禁止新建平行日志通道或要求 UI 逐案适配
+   - 必须遵守 domain/event 命名、关联 ID 与脱敏规则，详见上方“日志接入与调试”
+
 ## 添加新模型
 
 ### 步骤 1: 创建模型文件
@@ -353,56 +367,6 @@ npm run electron:dev
 8. `custom` - 自定义逻辑
 
 ## 调试工具（开发模式）
-
-### 日志系统
-
-- 日志为 JSONL，位于 `%LOCALAPPDATA%\com.henji.ai\Henji-AI\logs\henji-YYYY-MM-DD.log`（Windows；其他系统使用应用配置目录）；每行含 `level`、`domain`、`event`、`requestId`、`context`、`error`、`source` 等字段。
-- 调试时优先直接查询日志文件，不要先要求用户复制控制台输出；脚本会自动跳过损坏行：
-
-```bash
-npm run logs:query -- --level error --tail 50
-npm run logs:query -- --domain llm-runtime --grep timeout
-npm run logs:query -- --chain <requestId>       # 取该 LLM 调用的完整请求/响应链路
-npm run logs:query -- --chain <requestId> --json # 原始 JSONL，便于程序处理
-```
-
-可用 `--date YYYY-MM-DD` 查询指定日期，`--dir PATH` 覆盖日志目录；完整参数见 `npm run logs:query -- --help`。
-
-#### 新功能日志接入规范
-
-- 新功能只需在实际执行层创建 logger：渲染层/前端服务使用 `createLogger(domain)`；Electron 主进程服务使用 `createMainLogger(domain)`。两者都会自动进入主进程 JSONL 落盘、日志窗口实时/历史查询与 `npm run logs:query`，**不需要为新 domain/event 单独改 IPC、页面或查询脚本**。
-- domain 用小写点分层级，按代码归属命名，不包含模型 ID、用户输入或动态路径。前端增量前缀为 `app`、`commands.*`、`core.*`、`features.*`、`services.*`、`stores.*`、`hooks.*`、`components.*`、`contexts.*`、`workspaces.*`、`utils.*`、`models.*`；主进程新代码统一为 `main.<服务>`，例如 `main.ai_runtime`、`main.llm`、`main.project_package`、`main.updater`、`main.database`、`main.logging`。
-- 存量 domain **不批量重命名**，以免切断历史日志查询；例如现有 `ai-runtime`、`llm-runtime`、`core.services.GenerationService`、`commands.llmRuntime` 继续有效。新增代码遵循上面的增量命名，查询时可用 `--domain` 前缀同时覆盖同一类事件。
-
-| 主要链路 | 已有 domain（保持） | 新增时使用 |
-|---|---|---|
-| 生成 | `core.services.GenerationService`、`ai-runtime` | `core.services.*`、`main.ai_runtime` |
-| LLM | `commands.llmRuntime`、`llm-runtime`、`services.llm.*` | `commands.*`、`main.llm` |
-| 上传 / 画布结果持久化 | `services.upload.UploadService`、`features.canvas.generation.*` | `services.upload.*`、`features.canvas.*` |
-| 项目包 | `services.projectPackage.importProject`、`services.projectPackage.exportProject` | `services.projectPackage.*`、`main.project_package` |
-| 更新 / 数据库 | `services.updateChecker`、`services.database.DatabaseService` | `main.updater`、`main.database` |
-| 日志系统 | `features.logs.*`、`core.logging.*` | `features.logs.*`、`main.logging` |
-- event 采用 `模块.动作.阶段` 小写点分格式，例如 `project_package.export.start`、`project_package.export.completed`、`project_package.export.failed`。阶段优先使用 `start`、`progress`、`completed`、`failed`；需要记录原始协议载荷时使用 `request_json`、`response_json`。event 是稳定的机器查询键，`message` 只写面向人的简短描述。
-- 级别约定：`error` 为用户可感知或需处理的失败；`warn` 为已降级/可自愈异常；`info` 为关键业务边界（开始、完成、状态改变）；`debug` 为排查细节；`trace` 为高频细节。轮询、下载进度等高频事件优先 `debug`/`trace`，避免淹没正常查询。
-- 不记录 API key、token、cookie、授权头及其他密钥；请求/响应正文按完整捕获与脱敏策略处理。关联生成或 LLM 链路时传入稳定的 `requestId`，同时按需传 `taskId`、`modelId`、`providerId`。
-
-```ts
-// 渲染层或前端服务
-const logger = createLogger('features.canvas.persistence')
-logger.info('画布保存完成', {
-  event: 'canvas.save.completed',
-  context: { nodeCount },
-})
-
-// Electron 主进程服务
-const logger = createMainLogger('main.project_package')
-logger.error('项目包导入失败', {
-  event: 'project_package.import.failed',
-  error: { message: '...' },
-})
-```
-
-- 日志窗口的事件美化字典仅用于改善可读性，**可选**维护；未登记 event 仍会按 domain 兜底样式正常显示和查询，不得因未加字典阻塞功能开发或日志落盘。
 
 浏览器控制台：
 
