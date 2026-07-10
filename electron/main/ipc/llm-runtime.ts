@@ -22,7 +22,7 @@ export function registerLlmRuntimeIpc(): void {
         event: streamEvent,
       }
       event.sender.send('llm:chatStream:event', eventPayload)
-    }, event.sender)
+    })
   })
 
   registerIpcHandler<string, void>('llm:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {

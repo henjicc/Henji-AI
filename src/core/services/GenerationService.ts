@@ -1,4 +1,4 @@
-import { createLogger, logPreviewOnly } from '@/core/logging'
+import { createLogger } from '@/core/logging'
 
 const logger = createLogger('core.services.GenerationService')
 /**
@@ -500,20 +500,9 @@ function recordRuntimeTrace(
   }
 
   // 主进程（ai-runtime/runtime.ts）已经用同一份 trace 直接落盘 generation.runtime.response_json，
-  // 这里只做渲染层"实时预览"（控制台 + 测试模式面板），不再经 logger.info 桥接重复写入 henji-*.log。
-  logPreviewOnly('core.services.GenerationService', '[GenerationService] API原始响应(JSON)', {
-    event: 'generation.runtime.response_json',
-    requestId: trace.requestId,
-    taskId: trace.taskId,
-    modelId: trace.modelId || modelId,
-    providerId: trace.providerId,
-    context: {
-      phase: trace.phase,
-      route: trace.route,
-      method: trace.method,
-      responseBody: trace.responseBody,
-    },
-  })
+  // 渲染层不再重复记录——独立日志窗口（2.1）通过 henji://log-event 实时订阅主进程权威事件。
+  // 这里只保留 recordApiTrace()：测试模式下 opt-in 的独立调试通道（api.trace），语义与用途
+  // 都和统一日志事件不同，不属于本次删除范围（1.2/1.3 决策已确立，见 decisions.md）。
 
   const prompt = typeof params.prompt === 'string'
     ? params.prompt

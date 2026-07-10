@@ -1,4 +1,3 @@
-import type { WebContents } from 'electron'
 import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
 import { AiRuntimeError } from './errors'
@@ -21,23 +20,12 @@ import type {
   AiRecordProgressSampleRequestDto,
   AiRecordProgressSampleResponseDto,
   JsonObject,
-  JsonValue,
   ModelManifestItem,
   ProviderKeyStatusDto,
 } from './types'
 
-interface RuntimeRequestPreviewEvent {
-  requestId: string
-  taskId?: string
-  modelId: string
-  providerId: string
-  method: string
-  route: string
-  requestBody: JsonValue
-}
-
-// 试点接入 1.1 任务的主进程日志中枢：直接落盘 henji-*.log（source: 'backend'），
-// 不再依赖 emitPreview -> 渲染层 -> 桥接回写 这条绕路链路。
+// 主进程直接落盘 henji-*.log（source: 'backend'）；日志窗口（2.1）通过 henji://log-event
+// 实时订阅同一份事件，不再需要 henji://runtime-request-preview 这条给旧查看器用的预览通道。
 const logger = createMainLogger('ai-runtime')
 
 function toLogError(error: unknown): unknown {
@@ -56,8 +44,7 @@ export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
 }
 
 export async function generate(
-  request: AiGenerateRequestDto,
-  webContents?: WebContents
+  request: AiGenerateRequestDto
 ): Promise<AiGenerateResponseDto> {
   const requestId = resolveRequestId(request)
   clearCancelFlag(requestId)
@@ -81,14 +68,6 @@ export async function generate(
     }
 
     const preprocessedBody = await preprocessRequestBody(providerId, builtRequest.route, normalizedBody, request.params)
-    emitPreview(webContents, {
-      requestId,
-      modelId: request.modelId,
-      providerId,
-      method: builtRequest.method,
-      route: builtRequest.route,
-      requestBody: preprocessedBody,
-    })
     logger.info('后端发起生成请求', {
       event: 'generation.runtime.request_json',
       requestId,
@@ -165,8 +144,7 @@ export async function generate(
 }
 
 export async function continuePolling(
-  request: AiContinuePollingRequestDto,
-  webContents?: WebContents
+  request: AiContinuePollingRequestDto
 ): Promise<AiGenerateResponseDto> {
   const requestId = `continue-${request.modelId}-${Date.now()}`
   clearCancelFlag(requestId)
@@ -179,15 +157,6 @@ export async function continuePolling(
     const apiKey = requireApiKey(providerId)
     const builtRequest = buildRequest(request.params ?? {}, model)
 
-    emitPreview(webContents, {
-      requestId,
-      taskId: request.taskId.trim(),
-      modelId: request.modelId,
-      providerId,
-      method: 'GET',
-      route: builtRequest.route,
-      requestBody: builtRequest.body,
-    })
     logger.info('后端发起轮询请求', {
       event: 'generation.runtime.request_json',
       requestId,
@@ -303,10 +272,6 @@ async function saveMediaPaths(joinedUrls: string): Promise<string | undefined> {
     }
   }
   return savedPaths.length > 0 ? savedPaths.join('|||') : undefined
-}
-
-function emitPreview(webContents: WebContents | undefined, payload: RuntimeRequestPreviewEvent): void {
-  webContents?.send('henji://runtime-request-preview', payload)
 }
 
 export function parseJsonObject(value: unknown, label: string): JsonObject {

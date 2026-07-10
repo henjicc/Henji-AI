@@ -385,10 +385,6 @@
       "flowTracking": {
         "title": "Enable param flow tracking",
         "description": "Track full flow from UI input to API request."
-      },
-      "logCaptureMode": {
-        "title": "Full log capture",
-        "description": "When on, long text and images are no longer truncated; audio/video and sensitive fields like API keys are still summarized/masked."
       }
     },
     "flowTracking": {
@@ -403,7 +399,48 @@
         "fullParams": "Full params:"
       }
     },
-    "emptyHint": "After generating, request parameters will appear here."
+    "emptyHint": "After generating, request parameters will appear here.",
+    "logsWindow": {
+      "title": "Logs Window",
+      "description": "The standalone logs window shows live frontend/backend logs with filters and pause.",
+      "openButton": "Open Logs Window"
+    }
+  },
+  "logsWindow": {
+    "title": "Henji AI - Logs",
+    "toolbar": {
+      "source": {
+        "label": "Source",
+        "all": "All sources",
+        "frontend": "Frontend",
+        "backend": "Backend"
+      },
+      "level": {
+        "label": "Level",
+        "all": "All levels"
+      },
+      "domain": {
+        "label": "Domain",
+        "all": "All domains"
+      },
+      "keywordPlaceholder": "Filter by keyword (message/context/error)",
+      "pause": "Pause",
+      "resume": "Resume",
+      "clear": "Clear",
+      "captureMode": {
+        "title": "Full capture",
+        "description": "When on, long text and images are no longer truncated; audio/video and sensitive fields like API keys are still summarized/masked."
+      }
+    },
+    "list": {
+      "empty": "No logs yet",
+      "loadMore": "Load older logs",
+      "paused": "Paused, new logs are buffered"
+    },
+    "detail": {
+      "empty": "Select a log entry on the left to see details",
+      "truncatedNotice": "This event was truncated for exceeding the size limit, original size {{bytes}} bytes"
+    }
   },
   "imageEditor": {
     "actions": {

@@ -12,10 +12,9 @@ import {
 } from '@/utils/testMode'
 import { ParamFlowViewer } from './debug/ParamFlowViewer'
 import { ExportPanel } from './debug/ExportPanel'
-import { UnifiedLogViewer } from './debug/UnifiedLogViewer'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { openLogWindow } from '@/commands/logging'
 import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiPanel } from '@/components/ui'
 import { X } from 'lucide-react'
 
@@ -40,8 +39,6 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 }) => {
   const { t } = useI18n('ui')
   const [state, setState] = useState<TestModeState>(getTestModeState())
-  const logCaptureMode = useSettingsStore((settings) => settings.logCaptureMode)
-  const setLogCaptureMode = useSettingsStore((settings) => settings.setLogCaptureMode)
   const [opacity, setOpacity] = useState(0)
   const [showFlowTracking, setShowFlowTracking] = useState(false)
   const [activeTab, setActiveTab] = useState<'options' | 'export'>('options')
@@ -258,24 +255,6 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                   onClick={(event) => event.stopPropagation()}
                 />
               </div>
-
-              {/* 日志完整捕获模式 */}
-              <div
-                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
-                onClick={() => setLogCaptureMode(logCaptureMode === 'full' ? 'standard' : 'full')}
-              >
-                <div>
-                  <div className="text-white text-sm">{t('testMode.options.logCaptureMode.title')}</div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    {t('testMode.options.logCaptureMode.description')}
-                  </div>
-                </div>
-                <UiCheckbox
-                  checked={logCaptureMode === 'full'}
-                  onCheckedChange={(checked) => setLogCaptureMode(checked ? 'full' : 'standard')}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              </div>
             </div>
           </div>
         )}
@@ -301,12 +280,15 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           </div>
         )}
 
-        {/* 统一日志查看器 */}
+        {/* 独立日志窗口入口：日志完整捕获开关已移至日志窗口工具栏（见 2.1 decisions.md） */}
         {state.enabled && activeTab === 'options' && (
           <div>
-            <h3 className="text-white font-medium mb-3">统一日志查看器</h3>
-            <div className="bg-black/50 rounded-lg p-4 border border-zinc-700/50">
-              <UnifiedLogViewer />
+            <h3 className="text-white font-medium mb-3">{t('testMode.logsWindow.title')}</h3>
+            <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30">
+              <div className="text-xs text-gray-400">{t('testMode.logsWindow.description')}</div>
+              <UiButton type="button" size="sm" onClick={() => void openLogWindow()}>
+                {t('testMode.logsWindow.openButton')}
+              </UiButton>
             </div>
           </div>
         )}

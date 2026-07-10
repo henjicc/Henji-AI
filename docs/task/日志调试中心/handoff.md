@@ -1,8 +1,68 @@
 # 日志调试中心 - 交接说明（写给下一个执行者）
 
-面向任务：2.1 日志窗口骨架搭建（第二阶段-日志窗口，第一阶段-日志数据层已全部完成）
+面向任务：2.2 请求链路视图与错误复制（2.1 日志窗口骨架已完成）
 
-## 1.3 留下了什么（2.1 最需要看这部分）
+## 2.1 留下了什么（2.2 最需要看这部分）
+
+### 文件结构
+
+```
+src/features/logs/
+├── LogsShell.tsx              窗口壳：自定义标题栏 + useApplyRuntimeTheme() + 渲染 LogsPanel
+├── LogsPanel.tsx               页面编排：过滤状态 + useLogWindowStore + 列表/详情两栏布局
+├── logStore.ts                 数据源：订阅 henji://log-event，容量上限 5000，暂停/恢复/清空
+├── eventDisplay.ts              事件美化字典 + DisplayLogEvent 类型 + 工具函数
+└── components/
+    ├── LogFilterToolbar.tsx    来源/级别/domain/关键词过滤 + 暂停恢复 + 清空 + 完整捕获开关
+    ├── LogEventList.tsx        列表，增量渲染（初始 200 条 + 加载更早）
+    ├── LogEventRow.tsx         单条日志行
+    └── LogEventDetail.tsx      详情面板（简单 JSON 展示，无折叠）
+```
+
+主进程新增 `electron/main/windows/log-window.ts`（单例窗口管理，`openLogWindow()`/`closeLogWindow()`），IPC 新增 `logging:openWindow`/`logging:getCaptureConfig`（`electron/main/ipc/logging.ts`）。渲染层入口分流在 `src/main.tsx`（`?view=logs` 查询参数），快捷键 `Ctrl+Shift+L` 在 `src/hooks/useLogWindowShortcut.ts`（挂载于 `src/App.tsx`，只在主窗口生效）。
+
+### `DisplayLogEvent` 数据形状（2.2 直接复用，不要重新定义）
+
+`src/features/logs/eventDisplay.ts` 导出：
+
+```ts
+export interface DisplayLogEvent extends LogEventPushDto {
+  id: string  // logStore.ts 挂载时补的渲染层本地 id，仅用于 React key/选中态，不是稳定 ID
+}
+```
+
+`LogEventPushDto`（`src/platform/contracts/logging.ts`，经 `src/commands/logging.ts` 重导出）字段：`timestamp`/`level`/`domain`/`event`/`message`/`requestId?`/`taskId?`/`modelId?`/`providerId?`/`context?`/`error?`/`source: 'frontend' | 'backend'`/`truncatedByLimit?: boolean`。这是主进程 `MainLogEvent`（`electron/main/services/logging/types.ts`）的渲染层镜像，本任务已经把 `truncatedByLimit` 字段补齐到 preload/platform/commands 三层（此前只存在于主进程类型里，是个遗漏，2.1 一并修复）。
+
+### 数据源：`logStore.ts` 现状，2.2 大概率要扩展
+
+- `logWindowStore`（`LogWindowStore` 类单例）内部维护 `events: DisplayLogEvent[]`（有上限 5000，超出从最旧开始丢弃）、暂停时的 `pausedBuffer`。**没有任何按 `requestId` 分组/索引的能力**——2.2 任务文件实施步骤第 3 条要求"建链路聚合逻辑（`logStore` 中按 requestId 选择器）"，这是全新工作，需要在 `logStore.ts` 里新增一个选择器函数（例如 `selectEventsByRequestId(requestId: string): DisplayLogEvent[]`，遍历 `logWindowStore.getSnapshot()` 按 `requestId` 过滤 + 按 `timestamp` 排序），不需要改变现有存储结构（`events` 数组本身已经包含 `requestId` 字段，直接过滤即可，不需要额外建索引 Map——除非 2.2 实测发现性能问题，届时再优化）。
+- `useLogWindowStore()` hook 返回 `{ events, paused, pausedCount, setPaused, clear }`，2.2 如果要加"链路聚合"大概率需要新增一个 `useRequestChain(requestId: string)` 之类的独立 hook 或者在 `LogsPanel.tsx` 里用 `useMemo` 从现有 `events` 派生（不需要改动 `logWindowStore` 类本身的订阅机制）。
+
+### 过滤器状态怎么管理
+
+全部过滤状态在 `LogsPanel.tsx` 用 `useState` 管理（`sourceFilter`/`levelFilter`/`domainFilter`/`keyword`），**没有用 Zustand/Context**——一个简单页面级 `useState` 管理即可，没有必要为过滤状态单独建 store。`filteredEvents` 用 `useMemo` 派生（依赖 `events`/四个过滤条件），已经按时间倒序（最新在前）。2.2 加"只看错误"开关（任务文件实施方案第 3 条）可以直接在 `LogsPanel.tsx` 加一个 `errorOnly` 布尔 `useState`，在 `filteredEvents` 的 `useMemo` 里追加一个 `.filter((event) => !errorOnly || event.level === 'error')`，对应 UI 加在 `LogFilterToolbar.tsx`（作为 props 传入，同款模式）。
+
+### 日志行组件在哪、点击后现状
+
+`components/LogEventRow.tsx` 是单条日志行（`UiButton` 包裹），点击调用 `onSelect(event.id)` 只是把 `selectedId` 传给 `LogsPanel.tsx`，由 `LogEventDetail.tsx` 展示。**没有独立的"打开详情面板"交互**——现在的"详情"就是右侧固定的一栏，始终跟随 `selectedId` 变化。2.2 任务文件说的"点击日志行在页面侧栏（或行内展开区）展示完整事件"这个能力**已经存在**（右侧栏），2.2 主要是给这个详情面板换成折叠 JSON 树（`JsonTree.tsx`）+ 加"查看完整链路"入口按钮，不需要重新设计交互骨架。
+
+### `requestId` 目前有没有被用来做任何分组
+
+**没有**。当前列表是纯时间线（倒序平铺），`requestId` 只作为普通字段展示在 `LogEventRow.tsx`（`compactId(event.requestId)`）和详情面板里，完全没有做任何聚合/分组/关联展示。2.2 的链路视图是全新能力，从零开始建。
+
+### JSON 展示现状（2.2 要替换的部分）
+
+`LogEventDetail.tsx` 目前用 `<pre>{JSON.stringify(event, null, 2)}</pre>` 展示整个事件对象，`truncatedByLimit` 命中时额外插入一条黄色提示条（复用 `t('logsWindow.detail.truncatedNotice', { bytes })`）。2.2 建 `JsonTree.tsx` 时，这条 `truncatedByLimit` 特殊展示逻辑建议保留（不要在做 JSON 折叠树重构时不小心把这个分支删掉），可以把它作为 `JsonTree` 渲染之前的一个前置提示条独立保留，或者把 `truncatedByLimit` 判断逻辑一起下沉到 `JsonTree` 内部（自行判断，两种做法都合理）。
+
+### i18n 命名空间
+
+新增了顶层 `logsWindow` 命名空间（`src/i18n/locales/{zh-CN,en-US}/ui.json`），已有 `logsWindow.toolbar.*`/`logsWindow.list.*`/`logsWindow.detail.*` 三个子命名空间。2.2 新增文案（JSON 折叠树、链路视图、复制按钮、"只看错误"开关）建议延续这个命名空间，加 `logsWindow.detail.jsonTree.*`/`logsWindow.chain.*`/`logsWindow.copy.*` 之类的新子节点，不要另起新的顶层命名空间。
+
+### 复制能力去哪找
+
+`electron/preload/api.d.ts` 的 `HenjiClipboardApi`（`src/platform` 下对应 `clipboard` 域）目前只有 `readClipboardFiles`/`readText`/`writeImageFromPath`/`writeImageFromSource`，**没有"写文本到剪贴板"的方法**。2.2 任务文件已经提示"渲染层也可用 `navigator.clipboard` 兜底"——`navigator.clipboard.writeText()` 在 Electron 渲染进程里可以直接用（不需要走 preload），2.2 大概率会直接用这个而不是新增 IPC，但如果要更贴近项目"渲染层运行时代码统一经 PAL 访问桌面能力"的架构约束，也可以考虑给 `HenjiClipboardApi` 新增 `writeText`——这个取舍留给 2.2 执行时判断（如果 `navigator.clipboard.writeText` 在打包后的 Electron 环境实测有权限问题再切到 PAL 方案）。
+
+## 1.3 留下了什么（2.2 可跳过，仅供背景参考）
 
 ### 捕获模式开关现在放在哪
 

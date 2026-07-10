@@ -91,3 +91,48 @@
 ### 下一阶段（第二阶段-日志窗口，任务 2.1）
 
 详见 `handoff.md`。
+
+## 2.1 日志窗口骨架与查看器升级
+
+- 状态：已完成（自动化检查全通过；交互行为需人工验证，见 `test-report.md`）
+- 完成日期：2026-07-10
+
+### 完成内容
+
+1. **主进程窗口管理**：新增 `electron/main/windows/log-window.ts`，`openLogWindow()` 单例创建/聚焦已存在窗口，加载与主窗口同源 URL + `?view=logs`；`closeLogWindow()` 供主窗口 `closed` 事件联动关闭，避免主窗口关闭后应用因日志窗口存活而不退出。新增 IPC `logging:openWindow`、`logging:getCaptureConfig`（后者供日志窗口挂载时同步真实捕获模式）。
+2. **快捷键**：`Ctrl+Shift+L` 完全落在渲染层实现（`src/hooks/useLogWindowShortcut.ts`），与既有 `useDevToolsShortcut`/F12 同款门控模式：开发环境始终注册，生产环境需测试模式已开启；主进程 IPC 不做打包态门控（渲染层决定是否调用，与 F12 DevTools 切换同一策略）。
+3. **渲染层分流**：`src/main.tsx` 读取 `?view=logs` 查询参数，命中时渲染 `src/features/logs/LogsShell.tsx`（不挂载 `DragDropProvider`/`GlobalContextMenuProvider`），否则渲染原有 `App`。
+4. **日志窗口实现**：新增 `src/features/logs/` 目录——
+   - `LogsShell.tsx`：自定义无边框标题栏（复用通用 `getPlatform().window` per-sender-window 控制）+ `useApplyRuntimeTheme()` 跟随主题 + 渲染 `LogsPanel`。
+   - `LogsPanel.tsx`：编排过滤状态、`useLogWindowStore`、列表/详情两栏布局。
+   - `logStore.ts`：日志窗口专用数据源，订阅 `henji://log-event`（推送本身在 1.1 已实现广播到所有窗口，本任务未改）、容量上限 5000 条、暂停期间缓冲、清空。
+   - `eventDisplay.ts`：从旧 `UnifiedLogViewer.tsx` 迁移的事件美化字典/domain 提示/关键词匹配，新增 `truncatedByLimit` 特殊展示分支。
+   - `components/LogFilterToolbar.tsx`：来源/级别/domain/关键词过滤 + 暂停恢复 + 清空 + 完整捕获开关（从 `TestModePanel.tsx` 搬迁而来，挂载时主动拉取 `logging:getCaptureConfig` 纠正独立窗口的本地默认值）。
+   - `components/LogEventList.tsx` / `LogEventRow.tsx` / `LogEventDetail.tsx`：列表增量渲染（初始 200 条 + 加载更早）、单行展示、详情面板（简单 JSON，`truncatedByLimit` 事件有专属提示；JSON 折叠树留给 2.2）。
+5. **入口调整**：`TestModePanel.tsx` 删除 `UnifiedLogViewer` 挂载与"日志完整捕获"开关行，新增"打开日志窗口"按钮；`TestModeParamsDisplay.tsx` 排查确认全仓无挂载点（死代码），直接删除。
+6. **旧查看器删除**：`src/components/debug/UnifiedLogViewer.tsx` 物理删除（重要记录 004）。
+7. **预览通道清理**：`henji://runtime-request-preview` / `henji://llm-runtime-request-preview` 两条给旧查看器用的预览通道，及 `logPreviewOnly()`（`src/core/logging/logger.ts`）随本任务一起删除（1.2 决策已预告的先后关系）——五层结构（preload/platform/commands/`logger.ts`/主进程 emit 调用点）全部清理，`GenerationService.ts` 的 `recordRuntimeTrace()` 同步去掉对应调用，保留独立的 `recordApiTrace()` 通道不受影响。`ai-runtime/runtime.ts`/`llm/runtime.ts` 的 `generate()`/`continuePolling()`/`llmChatStream()` 相应去掉不再需要的 `webContents` 参数。
+8. i18n：`testMode.options.logCaptureMode.*` 删除，新增 `testMode.logsWindow.*` 与顶层 `logsWindow.*`（中英文）。
+
+### 验收标准逐项对照（自查，未做真实交互验证）
+
+| 验收标准 | 状态 |
+|---|---|
+| 按钮/快捷键打开窗口、重复触发聚焦不重复创建 | 代码走查确认（单例 `logWindowInstance` + `focus()`/`restore()`），**待人工验证** |
+| 主/日志窗口同时操作、实时同步 | 设计上成立（1.1 的 `pushLogEvents` 已广播全部窗口，本任务新增消费方），**待人工验证** |
+| 打包态/非测试模式入口不可见 | 代码走查确认（渲染层门控与 `useDevToolsShortcut` 同款模式），**待人工验证**（含构建产物等效验证步骤） |
+| 过滤/暂停/清空全部可用 | 代码走查确认，**待人工验证** |
+| 数千条事件不卡顿 | 增量渲染（初始 200 条 + 加载更早）设计上缓解，非真正虚拟滚动，**待人工验证** |
+| 旧查看器与相关选项已删除、无残留引用 | 已通过全仓 grep 确认，**测试面板其余功能不回退待人工二次确认** |
+| lint/tsc/check:colors/原生控件检查通过 | 已通过，见 `test-report.md` |
+
+### 未完成 / 待验证
+
+- 全部交互类验收点（开窗口、快捷键、双窗口同步、过滤器、暂停恢复、性能）均未实际操作，已在 `test-report.md` 写清步骤（Q~Y）交给用户。
+- 未执行 `npm run electron:build`/`electron:smoke`：仓库现有 `out/` 是旧构建产物，跑冒烟测试没有意义；本任务改动的主进程/preload 部分已用 `tsc -p tsconfig.electron.json --noEmit` + `eslint electron` 完整覆盖静态检查，交互行为验证与用户即将进行的 `electron:dev` 手动验证重合，不重复花时间跑一次 `electron:build`。
+- JSON 折叠树、requestId 链路聚合视图、错误一键复制留给 2.2（详见 `handoff.md`）。
+- 真正的虚拟滚动（如引入 `react-window`）本任务未做，采用"增量渲染 + 加载更多"的简化方案；如果用户实测数千条场景仍有明显卡顿，需要后续任务补虚拟滚动。
+
+### 下一任务
+
+2.2 请求链路视图与错误复制，可直接在本任务的 `logStore.ts`/`eventDisplay.ts`/`LogsPanel.tsx` 基础上扩展，详见 `handoff.md`。

@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
 import { bindWindowStateEvents } from './ipc/window'
+import { closeLogWindow } from './windows/log-window'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 
 export function createWindow(): BrowserWindow {
@@ -23,6 +24,9 @@ export function createWindow(): BrowserWindow {
   })
 
   bindWindowStateEvents(win)
+  win.on('closed', () => {
+    closeLogWindow()
+  })
 
   win.once('ready-to-show', () => {
     if (win.isDestroyed()) return

@@ -64,12 +64,12 @@ function parseRecordSampleRequest(input: unknown): AiRecordProgressSampleRequest
 }
 
 export function registerAiRuntimeIpc(): void {
-  registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request, event) => {
-    return await generate(request, event.sender)
+  registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request) => {
+    return await generate(request)
   })
 
-  registerIpcHandler<AiContinuePollingRequestDto, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async (request, event) => {
-    return await continuePolling(request, event.sender)
+  registerIpcHandler<AiContinuePollingRequestDto, AiGenerateResponseDto>('ai:continuePolling', parseContinuePollingRequest, async (request) => {
+    return await continuePolling(request)
   })
 
   registerIpcHandler<string, void>('ai:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {

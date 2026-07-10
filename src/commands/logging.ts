@@ -4,51 +4,12 @@ import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 export type { LogCaptureMode, LogEventPushDto }
 
-export interface RuntimeRequestPreviewDto {
-  requestId: string
-  taskId?: string
-  modelId: string
-  providerId: string
-  method: string
-  route: string
-  requestBody: DynamicValue
-}
-
-export interface LlmRuntimeRequestPreviewDto {
-  requestId: string
-  modelId: string
-  providerId: string
-  method: string
-  route: string
-  requestBody: DynamicValue
-}
-
 export async function logFrontendEvents(events: LogEventBridgeDto[]): Promise<void> {
   if (!isDesktopRuntime() || events.length === 0) {
     return
   }
 
   await getPlatform().logging.logFrontendEvents(events)
-}
-
-export async function listenRuntimeRequestPreview(
-  handler: (payload: RuntimeRequestPreviewDto) => void
-): Promise<() => void> {
-  if (!isDesktopRuntime()) {
-    return () => undefined
-  }
-
-  return await getPlatform().logging.listenRuntimeRequestPreview(handler)
-}
-
-export async function listenLlmRuntimeRequestPreview(
-  handler: (payload: LlmRuntimeRequestPreviewDto) => void
-): Promise<() => void> {
-  if (!isDesktopRuntime()) {
-    return () => undefined
-  }
-
-  return await getPlatform().logging.listenLlmRuntimeRequestPreview(handler)
 }
 
 /**
@@ -75,4 +36,27 @@ export async function setLogCaptureMode(mode: LogCaptureMode): Promise<void> {
   }
 
   await getPlatform().logging.setCaptureConfig(mode)
+}
+
+/**
+ * 读取主进程当前的日志捕获模式。用于独立日志窗口挂载时同步真实状态——
+ * 日志窗口是独立渲染进程，`settingsStore` 的 `logCaptureMode` 本地默认值为 `standard`，
+ * 与主窗口此前可能已切到 `full` 的主进程真实状态可能不一致，需要主动拉取一次纠正。
+ * 桌面运行时之外静默返回默认值 `standard`。
+ */
+export async function getLogCaptureMode(): Promise<LogCaptureMode> {
+  if (!isDesktopRuntime()) {
+    return 'standard'
+  }
+
+  return await getPlatform().logging.getCaptureConfig()
+}
+
+/** 打开（或聚焦已存在的）独立日志窗口（2.1 日志窗口骨架）。桌面运行时之外静默忽略。 */
+export async function openLogWindow(): Promise<void> {
+  if (!isDesktopRuntime()) {
+    return
+  }
+
+  await getPlatform().logging.openLogWindow()
 }

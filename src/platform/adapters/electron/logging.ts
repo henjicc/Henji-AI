@@ -15,17 +15,17 @@ export function createElectronLogging(): LoggingPlatform {
     logFrontendEvents: async (events) => {
       await getNativeLogging().logFrontendEvents(events)
     },
-    listenRuntimeRequestPreview: async (handler) => {
-      return getNativeLogging().onRuntimeRequestPreview(handler)
-    },
-    listenLlmRuntimeRequestPreview: async (handler) => {
-      return getNativeLogging().onLlmRuntimeRequestPreview(handler)
-    },
     listenLogEvent: async (handler) => {
       return getNativeLogging().onLogEvent(handler)
     },
     setCaptureConfig: async (mode) => {
       await getNativeLogging().setCaptureConfig(mode)
+    },
+    getCaptureConfig: async () => {
+      return await getNativeLogging().getCaptureConfig()
+    },
+    openLogWindow: async () => {
+      await getNativeLogging().openLogWindow()
     },
   }
 }

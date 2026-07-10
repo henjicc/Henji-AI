@@ -1,4 +1,3 @@
-import type { WebContents } from 'electron'
 import { getLlmProviderApiKey } from '../keystore'
 import { preprocessRequestBody } from '../ai-runtime/upload'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
@@ -11,8 +10,9 @@ import {
 } from './streaming'
 import type { JsonObject, JsonValue, LlmChatMessage, LlmChatRequestDto, LlmStreamEmitter } from './types'
 
-// 主进程直接记录 LLM 请求/响应/失败三类事件，替代 emitPreview -> 渲染层 -> 桥接回写 的绕路链路
-// （预览通道 `henji://llm-runtime-request-preview` 仍保留，但只用于渲染层即时展示，不再承担落盘职责）。
+// 主进程直接记录 LLM 请求/响应/失败三类事件，落盘 henji-*.log（source: 'backend'）；
+// 日志窗口（2.1）通过 henji://log-event 实时订阅同一份事件，不再需要
+// henji://llm-runtime-request-preview 这条给旧查看器用的预览通道。
 const logger = createMainLogger('llm-runtime')
 
 function toLogError(error: unknown): unknown {
@@ -21,8 +21,7 @@ function toLogError(error: unknown): unknown {
 
 export async function llmChatStream(
   request: LlmChatRequestDto,
-  emit: LlmStreamEmitter,
-  webContents?: WebContents
+  emit: LlmStreamEmitter
 ): Promise<void> {
   const taskId = resolveTaskId(request)
   const controller = new AbortController()
@@ -43,14 +42,6 @@ export async function llmChatStream(
       : resolveOpenAiCompatibleEndpoint(processedRequest)
     const requestPayload = buildOpenAiCompatiblePayload(processedRequest)
 
-    webContents?.send('henji://llm-runtime-request-preview', {
-      requestId: taskId,
-      modelId: processedRequest.modelId,
-      providerId: processedRequest.providerId,
-      method: 'POST',
-      route: endpoint,
-      requestBody: requestPayload,
-    })
     logger.info('后端发起 LLM 请求', {
       event: 'llm_runtime.chat_stream.request_json',
       requestId: taskId,

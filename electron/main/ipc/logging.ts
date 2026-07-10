@@ -1,5 +1,6 @@
-import { appendLogEvents, setLogCaptureMode, type LogCaptureMode, type LogEventBridgeDto } from '../services/logging'
-import { parseRecord, registerIpcHandler } from './registry'
+import { appendLogEvents, getLogCaptureMode, setLogCaptureMode, type LogCaptureMode, type LogEventBridgeDto } from '../services/logging'
+import { openLogWindow } from '../windows/log-window'
+import { parseRecord, parseVoid, registerIpcHandler } from './registry'
 
 interface LogEventsPayload {
   events: LogEventBridgeDto[]
@@ -52,4 +53,8 @@ export function registerLoggingIpc(): void {
   registerIpcHandler<SetCaptureConfigPayload, void>('logging:setCaptureConfig', parseCaptureConfigPayload, ({ mode }) =>
     setLogCaptureMode(mode)
   )
+  registerIpcHandler<void, LogCaptureMode>('logging:getCaptureConfig', parseVoid, () => getLogCaptureMode())
+  // 打开独立日志窗口：不做打包态/测试模式主进程侧门控，入口可见性与快捷键注册完全由渲染层决定
+  // （与既有 F12 DevTools 切换 IPC 同款模式：主进程始终暴露能力，渲染层负责判断"是否该调用"）。
+  registerIpcHandler<void, void>('logging:openWindow', parseVoid, () => openLogWindow())
 }

@@ -585,16 +585,6 @@ export interface HenjiLogEventBridgeDto {
   error?: unknown
 }
 
-export interface HenjiRuntimeRequestPreviewPayload {
-  requestId: string
-  taskId?: string
-  modelId: string
-  providerId: string
-  method: string
-  route: string
-  requestBody: unknown
-}
-
 export interface HenjiLogEvent {
   timestamp: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -608,6 +598,8 @@ export interface HenjiLogEvent {
   context?: unknown
   error?: unknown
   source: 'frontend' | 'backend'
+  /** 单条事件体积保险丝命中时为 true，此时 context/error 已被主进程强制丢弃，见 `MainLogEvent`。 */
+  truncatedByLimit?: boolean
 }
 
 /** 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。 */
@@ -615,10 +607,11 @@ export type HenjiLogCaptureMode = 'standard' | 'full'
 
 export interface HenjiLoggingApi {
   logFrontendEvents(events: HenjiLogEventBridgeDto[]): Promise<void>
-  onRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
-  onLlmRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
   onLogEvent(handler: (events: HenjiLogEvent[]) => void): () => void
   setCaptureConfig(mode: HenjiLogCaptureMode): Promise<void>
+  getCaptureConfig(): Promise<HenjiLogCaptureMode>
+  /** 打开（或聚焦已存在的）独立日志窗口（2.1 日志窗口骨架）。 */
+  openLogWindow(): Promise<void>
 }
 
 export type HenjiUpdaterStatus =

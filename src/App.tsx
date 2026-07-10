@@ -11,6 +11,7 @@ import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from '@/components/params/panels/registerDefaultPanels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
+import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
 
 const logger = createLogger('App')
 
@@ -24,6 +25,7 @@ const logger = createLogger('App')
 const App: React.FC = () => {
   useApplyRuntimeTheme()
   useDevToolsShortcut()
+  useLogWindowShortcut()
   const [activeTab, setActiveTab] = useState('generation')
   const [isReady, setIsReady] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)

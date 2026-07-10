@@ -385,10 +385,6 @@
       "flowTracking": {
         "title": "启用参数流转追踪",
         "description": "追踪参数从 UI 输入到 API 请求的完整流程"
-      },
-      "logCaptureMode": {
-        "title": "日志完整捕获",
-        "description": "开启后长文本与图片不再截断；音频/视频与 API Key 等敏感字段仍会摘要/打码"
       }
     },
     "flowTracking": {
@@ -403,7 +399,48 @@
         "fullParams": "完整参数:"
       }
     },
-    "emptyHint": "点击生成按钮后，请求参数将显示在这里"
+    "emptyHint": "点击生成按钮后，请求参数将显示在这里",
+    "logsWindow": {
+      "title": "日志窗口",
+      "description": "独立日志窗口支持实时查看前后端全部日志、过滤与暂停",
+      "openButton": "打开日志窗口"
+    }
+  },
+  "logsWindow": {
+    "title": "痕迹AI - 日志",
+    "toolbar": {
+      "source": {
+        "label": "来源",
+        "all": "全部来源",
+        "frontend": "前端",
+        "backend": "后端"
+      },
+      "level": {
+        "label": "级别",
+        "all": "全部级别"
+      },
+      "domain": {
+        "label": "域",
+        "all": "全部域"
+      },
+      "keywordPlaceholder": "关键词筛选（message/context/error）",
+      "pause": "暂停",
+      "resume": "恢复",
+      "clear": "清空",
+      "captureMode": {
+        "title": "完整捕获",
+        "description": "开启后长文本与图片不再截断；音频/视频与 API Key 等敏感字段仍会摘要/打码"
+      }
+    },
+    "list": {
+      "empty": "暂无日志",
+      "loadMore": "加载更早的日志",
+      "paused": "已暂停，新日志已缓冲"
+    },
+    "detail": {
+      "empty": "请选择左侧日志查看详情",
+      "truncatedNotice": "该事件因体积超限已被截断，原始大小 {{bytes}} 字节"
+    }
   },
   "imageEditor": {
     "actions": {

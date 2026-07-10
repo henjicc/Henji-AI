@@ -25,7 +25,6 @@ import type {
   HenjiNativeFetchRequest,
   HenjiPathsApi,
   HenjiProjectPackageApi,
-  HenjiRuntimeRequestPreviewPayload,
   HenjiShellApi,
   HenjiStoryboardProjectsApi,
   HenjiUpdaterApi,
@@ -306,24 +305,6 @@ const audioApi: HenjiAudioApi = {
 
 const loggingApi: HenjiLoggingApi = {
   logFrontendEvents: (events) => nativeInvoke('logging:frontendEvents', { events }),
-  onRuntimeRequestPreview: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiRuntimeRequestPreviewPayload): void => {
-      handler(payload)
-    }
-    ipcRenderer.on('henji://runtime-request-preview', listener)
-    return () => {
-      ipcRenderer.removeListener('henji://runtime-request-preview', listener)
-    }
-  },
-  onLlmRuntimeRequestPreview: (handler) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiRuntimeRequestPreviewPayload): void => {
-      handler(payload)
-    }
-    ipcRenderer.on('henji://llm-runtime-request-preview', listener)
-    return () => {
-      ipcRenderer.removeListener('henji://llm-runtime-request-preview', listener)
-    }
-  },
   onLogEvent: (handler) => {
     const listener = (_event: Electron.IpcRendererEvent, events: HenjiLogEvent[]): void => {
       handler(events)
@@ -334,6 +315,8 @@ const loggingApi: HenjiLoggingApi = {
     }
   },
   setCaptureConfig: (mode) => nativeInvoke('logging:setCaptureConfig', { mode }),
+  getCaptureConfig: () => nativeInvoke('logging:getCaptureConfig'),
+  openLogWindow: () => nativeInvoke('logging:openWindow'),
 }
 
 const updaterApi: HenjiUpdaterApi = {
