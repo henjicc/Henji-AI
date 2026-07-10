@@ -144,11 +144,13 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
     }
   })
 
-  // 播放期命令式采样：逐关节欧拉偏移直改骨骼、颜色直改共享材质（不写 store）
+  // 播放期命令式采样：clip 生效时骨骼只由 mixer 驱动，避免与关节关键帧采样双写。
   useEffect(() => {
+    if (activeClip) return undefined
+
     const euler = new Euler()
     const quat = new Quaternion()
-    const unregs: Array<() => void> = (Object.keys(POSE_JOINT_BONES) as StagePoseJointId[]).map(
+    const unregs = (Object.keys(POSE_JOINT_BONES) as StagePoseJointId[]).map(
       (jointId) =>
         registerPlaybackApplier(object.id, poseJointPath(jointId), (value) => {
           const bone = rig.bones.get(POSE_JOINT_BONES[jointId])
@@ -160,14 +162,14 @@ const CharacterModel: React.FC<CharacterModelProps> = ({ object, selected, url }
           bone.quaternion.copy(rest).multiply(quat)
         }),
     )
-    unregs.push(
-      registerPlaybackApplier(object.id, 'color', (value) => {
-        material.color.set(value as string)
-        material.emissive.set(value as string)
-      }),
-    )
     return () => unregs.forEach((unregister) => unregister())
-  }, [object.id, rig, material])
+  }, [activeClip, object.id, rig])
+
+  // 颜色关键帧不与 mixer 冲突，始终注册，避免切换动作时颜色动画失效。
+  useEffect(() => registerPlaybackApplier(object.id, 'color', (value) => {
+    material.color.set(value as string)
+    material.emissive.set(value as string)
+  }), [object.id, material])
 
   // 体型变体：头部骨骼缩放（头身比），整体缩放走容器 group
   const variant = getBodyVariant(object.variant)
