@@ -1,5 +1,6 @@
 import type { WebContents } from 'electron'
 import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
+import { createMainLogger } from '../logging'
 import { AiRuntimeError } from './errors'
 import { getManifestStore, reloadManifestStore } from './manifest'
 import { saveMediaFromUrl } from './media-store'
@@ -35,6 +36,14 @@ interface RuntimeRequestPreviewEvent {
   requestBody: JsonValue
 }
 
+// 试点接入 1.1 任务的主进程日志中枢：直接落盘 henji-*.log（source: 'backend'），
+// 不再依赖 emitPreview -> 渲染层 -> 桥接回写 这条绕路链路。
+const logger = createMainLogger('ai-runtime')
+
+function toLogError(error: unknown): unknown {
+  return error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+}
+
 export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
   const known = getAiProviderKeyStatus()
   const byProvider = new Map(known.map((item) => [item.providerId, item.configured]))
@@ -54,6 +63,12 @@ export async function generate(
   clearCancelFlag(requestId)
   const abortController = new AbortController()
   registerAbortController(requestId, abortController)
+
+  logger.info('后端开始生成', {
+    event: 'ai_runtime.generate.start',
+    requestId,
+    modelId: request.modelId,
+  })
 
   try {
     const model = resolveModel(request.modelId)
@@ -96,6 +111,15 @@ export async function generate(
     const filePath = providerResult.status === 'completed'
       ? await saveMediaPaths(providerResult.url)
       : undefined
+
+    logger.info('后端生成结果', {
+      event: 'ai_runtime.generate.result',
+      requestId,
+      modelId: request.modelId,
+      providerId,
+      context: { status: providerResult.status, taskId: providerResult.taskId },
+    })
+
     return {
       status: providerResult.status,
       url: providerResult.url,
@@ -104,6 +128,14 @@ export async function generate(
       metadata: providerResult.metadata,
       trace,
     }
+  } catch (error) {
+    logger.error('后端生成失败', {
+      event: 'ai_runtime.generate.failed',
+      requestId,
+      modelId: request.modelId,
+      error: toLogError(error),
+    })
+    throw error
   } finally {
     clearCancelFlag(requestId)
   }

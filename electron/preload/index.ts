@@ -18,6 +18,7 @@ import type {
   HenjiLlmApi,
   HenjiLlmStreamEventPayload,
   HenjiLoggingApi,
+  HenjiLogEvent,
   HenjiMediaApi,
   HenjiIpcErrorEnvelope,
   HenjiNativeApi,
@@ -321,6 +322,15 @@ const loggingApi: HenjiLoggingApi = {
     ipcRenderer.on('henji://llm-runtime-request-preview', listener)
     return () => {
       ipcRenderer.removeListener('henji://llm-runtime-request-preview', listener)
+    }
+  },
+  onLogEvent: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, events: HenjiLogEvent[]): void => {
+      handler(events)
+    }
+    ipcRenderer.on('henji://log-event', listener)
+    return () => {
+      ipcRenderer.removeListener('henji://log-event', listener)
     }
   },
 }

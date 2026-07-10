@@ -21,5 +21,8 @@ export function createElectronLogging(): LoggingPlatform {
     listenLlmRuntimeRequestPreview: async (handler) => {
       return getNativeLogging().onLlmRuntimeRequestPreview(handler)
     },
+    listenLogEvent: async (handler) => {
+      return getNativeLogging().onLogEvent(handler)
+    },
   }
 }

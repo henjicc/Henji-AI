@@ -1,5 +1,8 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
+import type { LogEventPushDto } from '@/platform/contracts/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+
+export type { LogEventPushDto }
 
 export interface RuntimeRequestPreviewDto {
   requestId: string
@@ -46,4 +49,18 @@ export async function listenLlmRuntimeRequestPreview(
   }
 
   return await getPlatform().logging.listenLlmRuntimeRequestPreview(handler)
+}
+
+/**
+ * 订阅主进程实时推送的日志事件（前端桥接事件与主进程自身事件都会推送）。
+ * 桌面运行时之外静默返回空取消函数。
+ */
+export async function listenLogEvent(
+  handler: (events: LogEventPushDto[]) => void
+): Promise<() => void> {
+  if (!isDesktopRuntime()) {
+    return () => undefined
+  }
+
+  return await getPlatform().logging.listenLogEvent(handler)
 }

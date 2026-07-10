@@ -1,4 +1,4 @@
-import { appendFrontendLogEvents, type LogEventBridgeDto } from '../services/logging'
+import { appendLogEvents, type LogEventBridgeDto } from '../services/logging'
 import { parseRecord, registerIpcHandler } from './registry'
 
 interface LogEventsPayload {
@@ -33,5 +33,7 @@ function parseLogEventsPayload(input: unknown): LogEventsPayload {
 }
 
 export function registerLoggingIpc(): void {
-  registerIpcHandler<LogEventsPayload, void>('logging:frontendEvents', parseLogEventsPayload, ({ events }) => appendFrontendLogEvents(events))
+  registerIpcHandler<LogEventsPayload, void>('logging:frontendEvents', parseLogEventsPayload, ({ events }) =>
+    appendLogEvents(events.map((event) => ({ ...event, source: 'frontend' as const })))
+  )
 }

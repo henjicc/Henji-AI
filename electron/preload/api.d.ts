@@ -595,10 +595,26 @@ export interface HenjiRuntimeRequestPreviewPayload {
   requestBody: unknown
 }
 
+export interface HenjiLogEvent {
+  timestamp: string
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
+  domain: string
+  event: string
+  message: string
+  requestId?: string
+  taskId?: string
+  modelId?: string
+  providerId?: string
+  context?: unknown
+  error?: unknown
+  source: 'frontend' | 'backend'
+}
+
 export interface HenjiLoggingApi {
   logFrontendEvents(events: HenjiLogEventBridgeDto[]): Promise<void>
   onRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
   onLlmRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
+  onLogEvent(handler: (events: HenjiLogEvent[]) => void): () => void
 }
 
 export type HenjiUpdaterStatus =

@@ -21,6 +21,7 @@ import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme } from './protocol'
+import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
 
@@ -55,6 +56,7 @@ app.whenReady().then(() => {
   registerVideoIpc()
   registerWindowIpc()
   initializeUpdater()
+  void runLogRetention()
   createWindow()
 
   app.on('activate', () => {
