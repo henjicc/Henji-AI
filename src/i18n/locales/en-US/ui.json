@@ -385,6 +385,10 @@
       "flowTracking": {
         "title": "Enable param flow tracking",
         "description": "Track full flow from UI input to API request."
+      },
+      "logCaptureMode": {
+        "title": "Full log capture",
+        "description": "When on, long text and images are no longer truncated; audio/video and sensitive fields like API keys are still summarized/masked."
       }
     },
     "flowTracking": {

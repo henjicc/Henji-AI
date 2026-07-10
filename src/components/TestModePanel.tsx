@@ -15,6 +15,7 @@ import { ExportPanel } from './debug/ExportPanel'
 import { UnifiedLogViewer } from './debug/UnifiedLogViewer'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiPanel } from '@/components/ui'
 import { X } from 'lucide-react'
 
@@ -39,6 +40,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 }) => {
   const { t } = useI18n('ui')
   const [state, setState] = useState<TestModeState>(getTestModeState())
+  const logCaptureMode = useSettingsStore((settings) => settings.logCaptureMode)
+  const setLogCaptureMode = useSettingsStore((settings) => settings.setLogCaptureMode)
   const [opacity, setOpacity] = useState(0)
   const [showFlowTracking, setShowFlowTracking] = useState(false)
   const [activeTab, setActiveTab] = useState<'options' | 'export'>('options')
@@ -252,6 +255,24 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 <UiCheckbox
                   checked={showFlowTracking}
                   onCheckedChange={setShowFlowTracking}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              </div>
+
+              {/* 日志完整捕获模式 */}
+              <div
+                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                onClick={() => setLogCaptureMode(logCaptureMode === 'full' ? 'standard' : 'full')}
+              >
+                <div>
+                  <div className="text-white text-sm">{t('testMode.options.logCaptureMode.title')}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {t('testMode.options.logCaptureMode.description')}
+                  </div>
+                </div>
+                <UiCheckbox
+                  checked={logCaptureMode === 'full'}
+                  onCheckedChange={(checked) => setLogCaptureMode(checked ? 'full' : 'standard')}
                   onClick={(event) => event.stopPropagation()}
                 />
               </div>

@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { applyEventSizeFuse } from './sanitize'
 import { writeLogEventsToFile } from './writer'
 import type { MainLogEvent } from './types'
 
@@ -27,6 +28,9 @@ export async function appendLogEvents(events: MainLogEvent[]): Promise<void> {
     return
   }
 
-  await writeLogEventsToFile(events)
-  pushLogEvents(events)
+  // 单条事件体积保险丝：无论事件来自前端桥接还是主进程自身，落盘/推送前统一过一遍，
+  // 防止超大 context（如异常巨大的完整捕获内容）拖垮写入队列与渲染层实时展示。
+  const safeEvents = events.map(applyEventSizeFuse)
+  await writeLogEventsToFile(safeEvents)
+  pushLogEvents(safeEvents)
 }

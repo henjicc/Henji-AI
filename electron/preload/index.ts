@@ -333,6 +333,7 @@ const loggingApi: HenjiLoggingApi = {
       ipcRenderer.removeListener('henji://log-event', listener)
     }
   },
+  setCaptureConfig: (mode) => nativeInvoke('logging:setCaptureConfig', { mode }),
 }
 
 const updaterApi: HenjiUpdaterApi = {

@@ -385,6 +385,10 @@
       "flowTracking": {
         "title": "启用参数流转追踪",
         "description": "追踪参数从 UI 输入到 API 请求的完整流程"
+      },
+      "logCaptureMode": {
+        "title": "日志完整捕获",
+        "description": "开启后长文本与图片不再截断；音频/视频与 API Key 等敏感字段仍会摘要/打码"
       }
     },
     "flowTracking": {

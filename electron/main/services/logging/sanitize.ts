@@ -1,3 +1,5 @@
+import { getLogCaptureMode, type LogCaptureMode } from './capture-config'
+import type { MainLogEvent } from './types'
 import type { JsonObject, JsonValue } from '../ai-runtime/types'
 
 /**
@@ -5,8 +7,14 @@ import type { JsonObject, JsonValue } from '../ai-runtime/types'
  *
  * 从 `ai-runtime/trace.ts` 抽出，供 LLM Runtime（`services/llm/runtime.ts`）与
  * AI Runtime（`services/ai-runtime/trace.ts`）共用，避免同一套脱敏规则维护两份。
- * 1.3 任务（捕获开关与脱敏策略统一）会在此基础上扩展可配置项，新增逻辑时优先扩展
- * 这里而不是在调用方各写一份。
+ *
+ * 截断行为按 `capture-config.ts` 的捕获模式分档（见 1.3 任务）：
+ * - 脱敏（`isSensitiveKey`）任何模式下都强制生效，不受捕获模式影响。
+ * - `standard` 模式：行为与改动前一致（长字符串/深度/base64 均按固定阈值截断）。
+ * - `full` 模式：跳过长字符串截断与深度截断，`data:image/*` 原文完整保留；
+ *   但音频/视频（`data:audio/*`、`data:video/*`）及无法识别类型的超长裸 base64
+ *   （不带 `data:` 前缀、只是形似 base64 的长字符串）仍强制走"头尾摘要 + 长度标注"，
+ *   因为这类内容对人工排查没有可读价值，完整保留只会让日志文件迅速膨胀。
  */
 
 const MAX_DEPTH = 12
@@ -17,8 +25,12 @@ const LONG_STRING_TAIL_LEN = 240
 const BASE64_HEAD_LEN = 160
 const BASE64_TAIL_LEN = 48
 
+/** 单条日志事件体积保险丝（字节）：无论捕获模式如何，超限一律强制截断，防止拖垮写入与页面渲染。 */
+export const MAIN_LOG_EVENT_MAX_BYTES = 2 * 1024 * 1024
+
 export function sanitizeJsonValue(value: JsonValue, depth = 0): JsonValue {
-  if (depth >= MAX_DEPTH) {
+  const mode = getLogCaptureMode()
+  if (mode === 'standard' && depth >= MAX_DEPTH) {
     return '[depth-limited]'
   }
   if (Array.isArray(value)) {
@@ -32,9 +44,27 @@ export function sanitizeJsonValue(value: JsonValue, depth = 0): JsonValue {
     return next
   }
   if (typeof value === 'string') {
-    return sanitizeString(value)
+    return sanitizeString(value, mode)
   }
   return value
+}
+
+/**
+ * 单条事件体积保险丝：序列化后超过 `MAIN_LOG_EVENT_MAX_BYTES` 时，强制丢弃
+ * `context`/`error`（这两个字段是唯一可能无界增长的字段），并标注 `truncatedByLimit: true`。
+ * 由 `push.ts` 的 `appendLogEvents` 统一调用，覆盖前端桥接事件与主进程自身事件。
+ */
+export function applyEventSizeFuse(event: MainLogEvent): MainLogEvent {
+  const byteLength = Buffer.byteLength(JSON.stringify(event), 'utf8')
+  if (byteLength <= MAIN_LOG_EVENT_MAX_BYTES) {
+    return event
+  }
+  return {
+    ...event,
+    context: { truncatedByLimit: true, originalBytes: byteLength },
+    error: undefined,
+    truncatedByLimit: true,
+  }
 }
 
 export function isSensitiveKey(key: string): boolean {
@@ -47,17 +77,29 @@ export function isSensitiveKey(key: string): boolean {
     lower.includes('password')
 }
 
-function sanitizeString(value: string): string {
+function sanitizeString(value: string, mode: LogCaptureMode): string {
   if (value.startsWith('data:')) {
+    // 完整捕获模式下只有图片保留原文；音频/视频及其他无法识别的 data: 类型仍摘要。
+    if (mode === 'full' && isImageDataUri(value)) {
+      return value
+    }
     return summarizeDataUri(value)
   }
+  // 不带 data: 前缀、形似 base64 的长字符串属于"无法识别类型"，任何模式下都摘要。
   if (looksLikeBase64(value)) {
     return summarizeCompactString(value, BASE64_HEAD_LEN, BASE64_TAIL_LEN, 'base64')
+  }
+  if (mode === 'full') {
+    return value
   }
   if ([...value].length > LONG_STRING_HEAD_LEN + LONG_STRING_TAIL_LEN) {
     return summarizeCompactString(value, LONG_STRING_HEAD_LEN, LONG_STRING_TAIL_LEN, 'truncated')
   }
   return value
+}
+
+function isImageDataUri(value: string): boolean {
+  return /^data:image\//i.test(value)
 }
 
 function summarizeDataUri(value: string): string {

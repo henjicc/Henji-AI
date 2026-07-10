@@ -1,8 +1,12 @@
-import { appendLogEvents, type LogEventBridgeDto } from '../services/logging'
+import { appendLogEvents, setLogCaptureMode, type LogCaptureMode, type LogEventBridgeDto } from '../services/logging'
 import { parseRecord, registerIpcHandler } from './registry'
 
 interface LogEventsPayload {
   events: LogEventBridgeDto[]
+}
+
+interface SetCaptureConfigPayload {
+  mode: LogCaptureMode
 }
 
 const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error'])
@@ -32,8 +36,20 @@ function parseLogEventsPayload(input: unknown): LogEventsPayload {
   return { events }
 }
 
+function parseCaptureConfigPayload(input: unknown): SetCaptureConfigPayload {
+  const record = parseRecord(input)
+  const mode = record.mode
+  if (mode !== 'standard' && mode !== 'full') {
+    throw new Error('Expected capture mode to be "standard" or "full"')
+  }
+  return { mode }
+}
+
 export function registerLoggingIpc(): void {
   registerIpcHandler<LogEventsPayload, void>('logging:frontendEvents', parseLogEventsPayload, ({ events }) =>
     appendLogEvents(events.map((event) => ({ ...event, source: 'frontend' as const })))
+  )
+  registerIpcHandler<SetCaptureConfigPayload, void>('logging:setCaptureConfig', parseCaptureConfigPayload, ({ mode }) =>
+    setLogCaptureMode(mode)
   )
 }

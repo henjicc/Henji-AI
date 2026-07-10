@@ -69,3 +69,32 @@
 
 - 本次分别只新增了约 30 行（`logPreviewOnly()`）和几行（`recordRuntimeTrace()` 内一行函数替换 + 注释），未做拆分。
 - CLAUDE.md 约束是"修改即拆分"，但这两个文件的拆分是与本任务无关的独立重构工作量（`logger.ts` 承担了整个渲染层日志格式化/控制台美化逻辑，`GenerationService.ts` 是生成主链路核心编排），本任务范围内不适合顺带做，记录在此留给后续任务或专门的治理任务处理，不隐藏这个已知问题。
+
+## 1.3 完整捕获开关与脱敏策略统一
+
+### 决策：`sanitizeJsonValue` 读 `capture-config.ts` 的内存态配置，不改函数签名加模式参数
+
+- 任务文件实施方案第 2 条给了两个选项："`sanitize.ts` 接受模式参数（或读 capture-config）"，标注可执行时确认。
+- 选择让 `sanitizeJsonValue(value, depth?)` 内部调用 `getLogCaptureMode()` 读取当前模式，不在签名上加 `mode` 参数。
+- 理由：`sanitizeJsonValue` 当前有三处调用方（`ai-runtime/trace.ts`、`ai-runtime/runtime.ts`、`llm/runtime.ts`），如果改签名加必填/可选 `mode` 参数，三处调用点都要跟着改，且未来任何新调用点都要记得传参，容易漏传导致"忘记切模式"的隐蔽 bug。读内存态配置后，所有调用方零改动，模式切换在唯一入口（`capture-config.ts`）生效，天然满足"切换开关无需重启即时生效"的验收标准，也避免了"模式参数要不要有默认值、默认值该是哪个"这类额外决策分支。
+
+### 决策：单条事件体积保险丝放在 `sanitize.ts` 导出 + `push.ts` 的 `appendLogEvents` 统一调用，不建独立文件
+
+- 任务文件"涉及内容"没有把"体积保险丝"列为独立新增文件，只在实施方案第 3 条描述了行为要求。
+- 保险丝本质是"对一整条 `MainLogEvent` 做体积兜底"，与 `sanitizeJsonValue`（对单个 JSON 值做脱敏/截断）职责相邻但不同（前者操作事件级别，后者操作值级别），放进 `sanitize.ts` 而不是单独建 `size-fuse.ts`，是因为二者都属于"进入日志文件前的最后一道防线"，同一文件维护更容易看清全貌，且避免为一个约 15 行的小函数新建文件。
+- 调用点选在 `push.ts` 的 `appendLogEvents`，因为这是前端桥接事件（`ipc/logging.ts`）与主进程自身事件（`main-logger.ts` 的 `createMainLogger`）唯一的汇合点（1.1 决策已确立的架构），在这里加一次 `.map(applyEventSizeFuse)` 就能同时覆盖两条来源，不需要在两处调用方各加一次。
+
+### 决策：捕获模式状态放进 `settingsStore.ts`，但用自定义 `partialize` 显式排除持久化
+
+- 任务文件实施方案第 4 条建议"不持久化，重启回落 standard"，但 `settingsStore.ts` 用的是 zustand `persist` 中间件且此前没有 `partialize` 配置——不加处理的话，`persist` 默认会把返回状态里所有可 JSON 序列化的字段（包括新加的 `logCaptureMode` 字符串）整体存进 `localStorage`，导致用户关闭应用重新打开后 `logCaptureMode` 仍然是上次的值（比如 `full`），与"重启回落 standard"的决策直接矛盾。
+- 排查确认：现有其他 `set*` action 函数字段能"看似不被持久化"，是因为 `JSON.stringify` 序列化时天然丢弃函数值，并不是 `persist` 主动排除的；`logCaptureMode` 是纯字符串数据字段，不会被这个副作用保护，必须显式处理。
+- 选择新增 `partialize: (state) => { const { logCaptureMode, ...rest } = state; return rest }`，只排除这一个字段，其余字段的持久化行为与改动前完全一致。
+- 验证：加了 `partialize` 后完整跑了一遍 `npx tsc --noEmit`（全仓库），确认 zustand `persist` 中间件的 `U`（持久化状态类型）能从 `partialize` 返回值正确推导为 `Omit<SettingsState, 'logCaptureMode'>`，不需要额外的显式泛型标注，`migrate` 函数的既有返回值类型检查也未受影响（少一个必填字段的目标类型只会让约束更松，不会新增报错）。
+
+### 决策：开关 UI 落点选 `TestModePanel.tsx` 的"测试选项"标签页，不落到独立设置面板
+
+- 任务文件"涉及内容"标注"开关 UI 落点（TestModePanel 或 Settings，执行时确认，用 Ui* 组件）"。
+- 选择 `TestModePanel.tsx`：
+  1. 这个面板本身就是面向开发者/高级用户的调试工具集合，同一个标签页里已经有 `skipRequest`/`logParams`/`enableDevTools`/`flowTracking` 四个同类调试开关，且 `UnifiedLogViewer`（日志查看器）也挂在这个面板里，语义上高度相关，用户心智负担最小。
+  2. handoff.md 已经说明 2.1（日志窗口）落地后 `UnifiedLogViewer`/`TestModePanel` 会被替换/删除，届时这个开关按计划"移到窗口工具栏"（任务文件实施方案第 5 条原话），放在 `TestModePanel` 是一个明确知道会被搬迁的临时位置，不会造成"设置面板里长期挂一个和主设置无关的调试项"的问题；如果放进正式的 Settings 面板，反而需要在 2.1 时额外做一次"从设置面板搬到日志窗口"的迁移，多一次改动。
+  3. 交互实现完全复用面板里已有的 `UiCheckbox` + 行布局模式（点击整行或点击 checkbox 都能切换），没有引入任何新样式或新控件。

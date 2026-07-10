@@ -55,3 +55,25 @@
 
 - `src/utils/testMode.ts` 的 `recordApiTrace()`/`api.trace`：保持原样，是独立于本次改造的测试模式 opt-in 调试通道。
 - `electron/preload/index.ts`、`electron/preload/api.d.ts`、`src/platform/contracts/logging.ts`、`src/platform/adapters/electron/logging.ts`、`src/commands/logging.ts`：预览通道相关五层结构均保留不动（决策：不删除预览通道，只切断其落盘职责）。
+
+## 1.3 完整捕获开关与脱敏策略统一
+
+### 新增
+
+- `electron/main/services/logging/capture-config.ts`：内存态日志捕获模式配置（`LogCaptureMode`/`getLogCaptureMode`/`setLogCaptureMode`，默认 `standard`，不落盘）。
+
+### 修改
+
+- `electron/main/services/logging/sanitize.ts`：`sanitizeJsonValue`/`sanitizeString` 按 `getLogCaptureMode()` 分档（`full` 模式跳过长字符串/深度截断，图片 data URI 原文保留；音频/视频与无法识别类型的裸 base64 两种模式下都强制摘要）；新增 `MAIN_LOG_EVENT_MAX_BYTES` 常量与 `applyEventSizeFuse()` 单条事件体积保险丝。
+- `electron/main/services/logging/types.ts`：`MainLogEvent` 新增可选字段 `truncatedByLimit?: boolean`。
+- `electron/main/services/logging/push.ts`：`appendLogEvents` 落盘/推送前统一调用 `applyEventSizeFuse`。
+- `electron/main/services/logging/index.ts`：新增导出 `getLogCaptureMode`/`setLogCaptureMode`/`LogCaptureMode`/`MAIN_LOG_EVENT_MAX_BYTES`。
+- `electron/main/ipc/logging.ts`：新增 IPC `logging:setCaptureConfig`（校验 `mode` 为 `'standard' | 'full'`）。
+- `electron/preload/api.d.ts`：新增 `HenjiLogCaptureMode` 类型、`HenjiLoggingApi.setCaptureConfig`。
+- `electron/preload/index.ts`：`loggingApi` 实现 `setCaptureConfig`。
+- `src/platform/contracts/logging.ts`：新增 `LogCaptureMode` 类型、`LoggingPlatform.setCaptureConfig`。
+- `src/platform/adapters/electron/logging.ts`：实现 `setCaptureConfig`。
+- `src/commands/logging.ts`：新增 `setLogCaptureMode()` 命令桥封装，导出 `LogCaptureMode` 类型。
+- `src/stores/settingsStore.ts`：新增 `logCaptureMode` 状态 + `setLogCaptureMode` action（同步调用命令桥）；`persist` 配置新增 `partialize`，显式排除 `logCaptureMode` 不落 localStorage。
+- `src/components/TestModePanel.tsx`：新增日志完整捕获开关（`UiCheckbox`），置于"测试选项"标签页。
+- `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：新增 `testMode.options.logCaptureMode.{title,description}` 中英文文案。

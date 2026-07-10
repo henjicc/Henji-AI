@@ -22,6 +22,8 @@ export interface MainLogEvent {
   context?: unknown
   error?: unknown
   source: MainLogSource
+  /** 单条事件体积保险丝命中时标注为 true（`sanitize.ts` 的 `applyEventSizeFuse`），context/error 已被强制丢弃。 */
+  truncatedByLimit?: boolean
 }
 
 /**

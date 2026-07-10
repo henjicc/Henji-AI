@@ -610,11 +610,15 @@ export interface HenjiLogEvent {
   source: 'frontend' | 'backend'
 }
 
+/** 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。 */
+export type HenjiLogCaptureMode = 'standard' | 'full'
+
 export interface HenjiLoggingApi {
   logFrontendEvents(events: HenjiLogEventBridgeDto[]): Promise<void>
   onRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
   onLlmRuntimeRequestPreview(handler: (payload: HenjiRuntimeRequestPreviewPayload) => void): () => void
   onLogEvent(handler: (events: HenjiLogEvent[]) => void): () => void
+  setCaptureConfig(mode: HenjiLogCaptureMode): Promise<void>
 }
 
 export type HenjiUpdaterStatus =

@@ -1,8 +1,8 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
-import type { LogEventPushDto } from '@/platform/contracts/logging'
+import type { LogCaptureMode, LogEventPushDto } from '@/platform/contracts/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
-export type { LogEventPushDto }
+export type { LogCaptureMode, LogEventPushDto }
 
 export interface RuntimeRequestPreviewDto {
   requestId: string
@@ -63,4 +63,16 @@ export async function listenLogEvent(
   }
 
   return await getPlatform().logging.listenLogEvent(handler)
+}
+
+/**
+ * 同步日志捕获模式到主进程（standard 沿用截断策略；full 长文本/图片 base64 不截断）。
+ * 桌面运行时之外静默忽略。
+ */
+export async function setLogCaptureMode(mode: LogCaptureMode): Promise<void> {
+  if (!isDesktopRuntime()) {
+    return
+  }
+
+  await getPlatform().logging.setCaptureConfig(mode)
 }

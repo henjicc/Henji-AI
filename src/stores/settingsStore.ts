@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { setLogCaptureMode as syncLogCaptureMode, type LogCaptureMode } from '@/commands/logging';
 import type { UploadProvider } from '@/core/config/providers';
 import {
   LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
@@ -35,6 +36,11 @@ interface SettingsState {
   /** 分镜格子描述为空时，自动在 prompt 中补一句"依据之前的内容进行推测" */
   storyboardGenAutoInferEmptyFrame: boolean;
   ignoreAtTagWhenCopyingAndGenerating: boolean;
+  /**
+   * 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。
+   * 不持久化——应用重启回落 standard，避免用户忘记关闭导致日志膨胀（见 `partialize`）。
+   */
+  logCaptureMode: LogCaptureMode;
   uiRadiusPreset: UiRadiusPreset;
   themeTonePreset: ThemeTonePreset;
   accentColor: string;
@@ -52,6 +58,7 @@ interface SettingsState {
   setStoryboardGenDisableTextInImage: (enabled: boolean) => void;
   setStoryboardGenAutoInferEmptyFrame: (enabled: boolean) => void;
   setIgnoreAtTagWhenCopyingAndGenerating: (enabled: boolean) => void;
+  setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
   setAccentColor: (color: string) => void;
@@ -165,6 +172,7 @@ export const useSettingsStore = create<SettingsState>()(
       storyboardGenDisableTextInImage: true,
       storyboardGenAutoInferEmptyFrame: true,
       ignoreAtTagWhenCopyingAndGenerating: true,
+      logCaptureMode: 'standard',
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
       accentColor: SETTINGS_ACCENT_HEX,
@@ -212,6 +220,10 @@ export const useSettingsStore = create<SettingsState>()(
         set({ storyboardGenAutoInferEmptyFrame: enabled }),
       setIgnoreAtTagWhenCopyingAndGenerating: (enabled) =>
         set({ ignoreAtTagWhenCopyingAndGenerating: enabled }),
+      setLogCaptureMode: (mode) => {
+        set({ logCaptureMode: mode });
+        void syncLogCaptureMode(mode).catch(() => undefined);
+      },
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
       setAccentColor: (color) => set({ accentColor: normalizeHexColor(color) }),
@@ -234,6 +246,12 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       version: 8,
+      // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
+      // "完整捕获" 导致日志长期膨胀（决策见 docs/task/日志调试中心/decisions.md）。
+      partialize: (state) => {
+        const { logCaptureMode: _logCaptureMode, ...persisted } = state;
+        return persisted;
+      },
       migrate: (persistedState: DynamicValue) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;

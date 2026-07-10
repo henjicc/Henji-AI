@@ -27,6 +27,9 @@ export interface LogEventPushDto extends LogEventBridgeDto {
   source: 'frontend' | 'backend'
 }
 
+/** 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。 */
+export type LogCaptureMode = 'standard' | 'full'
+
 export interface LoggingPlatform {
   logFrontendEvents(events: LogEventBridgeDto[]): Promise<void>
   listenRuntimeRequestPreview(handler: (payload: RuntimeRequestPreviewDto) => void): Promise<() => void>
@@ -34,4 +37,5 @@ export interface LoggingPlatform {
     handler: (payload: LlmRuntimeRequestPreviewDto) => void
   ): Promise<() => void>
   listenLogEvent(handler: (events: LogEventPushDto[]) => void): Promise<() => void>
+  setCaptureConfig(mode: LogCaptureMode): Promise<void>
 }

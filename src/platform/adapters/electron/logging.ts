@@ -24,5 +24,8 @@ export function createElectronLogging(): LoggingPlatform {
     listenLogEvent: async (handler) => {
       return getNativeLogging().onLogEvent(handler)
     },
+    setCaptureConfig: async (mode) => {
+      await getNativeLogging().setCaptureConfig(mode)
+    },
   }
 }
