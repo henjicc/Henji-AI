@@ -99,7 +99,16 @@ npm run lint                   # 前端 lint
 - Electron 主进程能力经 `ipcMain` + preload 白名单暴露，保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`
 - `src/platform/adapters/electron/*` 是当前唯一桌面平台 adapter；未来新增桌面能力仍先扩展 PAL 契约，再由 Electron adapter 实现
 
-### 4. 严格解耦与体积治理
+### 4. 日志接入与调试（新增/改造功能必检）
+
+- 日志系统**不会自动推断新功能的业务事件**：新增或改造涉及网络请求、文件读写、长耗时任务、导入导出、状态流转或用户可见失败的功能时，必须在实际执行层判断并补充必要的结构化日志。
+- 渲染层/前端服务使用 `createLogger(domain)`；Electron 主进程服务使用 `createMainLogger(domain)`。只要通过这两个入口记录，事件会自动进入主进程 JSONL、日志窗口（实时/历史）和 `npm run logs:query`，**禁止**为新功能另建日志文件、查看器、IPC 或查询通道。
+- 关键链路最少覆盖 `start`、`completed`、`failed`；高频进度使用 `debug`/`trace`。关联 AI/生成任务时必须带稳定的 `requestId`，并按需带 `taskId`、`modelId`、`providerId`。
+- domain 使用既定分层前缀：前端按代码归属（如 `features.*`、`services.*`、`commands.*`），新主进程服务使用 `main.<服务>`；event 使用 `模块.动作.阶段`（如 `project_package.export.completed`）。存量 domain 不批量重命名。
+- 日志中不得包含 API key、token、cookie、授权头、密码等敏感信息。完整捕获只放开截断，不放开脱敏；详细规则和查询示例见 `CLAUDE.md` 的“日志系统”小节及 `docs/日志调试中心使用手册.md`。
+- 改动日志接入或主进程功能后，至少执行相应静态检查；涉及真实窗口、文件落盘或主进程事件可见性时，按项目约定写清用户手动验证步骤。
+
+### 5. 严格解耦与体积治理
 
 - **层级分离**: 组件不包含业务编排，业务层不直接实现 provider 协议，Runtime/Provider 不包含 UI 逻辑
 - **文件体积策略**:
@@ -113,7 +122,7 @@ npm run lint                   # 前端 lint
   - 模型定义不能导入 `services/` 或 `components/`
   - 使用 `core/`、`commands/`、`platform/` 作为层间桥梁
 
-### 5. UI Primitive 单点落地
+### 6. UI Primitive 单点落地
 
 - **统一入口**：业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
 - **原生标签落点**：`<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现
@@ -126,7 +135,7 @@ npm run lint                   # 前端 lint
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 
-### 6. 画布模块拆分约定
+### 7. 画布模块拆分约定
 
 - `src/features/canvas/Canvas.tsx` 只保留编排与接线，不承载复杂业务实现
 - 画布行为优先放入 hooks：
@@ -136,18 +145,18 @@ npm run lint                   # 前端 lint
 - 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`
 - 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
 
-### 7. 主题与运行时样式落地约定
+### 8. 主题与运行时样式落地约定
 
 - `settingsStore` 中的 `themeTonePreset` / `uiRadiusPreset` / `accentColor` 变更后，必须同步到 `document.documentElement`（`data-*` 或 CSS 变量）
 - 禁止“有设置项但未生效”的状态长期存在；新增主题设置时需同时提交“状态 + 应用层同步器”
 - 主题状态必须单一数据源，避免多套 store 并存且互不联动
 
-### 8. 根级 Provider 挂载约定
+### 9. 根级 Provider 挂载约定
 
 - 全局 Provider（如拖拽、全局菜单、通知）只允许在应用根层挂载一次
 - 禁止在多个根容器重复包裹同一 Provider，避免事件重复订阅与状态分叉
 
-### 9. 画布节点组成规范
+### 10. 画布节点组成规范
 
 新建/改造画布节点时，优先从标准化的"参数行组件"拼装，而不是从零写 UI；详细步骤与示例代码见 Skill `canvas-node-builder`。
 
@@ -275,6 +284,11 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
    - 新建生成类节点优先复用 `GenerationNodeShell`；做不到时优先拼装 `ModelInputRow`/`MediaInputRow`/`NodeParamRows`
    - 媒体输入统一走 `connectivity.targetHandleMode: 'rows'` + `MediaInputRow`，禁止新增手写的单一 `target` Handle 来接收媒体
    - 特殊节点的专属 UI 只叠加在标准行组件之上，不替代标准行组件
+
+14. **新功能日志接入约束**
+   - 新功能不会自动生成业务日志；新增/改造关键业务链路时，必须在实际执行层评估并补充必要的 `createLogger` / `createMainLogger` 日志
+   - 日志记录后自动进入现有 JSONL、日志窗口和 `logs:query`；禁止新建平行日志通道或要求 UI 逐案适配
+   - 必须遵守 domain/event 命名、关联 ID 与脱敏规则，详见上方“日志接入与调试”
 
 ## 添加新模型
 
