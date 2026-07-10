@@ -1,6 +1,44 @@
 # 运镜控制简易模式 · 任务交接
 
-## 交给 1.2（快照差异编译器）需要知道的接口
+## 交给 1.3（摄像机运镜预设编译）与 1.4（角色自动走跑与朝向推断）需要知道的接口
+
+两者都在 `src/features/cameraStage/domain/shotCompiler.ts` 基础上扩展，互相独立、可并行；不需要改动 `compileShotsToAnimation` 的外层结构（时间轴布点、错峰延迟、停留段守护点、去重）。
+
+- **编译器主入口**：`compileShotsToAnimation(shots: StageShot[], objects: StageObject[]): StageSceneAnimation`，纯函数，已跑通 13 个单元测试（`shotCompiler.test.ts`），可直接作为 1.3/1.4 修改前后的回归基线（跑 `npm run test`）。
+- **测试基建已就绪**：`npm run test`（vitest run）。新增用例直接加进 `shotCompiler.test.ts`，或视体积另开 `shotCompilerXxx.test.ts`；`vitest.config.ts` 已配置 `@/` alias，无需再改配置。
+
+### 1.3 摄像机运镜预设编译扩展点
+
+- 位置：`shotCompiler.ts` 的 `compileTransitionPoints` 函数（约第 122 行），函数头部已有 TODO(1.3) 注释块。
+- 现状：函数签名 `compileTransitionPoints(object: StageObject, move: StageCameraMove | undefined, fromValue, toValue, segStart, segEnd, easing): StageKeyframe[]`，`object`/`move` 两个参数当前**故意未使用**（预留），函数体目前不区分 `move.kind`，一律返回 `[{time:segStart,value:fromValue,easing},{time:segEnd,value:toValue,easing:'linear'}]`（direct 两点直插）。
+- 需要做的事：在函数内部加分支——当 `object.type === 'camera' && move !== undefined && move.kind !== 'direct'` 时，改为调用新的运镜预设编译函数（建议命名 `compileCameraMovePreset`，建议放新文件 `shotCameraMovePresets.ts`，避免 `shotCompiler.ts` 继续膨胀），返回多点关键帧数组来近似 orbit/dollyIn/dollyOut 的运镜轨迹。
+- 建议签名（供参考，1.3 可按需调整）：
+  ```ts
+  function compileCameraMovePreset(
+    move: Exclude<StageCameraMove, { kind: 'direct' }>,
+    fromValue: StageKeyframeValue,
+    toValue: StageKeyframeValue,
+    segStart: number,
+    segEnd: number,
+    easing: StageEasingPreset,
+  ): StageKeyframe[]
+  ```
+- **重要范围提示**：这个分支只应该拦截 `transform.position` 分组的路径（`transform.position.x/y/z`）。`compileObjectTransition` 对同一个摄像机对象会为 `fov`、`color` 等其它变化属性也调用 `compileTransitionPoints`，这些属性应该继续走直插逻辑，不要被运镜预设分支误伤。当前 `compileTransitionPoints` 函数签名里没有 `descriptor`/`propertyPath` 参数，1.3 接入时大概率需要给函数加一个 `propertyPath: string` 参数（`compileObjectTransition` 调用处已经有 `descriptor.path` 可传）来做这个判断。
+- 摄像机对象上只有 `transform.position`（`transform.rotation`/`scale` 对摄像机不可动画，见 `animatableProps.ts` 的 `TRANSFORM_GROUPS`），所以运镜预设只需要考虑位置轨道；朝向由 `lookAt` 字段驱动（不是关键帧轨道，渲染时实时计算，不在本编译器职责内）。
+- `StageCameraMove` 目前只有骨架（`{kind:'orbit',degrees,direction}`、`{kind:'dollyIn'|'dollyOut'}`），参数是否够用由 1.3 自行判断，需要更多参数（如环绕中心、dolly 距离）可以扩展 `shotTypes.ts` 的类型定义。
+
+### 1.4 角色自动走跑与朝向推断扩展点
+
+- 位置：`shotCompiler.ts` 的 `compileObjectTransition` 函数（约第 163 行），函数头部已有 TODO(1.4) 注释块。
+- 现状：该函数目前只做逐属性差异直插，**完全没有处理"走/跑"动作**——`StageShotObjectState.motion`（卡内动作快照）和 `StageShotTransitionObjectDetail.motionOverride`（覆盖自动推断结果）这两个字段已经存在于 1.1 的类型定义里，但编译器还没读取/写入任何跟它们相关的输出。
+- **关键未决问题（重要记录 002，需要 1.4 自己定稿）**：动作切换的"时间表"应该放在哪里？现有 `StageSceneAnimation` 只有 `tracks: StageTrack[]`（逐属性关键帧）+ `duration` + `fps`，没有"某时间段播放哪个动作片段"的字段。1.4 需要二选一（或提出第三种方案）：
+  1. 扩展 `StageSceneAnimation`（在 `animationTypes.ts` 里新增字段，如 `motionSchedule: Array<{objectId, motion, startTime, endTime}>`），播放/导出链路（`StagePlaybackDriver`、`cameraStageVideo`）要能感知这个新字段并在采样时切换角色动作；
+  2. 或者完全不进 `StageSceneAnimation`，走一条独立于关键帧轨道的旁路结构，由播放层单独消费。
+  这个决策会影响播放/导出链路是否需要改动（当前 1.2 的定位是"零改动或极小改动"），1.4 落地前建议先确认这一点，必要时更新 00-任务总览.md 里"核心技术路线"的表述。
+- 若 1.4 决定方案 1（扩展 `StageSceneAnimation`），改动点在 `animationTypes.ts`（加字段）和 `shotCompiler.ts` 的 `compileObjectTransition`（在 `object.type === 'character'` 分支里，根据 `fromState`/`toState` 的位置差算走跑速度，结合 `motionOverride` 覆盖优先级，生成时间表条目并写回一个新的累加结构，函数需要相应加一个可变的输出参数或改造成返回值）。
+- 角色的位置/朝向轨道（`transform.position`、`transform.rotation`）已经由通用差异检测覆盖（角色不是摄像机，`notCamera` 为 true，rotation/scale 可用），1.4 不需要重新实现这部分；只需要额外决定"动作片段"怎么表达和消费。
+
+## 交给 1.2（快照差异编译器）需要知道的接口（已完成，供历史参考）
 
 - 类型全部在 `src/features/cameraStage/domain/shotTypes.ts`：
   - `StageShot { id, name, hold, transitionDuration, objectStates: Record<objectId, StageShotObjectState>, transition: StageShotTransition }`

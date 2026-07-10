@@ -17,3 +17,15 @@
 ### 临时文件（已删除，不在最终提交中）
 
 - `src/features/cameraStage/domain/__tmp_verify_v11__.ts`：用于验证 v10→v11 迁移与 v11 往返序列化的一次性脚本，验证通过后已删除。
+
+## 1.2 快照差异编译器
+
+### 新增
+
+- `src/features/cameraStage/domain/shotCompiler.ts`（249 行）：`compileShotsToAnimation(shots, objects)` 纯函数编译器，内含时间轴布点、差异检测、关键帧生成、速度预设映射、错峰延迟钳制、停留段守护点；为 1.3/1.4 预留 TODO 扩展点。
+- `src/features/cameraStage/domain/shotCompiler.test.ts`（214 行，13 个用例）：单元测试，覆盖任务要求的全部 6 类场景 + propertyPath 全量校验/缺快照综合用例。
+- `vitest.config.ts`：最小 vitest 配置（`include: ['src/**/*.test.ts']` + `@/` alias）。
+
+### 修改
+
+- `package.json`：`devDependencies` 新增 `vitest@^1.6.1`；`scripts` 新增 `"test": "vitest run"`。
