@@ -110,3 +110,11 @@
 - `PlaybackApplyFn` 现为 `(value, time)`；新增 applier 应继续使用驱动传入的精确时间，不要改用节流后的 store 播放头。
 - 启用效果器的静态摄像机在播放中也会逐帧下发 position；关闭后仍保持原有行为。
 - 3.3 需由用户在真实 Electron 验证播放/scrub/MP4 同时刻一致，以及保存重开后 transform 未污染。
+
+## 3.2 完成交接（供 3.3）
+
+- `bakeCurrentProjectToPro()` 是唯一烘焙编排入口：调用 store 转换、清空 zundo 历史、立即保存并写结构化日志。
+- 烘焙后的 `animation` 保留全部 tracks/duration/fps/motionSchedule，`objects` 及摄像机 effectors 不变，`shots=[]`、`selectedShotId=null`。
+- 专业转简易已在 `setEditorMode` 底层阻断；不要在 3.3 增加任何反向入口。
+- 保存失败按定稿不回滚，UI 会明确提示使用现有工程保存功能重试。
+- 3.3 重点手测：取消零变更、播放前后一致、专业轨道可编辑、撤销不可回简易、重开仍为专业、效果器仍生效。

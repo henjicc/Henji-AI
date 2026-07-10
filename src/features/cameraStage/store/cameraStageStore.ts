@@ -82,6 +82,8 @@ export interface CameraStageState {
   updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
   captureIntoSelectedShot: (objectIds?: string[]) => void
   setEditorMode: (mode: StageEditorMode) => void
+  /** 将简易镜头卡单向固化为专业关键帧工程；专业工程调用时无操作。 */
+  bakeToProMode: () => void
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void

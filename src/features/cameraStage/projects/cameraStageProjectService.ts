@@ -91,6 +91,39 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
   return await saveProjectDraft(createCurrentProjectDraft())
 }
 
+/** 将当前简易工程单向烘焙为专业工程，并立即持久化。 */
+export async function bakeCurrentProjectToPro(): Promise<SavedProjectInfo | null> {
+  const before = useCameraStageStore.getState()
+  if (before.editorMode !== 'simple') return null
+  const shotCount = before.shots.length
+  logger.info('简易工程烘焙开始', {
+    event: 'simple_mode.bake.start',
+    projectId: before.currentProjectId,
+    shotCount,
+  })
+  before.bakeToProMode()
+  clearCameraStageHistory()
+  const baked = useCameraStageStore.getState()
+  try {
+    const project = await saveCurrentProject()
+    logger.info('简易工程烘焙完成', {
+      event: 'simple_mode.bake.completed',
+      projectId: project.id,
+      shotCount,
+      trackCount: baked.animation.tracks.length,
+    })
+    return project
+  } catch (error) {
+    logger.error('简易工程烘焙保存失败', error, {
+      event: 'simple_mode.bake.failed',
+      projectId: baked.currentProjectId,
+      shotCount,
+      trackCount: baked.animation.tracks.length,
+    })
+    throw error
+  }
+}
+
 /** 新建空白工程：重置为空场景并立即保存入库，返回新工程标识 */
 export async function createNewProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,

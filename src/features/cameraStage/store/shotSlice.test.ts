@@ -103,4 +103,30 @@ describe('简易模式 store 分片', () => {
     expect(selected.objects[0].transform.position.x).toBe(3)
     expect(selected.playback.currentTime).toBe(first.shots[0].hold + first.shots[0].transitionDuration)
   })
+
+  it('单向烘焙保留完整动画与效果器配置并清空镜头卡', () => {
+    const initial = useCameraStageStore.getState()
+    initial.addCamera()
+    const camera = useCameraStageStore.getState().objects.find((object) => object.type === 'camera')
+    if (!camera) throw new Error('测试需要摄像机')
+    const effectors = [{ id: 'handheld', kind: 'handheld' as const, enabled: true, intensity: 0.5, frequency: 1.2 }]
+    useCameraStageStore.getState().updateObject(camera.id, { effectors })
+    useCameraStageStore.getState().addShot()
+    const before = useCameraStageStore.getState()
+    const expectedAnimation = structuredClone(before.animation)
+
+    before.bakeToProMode()
+    const baked = useCameraStageStore.getState()
+    expect(baked.editorMode).toBe('pro')
+    expect(baked.shots).toEqual([])
+    expect(baked.selectedShotId).toBeNull()
+    expect(baked.animation).toEqual(expectedAnimation)
+    expect(baked.animation.motionSchedule).toEqual(expectedAnimation.motionSchedule)
+    const bakedCamera = baked.objects.find((object) => object.id === camera.id)
+    expect(bakedCamera?.type).toBe('camera')
+    expect(bakedCamera?.type === 'camera' ? bakedCamera.effectors : null).toEqual(effectors)
+
+    baked.setEditorMode('simple')
+    expect(useCameraStageStore.getState().editorMode).toBe('pro')
+  })
 })

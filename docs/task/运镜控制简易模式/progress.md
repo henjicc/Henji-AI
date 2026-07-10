@@ -86,3 +86,11 @@
 - 实时播放、暂停/scrub 与逐帧导出统一在真实取景相机叠加；偏移不写 store、不产生关键帧。
 - 摄像机属性面板提供两种效果器开关及强度/频率调节，复用现有 Ui primitives。
 - 自动验证全部通过；真实 Electron 观感与导出一致性待用户手动验收。
+
+## 3.2 单向烘焙为专业工程 —— 已完成
+
+- 日期：2026-07-10
+- 新增单向 `bakeToProMode`：最终重编译后原子切换 `editorMode='pro'`、清空 shots/选中卡并停止播放；完整保留 animation（含 motionSchedule）与摄像机 effectors。
+- 工程服务在转换后清空撤销历史、立即保存，并记录 start/completed/failed；保存失败保持专业内存态并提示重试保存。
+- 顶栏复用 `EditorModeBadge`、`UiModal` 与 `UiButton` 提供不可逆确认；专业工程不能通过 `setEditorMode` 返回简易。
+- 验证：44/44 单测、lint、前后端 tsc、颜色与 diff 检查通过；真实 Electron 操作待用户验收。

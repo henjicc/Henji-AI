@@ -121,3 +121,14 @@
 - `src/features/cameraStage/scene/StageViewportCamera.tsx`：对真实取景相机叠加确定性局部偏移。
 - `src/features/cameraStage/panels/CameraSettingsSection.tsx`：增加效果器参数 UI。
 - `docs/task/运镜控制简易模式/`：更新 3.1 任务、总览、重要记录及五类任务记录。
+
+## 3.2 单向烘焙为专业工程
+
+### 修改
+
+- `src/features/cameraStage/store/shotSlice.ts`：新增单向烘焙 action，并锁定专业模式不可回简易。
+- `src/features/cameraStage/store/cameraStageStore.ts`：声明烘焙 action 契约。
+- `src/features/cameraStage/projects/cameraStageProjectService.ts`：烘焙编排、清历史、立即保存及结构化日志。
+- `src/features/cameraStage/simple/EditorModeBadge.tsx`：不可逆确认弹窗、执行态和保存失败提示。
+- `src/features/cameraStage/store/shotSlice.test.ts`：新增动画、motionSchedule、effectors、清 shots 与单向锁定回归测试。
+- `docs/task/运镜控制简易模式/`：更新 3.2 任务、总览及五类任务记录。

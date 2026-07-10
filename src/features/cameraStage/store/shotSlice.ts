@@ -25,6 +25,7 @@ export type ShotSliceActions = Pick<
   | 'updateShotTransition'
   | 'captureIntoSelectedShot'
   | 'setEditorMode'
+  | 'bakeToProMode'
 >
 
 function compile(shots: StageShot[], objects: StageObject[]): CameraStageState['animation'] {
@@ -170,10 +171,22 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       return shots === state.shots ? {} : { shots, animation: compile(shots, state.objects) }
     }),
     setEditorMode: (editorMode: StageEditorMode) => set((state) => {
+      if (state.editorMode === 'pro' && editorMode === 'simple') return {}
       if (editorMode === state.editorMode && !(editorMode === 'simple' && state.shots.length === 0)) return {}
       const shots = editorMode === 'simple' && state.shots.length === 0 ? [createShot(state.objects, '片段 1')] : state.shots
       return { editorMode, shots, selectedShotId: shots[0]?.id ?? null,
         ...(editorMode === 'simple' ? { animation: compile(shots, state.objects) } : {}) }
+    }),
+    bakeToProMode: () => set((state) => {
+      if (state.editorMode !== 'simple') return {}
+      const animation = compile(state.shots, state.objects)
+      return {
+        animation,
+        editorMode: 'pro',
+        shots: [],
+        selectedShotId: null,
+        playback: { ...state.playback, playing: false },
+      }
     }),
   }
 }
