@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { PlaybackButtons } from '../timeline/PlaybackControls'
 import TimeRuler from '../timeline/TimeRuler'
 import { clampPxPerSecond, timeToX } from '../timeline/timeScale'
 import { TIMELINE_RULER_HEIGHT } from '../timeline/timelineLayout'
-import TransitionDetailPanel from './TransitionDetailPanel'
 import ShotClipTrack from './timeline/ShotClipTrack'
 import ShotTimecodeText from './timeline/ShotTimecodeText'
 import { buildClipLayout, findClipAtTime } from './timeline/shotClipGeometry'
@@ -13,7 +12,8 @@ import { SHOT_CLIP_TRACK_HEIGHT } from './timeline/shotTimelineLayout'
 
 /**
  * 简易模式时间轴面板：工具条（播放控制 + 时间码）→ 时间标尺（可拖 scrub）→ 比例块轨道 → 播放头竖线贯穿。
- * 块宽反映真实时长；过渡细节入口暂沿用旧抽屉（1.3 替换为块上方参数气泡），保证功能不断档。
+ * 块宽反映真实时长；过渡细节走块上方参数气泡（TransitionClipBlock 内接 PanelTrigger，见重要记录 004），
+ * 本面板只做编排接线，不再持有过渡抽屉展开态。
  */
 
 /** 简易模式时间轴固定像素密度；缩放能力在 2.3 打磨阶段接入 */
@@ -32,11 +32,10 @@ const ShotTimelinePanel: React.FC = () => {
   const selectShot = useCameraStageStore((state) => state.selectShot)
   const removeShot = useCameraStageStore((state) => state.removeShot)
   const updateShotName = useCameraStageStore((state) => state.updateShotName)
+  const updateShotTiming = useCameraStageStore((state) => state.updateShotTiming)
   const updateShotTransition = useCameraStageStore((state) => state.updateShotTransition)
   const setSelectedShotIdOnly = useCameraStageStore((state) => state.setSelectedShotIdOnly)
   const seek = useCameraStageStore((state) => state.seek)
-
-  const [expandedTransitionId, setExpandedTransitionId] = useState<string | null>(null)
 
   const pxPerSecond = clampPxPerSecond(SHOT_TRACK_PX_PER_SECOND)
   const contentWidth = Math.max(MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond))
@@ -70,14 +69,17 @@ const ShotTimelinePanel: React.FC = () => {
           />
           <ShotClipTrack
             shots={shots}
+            objects={objects}
             pxPerSecond={pxPerSecond}
             contentWidth={contentWidth}
+            fps={fps}
             selectedShotId={selectedShotId}
             currentTime={currentTime}
             onSelectShot={selectShot}
             onRenameShot={updateShotName}
             onRemoveShot={removeShot}
-            onOpenTransition={(id) => setExpandedTransitionId((current) => (current === id ? null : id))}
+            onUpdateShotTiming={updateShotTiming}
+            onUpdateShotTransition={updateShotTransition}
             onAddShot={addShot}
           />
           <div
@@ -104,24 +106,6 @@ const ShotTimelinePanel: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {expandedTransitionId && (() => {
-        const index = shots.findIndex((shot) => shot.id === expandedTransitionId)
-        const shot = shots[index]
-        const nextShot = shots[index + 1]
-        return shot && nextShot ? (
-          <div className="max-h-56 min-h-0 shrink-0 overflow-y-auto border-t border-border-dark">
-            <TransitionDetailPanel
-              shot={shot}
-              nextShot={nextShot}
-              shotIndex={index}
-              objects={objects}
-              onDetailChange={(objectId, detail) => updateShotTransition(shot.id, { perObject: { [objectId]: detail } })}
-              onCameraMoveChange={(objectId, move) => updateShotTransition(shot.id, { cameraMoves: { [objectId]: move } })}
-            />
-          </div>
-        ) : null
-      })()}
     </div>
   )
 }

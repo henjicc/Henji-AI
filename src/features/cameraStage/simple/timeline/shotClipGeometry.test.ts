@@ -5,6 +5,8 @@ import {
   clampHold,
   clampTransition,
   findClipAtTime,
+  isTimeInShotStaticSegment,
+  isTimeInTransition,
   quantizeToFrame,
 } from './shotClipGeometry'
 
@@ -121,5 +123,46 @@ describe('findClipAtTime', () => {
 
   it('空布局返回 null', () => {
     expect(findClipAtTime([], 5)).toBeNull()
+  })
+})
+
+describe('isTimeInShotStaticSegment / isTimeInTransition', () => {
+  const buildShots = (): ReturnType<typeof createShot>[] => {
+    const shots = [createShot([], 'A'), createShot([], 'B')]
+    shots[0].hold = 1
+    shots[0].transitionDuration = 2
+    shots[1].hold = 3
+    return shots
+  }
+
+  it('静止段内命中对应卡，过渡段/别的卡不命中', () => {
+    const shots = buildShots()
+    expect(isTimeInShotStaticSegment(shots, shots[0].id, 0.5, FPS)).toBe(true)
+    expect(isTimeInShotStaticSegment(shots, shots[0].id, 2, FPS)).toBe(false) // A 的过渡段
+    expect(isTimeInShotStaticSegment(shots, shots[1].id, 2, FPS)).toBe(false) // A 的过渡段，不属于 B
+    expect(isTimeInShotStaticSegment(shots, shots[1].id, 4, FPS)).toBe(true)
+  })
+
+  it('不存在的 shotId 返回 false', () => {
+    const shots = buildShots()
+    expect(isTimeInShotStaticSegment(shots, 'not-exist', 0.5, FPS)).toBe(false)
+  })
+
+  it('半帧容差内的边界时间仍视为静止段', () => {
+    const shots = buildShots()
+    const eps = 1 / (2 * FPS)
+    expect(isTimeInShotStaticSegment(shots, shots[0].id, 1 + eps / 2, FPS)).toBe(true)
+    expect(isTimeInShotStaticSegment(shots, shots[0].id, 1 + eps * 2, FPS)).toBe(false)
+  })
+
+  it('isTimeInTransition 与静止段判断互补', () => {
+    const shots = buildShots()
+    expect(isTimeInTransition(shots, 0.5, FPS)).toBe(false)
+    expect(isTimeInTransition(shots, 2, FPS)).toBe(true)
+    expect(isTimeInTransition(shots, 4, FPS)).toBe(false)
+  })
+
+  it('空镜头卡数组恒为 false', () => {
+    expect(isTimeInTransition([], 5, FPS)).toBe(false)
   })
 })

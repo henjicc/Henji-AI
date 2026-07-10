@@ -1,0 +1,43 @@
+# 简易模式时间轴重做 · 变更文件清单（第一阶段：1.1 + 1.2 + 1.3）
+
+## 新增文件
+
+```
+src/features/cameraStage/simple/timeline/shotClipGeometry.ts
+src/features/cameraStage/simple/timeline/shotClipGeometry.test.ts
+src/features/cameraStage/simple/timeline/shotTimecodeFormat.ts
+src/features/cameraStage/simple/timeline/shotTimecodeFormat.test.ts
+src/features/cameraStage/simple/timeline/shotTimelineLayout.ts
+src/features/cameraStage/simple/timeline/ShotTimecodeText.tsx
+src/features/cameraStage/simple/timeline/ShotClipTrack.tsx
+src/features/cameraStage/simple/timeline/StaticClipBlock.tsx
+src/features/cameraStage/simple/timeline/TransitionClipBlock.tsx
+src/features/cameraStage/simple/timeline/TransitionPopover.tsx
+src/features/cameraStage/scene/StageTransitionReadOnlyOverlay.tsx
+```
+
+## 修改文件
+
+```
+src/features/cameraStage/simple/ShotTimelinePanel.tsx     # 整体重写：比例块轨道替代旧固定宽卡片列表
+src/features/cameraStage/store/shotSlice.ts                # updateShotTiming 接入钳制/量化；新增 setSelectedShotIdOnly；
+                                                             # compileSimpleEdit/captureIntoSelectedShot 接入静止段捕获守卫；
+                                                             # addShot 补上播放头跳转（决策 D1）
+src/features/cameraStage/store/shotSlice.test.ts            # 新增捕获守卫回归用例
+src/features/cameraStage/store/cameraStageStore.ts          # CameraStageState 接口新增 setSelectedShotIdOnly 签名
+src/features/cameraStage/scene/StageScene.tsx                # 过渡段隐藏 StageTransformControls（gizmo）
+src/features/cameraStage/layout/CameraStageDock.tsx           # ViewportPanel 挂载 StageTransitionReadOnlyOverlay
+```
+
+## 删除文件
+
+```
+src/features/cameraStage/simple/ShotCard.tsx              # 被 StaticClipBlock 替代（1.2）
+src/features/cameraStage/simple/TransitionDetailPanel.tsx  # 被 TransitionPopover 替代（1.3）；TransitionObjectRow.tsx 保留复用
+```
+
+## 对应提交
+
+- `完成：1.1 帧单位时长基础与块布局几何`
+- `完成：1.2 比例块轨道与标尺播放头`
+- `完成：1.3 过渡参数气泡与过渡段只读`

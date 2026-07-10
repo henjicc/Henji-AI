@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react'
 import { Plus } from 'lucide-react'
 import { UiButton } from '@/components/ui'
+import type { StageObject } from '../../domain/sceneTypes'
 import type { StageShot } from '../../domain/shotTypes'
+import type { ShotTimingPatch, ShotTransitionPatch } from '../../store/shotSlice'
 import { buildClipLayout, findClipAtTime } from './shotClipGeometry'
 import { SHOT_CLIP_TRACK_HEIGHT } from './shotTimelineLayout'
 import StaticClipBlock from './StaticClipBlock'
@@ -11,28 +13,34 @@ const ADD_BLOCK_WIDTH = 104
 
 interface ShotClipTrackProps {
   shots: StageShot[]
+  objects: StageObject[]
   pxPerSecond: number
   contentWidth: number
+  fps: number
   selectedShotId: string | null
   currentTime: number
   onSelectShot: (id: string) => void
   onRenameShot: (id: string, name: string) => void
   onRemoveShot: (id: string) => void
-  onOpenTransition: (shotId: string) => void
+  onUpdateShotTiming: (id: string, patch: ShotTimingPatch) => void
+  onUpdateShotTransition: (id: string, patch: ShotTransitionPatch) => void
   onAddShot: () => void
 }
 
 /** 时间轴块轨道：消费 buildClipLayout 渲染静止块/过渡块，末尾接"+ 添加片段"虚线块（不参与时间映射） */
 const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
   shots,
+  objects,
   pxPerSecond,
   contentWidth,
+  fps,
   selectedShotId,
   currentTime,
   onSelectShot,
   onRenameShot,
   onRemoveShot,
-  onOpenTransition,
+  onUpdateShotTiming,
+  onUpdateShotTransition,
   onAddShot,
 }) => {
   const layout = useMemo(() => buildClipLayout(shots, pxPerSecond), [shots, pxPerSecond])
@@ -62,8 +70,13 @@ const ShotClipTrack: React.FC<ShotClipTrackProps> = ({
             <TransitionClipBlock
               key={`transition-${block.shotId}`}
               shot={shots[block.index]}
+              nextShot={shots[block.index + 1]}
+              shotIndex={block.index}
               block={block}
-              onOpen={() => onOpenTransition(block.shotId)}
+              objects={objects}
+              fps={fps}
+              updateShotTiming={onUpdateShotTiming}
+              updateShotTransition={onUpdateShotTransition}
             />
           )
         ))}

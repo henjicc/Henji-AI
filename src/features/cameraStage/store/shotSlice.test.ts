@@ -48,6 +48,31 @@ describe('简易模式 store 分片', () => {
     expect(undone.animation.tracks).toHaveLength(0)
   })
 
+  it('播放头不在选中卡静止段内时不捕获编辑（过渡段/别的卡静止段均不写回，物体本身仍更新）', () => {
+    const initial = useCameraStageStore.getState()
+    const objectId = initial.objects[0].id
+    initial.addShot()
+    const secondId = useCameraStageStore.getState().selectedShotId
+    if (!secondId) throw new Error('新增镜头卡后应存在选中项')
+
+    // 播放头手动挪到第一张卡的过渡段（选中卡仍是第二张）
+    useCameraStageStore.getState().seek(1)
+    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 9, y: 0, z: 0 } })
+    const afterTransitionEdit = useCameraStageStore.getState()
+    expect(afterTransitionEdit.objects[0].transform.position.x).toBe(9)
+    expect(
+      afterTransitionEdit.shots.find((shot) => shot.id === secondId)?.objectStates[objectId].transform.position.x,
+    ).toBe(0)
+
+    // 播放头回到选中卡自己的静止段，编辑应正常捕获
+    useCameraStageStore.getState().selectShot(secondId)
+    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 7, y: 0, z: 0 } })
+    const afterStaticEdit = useCameraStageStore.getState()
+    expect(
+      afterStaticEdit.shots.find((shot) => shot.id === secondId)?.objectStates[objectId].transform.position.x,
+    ).toBe(7)
+  })
+
   it('播放态编辑不自动记录镜头卡', () => {
     const before = useCameraStageStore.getState()
     const objectId = before.objects[0].id

@@ -12,6 +12,7 @@
 import { buildShotTimeline } from '../../domain/shotCompiler'
 import type { StageShot } from '../../domain/shotTypes'
 import { timeToX } from '../../timeline/timeScale'
+import { getShotTimeRanges, type ShotTimeRange } from '../shotTimelineUtils'
 
 /** 秒 → 最近帧网格（n / fps），四舍五入 */
 export function quantizeToFrame(seconds: number, fps: number): number {
@@ -90,4 +91,31 @@ export function findClipAtTime(layout: ShotClipBlock[], time: number): ShotClipB
   if (layout.length === 0) return null
   const safeTime = Math.max(0, time)
   return layout.find((block) => safeTime < block.endTime) ?? layout[layout.length - 1]
+}
+
+/** 半帧容差（秒）：规避浮点误差导致的静止/过渡段边界误判 */
+function halfFrameEpsilon(fps: number): number {
+  return 1 / (2 * Math.max(1, fps))
+}
+
+function inStaticSegment(range: ShotTimeRange, time: number, eps: number): boolean {
+  return time >= range.holdStart - eps && time < range.transitionStart + eps
+}
+
+/**
+ * 时间是否落在指定镜头卡的静止段内（±半帧容差）。
+ * 播放头编辑守卫用（重要记录 003）：`compileSimpleEdit` 只有在这里返回 true 时才允许把
+ * 视口编辑捕获进该卡，天然同时覆盖"过渡段插值状态误录"与"播放头在别的卡上却录进选中卡"两种误录场景。
+ */
+export function isTimeInShotStaticSegment(shots: StageShot[], shotId: string, time: number, fps: number): boolean {
+  const range = getShotTimeRanges(shots).find((item) => item.shotId === shotId)
+  return !!range && inStaticSegment(range, time, halfFrameEpsilon(fps))
+}
+
+/** 播放头是否落在任意一张卡的过渡段内（即不属于任何卡的静止段）；视口只读/隐藏 gizmo 判断用 */
+export function isTimeInTransition(shots: StageShot[], time: number, fps: number): boolean {
+  const ranges = getShotTimeRanges(shots)
+  if (ranges.length === 0) return false
+  const eps = halfFrameEpsilon(fps)
+  return !ranges.some((range) => inStaticSegment(range, time, eps))
 }

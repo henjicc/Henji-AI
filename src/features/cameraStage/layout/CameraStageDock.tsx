@@ -17,6 +17,7 @@ import ObjectListPanel from '../panels/ObjectListPanel'
 import PropertyPanel from '../panels/PropertyPanel'
 import StageAspectRatioOverlay from '../scene/StageAspectRatioOverlay'
 import StageScene from '../scene/StageScene'
+import StageTransitionReadOnlyOverlay from '../scene/StageTransitionReadOnlyOverlay'
 import TimelinePanel from '../timeline/TimelinePanel'
 import ShotTimelinePanel from '../simple/ShotTimelinePanel'
 import { useCameraStageStore } from '../store/cameraStageStore'
@@ -41,6 +42,7 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
     <div className="relative h-full w-full">
       <StageScene captureRef={captureRef ?? undefined} />
       <StageAspectRatioOverlay />
+      <StageTransitionReadOnlyOverlay />
     </div>
   )
 }

@@ -10,7 +10,7 @@ import {
 } from '../domain/shotTypes'
 import type { StageCameraMove } from '../domain/shotTypes'
 import type { StageObject } from '../domain/sceneTypes'
-import { clampHold, clampTransition, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
+import { clampHold, clampTransition, isTimeInShotStaticSegment, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
 
 const logger = createLogger('features.cameraStage.simple')
@@ -91,12 +91,32 @@ export function syncRemovedObjectFromShots(shots: StageShot[], objectId: string)
   })
 }
 
+/**
+ * 播放头是否允许把编辑捕获进选中卡：必须落在选中卡自己的静止段内（重要记录 003）。
+ * 同时覆盖两种误录场景——过渡段插值状态、播放头停在别的卡上却把编辑录进当前选中卡。
+ */
+function canCaptureAtCurrentTime(state: CameraStageState): boolean {
+  if (!state.selectedShotId) return false
+  return isTimeInShotStaticSegment(state.shots, state.selectedShotId, state.playback.currentTime, state.animation.fps)
+}
+
+function logCaptureSkipped(selectedShotId: string): void {
+  logger.debug('播放头不在选中卡静止段内，跳过自动记录', {
+    event: 'simple_mode.capture.skipped_in_transition',
+    selectedShotId,
+  })
+}
+
 export function compileSimpleEdit(
   state: CameraStageState,
   objects: StageObject[],
   objectIds: string[],
 ): Partial<CameraStageState> {
   if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return { objects }
+  if (!canCaptureAtCurrentTime(state)) {
+    logCaptureSkipped(state.selectedShotId)
+    return { objects }
+  }
   const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, objects, objectIds)
   return { objects, shots, animation: compile(shots, objects) }
 }
@@ -117,7 +137,15 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       const insertIndex = selectedIndex < 0 ? state.shots.length : selectedIndex + 1
       const shots = [...state.shots.slice(0, insertIndex), shot, ...state.shots.slice(insertIndex)]
       logger.debug('新增简易模式镜头卡', { event: 'simple_mode.shot.added', shotCount: shots.length })
-      return { shots, selectedShotId: shot.id, animation: compile(shots, state.objects) }
+      // 播放头随选中同步跳到新卡起点（对齐 selectShot 的语义）：新卡创建时已从当前对象状态取快照，
+      // 播放头留在旧位置会导致刚建卡就落在"别的卡静止段/过渡段"，被 1.3 的捕获守卫拦截，无法继续编辑新卡。
+      const time = shotStartTime(shots, insertIndex)
+      return {
+        shots,
+        selectedShotId: shot.id,
+        animation: compile(shots, state.objects),
+        playback: { ...state.playback, playing: false, currentTime: time },
+      }
     }),
     removeShot: (id) => set((state) => {
       const index = state.shots.findIndex((shot) => shot.id === id)
@@ -180,7 +208,11 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       return { shots, animation: compile(shots, state.objects) }
     }),
     captureIntoSelectedShot: (objectIds) => set((state) => {
-      if (state.editorMode !== 'simple' || state.playback.playing) return {}
+      if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return {}
+      if (!canCaptureAtCurrentTime(state)) {
+        logCaptureSkipped(state.selectedShotId)
+        return {}
+      }
       const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, state.objects, objectIds)
       return shots === state.shots ? {} : { shots, animation: compile(shots, state.objects) }
     }),
