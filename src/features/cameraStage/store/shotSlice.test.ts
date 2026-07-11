@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createDefaultAnimation, createDefaultPlayback } from '../domain/animationTypes'
 import { compileShotsToAnimation } from '../domain/shotCompiler'
-import { createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
+import { createCameraObject, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { createShot } from '../domain/shotTypes'
 import { clearCameraStageHistory, useCameraStageStore } from './cameraStageStore'
 
@@ -16,7 +16,6 @@ function resetSimpleStore(): void {
     selectedShotIds: [],
     animation: compileShotsToAnimation([shot], [object]),
     playback: createDefaultPlayback(),
-    simpleAutoKeyframe: false,
   })
   clearCameraStageHistory()
 }
@@ -28,6 +27,21 @@ function addShotAt(time: number): void {
 
 describe('简易模式 store 分片', () => {
   beforeEach(resetSimpleStore)
+
+  it('新建场景默认自带一台摄像机并进入摄像机视角', () => {
+    useCameraStageStore.getState().newScene('新工程')
+    const state = useCameraStageStore.getState()
+    const camera = state.objects.find((item) => item.type === 'camera')
+    expect(state.objects).toHaveLength(1)
+    expect(camera).toBeDefined()
+    expect(state.viewMode).toBe('camera')
+    expect(state.activeCameraId).toBe(camera?.id)
+    expect(state.selectedId).toBe(camera?.id)
+    // 默认镜头卡同步捕获了摄像机快照，且拍摄机位指向默认摄像机
+    expect(state.shots).toHaveLength(1)
+    expect(state.shots[0].cameraId).toBe(camera?.id)
+    expect(camera && state.shots[0].objectStates[camera.id]).toBeDefined()
+  })
 
   it('同为简易模式但尚无关键帧时会初始化关键帧 1', () => {
     useCameraStageStore.setState({ shots: [], selectedShotId: null })
@@ -56,29 +70,18 @@ describe('简易模式 store 分片', () => {
     expect(undone.animation.tracks).toHaveLength(0)
   })
 
-  it('播放头不在选中卡静止段内时不捕获编辑（过渡段/别的卡静止段均不写回，物体本身仍更新）', () => {
+  it('播放头在过渡段编辑时自动插入当前帧关键帧', () => {
     const initial = useCameraStageStore.getState()
     const objectId = initial.objects[0].id
     addShotAt(2)
-    const secondId = useCameraStageStore.getState().selectedShotId
-    if (!secondId) throw new Error('新增镜头卡后应存在选中项')
-
-    // 播放头手动挪到第一张卡的过渡段（选中卡仍是第二张）
     useCameraStageStore.getState().seek(1)
     useCameraStageStore.getState().updateTransform(objectId, { position: { x: 9, y: 0, z: 0 } })
     const afterTransitionEdit = useCameraStageStore.getState()
     expect(afterTransitionEdit.objects[0].transform.position.x).toBe(9)
-    expect(
-      afterTransitionEdit.shots.find((shot) => shot.id === secondId)?.objectStates[objectId].transform.position.x,
-    ).toBe(0)
-
-    // 播放头回到选中卡自己的静止段，编辑应正常捕获
-    useCameraStageStore.getState().selectShot(secondId)
-    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 7, y: 0, z: 0 } })
-    const afterStaticEdit = useCameraStageStore.getState()
-    expect(
-      afterStaticEdit.shots.find((shot) => shot.id === secondId)?.objectStates[objectId].transform.position.x,
-    ).toBe(7)
+    expect(afterTransitionEdit.shots).toHaveLength(3)
+    const inserted = afterTransitionEdit.shots.find((shot) => Math.abs(shot.time - 1) < 1e-6)
+    expect(inserted?.objectStates[objectId].transform.position.x).toBe(9)
+    expect(afterTransitionEdit.selectedShotId).toBe(inserted?.id)
   })
 
   it('播放态编辑不自动记录镜头卡', () => {
@@ -101,18 +104,47 @@ describe('简易模式 store 分片', () => {
     expect(state.animation.duration).toBeCloseTo(31 / 30, 10)
   })
 
-  it('自动关键帧开启后，在过渡区编辑会于播放头所在帧插入状态点', () => {
+  it('过渡区连续编辑只插入一个状态点并持续更新它', () => {
     const objectId = useCameraStageStore.getState().objects[0].id
     addShotAt(2)
     useCameraStageStore.getState().seek(1)
-    useCameraStageStore.getState().setSimpleAutoKeyframe(true)
     useCameraStageStore.getState().updateTransform(objectId, { position: { x: 6, y: 0, z: 0 } })
+    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 7, y: 0, z: 0 } })
 
     const state = useCameraStageStore.getState()
     expect(state.shots).toHaveLength(3)
     const inserted = state.shots.find((shot) => Math.abs(shot.time - 1) < 1e-6)
-    expect(inserted?.objectStates[objectId].transform.position.x).toBe(6)
+    expect(inserted?.objectStates[objectId].transform.position.x).toBe(7)
     expect(state.selectedShotId).toBe(inserted?.id)
+  })
+
+  it('摄像机视图一次原子更新同时记录位置、XYZ 旋转和注视点', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    const first = createShot([camera], '关键帧 1', camera.id, 0)
+    const second = createShot([camera], '关键帧 2', camera.id, 2)
+    const shots = [first, second]
+    useCameraStageStore.setState({
+      objects: [camera],
+      shots,
+      selectedShotId: second.id,
+      animation: compileShotsToAnimation(shots, [camera]),
+      playback: { ...createDefaultPlayback(), currentTime: 1 },
+      activeCameraId: camera.id,
+    })
+
+    useCameraStageStore.getState().updateCameraView(camera.id, {
+      position: { x: 1, y: 2, z: 3 },
+      rotation: { x: 10, y: 20, z: 30 },
+      lookAtTarget: { x: 4, y: 5, z: 6 },
+    })
+
+    const state = useCameraStageStore.getState()
+    expect(state.shots).toHaveLength(3)
+    const inserted = state.shots.find((shot) => Math.abs(shot.time - 1) < 1e-6)
+    const snapshot = inserted?.objectStates[camera.id]
+    expect(snapshot?.transform.position).toEqual({ x: 1, y: 2, z: 3 })
+    expect(snapshot?.transform.rotation).toEqual({ x: 10, y: 20, z: 30 })
+    expect(snapshot?.lookAt).toEqual({ mode: 'manual', target: { x: 4, y: 5, z: 6 } })
   })
 
   it('批量删除关键帧：单条撤销记录、清空框选、重算过渡与选中', () => {

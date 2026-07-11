@@ -2,9 +2,8 @@ import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import type { Group } from 'three'
-import { resolveCameraLookAtTarget } from '../domain/cameraUtils'
+import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
-import { isTimeInTransition } from '../simple/timeline/shotClipGeometry'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import DirectorViewTracker from './DirectorViewTracker'
 import StageDirectorViewRestorer from './StageDirectorViewRestorer'
@@ -43,16 +42,13 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
-  const editorMode = useCameraStageStore((state) => state.editorMode)
-  const shots = useCameraStageStore((state) => state.shots)
-  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
-  const animationFps = useCameraStageStore((state) => state.animation.fps)
-  const simpleAutoKeyframe = useCameraStageStore((state) => state.simpleAutoKeyframe)
+  const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
   // 表现为刚添加的对象要点别处再点回来 gizmo 才出现）
   const [objectNodes, setObjectNodes] = useState<ReadonlyMap<string, Group>>(new Map())
+  const cameraViewInteractionRef = useRef(false)
   const objectNodesRef = useRef(objectNodes)
   objectNodesRef.current = objectNodes
 
@@ -74,20 +70,34 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
     if (!id) return
     const node = objectNodesRef.current.get(id)
     if (!node) return
+    const rotation = {
+      x: node.rotation.x * RAD2DEG,
+      y: node.rotation.y * RAD2DEG,
+      z: node.rotation.z * RAD2DEG,
+    }
+    const state = useCameraStageStore.getState()
+    const object = state.objects.find((item) => item.id === id)
+    const position = { x: node.position.x, y: node.position.y, z: node.position.z }
+    if (object?.type === 'camera') {
+      updateCameraView(id, {
+        position,
+        rotation,
+        ...(state.gizmoMode === 'rotate'
+          ? { lookAtTarget: cameraTargetFromRotation(object, state.objects, rotation) }
+          : {}),
+      })
+      return
+    }
     updateTransform(id, {
-      position: { x: node.position.x, y: node.position.y, z: node.position.z },
-      rotation: {
-        x: node.rotation.x * RAD2DEG,
-        y: node.rotation.y * RAD2DEG,
-        z: node.rotation.z * RAD2DEG,
-      },
+      position,
+      rotation,
       scale: { x: node.scale.x, y: node.scale.y, z: node.scale.z },
     })
-  }, [updateTransform])
+  }, [updateCameraView, updateTransform])
 
   const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
   const selectedObject = selectedId ? objects.find((item) => item.id === selectedId) : undefined
-  const transformMode = selectedObject?.type === 'camera' ? 'translate' : gizmoMode
+  const transformMode = selectedObject?.type === 'camera' && gizmoMode === 'scale' ? 'translate' : gizmoMode
   const cameraLookAtTargets = useMemo(() => {
     const targets = new Map<string, ReturnType<typeof resolveCameraLookAtTarget>>()
     for (const object of objects) {
@@ -103,15 +113,13 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
   const isCameraView = viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
   // 简易模式播放头落在过渡段时视口只读（重要记录 003）：隐藏 gizmo，阻断手动编辑插值状态
-  const isSimpleTransitionReadOnly = editorMode === 'simple'
-    && !simpleAutoKeyframe
-    && isTimeInTransition(shots, currentTime, animationFps)
   const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
   const fogFar = Math.max(fogNear + 1, sceneSettings.fog.distance)
 
   return (
     <Canvas
-      camera={{ position: [5, 4, 7], fov: 50 }}
+      // 初始机位与 DEFAULT_DIRECTOR_VIEW 对齐（正对场景、略俯视），避免恢复器首帧生效前闪一下斜视角
+      camera={{ position: [0, 4.2, 9], fov: 50 }}
       // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
       gl={{ preserveDrawingBuffer: true, alpha: false }}
       style={{ background: sceneSettings.sky.color }}
@@ -137,11 +145,13 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           <StageViewportCamera
             cameraObject={activeCamera}
             lookAtTarget={activeCameraTarget}
+            interactionRef={cameraViewInteractionRef}
           />
           {activeCamera.lookAt.mode === 'manual' && (
             <StageCameraViewControls
               cameraObject={activeCamera}
               lookAtTarget={activeCameraTarget}
+              interactionRef={cameraViewInteractionRef}
             />
           )}
         </>
@@ -159,10 +169,11 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           nameLabelSettings={sceneSettings.display.nameLabel}
         />
       ))}
-      {selectedNode && (!isCameraView || selectedObject?.id !== activeCamera?.id) && !isSimpleTransitionReadOnly && (
+      {selectedNode && (!isCameraView || selectedObject?.id !== activeCamera?.id) && (
         <StageTransformControls
           object={selectedNode}
           mode={transformMode}
+          enabled
           onObjectChange={handleGizmoChange}
         />
       )}

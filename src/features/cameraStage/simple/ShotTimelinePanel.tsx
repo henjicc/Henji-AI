@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CircleDot, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
 import { useCameraStageStore } from '../store/cameraStageStore'
@@ -9,7 +9,7 @@ import { clampPxPerSecond, timeToX, xToTime, type TimeRulerMode } from '../timel
 import { TIMELINE_RULER_HEIGHT } from '../timeline/timelineLayout'
 import ShotClipTrack from './timeline/ShotClipTrack'
 import ShotTimecodeText from './timeline/ShotTimecodeText'
-import { formatShotTimecode } from './timeline/shotTimecodeFormat'
+import { formatCompactShotTimecode, type ShotTimecodeMode } from './timeline/shotTimecodeFormat'
 import { quantizeToFrame } from './timeline/shotClipGeometry'
 import { SHOT_CLIP_TRACK_HEIGHT } from './timeline/shotTimelineLayout'
 import { useShotMarqueeSelect } from './timeline/useShotMarqueeSelect'
@@ -45,8 +45,6 @@ const ShotTimelinePanel: React.FC = () => {
   const updateShotTransition = useCameraStageStore((state) => state.updateShotTransition)
   const updateShotCamera = useCameraStageStore((state) => state.updateShotCamera)
   const updateShotContinuity = useCameraStageStore((state) => state.updateShotContinuity)
-  const simpleAutoKeyframe = useCameraStageStore((state) => state.simpleAutoKeyframe)
-  const setSimpleAutoKeyframe = useCameraStageStore((state) => state.setSimpleAutoKeyframe)
   const setSelectedShotIdOnly = useCameraStageStore((state) => state.setSelectedShotIdOnly)
   const selectedShotIds = useCameraStageStore((state) => state.selectedShotIds)
   const setSelectedShotIds = useCameraStageStore((state) => state.setSelectedShotIds)
@@ -75,6 +73,7 @@ const ShotTimelinePanel: React.FC = () => {
   const userZoomedRef = useRef(false)
   const [pxPerSecond, setPxPerSecond] = useState(clampPxPerSecond(120))
   const [viewportWidth, setViewportWidth] = useState(MIN_CONTENT_WIDTH)
+  const [timecodeMode, setTimecodeMode] = useState<ShotTimecodeMode>('secondsFrames')
 
   // 初始自适应：面板挂载 / 可视宽度变化 / 总时长变化时，取 clampPxPerSecond(可视宽度 / 总时长)
   // 让整条时间轴默认尽量铺满可见区域；用户手动缩放过后不再介入。
@@ -166,7 +165,13 @@ const ShotTimelinePanel: React.FC = () => {
     <div className="flex h-full min-h-0 flex-col bg-app" onKeyDown={handlePanelKeyDown}>
       <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border-dark bg-surface-dark px-2">
         <PlaybackButtons canPlay={shots.length > 0 && duration > 0} />
-        <ShotTimecodeText currentTime={currentTime} duration={duration} fps={fps} />
+        <ShotTimecodeText
+          currentTime={currentTime}
+          duration={duration}
+          fps={fps}
+          mode={timecodeMode}
+          onModeChange={setTimecodeMode}
+        />
         <UiIconButton
           showBorder={false}
           appearance="hover-only"
@@ -176,24 +181,13 @@ const ShotTimelinePanel: React.FC = () => {
         >
           <Plus size={16} />
         </UiIconButton>
-        <UiIconButton
-          showBorder={false}
-          appearance="hover-only"
-          active={simpleAutoKeyframe}
-          className="h-7 w-7"
-          title={simpleAutoKeyframe ? '自动关键帧已开启' : '开启自动关键帧'}
-          aria-pressed={simpleAutoKeyframe}
-          onClick={() => setSimpleAutoKeyframe(!simpleAutoKeyframe)}
-        >
-          <CircleDot size={15} />
-        </UiIconButton>
         <span className="ml-auto text-xs text-text-muted">状态关键帧</span>
       </div>
 
       <div
         ref={scrollRef}
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-auto outline-none"
+        className="min-h-0 flex-1 select-none overflow-auto outline-none"
         onWheel={handleWheel}
         onPointerDown={marquee.handlePointerDown}
         onPointerMove={marquee.handlePointerMove}
@@ -207,7 +201,7 @@ const ShotTimelinePanel: React.FC = () => {
             contentWidth={contentWidth}
             mode={rulerMode}
             fps={fps}
-            formatLabel={(time) => formatShotTimecode(time, 'secondsFrames', fps)}
+            formatLabel={(time) => formatCompactShotTimecode(time, timecodeMode, fps)}
             onScrub={(time) => seek(quantizeToFrame(time, fps))}
           />
           <ShotClipTrack

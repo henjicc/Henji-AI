@@ -79,6 +79,57 @@ describe('compileShotsToAnimation', () => {
     expect(animation.tracks).toHaveLength(0)
   })
 
+  it('摄像机 XYZ 旋转从过渡起点开始连续插值', () => {
+    const camera = createCameraObject('Camera', pickDefaultColor(2), {
+      position: { x: 0, y: 1, z: 5 },
+      target: { x: 0, y: 1, z: 0 },
+    })
+    const shotA = createShot([camera], '卡1')
+    shotA.transition.perObject[camera.id] = { speedPreset: 'uniform' }
+    const shotB = createShot([camera], '卡2')
+    shotB.time = 1
+    const stateB = shotB.objectStates[camera.id]
+    stateB.lookAt = { mode: 'manual', target: { x: 4, y: 1, z: 0 } }
+    stateB.transform.rotation = { ...stateB.transform.rotation, z: 30 }
+
+    const animation = compileShotsToAnimation([shotA, shotB], [camera])
+    const rotationYTrack = animation.tracks.find((track) => track.propertyPath === 'transform.rotation.y')
+    const rotationZTrack = animation.tracks.find((track) => track.propertyPath === 'transform.rotation.z')
+
+    expect(rotationYTrack).toBeDefined()
+    expect(rotationZTrack).toBeDefined()
+    expect(sampleTrack(rotationYTrack!, 0, 'scalar')).toBeCloseTo(0, 5)
+    expect(sampleTrack(rotationYTrack!, 0.25, 'scalar')).toBeLessThan(0)
+    expect(sampleTrack(rotationYTrack!, 1, 'scalar')).toBeCloseTo(-38.6598, 4)
+    expect(sampleTrack(rotationZTrack!, 0.5, 'scalar')).toBeCloseTo(15, 5)
+    expect(sampleTrack(rotationZTrack!, 1, 'scalar')).toBeCloseTo(30, 5)
+  })
+
+  it('摄像机旋转跨越正负 180° 时选择最短路径', () => {
+    const distance = 5
+    const targetAtYaw = (degrees: number): { x: number; y: number; z: number } => {
+      const radians = degrees * Math.PI / 180
+      return { x: -Math.sin(radians) * distance, y: 1, z: -Math.cos(radians) * distance }
+    }
+    const camera = createCameraObject('Camera', pickDefaultColor(2), {
+      position: { x: 0, y: 1, z: 0 },
+      target: targetAtYaw(170),
+    })
+    const shotA = createShot([camera], '卡1')
+    shotA.transition.perObject[camera.id] = { speedPreset: 'uniform' }
+    const shotB = createShot([camera], '卡2')
+    shotB.time = 1
+    shotB.objectStates[camera.id].lookAt = { mode: 'manual', target: targetAtYaw(-170) }
+
+    const animation = compileShotsToAnimation([shotA, shotB], [camera])
+    const yawTrack = animation.tracks.find((track) => track.propertyPath === 'transform.rotation.y')
+
+    expect(yawTrack).toBeDefined()
+    expect(sampleTrack(yawTrack!, 0, 'scalar')).toBeCloseTo(170, 5)
+    expect(sampleTrack(yawTrack!, 0.5, 'scalar')).toBeCloseTo(180, 5)
+    expect(sampleTrack(yawTrack!, 1, 'scalar')).toBeCloseTo(190, 5)
+  })
+
   it('中间卡停留时长>0时，停留段内采样值保持恒定，不被跨卡插值污染', () => {
     const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
 

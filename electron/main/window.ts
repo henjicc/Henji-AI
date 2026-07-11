@@ -1,9 +1,12 @@
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
 import { bindWindowStateEvents } from './ipc/window'
+import { createMainLogger } from './services/logging/main-logger'
 import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
+
+const logger = createMainLogger('main.window')
 
 export function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -28,7 +31,12 @@ export function createWindow(): BrowserWindow {
   win.webContents.on('did-start-loading', () => {
     void cleanupAllVideoFrameExports('renderer_reloading')
   })
-  win.webContents.on('render-process-gone', () => {
+  win.webContents.on('render-process-gone', (_event, details) => {
+    // 渲染进程崩溃/被杀时渲染层日志通道已断，主进程必须记录原因，否则白屏无迹可查
+    logger.error('渲染进程异常退出', {
+      event: 'window.render_process.gone',
+      context: { reason: details.reason, exitCode: details.exitCode },
+    })
     void cleanupAllVideoFrameExports('renderer_process_gone')
   })
   win.webContents.once('destroyed', () => {

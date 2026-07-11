@@ -12,7 +12,7 @@ import {
 } from '../domain/sceneDefaults'
 import { createPoseMotion } from '../domain/characterMotion'
 import { applyObjectPatch, getCameraObjects, isCameraId } from '../domain/cameraUtils'
-import { getDirectorView } from '../scene/directorViewState'
+import { getDirectorView, resetDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
@@ -73,8 +73,6 @@ export interface CameraStageState {
   selectedShotId: string | null
   /** 时间轴框选出的多个状态关键帧 id（界面态，不持久化、不进撤销历史） */
   selectedShotIds: string[]
-  /** 非关键帧时间编辑场景时，是否自动插入状态关键帧。 */
-  simpleAutoKeyframe: boolean
   /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
   focusToken: number
   addShot: () => void
@@ -93,7 +91,6 @@ export interface CameraStageState {
   /** 修改镜头卡拍摄机位（重要记录 005）；null = 取消指定，沿用全局 activeCameraId */
   updateShotCamera: (id: string, cameraId: string | null) => void
   updateShotContinuity: (id: string, continuity: StageShot['continuity']) => void
-  setSimpleAutoKeyframe: (enabled: boolean) => void
   captureIntoSelectedShot: (objectIds?: string[]) => void
   setEditorMode: (mode: StageEditorMode) => void
   /** 将简易镜头卡单向固化为专业关键帧工程；专业工程调用时无操作。 */
@@ -110,6 +107,12 @@ export interface CameraStageState {
   setActiveCameraId: (id: string | null) => void
   updateObject: (id: string, patch: StageObjectPatch) => void
   updateTransform: (id: string, patch: Partial<StageTransform>, autoKeyPaths?: string[]) => void
+  /** 原子更新摄像机视图姿态，避免 OrbitControls 一次 change 被拆成多次编译。 */
+  updateCameraView: (id: string, patch: {
+    position?: StageVec3
+    rotation?: StageVec3
+    lookAtTarget?: StageVec3
+  }) => void
   /** 更新角色单个关节的欧拉偏移（角度制） */
   updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3, autoKeyPaths?: string[]) => void
   /** 一键应用预设姿势（整体替换当前姿态） */
@@ -293,7 +296,6 @@ export const useCameraStageStore = create<CameraStageState>()(
   shots: [initialShot],
   selectedShotId: initialShot.id,
   selectedShotIds: [],
-  simpleAutoKeyframe: false,
   focusToken: 0,
 
   addPrimitive: (kind) =>
@@ -442,6 +444,33 @@ export const useCameraStageStore = create<CameraStageState>()(
       return animation === state.animation ? { objects } : { objects, animation }
     }),
 
+  updateCameraView: (id, patch) =>
+    set((state) => {
+      const objects = state.objects.map((item) => {
+        if (item.id !== id || item.type !== 'camera') return item
+        return {
+          ...item,
+          transform: {
+            ...item.transform,
+            ...(patch.position ? { position: patch.position } : {}),
+            ...(patch.rotation ? { rotation: patch.rotation } : {}),
+          },
+          ...(patch.lookAtTarget
+            ? { lookAt: { mode: 'manual' as const, target: patch.lookAtTarget } }
+            : {}),
+        }
+      })
+      const object = objects.find((item) => item.id === id)
+      if (!object || object.type !== 'camera') return { objects }
+      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
+      const paths = [
+        ...(patch.position ? ['x', 'y', 'z'].map((axis) => `transform.position.${axis}`) : []),
+        ...(patch.rotation ? ['x', 'y', 'z'].map((axis) => `transform.rotation.${axis}`) : []),
+      ]
+      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
+      return animation === state.animation ? { objects } : { objects, animation }
+    }),
+
   updatePoseJoint: (id, jointId, euler, explicitAutoKeyPaths) =>
     set((state) => {
       const objects = state.objects.map((item) =>
@@ -482,18 +511,23 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
 
-  newScene: (name) =>
+  newScene: (name) => {
+    // 新工程不继承上一次离开时的自由视角（跨工程共享的 localStorage 快照），回到标准正视角度
+    resetDirectorView()
     set(() => {
-      const shots = [createShot([], '关键帧 1')]
+      // 新工程默认自带一台摄像机并直接进入摄像机视角，打开即有可拍画面
+      const camera = createCameraObject(nextName([], '摄像机'), pickDefaultColor(0))
+      const objects = [camera]
+      const shots = [createShot(objects, '关键帧 1', camera.id)]
       return {
-      objects: [],
-      selectedId: null,
+      objects,
+      selectedId: camera.id,
       gizmoMode: 'translate',
-      viewMode: 'director',
-      activeCameraId: null,
+      viewMode: 'camera',
+      activeCameraId: camera.id,
       currentProjectId: null,
       currentProjectName: name,
-      animation: compileShotsToAnimation(shots, []),
+      animation: compileShotsToAnimation(shots, objects),
       playback: createDefaultPlayback(),
       selectedKeyframes: [],
       sceneSettings: createDefaultSceneSettings(),
@@ -501,10 +535,10 @@ export const useCameraStageStore = create<CameraStageState>()(
       shots,
       selectedShotId: shots[0].id,
       selectedShotIds: [],
-      simpleAutoKeyframe: false,
       focusToken: 0,
       }
-    }),
+    })
+  },
 
   loadSnapshot: (snapshot, project) =>
     set(() => {
@@ -527,7 +561,6 @@ export const useCameraStageStore = create<CameraStageState>()(
         shots: snapshot.shots ?? [],
         selectedShotId: snapshot.shots?.[0]?.id ?? null,
         selectedShotIds: [],
-        simpleAutoKeyframe: false,
         focusToken: 0,
       }
     }),

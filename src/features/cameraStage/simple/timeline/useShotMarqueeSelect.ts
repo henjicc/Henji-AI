@@ -66,6 +66,8 @@ export function useShotMarqueeSelect({
     const target = event.target as Element
     // 交互元素与标尺各自有手势（点选/拖拽/scrub），只有真正的空白区域才启动框选
     if (target.closest('[role="button"],[data-panel-trigger-button],button,input,[data-timeline-ruler]')) return
+    // 框选是自定义拖拽手势，禁止浏览器同时拉起原生文本选择。
+    event.preventDefault()
     container.setPointerCapture(event.pointerId)
     const bounds = container.getBoundingClientRect()
     dragRef.current = {

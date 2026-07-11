@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
-import { Vector4, WebGLRenderTarget } from 'three'
-import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { WebGLRenderer } from 'three'
+import type { Camera, PerspectiveCamera, Scene } from 'three'
 import { resolveCenteredCaptureView } from './captureFraming'
 
 /**
@@ -25,18 +25,11 @@ interface StageCaptureBridgeProps {
   captureRef: React.MutableRefObject<StageCaptureFn | null>
 }
 
-interface OffscreenCaptureResources {
-  target: WebGLRenderTarget
-  pixels: Uint8Array
-  flippedPixels: Uint8ClampedArray
-  imageData: ImageData
-  canvas: HTMLCanvasElement
-  context: CanvasRenderingContext2D
+interface ExportRendererResources {
+  renderer: WebGLRenderer
   width: number
   height: number
 }
-
-const PIXEL_CHANNELS = 4
 
 const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) => {
   const gl = useThree((state) => state.gl)
@@ -44,10 +37,11 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
   const camera = useThree((state) => state.camera)
 
   useEffect(() => {
-    let resources: OffscreenCaptureResources | null = null
+    let resources: ExportRendererResources | null = null
 
     const disposeOffscreen = (): void => {
-      resources?.target.dispose()
+      resources?.renderer.dispose()
+      resources?.renderer.forceContextLoss()
       resources = null
     }
 
@@ -64,10 +58,8 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
         }
       }
 
-      return captureOffscreenPng(gl, scene, camera, options, () => {
-        resources = getOffscreenResources(resources, gl, options)
-        return resources
-      })
+      resources = getExportRenderer(resources, gl, options)
+      return captureOffscreenPng(resources.renderer, scene, camera, options)
     }
 
     captureFrame.disposeOffscreen = disposeOffscreen
@@ -81,39 +73,31 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
   return null
 }
 
-function getOffscreenResources(
-  current: OffscreenCaptureResources | null,
-  gl: WebGLRenderer,
+function getExportRenderer(
+  current: ExportRendererResources | null,
+  source: WebGLRenderer,
   options: StageOffscreenCaptureOptions,
-): OffscreenCaptureResources {
-  if (current && current.width === options.width && current.height === options.height) {
-    return current
-  }
+): ExportRendererResources {
+  const renderer = current?.renderer ?? new WebGLRenderer({
+    alpha: false,
+    antialias: true,
+    preserveDrawingBuffer: true,
+  })
 
-  current?.target.dispose()
-  const target = new WebGLRenderTarget(options.width, options.height)
-  target.texture.colorSpace = gl.outputColorSpace
-  const canvas = document.createElement('canvas')
-  canvas.width = options.width
-  canvas.height = options.height
-  const context = canvas.getContext('2d')
-  if (!context) {
-    target.dispose()
-    throw new Error('[cameraStage] 离屏视频帧编码失败：无法创建 2D 画布')
+  // 导出 renderer 不挂进 DOM，因此调整其 drawing buffer 不会引起预览闪烁或触发 R3F resize。
+  if (!current || current.width !== options.width || current.height !== options.height) {
+    renderer.setPixelRatio(1)
+    renderer.setSize(options.width, options.height, false)
   }
+  renderer.outputColorSpace = source.outputColorSpace
+  renderer.toneMapping = source.toneMapping
+  renderer.toneMappingExposure = source.toneMappingExposure
+  renderer.shadowMap.enabled = source.shadowMap.enabled
+  renderer.shadowMap.type = source.shadowMap.type
+  renderer.localClippingEnabled = source.localClippingEnabled
+  renderer.sortObjects = source.sortObjects
 
-  const length = options.width * options.height * PIXEL_CHANNELS
-  const flippedPixels = new Uint8ClampedArray(length)
-  return {
-    target,
-    pixels: new Uint8Array(length),
-    flippedPixels,
-    imageData: new ImageData(flippedPixels, options.width, options.height),
-    canvas,
-    context,
-    width: options.width,
-    height: options.height,
-  }
+  return { renderer, width: options.width, height: options.height }
 }
 
 async function captureOffscreenPng(
@@ -121,13 +105,11 @@ async function captureOffscreenPng(
   scene: Scene,
   camera: Camera,
   options: StageOffscreenCaptureOptions,
-  getResources: () => OffscreenCaptureResources,
 ): Promise<Uint8Array | null> {
   if (!isPerspectiveCamera(camera)) {
     throw new Error('[cameraStage] 离屏视频帧导出仅支持透视相机')
   }
 
-  const resources = getResources()
   const exportCamera = camera.clone()
   const captureView = resolveCenteredCaptureView(camera.aspect, options)
   exportCamera.setViewOffset(
@@ -139,48 +121,15 @@ async function captureOffscreenPng(
     captureView.height,
   )
 
-  const previousTarget = gl.getRenderTarget()
-  const previousAutoClear = gl.autoClear
-  const previousViewport = gl.getViewport(new Vector4())
-  const previousScissor = gl.getScissor(new Vector4())
-  const previousScissorTest = gl.getScissorTest()
-
-  try {
-    gl.autoClear = true
-    gl.setRenderTarget(resources.target)
-    gl.setViewport(0, 0, options.width, options.height)
-    gl.setScissor(0, 0, options.width, options.height)
-    gl.setScissorTest(false)
-    gl.render(scene, exportCamera)
-    gl.readRenderTargetPixels(resources.target, 0, 0, options.width, options.height, resources.pixels)
-    flipPixelsVertically(resources.pixels, resources.flippedPixels, options.width, options.height)
-    resources.context.putImageData(resources.imageData, 0, 0)
-  } finally {
-    gl.setRenderTarget(previousTarget)
-    gl.setViewport(previousViewport)
-    gl.setScissor(previousScissor)
-    gl.setScissorTest(previousScissorTest)
-    gl.autoClear = previousAutoClear
-  }
-
-  return canvasToPngBytes(resources.canvas)
+  gl.setRenderTarget(null)
+  gl.setViewport(0, 0, options.width, options.height)
+  gl.setScissorTest(false)
+  gl.render(scene, exportCamera)
+  return await canvasToPngBytes(gl.domElement)
 }
 
 function isPerspectiveCamera(camera: Camera): camera is PerspectiveCamera {
   return (camera as PerspectiveCamera).isPerspectiveCamera
-}
-
-function flipPixelsVertically(
-  source: Uint8Array,
-  target: Uint8ClampedArray,
-  width: number,
-  height: number,
-): void {
-  const rowLength = width * PIXEL_CHANNELS
-  for (let row = 0; row < height; row += 1) {
-    const sourceStart = (height - row - 1) * rowLength
-    target.set(source.subarray(sourceStart, sourceStart + rowLength), row * rowLength)
-  }
 }
 
 function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {

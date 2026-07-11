@@ -1,7 +1,14 @@
 import React, { useState } from 'react'
 import NumberInput from '@/components/ui/NumberInput'
 import { Dropdown, UiRangeInput, UiSwitch } from '@/components/ui'
-import { getObjectLookAtPoint, isFirstCamera, resolveCameraLookAtTarget } from '../domain/cameraUtils'
+import {
+  cameraTargetFromRotation,
+  getObjectLookAtPoint,
+  isFirstCamera,
+  resolveCameraLookAtTarget,
+  resolveCameraRotation,
+} from '../domain/cameraUtils'
+import { focalLengthToFov, fovToFocalLength } from '../domain/cameraOptics'
 import { CAMERA_ASPECT_RATIO_PRESETS } from '../domain/sceneDefaults'
 import type {
   StageCameraAspectRatioPreset,
@@ -18,7 +25,7 @@ type LookAtMode = StageCameraLookAt['mode']
 const AXES: Array<keyof StageVec3> = ['x', 'y', 'z']
 const LOOK_AT_MODE_OPTIONS: Array<{ label: string; value: LookAtMode; disabled?: boolean }> = [
   { label: '手动坐标', value: 'manual' },
-  { label: '锁定角色', value: 'object' },
+  { label: '锁定对象', value: 'object' },
 ]
 
 const CUSTOM_ASPECT_RATIO_INITIAL_HEIGHT = 9
@@ -77,12 +84,13 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 const Vec3NumberRow: React.FC<{
   label: string
   value: StageVec3
+  axes?: Array<keyof StageVec3>
   onChange: (next: StageVec3) => void
-}> = ({ label, value, onChange }) => (
+}> = ({ label, value, axes = AXES, onChange }) => (
   <div>
     <div className="mb-1 text-xs text-text-muted">{label}</div>
     <div className="flex gap-1.5">
-      {AXES.map((axis) => (
+      {axes.map((axis) => (
         <NumberInput
           key={axis}
           value={value[axis]}
@@ -100,7 +108,7 @@ const Vec3NumberRow: React.FC<{
 )
 
 function getLookAtModeDisplay(mode: LookAtMode): string {
-  return mode === 'manual' ? '手动坐标' : '锁定角色'
+  return mode === 'manual' ? '手动坐标' : '锁定对象'
 }
 
 function createManualLookAt(target: StageVec3): StageCameraLookAt {
@@ -114,13 +122,17 @@ function createObjectLookAt(objectId: string, fallbackTarget: StageVec3): StageC
 const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object }) => {
   const objects = useCameraStageStore((state) => state.objects)
   const updateObject = useCameraStageStore((state) => state.updateObject)
-  const characters = objects.filter((item) => item.type === 'character')
+  const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
+  // 注视目标可锁定任意场景对象（角色/几何体/其他摄像机），只排除自己
+  const lockableTargets = objects.filter((item) => item.id !== object.id)
   const resolvedTarget = resolveCameraLookAtTarget(object, objects)
+  const cameraRotation = resolveCameraRotation(object, objects)
+  const focalLength = fovToFocalLength(object.fov)
   // 重要记录 007：画幅一致性只由首个摄像机决定，非首摄像机画幅字段只读
   const isPrimaryCamera = isFirstCamera(objects, object.id)
   const lookAt = object.lookAt
-  const selectedCharacter = lookAt.mode === 'object'
-    ? characters.find((item) => item.id === lookAt.objectId)
+  const selectedTarget = lookAt.mode === 'object'
+    ? lockableTargets.find((item) => item.id === lookAt.objectId)
     : undefined
 
   const handleModeSelect = (mode: LookAtMode): void => {
@@ -129,25 +141,36 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
       updateObject(object.id, { lookAt: createManualLookAt(resolvedTarget) })
       return
     }
-    const firstCharacter = characters[0]
-    if (!firstCharacter) {
+    const firstTarget = lockableTargets[0]
+    if (!firstTarget) {
       updateObject(object.id, { lookAt: createManualLookAt(resolvedTarget) })
       return
     }
     updateObject(object.id, {
-      lookAt: createObjectLookAt(firstCharacter.id, getObjectLookAtPoint(firstCharacter)),
+      lookAt: createObjectLookAt(firstTarget.id, getObjectLookAtPoint(firstTarget)),
     })
   }
 
-  const handleCharacterSelect = (characterId: string): void => {
-    const character = characters.find((item) => item.id === characterId)
+  const handleTargetSelect = (targetId: string): void => {
+    const target = lockableTargets.find((item) => item.id === targetId)
     updateObject(object.id, {
-      lookAt: createObjectLookAt(characterId, character ? getObjectLookAtPoint(character) : resolvedTarget),
+      lookAt: createObjectLookAt(targetId, target ? getObjectLookAtPoint(target) : resolvedTarget),
     })
   }
 
   const handleManualTargetChange = (target: StageVec3): void => {
     updateObject(object.id, { lookAt: createManualLookAt(target) })
+  }
+
+  const handleRotationChange = (rotation: StageVec3): void => {
+    updateCameraView(object.id, {
+      rotation,
+      lookAtTarget: cameraTargetFromRotation(object, objects, rotation),
+    })
+  }
+
+  const handleFocalLengthChange = (next: number): void => {
+    updateObject(object.id, { fov: focalLengthToFov(next) })
   }
 
   const handleAspectPresetSelect = (preset: StageCameraAspectRatioPreset): void => {
@@ -205,28 +228,39 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
       <SectionTitle>相机</SectionTitle>
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-1 text-xs text-text-muted">
+          <KeyframeStopwatch objectId={object.id} groupPath="transform.rotation" />
+          <span>旋转（°）</span>
+        </div>
+        <Vec3NumberRow
+          label="X / Y / Z"
+          value={cameraRotation}
+          onChange={handleRotationChange}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-1 text-xs text-text-muted">
           <KeyframeStopwatch objectId={object.id} groupPath="fov" />
-          <span>视野角 FOV（°）</span>
+          <span>焦距（mm，全画幅等效）</span>
         </div>
         <div className="flex items-center gap-1.5">
           <UiRangeInput
             min={10}
-            max={120}
+            max={200}
             step={1}
-            value={object.fov}
-            onChange={(event) => updateObject(object.id, { fov: Number(event.target.value) })}
+            value={focalLength}
+            onChange={(event) => handleFocalLengthChange(Number(event.target.value))}
           />
           <NumberInput
-            value={object.fov}
+            value={focalLength}
             step={1}
             min={10}
-            max={120}
+            max={200}
             precision={0}
             widthClassName="w-16"
             className="shrink-0"
             commitOnChange
             wheelStep
-            onChange={(next) => updateObject(object.id, { fov: next })}
+            onChange={handleFocalLengthChange}
           />
         </div>
       </div>
@@ -263,7 +297,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
           display={getLookAtModeDisplay(object.lookAt.mode)}
           options={LOOK_AT_MODE_OPTIONS.map((option) => ({
             ...option,
-            disabled: option.value === 'object' && characters.length === 0,
+            disabled: option.value === 'object' && lockableTargets.length === 0,
           }))}
           onSelect={handleModeSelect}
           className="w-full"
@@ -279,12 +313,12 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
         />
       ) : (
         <div className="flex flex-col gap-1.5">
-          <div className="text-xs text-text-muted">锁定角色</div>
+          <div className="text-xs text-text-muted">锁定对象</div>
           <Dropdown<string>
-            value={selectedCharacter?.id}
-            display={selectedCharacter?.name ?? '选择角色'}
-            options={characters.map((character) => ({ label: character.name, value: character.id }))}
-            onSelect={handleCharacterSelect}
+            value={selectedTarget?.id}
+            display={selectedTarget?.name ?? '选择对象'}
+            options={lockableTargets.map((target) => ({ label: target.name, value: target.id }))}
+            onSelect={handleTargetSelect}
             className="w-full"
             minWidthStrategy="none"
           />

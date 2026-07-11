@@ -3,6 +3,7 @@ import { BLACK_HEX, CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX, WHI
 import { createPoseMotion } from './characterMotion'
 import { POSE_PRESETS } from './posePresets.gen'
 import { clonePose, createEmptyPose } from './poseTypes'
+import { rotationFromPositionAndTarget } from './cameraUtils'
 import type {
   StageCameraAspectRatioPreset,
   StageCameraObject,
@@ -93,6 +94,8 @@ export function createCameraObject(
 ): StageCameraObject {
   const transform = createIdentityTransform()
   transform.position = initialView ? { ...initialView.position } : { x: 0, y: 1.5, z: 4 }
+  const target = initialView ? { ...initialView.target } : { x: 0, y: 1, z: 0 }
+  transform.rotation = rotationFromPositionAndTarget(transform.position, target)
   return {
     id: uuidv4(),
     type: 'camera',
@@ -101,7 +104,7 @@ export function createCameraObject(
     color,
     visible: true,
     fov: 50,
-    lookAt: { mode: 'manual', target: initialView ? { ...initialView.target } : { x: 0, y: 1, z: 0 } },
+    lookAt: { mode: 'manual', target },
     aspectRatio: { preset: '16:9', ratio: 16 / 9 },
     effectors: [],
   }

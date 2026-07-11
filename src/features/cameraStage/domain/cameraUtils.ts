@@ -1,5 +1,8 @@
 import type { StageCameraObject, StageObject, StageObjectPatch, StageVec3 } from './sceneTypes'
 
+const RAD2DEG = 180 / Math.PI
+const DEG2RAD = Math.PI / 180
+
 /** 相机锁定对象时的默认瞄准点：角色看胸口附近，其它对象看自身原点/中心 */
 export function getObjectLookAtPoint(object: StageObject): StageVec3 {
   const { position, scale } = object.transform
@@ -20,6 +23,48 @@ export function resolveCameraLookAtTarget(
 
   const target = objects.find((item) => item.id === lookAt.objectId)
   return target ? getObjectLookAtPoint(target) : { ...lookAt.fallbackTarget }
+}
+
+/** 由摄像机位置与注视点换算为面板可读的俯仰角 X / 水平角 Y（角度制）。 */
+export function resolveCameraRotation(camera: StageCameraObject, objects: StageObject[]): StageVec3 {
+  if (camera.lookAt.mode === 'manual') return { ...camera.transform.rotation }
+  const target = resolveCameraLookAtTarget(camera, objects)
+  return rotationFromPositionAndTarget(camera.transform.position, target, camera.transform.rotation.z)
+}
+
+/** 由位置与目标点计算 three.js 摄像机欧拉角；roll 没有包含在 lookAt 中，由调用方显式保留。 */
+export function rotationFromPositionAndTarget(position: StageVec3, target: StageVec3, roll = 0): StageVec3 {
+  const dx = target.x - position.x
+  const dy = target.y - position.y
+  const dz = target.z - position.z
+  return {
+    x: Math.atan2(dy, Math.hypot(dx, dz)) * RAD2DEG,
+    y: Math.atan2(-dx, -dz) * RAD2DEG,
+    z: roll,
+  }
+}
+
+/** 按旋转角更新注视点并保持当前对焦距离；摄像机朝向仍由单一 lookAt 数据源驱动。 */
+export function cameraTargetFromRotation(
+  camera: StageCameraObject,
+  objects: StageObject[],
+  rotation: StageVec3,
+): StageVec3 {
+  const currentTarget = resolveCameraLookAtTarget(camera, objects)
+  const position = camera.transform.position
+  const distance = Math.max(0.01, Math.hypot(
+    currentTarget.x - position.x,
+    currentTarget.y - position.y,
+    currentTarget.z - position.z,
+  ))
+  const pitch = rotation.x * DEG2RAD
+  const yaw = rotation.y * DEG2RAD
+  const horizontal = Math.cos(pitch) * distance
+  return {
+    x: position.x - Math.sin(yaw) * horizontal,
+    y: position.y + Math.sin(pitch) * distance,
+    z: position.z - Math.cos(yaw) * horizontal,
+  }
 }
 
 export function getCameraObjects(objects: StageObject[]): StageCameraObject[] {

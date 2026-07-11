@@ -28,6 +28,7 @@ import {
 } from './animationTypes'
 import { upsertKeyframe } from './keyframeEngine'
 import type { StageObject, StageVec3 } from './sceneTypes'
+import { rotationFromPositionAndTarget } from './cameraUtils'
 import { compileCameraMoveSamples } from './shotCameraMovePresets'
 import { inferCharacterTransition } from './characterTransitionInference'
 import type { StageCameraMove, StageShot, StageShotObjectState, StageSpeedPreset } from './shotTypes'
@@ -107,9 +108,19 @@ export function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
 /** 把镜头卡快照的可动画字段合并进当前场景对象，复用 animatableProps 的取值逻辑而不重写一份 */
 function mergeStateIntoObject(object: StageObject, state: StageShotObjectState): StageObject {
   if (object.type === 'camera') {
+    const lookAtTarget = state.lookAt?.mode === 'manual'
+      ? state.lookAt.target
+      : state.lookAt?.fallbackTarget ?? { x: 0, y: 0, z: 0 }
     return {
       ...object,
-      transform: state.transform,
+      transform: {
+        ...state.transform,
+        rotation: rotationFromPositionAndTarget(
+          state.transform.position,
+          lookAtTarget,
+          state.transform.rotation.z,
+        ),
+      },
       color: state.color,
       fov: state.fov ?? object.fov,
       lookAt: state.lookAt ?? object.lookAt,
@@ -130,6 +141,12 @@ function mergeStateIntoObject(object: StageObject, state: StageShotObjectState):
 function hasPropertyChanged(valueType: StageAnimatableValueType, a: StageKeyframeValue, b: StageKeyframeValue): boolean {
   if (valueType === 'color') return a !== b
   return Math.abs((a as number) - (b as number)) > SCALAR_EPSILON
+}
+
+/** 欧拉角等价值解包到离起点最近的一圈，避免 170° → -170° 绕远路旋转 340°。 */
+function unwrapNearestAngle(from: number, to: number): number {
+  const delta = ((to - from + 180) % 360 + 360) % 360 - 180
+  return from + delta
 }
 
 /** 返回两张镜头卡之间确有可动画属性变化的对象 id；UI 与编译器共享同一注册表和差异容差。 */
@@ -319,7 +336,13 @@ function compileObjectTransition(
     for (const descriptor of group.children) {
       if (characterInference?.motion && descriptor.path === 'transform.rotation.y') continue
       const fromValue = descriptor.getValue(fromObject)
-      const toValue = descriptor.getValue(toObject)
+      const rawToValue = descriptor.getValue(toObject)
+      const toValue = object.type === 'camera'
+        && descriptor.path.startsWith('transform.rotation.')
+        && typeof fromValue === 'number'
+        && typeof rawToValue === 'number'
+        ? unwrapNearestAngle(fromValue, rawToValue)
+        : rawToValue
       if (!hasPropertyChanged(descriptor.valueType, fromValue, toValue)) continue
 
       const points = compileTransitionPoints(object, move, fromValue, toValue, segStart, segEnd, easing, descriptor.path)

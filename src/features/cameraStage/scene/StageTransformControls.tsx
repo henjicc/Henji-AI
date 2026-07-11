@@ -8,6 +8,7 @@ import { beginHistorySession, endHistorySession } from '../store/cameraStageStor
 interface StageTransformControlsProps {
   object: Object3D
   mode: StageGizmoMode
+  enabled?: boolean
   onObjectChange: () => void
 }
 
@@ -44,6 +45,7 @@ interface StageTransformGizmo extends Object3D {
 
 interface StageTransformControlsRuntime {
   gizmo?: StageTransformGizmo
+  enabled: boolean
 }
 
 const AXIS_NAMES = ['X', 'Y', 'Z'] as const
@@ -138,6 +140,7 @@ const patchGizmoHandleStabilization = (controls: TransformControlsImpl): void =>
 const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTransformControlsProps>(({
   object,
   mode,
+  enabled = true,
   onObjectChange,
 }, ref) => {
   const defaultControls = useThree((state) => (
@@ -165,6 +168,11 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
       controls.detach()
     }
   }, [controls, object])
+
+  useLayoutEffect(() => {
+    const runtimeControls = controls as unknown as StageTransformControlsRuntime
+    runtimeControls.enabled = enabled
+  }, [controls, enabled])
 
   useEffect(() => {
     if (!defaultControls) return undefined

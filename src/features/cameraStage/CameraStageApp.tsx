@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import CameraStageEditor from './CameraStageEditor'
+import CameraStageErrorBoundary from './CameraStageErrorBoundary'
 import { loadProjectIntoScene } from './projects/cameraStageProjectService'
 import CameraStageProjectList from './projects/CameraStageProjectList'
 import { persistDirectorView } from './scene/directorViewState'
@@ -11,7 +12,7 @@ import { useCameraStageStore } from './store/cameraStageStore'
  * 列表页负责新建/打开/重命名/删除并把场景加载进 store，编辑器负责场景搭建与截图。
  */
 
-const CameraStageApp: React.FC = () => {
+const CameraStageAppInner: React.FC = () => {
   const view = useCameraStageSessionStore((state) => state.appView)
   const lastProjectId = useCameraStageSessionStore((state) => state.lastProjectId)
   const stageViewMode = useCameraStageSessionStore((state) => state.stageViewMode)
@@ -64,5 +65,11 @@ const CameraStageApp: React.FC = () => {
   }
   return <CameraStageProjectList onEnterEditor={() => setAppView('editor')} />
 }
+
+const CameraStageApp: React.FC = () => (
+  <CameraStageErrorBoundary>
+    <CameraStageAppInner />
+  </CameraStageErrorBoundary>
+)
 
 export default CameraStageApp

@@ -68,7 +68,7 @@ export interface StageCameraObject extends StageObjectBase {
   type: 'camera'
   /** 视野角（度） */
   fov: number
-  /** 摄像机实际取景朝向：手动坐标或锁定角色对象 */
+  /** 摄像机实际取景朝向：手动坐标或锁定任意场景对象 */
   lookAt: StageCameraLookAt
   /** 画幅比例（宽/高），驱动取景框线框与摄像机视角压暗遮罩 */
   aspectRatio: StageCameraAspectRatio

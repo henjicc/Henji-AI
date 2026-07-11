@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatShotTimecode, nextShotTimecodeMode } from './shotTimecodeFormat'
+import { formatCompactShotTimecode, formatShotTimecode, nextShotTimecodeMode } from './shotTimecodeFormat'
 
 const FPS = 30
 
@@ -24,6 +24,19 @@ describe('formatShotTimecode', () => {
   it('负数钳制到 0', () => {
     expect(formatShotTimecode(-5, 'seconds', FPS)).toBe('0.00s')
     expect(formatShotTimecode(-5, 'frames', FPS)).toBe('0f')
+  })
+})
+
+describe('formatCompactShotTimecode', () => {
+  it('省略为零的高位时间单位', () => {
+    expect(formatCompactShotTimecode(2, 'secondsFrames', FPS)).toBe('02:00')
+    expect(formatCompactShotTimecode(65, 'secondsFrames', FPS)).toBe('01:05:00')
+    expect(formatCompactShotTimecode(3661, 'secondsFrames', FPS)).toBe('01:01:01:00')
+  })
+
+  it('其他模式沿用对应单位格式', () => {
+    expect(formatCompactShotTimecode(2, 'seconds', FPS)).toBe('2.00s')
+    expect(formatCompactShotTimecode(2, 'frames', FPS)).toBe('60f')
   })
 })
 

@@ -66,7 +66,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const animation = useCameraStageStore((state) => state.animation)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
-  const isCameraSelected = objects.find((item) => item.id === selectedId)?.type === 'camera'
 
   const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
   const { saveState } = useCameraStageAutosave()
@@ -332,13 +331,10 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
         {viewMode === 'director' && (
           <div className="flex items-center gap-1.5 border-l border-border-dark pl-2">
             {GIZMO_MODES.map((item) => {
-              const disabled = isCameraSelected && item.id !== 'translate'
               return (
                 <UiOptionButton
                   key={item.id}
                   active={gizmoMode === item.id}
-                  disabled={disabled}
-                  title={disabled ? '摄像机仅支持移动（W/E/R 切换）' : undefined}
                   onClick={() => setGizmoMode(item.id)}
                   className="py-1.5 text-xs"
                 >

@@ -26,6 +26,20 @@ import {
  */
 
 const logger = createLogger('cameraStage.projects')
+const deletedProjectIds = new Set<string>()
+const projectMutationTails = new Map<string, Promise<void>>()
+
+/** 同一工程的保存/删除严格串行，避免编辑器卸载时的迟到 autosave 在删除后把记录复活。 */
+async function enqueueProjectMutation(projectId: string, mutation: () => Promise<void>): Promise<void> {
+  const previous = projectMutationTails.get(projectId) ?? Promise.resolve()
+  const current = previous.catch(() => undefined).then(mutation)
+  projectMutationTails.set(projectId, current)
+  try {
+    await current
+  } finally {
+    if (projectMutationTails.get(projectId) === current) projectMutationTails.delete(projectId)
+  }
+}
 
 export interface SavedProjectInfo {
   id: string
@@ -74,15 +88,29 @@ export function createCurrentProjectDraft(now: number = Date.now()): CameraStage
 }
 
 /** 持久化工程草稿并把工程 id/name 绑定回当前编辑态。 */
-export async function saveProjectDraft(draft: CameraStageProjectDraft): Promise<SavedProjectInfo> {
+export async function saveProjectDraft(
+  draft: CameraStageProjectDraft,
+  bindToCurrentProject = true,
+): Promise<SavedProjectInfo> {
+  if (deletedProjectIds.has(draft.id)) {
+    logger.debug('跳过已删除工程的迟到保存', {
+      event: 'camera_stage.project.save.skipped_deleted',
+      projectId: draft.id,
+    })
+    return { id: draft.id, name: draft.name }
+  }
   try {
-    await upsertCameraStageProjectRecord(draft.record)
+    await enqueueProjectMutation(draft.id, async () => {
+      if (!deletedProjectIds.has(draft.id)) await upsertCameraStageProjectRecord(draft.record)
+    })
   } catch (error) {
     logger.error('[cameraStage] 保存工程失败', error, { projectId: draft.id })
     throw error
   }
-  useCameraStageStore.getState().bindProject(draft.id, draft.name)
-  useCameraStageSessionStore.getState().setLastProjectId(draft.id)
+  if (bindToCurrentProject && !deletedProjectIds.has(draft.id)) {
+    useCameraStageStore.getState().bindProject(draft.id, draft.name)
+    useCameraStageSessionStore.getState().setLastProjectId(draft.id)
+  }
   return { id: draft.id, name: draft.name }
 }
 
@@ -133,6 +161,8 @@ export async function createNewProject(
   useCameraStageStore.getState().newScene(name)
   useCameraStageStore.getState().setEditorMode(mode)
   useCameraStageSessionStore.getState().setLastProjectId(null)
+  // 新工程默认摄像机视角；会话持久化的 stageViewMode 会在进入编辑器时回放，必须同步更新
+  useCameraStageSessionStore.getState().setStageViewMode('camera')
   clearCameraStageHistory()
   try {
     const project = await saveCurrentProject()
@@ -188,7 +218,16 @@ export async function renameProject(projectId: string, name: string): Promise<vo
 }
 
 export async function deleteProject(projectId: string): Promise<void> {
-  await deleteCameraStageProjectRecord(projectId)
+  deletedProjectIds.add(projectId)
+  logger.info('删除运镜工程开始', { event: 'camera_stage.project.delete.start', projectId })
+  try {
+    await enqueueProjectMutation(projectId, async () => deleteCameraStageProjectRecord(projectId))
+    logger.info('删除运镜工程完成', { event: 'camera_stage.project.delete.completed', projectId })
+  } catch (error) {
+    deletedProjectIds.delete(projectId)
+    logger.error('删除运镜工程失败', error, { event: 'camera_stage.project.delete.failed', projectId })
+    throw error
+  }
   const session = useCameraStageSessionStore.getState()
   if (session.lastProjectId === projectId) {
     session.setLastProjectId(null)

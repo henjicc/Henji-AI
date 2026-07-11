@@ -3,6 +3,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { BufferGeometry, Vector3 } from 'three'
 import type { Group, MeshStandardMaterial } from 'three'
 import { registerPlaybackApplier } from '../store/playbackAppliers'
+import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import type {
   StageCameraObject,
   StageCharacterObject,
@@ -115,14 +116,8 @@ const CharacterMesh: React.FC<{ object: StageCharacterObject; selected: boolean 
 const CameraHelperMesh: React.FC<{
   object: StageCameraObject
   selected: boolean
-  lookAtTarget: StageVec3
-}> = ({ object, selected, lookAtTarget }) => {
-  const helperRef = useRef<Group>(null)
+}> = ({ object, selected }) => {
   const modelUrl = useCameraModelUrl()
-  const target = useMemo(
-    () => new Vector3(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z),
-    [lookAtTarget.x, lookAtTarget.y, lookAtTarget.z],
-  )
   const frustumGeometry = useMemo(() => {
     const distance = 1.1
     const fov = Math.min(120, Math.max(10, object.fov)) * DEG2RAD
@@ -150,10 +145,6 @@ const CameraHelperMesh: React.FC<{
 
   useEffect(() => () => frustumGeometry.dispose(), [frustumGeometry])
 
-  useLayoutEffect(() => {
-    helperRef.current?.lookAt(target)
-  }, [target])
-
   const placeholder = (
     <>
       <mesh position={[0, 0, 0]}>
@@ -176,7 +167,7 @@ const CameraHelperMesh: React.FC<{
   )
 
   return (
-    <group ref={helperRef}>
+    <group>
       {modelUrl ? (
         <CharacterErrorBoundary fallback={placeholder}>
           <Suspense fallback={placeholder}>
@@ -215,6 +206,14 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
     return () => onRegister(object.id, null)
   }, [object.id, onRegister])
 
+  // 摄像机旋转数据是 YXZ 语义（与 rotationFromPositionAndTarget 一致）；改顺序后 three.js 会用
+  // 现有欧拉值重算四元数，因此在首帧绘制前声明即可，后续 rotation.set / gizmo 读写都沿用该顺序
+  useLayoutEffect(() => {
+    const group = groupRef.current
+    if (!group || object.type !== 'camera') return
+    group.rotation.order = 'YXZ'
+  }, [object.type])
+
   // 播放期命令式采样：变换直改本对象容器 group，颜色直改 primitive 材质（不写 store）
   useEffect(() => {
     const unregs: Array<() => void> = []
@@ -226,15 +225,15 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
         group.position.set(v.x, v.y, v.z)
       }),
     )
+    unregs.push(
+      registerPlaybackApplier(object.id, 'transform.rotation', (value) => {
+        const group = groupRef.current
+        if (!group) return
+        const v = value as StageVec3
+        group.rotation.set(v.x * DEG2RAD, v.y * DEG2RAD, v.z * DEG2RAD)
+      }),
+    )
     if (object.type !== 'camera') {
-      unregs.push(
-        registerPlaybackApplier(object.id, 'transform.rotation', (value) => {
-          const group = groupRef.current
-          if (!group) return
-          const v = value as StageVec3
-          group.rotation.set(v.x * DEG2RAD, v.y * DEG2RAD, v.z * DEG2RAD)
-        }),
-      )
       unregs.push(
         registerPlaybackApplier(object.id, 'transform.scale', (value) => {
           const group = groupRef.current
@@ -262,19 +261,21 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
     onSelect(object.id)
   }
 
+  const renderedRotation = object.type === 'camera' && object.lookAt.mode === 'object' && cameraLookAtTarget
+    ? rotationFromPositionAndTarget(transform.position, cameraLookAtTarget, transform.rotation.z)
+    : transform.rotation
+
   return (
       <group
         ref={groupRef}
         name={object.id}
         visible={object.visible}
         position={[transform.position.x, transform.position.y, transform.position.z]}
-        rotation={object.type === 'camera'
-          ? [0, 0, 0]
-          : [
-              transform.rotation.x * DEG2RAD,
-              transform.rotation.y * DEG2RAD,
-              transform.rotation.z * DEG2RAD,
-            ]}
+        rotation={[
+          renderedRotation.x * DEG2RAD,
+          renderedRotation.y * DEG2RAD,
+          renderedRotation.z * DEG2RAD,
+        ]}
         scale={object.type === 'camera' ? [1, 1, 1] : [transform.scale.x, transform.scale.y, transform.scale.z]}
       >
         <group ref={contentRef}>
@@ -299,7 +300,6 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
               <CameraHelperMesh
                 object={object}
                 selected={selected}
-                lookAtTarget={cameraLookAtTarget}
               />
             </group>
           )}

@@ -105,7 +105,7 @@ const TRANSFORM_GROUPS: AnimatableGroup[] = [
   vec3Group(
     'transform.rotation',
     '旋转',
-    notCamera,
+    () => true,
     (object) => object.transform.rotation,
     (object, vec) => ({ ...object, transform: { ...object.transform, rotation: vec } }),
   ),

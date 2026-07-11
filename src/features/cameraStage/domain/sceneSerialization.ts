@@ -22,6 +22,7 @@ import { normalizeCharacterMotion } from './characterMotion'
 import { createDefaultAnimation } from './animationTypes'
 import type { StageKeyframe, StageSceneAnimation, StageTrack } from './animationTypes'
 import { createDefaultSceneSettings } from './sceneDefaults'
+import { rotationFromPositionAndTarget } from './cameraUtils'
 import { normalizeEditorMode, normalizeShots } from './shotTypes'
 import type { StageEditorMode, StageShot } from './shotTypes'
 import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
@@ -278,6 +279,24 @@ function withDefaultCameraEffectors(objects: StageObject[]): StageObject[] {
   })
 }
 
+/** 统一旧工程摄像机的手动注视点与 XYZ 旋转；Z 轴 roll 无法由 lookAt 推导，因此原样保留。 */
+function withNormalizedCameraRotations(objects: StageObject[]): StageObject[] {
+  return objects.map((object) => {
+    if (object.type !== 'camera' || object.lookAt.mode !== 'manual') return object
+    return {
+      ...object,
+      transform: {
+        ...object.transform,
+        rotation: rotationFromPositionAndTarget(
+          object.transform.position,
+          object.lookAt.target,
+          object.transform.rotation.z,
+        ),
+      },
+    }
+  })
+}
+
 /** v2→v3：把整体 Vec3 值的轨道拆成 X/Y/Z 三条分量 scalar 轨道；非 Vec3 轨道原样保留 */
 function splitVec3Track(track: StageTrack): StageTrack[] {
   const first = track.keyframes[0]?.value
@@ -322,6 +341,7 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   objects = withNormalizedCharacterMotion(objects)
   // v10 及以下工程的摄像机对象无 effectors 字段 → 补空数组；同时顺手规范非法数据
   objects = withDefaultCameraEffectors(objects)
+  objects = withNormalizedCameraRotations(objects)
   const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
   // v1 工程无 animation 字段 → 视为无动画；v2+ 解析已有动画；v2 的整体 Vec3 轨道拆成分量轨道
   let animation = version >= 2 ? parseAnimation(record.animation) : createDefaultAnimation()

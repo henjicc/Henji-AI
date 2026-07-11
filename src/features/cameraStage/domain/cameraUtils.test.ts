@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import { createCameraObject, createPrimitiveObject, pickDefaultColor } from './sceneDefaults'
-import { applyObjectPatch, areCameraAspectRatiosConsistent, getCameraObjects, isFirstCamera } from './cameraUtils'
+import {
+  applyObjectPatch,
+  areCameraAspectRatiosConsistent,
+  cameraTargetFromRotation,
+  getCameraObjects,
+  isFirstCamera,
+  resolveCameraRotation,
+  rotationFromPositionAndTarget,
+} from './cameraUtils'
 
 describe('areCameraAspectRatiosConsistent', () => {
   it('空集合和统一画幅的机位通过校验', () => {
@@ -74,5 +83,52 @@ describe('applyObjectPatch（重要记录 007：摄像机画幅一致性）', ()
     const cameraA = createCameraObject('摄像机01', pickDefaultColor(0))
     const objects = [cameraA]
     expect(applyObjectPatch(objects, 'missing', { name: 'x' })).toBe(objects)
+  })
+})
+
+describe('摄像机旋转与注视点换算', () => {
+  it('手动注视模式直接使用完整 XYZ 旋转，Z 轴不会被 lookAt 覆盖', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    camera.transform.rotation = { x: 12, y: -34, z: 27 }
+    expect(resolveCameraRotation(camera, [camera])).toEqual({ x: 12, y: -34, z: 27 })
+  })
+
+  it('旋转换算往返时保持实际朝向', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0), {
+      position: { x: 0, y: 0, z: 5 },
+      target: { x: 3, y: 2, z: 0 },
+    })
+    const rotation = resolveCameraRotation(camera, [camera])
+    const target = cameraTargetFromRotation(camera, [camera], rotation)
+    if (camera.lookAt.mode !== 'manual') throw new Error('测试摄像机应使用手动注视点')
+    const originalDirection = {
+      x: camera.lookAt.target.x - camera.transform.position.x,
+      y: camera.lookAt.target.y - camera.transform.position.y,
+      z: camera.lookAt.target.z - camera.transform.position.z,
+    }
+    expect(target.x - camera.transform.position.x).toBeCloseTo(originalDirection.x, 5)
+    expect(target.y - camera.transform.position.y).toBeCloseTo(originalDirection.y, 5)
+    expect(target.z - camera.transform.position.z).toBeCloseTo(originalDirection.z, 5)
+  })
+
+  it('换算出的角度按 YXZ 顺序回放时与 three.js lookAt 姿态一致（回归：XYZ 顺序会产生假 roll）', () => {
+    // 俯仰角和水平角同时非零的机位：欧拉顺序一旦用错，两个四元数会明显偏离
+    const position = { x: 2.5, y: 1.8, z: -3.2 }
+    const target = { x: -1, y: 0.6, z: 2 }
+    const rotation = rotationFromPositionAndTarget(position, target)
+    const lookAtQuaternion = new Quaternion().setFromRotationMatrix(new Matrix4().lookAt(
+      new Vector3(position.x, position.y, position.z),
+      new Vector3(target.x, target.y, target.z),
+      new Vector3(0, 1, 0),
+    ))
+    const toQuaternion = (order: 'YXZ' | 'XYZ'): Quaternion => new Quaternion().setFromEuler(new Euler(
+      rotation.x * Math.PI / 180,
+      rotation.y * Math.PI / 180,
+      rotation.z * Math.PI / 180,
+      order,
+    ))
+    // |dot| = 1 表示同一姿态（四元数双覆盖，q 与 -q 等价）
+    expect(Math.abs(lookAtQuaternion.dot(toQuaternion('YXZ')))).toBeCloseTo(1, 6)
+    expect(Math.abs(lookAtQuaternion.dot(toQuaternion('XYZ')))).toBeLessThan(0.999)
   })
 })

@@ -52,7 +52,7 @@ export function useCameraStageAutosave(): UseCameraStageAutosaveResult {
       }
 
       try {
-        await saveProjectDraft(draft)
+        await saveProjectDraft(draft, false)
         lastSavedFingerprintRef.current = draft.fingerprint
         if (mountedRef.current) {
           setSaveState('saved')

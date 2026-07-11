@@ -43,3 +43,15 @@ export function formatShotTimecode(seconds: number, mode: ShotTimecodeMode, fps:
   }
   return `${safeSeconds.toFixed(2)}s`
 }
+
+/**
+ * 时间轴内的紧凑时间码：显示模式与工具栏一致，但省略值为 0 的高位时间单位。
+ * 例如 2 秒显示为 02:00，65 秒显示为 01:05:00。
+ */
+export function formatCompactShotTimecode(seconds: number, mode: ShotTimecodeMode, fps: number): string {
+  if (mode !== 'secondsFrames') return formatShotTimecode(seconds, mode, fps)
+  const { hours, minutes, secs, frames } = toTimecodeParts(Math.max(0, seconds), fps)
+  if (hours > 0) return `${pad2(hours)}:${pad2(minutes)}:${pad2(secs)}:${pad2(frames)}`
+  if (minutes > 0) return `${pad2(minutes)}:${pad2(secs)}:${pad2(frames)}`
+  return `${pad2(secs)}:${pad2(frames)}`
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { formatShotTimecode, nextShotTimecodeMode, type ShotTimecodeMode } from './shotTimecodeFormat'
 
 /**
@@ -10,14 +10,14 @@ interface ShotTimecodeTextProps {
   currentTime: number
   duration: number
   fps: number
+  mode: ShotTimecodeMode
+  onModeChange: (mode: ShotTimecodeMode) => void
 }
 
-const ShotTimecodeText: React.FC<ShotTimecodeTextProps> = ({ currentTime, duration, fps }) => {
-  const [mode, setMode] = useState<ShotTimecodeMode>('secondsFrames')
-
+const ShotTimecodeText: React.FC<ShotTimecodeTextProps> = ({ currentTime, duration, fps, mode, onModeChange }) => {
   const handleClick = (event: React.MouseEvent<HTMLSpanElement>): void => {
     if (!event.ctrlKey) return
-    setMode((current) => nextShotTimecodeMode(current))
+    onModeChange(nextShotTimecodeMode(mode))
   }
 
   return (

@@ -31,7 +31,6 @@ export type ShotSliceActions = Pick<
   | 'updateShotTransition'
   | 'updateShotCamera'
   | 'updateShotContinuity'
-  | 'setSimpleAutoKeyframe'
   | 'captureIntoSelectedShot'
   | 'setEditorMode'
   | 'bakeToProMode'
@@ -125,16 +124,15 @@ function insertCapturedShot(
   objects: StageObject[],
 ): { shots: StageShot[]; shot: StageShot } {
   const time = quantizeToFrame(state.playback.currentTime, state.animation.fps)
+  // 播放头正好落在别的卡的时间点上时捕获进那张卡，禁止产生同一时刻的重复卡
+  //（重复时间会让 buildShotTimeline 误判为旧版时序数据，整条时间轴布点退化）
+  const existing = shotAtTime(state.shots, time, state.animation.fps)
+  if (existing) {
+    return { shots: captureObjectsIntoShot(state.shots, existing.id, objects), shot: existing }
+  }
   const shot = createShot(objects, `关键帧 ${state.shots.length + 1}`, state.activeCameraId, time)
   const shots = syncTransitionDurations([...state.shots, shot].sort((a, b) => a.time - b.time))
   return { shots, shot }
-}
-
-function logCaptureSkipped(selectedShotId: string): void {
-  logger.debug('播放头不在选中卡静止段内，跳过自动记录', {
-    event: 'simple_mode.capture.skipped_in_transition',
-    selectedShotId,
-  })
 }
 
 export function compileSimpleEdit(
@@ -144,22 +142,18 @@ export function compileSimpleEdit(
 ): Partial<CameraStageState> {
   if (state.editorMode !== 'simple' || state.playback.playing) return { objects }
   if (!canCaptureAtCurrentTime(state)) {
-    if (state.simpleAutoKeyframe) {
-      const inserted = insertCapturedShot(state, objects)
-      logger.debug('自动插入状态关键帧', {
-        event: 'simple_mode.auto_keyframe.inserted',
-        shotId: inserted.shot.id,
-        time: inserted.shot.time,
-      })
-      return {
-        objects,
-        shots: inserted.shots,
-        selectedShotId: inserted.shot.id,
-        animation: compile(inserted.shots, objects),
-      }
+    const inserted = insertCapturedShot(state, objects)
+    logger.debug('编辑过渡画面时自动插入状态关键帧', {
+      event: 'simple_mode.auto_keyframe.inserted',
+      shotId: inserted.shot.id,
+      time: inserted.shot.time,
+    })
+    return {
+      objects,
+      shots: inserted.shots,
+      selectedShotId: inserted.shot.id,
+      animation: compile(inserted.shots, objects),
     }
-    if (state.selectedShotId) logCaptureSkipped(state.selectedShotId)
-    return { objects }
   }
   const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, objects, objectIds)
   return { objects, shots, animation: compile(shots, objects) }
@@ -330,20 +324,15 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
       const shots = state.shots.map((shot) => shot.id === id ? { ...shot, continuity } : shot)
       return { shots, animation: compile(shots, state.objects) }
     }),
-    setSimpleAutoKeyframe: (enabled) => set({ simpleAutoKeyframe: enabled }),
     captureIntoSelectedShot: (objectIds) => set((state) => {
       if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return {}
       if (!canCaptureAtCurrentTime(state)) {
-        if (state.simpleAutoKeyframe) {
-          const inserted = insertCapturedShot(state, state.objects)
-          return {
-            shots: inserted.shots,
-            selectedShotId: inserted.shot.id,
-            animation: compile(inserted.shots, state.objects),
-          }
+        const inserted = insertCapturedShot(state, state.objects)
+        return {
+          shots: inserted.shots,
+          selectedShotId: inserted.shot.id,
+          animation: compile(inserted.shots, state.objects),
         }
-        logCaptureSkipped(state.selectedShotId)
-        return {}
       }
       const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, state.objects, objectIds)
       return shots === state.shots ? {} : { shots, animation: compile(shots, state.objects) }
