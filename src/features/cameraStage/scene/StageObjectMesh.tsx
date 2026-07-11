@@ -167,7 +167,8 @@ const CameraHelperMesh: React.FC<{
   )
 
   return (
-    <group>
+    // Three.js 摄像机沿本地 -Z 取景；辅助模型和视锥几何按 +Z 建模，整体翻转后才与真实画面一致。
+    <group rotation={[0, Math.PI, 0]}>
       {modelUrl ? (
         <CharacterErrorBoundary fallback={placeholder}>
           <Suspense fallback={placeholder}>
