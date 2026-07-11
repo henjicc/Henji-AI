@@ -3,6 +3,7 @@ import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import { UiButton, UiIconButton, UiInput, UiModal, UiOptionButton } from '@/components/ui'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
 import type { StageEditorMode } from '../domain/shotTypes'
+import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
 import {
   createNewProject,
   deleteProject,
@@ -39,6 +40,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const [deleteTarget, setDeleteTarget] = useState<CameraStageProjectPlatformSummary | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createMode, setCreateMode] = useState<StageEditorMode>('simple')
+  const [createName, setCreateName] = useState(CAMERA_STAGE_DEFAULT_PROJECT_NAME)
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -56,13 +58,13 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const handleCreate = useCallback(async (): Promise<void> => {
     setBusy(true)
     try {
-      await createNewProject(undefined, createMode)
+      await createNewProject(createName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME, createMode)
       setCreateDialogOpen(false)
       onEnterEditor()
     } finally {
       setBusy(false)
     }
-  }, [createMode, onEnterEditor])
+  }, [createMode, createName, onEnterEditor])
 
   const handleOpen = useCallback(
     async (projectId: string): Promise<void> => {
@@ -103,7 +105,11 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
             <div className="text-lg font-medium text-text-dark">运镜控制</div>
             <div className="mt-1 text-sm text-text-muted">搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图</div>
           </div>
-          <UiButton onClick={() => { setCreateMode('simple'); setCreateDialogOpen(true) }} disabled={busy}>
+          <UiButton onClick={() => {
+            setCreateMode('simple')
+            setCreateName(CAMERA_STAGE_DEFAULT_PROJECT_NAME)
+            setCreateDialogOpen(true)
+          }} disabled={busy}>
             <Plus size={15} className="mr-1" />
             新建工程
           </UiButton>
@@ -173,7 +179,19 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
         }
       >
         <div className="space-y-3">
-          <div className="text-sm text-text-muted">选择编辑方式。创建后模式会随工程保存。</div>
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-text-muted">工程名称</div>
+            <UiInput
+              autoFocus
+              value={createName}
+              onChange={(event) => setCreateName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !busy) void handleCreate()
+              }}
+              placeholder={CAMERA_STAGE_DEFAULT_PROJECT_NAME}
+            />
+          </div>
+          <div className="pt-1 text-sm text-text-muted">选择编辑方式。创建后模式会随工程保存。</div>
           <div className="grid grid-cols-2 gap-2">
             <UiOptionButton
               variant="card"
