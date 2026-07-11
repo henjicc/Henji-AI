@@ -153,6 +153,10 @@ export function compileSimpleEdit(
       shots: inserted.shots,
       selectedShotId: inserted.shot.id,
       animation: compile(inserted.shots, objects),
+      // 状态关键帧按 fps 吸附；播放头必须在同一次 store 更新里落到完全相同的时间。
+      // 否则重编译后的视口会继续以吸附前的小数时间采样，在新点旁边再次插值，
+      // 用户开始拖动物体/相机的第一瞬间就会看到一次轻微跳变。
+      playback: { ...state.playback, currentTime: inserted.shot.time },
     }
   }
   const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, objects, objectIds)

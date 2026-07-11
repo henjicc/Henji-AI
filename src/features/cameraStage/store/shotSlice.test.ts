@@ -84,6 +84,21 @@ describe('简易模式 store 分片', () => {
     expect(afterTransitionEdit.selectedShotId).toBe(inserted?.id)
   })
 
+  it('过渡段自动插帧时播放头原子对齐吸附帧，避免重编译后二次插值跳变', () => {
+    const initial = useCameraStageStore.getState()
+    const objectId = initial.objects[0].id
+    addShotAt(2)
+    useCameraStageStore.getState().seek(1.019)
+
+    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 9, y: 0, z: 0 } })
+
+    const state = useCameraStageStore.getState()
+    const snappedTime = 31 / 30
+    const inserted = state.shots.find((shot) => Math.abs(shot.time - snappedTime) < 1e-6)
+    expect(inserted?.objectStates[objectId].transform.position.x).toBe(9)
+    expect(state.playback.currentTime).toBeCloseTo(snappedTime, 10)
+  })
+
   it('播放态编辑不自动记录镜头卡', () => {
     const before = useCameraStageStore.getState()
     const objectId = before.objects[0].id
