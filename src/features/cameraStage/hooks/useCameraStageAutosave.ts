@@ -75,6 +75,10 @@ export function useCameraStageAutosave(): UseCameraStageAutosaveResult {
   const flushAutosave = useCallback(async (): Promise<void> => {
     clearTimer()
 
+    // Autosave 只更新已绑定工程，绝不能复用手动保存的“无 id 则新建”语义。
+    // 工程恢复/错误边界重挂载期间会短暂出现未绑定空场景，若此时卸载 flush，
+    // createCurrentProjectDraft 会生成 UUID 并制造一个 0 对象的幽灵工程。
+    if (!useCameraStageStore.getState().currentProjectId) return
     const draft = createCurrentProjectDraft()
     if (!initializedRef.current) {
       initializedRef.current = true
@@ -107,6 +111,10 @@ export function useCameraStageAutosave(): UseCameraStageAutosaveResult {
   }, [saveState])
 
   useEffect(() => {
+    if (!currentProjectId) {
+      clearTimer()
+      return clearTimer
+    }
     const draft = createCurrentProjectDraft()
     if (!initializedRef.current) {
       initializedRef.current = true
