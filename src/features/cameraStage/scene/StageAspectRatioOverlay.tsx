@@ -13,14 +13,18 @@ interface ViewportSize {
  * 压暗超出取景框的区域（容器更宽压左右、更高压上下）；pointer-events: none 不挡视口鼠标交互。
  * 容器 ref 始终挂载以保证 ResizeObserver 能可靠拿到尺寸，内容按视角/摄像机状态条件渲染。
  */
-const StageAspectRatioOverlay: React.FC = () => {
+interface StageAspectRatioOverlayProps {
+  cameraId?: string
+}
+
+const StageAspectRatioOverlay: React.FC<StageAspectRatioOverlayProps> = ({ cameraId }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<ViewportSize>({ width: 0, height: 0 })
   const viewMode = useCameraStageStore((state) => state.viewMode)
   const objects = useCameraStageStore((state) => state.objects)
   // 画幅遮罩跟随渲染机位（重要记录 005，3.2），与视口渲染机位来源保持一致
   const renderCameraId = useRenderCameraId()
-  const activeCamera = getCameraObjects(objects).find((item) => item.id === renderCameraId)
+  const activeCamera = getCameraObjects(objects).find((item) => item.id === (cameraId ?? renderCameraId))
 
   useEffect(() => {
     const container = containerRef.current
@@ -34,7 +38,10 @@ const StageAspectRatioOverlay: React.FC = () => {
     return () => observer.disconnect()
   }, [])
 
-  const showFrame = viewMode === 'camera' && !!activeCamera && size.width > 0 && size.height > 0
+  const showFrame = (cameraId !== undefined || viewMode === 'camera')
+    && !!activeCamera
+    && size.width > 0
+    && size.height > 0
   const barClassName = 'absolute bg-black/70'
 
   return (

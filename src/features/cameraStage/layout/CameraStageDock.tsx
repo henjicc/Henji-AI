@@ -15,14 +15,12 @@ import {
 import 'dockview-react/dist/styles/dockview.css'
 import ObjectListPanel from '../panels/ObjectListPanel'
 import PropertyPanel from '../panels/PropertyPanel'
-import StageAspectRatioOverlay from '../scene/StageAspectRatioOverlay'
-import StageScene from '../scene/StageScene'
+import StageViewportWorkspace from '../viewport/StageViewportWorkspace'
 import TimelinePanel from '../timeline/TimelinePanel'
 import ShotTimelinePanel from '../simple/ShotTimelinePanel'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
-import StagePathContextBar from '../toolbar/StagePathContextBar'
-import StageViewportToolbar from '../toolbar/StageViewportToolbar'
 import { DockHeaderActions, DockTab } from './DockChrome'
 import { LAYOUT_STORAGE_KEY, resetLayout, restoreLayout } from './dockLayout'
 
@@ -41,10 +39,7 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
   const captureRef = useContext(ViewportCaptureContext)
   return (
     <div className="relative h-full w-full">
-      <StageScene captureRef={captureRef ?? undefined} />
-      <StageAspectRatioOverlay />
-      <StageViewportToolbar />
-      <StagePathContextBar />
+      <StageViewportWorkspace captureRef={captureRef ?? undefined} />
     </div>
   )
 }
@@ -87,6 +82,7 @@ const CameraStageDock = forwardRef<CameraStageDockHandle, CameraStageDockProps>(
       resetLayout: () => {
         const api = apiRef.current
         if (api) resetLayout(api)
+        useCameraStageViewportStore.getState().resetViewports()
       },
     }))
 

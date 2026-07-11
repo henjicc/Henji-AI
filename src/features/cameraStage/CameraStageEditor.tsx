@@ -19,6 +19,7 @@ import type { CameraStageDockHandle } from './layout/CameraStageDock'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
+import { useCameraStageViewportStore } from './store/cameraStageViewportStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
 import QuickAddGroup from './toolbar/QuickAddGroup'
 import EditorModeBadge from './simple/EditorModeBadge'
@@ -47,6 +48,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
   const setSelected = useCameraStageStore((state) => state.setSelected)
+  const activeViewportId = useCameraStageViewportStore((state) => state.activeViewportId)
+  const setViewportSource = useCameraStageViewportStore((state) => state.setViewportSource)
   const currentProjectId = useCameraStageStore((state) => state.currentProjectId)
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
@@ -77,6 +80,19 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const handleCameraSelect = (cameraId: string): void => {
     setActiveCameraId(cameraId)
     setSelected(cameraId)
+    setViewportSource(activeViewportId, { kind: 'camera', cameraId })
+  }
+
+  const handleDirectorView = (): void => {
+    setViewMode('director')
+    setViewportSource(activeViewportId, { kind: 'director' })
+  }
+
+  const handleCameraView = (): void => {
+    if (!activeCamera) return
+    setActiveCameraId(activeCamera.id)
+    setViewMode('camera')
+    setViewportSource(activeViewportId, { kind: 'camera', cameraId: activeCamera.id })
   }
 
   const prepareScreenshotDataUrl = useCallback(async (): Promise<string | null> => {
@@ -289,7 +305,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
         <div className="flex items-center gap-1.5">
           <UiOptionButton
             active={viewMode === 'director'}
-            onClick={() => setViewMode('director')}
+            onClick={handleDirectorView}
             className="py-1.5 text-xs"
           >
             自由视角
@@ -297,7 +313,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
           <UiOptionButton
             active={viewMode === 'camera'}
             disabled={!activeCamera}
-            onClick={() => setViewMode('camera')}
+            onClick={handleCameraView}
             className="py-1.5 text-xs"
           >
             摄像机视角

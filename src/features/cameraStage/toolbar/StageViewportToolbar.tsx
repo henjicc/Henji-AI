@@ -9,6 +9,7 @@ import {
   useCameraStageToolStore,
   type StageEditorTool,
 } from '../store/cameraStageToolStore'
+import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
 
 interface ToolDefinition {
   id: StageEditorTool
@@ -33,7 +34,8 @@ const StageViewportToolbar: React.FC = () => {
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const selectedShotId = useCameraStageStore((state) => state.selectedShotId)
   const editorMode = useCameraStageStore((state) => state.editorMode)
-  const viewMode = useCameraStageStore((state) => state.viewMode)
+  const activeViewportId = useCameraStageViewportStore((state) => state.activeViewportId)
+  const activeViewportSource = useCameraStageViewportStore((state) => state.viewports[activeViewportId].source)
   const shots = useCameraStageStore((state) => state.shots)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
@@ -53,7 +55,10 @@ const StageViewportToolbar: React.FC = () => {
     }
   }
 
-  const pathDisabled = editorMode !== 'simple' || viewMode !== 'director' || !selectedId || shots.length < 2
+  const pathDisabled = editorMode !== 'simple'
+    || activeViewportSource.kind === 'camera'
+    || !selectedId
+    || shots.length < 2
 
   return (
     <div className="pointer-events-auto absolute left-3 top-3 z-30 flex items-center gap-0.5 rounded-lg border border-border-dark bg-surface-dark/95 p-1 shadow-lg backdrop-blur">

@@ -16,6 +16,7 @@ import PathControlPoint from './PathControlPoint'
 interface StageMotionPathOverlayProps {
   objectId: string
   shots: StageShot[]
+  editable?: boolean
 }
 
 interface PathSegment {
@@ -38,7 +39,7 @@ function samePosition(a: StageVec3, b: StageVec3): boolean {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6
 }
 
-const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectId, shots }) => {
+const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectId, shots, editable = true }) => {
   const pathSelection = useCameraStageToolStore((state) => state.pathSelection)
   const controlSelection = useCameraStageToolStore((state) => state.controlSelection)
   const selectPath = useCameraStageToolStore((state) => state.selectPath)
@@ -114,6 +115,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
               transparent
               opacity={selected ? 1 : 0.42}
               onPointerDown={(event) => {
+                if (!editable) return
                 event.stopPropagation()
                 selectSegment(segment)
               }}
@@ -135,7 +137,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
         )
       })}
 
-      {selectedSegment && (
+      {editable && selectedSegment && (
         <>
           <PathControlPoint
             position={selectedSegment.from}
@@ -169,7 +171,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
         </>
       )}
 
-      {selectedSegment?.path && (() => {
+      {editable && selectedSegment?.path && (() => {
         const path = selectedSegment.path
         const startHandle = addPosition(selectedSegment.from, path.startOutTangent)
         const endHandle = addPosition(selectedSegment.to, path.endInTangent)

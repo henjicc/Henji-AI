@@ -20,6 +20,7 @@ import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
 import StageMotionPathOverlay from './StageMotionPathOverlay'
 import { useRenderCameraId } from './useRenderCameraId'
+import type { StageViewportSource } from '../viewport/viewportTypes'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -31,9 +32,26 @@ const RAD2DEG = 180 / Math.PI
 interface StageSceneProps {
   /** 截图函数注册位：摄像机视角下读取当前帧为 PNG dataURL */
   captureRef?: React.MutableRefObject<StageCaptureFn | null>
+  viewportSource?: StageViewportSource
+  interactive?: boolean
+  primary?: boolean
 }
 
-const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
+const FIXED_CAMERA_POSITIONS = {
+  top: [0, 20, 0.001],
+  bottom: [0, -20, 0.001],
+  front: [0, 3, 20],
+  back: [0, 3, -20],
+  left: [-20, 3, 0],
+  right: [20, 3, 0],
+} satisfies Record<string, readonly [number, number, number]>
+
+const StageScene: React.FC<StageSceneProps> = ({
+  captureRef,
+  viewportSource,
+  interactive = true,
+  primary = true,
+}) => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
@@ -59,7 +77,8 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
 
   useEffect(() => {
     const tools = useCameraStageToolStore.getState()
-    if (editorMode !== 'simple' || viewMode !== 'director') {
+    const supportsPathEditing = viewportSource?.kind !== 'camera' && viewMode === 'director'
+    if (editorMode !== 'simple' || !supportsPathEditing) {
       if (tools.tool === 'path') tools.setTool('select')
       return
     }
@@ -72,7 +91,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       || tools.pathSelection.shotId !== automaticPathShotId) {
       tools.selectPath({ shotId: automaticPathShotId, objectId: selectedId })
     }
-  }, [automaticPathShotId, editorMode, editorTool, selectedId, viewMode])
+  }, [automaticPathShotId, editorMode, editorTool, selectedId, viewMode, viewportSource])
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
@@ -144,23 +163,36 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
     }
     return targets
   }, [objects])
+  const requestedCameraId = viewportSource?.kind === 'camera'
+    ? viewportSource.cameraId
+    : viewportSource
+      ? null
+      : renderCameraId
   const activeCamera = objects.find(
-    (item): item is StageCameraObject => item.id === renderCameraId && item.type === 'camera',
+    (item): item is StageCameraObject => item.id === requestedCameraId && item.type === 'camera',
   )
   const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
-  const isCameraView = viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
+  const isCameraView = viewportSource
+    ? viewportSource.kind === 'camera' && !!activeCamera && !!activeCameraTarget
+    : viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
+  const isFixedView = viewportSource?.kind === 'fixed'
+  const canvasCamera = isFixedView
+    ? { position: FIXED_CAMERA_POSITIONS[viewportSource.view], zoom: 45, near: 0.01, far: 2000 }
+    : { position: [0, 4.2, 9] as [number, number, number], fov: 50 }
   // 简易模式播放头落在过渡段时视口只读（重要记录 003）：隐藏 gizmo，阻断手动编辑插值状态
   const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
   const fogFar = Math.max(fogNear + 1, sceneSettings.fog.distance)
 
   return (
     <Canvas
+      key={isFixedView ? viewportSource.view : viewportSource?.kind ?? 'legacy'}
+      orthographic={isFixedView}
       // 初始机位与 DEFAULT_DIRECTOR_VIEW 对齐（正对场景、略俯视），避免恢复器首帧生效前闪一下斜视角
-      camera={{ position: [0, 4.2, 9], fov: 50 }}
+      camera={canvasCamera}
       // preserveDrawingBuffer 让截图能读到当前帧；场景为静态摆拍，性能代价可忽略
       gl={{ preserveDrawingBuffer: true, alpha: false }}
       style={{ background: sceneSettings.sky.color }}
-      onPointerMissed={() => setSelected(null)}
+      onPointerMissed={() => interactive && setSelected(null)}
     >
       <color attach="background" args={[sceneSettings.sky.color]} />
       {sceneSettings.fog.enabled && (
@@ -170,14 +202,14 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           args={[sceneSettings.sky.color, fogNear, fogFar]}
         />
       )}
-      {captureRef && <StageCaptureBridge captureRef={captureRef} />}
-      <StagePlaybackDriver />
+      {primary && captureRef && <StageCaptureBridge captureRef={captureRef} />}
+      {primary && <StagePlaybackDriver />}
       <StageSunLight settings={sceneSettings} />
       <StageGround
         key={`stage-ground-${sceneSettings.ground.pattern}`}
         settings={sceneSettings.ground}
       />
-      {isCameraView && (
+      {isCameraView && activeCamera && activeCameraTarget && (
         <>
           <StageViewportCamera
             cameraObject={activeCamera}
@@ -198,7 +230,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           key={object.id}
           object={object}
           selected={object.id === selectedId}
-          onSelect={setSelected}
+          onSelect={(id) => interactive && setSelected(id)}
           onRegister={registerNode}
           cameraLookAtTarget={cameraLookAtTargets.get(object.id)}
           showCameraHelpers={!isCameraView}
@@ -206,10 +238,10 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           nameLabelSettings={sceneSettings.display.nameLabel}
         />
       ))}
-      {editorMode === 'simple' && viewMode === 'director' && selectedId && (
-        <StageMotionPathOverlay objectId={selectedId} shots={shots} />
+      {editorMode === 'simple' && !isCameraView && selectedId && (
+        <StageMotionPathOverlay objectId={selectedId} shots={shots} editable={interactive} />
       )}
-      {selectedNode
+      {interactive && selectedNode
         && (editorTool === 'translate' || editorTool === 'rotate' || editorTool === 'scale')
         && !editingSpatialPath
         && (!isCameraView || selectedObject?.id !== activeCamera?.id) && (
@@ -223,10 +255,10 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       )}
       {!isCameraView && (
         <>
-          <OrbitControls makeDefault enableDamping={false} />
-          <StageDirectorViewRestorer />
-          <StageFocusController />
-          <DirectorViewTracker />
+          <OrbitControls makeDefault enableDamping={false} enableRotate={!isFixedView} />
+          {!isFixedView && <StageDirectorViewRestorer />}
+          {interactive && <StageFocusController />}
+          {!isFixedView && primary && <DirectorViewTracker />}
         </>
       )}
     </Canvas>
