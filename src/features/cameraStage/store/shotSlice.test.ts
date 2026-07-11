@@ -84,6 +84,23 @@ describe('简易模式 store 分片', () => {
     expect(afterTransitionEdit.selectedShotId).toBe(inserted?.id)
   })
 
+  it('手动定位只能停在整帧，播放内部回写仍保留连续时间', () => {
+    const store = useCameraStageStore.getState()
+    store.seek(1.019)
+    expect(useCameraStageStore.getState().playback.currentTime).toBeCloseTo(31 / 30, 10)
+
+    useCameraStageStore.getState().setPlaybackTime(1.019)
+    expect(useCameraStageStore.getState().playback.currentTime).toBeCloseTo(1.019, 10)
+  })
+
+  it('暂停播放时把播放头和场景吸附到最近整帧', () => {
+    useCameraStageStore.getState().setPlaybackTime(1.019)
+    useCameraStageStore.getState().pause()
+    const state = useCameraStageStore.getState()
+    expect(state.playback.playing).toBe(false)
+    expect(state.playback.currentTime).toBeCloseTo(31 / 30, 10)
+  })
+
   it('过渡段自动插帧时播放头原子对齐吸附帧，避免重编译后二次插值跳变', () => {
     const initial = useCameraStageStore.getState()
     const objectId = initial.objects[0].id

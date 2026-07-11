@@ -18,6 +18,7 @@ import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
 import { createShot, type StageEditorMode, type StageShot } from '../domain/shotTypes'
 import { compileShotsToAnimation } from '../domain/shotCompiler'
+import { quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import {
   createDefaultAnimation,
   createDefaultPlayback,
@@ -582,9 +583,11 @@ export const useCameraStageStore = create<CameraStageState>()(
     }),
 
   pause: () => {
-    // 先按当前播放头把采样值落回对象（另一次 set，避免嵌套 setState），再置暂停
-    applySampledObjectsSilently(useCameraStageStore.getState().playback.currentTime)
-    set((state) => ({ playback: { ...state.playback, playing: false } }))
+    // 播放中按连续时间采样以保持丝滑；停下时吸附到最近帧，让后续编辑永远落在帧格上。
+    const state = useCameraStageStore.getState()
+    const snapped = quantizeToFrame(state.playback.currentTime, state.animation.fps)
+    applySampledObjectsSilently(snapped)
+    set((current) => ({ playback: { ...current.playback, playing: false, currentTime: snapped } }))
   },
 
   stop: () => {
@@ -594,10 +597,11 @@ export const useCameraStageStore = create<CameraStageState>()(
 
   seek: (time) => {
     const state = useCameraStageStore.getState()
+    const snapped = quantizeToFrame(time, state.animation.fps)
     // 简易模式允许把播放头放到最后关键帧之后，以便在未来时间直接添加关键帧。
     const clamped = state.editorMode === 'simple'
-      ? Math.max(0, time)
-      : Math.max(0, Math.min(state.animation.duration, time))
+      ? Math.max(0, snapped)
+      : Math.max(0, Math.min(state.animation.duration, snapped))
     if (!state.playback.playing) applySampledObjectsSilently(clamped)
     set((current) => ({ playback: { ...current.playback, currentTime: clamped } }))
   },
