@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import type { Group } from 'three'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { resolvePathShotId, useCameraStageToolStore } from '../store/cameraStageToolStore'
 import DirectorViewTracker from './DirectorViewTracker'
 import StageDirectorViewRestorer from './StageDirectorViewRestorer'
 import StageCameraViewControls from './StageCameraViewControls'
@@ -43,11 +44,35 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
   const editorMode = useCameraStageStore((state) => state.editorMode)
   const shots = useCameraStageStore((state) => state.shots)
+  const selectedShotId = useCameraStageStore((state) => state.selectedShotId)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
   const prepareSimpleEdit = useCameraStageStore((state) => state.prepareSimpleEdit)
+  const editorTool = useCameraStageToolStore((state) => state.tool)
+  const pathSelection = useCameraStageToolStore((state) => state.pathSelection)
+  const automaticPathShotId = useMemo(
+    () => resolvePathShotId(shots, currentTime, selectedShotId),
+    [currentTime, selectedShotId, shots],
+  )
+
+  useEffect(() => {
+    const tools = useCameraStageToolStore.getState()
+    if (editorMode !== 'simple' || viewMode !== 'director') {
+      if (tools.tool === 'path') tools.setTool('select')
+      return
+    }
+    if (tools.tool !== 'path') return
+    if (!selectedId || !automaticPathShotId) {
+      tools.clearPathSelection()
+      return
+    }
+    if (tools.pathSelection?.objectId !== selectedId
+      || tools.pathSelection.shotId !== automaticPathShotId) {
+      tools.selectPath({ shotId: automaticPathShotId, objectId: selectedId })
+    }
+  }, [automaticPathShotId, editorMode, editorTool, selectedId, viewMode])
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
@@ -107,11 +132,8 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
 
   const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
   const selectedObject = selectedId ? objects.find((item) => item.id === selectedId) : undefined
-  const editingSpatialPath = !!selectedId && shots.some((shot, index) => (
-    !!shot.transition.perObject[selectedId]?.spatialPath
-    && currentTime >= shot.time
-    && currentTime <= (shots[index + 1]?.time ?? shot.time)
-  ))
+  const editingSpatialPath = editorTool === 'path'
+    && pathSelection?.objectId === selectedId
   const transformMode = selectedObject?.type === 'camera' && gizmoMode === 'scale' ? 'translate' : gizmoMode
   const cameraLookAtTargets = useMemo(() => {
     const targets = new Map<string, ReturnType<typeof resolveCameraLookAtTarget>>()
@@ -185,9 +207,12 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
         />
       ))}
       {editorMode === 'simple' && viewMode === 'director' && selectedId && (
-        <StageMotionPathOverlay objectId={selectedId} shots={shots} currentTime={currentTime} />
+        <StageMotionPathOverlay objectId={selectedId} shots={shots} />
       )}
-      {selectedNode && !editingSpatialPath && (!isCameraView || selectedObject?.id !== activeCamera?.id) && (
+      {selectedNode
+        && (editorTool === 'translate' || editorTool === 'rotate' || editorTool === 'scale')
+        && !editingSpatialPath
+        && (!isCameraView || selectedObject?.id !== activeCamera?.id) && (
         <StageTransformControls
           object={selectedNode}
           mode={transformMode}

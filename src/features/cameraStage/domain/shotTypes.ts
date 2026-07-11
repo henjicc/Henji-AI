@@ -37,13 +37,6 @@ export interface StageShotObjectState {
 
 export type StageSpeedPreset = 'uniform' | 'easeInOut' | 'fastStart' | 'slowStart'
 
-/** 三维空间路径：切线为相对起点/终点的偏移，端点移动后路径仍能保持局部形状。 */
-export interface StageSpatialPath {
-  kind: 'bezier'
-  outTangent: StageVec3
-  inTangent: StageVec3
-}
-
 /**
  * 摄像机运镜预设判别联合（参数于 1.3 定稿）。
  * - direct：两点直插（默认值，无参数）。
@@ -59,6 +52,32 @@ export type StageCameraMove =
   | { kind: 'dollyIn' | 'dollyOut'; distanceRatio: number }
   | { kind: 'truck'; offset: number }
   | { kind: 'crane'; height: number }
+
+export type StageCameraMovePreset = Exclude<StageCameraMove, { kind: 'direct' }>
+
+export type StageSpatialPathSource =
+  | { kind: 'preset'; preset: StageCameraMovePreset }
+  | { kind: 'custom'; originPreset?: StageCameraMovePreset }
+
+/** 过渡内部的空间关键点；position 为世界坐标，切线为相对该点的偏移。 */
+export interface StageSpatialPathKnot {
+  id: string
+  position: StageVec3
+  inTangent: StageVec3
+  outTangent: StageVec3
+}
+
+/**
+ * 分段三次贝塞尔空间路径。起终点由相邻镜头卡快照提供，避免重复存储后发生漂移；
+ * knots 仅保存过渡内部的空间关键点。
+ */
+export interface StageSpatialPath {
+  kind: 'bezier'
+  source: StageSpatialPathSource
+  startOutTangent: StageVec3
+  knots: StageSpatialPathKnot[]
+  endInTangent: StageVec3
+}
 
 /** 单个对象在过渡段的细节覆盖：速度预设 / 错峰延迟 / 动作覆盖 */
 export interface StageShotTransitionObjectDetail {
@@ -207,10 +226,55 @@ function normalizeShotTransitionObjectDetail(raw: unknown): StageShotTransitionO
       const z = Number(vec.z)
       return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null
     }
-    const outTangent = normalizeTangent(path.outTangent)
-    const inTangent = normalizeTangent(path.inTangent)
-    if (path.kind === 'bezier' && outTangent && inTangent) {
-      detail.spatialPath = { kind: 'bezier', outTangent, inTangent }
+    const normalizePreset = (value: unknown): StageCameraMovePreset | undefined => {
+      const move = normalizeCameraMove(value)
+      return move && move.kind !== 'direct' ? move : undefined
+    }
+    const normalizeSource = (value: unknown): StageSpatialPathSource => {
+      if (!value || typeof value !== 'object') return { kind: 'custom' }
+      const source = value as Record<string, unknown>
+      const preset = normalizePreset(source.preset)
+      if (source.kind === 'preset' && preset) return { kind: 'preset', preset }
+      const originPreset = normalizePreset(source.originPreset)
+      return originPreset ? { kind: 'custom', originPreset } : { kind: 'custom' }
+    }
+    const startOutTangent = normalizeTangent(path.startOutTangent)
+    const endInTangent = normalizeTangent(path.endInTangent)
+    if (path.kind === 'bezier' && startOutTangent && endInTangent) {
+      const knots = Array.isArray(path.knots) ? path.knots.flatMap((rawKnot) => {
+        if (!rawKnot || typeof rawKnot !== 'object') return []
+        const knot = rawKnot as Record<string, unknown>
+        const position = normalizeTangent(knot.position)
+        const inTangent = normalizeTangent(knot.inTangent)
+        const outTangent = normalizeTangent(knot.outTangent)
+        if (!position || !inTangent || !outTangent) return []
+        return [{
+          id: typeof knot.id === 'string' && knot.id ? knot.id : uuidv4(),
+          position,
+          inTangent,
+          outTangent,
+        }]
+      }) : []
+      detail.spatialPath = {
+        kind: 'bezier',
+        source: normalizeSource(path.source),
+        startOutTangent,
+        knots,
+        endInTangent,
+      }
+    } else {
+      // v11 旧结构：单段路径只有 outTangent / inTangent。
+      const legacyOut = normalizeTangent(path.outTangent)
+      const legacyIn = normalizeTangent(path.inTangent)
+      if (path.kind === 'bezier' && legacyOut && legacyIn) {
+        detail.spatialPath = {
+          kind: 'bezier',
+          source: { kind: 'custom' },
+          startOutTangent: legacyOut,
+          knots: [],
+          endInTangent: legacyIn,
+        }
+      }
     }
   }
   return detail

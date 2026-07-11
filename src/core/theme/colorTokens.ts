@@ -70,7 +70,9 @@ export const CAMERA_STAGE_TIMELINE_HEX = {
 export const CAMERA_STAGE_MOTION_PATH_HEX = {
   path: '#e8c84a',
   tangent: '#8f97a3',
-  handle: '#e8734a',
+  handle: '#e8c84a',
+  handleSelected: '#fff6d0',
+  handleOutline: '#3f3920',
 } as const;
 
 // 运镜控制新建对象默认颜色轮换盘（按对象序号取模）

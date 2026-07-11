@@ -7,8 +7,9 @@ import {
   UI_TRIGGER_PANEL_CLASS,
 } from './styleTokens'
 import { UiButton, UiOptionButton } from './primitives'
+import { resolveDropdownDisplay } from './dropdownUtils'
 
-type Option<T extends string | number | boolean> = {
+export type DropdownOption<T extends string | number | boolean> = {
   label: string
   value: T
   disabled?: boolean
@@ -18,7 +19,7 @@ type DropdownProps<T extends string | number | boolean> = {
   label?: string
   value?: T
   display?: string
-  options?: Option<T>[]
+  options?: DropdownOption<T>[]
   onSelect?: (value: T) => void
   renderPanel?: () => React.ReactNode
   disabled?: boolean
@@ -61,11 +62,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
   const lastButtonMinWidthRef = useRef<number | null>(null)
   const lastPanelMinWidthRef = useRef<number | null>(null)
+  const resolvedDisplay = resolveDropdownDisplay(display, value, options)
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
     return String(value) === String(optValue)
   }
-  const getOptionLabels = useCallback((source?: Option<T>[]): string[] => {
+  const getOptionLabels = useCallback((source?: DropdownOption<T>[]): string[] => {
     return (source || []).map((option) => String(option.label))
   }, [])
   const measureTextMinWidth = (targetButton: HTMLElement, labels: string[]): number | null => {
@@ -107,7 +109,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const btn = ref.current.querySelector('[data-dropdown-button]') as HTMLElement | null
     if (!btn) return
     const computeMinWidth = () => {
-      const displayText = String(display ?? value ?? '')
+      const displayText = resolvedDisplay
       const optionLabels = getOptionLabels(options)
       if (minWidthStrategy === 'none') {
         if (lastButtonMinWidthRef.current !== null || buttonMinWidthPx !== null) {
@@ -141,7 +143,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       }
     }
     computeMinWidth()
-  }, [buttonMinWidthPx, display, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, value])
+  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, resolvedDisplay])
 
   useEffect(() => {
     const updatePos = () => {
@@ -190,7 +192,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           ...(buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : {})
         }}
       >
-        <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{display ?? String(value ?? '')}</span>
+        <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{resolvedDisplay}</span>
         <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
       </UiButton>
       {(open || closing) && (

@@ -16,7 +16,11 @@ import { getDirectorView, resetDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
-import { createShot, type StageEditorMode, type StageShot } from '../domain/shotTypes'
+import {
+  createShot,
+  type StageEditorMode,
+  type StageShot,
+} from '../domain/shotTypes'
 import { compileShotsToAnimation } from '../domain/shotCompiler'
 import { quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import {
@@ -38,6 +42,7 @@ import {
   type ShotTransitionPatch,
 } from './shotSlice'
 import { applyAnimationAtTime } from './playbackSampling'
+import type { CameraStagePathActions } from './pathActionTypes'
 import type {
   StageGizmoMode,
   StageObject,
@@ -49,7 +54,7 @@ import type {
   StageViewMode,
 } from '../domain/sceneTypes'
 
-export interface CameraStageState {
+export interface CameraStageState extends CameraStagePathActions {
   objects: StageObject[]
   selectedId: string | null
   gizmoMode: StageGizmoMode

@@ -56,10 +56,6 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
   const handleDetailChange: React.ComponentProps<typeof TransitionPopover>['onDetailChange'] = (objectId, detail) => {
     updateShotTransition(shot.id, { perObject: { [objectId]: detail } })
   }
-  const handleCameraMoveChange: React.ComponentProps<typeof TransitionPopover>['onCameraMoveChange'] = (objectId, move) => {
-    updateShotTransition(shot.id, { cameraMoves: { [objectId]: move } })
-  }
-
   return (
     <div className="absolute inset-y-2 z-10" style={{ left, width }}>
       <PanelTrigger
@@ -76,7 +72,6 @@ const TransitionClipBlock: React.FC<TransitionClipBlockProps> = ({
             camerasDiffer={camerasDiffer}
             onDurationFramesChange={handleDurationFramesChange}
             onDetailChange={handleDetailChange}
-            onCameraMoveChange={handleCameraMoveChange}
           />
         )}
       >

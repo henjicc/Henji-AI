@@ -3,8 +3,9 @@ import { getAnimatablePropByPath } from './animatableProps'
 import type { StageTrack } from './animationTypes'
 import { sampleTrack } from './keyframeEngine'
 import { createCameraObject, createCharacterObject, createPrimitiveObject, pickDefaultColor } from './sceneDefaults'
+import { createCameraPresetPath, cubicSpatialPoint } from './spatialPath'
 import { buildShotTimeline, compileShotsToAnimation } from './shotCompiler'
-import { createShot } from './shotTypes'
+import { createShot, type StageSpatialPath } from './shotTypes'
 
 describe('compileShotsToAnimation', () => {
   it('空间贝塞尔路径同步编译 XYZ，且曲线形状独立于速度时间轴', () => {
@@ -16,8 +17,10 @@ describe('compileShotsToAnimation', () => {
       speedPreset: 'uniform',
       spatialPath: {
         kind: 'bezier',
-        outTangent: { x: 2, y: 4, z: 0 },
-        inTangent: { x: -2, y: 4, z: 0 },
+        source: { kind: 'custom' },
+        startOutTangent: { x: 2, y: 4, z: 0 },
+        knots: [],
+        endInTangent: { x: -2, y: 4, z: 0 },
       },
     }
 
@@ -25,11 +28,17 @@ describe('compileShotsToAnimation', () => {
     const x = animation.tracks.find((track) => track.propertyPath === 'transform.position.x')
     const y = animation.tracks.find((track) => track.propertyPath === 'transform.position.y')
     const z = animation.tracks.find((track) => track.propertyPath === 'transform.position.z')
-    expect(x?.keyframes).toHaveLength(25)
-    expect(y?.keyframes).toHaveLength(25)
-    expect(z?.keyframes).toHaveLength(25)
-    expect(sampleTrack(x as StageTrack, 1, 'scalar')).toBeCloseTo(3, 5)
-    expect(sampleTrack(y as StageTrack, 1, 'scalar')).toBeCloseTo(3.25, 5)
+    expect(x?.keyframes).toHaveLength(49)
+    expect(y?.keyframes).toHaveLength(49)
+    expect(z?.keyframes).toHaveLength(49)
+    const midpoint = cubicSpatialPoint(
+      shotA.objectStates[box.id].transform.position,
+      shotB.objectStates[box.id].transform.position,
+      shotA.transition.perObject[box.id].spatialPath as StageSpatialPath,
+      0.5,
+    )
+    expect(sampleTrack(x as StageTrack, 1, 'scalar')).toBeCloseTo(midpoint.x, 5)
+    expect(sampleTrack(y as StageTrack, 1, 'scalar')).toBeCloseTo(midpoint.y, 5)
   })
 
   it('角色位移生成转身轨道与可覆盖的动作时间表', () => {
@@ -283,7 +292,7 @@ describe('compileShotsToAnimation', () => {
     expect(animation.duration).toBeCloseTo(1.25, 5)
   })
 
-  describe('摄像机运镜预设接入（1.3）', () => {
+  describe('摄像机预设物化路径', () => {
     it('含 orbit 的过渡编译产物：x/y/z 轨道可被 sampleTrack 采样，中间时刻位置在圆弧上（到目标距离恒定，容差内）', () => {
       const target = { x: 0, y: 0, z: 0 }
       const startPosition = { x: 0, y: 2, z: 5 }
@@ -292,9 +301,14 @@ describe('compileShotsToAnimation', () => {
       const shotA = createShot([camera], '卡1')
       shotA.hold = 0
       shotA.transitionDuration = 4
-      shotA.transition.cameraMoves[camera.id] = { kind: 'orbit', degrees: 180, direction: 'cw' }
-      // B 卡机位刻意保留创建时的默认快照（未手动摆到环绕落点），验证环绕几何覆盖 B 卡机位（重要记录 003）
       const shotB = createShot([camera], '卡2')
+      const generated = createCameraPresetPath(
+        { kind: 'orbit', degrees: 180, direction: 'cw' },
+        startPosition,
+        target,
+      )
+      shotA.transition.perObject[camera.id] = { spatialPath: generated.path }
+      shotB.objectStates[camera.id].transform.position = generated.endPosition
 
       const animation = compileShotsToAnimation([shotA, shotB], [camera])
       const trackX = animation.tracks.find((item) => item.objectId === camera.id && item.propertyPath === 'transform.position.x')
@@ -323,13 +337,19 @@ describe('compileShotsToAnimation', () => {
       expect(endZ).toBeCloseTo(-5, 1)
     })
 
-    it('非 direct 运镜的位置分量不会误伤 fov 变化：fov 仍走两点直插', () => {
+    it('摄像机空间路径不会误伤 fov 变化：fov 仍走两点直插', () => {
       const target = { x: 0, y: 0, z: 0 }
       const camera = createCameraObject('Camera', pickDefaultColor(2), { position: { x: 0, y: 2, z: 5 }, target })
 
       const shotA = createShot([camera], '卡1')
-      shotA.transition.cameraMoves[camera.id] = { kind: 'dollyIn', distanceRatio: 0.5 }
       const shotB = createShot([camera], '卡2')
+      const generated = createCameraPresetPath(
+        { kind: 'dollyIn', distanceRatio: 0.5 },
+        shotA.objectStates[camera.id].transform.position,
+        target,
+      )
+      shotA.transition.perObject[camera.id] = { spatialPath: generated.path }
+      shotB.objectStates[camera.id].transform.position = generated.endPosition
       shotB.objectStates[camera.id] = { ...shotB.objectStates[camera.id], fov: 70 }
 
       const animation = compileShotsToAnimation([shotA, shotB], [camera])

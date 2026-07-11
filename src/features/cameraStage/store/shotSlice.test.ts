@@ -3,7 +3,12 @@ import { createDefaultAnimation, createDefaultPlayback } from '../domain/animati
 import { compileShotsToAnimation } from '../domain/shotCompiler'
 import { createCameraObject, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { createShot } from '../domain/shotTypes'
-import { clearCameraStageHistory, useCameraStageStore } from './cameraStageStore'
+import {
+  beginHistorySession,
+  clearCameraStageHistory,
+  endHistorySession,
+  useCameraStageStore,
+} from './cameraStageStore'
 
 function resetSimpleStore(): void {
   const object = createPrimitiveObject('box', '方块01', pickDefaultColor(0))
@@ -27,6 +32,56 @@ function addShotAt(time: number): void {
 
 describe('简易模式 store 分片', () => {
   beforeEach(resetSimpleStore)
+
+  it('应用运镜预设会生成可编辑路径并同步下一关键帧终点', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0), {
+      position: { x: 0, y: 2, z: 5 },
+      target: { x: 0, y: 0, z: 0 },
+    })
+    const shotA = createShot([camera], 'A', camera.id, 0)
+    const shotB = createShot([camera], 'B', camera.id, 2)
+    useCameraStageStore.setState({
+      objects: [camera],
+      shots: [shotA, shotB],
+      animation: compileShotsToAnimation([shotA, shotB], [camera]),
+    })
+    useCameraStageStore.getState().applyCameraPathPreset(
+      shotA.id,
+      camera.id,
+      { kind: 'orbit', degrees: 180, direction: 'cw' },
+    )
+    const state = useCameraStageStore.getState()
+    expect(state.shots[0].transition.perObject[camera.id].spatialPath?.knots).toHaveLength(1)
+    expect(state.shots[1].objectStates[camera.id].transform.position.z).toBeCloseTo(-5, 5)
+    expect(state.animation.tracks.some((track) => track.propertyPath === 'transform.position.z')).toBe(true)
+  })
+
+  it('连续拖动路径锚点合并为单条撤销记录并将预设标记为自定义', () => {
+    const state = useCameraStageStore.getState()
+    const objectId = state.objects[0].id
+    addShotAt(2)
+    const shotId = useCameraStageStore.getState().shots[0].id
+    useCameraStageStore.getState().setShotSpatialPath(
+      shotId,
+      objectId,
+      {
+        kind: 'bezier',
+        source: { kind: 'preset', preset: { kind: 'truck', offset: 2 } },
+        startOutTangent: { x: 1, y: 0, z: 0 },
+        knots: [],
+        endInTangent: { x: -1, y: 0, z: 0 },
+      },
+    )
+    const originalEnd = structuredClone(useCameraStageStore.getState().shots[1].objectStates[objectId].transform.position)
+    clearCameraStageHistory()
+    beginHistorySession()
+    useCameraStageStore.getState().setShotPathAnchor(shotId, objectId, 'end', { x: 2, y: 1, z: 0 })
+    useCameraStageStore.getState().setShotPathAnchor(shotId, objectId, 'end', { x: 3, y: 2, z: 0 })
+    endHistorySession()
+    expect(useCameraStageStore.getState().shots[0].transition.perObject[objectId].spatialPath?.source.kind).toBe('custom')
+    useCameraStageStore.temporal.getState().undo()
+    expect(useCameraStageStore.getState().shots[1].objectStates[objectId].transform.position).toEqual(originalEnd)
+  })
 
   it('新建场景默认自带一台摄像机并进入摄像机视角', () => {
     useCameraStageStore.getState().newScene('新工程')

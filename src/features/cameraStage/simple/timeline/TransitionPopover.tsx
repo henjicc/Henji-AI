@@ -1,21 +1,16 @@
-import React, { useMemo, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import React, { useMemo } from 'react'
+import { Camera, Cuboid, PenTool, UserRound } from 'lucide-react'
 import { Dropdown, UiButton, UiInput } from '@/components/ui'
 import { getCameraObjects } from '../../domain/cameraUtils'
 import { diffShotObjects } from '../../domain/shotCompiler'
 import type {
-  StageCameraMove,
   StageShot,
   StageShotTransitionObjectDetail,
   StageSpeedPreset,
 } from '../../domain/shotTypes'
 import type { StageObject } from '../../domain/sceneTypes'
-import TransitionObjectRow from '../TransitionObjectRow'
-
-/**
- * 过渡参数气泡内容（重要记录 004）：锚定容器由 TransitionClipBlock 里的 PanelTrigger 提供，
- * 本组件只负责内容——顶部时长（帧）+ 批量速度预设，下方折叠逐对象细节（复用 TransitionObjectRow，不重复实现）。
- */
+import { useCameraStageStore } from '../../store/cameraStageStore'
+import { useCameraStageToolStore } from '../../store/cameraStageToolStore'
 
 const SPEED_OPTIONS: Array<{ label: string; value: StageSpeedPreset }> = [
   { label: '匀速', value: 'uniform' },
@@ -30,16 +25,23 @@ interface TransitionPopoverProps {
   shotIndex: number
   objects: StageObject[]
   fps: number
-  /** 两侧机位不同（重要记录 005）：时长输入禁用，展示跨机位硬切提示 */
   camerasDiffer: boolean
   onDurationFramesChange: (frames: number) => void
   onDetailChange: (objectId: string, detail: StageShotTransitionObjectDetail) => void
-  onCameraMoveChange: (objectId: string, move: StageCameraMove) => void
 }
 
 function cameraDisplayName(objects: StageObject[], cameraId: string | null): string {
   if (!cameraId) return '默认机位'
   return getCameraObjects(objects).find((camera) => camera.id === cameraId)?.name ?? '未知机位'
+}
+
+function detailSummary(detail: StageShotTransitionObjectDetail): string {
+  const speed = SPEED_OPTIONS.find((option) => option.value === (detail.speedPreset ?? 'easeInOut'))?.label ?? '平滑'
+  const path = detail.spatialPath?.source.kind === 'preset'
+    ? ({ orbit: '环绕', dollyIn: '推进', dollyOut: '拉远', truck: '横移', crane: '升降' } as const)[detail.spatialPath.source.preset.kind]
+    : detail.spatialPath ? '自定义贝塞尔' : '直线'
+  const delay = detail.delay ? ` · 延迟 ${detail.delay.toFixed(1)}s` : ''
+  return `${path} · ${speed}${delay}`
 }
 
 const TransitionPopover: React.FC<TransitionPopoverProps> = ({
@@ -51,9 +53,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
   camerasDiffer,
   onDurationFramesChange,
   onDetailChange,
-  onCameraMoveChange,
 }) => {
-  const [detailExpanded, setDetailExpanded] = useState(false)
   const changedIds = useMemo(() => new Set(diffShotObjects(shot, nextShot, objects)), [shot, nextShot, objects])
   const changedObjects = useMemo(() => objects.filter((object) => changedIds.has(object.id)), [objects, changedIds])
   const durationFrames = Math.round(shot.transitionDuration * fps)
@@ -64,6 +64,14 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
     })
   }
 
+  const editObjectPath = (objectId: string): void => {
+    const stage = useCameraStageStore.getState()
+    stage.pause()
+    stage.setSelected(objectId)
+    stage.seek((shot.time + nextShot.time) / 2)
+    useCameraStageToolStore.getState().selectPath({ shotId: shot.id, objectId })
+  }
+
   return (
     <div className="flex max-h-full flex-col gap-3 overflow-y-auto p-3">
       <div className="text-xs font-medium text-text-dark">
@@ -72,9 +80,8 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
 
       {camerasDiffer && (
         <div className="rounded-md border border-border-dark bg-layer/60 px-2 py-1.5 text-[11px] leading-5 text-text-muted">
-          机位切换：{cameraDisplayName(objects, shot.cameraId)} → {cameraDisplayName(objects, nextShot.cameraId)}，
-          区间末端执行硬切，不在两台机位之间插值。调整区间时长会移动后一个关键帧并改变切换时刻；
-          如需连续运镜，请把两侧机位改为相同。
+          机位切换：{cameraDisplayName(objects, shot.cameraId)} → {cameraDisplayName(objects, nextShot.cameraId)}。
+          区间末端执行硬切；需要连续运镜时，请把两侧机位改为相同。
         </div>
       )}
 
@@ -86,12 +93,12 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
             min={0}
             step={1}
             value={durationFrames}
-            className="h-8 w-24 px-2 text-xs"
+            className="h-8 w-24 px-2 text-xs tabular-nums"
             onChange={(event) => onDurationFramesChange(Math.max(0, Math.round(Number(event.target.value))))}
           />
         </label>
         <Dropdown
-          label="速度预设（批量应用到全部有变化的对象）"
+          label="全部对象速度"
           display="批量设置"
           options={SPEED_OPTIONS}
           onSelect={applyBulkSpeedPreset}
@@ -102,39 +109,38 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
 
       {!camerasDiffer && durationFrames === 0 && (
         <div className="text-[11px] leading-5 text-text-muted">
-          时长为 0 帧 = 硬切，前后画面直接切换；改为大于 0 的值即可恢复为过渡。
+          0 帧表示硬切；增加时长后即可编辑过渡路径。
         </div>
       )}
 
-      <div>
-        <UiButton
-          variant="ghost"
-          className="h-7 border-0 bg-transparent px-1 text-xs text-text-muted"
-          onClick={() => setDetailExpanded((current) => !current)}
-        >
-          逐对象细节
-          <ChevronDown size={12} className={`ml-1 transition-transform ${detailExpanded ? 'rotate-180' : ''}`} />
-        </UiButton>
-        {detailExpanded && (
-          <div className="mt-2 max-h-64 overflow-y-auto">
-            {changedObjects.length === 0 ? (
-              <div className="py-3 text-center text-xs text-text-muted">这两个片段之间没有变化</div>
-            ) : (
-              <div className="grid gap-2">
-                {changedObjects.map((object) => (
-                  <TransitionObjectRow
-                    key={object.id}
-                    object={object}
-                    fromPosition={shot.objectStates[object.id].transform.position}
-                    toPosition={nextShot.objectStates[object.id].transform.position}
-                    detail={shot.transition.perObject[object.id] ?? {}}
-                    cameraMove={shot.transition.cameraMoves[object.id]}
-                    onDetailChange={(detail) => onDetailChange(object.id, detail)}
-                    onCameraMoveChange={(move) => onCameraMoveChange(object.id, move)}
-                  />
-                ))}
-              </div>
-            )}
+      <div className="border-t border-border-dark pt-2">
+        <div className="mb-1 text-[11px] text-text-muted">变化对象</div>
+        {changedObjects.length === 0 ? (
+          <div className="py-3 text-center text-xs text-text-muted">这两个关键帧之间没有变化</div>
+        ) : (
+          <div className="grid gap-1">
+            {changedObjects.map((object) => {
+              const Icon = object.type === 'camera' ? Camera : object.type === 'character' ? UserRound : Cuboid
+              return (
+                <div key={object.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-layer/60">
+                  <Icon size={13} className="shrink-0 text-text-muted" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs text-text-dark">{object.name}</div>
+                    <div className="truncate text-[10px] text-text-muted">
+                      {detailSummary(shot.transition.perObject[object.id] ?? {})}
+                    </div>
+                  </div>
+                  <UiButton
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 shrink-0 rounded-md px-2 text-[11px]"
+                    onClick={() => editObjectPath(object.id)}
+                  >
+                    <PenTool size={12} className="mr-1" />在视口编辑
+                  </UiButton>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

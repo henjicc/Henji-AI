@@ -4,7 +4,6 @@ import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '
 import { cancelVideoFrameExport } from '@/commands/video'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from './domain/cameraUtils'
 import { buildRenderCameraSchedule } from './domain/renderCameraSchedule'
-import type { StageGizmoMode } from './domain/sceneTypes'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
 import { copySceneScreenshotToClipboard, exportSceneScreenshot } from './export/cameraStageScreenshot'
 import {
@@ -29,12 +28,6 @@ import EditorModeBadge from './simple/EditorModeBadge'
  * 只做布局与接线，不承载业务实现；面板布局由 CameraStageDock（dockview）管理。
  */
 
-const GIZMO_MODES: Array<{ id: StageGizmoMode; label: string }> = [
-  { id: 'translate', label: '移动' },
-  { id: 'rotate', label: '旋转' },
-  { id: 'scale', label: '缩放' },
-]
-
 const VIDEO_RESOLUTION_OPTIONS: Array<{ label: string; value: CameraStageVideoResolutionPreset }> = [
   { label: '720p', value: '720p' },
   { label: '1080p', value: '1080p' },
@@ -48,7 +41,6 @@ interface CameraStageEditorProps {
 const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
-  const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
@@ -327,23 +319,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
         </div>
 
         <QuickAddGroup />
-
-        {viewMode === 'director' && (
-          <div className="flex items-center gap-1.5 border-l border-border-dark pl-2">
-            {GIZMO_MODES.map((item) => {
-              return (
-                <UiOptionButton
-                  key={item.id}
-                  active={gizmoMode === item.id}
-                  onClick={() => setGizmoMode(item.id)}
-                  className="py-1.5 text-xs"
-                >
-                  {item.label}
-                </UiOptionButton>
-              )
-            })}
-          </div>
-        )}
 
         <div className="ml-auto flex items-center gap-2">
           {videoProgressLabel && (

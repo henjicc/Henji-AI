@@ -1,5 +1,11 @@
 import { useEffect } from 'react'
 import type { StageGizmoMode } from '../domain/sceneTypes'
+import { useCameraStageStore } from '../store/cameraStageStore'
+import {
+  resolvePathShotId,
+  useCameraStageToolStore,
+  type StageEditorTool,
+} from '../store/cameraStageToolStore'
 
 /**
  * 编辑器作用域快捷键：W/E/R 切 gizmo 模式、F 聚焦选中对象、Delete/Backspace 删除选中、
@@ -17,7 +23,11 @@ interface UseCameraStageShortcutsParams {
   redo: () => void
 }
 
-const GIZMO_KEY_MODE: Record<string, StageGizmoMode> = { w: 'translate', e: 'rotate', r: 'scale' }
+const GIZMO_KEY_MODE: Record<string, { gizmo: StageGizmoMode; tool: StageEditorTool }> = {
+  w: { gizmo: 'translate', tool: 'translate' },
+  e: { gizmo: 'rotate', tool: 'rotate' },
+  r: { gizmo: 'scale', tool: 'scale' },
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   const element = target as HTMLElement | null
@@ -58,7 +68,18 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
       }
 
       if (key in GIZMO_KEY_MODE) {
-        setGizmoMode(GIZMO_KEY_MODE[key])
+        const mode = GIZMO_KEY_MODE[key]
+        setGizmoMode(mode.gizmo)
+        useCameraStageToolStore.getState().setTool(mode.tool)
+      } else if (key === 'v') {
+        useCameraStageToolStore.getState().setTool('select')
+      } else if (key === 'g') {
+        const state = useCameraStageStore.getState()
+        if (!selectedId || state.editorMode !== 'simple' || state.viewMode !== 'director') return
+        const shotId = resolvePathShotId(state.shots, state.playback.currentTime, state.selectedShotId)
+        if (shotId) {
+          useCameraStageToolStore.getState().selectPath({ shotId, objectId: selectedId })
+        }
       } else if (key === 'f') {
         if (!selectedId) return
         requestFocusSelected()

@@ -21,6 +21,8 @@ import TimelinePanel from '../timeline/TimelinePanel'
 import ShotTimelinePanel from '../simple/ShotTimelinePanel'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
+import StagePathContextBar from '../toolbar/StagePathContextBar'
+import StageViewportToolbar from '../toolbar/StageViewportToolbar'
 import { DockHeaderActions, DockTab } from './DockChrome'
 import { LAYOUT_STORAGE_KEY, resetLayout, restoreLayout } from './dockLayout'
 
@@ -41,6 +43,8 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
     <div className="relative h-full w-full">
       <StageScene captureRef={captureRef ?? undefined} />
       <StageAspectRatioOverlay />
+      <StageViewportToolbar />
+      <StagePathContextBar />
     </div>
   )
 }

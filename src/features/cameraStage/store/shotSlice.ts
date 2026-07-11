@@ -4,13 +4,16 @@ import { compileShotsToAnimation } from '../domain/shotCompiler'
 import {
   captureShotObjectState,
   createShot,
+  type StageCameraMovePreset,
   type StageEditorMode,
   type StageShot,
+  type StageSpatialPath,
   type StageShotTransitionObjectDetail,
 } from '../domain/shotTypes'
-import type { StageCameraMove } from '../domain/shotTypes'
 import type { StageObject } from '../domain/sceneTypes'
 import { isCameraId } from '../domain/cameraUtils'
+import { createCameraPresetPath } from '../domain/spatialPath'
+import { markSpatialPathCustom } from '../domain/spatialPath'
 import { clampHold, clampTransition, isTimeInShotStaticSegment, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
 
@@ -29,6 +32,9 @@ export type ShotSliceActions = Pick<
   | 'updateShotTiming'
   | 'updateShotName'
   | 'updateShotTransition'
+  | 'setShotSpatialPath'
+  | 'applyCameraPathPreset'
+  | 'setShotPathAnchor'
   | 'updateShotCamera'
   | 'updateShotContinuity'
   | 'captureIntoSelectedShot'
@@ -117,6 +123,40 @@ function syncTransitionDurations(shots: StageShot[]): StageShot[] {
     hold: 0,
     transitionDuration: Math.max(0, (shots[index + 1]?.time ?? shot.time) - shot.time),
   }))
+}
+
+function resolveShotTarget(shot: StageShot, objectId: string, objects: StageObject[]): StageObject['transform']['position'] {
+  const cameraState = shot.objectStates[objectId]
+  const lookAt = cameraState?.lookAt
+  if (!lookAt) return { x: 0, y: 0, z: 0 }
+  if (lookAt.mode === 'manual') return { ...lookAt.target }
+  const target = objects.find((object) => object.id === lookAt.objectId)
+  const targetState = shot.objectStates[lookAt.objectId]
+  if (!target || !targetState) return { ...lookAt.fallbackTarget }
+  const position = targetState.transform.position
+  return target.type === 'character'
+    ? { x: position.x, y: position.y + targetState.transform.scale.y, z: position.z }
+    : { ...position }
+}
+
+function replaceSpatialPath(
+  shot: StageShot,
+  objectId: string,
+  path: StageSpatialPath | undefined,
+): StageShot {
+  const previous = shot.transition.perObject[objectId] ?? {}
+  const detail = { ...previous }
+  if (path) detail.spatialPath = path
+  else delete detail.spatialPath
+  const cameraMoves = { ...shot.transition.cameraMoves }
+  delete cameraMoves[objectId]
+  return {
+    ...shot,
+    transition: {
+      perObject: { ...shot.transition.perObject, [objectId]: detail },
+      cameraMoves,
+    },
+  }
 }
 
 function insertCapturedShot(
@@ -306,9 +346,74 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
         ...shot,
         transition: {
           perObject: patch.perObject ? { ...shot.transition.perObject, ...patch.perObject } : shot.transition.perObject,
-          cameraMoves: patch.cameraMoves ? { ...shot.transition.cameraMoves, ...patch.cameraMoves } : shot.transition.cameraMoves,
+          cameraMoves: shot.transition.cameraMoves,
         },
       } : shot)
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    setShotSpatialPath: (shotId, objectId, path) => set((state) => {
+      const shots = state.shots.map((shot) => (
+        shot.id === shotId ? replaceSpatialPath(shot, objectId, path) : shot
+      ))
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    applyCameraPathPreset: (shotId, objectId, preset: StageCameraMovePreset) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === shotId)
+      if (index < 0 || index >= state.shots.length - 1) return {}
+      const fromShot = state.shots[index]
+      const nextShot = state.shots[index + 1]
+      const fromPosition = fromShot.objectStates[objectId]?.transform.position
+      const nextState = nextShot.objectStates[objectId]
+      if (!fromPosition || !nextState) return {}
+      const generated = createCameraPresetPath(preset, fromPosition, resolveShotTarget(fromShot, objectId, state.objects))
+      const shots = state.shots.map((shot, shotIndex) => {
+        if (shotIndex === index) return replaceSpatialPath(shot, objectId, generated.path)
+        if (shotIndex !== index + 1) return shot
+        return {
+          ...shot,
+          objectStates: {
+            ...shot.objectStates,
+            [objectId]: {
+              ...nextState,
+              transform: { ...nextState.transform, position: generated.endPosition },
+            },
+          },
+        }
+      })
+      logger.debug('运镜预设已物化为空间路径', {
+        event: 'simple_mode.camera_path.materialized',
+        shotId,
+        objectId,
+        preset: preset.kind,
+        knotCount: generated.path.knots.length,
+      })
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    setShotPathAnchor: (shotId, objectId, endpoint, position) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === shotId)
+      const targetIndex = endpoint === 'start' ? index : index + 1
+      if (index < 0 || targetIndex >= state.shots.length) return {}
+      const shots = state.shots.map((shot, shotIndex) => {
+        if (shotIndex === index) {
+          const path = shot.transition.perObject[objectId]?.spatialPath
+          return path ? replaceSpatialPath(shot, objectId, markSpatialPathCustom(path)) : shot
+        }
+        return shot
+      }).map((shot, shotIndex) => {
+        if (shotIndex !== targetIndex) return shot
+        const objectState = shot.objectStates[objectId]
+        if (!objectState) return shot
+        return {
+          ...shot,
+          objectStates: {
+            ...shot.objectStates,
+            [objectId]: {
+              ...objectState,
+              transform: { ...objectState.transform, position },
+            },
+          },
+        }
+      })
       return { shots, animation: compile(shots, state.objects) }
     }),
     /**
@@ -367,5 +472,4 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
 export type ShotTimingPatch = Partial<Pick<StageShot, 'hold' | 'transitionDuration'>>
 export interface ShotTransitionPatch {
   perObject?: Record<string, StageShotTransitionObjectDetail>
-  cameraMoves?: Record<string, StageCameraMove>
 }

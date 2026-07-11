@@ -25,10 +25,12 @@ import { createDefaultSceneSettings } from './sceneDefaults'
 import { rotationFromPositionAndTarget } from './cameraUtils'
 import { normalizeEditorMode, normalizeShots } from './shotTypes'
 import type { StageEditorMode, StageShot } from './shotTypes'
+import { createCameraPresetPath } from './spatialPath'
+import { compileShotsToAnimation } from './shotCompiler'
 import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 11
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 12
 
 export interface StageSceneSnapshot {
   schemaVersion: number
@@ -52,6 +54,40 @@ export interface StageSceneSnapshotInput {
   sceneSettings: StageSceneSettings
   editorMode: StageEditorMode
   shots: StageShot[]
+}
+
+function legacyShotTarget(shot: StageShot, objectId: string, objects: StageObject[]): StageVec3 {
+  const lookAt = shot.objectStates[objectId]?.lookAt
+  if (!lookAt) return { x: 0, y: 0, z: 0 }
+  if (lookAt.mode === 'manual') return { ...lookAt.target }
+  const target = objects.find((object) => object.id === lookAt.objectId)
+  const targetState = shot.objectStates[lookAt.objectId]
+  if (!target || !targetState) return { ...lookAt.fallbackTarget }
+  const position = targetState.transform.position
+  return target.type === 'character'
+    ? { x: position.x, y: position.y + targetState.transform.scale.y, z: position.z }
+    : { ...position }
+}
+
+/** v11 的 cameraMoves 是编译期黑盒；加载时转成可见、可编辑的对象级空间路径。 */
+function materializeLegacyCameraPaths(shots: StageShot[], objects: StageObject[]): StageShot[] {
+  const result = shots.map((shot) => structuredClone(shot))
+  for (let index = 0; index < result.length - 1; index += 1) {
+    const shot = result[index]
+    const nextShot = result[index + 1]
+    for (const [objectId, move] of Object.entries(shot.transition.cameraMoves)) {
+      const detail = shot.transition.perObject[objectId] ?? {}
+      if (detail.spatialPath || move.kind === 'direct') continue
+      const fromPosition = shot.objectStates[objectId]?.transform.position
+      const nextState = nextShot.objectStates[objectId]
+      if (!fromPosition || !nextState) continue
+      const generated = createCameraPresetPath(move, fromPosition, legacyShotTarget(shot, objectId, objects))
+      shot.transition.perObject[objectId] = { ...detail, spatialPath: generated.path }
+      nextState.transform.position = generated.endPosition
+    }
+    shot.transition.cameraMoves = {}
+  }
+  return result
 }
 
 export function serializeScene(input: StageSceneSnapshotInput): string {
@@ -352,7 +388,9 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   const sceneSettings = version >= 4 ? parseSceneSettings(record.sceneSettings) : createDefaultSceneSettings()
   // v10 及以下工程无 editorMode/shots 字段 → 一律视为专业工程、无镜头卡
   const editorMode = version >= 11 ? normalizeEditorMode(record.editorMode) : 'pro'
-  const shots = version >= 11 ? normalizeShots(record.shots) : []
+  const normalizedShots = version >= 11 ? normalizeShots(record.shots) : []
+  const shots = materializeLegacyCameraPaths(normalizedShots, objects)
+  if (editorMode === 'simple') animation = compileShotsToAnimation(shots, objects)
 
   return {
     schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
