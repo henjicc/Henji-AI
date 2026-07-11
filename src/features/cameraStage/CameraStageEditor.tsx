@@ -22,6 +22,7 @@ import { useCameraStageStore } from './store/cameraStageStore'
 import { useCameraStageViewportStore } from './store/cameraStageViewportStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
 import QuickAddGroup from './toolbar/QuickAddGroup'
+import StageViewportToolbar from './toolbar/StageViewportToolbar'
 import EditorModeBadge from './simple/EditorModeBadge'
 
 /**
@@ -335,6 +336,9 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
         </div>
 
         <QuickAddGroup />
+
+        <span className="mx-1 h-6 w-px shrink-0 bg-border-dark" />
+        <StageViewportToolbar />
 
         <div className="ml-auto flex items-center gap-2">
           {videoProgressLabel && (

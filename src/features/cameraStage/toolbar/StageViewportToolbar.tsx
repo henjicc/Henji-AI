@@ -61,7 +61,7 @@ const StageViewportToolbar: React.FC = () => {
     || shots.length < 2
 
   return (
-    <div className="pointer-events-auto absolute left-3 top-3 z-30 flex items-center gap-0.5 rounded-lg border border-border-dark bg-surface-dark/95 p-1 shadow-lg backdrop-blur">
+    <div className="flex items-center gap-0.5">
       {TOOLS.map((definition, index) => {
         const Icon = definition.icon
         const disabled = definition.id === 'path' && pathDisabled
