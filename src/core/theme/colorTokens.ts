@@ -67,6 +67,12 @@ export const CAMERA_STAGE_TIMELINE_HEX = {
   curveHandle: '#e8c84a',
 } as const;
 
+export const CAMERA_STAGE_MOTION_PATH_HEX = {
+  path: '#e8c84a',
+  tangent: '#8f97a3',
+  handle: '#e8734a',
+} as const;
+
 // 运镜控制新建对象默认颜色轮换盘（按对象序号取模）
 export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
   '#e8734a',

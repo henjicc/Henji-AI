@@ -125,6 +125,8 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
                   <TransitionObjectRow
                     key={object.id}
                     object={object}
+                    fromPosition={shot.objectStates[object.id].transform.position}
+                    toPosition={nextShot.objectStates[object.id].transform.position}
                     detail={shot.transition.perObject[object.id] ?? {}}
                     cameraMove={shot.transition.cameraMoves[object.id]}
                     onDetailChange={(detail) => onDetailChange(object.id, detail)}

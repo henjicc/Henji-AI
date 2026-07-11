@@ -17,6 +17,7 @@ import StagePlaybackDriver from './StagePlaybackDriver'
 import StageSunLight from './StageSunLight'
 import StageViewportCamera from './StageViewportCamera'
 import StageTransformControls from './StageTransformControls'
+import StageMotionPathOverlay from './StageMotionPathOverlay'
 import { useRenderCameraId } from './useRenderCameraId'
 
 /**
@@ -40,6 +41,9 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   // （编辑机位，用户显式选择）区分；专业模式/无镜头卡时该 hook 直接回落 activeCameraId，行为不变。
   const renderCameraId = useRenderCameraId()
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
+  const editorMode = useCameraStageStore((state) => state.editorMode)
+  const shots = useCameraStageStore((state) => state.shots)
+  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
@@ -103,6 +107,11 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
 
   const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
   const selectedObject = selectedId ? objects.find((item) => item.id === selectedId) : undefined
+  const editingSpatialPath = !!selectedId && shots.some((shot, index) => (
+    !!shot.transition.perObject[selectedId]?.spatialPath
+    && currentTime >= shot.time
+    && currentTime <= (shots[index + 1]?.time ?? shot.time)
+  ))
   const transformMode = selectedObject?.type === 'camera' && gizmoMode === 'scale' ? 'translate' : gizmoMode
   const cameraLookAtTargets = useMemo(() => {
     const targets = new Map<string, ReturnType<typeof resolveCameraLookAtTarget>>()
@@ -175,7 +184,10 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           nameLabelSettings={sceneSettings.display.nameLabel}
         />
       ))}
-      {selectedNode && (!isCameraView || selectedObject?.id !== activeCamera?.id) && (
+      {editorMode === 'simple' && viewMode === 'director' && selectedId && (
+        <StageMotionPathOverlay objectId={selectedId} shots={shots} currentTime={currentTime} />
+      )}
+      {selectedNode && !editingSpatialPath && (!isCameraView || selectedObject?.id !== activeCamera?.id) && (
         <StageTransformControls
           object={selectedNode}
           mode={transformMode}

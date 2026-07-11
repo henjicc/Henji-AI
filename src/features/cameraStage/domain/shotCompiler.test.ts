@@ -7,6 +7,31 @@ import { buildShotTimeline, compileShotsToAnimation } from './shotCompiler'
 import { createShot } from './shotTypes'
 
 describe('compileShotsToAnimation', () => {
+  it('空间贝塞尔路径同步编译 XYZ，且曲线形状独立于速度时间轴', () => {
+    const box = createPrimitiveObject('box', 'Box', pickDefaultColor(0))
+    const shotA = createShot([box], '卡1', null, 0)
+    const shotB = createShot([box], '卡2', null, 2)
+    shotB.objectStates[box.id].transform.position = { x: 6, y: 0, z: 0 }
+    shotA.transition.perObject[box.id] = {
+      speedPreset: 'uniform',
+      spatialPath: {
+        kind: 'bezier',
+        outTangent: { x: 2, y: 4, z: 0 },
+        inTangent: { x: -2, y: 4, z: 0 },
+      },
+    }
+
+    const animation = compileShotsToAnimation([shotA, shotB], [box])
+    const x = animation.tracks.find((track) => track.propertyPath === 'transform.position.x')
+    const y = animation.tracks.find((track) => track.propertyPath === 'transform.position.y')
+    const z = animation.tracks.find((track) => track.propertyPath === 'transform.position.z')
+    expect(x?.keyframes).toHaveLength(25)
+    expect(y?.keyframes).toHaveLength(25)
+    expect(z?.keyframes).toHaveLength(25)
+    expect(sampleTrack(x as StageTrack, 1, 'scalar')).toBeCloseTo(3, 5)
+    expect(sampleTrack(y as StageTrack, 1, 'scalar')).toBeCloseTo(3.25, 5)
+  })
+
   it('角色位移生成转身轨道与可覆盖的动作时间表', () => {
     const character = createCharacterObject('Character', pickDefaultColor(1))
     const shotA = createShot([character], '卡1')

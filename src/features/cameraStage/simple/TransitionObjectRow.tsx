@@ -3,6 +3,7 @@ import { Camera, Cuboid, UserRound } from 'lucide-react'
 import { Dropdown, UiInput, UiOptionButton } from '@/components/ui'
 import { CHARACTER_ANIMATION_CLIPS, createClipMotion, createPoseMotion, isCharacterAnimationClipName } from '../domain/characterMotion'
 import { STAGE_CAMERA_MOVE_DEFAULTS } from '../domain/shotCameraMovePresets'
+import { defaultSpatialPath } from '../domain/spatialPath'
 import type {
   StageCameraMove,
   StageShotTransitionObjectDetail,
@@ -12,6 +13,8 @@ import type { StageObject } from '../domain/sceneTypes'
 
 interface TransitionObjectRowProps {
   object: StageObject
+  fromPosition: StageObject['transform']['position']
+  toPosition: StageObject['transform']['position']
   detail: StageShotTransitionObjectDetail
   cameraMove?: StageCameraMove
   onDetailChange: (detail: StageShotTransitionObjectDetail) => void
@@ -45,7 +48,15 @@ function defaultCameraMove(kind: StageCameraMove['kind']): StageCameraMove {
   return { kind: 'direct' }
 }
 
-const TransitionObjectRow: React.FC<TransitionObjectRowProps> = ({ object, detail, cameraMove, onDetailChange, onCameraMoveChange }) => {
+const TransitionObjectRow: React.FC<TransitionObjectRowProps> = ({
+  object,
+  fromPosition,
+  toPosition,
+  detail,
+  cameraMove,
+  onDetailChange,
+  onCameraMoveChange,
+}) => {
   const Icon = object.type === 'camera' ? Camera : object.type === 'character' ? UserRound : Cuboid
   const move = cameraMove ?? { kind: 'direct' }
   const motionValue = detail.motionOverride?.mode === 'clip' ? detail.motionOverride.clipName : detail.motionOverride ? 'pose' : 'auto'
@@ -61,6 +72,16 @@ const TransitionObjectRow: React.FC<TransitionObjectRowProps> = ({ object, detai
         <div className="flex min-w-32 items-center gap-2 self-center text-xs text-text-dark"><Icon size={14} />{object.name}</div>
         <Dropdown label="速度" value={detail.speedPreset ?? 'easeInOut'} options={SPEED_OPTIONS}
           onSelect={(speedPreset) => onDetailChange({ ...detail, speedPreset })} buttonClassName="w-28" />
+        <Dropdown
+          label="空间路径"
+          value={detail.spatialPath ? 'bezier' : 'linear'}
+          options={[{ label: '直线', value: 'linear' }, { label: '贝塞尔', value: 'bezier' }]}
+          onSelect={(kind) => onDetailChange({
+            ...detail,
+            spatialPath: kind === 'bezier' ? defaultSpatialPath(fromPosition, toPosition) : undefined,
+          })}
+          buttonClassName="w-24"
+        />
         {numberField('延迟（秒）', detail.delay ?? 0, (delay) => onDetailChange({ ...detail, delay }))}
         {object.type === 'camera' && <Dropdown label="运镜" value={move.kind} options={CAMERA_MOVE_OPTIONS}
           onSelect={(kind) => onCameraMoveChange(defaultCameraMove(kind))} buttonClassName="w-24" />}

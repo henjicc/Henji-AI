@@ -31,7 +31,8 @@ import type { StageObject, StageVec3 } from './sceneTypes'
 import { rotationFromPositionAndTarget } from './cameraUtils'
 import { compileCameraMoveSamples } from './shotCameraMovePresets'
 import { inferCharacterTransition } from './characterTransitionInference'
-import type { StageCameraMove, StageShot, StageShotObjectState, StageSpeedPreset } from './shotTypes'
+import { compileSpatialPathSamples } from './spatialPath'
+import type { StageCameraMove, StageShot, StageShotObjectState, StageSpatialPath, StageSpeedPreset } from './shotTypes'
 
 /** scalar 属性差异容差：|a-b| 不超过该值视为未变化 */
 const SCALAR_EPSILON = 1e-3
@@ -243,6 +244,35 @@ function compileCameraPositionGroup(
   }
 }
 
+function compileSpatialPositionGroup(
+  trackMap: TrackMap,
+  objectId: string,
+  fromPosition: StageVec3,
+  toPosition: StageVec3,
+  path: StageSpatialPath,
+  segStart: number,
+  segEnd: number,
+  easing: StageEasingPreset,
+  holdGuard: HoldGuard,
+): void {
+  const samples = compileSpatialPathSamples(fromPosition, toPosition, path, segStart, segEnd, easing)
+  for (const axis of ['x', 'y', 'z'] as const) {
+    const propertyPath = `transform.position.${axis}`
+    for (const sample of samples) {
+      writeKeyframe(trackMap, objectId, propertyPath, {
+        time: sample.time,
+        value: sample.position[axis],
+        easing: 'linear',
+        // 空间切线已完整定义几何形状，禁止通用 continuity Hermite 再次改写采样曲线。
+        continuity: 'stop',
+      })
+    }
+    if (holdGuard.enabled) {
+      writeKeyframe(trackMap, objectId, propertyPath, { time: holdGuard.time, value: toPosition[axis], easing: 'linear' })
+    }
+  }
+}
+
 type TrackMap = Map<string, StageKeyframe[]>
 
 const TRACK_KEY_SEPARATOR = '::'
@@ -284,6 +314,7 @@ function compileObjectTransition(
   cameraLookAtTarget?: StageVec3,
   motionSchedule?: StageCharacterMotionScheduleEntry[],
   motionOverride?: import('./characterMotion').StageCharacterMotion,
+  spatialPath?: StageSpatialPath,
 ): void {
   const fromObject = mergeStateIntoObject(object, fromState)
   const toObject = mergeStateIntoObject(object, toState)
@@ -318,6 +349,20 @@ function compileObjectTransition(
   }
 
   for (const group of listAnimatableGroups(object)) {
+    if (group.groupPath === 'transform.position' && spatialPath) {
+      compileSpatialPositionGroup(
+        trackMap,
+        object.id,
+        fromState.transform.position,
+        toState.transform.position,
+        spatialPath,
+        segStart,
+        segEnd,
+        easing,
+        holdGuard,
+      )
+      continue
+    }
     if (isCameraPositionMoveGroup(object, group, move)) {
       compileCameraPositionGroup(
         trackMap,
@@ -387,7 +432,7 @@ function finalizeTracks(trackMap: TrackMap, shots: StageShot[]): StageTrack[] {
       propertyPath: key.slice(separatorIndex + TRACK_KEY_SEPARATOR.length),
       keyframes: keyframes.map((keyframe) => {
         const shot = shots.find((item) => Math.abs(item.time - keyframe.time) <= 1e-4)
-        return shot ? { ...keyframe, continuity: shot.continuity } : keyframe
+        return shot && keyframe.continuity === undefined ? { ...keyframe, continuity: shot.continuity } : keyframe
       }),
     })
   }
@@ -447,6 +492,7 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
         cameraLookAtTarget,
         motionSchedule,
         detail?.motionOverride,
+        detail?.spatialPath,
       )
     }
   }

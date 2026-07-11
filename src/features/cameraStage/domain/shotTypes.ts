@@ -37,6 +37,13 @@ export interface StageShotObjectState {
 
 export type StageSpeedPreset = 'uniform' | 'easeInOut' | 'fastStart' | 'slowStart'
 
+/** 三维空间路径：切线为相对起点/终点的偏移，端点移动后路径仍能保持局部形状。 */
+export interface StageSpatialPath {
+  kind: 'bezier'
+  outTangent: StageVec3
+  inTangent: StageVec3
+}
+
 /**
  * 摄像机运镜预设判别联合（参数于 1.3 定稿）。
  * - direct：两点直插（默认值，无参数）。
@@ -56,6 +63,8 @@ export type StageCameraMove =
 /** 单个对象在过渡段的细节覆盖：速度预设 / 错峰延迟 / 动作覆盖 */
 export interface StageShotTransitionObjectDetail {
   speedPreset?: StageSpeedPreset
+  /** 未设置 = 直线；设置后位置按三次贝塞尔空间路径编译。 */
+  spatialPath?: StageSpatialPath
   /** 错峰延迟（秒，可为负=提前，编译时钳制到过渡区间内） */
   delay?: number
   /** 覆盖自动走跑推断得到的卡内动作 */
@@ -186,6 +195,23 @@ function normalizeShotTransitionObjectDetail(raw: unknown): StageShotTransitionO
   }
   if (record.motionOverride !== undefined) {
     detail.motionOverride = normalizeCharacterMotion(record.motionOverride)
+  }
+  const spatialPath = record.spatialPath
+  if (spatialPath && typeof spatialPath === 'object') {
+    const path = spatialPath as Record<string, unknown>
+    const normalizeTangent = (value: unknown): StageVec3 | null => {
+      if (!value || typeof value !== 'object') return null
+      const vec = value as Record<string, unknown>
+      const x = Number(vec.x)
+      const y = Number(vec.y)
+      const z = Number(vec.z)
+      return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null
+    }
+    const outTangent = normalizeTangent(path.outTangent)
+    const inTangent = normalizeTangent(path.inTangent)
+    if (path.kind === 'bezier' && outTangent && inTangent) {
+      detail.spatialPath = { kind: 'bezier', outTangent, inTangent }
+    }
   }
   return detail
 }
