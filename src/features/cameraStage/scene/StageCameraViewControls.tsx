@@ -102,6 +102,7 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
     <OrbitControls
       ref={controlsRef}
       makeDefault
+      enableDamping={false}
       onStart={handleStart}
       onEnd={handleEnd}
       onChange={handleChange}

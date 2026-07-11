@@ -186,7 +186,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       )}
       {!isCameraView && (
         <>
-          <OrbitControls makeDefault />
+          <OrbitControls makeDefault enableDamping={false} />
           <StageDirectorViewRestorer />
           <StageFocusController />
           <DirectorViewTracker />
