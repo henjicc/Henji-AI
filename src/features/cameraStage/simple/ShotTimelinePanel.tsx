@@ -18,8 +18,8 @@ import { useShotMarqueeSelect } from './timeline/useShotMarqueeSelect'
  * 简易模式时间轴面板：工具条（播放控制 + 时间码）→ 时间标尺（可拖 scrub）→ 比例块轨道 → 播放头竖线贯穿。
  * 块宽反映真实时长；过渡细节走块上方参数气泡（TransitionClipBlock 内接 PanelTrigger，见重要记录 004），
  * 本面板只做编排接线，不再持有过渡抽屉展开态。
- * 2.3：pxPerSecond 由固定常量改为可缩放 state，接入 Alt+滚轮锚点缩放（照抄专业模式 TimelinePanel 的
- * 触发条件与锚点反解算法），并在用户尚未手动缩放前，随面板可视宽度/总时长变化持续自适应铺满。
+ * pxPerSecond 是独立的编辑视口状态：仅由用户 Alt+滚轮修改。关键帧位置决定实际总时长，
+ * 新增/移动关键帧只能扩展内容范围，禁止自动 fit 改变时间尺度。
  */
 
 /** 轨道内容最小宽度，避免空/极短工程时轨道过窄 */
@@ -69,29 +69,24 @@ const ShotTimelinePanel: React.FC = () => {
   }, [])
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  /** 用户是否已手动滚轮缩放过：一旦为 true，停止随时长变化自动自适应铺满，尊重用户当前缩放 */
-  const userZoomedRef = useRef(false)
   const [pxPerSecond, setPxPerSecond] = useState(clampPxPerSecond(120))
   const [viewportWidth, setViewportWidth] = useState(MIN_CONTENT_WIDTH)
   const [timecodeMode, setTimecodeMode] = useState<ShotTimecodeMode>('secondsFrames')
 
-  // 初始自适应：面板挂载 / 可视宽度变化 / 总时长变化时，取 clampPxPerSecond(可视宽度 / 总时长)
-  // 让整条时间轴默认尽量铺满可见区域；用户手动缩放过后不再介入。
+  // 面板尺寸只影响可滚动内容留白，不得反向修改时间尺度。
   useLayoutEffect(() => {
     const container = scrollRef.current
     if (!container) return undefined
-    const applyAutoFit = (): void => {
+    const updateViewportWidth = (): void => {
       const visibleWidth = container.clientWidth
       if (visibleWidth <= 0) return
       setViewportWidth(visibleWidth)
-      if (userZoomedRef.current || duration <= 0) return
-      setPxPerSecond(clampPxPerSecond(visibleWidth / duration))
     }
-    applyAutoFit()
-    const observer = new ResizeObserver(applyAutoFit)
+    updateViewportWidth()
+    const observer = new ResizeObserver(updateViewportWidth)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [duration])
+  }, [])
 
   // 轨道在最后一个关键帧之后始终保留至少一屏空白，允许播放头进入未来时间。
   const contentWidth = Math.max(MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond) + viewportWidth)
@@ -112,7 +107,6 @@ const ShotTimelinePanel: React.FC = () => {
     const factor = Math.pow(WHEEL_ZOOM_BASE, -event.deltaY)
     const nextPxPerSecond = clampPxPerSecond(pxPerSecond * factor)
     if (Math.abs(nextPxPerSecond - pxPerSecond) < 0.01) return
-    userZoomedRef.current = true
     setPxPerSecond(nextPxPerSecond)
     requestAnimationFrame(() => {
       scroller.scrollLeft = Math.max(0, timeToX(anchorTime, nextPxPerSecond) - viewportContentX)
