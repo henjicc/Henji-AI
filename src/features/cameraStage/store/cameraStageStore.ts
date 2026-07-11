@@ -107,6 +107,8 @@ export interface CameraStageState {
   setViewMode: (mode: StageViewMode) => void
   setActiveCameraId: (id: string | null) => void
   updateObject: (id: string, patch: StageObjectPatch) => void
+  /** 简易模式交互开始前冻结当前帧，避免首个变换增量中途触发插帧重编译。 */
+  prepareSimpleEdit: (id: string) => void
   updateTransform: (id: string, patch: Partial<StageTransform>, autoKeyPaths?: string[]) => void
   /** 原子更新摄像机视图姿态，避免 OrbitControls 一次 change 被拆成多次编译。 */
   updateCameraView: (id: string, patch: {
@@ -427,6 +429,12 @@ export const useCameraStageStore = create<CameraStageState>()(
       if ('fov' in patch) paths.push('fov')
       const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
       return animation === state.animation ? { objects } : { objects, animation }
+    }),
+
+  prepareSimpleEdit: (id) =>
+    set((state) => {
+      if (state.editorMode !== 'simple' || state.playback.playing) return {}
+      return compileSimpleEdit(state, state.objects, [id])
     }),
 
   updateTransform: (id, patch, explicitAutoKeyPaths) =>

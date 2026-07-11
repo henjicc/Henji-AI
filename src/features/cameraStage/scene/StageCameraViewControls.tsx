@@ -27,6 +27,7 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
   //（start~end 之间），否则 scrub 会把采样值当成用户编辑一路写回（自动关键帧开启时
   // 表现为拖动播放头疯狂插关键帧）。
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
+  const prepareSimpleEdit = useCameraStageStore((state) => state.prepareSimpleEdit)
   // drei 的 OrbitControls 在默认相机切换时会整体重建实例（新实例 target 回到原点）。
   // 订阅 r3f 注册的当前实例并纳入下方 effect 依赖，保证重建后立刻重新对齐注视点，
   // 否则新建工程后的第一次拖拽会突然从 (0,0,0) 环绕（画面瞬间跳变）。
@@ -61,6 +62,7 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
   const handleStart = (): void => {
     interactionRef.current = true
     beginHistorySession()
+    prepareSimpleEdit(cameraObject.id)
   }
 
   const handleEnd = (): void => {

@@ -43,6 +43,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
+  const prepareSimpleEdit = useCameraStageStore((state) => state.prepareSimpleEdit)
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
@@ -94,6 +95,11 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
       scale: { x: node.scale.x, y: node.scale.y, z: node.scale.z },
     })
   }, [updateCameraView, updateTransform])
+
+  const handleGizmoInteractionStart = useCallback((): void => {
+    const id = useCameraStageStore.getState().selectedId
+    if (id) prepareSimpleEdit(id)
+  }, [prepareSimpleEdit])
 
   const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
   const selectedObject = selectedId ? objects.find((item) => item.id === selectedId) : undefined
@@ -174,6 +180,7 @@ const StageScene: React.FC<StageSceneProps> = ({ captureRef }) => {
           object={selectedNode}
           mode={transformMode}
           enabled
+          onInteractionStart={handleGizmoInteractionStart}
           onObjectChange={handleGizmoChange}
         />
       )}

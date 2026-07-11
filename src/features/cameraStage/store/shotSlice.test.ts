@@ -150,6 +150,23 @@ describe('简易模式 store 分片', () => {
     expect(state.selectedShotId).toBe(inserted?.id)
   })
 
+  it('交互开始时先用当前采样画面冻结关键帧，首个移动增量不再改变动画拓扑', () => {
+    const objectId = useCameraStageStore.getState().objects[0].id
+    addShotAt(2)
+    useCameraStageStore.getState().seek(1)
+
+    useCameraStageStore.getState().prepareSimpleEdit(objectId)
+    const prepared = useCameraStageStore.getState()
+    expect(prepared.shots).toHaveLength(3)
+    const insertedId = prepared.selectedShotId
+
+    useCameraStageStore.getState().updateTransform(objectId, { position: { x: 7, y: 0, z: 0 } })
+    const edited = useCameraStageStore.getState()
+    expect(edited.shots).toHaveLength(3)
+    expect(edited.selectedShotId).toBe(insertedId)
+    expect(edited.shots.find((shot) => shot.id === insertedId)?.objectStates[objectId].transform.position.x).toBe(7)
+  })
+
   it('摄像机视图一次原子更新同时记录位置、XYZ 旋转和注视点', () => {
     const camera = createCameraObject('摄像机01', pickDefaultColor(0))
     const first = createShot([camera], '关键帧 1', camera.id, 0)

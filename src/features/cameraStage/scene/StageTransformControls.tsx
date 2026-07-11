@@ -9,6 +9,7 @@ interface StageTransformControlsProps {
   object: Object3D
   mode: StageGizmoMode
   enabled?: boolean
+  onInteractionStart?: () => void
   onObjectChange: () => void
 }
 
@@ -141,6 +142,7 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
   object,
   mode,
   enabled = true,
+  onInteractionStart,
   onObjectChange,
 }, ref) => {
   const defaultControls = useThree((state) => (
@@ -183,6 +185,7 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
       // 一次 gizmo 拖拽合并为一条撤销记录：拖拽开始开会话，结束提交
       if (event.value) {
         beginHistorySession()
+        onInteractionStart?.()
       } else {
         endHistorySession()
       }
@@ -191,7 +194,7 @@ const StageTransformControls = React.forwardRef<TransformControlsImpl, StageTran
     return () => {
       controlEvents.removeEventListener('dragging-changed', handleDraggingChanged)
     }
-  }, [controls, defaultControls])
+  }, [controls, defaultControls, onInteractionStart])
 
   useEffect(() => {
     const controlEvents = controls as unknown as StageTransformEventSource
