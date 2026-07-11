@@ -3,6 +3,7 @@ import { ArrowLeft, Clapperboard } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UiIconButton, UiOptionButton } from '@/components/ui'
 import CameraStageApp from '@/features/cameraStage/CameraStageApp'
+import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
@@ -36,24 +37,28 @@ function renderTool(id: ToolboxToolId): React.ReactNode {
 
 const ToolboxWorkspace: React.FC = () => {
   const [activeToolId, setActiveToolId] = useState<ToolboxToolId | null>(null)
+  const cameraStageView = useCameraStageSessionStore((state) => state.appView)
 
   const activeTool = TOOLS.find((tool) => tool.id === activeToolId)
+  const showToolHeader = activeToolId !== 'cameraStage' || cameraStageView !== 'editor'
 
   if (activeTool) {
     return (
       <div className="flex h-full flex-col bg-app">
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
-          <UiIconButton
-            showBorder={false}
-            appearance="hover-only"
-            className="h-7 w-7"
-            title="返回工具箱"
-            onClick={() => setActiveToolId(null)}
-          >
-            <ArrowLeft size={15} />
-          </UiIconButton>
-          <span className="text-sm font-medium text-text-dark">{activeTool.name}</span>
-        </div>
+        {showToolHeader && (
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
+            <UiIconButton
+              showBorder={false}
+              appearance="hover-only"
+              className="h-7 w-7"
+              title="返回工具箱"
+              onClick={() => setActiveToolId(null)}
+            >
+              <ArrowLeft size={15} />
+            </UiIconButton>
+            <span className="text-sm font-medium text-text-dark">{activeTool.name}</span>
+          </div>
+        )}
         <div className="min-h-0 flex-1">{renderTool(activeTool.id)}</div>
       </div>
     )
