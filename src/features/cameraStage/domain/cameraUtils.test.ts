@@ -4,12 +4,24 @@ import { createCameraObject, createPrimitiveObject, pickDefaultColor } from './s
 import {
   applyObjectPatch,
   areCameraAspectRatiosConsistent,
+  cameraTargetFromPositionRotation,
   cameraTargetFromRotation,
   getCameraObjects,
   isFirstCamera,
   resolveCameraRotation,
   rotationFromPositionAndTarget,
 } from './cameraUtils'
+
+describe('cameraTargetFromPositionRotation', () => {
+  it('反推控制目标后重新 lookAt 可无损还原俯仰和水平角', () => {
+    const position = { x: 2, y: 3, z: 8 }
+    const rotation = { x: -12.5, y: 27.25, z: 0 }
+    const target = cameraTargetFromPositionRotation(position, rotation, 9)
+    const restored = rotationFromPositionAndTarget(position, target)
+    expect(restored.x).toBeCloseTo(rotation.x, 10)
+    expect(restored.y).toBeCloseTo(rotation.y, 10)
+  })
+})
 
 describe('areCameraAspectRatiosConsistent', () => {
   it('空集合和统一画幅的机位通过校验', () => {

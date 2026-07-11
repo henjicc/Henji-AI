@@ -57,12 +57,22 @@ export function cameraTargetFromRotation(
     currentTarget.y - position.y,
     currentTarget.z - position.z,
   ))
+  return cameraTargetFromPositionRotation(position, rotation, distance)
+}
+
+/** 由当前姿态反推同方向注视点；用于让 OrbitControls 接管时不重新扳动摄像机。 */
+export function cameraTargetFromPositionRotation(
+  position: StageVec3,
+  rotation: StageVec3,
+  distance: number,
+): StageVec3 {
+  const safeDistance = Math.max(0.01, distance)
   const pitch = rotation.x * DEG2RAD
   const yaw = rotation.y * DEG2RAD
-  const horizontal = Math.cos(pitch) * distance
+  const horizontal = Math.cos(pitch) * safeDistance
   return {
     x: position.x - Math.sin(yaw) * horizontal,
-    y: position.y + Math.sin(pitch) * distance,
+    y: position.y + Math.sin(pitch) * safeDistance,
     z: position.z - Math.cos(yaw) * horizontal,
   }
 }

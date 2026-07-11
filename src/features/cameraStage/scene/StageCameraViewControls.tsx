@@ -1,9 +1,9 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
-import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
+import { cameraTargetFromPositionRotation, rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
 
 const DEG2RAD = Math.PI / 180
@@ -32,13 +32,24 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
   // 订阅 r3f 注册的当前实例并纳入下方 effect 依赖，保证重建后立刻重新对齐注视点，
   // 否则新建工程后的第一次拖拽会突然从 (0,0,0) 环绕（画面瞬间跳变）。
   const registeredControls = useThree((state) => state.controls)
+  const controlTarget = useMemo(() => {
+    const position = cameraObject.transform.position
+    const distance = Math.hypot(
+      lookAtTarget.x - position.x,
+      lookAtTarget.y - position.y,
+      lookAtTarget.z - position.z,
+    )
+    // 过渡采样会更新 position/rotation，但 lookAt 快照不是独立动画轨道。
+    // 以当前实际旋转反推 OrbitControls 目标，避免 pointerdown 时按陈旧目标重新 lookAt。
+    return cameraTargetFromPositionRotation(position, cameraObject.transform.rotation, distance)
+  }, [cameraObject.transform.position, cameraObject.transform.rotation, lookAtTarget])
 
   // 外部改动（属性面板改坐标、切换取景摄像机、controls 实例重建）后，把环绕基准点对齐到最新目标点
   useEffect(() => {
     const controls = controlsRef.current
     if (!controls) return
     if (interactionRef.current) return
-    controls.target.set(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z)
+    controls.target.set(controlTarget.x, controlTarget.y, controlTarget.z)
     controls.update()
     if (cameraObject.lookAt.mode === 'manual') {
       const rotation = cameraObject.transform.rotation
@@ -53,9 +64,9 @@ const StageCameraViewControls: React.FC<StageCameraViewControlsProps> = ({ camer
     cameraObject.lookAt.mode,
     cameraObject.transform.rotation,
     interactionRef,
-    lookAtTarget.x,
-    lookAtTarget.y,
-    lookAtTarget.z,
+    controlTarget.x,
+    controlTarget.y,
+    controlTarget.z,
     registeredControls,
   ])
 
