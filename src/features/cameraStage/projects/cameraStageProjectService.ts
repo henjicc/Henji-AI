@@ -199,7 +199,8 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
     },
     { id: record.id, name: record.name },
   )
-  useCameraStageSessionStore.getState().setLastProjectId(record.id)
+  const session = useCameraStageSessionStore.getState()
+  if (session.lastProjectId !== record.id) session.setLastProjectId(record.id)
   clearCameraStageHistory()
   return true
 }

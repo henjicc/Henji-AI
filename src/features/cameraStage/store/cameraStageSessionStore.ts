@@ -19,9 +19,13 @@ export const useCameraStageSessionStore = create<CameraStageSessionState>()(
       appView: 'list',
       lastProjectId: null,
       stageViewMode: 'director',
-      setAppView: (appView) => set({ appView }),
-      setLastProjectId: (lastProjectId) => set({ lastProjectId }),
-      setStageViewMode: (stageViewMode) => set({ stageViewMode }),
+      setAppView: (appView) => set((state) => (state.appView === appView ? state : { appView })),
+      setLastProjectId: (lastProjectId) => set((state) => (
+        state.lastProjectId === lastProjectId ? state : { lastProjectId }
+      )),
+      setStageViewMode: (stageViewMode) => set((state) => (
+        state.stageViewMode === stageViewMode ? state : { stageViewMode }
+      )),
     }),
     {
       name: 'camera-stage-session',

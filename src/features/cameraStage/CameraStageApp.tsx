@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import CameraStageEditor from './CameraStageEditor'
 import CameraStageErrorBoundary from './CameraStageErrorBoundary'
 import { loadProjectIntoScene } from './projects/cameraStageProjectService'
@@ -19,6 +19,7 @@ const CameraStageAppInner: React.FC = () => {
   const setAppView = useCameraStageSessionStore((state) => state.setAppView)
   const setLastProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
   const [restoring, setRestoring] = useState(true)
+  const restoredSessionKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -34,6 +35,13 @@ const CameraStageAppInner: React.FC = () => {
         return
       }
 
+      const sessionKey = `${lastProjectId}:${stageViewMode}`
+      if (restoredSessionKeyRef.current === sessionKey) {
+        if (!cancelled) setRestoring(false)
+        return
+      }
+      restoredSessionKeyRef.current = sessionKey
+
       const currentProjectId = useCameraStageStore.getState().currentProjectId
       const shouldLoadProject = currentProjectId !== lastProjectId
       const ok = shouldLoadProject ? await loadProjectIntoScene(lastProjectId) : true
@@ -44,7 +52,8 @@ const CameraStageAppInner: React.FC = () => {
         return
       }
 
-      useCameraStageStore.getState().setViewMode(stageViewMode)
+      const stage = useCameraStageStore.getState()
+      if (stage.viewMode !== stageViewMode) stage.setViewMode(stageViewMode)
       if (!cancelled) setRestoring(false)
     }
 

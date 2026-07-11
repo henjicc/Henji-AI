@@ -398,12 +398,19 @@ export const useCameraStageStore = create<CameraStageState>()(
   setViewMode: (mode) =>
     set((state) => {
       if (mode === 'director') {
-        return { viewMode: mode }
+        return state.viewMode === mode ? state : { viewMode: mode }
       }
       const activeCameraId = isCameraId(state.objects, state.activeCameraId)
         ? state.activeCameraId
         : firstCameraId(state.objects)
-      return activeCameraId ? { viewMode: mode, activeCameraId } : { viewMode: 'director', activeCameraId: null }
+      if (!activeCameraId) {
+        return state.viewMode === 'director' && state.activeCameraId === null
+          ? state
+          : { viewMode: 'director', activeCameraId: null }
+      }
+      return state.viewMode === mode && state.activeCameraId === activeCameraId
+        ? state
+        : { viewMode: mode, activeCameraId }
     }),
 
   setActiveCameraId: (id) =>
