@@ -21,6 +21,7 @@ import StageTransformControls from './StageTransformControls'
 import StageMotionPathOverlay from './StageMotionPathOverlay'
 import { useRenderCameraId } from './useRenderCameraId'
 import type { StageViewportSource } from '../viewport/viewportTypes'
+import StageFixedViewportCamera from './StageFixedViewportCamera'
 
 /**
  * 场景三维视图：数据驱动渲染 store 中的对象列表，
@@ -36,15 +37,6 @@ interface StageSceneProps {
   interactive?: boolean
   primary?: boolean
 }
-
-const FIXED_CAMERA_POSITIONS = {
-  top: [0, 20, 0.001],
-  bottom: [0, -20, 0.001],
-  front: [0, 3, 20],
-  back: [0, 3, -20],
-  left: [-20, 3, 0],
-  right: [20, 3, 0],
-} satisfies Record<string, readonly [number, number, number]>
 
 const StageScene: React.FC<StageSceneProps> = ({
   captureRef,
@@ -177,7 +169,7 @@ const StageScene: React.FC<StageSceneProps> = ({
     : viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
   const isFixedView = viewportSource?.kind === 'fixed'
   const canvasCamera = isFixedView
-    ? { position: FIXED_CAMERA_POSITIONS[viewportSource.view], zoom: 45, near: 0.01, far: 2000 }
+    ? { position: [0, 0, 20] as [number, number, number], zoom: 45, near: 0.01, far: 2000 }
     : { position: [0, 4.2, 9] as [number, number, number], fov: 50 }
   // 简易模式播放头落在过渡段时视口只读（重要记录 003）：隐藏 gizmo，阻断手动编辑插值状态
   const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
@@ -195,6 +187,7 @@ const StageScene: React.FC<StageSceneProps> = ({
       onPointerMissed={() => interactive && setSelected(null)}
     >
       <color attach="background" args={[sceneSettings.sky.color]} />
+      {isFixedView && <StageFixedViewportCamera view={viewportSource.view} />}
       {sceneSettings.fog.enabled && (
         <fog
           key={`scene-fog-${sceneSettings.sky.color}-${fogNear}-${fogFar}`}
