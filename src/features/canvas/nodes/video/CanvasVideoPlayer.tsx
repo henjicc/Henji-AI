@@ -128,12 +128,12 @@ export function CanvasVideoPlayer({
       )}
 
       <div
-        className={`absolute inset-x-0 bottom-0 flex items-center gap-1 px-1.5 pb-1 transition-opacity duration-150 ${
+        className={`absolute inset-x-0 bottom-1 flex h-7 items-center gap-1 px-1.5 transition-opacity duration-150 ${
           playing ? 'opacity-0 group-hover/player:opacity-100' : 'opacity-100'
         }`}
       >
         <UiIconButton
-          className="h-7 w-7 shrink-0 text-text-dark drop-shadow-sm"
+          className="!h-7 !w-7 shrink-0 !p-0 text-text-dark drop-shadow-sm"
           showBorder={false}
           appearance="hover-only"
           aria-label={playing ? '暂停' : '播放'}
@@ -142,7 +142,7 @@ export function CanvasVideoPlayer({
             togglePlayback();
           }}
         >
-          {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </UiIconButton>
         <UiRangeInput
           min={0}
@@ -154,12 +154,12 @@ export function CanvasVideoPlayer({
           onChange={(event) => seekTo(Number(event.target.value))}
           onClick={(event) => event.stopPropagation()}
         />
-        <span className="shrink-0 text-[10px] tabular-nums text-text-dark drop-shadow-sm">
+        <span className="shrink-0 text-[10px] leading-none tabular-nums text-text-dark drop-shadow-sm">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
         {hasAudio !== false && (
           <UiIconButton
-            className="h-7 w-7 shrink-0 text-text-dark drop-shadow-sm"
+            className="!h-7 !w-7 shrink-0 !p-0 text-text-dark drop-shadow-sm"
             showBorder={false}
             appearance="hover-only"
             aria-label={muted ? '取消静音' : '静音'}
@@ -171,11 +171,11 @@ export function CanvasVideoPlayer({
               setMuted(video.muted);
             }}
           >
-            {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </UiIconButton>
         )}
         <UiIconButton
-          className="h-7 w-7 shrink-0 text-text-dark drop-shadow-sm"
+          className="!h-7 !w-7 shrink-0 !p-0 text-text-dark drop-shadow-sm"
           showBorder={false}
           appearance="hover-only"
           aria-label="打开大播放器"
@@ -185,7 +185,7 @@ export function CanvasVideoPlayer({
             onOpenViewer();
           }}
         >
-          <Maximize2 className="h-3.5 w-3.5" />
+          <Maximize2 className="h-3 w-3" strokeWidth={1.75} />
         </UiIconButton>
       </div>
     </div>
