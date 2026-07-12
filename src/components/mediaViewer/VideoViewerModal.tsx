@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton } from '@/components/ui'
 import { readVideoInfo } from '@/commands/video'
@@ -392,7 +393,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   if (!isVisible) return null
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
       style={{
@@ -543,6 +544,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           trimRange={trimRange}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
