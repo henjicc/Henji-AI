@@ -17,6 +17,7 @@ import type { CameraStageRenderPlatform } from './cameraStageRender'
 import type { WindowPlatform } from './window'
 import type { LoggingPlatform } from './logging'
 import type { UpdaterPlatform } from './updater'
+import type { AssetLibraryPlatform } from './assetLibrary'
 
 export interface PlatformRuntime {
   aiRuntime: AiRuntimePlatform
@@ -38,6 +39,7 @@ export interface PlatformRuntime {
   window: WindowPlatform
   logging: LoggingPlatform
   updater: UpdaterPlatform
+  assetLibrary: AssetLibraryPlatform
 }
 
 export type {
@@ -60,6 +62,7 @@ export type {
   WindowPlatform,
   LoggingPlatform,
   UpdaterPlatform,
+  AssetLibraryPlatform,
 }
 export * from './aiRuntime'
 export * from './llmRuntime'
@@ -80,3 +83,4 @@ export * from './cameraStageRender'
 export * from './window'
 export * from './logging'
 export * from './updater'
+export * from './assetLibrary'

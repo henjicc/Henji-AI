@@ -59,7 +59,7 @@ function ensureReadStatement(sql: string): void {
   }
 }
 
-function initializeSchema(conn: Database.Database): void {
+export function initializeSchema(conn: Database.Database): void {
   conn.exec(`
     CREATE TABLE IF NOT EXISTS history (
       id TEXT PRIMARY KEY,
@@ -172,6 +172,46 @@ function initializeSchema(conn: Database.Database): void {
       result_json TEXT NOT NULL,
       completed_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY,
+      media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'audio')),
+      display_name TEXT NOT NULL,
+      file_path TEXT NOT NULL UNIQUE,
+      source TEXT NOT NULL CHECK (source IN ('generated', 'canvas', 'camera-stage', 'imported', 'external')),
+      mime_type TEXT,
+      size_bytes INTEGER,
+      width INTEGER,
+      height INTEGER,
+      duration_seconds REAL,
+      thumbnail_path TEXT,
+      inspection_status TEXT NOT NULL DEFAULT 'pending' CHECK (inspection_status IN ('pending', 'ready', 'missing', 'failed')),
+      inspection_error TEXT,
+      file_modified_at INTEGER,
+      last_used_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_libraries (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_library_items (
+      library_id TEXT NOT NULL REFERENCES asset_libraries(id) ON DELETE CASCADE,
+      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      added_at INTEGER NOT NULL,
+      sort_order INTEGER,
+      PRIMARY KEY (library_id, asset_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_assets_media_type ON assets(media_type);
+    CREATE INDEX IF NOT EXISTS idx_assets_updated_at ON assets(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_assets_last_used_at ON assets(last_used_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_asset_library_items_asset ON asset_library_items(asset_id);
   `)
 }
 

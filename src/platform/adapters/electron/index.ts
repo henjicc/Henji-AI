@@ -18,6 +18,7 @@ import { createElectronCameraStageRender } from './cameraStageRender'
 import { createElectronWindow } from './window'
 import { createElectronLogging } from './logging'
 import { createElectronUpdater } from './updater'
+import { createElectronAssetLibrary } from './assetLibrary'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -40,5 +41,6 @@ export function createElectronPlatform(): PlatformRuntime {
     window: createElectronWindow(),
     logging: createElectronLogging(),
     updater: createElectronUpdater(),
+    assetLibrary: createElectronAssetLibrary(),
   }
 }

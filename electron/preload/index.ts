@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   HenjiAudioApi,
+  HenjiAssetLibraryApi,
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
@@ -312,6 +313,23 @@ const videoApi: HenjiVideoApi = {
   },
 }
 
+const assetLibraryApi: HenjiAssetLibraryApi = {
+  createAsset: (input) => nativeInvoke('assetLibrary:createAsset', input),
+  updateAsset: (id, name) => nativeInvoke('assetLibrary:updateAsset', { id, name }),
+  deleteAsset: (id) => nativeInvoke('assetLibrary:deleteAsset', { id }),
+  queryAssets: (input) => nativeInvoke('assetLibrary:queryAssets', input),
+  touchAsset: (id) => nativeInvoke('assetLibrary:touchAsset', { id }),
+  inspectAsset: (id) => nativeInvoke('assetLibrary:inspectAsset', { id }),
+  inspectAssets: (ids) => nativeInvoke('assetLibrary:inspectAssets', { ids }),
+  relocateAsset: (id, filePath) => nativeInvoke('assetLibrary:relocateAsset', { id, filePath }),
+  listLibraries: () => nativeInvoke('assetLibrary:listLibraries'),
+  createLibrary: (name) => nativeInvoke('assetLibrary:createLibrary', { name }),
+  renameLibrary: (id, name) => nativeInvoke('assetLibrary:renameLibrary', { id, name }),
+  deleteLibrary: (id) => nativeInvoke('assetLibrary:deleteLibrary', { id }),
+  addToLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:addToLibrary', { libraryId, assetId }),
+  removeFromLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:removeFromLibrary', { libraryId, assetId }),
+}
+
 const cameraStageRenderApi: HenjiCameraStageRenderApi = {
   start: (request) => nativeInvoke('cameraStageRender:start', request),
   cancel: (requestId) => nativeInvoke('cameraStageRender:cancel', { requestId }),
@@ -405,6 +423,7 @@ const api: HenjiNativeApi = {
   modelscope: {},
   window: windowApi,
   diagnostics: diagnosticsApi,
+  assetLibrary: assetLibraryApi,
 }
 
 contextBridge.exposeInMainWorld('henjiNative', api)
