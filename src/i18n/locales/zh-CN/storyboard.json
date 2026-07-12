@@ -182,6 +182,7 @@
       "renderFailed": "视频渲染失败",
       "open": "打开 3D 镜头参考",
       "openHint": "双击打开 3D 镜头参考",
+      "openBlockedRendering": "视频渲染中，暂不可打开",
       "imageResultTitle": "3D 镜头参考图片",
       "videoResultTitle": "3D 镜头参考视频",
       "imageOutput": "图片输出",

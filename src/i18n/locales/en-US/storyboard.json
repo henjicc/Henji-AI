@@ -182,6 +182,7 @@
       "renderFailed": "Video rendering failed",
       "open": "Open 3D Camera Reference",
       "openHint": "Double-click to open 3D Camera Reference",
+      "openBlockedRendering": "Video rendering in progress; editor unavailable",
       "imageResultTitle": "3D Camera Reference Image",
       "videoResultTitle": "3D Camera Reference Video",
       "imageOutput": "Image output",

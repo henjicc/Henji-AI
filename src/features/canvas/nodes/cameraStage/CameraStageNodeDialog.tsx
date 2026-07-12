@@ -33,6 +33,14 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
   useEffect(() => canvasEventBus.subscribe('camera-stage/open', ({ nodeId: nextNodeId }) => {
+    const nextNode = useCanvasStore.getState().nodes.find((item) => item.id === nextNodeId);
+    if (isCameraStageNode(nextNode) && nextNode.data.videoExporting) {
+      logger.warn('3D 视频渲染期间已阻止打开编辑器', {
+        event: 'canvas.camera_stage.open.blocked_rendering',
+        context: { nodeId: nextNodeId, requestId: nextNode.data.videoRenderRequestId },
+      });
+      return;
+    }
     setNodeId(nextNodeId);
   }), []);
 
@@ -159,6 +167,18 @@ export function CameraStageNodeDialog(): JSX.Element | null {
     });
     setNodeId(null);
   }, [nodeId]);
+
+  useEffect(() => {
+    if (!nodeId) return;
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [close, nodeId]);
 
   const syncOutputKind = useCallback((outputKind: 'image' | 'video'): void => {
     if (!nodeId) return;

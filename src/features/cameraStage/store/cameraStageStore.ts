@@ -587,15 +587,18 @@ export const useCameraStageStore = create<CameraStageState>()(
       const activeCameraId = isCameraId(snapshot.objects, snapshot.activeCameraId)
         ? snapshot.activeCameraId
         : firstCameraId(snapshot.objects)
+      const animation = snapshot.animation ?? createDefaultAnimation()
       return {
-        objects: snapshot.objects,
+        // 播放头加载后固定从 0 开始，因此场景对象也必须立即落到 t=0 的权威采样值。
+        // 否则首屏会短暂展示持久化时的对象值，直到播放驱动首帧采样才跳到首关键帧。
+        objects: applyAnimationAtTime(snapshot.objects, animation, 0),
         selectedId: null,
         gizmoMode: 'translate',
         viewMode: 'director',
         activeCameraId,
         currentProjectId: project.id,
         currentProjectName: project.name,
-        animation: snapshot.animation ?? createDefaultAnimation(),
+        animation,
         playback: createDefaultPlayback(),
         selectedKeyframes: [],
         sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),

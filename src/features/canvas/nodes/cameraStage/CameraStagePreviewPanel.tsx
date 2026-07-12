@@ -71,7 +71,7 @@ export function CameraStagePreviewPanel({
       )}
 
       <span className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[10px] text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
-        {t('node.cameraStage.openHint')}
+        {t(videoExporting ? 'node.cameraStage.openBlockedRendering' : 'node.cameraStage.openHint')}
       </span>
     </div>
   );

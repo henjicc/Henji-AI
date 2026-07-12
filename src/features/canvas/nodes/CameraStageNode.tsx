@@ -72,8 +72,15 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
   }, [id, resolvedHeight, resolvedWidth, updateNodeInternals]);
 
   const openEditor = useCallback(() => {
+    if (data.videoExporting) {
+      logger.warn('3D 视频渲染期间已阻止打开编辑器', {
+        event: 'canvas.camera_stage.open.blocked_rendering',
+        context: { nodeId: id, requestId: data.videoRenderRequestId },
+      });
+      return;
+    }
     canvasEventBus.publish('camera-stage/open', { nodeId: id });
-  }, [id]);
+  }, [data.videoExporting, data.videoRenderRequestId, id]);
 
   const createOutputNode = useCallback((kind: 'image' | 'video'): void => {
     const currentNode = useCanvasStore.getState().nodes.find((node) => node.id === id);
