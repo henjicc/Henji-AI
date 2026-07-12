@@ -436,6 +436,7 @@ export interface HenjiVideoInfoResult {
   durationSeconds: number
   width: number
   height: number
+  hasAudio: boolean
 }
 
 export interface HenjiVideoTrimVideoSourcePayload {

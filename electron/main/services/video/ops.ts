@@ -57,6 +57,7 @@ export async function readVideoInfo(source: string): Promise<VideoInfoResultDto>
   ])
   const parsed = JSON.parse(stdout) as FfprobeOutput
   const videoStream = parsed.streams?.find((stream) => stream.codec_type === 'video')
+  const hasAudio = parsed.streams?.some((stream) => stream.codec_type === 'audio') ?? false
   const durationSeconds = Number(parsed.format?.duration ?? 0)
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error('Unable to read video duration')
@@ -65,6 +66,7 @@ export async function readVideoInfo(source: string): Promise<VideoInfoResultDto>
     durationSeconds,
     width: videoStream?.width ?? 0,
     height: videoStream?.height ?? 0,
+    hasAudio,
   }
 }
 

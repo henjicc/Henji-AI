@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 
 import { UiIconButton, UiRangeInput } from '@/components/ui';
+import { readVideoInfo } from '@/commands/video';
 
 interface CanvasVideoPlayerProps {
   src: string;
@@ -28,6 +29,7 @@ export function CanvasVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(knownDuration ?? 0);
   const [muted, setMuted] = useState(false);
+  const [hasAudio, setHasAudio] = useState<boolean | null>(null);
 
   useEffect(() => {
     setPlaying(false);
@@ -37,6 +39,20 @@ export function CanvasVideoPlayer({
       if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
     };
   }, [knownDuration, src]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHasAudio(null);
+    void readVideoInfo(src).then(
+      (info) => {
+        if (!cancelled) setHasAudio(info.hasAudio);
+      },
+      () => {
+        if (!cancelled) setHasAudio(null);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [src]);
 
   const togglePlayback = useCallback((): void => {
     const video = videoRef.current;
@@ -112,12 +128,12 @@ export function CanvasVideoPlayer({
       )}
 
       <div
-        className={`absolute right-2 top-2 flex items-center gap-1 transition-opacity duration-150 ${
+        className={`absolute inset-x-0 bottom-0 flex items-center gap-1 px-1.5 pb-1 transition-opacity duration-150 ${
           playing ? 'opacity-0 group-hover/player:opacity-100' : 'opacity-100'
         }`}
       >
         <UiIconButton
-          className="h-7 w-7 shrink-0"
+          className="h-7 w-7 shrink-0 text-text-dark drop-shadow-sm"
           showBorder={false}
           appearance="hover-only"
           aria-label={playing ? '暂停' : '播放'}
@@ -128,41 +144,49 @@ export function CanvasVideoPlayer({
         >
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </UiIconButton>
-        <span className="px-1 text-[10px] tabular-nums text-text-dark drop-shadow-sm">
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </span>
-        <UiIconButton
-          className="h-7 w-7 shrink-0"
-          showBorder={false}
-          appearance="hover-only"
-          aria-label={muted ? '取消静音' : '静音'}
-          onClick={(event) => {
-            event.stopPropagation();
-            const video = videoRef.current;
-            if (!video) return;
-            video.muted = !video.muted;
-            setMuted(video.muted);
-          }}
-        >
-          {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-        </UiIconButton>
-      </div>
-
-      <div
-        className={`absolute inset-x-0 bottom-0 px-2 pb-1 transition-opacity duration-150 ${
-          playing ? 'opacity-0 group-hover/player:opacity-100' : 'opacity-100'
-        }`}
-      >
         <UiRangeInput
           min={0}
           max={Math.max(duration, 0.01)}
           step={0.01}
           value={Math.min(currentTime, Math.max(duration, 0.01))}
           aria-label="视频进度"
-          className="w-full"
+          className="min-w-0 flex-1"
           onChange={(event) => seekTo(Number(event.target.value))}
           onClick={(event) => event.stopPropagation()}
         />
+        <span className="shrink-0 text-[10px] tabular-nums text-text-dark drop-shadow-sm">
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </span>
+        {hasAudio !== false && (
+          <UiIconButton
+            className="h-7 w-7 shrink-0 text-text-dark drop-shadow-sm"
+            showBorder={false}
+            appearance="hover-only"
+            aria-label={muted ? '取消静音' : '静音'}
+            onClick={(event) => {
+              event.stopPropagation();
+              const video = videoRef.current;
+              if (!video) return;
+              video.muted = !video.muted;
+              setMuted(video.muted);
+            }}
+          >
+            {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+          </UiIconButton>
+        )}
+        <UiIconButton
+          className="h-7 w-7 shrink-0 text-text-dark drop-shadow-sm"
+          showBorder={false}
+          appearance="hover-only"
+          aria-label="打开大播放器"
+          onClick={(event) => {
+            event.stopPropagation();
+            videoRef.current?.pause();
+            onOpenViewer();
+          }}
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+        </UiIconButton>
       </div>
     </div>
   );

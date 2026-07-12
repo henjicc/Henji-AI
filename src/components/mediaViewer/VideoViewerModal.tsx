@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton } from '@/components/ui'
+import { readVideoInfo } from '@/commands/video'
 import {
   CloseIcon,
   VolumeMutedIcon,
@@ -46,6 +47,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [videoDuration, setVideoDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
+  const [hasAudio, setHasAudio] = useState<boolean | null>(null)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [loop, setLoop] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
@@ -103,6 +105,23 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       if (openRaf2) cancelAnimationFrame(openRaf2)
     }
   }, [open, videoUrl])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setHasAudio(null)
+    void readVideoInfo(filePath ?? videoUrl).then(
+      (info) => {
+        if (cancelled) return
+        setHasAudio(info.hasAudio)
+        if (!info.hasAudio) setIsVolumeMenuOpen(false)
+      },
+      () => {
+        if (!cancelled) setHasAudio(null)
+      },
+    )
+    return () => { cancelled = true }
+  }, [filePath, open, videoUrl])
 
   useEffect(() => {
     if (open) return
@@ -411,17 +430,19 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           className="relative w-full h-full flex items-center justify-center"
           onClick={handleViewportClick}
         >
-          <div
-            className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
-            style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
-          >
-            {muted || volume === 0 ? (
-              <VolumeMutedIcon className="w-5 h-5" />
-            ) : (
-              <VolumeOnIcon className="w-5 h-5" />
-            )}
-            <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
-          </div>
+          {hasAudio !== false && (
+            <div
+              className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
+              style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
+            >
+              {muted || volume === 0 ? (
+                <VolumeMutedIcon className="w-5 h-5" />
+              ) : (
+                <VolumeOnIcon className="w-5 h-5" />
+              )}
+              <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
+            </div>
+          )}
 
           <video
             ref={videoRef}
@@ -463,6 +484,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             onStalled={() => setIsBuffering(true)}
             onClick={togglePlay}
             onWheel={(e) => {
+              if (hasAudio === false) return
               e.preventDefault()
               const delta = e.deltaY > 0 ? -0.05 : 0.05
               updateVolume((muted ? 0 : volume) + delta)
@@ -508,6 +530,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           videoDuration={videoDuration}
           muted={muted}
           volume={volume}
+          hasAudio={hasAudio}
           setMuted={setMuted}
           updateVolume={updateVolume}
           playbackRate={playbackRate}

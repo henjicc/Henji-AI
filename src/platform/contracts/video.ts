@@ -2,6 +2,7 @@ export interface VideoInfoResult {
   durationSeconds: number
   width: number
   height: number
+  hasAudio: boolean
 }
 
 export interface TrimVideoSourcePayload {
