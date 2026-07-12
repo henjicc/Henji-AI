@@ -71,8 +71,6 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
         const mode = GIZMO_KEY_MODE[key]
         setGizmoMode(mode.gizmo)
         useCameraStageToolStore.getState().setTool(mode.tool)
-      } else if (key === 'v') {
-        useCameraStageToolStore.getState().setTool('select')
       } else if (key === 'g') {
         const state = useCameraStageStore.getState()
         if (!selectedId || state.editorMode !== 'simple' || state.viewMode !== 'director') return

@@ -1,6 +1,6 @@
 import React from 'react'
-import { RotateCcw, Spline } from 'lucide-react'
-import { Dropdown, UiButton, UiInput } from '@/components/ui'
+import { RotateCcw, SlidersHorizontal, Spline } from 'lucide-react'
+import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiInput } from '@/components/ui'
 import {
   CHARACTER_ANIMATION_CLIPS,
   createClipMotion,
@@ -115,114 +115,161 @@ const StagePathContextBar: React.FC = () => {
   }
 
   const parameterInput = (label: string, value: number, onChange: (value: number) => void): React.ReactNode => (
-    <label className="flex h-8 shrink-0 items-center gap-1.5 text-[11px] text-text-muted">
-      <span>{label}</span>
+    <label className="flex items-center justify-between gap-3 text-xs text-text-muted">
+      <span className="shrink-0">{label}</span>
       <UiInput
         type="number"
         step={0.1}
         value={value}
-        className="h-8 w-20 rounded-md px-2 text-xs tabular-nums"
+        className="h-8 w-24 rounded-md px-2 text-right text-xs tabular-nums"
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
   )
 
+  const pathOptions = object.type === 'camera' ? CAMERA_PATH_OPTIONS : BASE_PATH_OPTIONS
+  const pathLabel = pathOptions.find((option) => option.value === pathChoice)?.label ?? '直线'
+  const speedPreset = detail.speedPreset ?? 'easeInOut'
+  const speedLabel = SPEED_OPTIONS.find((option) => option.value === speedPreset)?.label ?? '平滑'
+
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-3 z-30 flex h-11 max-w-[calc(100%_-_13rem)] -translate-x-1/2 items-center gap-2 overflow-x-auto whitespace-nowrap rounded-lg border border-border-dark bg-surface-dark/95 px-2 shadow-lg backdrop-blur">
-      <div className="flex h-8 shrink-0 items-center gap-1.5 text-xs text-text-dark">
+    <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+      <div
+        className="flex min-w-0 items-center gap-1.5 text-xs text-text-dark"
+        title={`${object.name}，关键帧 ${shotIndex + 1} 到 ${shotIndex + 2}`}
+      >
         <Spline size={14} className="text-accent" />
-        <span className="max-w-28 truncate font-medium">{object.name}</span>
+        <span className="max-w-24 truncate font-medium">{object.name}</span>
         <span className="text-text-muted">{shotIndex + 1} → {shotIndex + 2}</span>
       </div>
-      <span className="h-5 w-px shrink-0 bg-border-dark" />
+      <span className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" />
 
-      <div className="flex h-8 shrink-0 items-center gap-1.5 text-[11px] text-text-muted">
-        <span>路径</span>
-        <Dropdown<PathChoice>
-          value={pathChoice}
-          options={object.type === 'camera' ? CAMERA_PATH_OPTIONS : BASE_PATH_OPTIONS}
-          onSelect={handlePathChoice}
-          buttonClassName="h-8 w-32 rounded-md py-1 text-xs"
-          buttonLabelClassName="text-xs"
-          optionLabelClassName="text-xs"
-          panelWidthStrategy="options"
-        />
-      </div>
-      <div className="flex h-8 shrink-0 items-center gap-1.5 text-[11px] text-text-muted">
-        <span>速度</span>
-        <Dropdown<StageSpeedPreset>
-          value={detail.speedPreset ?? 'easeInOut'}
-          options={SPEED_OPTIONS}
-          onSelect={(speedPreset) => updateDetail({ speedPreset })}
-          buttonClassName="h-8 w-24 rounded-md py-1 text-xs"
-          buttonLabelClassName="text-xs"
-          optionLabelClassName="text-xs"
-        />
-      </div>
-      {parameterInput('延迟', detail.delay ?? 0, (delay) => updateDetail({ delay }))}
+      <Dropdown<PathChoice>
+        value={pathChoice}
+        display={`路径 · ${pathLabel}`}
+        options={pathOptions}
+        onSelect={handlePathChoice}
+        buttonClassName="h-8 w-36 rounded-md py-1 text-xs"
+        buttonLabelClassName="text-xs"
+        optionLabelClassName="text-xs"
+        panelWidthStrategy="options"
+      />
+      <Dropdown<StageSpeedPreset>
+        value={speedPreset}
+        display={`速度 · ${speedLabel}`}
+        options={SPEED_OPTIONS}
+        onSelect={(nextSpeedPreset) => updateDetail({ speedPreset: nextSpeedPreset })}
+        buttonClassName="h-8 w-28 rounded-md py-1 text-xs"
+        buttonLabelClassName="text-xs"
+        optionLabelClassName="text-xs"
+      />
 
-      {activePreset?.kind === 'orbit' && (
-        <>
-          {parameterInput('角度', activePreset.degrees, (degrees) => updatePreset({ ...activePreset, degrees }))}
-          <div className="flex h-8 shrink-0 items-center gap-1.5 text-[11px] text-text-muted">
-            <span>方向</span>
-            <Dropdown<'cw' | 'ccw'>
-              value={activePreset.direction}
-              options={[{ label: '顺时针', value: 'cw' }, { label: '逆时针', value: 'ccw' }]}
-              onSelect={(direction) => updatePreset({ ...activePreset, direction })}
-              buttonClassName="h-8 w-20 rounded-md py-1 text-xs"
-              buttonLabelClassName="text-xs"
-            />
+      <PanelTrigger
+        panelWidth={272}
+        panelClassName="p-3"
+        renderPanel={() => (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center justify-between gap-3 text-xs text-text-muted">
+                <span className="shrink-0">起步延迟</span>
+                <div className="flex items-center gap-1.5">
+                  <UiInput
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={detail.delay ?? 0}
+                    className="h-8 w-20 rounded-md px-2 text-right text-xs tabular-nums"
+                    onChange={(event) => updateDetail({ delay: Math.max(0, Number(event.target.value)) })}
+                  />
+                  <span className="text-[11px] text-text-muted">秒</span>
+                </div>
+              </label>
+              <p className="text-[11px] leading-4 text-text-muted">
+                本段过渡开始后，等待这段时间再让当前对象开始移动。
+              </p>
+            </div>
+
+            {activePreset?.kind === 'orbit' && (
+              <>
+                {parameterInput('环绕角度', activePreset.degrees, (degrees) => updatePreset({ ...activePreset, degrees }))}
+                <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+                  <span>环绕方向</span>
+                  <Dropdown<'cw' | 'ccw'>
+                    value={activePreset.direction}
+                    options={[{ label: '顺时针', value: 'cw' }, { label: '逆时针', value: 'ccw' }]}
+                    onSelect={(direction) => updatePreset({ ...activePreset, direction })}
+                    buttonClassName="h-8 w-24 rounded-md py-1 text-xs"
+                    buttonLabelClassName="text-xs"
+                  />
+                </div>
+              </>
+            )}
+            {(activePreset?.kind === 'dollyIn' || activePreset?.kind === 'dollyOut')
+              && parameterInput('移动距离比', activePreset.distanceRatio, (distanceRatio) => updatePreset({ ...activePreset, distanceRatio }))}
+            {activePreset?.kind === 'truck'
+              && parameterInput('横移距离', activePreset.offset, (offset) => updatePreset({ ...activePreset, offset }))}
+            {activePreset?.kind === 'crane'
+              && parameterInput('升降高度', activePreset.height, (height) => updatePreset({ ...activePreset, height }))}
+
+            {object.type === 'character' && (
+              <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+                <span>角色动作</span>
+                <Dropdown<string>
+                  value={motionValue}
+                  options={MOTION_OPTIONS}
+                  onSelect={(value) => updateDetail({
+                    motionOverride: value === 'auto'
+                      ? undefined
+                      : value === 'pose' || !isCharacterAnimationClipName(value)
+                        ? createPoseMotion()
+                        : createClipMotion(value),
+                  })}
+                  buttonClassName="h-8 w-36 rounded-md py-1 text-xs"
+                  buttonLabelClassName="text-xs"
+                  panelWidthStrategy="options"
+                />
+              </div>
+            )}
+
+            {originPreset && (
+              <UiButton
+                size="sm"
+                variant="ghost"
+                className="h-8 justify-start rounded-md px-2 text-xs"
+                title="丢弃手动修改并重新生成预设路径"
+                onClick={() => updatePreset(originPreset)}
+              >
+                <RotateCcw size={13} className="mr-1.5" />重新应用原预设
+              </UiButton>
+            )}
           </div>
-        </>
-      )}
-      {(activePreset?.kind === 'dollyIn' || activePreset?.kind === 'dollyOut')
-        && parameterInput('距离比', activePreset.distanceRatio, (distanceRatio) => updatePreset({ ...activePreset, distanceRatio }))}
-      {activePreset?.kind === 'truck'
-        && parameterInput('距离', activePreset.offset, (offset) => updatePreset({ ...activePreset, offset }))}
-      {activePreset?.kind === 'crane'
-        && parameterInput('高度', activePreset.height, (height) => updatePreset({ ...activePreset, height }))}
+        )}
+      >
+        {({ togglePanel, open }) => (
+          <UiIconButton
+            showBorder={false}
+            active={open}
+            className="h-8 w-8 rounded-md"
+            title="更多路径参数"
+            aria-label="更多路径参数"
+            onClick={togglePanel}
+            data-panel-trigger-button
+          >
+            <SlidersHorizontal size={14} />
+          </UiIconButton>
+        )}
+      </PanelTrigger>
 
-      {object.type === 'character' && (
-        <div className="flex h-8 shrink-0 items-center gap-1.5 text-[11px] text-text-muted">
-          <span>动作</span>
-          <Dropdown<string>
-            value={motionValue}
-            options={MOTION_OPTIONS}
-            onSelect={(value) => updateDetail({
-              motionOverride: value === 'auto'
-                ? undefined
-                : value === 'pose' || !isCharacterAnimationClipName(value)
-                  ? createPoseMotion()
-                  : createClipMotion(value),
-            })}
-            buttonClassName="h-8 w-32 rounded-md py-1 text-xs"
-            buttonLabelClassName="text-xs"
-            panelWidthStrategy="options"
-          />
-        </div>
-      )}
-
-      {originPreset && (
-        <UiButton
-          size="sm"
-          variant="ghost"
-          className="h-8 shrink-0 rounded-md px-2 text-[11px]"
-          title="丢弃手动修改并重新生成预设路径"
-          onClick={() => updatePreset(originPreset)}
-        >
-          <RotateCcw size={12} className="mr-1" />重新应用预设
-        </UiButton>
-      )}
       {path && (
-        <UiButton
-          size="sm"
-          variant="ghost"
-          className="h-8 shrink-0 rounded-md px-2 text-[11px]"
+        <UiIconButton
+          showBorder={false}
+          className="h-8 w-8 rounded-md"
+          title="重置为直线"
+          aria-label="重置为直线"
           onClick={() => setShotSpatialPath(shot.id, object.id, undefined)}
         >
-          重置为直线
-        </UiButton>
+          <RotateCcw size={14} />
+        </UiIconButton>
       )}
     </div>
   )

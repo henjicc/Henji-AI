@@ -98,11 +98,14 @@ function candidatesForPlatform(): HwEncoderId[] {
 }
 
 interface HwaccelCacheFile {
+  probeVersion: number
   platform: string
   arch: string
   encoderId: EncoderChoice
   detectedAt: number
 }
+
+const HWACCEL_PROBE_VERSION = 2
 
 function getCacheFilePath(): string {
   return path.join(getDataRootDir(), 'hwaccel-cache.json')
@@ -113,7 +116,11 @@ function readCache(): HwaccelCacheFile | null {
     const raw = fs.readFileSync(getCacheFilePath(), 'utf-8')
     const parsed = JSON.parse(raw) as HwaccelCacheFile
     // 平台/架构指纹校验：自定义数据目录理论上可能被搬到别的机器，指纹不符就当缓存无效重新探测
-    if (parsed.platform !== process.platform || parsed.arch !== process.arch) return null
+    if (
+      parsed.probeVersion !== HWACCEL_PROBE_VERSION
+      || parsed.platform !== process.platform
+      || parsed.arch !== process.arch
+    ) return null
     return parsed
   } catch {
     return null
@@ -122,6 +129,7 @@ function readCache(): HwaccelCacheFile | null {
 
 function writeCache(encoderId: EncoderChoice): void {
   const entry: HwaccelCacheFile = {
+    probeVersion: HWACCEL_PROBE_VERSION,
     platform: process.platform,
     arch: process.arch,
     encoderId,
@@ -138,7 +146,8 @@ async function probeEncoder(encoderId: HwEncoderId): Promise<boolean> {
   const ffmpegPath = await loadFfmpegPath()
   const args = [
     '-y', '-hide_banner', '-loglevel', 'error',
-    '-f', 'lavfi', '-i', 'color=c=black:s=64x64:d=1',
+    // NVENC 会拒绝过小画面；256x256 能覆盖主流硬件编码器的最小尺寸要求。
+    '-f', 'lavfi', '-i', 'color=c=black:s=256x256:d=1',
     '-frames:v', '1',
     ...PROBE_EXTRA_ARGS[encoderId],
     '-c:v', encoderId,

@@ -22,6 +22,7 @@ export const CANVAS_NODE_TYPES = {
   imageModelSelector: 'imageModelSelectorNode',
   videoModelSelector: 'videoModelSelectorNode',
   audioModelSelector: 'audioModelSelectorNode',
+  cameraStage: 'cameraStageNode',
 } as const;
 
 /** 数值/源节点类型集合（单一类型化输出，喂下游参数端口） */
@@ -219,6 +220,23 @@ export interface VideoMediaNodeData extends NodeDisplayData {
   [key: string]: DynamicValue;
 }
 
+export interface CameraStageNodeData extends NodeDisplayData {
+  projectId: string | null;
+  imageUrl: string | null;
+  previewImageUrl?: string | null;
+  videoUrl: string | null;
+  aspectRatio: string;
+  durationSec: number | null;
+  selectedTimeSec: number;
+  videoProgress?: number | null;
+  videoExporting?: boolean;
+  videoRenderPhase?: 'preparing' | 'rendering' | 'encoding' | null;
+  videoRenderRequestId?: string | null;
+  videoRenderError?: string | null;
+  /** 场景时间轴决定的唯一可用输出类型；旧节点缺省按静态图片处理。 */
+  outputKind?: 'image' | 'video';
+}
+
 export interface AudioMediaNodeData extends NodeDisplayData {
   audioUrl: string | null;
   durationSec?: number | null;
@@ -254,6 +272,7 @@ export type CanvasNodeData =
   | StoryboardGenNodeData
   | MediaGenNodeData
   | VideoMediaNodeData
+  | CameraStageNodeData
   | AudioMediaNodeData
   | ValueSourceNodeData
   | ModelSelectorNodeData;
@@ -339,6 +358,12 @@ export function isAudioMediaNode(
   node: CanvasNode | null | undefined
 ): node is Node<AudioMediaNodeData, typeof CANVAS_NODE_TYPES.exportAudio | typeof CANVAS_NODE_TYPES.audioUpload> {
   return node?.type === CANVAS_NODE_TYPES.exportAudio || node?.type === CANVAS_NODE_TYPES.audioUpload;
+}
+
+export function isCameraStageNode(
+  node: CanvasNode | null | undefined,
+): node is Node<CameraStageNodeData, typeof CANVAS_NODE_TYPES.cameraStage> {
+  return node?.type === CANVAS_NODE_TYPES.cameraStage;
 }
 
 export function isValueSourceNodeType(type: CanvasNodeType | string | undefined | null): boolean {

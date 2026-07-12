@@ -4,12 +4,42 @@ import {
   isSmartAspectValue,
 } from '@/core/params/ratioResolution';
 
-import type { CanvasNode } from './canvasNodes';
+import {
+  CANVAS_NODE_TYPES,
+  type CanvasNode,
+  type CanvasNodeType,
+} from './canvasNodes';
 import { getDefaultModelId } from './defaultModels';
 import { getCanvasNodeDefinition } from './nodeRegistry';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
+
+/**
+ * 清理无法跨应用生命周期恢复的节点运行态。
+ * 直接修改传入对象；调用方应传入节点数据副本，避免影响当前运行中的任务。
+ */
+export function resetTransientNodeRuntimeState(
+  nodeType: CanvasNodeType,
+  data: DynamicValueMap
+): void {
+  if (data.isGenerating === true) {
+    data.isGenerating = false;
+    if ('generationStartedAt' in data) {
+      data.generationStartedAt = null;
+    }
+  }
+
+  if (nodeType !== CANVAS_NODE_TYPES.cameraStage) {
+    return;
+  }
+
+  data.videoExporting = false;
+  data.videoProgress = null;
+  data.videoRenderPhase = null;
+  data.videoRenderRequestId = null;
+  data.videoRenderError = null;
+}
 
 /**
  * 节点由旧版单一 target Handle 迁移为逐行媒体端口（connectivity.targetHandleMode: 'rows'）后，

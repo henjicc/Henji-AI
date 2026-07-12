@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerAudioIpc } from './ipc/audio'
 import { registerCameraStageProjectsIpc } from './ipc/camera-stage-projects'
+import { registerCameraStageRenderIpc } from './ipc/camera-stage-render'
 import { registerCanvasProjectsIpc } from './ipc/canvas-projects'
 import { registerClipboardIpc } from './ipc/clipboard'
 import { registerCustomModelsIpc } from './ipc/custom-models'
@@ -37,6 +38,7 @@ app.whenReady().then(() => {
   registerAiRuntimeIpc()
   registerAudioIpc()
   registerCameraStageProjectsIpc()
+  registerCameraStageRenderIpc()
   registerCanvasProjectsIpc()
   registerClipboardIpc()
   registerCustomModelsIpc()

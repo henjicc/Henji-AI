@@ -10,7 +10,7 @@ interface RestorableControls {
 
 /**
  * 自由视角恢复器：在 OrbitControls 就绪后，仅首帧把上次退出时的相机位置/注视点补回去。
- * 这样重新进入运镜控制时，自由视角能续上用户离开前的观察角度。
+ * 这样重新进入3D 镜头参考时，自由视角能续上用户离开前的观察角度。
  * 没有历史快照（首次使用/新建工程重置后）时落到标准正视角度，而不是保留 Canvas 兜底机位。
  */
 const StageDirectorViewRestorer: React.FC = () => {

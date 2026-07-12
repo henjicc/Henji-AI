@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Viewport } from '@xyflow/react';
+import { resetTransientNodeRuntimeState } from '@/features/canvas/domain/nodeMigrations';
 import {
   useCanvasStore,
   type CanvasEdge,
@@ -189,11 +190,28 @@ function encodeProject(project: Project): PersistedProject {
   const imageIndexMap = new Map<string, number>();
   const encode = (imageUrl: string | null | undefined) =>
     encodeImageReference(imageUrl, imagePool, imageIndexMap);
+  const resetRuntimeState = (nodes: CanvasNode[]): CanvasNode[] => nodes.map((node) => {
+    const data = { ...(node.data as DynamicValueMap) };
+    resetTransientNodeRuntimeState(node.type, data);
+    return {
+      ...node,
+      data: data as CanvasNodeData,
+    };
+  });
 
   return {
     ...project,
-    nodes: mapNodeImageReferences(project.nodes, encode),
-    history: mapHistoryImageReferences(project.history, encode),
+    nodes: mapNodeImageReferences(resetRuntimeState(project.nodes), encode),
+    history: mapHistoryImageReferences({
+      past: project.history.past.map((snapshot) => ({
+        ...snapshot,
+        nodes: resetRuntimeState(snapshot.nodes),
+      })),
+      future: project.history.future.map((snapshot) => ({
+        ...snapshot,
+        nodes: resetRuntimeState(snapshot.nodes),
+      })),
+    }, encode),
     imagePool,
   };
 }

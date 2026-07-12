@@ -1,7 +1,7 @@
 import { getDb } from './db'
 
 /**
- * 运镜控制场景工程持久化服务层。
+ * 3D 镜头参考场景工程持久化服务层。
  * 结构参照 storyboard-projects：DTO 命名规范、时间戳归一化，scene_json 存整份场景快照。
  */
 

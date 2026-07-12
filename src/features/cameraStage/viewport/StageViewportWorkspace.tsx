@@ -2,7 +2,6 @@ import React, { useEffect } from 'react'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
-import StagePathContextBar from '../toolbar/StagePathContextBar'
 import StageViewportPane from './StageViewportPane'
 import { STAGE_VIEWPORT_IDS } from './viewportTypes'
 
@@ -41,7 +40,6 @@ const StageViewportWorkspace: React.FC<StageViewportWorkspaceProps> = ({ capture
           />
         ))}
       </div>
-      <StagePathContextBar />
     </div>
   )
 }

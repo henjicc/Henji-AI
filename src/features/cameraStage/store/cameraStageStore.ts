@@ -36,6 +36,7 @@ import { createKeyframeSlice } from './keyframeSlice'
 import {
   compileSimpleEdit,
   createShotSlice,
+  syncCameraLookAtAcrossShots,
   syncAddedObjectToShots,
   syncRemovedObjectFromShots,
   type ShotTimingPatch,
@@ -434,7 +435,12 @@ export const useCameraStageStore = create<CameraStageState>()(
       const objects = applyObjectPatch(state.objects, id, patch)
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
-      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
+      if (state.editorMode === 'simple') {
+        if (object.type === 'camera' && 'lookAt' in patch && Object.keys(patch).length === 1) {
+          return syncCameraLookAtAcrossShots(state, objects, id, object.lookAt)
+        }
+        return compileSimpleEdit(state, objects, [id])
+      }
       // color / fov 是可动画标量/颜色属性，有轨道时自动打点
       const paths: string[] = []
       if ('color' in patch) paths.push('color')
@@ -483,7 +489,22 @@ export const useCameraStageStore = create<CameraStageState>()(
       })
       const object = objects.find((item) => item.id === id)
       if (!object || object.type !== 'camera') return { objects }
-      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
+      if (state.editorMode === 'simple') {
+        const edit = patch.position || patch.rotation
+          ? compileSimpleEdit(state, objects, [id])
+          : { objects }
+        if (!patch.lookAtTarget) return edit
+        const intermediateState: CameraStageState = { ...state, ...edit, objects }
+        return {
+          ...edit,
+          ...syncCameraLookAtAcrossShots(
+            intermediateState,
+            objects,
+            id,
+            object.lookAt,
+          ),
+        }
+      }
       const paths = [
         ...(patch.position ? ['x', 'y', 'z'].map((axis) => `transform.position.${axis}`) : []),
         ...(patch.rotation ? ['x', 'y', 'z'].map((axis) => `transform.rotation.${axis}`) : []),

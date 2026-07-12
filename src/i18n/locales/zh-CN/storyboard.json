@@ -64,6 +64,8 @@
     "copy": "复制",
     "copyText": "复制文本",
     "download": "下载",
+    "outputImage": "输出图片",
+    "outputVideo": "输出视频",
     "ungroup": "解散",
     "saveAs": "另存为...",
     "noDownloadPresetPathsHint": "暂无预设路径，请在设置 - 通用中添加",
@@ -98,7 +100,8 @@
       "booleanSource": "开关",
       "imageModelSelector": "图片模型选择器",
       "videoModelSelector": "视频模型选择器",
-      "audioModelSelector": "音频模型选择器"
+      "audioModelSelector": "音频模型选择器",
+      "cameraStage": "3D 镜头参考"
     },
     "mediaRow": {
       "image": "图片",
@@ -169,6 +172,20 @@
       "waitingResult": "等待输出结果音频",
       "play": "播放",
       "pause": "暂停"
+    },
+    "cameraStage": {
+      "previewAlt": "当前帧预览",
+      "empty": "打开 3D 镜头参考开始搭建",
+      "preparing": "正在准备渲染场景",
+      "rendering": "视频渲染中 {{progress}}%",
+      "encoding": "视频编码中 {{progress}}%",
+      "renderFailed": "视频渲染失败",
+      "open": "打开 3D 镜头参考",
+      "openHint": "双击打开 3D 镜头参考",
+      "imageResultTitle": "3D 镜头参考图片",
+      "videoResultTitle": "3D 镜头参考视频",
+      "imageOutput": "图片输出",
+      "videoOutput": "视频输出"
     }
   },
   "viewer": {

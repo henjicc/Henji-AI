@@ -22,7 +22,7 @@ interface ToolboxToolMeta {
 const TOOLS: ToolboxToolMeta[] = [
   {
     id: 'cameraStage',
-    name: '运镜控制',
+    name: '3D 镜头参考',
     description: '搭建三维场景、给角色摆姿势、调机位取景，一键截图给 AI 当参考图',
     icon: Clapperboard,
   },

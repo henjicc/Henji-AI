@@ -2,7 +2,7 @@ import { useStore } from 'zustand'
 import { useCameraStageStore } from './cameraStageStore'
 
 /**
- * 运镜控制撤销/重做：暴露 undo/redo 动作与可用状态（响应式订阅 zundo temporal store）。
+ * 3D 镜头参考撤销/重做：暴露 undo/redo 动作与可用状态（响应式订阅 zundo temporal store）。
  */
 
 export interface CameraStageHistory {

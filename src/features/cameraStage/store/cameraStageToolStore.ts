@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { StageShot } from '../domain/shotTypes'
 
-export type StageEditorTool = 'select' | 'translate' | 'rotate' | 'scale' | 'path'
+export type StageEditorTool = 'translate' | 'rotate' | 'scale' | 'path'
 
 export interface StagePathSelection {
   shotId: string
@@ -44,7 +44,7 @@ interface CameraStageToolState {
 }
 
 export const useCameraStageToolStore = create<CameraStageToolState>((set) => ({
-  tool: 'select',
+  tool: 'translate',
   pathSelection: null,
   controlSelection: null,
   setTool: (tool) => set({

@@ -1,6 +1,6 @@
 /**
  * 从内置角色 GLB（resources/camera-stage/UAL1_Standard.glb）的动画片段中采样静态姿势，
- * 生成运镜控制的预设姿势数据 src/features/cameraStage/domain/posePresets.gen.ts。
+ * 生成3D 镜头参考的预设姿势数据 src/features/cameraStage/domain/posePresets.gen.ts。
  *
  * 采样原理：直接解析 GLB 的 JSON/BIN chunk，读取指定片段在指定时间点上各受控骨骼的
  * 局部旋转四元数，与骨骼绑定姿态（rest）求差得到"相对绑定姿态的欧拉偏移（角度制，XYZ 序）"，

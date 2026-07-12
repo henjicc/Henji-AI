@@ -968,7 +968,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   margin: 0.25rem 0;
 }
 
-/* ── 运镜控制 dockview 主题映射 ──
+/* ── 3D 镜头参考 dockview 主题映射 ──
  * 用复合选择器（.henji-cameraStage-dock.dockview-theme-abyss，特指度 0,2,0）压过
  * abyss 主题自身的 .dockview-theme-abyss 规则（0,1,0），确保下列 --dv-* 覆盖始终生效，
  * 否则 dockview 样式表加载在后会用回 abyss 默认（含 rgb(91,30,207) 紫色强调色）。

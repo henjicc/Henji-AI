@@ -4,6 +4,7 @@ import { bindWindowStateEvents } from './ipc/window'
 import { createMainLogger } from './services/logging/main-logger'
 import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
+import { closeCameraStageRenderWindow } from './services/camera-stage-render'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 
 const logger = createMainLogger('main.window')
@@ -45,6 +46,7 @@ export function createWindow(): BrowserWindow {
   win.on('closed', () => {
     void cleanupAllVideoFrameExports('window_closed')
     closeLogWindow()
+    closeCameraStageRenderWindow()
   })
 
   win.once('ready-to-show', () => {

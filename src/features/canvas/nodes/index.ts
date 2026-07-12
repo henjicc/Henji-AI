@@ -10,6 +10,7 @@ import { StoryboardNode } from './StoryboardNode';
 import { TextAnnotationNode } from './TextAnnotationNode';
 import { UploadNode } from './UploadNode';
 import { VideoGenNode } from './VideoGenNode';
+import { CameraStageNode } from './CameraStageNode';
 import { VideoNode } from './VideoNode';
 import {
   BooleanSourceNode,
@@ -44,6 +45,7 @@ export const nodeTypes: NodeTypes = {
   imageModelSelectorNode: ImageModelSelectorNode,
   videoModelSelectorNode: VideoModelSelectorNode,
   audioModelSelectorNode: AudioModelSelectorNode,
+  cameraStageNode: CameraStageNode,
 };
 
 export {
@@ -65,4 +67,5 @@ export {
   ImageModelSelectorNode,
   VideoModelSelectorNode,
   AudioModelSelectorNode,
+  CameraStageNode,
 };

@@ -5,6 +5,9 @@ import type {
   HenjiDiagnosticsStreamEvent,
   HenjiAiApi,
   HenjiCameraStageProjectsApi,
+  HenjiCameraStageRenderApi,
+  HenjiCameraStageRenderEvent,
+  HenjiCameraStageRenderRequest,
   HenjiCanvasProjectsApi,
   HenjiClipboardApi,
   HenjiCustomModelsApi,
@@ -309,6 +312,34 @@ const videoApi: HenjiVideoApi = {
   },
 }
 
+const cameraStageRenderApi: HenjiCameraStageRenderApi = {
+  start: (request) => nativeInvoke('cameraStageRender:start', request),
+  cancel: (requestId) => nativeInvoke('cameraStageRender:cancel', { requestId }),
+  onEvent: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiCameraStageRenderEvent): void => {
+      handler(payload)
+    }
+    ipcRenderer.on('cameraStageRender:event', listener)
+    return () => ipcRenderer.removeListener('cameraStageRender:event', listener)
+  },
+  workerReady: () => nativeInvoke('cameraStageRender:workerReady'),
+  onWorkerJob: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiCameraStageRenderRequest): void => {
+      handler(payload)
+    }
+    ipcRenderer.on('cameraStageRender:workerJob', listener)
+    return () => ipcRenderer.removeListener('cameraStageRender:workerJob', listener)
+  },
+  onWorkerCancel: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, requestId: string): void => {
+      handler(requestId)
+    }
+    ipcRenderer.on('cameraStageRender:workerCancel', listener)
+    return () => ipcRenderer.removeListener('cameraStageRender:workerCancel', listener)
+  },
+  reportWorkerEvent: (event) => nativeInvoke('cameraStageRender:workerEvent', event),
+}
+
 const audioApi: HenjiAudioApi = {
   extractSamples: (payload) => nativeInvoke('audio:extractSamples', payload),
 }
@@ -354,6 +385,7 @@ const api: HenjiNativeApi = {
   canvasProjects: canvasProjectsApi,
   storyboardProjects: storyboardProjectsApi,
   cameraStageProjects: cameraStageProjectsApi,
+  cameraStageRender: cameraStageRenderApi,
   customModels: customModelsApi,
   keystore: keystoreApi,
   fs: fsApi,

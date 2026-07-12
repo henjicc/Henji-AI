@@ -64,6 +64,8 @@
     "copy": "Copy",
     "copyText": "Copy Text",
     "download": "Download",
+    "outputImage": "Output Image",
+    "outputVideo": "Output Video",
     "ungroup": "Ungroup",
     "saveAs": "Save as...",
     "noDownloadPresetPathsHint": "No preset path. Add one in Settings > General.",
@@ -98,7 +100,8 @@
       "booleanSource": "Boolean",
       "imageModelSelector": "Image Model Selector",
       "videoModelSelector": "Video Model Selector",
-      "audioModelSelector": "Audio Model Selector"
+      "audioModelSelector": "Audio Model Selector",
+      "cameraStage": "3D Camera Reference"
     },
     "mediaRow": {
       "image": "Image",
@@ -169,6 +172,20 @@
       "waitingResult": "Waiting for output audio",
       "play": "Play",
       "pause": "Pause"
+    },
+    "cameraStage": {
+      "previewAlt": "Current frame preview",
+      "empty": "Open 3D Camera Reference to start",
+      "preparing": "Preparing render scene",
+      "rendering": "Rendering video {{progress}}%",
+      "encoding": "Encoding video {{progress}}%",
+      "renderFailed": "Video rendering failed",
+      "open": "Open 3D Camera Reference",
+      "openHint": "Double-click to open 3D Camera Reference",
+      "imageResultTitle": "3D Camera Reference Image",
+      "videoResultTitle": "3D Camera Reference Video",
+      "imageOutput": "Image output",
+      "videoOutput": "Video output"
     }
   },
   "viewer": {

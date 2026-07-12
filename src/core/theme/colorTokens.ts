@@ -34,7 +34,7 @@ export const STORYBOARD_CELL_BG_HEX = '#262626';
 export const STORYBOARD_NOTE_BG_HEX = '#0A0A0A';
 export const STORYBOARD_NOTE_TEXT_HEX = '#E5E5E5';
 
-// 运镜控制三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
+// 3D 镜头参考三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
 export const CAMERA_STAGE_COLOR_HEX = {
   stageBg: '#18181c',
   groundBase: '#24242a',
@@ -50,7 +50,7 @@ export const CAMERA_STAGE_COLOR_HEX = {
   selectionOutline: '#4a90e8',
 } as const;
 
-// 运镜控制时间轴（第三阶段）配色：播放头 / 关键帧菱形 / 轨道分隔 / 曲线图分量色
+// 3D 镜头参考时间轴（第三阶段）配色：播放头 / 关键帧菱形 / 轨道分隔 / 曲线图分量色
 export const CAMERA_STAGE_TIMELINE_HEX = {
   playhead: '#e8734a',
   keyframe: '#c9ccd2',
@@ -75,7 +75,7 @@ export const CAMERA_STAGE_MOTION_PATH_HEX = {
   handleOutline: '#3f3920',
 } as const;
 
-// 运镜控制新建对象默认颜色轮换盘（按对象序号取模）
+// 3D 镜头参考新建对象默认颜色轮换盘（按对象序号取模）
 export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
   '#e8734a',
   '#4a90e8',

@@ -25,7 +25,7 @@ import { DockHeaderActions, DockTab } from './DockChrome'
 import { LAYOUT_STORAGE_KEY, resetLayout, restoreLayout } from './dockLayout'
 
 /**
- * 运镜控制停靠工作区：用 dockview 承载「视口 / 资源管理器 / 属性 / 时间轴」四个可停靠面板，
+ * 3D 镜头参考停靠工作区：用 dockview 承载「视口 / 资源管理器 / 属性 / 时间轴」四个可停靠面板，
  * 支持拖拽重排、调整大小、折叠（tab 分组），布局记忆到 localStorage、可重置默认布局。
  * dockview 只做布局容器；面板内容全部复用现有 Ui* 面板组件；面板头由 DockChrome 精简为 AE 风格。
  */

@@ -25,8 +25,18 @@ export interface ScreenshotExportResult {
   saveMode: 'quick' | 'dialog'
 }
 
+export interface CameraStageFrameResult {
+  mediaUrl: string
+}
+
+/** 仅持久化为应用媒体，供画布节点消费；不会触发系统保存对话框。 */
+export async function persistSceneScreenshot(dataUrl: string): Promise<CameraStageFrameResult> {
+  const persistedPath = await persistImageSource(dataUrl)
+  return { mediaUrl: toDisplaySrc(persistedPath) }
+}
+
 function buildFileName(projectName: string): string {
-  const stem = projectName.trim() || '运镜控制'
+  const stem = projectName.trim() || '3D 镜头参考'
   const stamp = new Date()
     .toISOString()
     .replace(/[:T]/g, '-')
@@ -72,9 +82,7 @@ export async function exportSceneScreenshot(
     const fileNameStem = buildFileName(projectName)
     const localResult = await saveScreenshotToLocal(dataUrl, fileNameStem)
     if (!localResult) return null
-    const persistedPath = await persistImageSource(dataUrl)
-    const mediaUrl = toDisplaySrc(persistedPath)
-    return { mediaUrl, ...localResult }
+    return { ...(await persistSceneScreenshot(dataUrl)), ...localResult }
   } catch (error) {
     logger.error('[cameraStage] 摄像机截图导出失败', error)
     throw error

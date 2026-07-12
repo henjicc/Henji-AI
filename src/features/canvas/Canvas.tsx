@@ -42,6 +42,7 @@ import { edgeTypes } from './edges';
 import { CANVAS_GRID_ALT_HEX } from '@/core/theme/colorTokens';
 import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialog } from './ui/NodeToolDialog';
+import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
 
 interface CanvasToastState {
@@ -308,11 +309,11 @@ export function Canvas() {
       }
       // 参数端口连线走插槽类型兼容；整节点媒体连线走媒体端口兼容
       const paramValidation = isParamPortId(connection.targetHandle)
-        ? validateParamConnection(sourceNode, targetNode, connection.targetHandle, nodes, edges)
+        ? validateParamConnection(sourceNode, targetNode, connection.targetHandle, nodes, edges, connection.sourceHandle)
         : null;
       const compatible = paramValidation
         ? paramValidation.compatible
-        : isConnectionCompatible(sourceNode.type, targetNode.type);
+        : isConnectionCompatible(sourceNode.type, targetNode.type, connection.sourceHandle);
       if (!compatible) {
         if (paramValidation?.reason === 'media-limit-exceeded') {
           const mediaLabel = paramValidation.mediaKind
@@ -473,6 +474,7 @@ export function Canvas() {
       </ReactFlow>
 
       <NodeToolDialog />
+      <CameraStageNodeDialog />
       <CanvasConnectionToast toast={connectionToast} />
 
       <CanvasOverlays

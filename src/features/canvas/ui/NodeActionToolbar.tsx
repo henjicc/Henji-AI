@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Copy, Crop, Download, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2 } from 'lucide-react';
+import { Copy, Crop, Download, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
 import { saveDialog } from '@/platform/desktopApi';
 import { useTranslation } from 'react-i18next';
 
@@ -10,6 +10,7 @@ const logger = createLogger('features.canvas.ui.NodeActionToolbar')
 import {
   NODE_TOOL_TYPES,
   isExportImageNode,
+  isCameraStageNode,
   isGroupNode,
   isImageEditNode,
   isStoryboardGenNode,
@@ -61,6 +62,7 @@ const TOOLBAR_DANGER_BUTTON_CLASS =
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const { t } = useTranslation();
   const isImageEdit = isImageEditNode(node);
+  const isCameraStage = isCameraStageNode(node);
   const isStoryboardGen = isStoryboardGenNode(node);
   const isStoryboardSplit = isStoryboardSplitNode(node);
   const canCopyStoryboardText = isStoryboardGen || isStoryboardSplit;
@@ -284,6 +286,32 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             <Sparkles className="h-3.5 w-3.5" />
             {t('canvas.generate')}
           </UiChipButton>
+        )}
+        {isCameraStage && (node.data.outputKind ?? 'image') === 'image' && (
+            <UiChipButton
+              className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_ACCENT_BUTTON_CLASS}`}
+              disabled={!node.data.imageUrl}
+              onClick={(event) => {
+                event.stopPropagation();
+                canvasEventBus.publish('camera-stage/output', { nodeId: node.id, kind: 'image' });
+              }}
+            >
+              <Image className="h-3.5 w-3.5" />
+              {t('nodeToolbar.outputImage')}
+            </UiChipButton>
+        )}
+        {isCameraStage && node.data.outputKind === 'video' && (
+            <UiChipButton
+              className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_ACCENT_BUTTON_CLASS}`}
+              disabled={Boolean(node.data.videoExporting)}
+              onClick={(event) => {
+                event.stopPropagation();
+                canvasEventBus.publish('camera-stage/render-video', { nodeId: node.id });
+              }}
+            >
+              <Video className="h-3.5 w-3.5" />
+              {t('nodeToolbar.outputVideo')}
+            </UiChipButton>
         )}
         {!isImageEdit && tools.map((tool) => {
           const Icon = toolIconMap[tool.icon] ?? Crop;

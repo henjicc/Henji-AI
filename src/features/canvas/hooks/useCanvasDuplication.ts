@@ -1,7 +1,8 @@
 import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Connection, NodeChange } from '@xyflow/react'
 import { useCanvasStore } from '@/stores/canvasStore'
-import type { CanvasEdge, CanvasNode, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
+import { CANVAS_NODE_TYPES, type CanvasEdge, type CanvasNode, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
+import { cloneCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
 import {
   ALT_DRAG_COPY_Z_INDEX,
   cloneNodeData,
@@ -117,6 +118,14 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         )
         idMap.set(sourceNode.id, nextNodeId)
         sizeMap.set(nextNodeId, getNodeSize(sourceNode))
+        if (sourceNode.type === CANVAS_NODE_TYPES.cameraStage) {
+          const projectId = (data as { projectId?: DynamicValue }).projectId
+          if (typeof projectId === 'string' && projectId) {
+            void cloneCameraStageProject(projectId).then((copied) => {
+              if (copied) useCanvasStore.getState().updateNodeData(nextNodeId, { projectId: copied.id })
+            })
+          }
+        }
       }
 
       const sizeSyncChanges = Array.from(sizeMap.entries()).map(([nodeId, size]) => ({

@@ -3,6 +3,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   type CanvasNodeData,
   type CanvasNodeType,
+  type CameraStageNodeData,
   type ExportImageNodeData,
   type GroupNodeData,
   type ImageEditNodeData,
@@ -103,7 +104,7 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   /** 生成类节点的生成规格 */
   generation?: NodeGenerationSpec;
   /** 提取该节点对下游的媒体输出（参数为宽类型以保证注册表协变，内部自行收窄） */
-  getOutputs?: (data: CanvasNodeData) => NodeMediaOutput[];
+  getOutputs?: (data: CanvasNodeData, sourceHandle?: string) => NodeMediaOutput[];
   /** 提取该节点对下游参数端口的标量值输出（数值/源节点专用） */
   getValueOutput?: (data: CanvasNodeData) => NodeValueOutput | null;
   createDefaultData: () => TData;
@@ -283,6 +284,36 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
   }),
 };
 
+const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
+  type: CANVAS_NODE_TYPES.cameraStage,
+  menuLabelKey: 'node.menu.cameraStage',
+  menuIcon: 'video',
+  visibleInMenu: true,
+  capabilities: { toolbar: true, promptInput: false },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: false,
+    connectMenu: { fromSource: false, fromTarget: true },
+    manualSource: false,
+  },
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.cameraStage],
+    projectId: null,
+    imageUrl: null,
+    previewImageUrl: null,
+    videoUrl: null,
+    aspectRatio: '16:9',
+    durationSec: null,
+    selectedTimeSec: 0,
+    videoProgress: null,
+    videoExporting: false,
+    videoRenderPhase: null,
+    videoRenderRequestId: null,
+    videoRenderError: null,
+    outputKind: 'image',
+  }),
+};
+
 const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardSplit,
   menuLabelKey: 'node.menu.storyboard',
@@ -399,6 +430,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.imageModelSelector]: imageModelSelectorNodeDefinition,
   [CANVAS_NODE_TYPES.videoModelSelector]: videoModelSelectorNodeDefinition,
   [CANVAS_NODE_TYPES.audioModelSelector]: audioModelSelectorNodeDefinition,
+  [CANVAS_NODE_TYPES.cameraStage]: cameraStageNodeDefinition,
 };
 
 export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {
@@ -461,11 +493,13 @@ export function getConnectMenuNodeTypes(
 /** 连接是否类型兼容（上游 emits ∈ 下游 accepts） */
 export function isConnectionCompatible(
   sourceType: CanvasNodeType,
-  targetType: CanvasNodeType
+  targetType: CanvasNodeType,
+  sourceHandle?: string | null,
 ): boolean {
   return arePortsCompatible(
     canvasNodeDefinitions[sourceType]?.ports,
-    canvasNodeDefinitions[targetType]?.ports
+    canvasNodeDefinitions[targetType]?.ports,
+    sourceHandle,
   );
 }
 
@@ -477,10 +511,11 @@ export function canNodeTypeStartManualConnection(type: CanvasNodeType): boolean 
 /** 提取节点对下游的媒体输出 */
 export function getNodeMediaOutputs(
   type: CanvasNodeType,
-  data: CanvasNodeData
+  data: CanvasNodeData,
+  sourceHandle?: string,
 ): ReturnType<NonNullable<CanvasNodeDefinition['getOutputs']>> {
   const definition = canvasNodeDefinitions[type];
-  return definition?.getOutputs?.(data) ?? [];
+  return definition?.getOutputs?.(data, sourceHandle) ?? [];
 }
 
 /** 提取节点对下游参数端口的标量值输出（无则返回 null） */

@@ -21,7 +21,7 @@ import {
 } from '../store/cameraStageStore'
 
 /**
- * 运镜控制工程编排：把 store 中的场景数据与持久化命令桥打通。
+ * 3D 镜头参考工程编排：把 store 中的场景数据与持久化命令桥打通。
  * 组件只调用这里的函数，不直接碰序列化/命令桥，保持编排逻辑单点落地。
  */
 
@@ -181,8 +181,23 @@ export async function createNewProject(
   }
 }
 
-/** 加载指定工程到场景，成功返回 true；工程不存在返回 false */
-export async function loadProjectIntoScene(projectId: string): Promise<boolean> {
+/** 为画布节点复制独立工程快照；复制后的后续编辑不再影响源工程。 */
+export async function cloneCameraStageProject(projectId: string, name?: string): Promise<SavedProjectInfo | null> {
+  const source = await getCameraStageProjectRecord(projectId)
+  if (!source) return null
+  const id = uuidv4()
+  const now = Date.now()
+  const nextName = name?.trim() || `${source.name} 副本`
+  await upsertCameraStageProjectRecord({ ...source, id, name: nextName, createdAt: now, updatedAt: now })
+  logger.info('画布工程快照已复制', { event: 'camera_stage.project.clone.completed', projectId: id, context: { sourceProjectId: projectId } })
+  return { id, name: nextName }
+}
+
+/** 加载指定工程到场景，成功返回 true；工程不存在返回 false。后台渲染可关闭会话记录写入。 */
+export async function loadProjectIntoScene(
+  projectId: string,
+  options: { updateSession?: boolean } = {},
+): Promise<boolean> {
   const record = await getCameraStageProjectRecord(projectId)
   if (!record) {
     return false
@@ -199,8 +214,10 @@ export async function loadProjectIntoScene(projectId: string): Promise<boolean> 
     },
     { id: record.id, name: record.name },
   )
-  const session = useCameraStageSessionStore.getState()
-  if (session.lastProjectId !== record.id) session.setLastProjectId(record.id)
+  if (options.updateSession !== false) {
+    const session = useCameraStageSessionStore.getState()
+    if (session.lastProjectId !== record.id) session.setLastProjectId(record.id)
+  }
   clearCameraStageHistory()
   return true
 }

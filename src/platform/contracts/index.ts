@@ -13,6 +13,7 @@ import type { DragDropPlatform } from './dragDrop'
 import type { ProjectPackagePlatform } from './projectPackage'
 import type { StoryboardProjectsPlatform } from './storyboardProjects'
 import type { CameraStageProjectsPlatform } from './cameraStageProjects'
+import type { CameraStageRenderPlatform } from './cameraStageRender'
 import type { WindowPlatform } from './window'
 import type { LoggingPlatform } from './logging'
 import type { UpdaterPlatform } from './updater'
@@ -33,6 +34,7 @@ export interface PlatformRuntime {
   projectPackage: ProjectPackagePlatform
   storyboardProjects: StoryboardProjectsPlatform
   cameraStageProjects: CameraStageProjectsPlatform
+  cameraStageRender: CameraStageRenderPlatform
   window: WindowPlatform
   logging: LoggingPlatform
   updater: UpdaterPlatform
@@ -54,6 +56,7 @@ export type {
   ProjectPackagePlatform,
   StoryboardProjectsPlatform,
   CameraStageProjectsPlatform,
+  CameraStageRenderPlatform,
   WindowPlatform,
   LoggingPlatform,
   UpdaterPlatform,
@@ -73,6 +76,7 @@ export * from './dragDrop'
 export * from './projectPackage'
 export * from './storyboardProjects'
 export * from './cameraStageProjects'
+export * from './cameraStageRender'
 export * from './window'
 export * from './logging'
 export * from './updater'

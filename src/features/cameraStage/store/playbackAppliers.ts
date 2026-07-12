@@ -9,7 +9,10 @@
  * 又驱动摄像机视角下的真实渲染相机），逐个调用互不覆盖。
  */
 
-import type { StageKeyframeValue } from '../domain/animationTypes'
+import type { StageKeyframeValue, StageTrack } from '../domain/animationTypes'
+import { listAnimatableGroups } from '../domain/animatableProps'
+import { sampleTrack } from '../domain/keyframeEngine'
+import type { StageObject, StageVec3 } from '../domain/sceneTypes'
 
 export type PlaybackApplyFn = (value: StageKeyframeValue, time: number) => void
 
@@ -50,4 +53,47 @@ export function runPlaybackAppliers(
   const set = appliers.get(keyOf(objectId, path))
   if (!set) return
   for (const fn of set) fn(value, time)
+}
+
+/**
+ * 按指定时间采样动画轨道并同步推送到 Three.js 命令式对象。
+ * 播放预览与离屏导出共用同一条采样路径，导出因此无需等待隐藏窗口约 1fps 的 RAF。
+ */
+export function applyAnimationToPlaybackAppliers(
+  objects: StageObject[],
+  tracks: StageTrack[],
+  time: number,
+): void {
+  const trackByKey = new Map<string, StageTrack>()
+  for (const track of tracks) trackByKey.set(`${track.objectId}::${track.propertyPath}`, track)
+
+  for (const object of objects) {
+    for (const group of listAnimatableGroups(object)) {
+      if (group.valueType === 'vec3') {
+        const output: StageVec3 = { ...(group.getBaseValue(object) as StageVec3) }
+        let sampledTrack = false
+        for (const child of group.children) {
+          const track = trackByKey.get(`${object.id}::${child.path}`)
+          if (!track || !child.axis) continue
+          const sampled = sampleTrack(track, time, 'scalar')
+          if (sampled === undefined) continue
+          output[child.axis] = sampled as number
+          sampledTrack = true
+        }
+        const drivesCameraEffectors = object.type === 'camera'
+          && group.groupPath === 'transform.position'
+          && object.effectors.some((effector) => effector.enabled)
+        if (sampledTrack || drivesCameraEffectors) {
+          runPlaybackAppliers(object.id, group.groupPath, output, time)
+        }
+        continue
+      }
+
+      const child = group.children[0]
+      const track = trackByKey.get(`${object.id}::${child.path}`)
+      if (!track) continue
+      const sampled = sampleTrack(track, time, group.valueType)
+      if (sampled !== undefined) runPlaybackAppliers(object.id, group.groupPath, sampled, time)
+    }
+  }
 }

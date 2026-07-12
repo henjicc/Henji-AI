@@ -14,16 +14,16 @@ export function collectInputMedia(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const sourceNodeIds = edges
     .filter((edge) => edge.target === nodeId)
-    .map((edge) => edge.source);
+    .map((edge) => ({ source: edge.source, sourceHandle: edge.sourceHandle ?? 'source' }));
 
   const seen = new Set<string>();
   const outputs: NodeMediaOutput[] = [];
-  for (const sourceId of sourceNodeIds) {
+  for (const { source: sourceId, sourceHandle } of sourceNodeIds) {
     const sourceNode = nodeById.get(sourceId);
     if (!sourceNode) {
       continue;
     }
-    for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data)) {
+    for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data, sourceHandle)) {
       if (!output.url || seen.has(output.url)) {
         continue;
       }

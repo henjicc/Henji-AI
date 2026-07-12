@@ -13,7 +13,7 @@ import {
 } from './cameraStageProjectService'
 
 /**
- * 运镜控制工程列表页：新建 / 打开 / 重命名 / 删除工程。
+ * 3D 镜头参考工程列表页：新建 / 打开 / 重命名 / 删除工程。
  * 打开或新建成功后调用 onEnterEditor 进入场景编辑器（场景已加载进 store）。
  */
 
@@ -102,7 +102,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
       <div className="mx-auto max-w-4xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <div className="text-lg font-medium text-text-dark">运镜控制</div>
+            <div className="text-lg font-medium text-text-dark">3D 镜头参考</div>
             <div className="mt-1 text-sm text-text-muted">搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图</div>
           </div>
           <UiButton onClick={() => {

@@ -14,6 +14,7 @@ import { createElectronDragDrop } from './dragDrop'
 import { createElectronProjectPackage } from './projectPackage'
 import { createElectronStoryboardProjects } from './storyboardProjects'
 import { createElectronCameraStageProjects } from './cameraStageProjects'
+import { createElectronCameraStageRender } from './cameraStageRender'
 import { createElectronWindow } from './window'
 import { createElectronLogging } from './logging'
 import { createElectronUpdater } from './updater'
@@ -35,6 +36,7 @@ export function createElectronPlatform(): PlatformRuntime {
     projectPackage: createElectronProjectPackage(),
     storyboardProjects: createElectronStoryboardProjects(),
     cameraStageProjects: createElectronCameraStageProjects(),
+    cameraStageRender: createElectronCameraStageRender(),
     window: createElectronWindow(),
     logging: createElectronLogging(),
     updater: createElectronUpdater(),

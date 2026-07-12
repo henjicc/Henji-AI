@@ -14,6 +14,8 @@ export interface NodePorts {
   /** 输出端口（右侧 source handle）产出的媒体类型 */
   source?: {
     emits: MediaKind;
+    /** 多输出节点按 source handle 声明各自的媒体类型；未声明时沿用 emits。 */
+    handles?: Record<string, MediaKind>;
   };
   /** 输入端口（左侧 target handle）可接受的媒体类型 */
   target?: {
@@ -33,6 +35,17 @@ export interface NodeMediaOutput {
   kind: MediaKind;
   url: string;
   previewUrl?: string | null;
+  /** 多输出节点的来源端口；省略表示默认 source 端口。 */
+  sourceHandle?: string;
+}
+
+export function getSourcePortMediaKind(
+  ports: NodePorts | undefined,
+  sourceHandle: string | null | undefined,
+): MediaKind | undefined {
+  const source = ports?.source;
+  if (!source) return undefined;
+  return source.handles?.[sourceHandle ?? 'source'] ?? source.emits;
 }
 
 /**
@@ -65,9 +78,10 @@ export const DEFAULT_INPUT_INJECTION_RULES: InputInjectionRule[] = [
 
 export function arePortsCompatible(
   sourcePorts: NodePorts | undefined,
-  targetPorts: NodePorts | undefined
+  targetPorts: NodePorts | undefined,
+  sourceHandle?: string | null,
 ): boolean {
-  const emits = sourcePorts?.source?.emits;
+  const emits = getSourcePortMediaKind(sourcePorts, sourceHandle);
   const accepts = targetPorts?.target?.accepts;
   if (!emits || !accepts || accepts.length === 0) {
     return false;

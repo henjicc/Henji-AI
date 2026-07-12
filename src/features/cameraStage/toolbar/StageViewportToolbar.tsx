@@ -1,5 +1,5 @@
 import React from 'react'
-import { MousePointer2, Move3D, PenTool, Rotate3D, Scaling } from 'lucide-react'
+import { Move3D, PenTool, Rotate3D, Scaling } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
 import type { StageGizmoMode } from '../domain/sceneTypes'
@@ -9,7 +9,6 @@ import {
   useCameraStageToolStore,
   type StageEditorTool,
 } from '../store/cameraStageToolStore'
-import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
 
 interface ToolDefinition {
   id: StageEditorTool
@@ -20,7 +19,6 @@ interface ToolDefinition {
 }
 
 const TOOLS: ToolDefinition[] = [
-  { id: 'select', label: '选择', shortcut: 'V', icon: MousePointer2 },
   { id: 'translate', label: '移动', shortcut: 'W', icon: Move3D, gizmo: 'translate' },
   { id: 'rotate', label: '旋转', shortcut: 'E', icon: Rotate3D, gizmo: 'rotate' },
   { id: 'scale', label: '缩放', shortcut: 'R', icon: Scaling, gizmo: 'scale' },
@@ -34,8 +32,6 @@ const StageViewportToolbar: React.FC = () => {
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const selectedShotId = useCameraStageStore((state) => state.selectedShotId)
   const editorMode = useCameraStageStore((state) => state.editorMode)
-  const activeViewportId = useCameraStageViewportStore((state) => state.activeViewportId)
-  const activeViewportSource = useCameraStageViewportStore((state) => state.viewports[activeViewportId].source)
   const shots = useCameraStageStore((state) => state.shots)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
@@ -47,6 +43,7 @@ const StageViewportToolbar: React.FC = () => {
       return
     }
     if (!selectedId) return
+    useCameraStageStore.getState().seek(currentTime)
     const shotId = resolvePathShotId(shots, currentTime, selectedShotId)
     if (shotId) {
       selectPath({ shotId, objectId: selectedId })
@@ -56,7 +53,6 @@ const StageViewportToolbar: React.FC = () => {
   }
 
   const pathDisabled = editorMode !== 'simple'
-    || activeViewportSource.kind === 'camera'
     || !selectedId
     || shots.length < 2
 
@@ -67,7 +63,7 @@ const StageViewportToolbar: React.FC = () => {
         const disabled = definition.id === 'path' && pathDisabled
         return (
           <React.Fragment key={definition.id}>
-            {index === 4 && <span className="mx-1 h-5 w-px bg-border-dark" />}
+            {index === 3 && <span className="mx-1 h-5 w-px bg-border-dark" />}
             <UiIconButton
               showBorder={false}
               active={activeTool === definition.id}

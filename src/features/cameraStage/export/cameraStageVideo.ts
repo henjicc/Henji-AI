@@ -41,6 +41,8 @@ export interface CameraStageVideoExportOptions {
   onProgress: (progress: CameraStageVideoExportProgress) => void
   onSession: (sessionId: string | null) => void
   isCancelled: () => boolean
+  /** 画布输出只写入应用媒体目录，不打开系统保存对话框。 */
+  saveToLocal?: boolean
 }
 
 export interface CameraStageVideoExportProgress {
@@ -70,14 +72,19 @@ export async function exportCameraStageVideo(
   options: CameraStageVideoExportOptions,
 ): Promise<CameraStageVideoExportResult | null> {
   const fileNameStem = buildFileName(options.projectName)
-  const targetPath = await resolveVideoTargetPath(fileNameStem)
-  if (!targetPath) return null
+  const targetPath = options.saveToLocal === false ? null : await resolveVideoTargetPath(fileNameStem)
+  if (options.saveToLocal !== false && !targetPath) return null
 
   const { width, height } = resolveVideoExportSize(options.cameraRatio, options.resolutionPreset)
   const frameCount = Math.max(1, Math.round(options.durationSeconds * options.fps))
+  const exportStartedAt = performance.now()
+  let seekElapsedMs = 0
+  let captureElapsedMs = 0
+  let appendElapsedMs = 0
   let sessionId: string | null = null
+  let renderingComplete = false
   const unsubscribeProgress = onVideoFrameExportProgress((progress) => {
-    if (progress.sessionId !== sessionId) return
+    if (progress.sessionId !== sessionId || !renderingComplete) return
     options.onProgress({
       phase: 'encoding',
       doneFrames: Math.min(progress.encodedFrames, frameCount),
@@ -122,23 +129,37 @@ export async function exportCameraStageVideo(
     for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
       throwIfCancelled(options)
       const time = Math.min(options.durationSeconds, frameIndex / options.fps)
+      const seekStartedAt = performance.now()
       await options.seekFrame(time)
-      await waitForCameraStageRender()
+      seekElapsedMs += performance.now() - seekStartedAt
+      const captureStartedAt = performance.now()
       const bytes = await options.captureFrame({ width, height })
+      captureElapsedMs += performance.now() - captureStartedAt
       if (!bytes) throw new Error('未获取到当前离屏视频帧')
+      const appendStartedAt = performance.now()
       await appendVideoFrameExport({ sessionId, frameIndex, bytes })
+      appendElapsedMs += performance.now() - appendStartedAt
       options.onProgress({ phase: 'rendering', doneFrames: frameIndex + 1, totalFrames: frameCount })
     }
 
     throwIfCancelled(options)
+    renderingComplete = true
     options.onProgress({ phase: 'encoding', doneFrames: 0, totalFrames: frameCount })
-    const result = await finishVideoFrameExport({ sessionId, targetPath })
+    const result = await finishVideoFrameExport({ sessionId, targetPath: targetPath ?? undefined })
     sessionId = null
     options.onSession(null)
     logger.info('离屏视频导出完成', {
       event: 'camera_stage.video_export.completed',
       taskId: session.sessionId,
-      context: { width, height, frameCount },
+      context: {
+        width,
+        height,
+        frameCount,
+        elapsedMs: Math.round(performance.now() - exportStartedAt),
+        averageSeekMs: Math.round(seekElapsedMs / frameCount),
+        averageCaptureMs: Math.round(captureElapsedMs / frameCount),
+        averageAppendMs: Math.round(appendElapsedMs / frameCount),
+      },
     })
     return {
       mediaUrl: toDisplaySrc(result.mediaPath),
@@ -185,7 +206,7 @@ async function resolveVideoTargetPath(fileNameStem: string): Promise<string | nu
 }
 
 function buildFileName(projectName: string): string {
-  const stem = projectName.trim() || '运镜控制'
+  const stem = projectName.trim() || '3D 镜头参考'
   const now = new Date()
   const stamp = [
     now.getFullYear(),

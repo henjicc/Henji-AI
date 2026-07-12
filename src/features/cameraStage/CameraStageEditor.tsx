@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Clipboard, Film, Redo2, Save, Undo2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { ArrowLeft, Camera, Clipboard, Film, Save, Undo2, X } from 'lucide-react'
+import { Dropdown, PanelTrigger, UiButton, UiIconButton } from '@/components/ui'
 import { cancelVideoFrameExport } from '@/commands/video'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from './domain/cameraUtils'
+import { KEYFRAME_TIME_EPSILON } from './domain/animationTypes'
 import { buildRenderCameraSchedule } from './domain/renderCameraSchedule'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
-import { copySceneScreenshotToClipboard, exportSceneScreenshot } from './export/cameraStageScreenshot'
+import { copySceneScreenshotToClipboard, exportSceneScreenshot, persistSceneScreenshot } from './export/cameraStageScreenshot'
 import {
   exportCameraStageVideo,
   waitForCameraStageRender,
+  type CameraStageVideoExportResult,
   type CameraStageVideoExportProgress,
   type CameraStageVideoResolutionPreset,
 } from './export/cameraStageVideo'
@@ -19,14 +21,14 @@ import type { CameraStageDockHandle } from './layout/CameraStageDock'
 import type { StageCaptureFn } from './scene/StageCaptureBridge'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
-import { useCameraStageViewportStore } from './store/cameraStageViewportStore'
 import { useCameraStageHistory } from './store/useCameraStageHistory'
 import QuickAddGroup from './toolbar/QuickAddGroup'
+import StagePathContextBar from './toolbar/StagePathContextBar'
 import StageViewportToolbar from './toolbar/StageViewportToolbar'
 import EditorModeBadge from './simple/EditorModeBadge'
 
 /**
- * 运镜控制编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
+ * 3D 镜头参考编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
  * 只做布局与接线，不承载业务实现；面板布局由 CameraStageDock（dockview）管理。
  */
 
@@ -38,19 +40,41 @@ const VIDEO_RESOLUTION_OPTIONS: Array<{ label: string; value: CameraStageVideoRe
 interface CameraStageEditorProps {
   /** 返回工程列表 */
   onBackToList?: () => void
+  backLabel?: string
+  autoExportVideoRequest?: number
+  embeddedOutput?: {
+    onFrame: (result: { mediaUrl: string; selectedTimeSec: number; aspectRatio: string }) => void
+    onVideo: (result: CameraStageVideoExportResult) => void
+    onProgress: (progress: number | null) => void
+    onOutputKindChange: (kind: 'image' | 'video') => void
+  }
 }
 
-const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) => {
+function hasMultipleTimelineKeyframes(
+  editorMode: 'simple' | 'pro',
+  shotCount: number,
+  animation: ReturnType<typeof useCameraStageStore.getState>['animation'],
+): boolean {
+  if (editorMode === 'simple') return shotCount > 1
+  return animation.tracks.some((track) => {
+    const firstTime = track.keyframes[0]?.time
+    return firstTime !== undefined && track.keyframes.some(
+      (keyframe) => Math.abs(keyframe.time - firstTime) > KEYFRAME_TIME_EPSILON,
+    )
+  })
+}
+
+const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
+  onBackToList,
+  backLabel = '返回工程列表',
+  autoExportVideoRequest,
+  embeddedOutput,
+}) => {
   const objects = useCameraStageStore((state) => state.objects)
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const viewMode = useCameraStageStore((state) => state.viewMode)
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
-  const setViewMode = useCameraStageStore((state) => state.setViewMode)
-  const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
-  const setSelected = useCameraStageStore((state) => state.setSelected)
-  const activeViewportId = useCameraStageViewportStore((state) => state.activeViewportId)
-  const setViewportSource = useCameraStageViewportStore((state) => state.setViewportSource)
   const currentProjectId = useCameraStageStore((state) => state.currentProjectId)
   const removeObject = useCameraStageStore((state) => state.removeObject)
   const duplicateObject = useCameraStageStore((state) => state.duplicateObject)
@@ -60,10 +84,12 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
   const skyColor = useCameraStageStore((state) => state.sceneSettings.sky.color)
   const animation = useCameraStageStore((state) => state.animation)
+  const editorMode = useCameraStageStore((state) => state.editorMode)
+  const shotCount = useCameraStageStore((state) => state.shots.length)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
 
-  const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
+  const { canUndo, undo, redo } = useCameraStageHistory()
   const { saveState } = useCameraStageAutosave()
 
   const [shotHint, setShotHint] = useState<string | null>(null)
@@ -74,27 +100,20 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
   const dockRef = useRef<CameraStageDockHandle>(null)
   const videoSessionRef = useRef<string | null>(null)
   const videoCancelRef = useRef(false)
+  const handledAutoExportRequestRef = useRef(0)
 
+  const outputKind = hasMultipleTimelineKeyframes(editorMode, shotCount, animation)
+    ? 'video'
+    : 'image'
   const canScreenshot = viewMode === 'camera' && !!activeCamera
-  const canExportVideo = canScreenshot && animation.duration > 0 && animation.fps > 0
+  const canExportVideo = outputKind === 'video'
+    && canScreenshot
+    && animation.duration > 0
+    && animation.fps > 0
 
-  const handleCameraSelect = (cameraId: string): void => {
-    setActiveCameraId(cameraId)
-    setSelected(cameraId)
-    setViewportSource(activeViewportId, { kind: 'camera', cameraId })
-  }
-
-  const handleDirectorView = (): void => {
-    setViewMode('director')
-    setViewportSource(activeViewportId, { kind: 'director' })
-  }
-
-  const handleCameraView = (): void => {
-    if (!activeCamera) return
-    setActiveCameraId(activeCamera.id)
-    setViewMode('camera')
-    setViewportSource(activeViewportId, { kind: 'camera', cameraId: activeCamera.id })
-  }
+  useEffect(() => {
+    embeddedOutput?.onOutputKindChange(outputKind)
+  }, [embeddedOutput, outputKind])
 
   const prepareScreenshotDataUrl = useCallback(async (): Promise<string | null> => {
     const dataUrl = captureRef.current?.()
@@ -128,6 +147,20 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       setShotAction(null)
     }
   }, [prepareScreenshotDataUrl])
+
+  const handleUpdateCanvasFrame = useCallback(async (): Promise<void> => {
+    if (!embeddedOutput) return
+    setShotAction('save')
+    try {
+      const dataUrl = await prepareScreenshotDataUrl()
+      if (!dataUrl || !activeCamera) return
+      const result = await persistSceneScreenshot(dataUrl)
+      embeddedOutput.onFrame({ mediaUrl: result.mediaUrl, selectedTimeSec: useCameraStageStore.getState().playback.currentTime, aspectRatio: activeCamera.aspectRatio.preset })
+      setShotHint('当前帧已更新到画布')
+    } catch {
+      setShotHint('当前帧更新失败')
+    } finally { setShotAction(null) }
+  }, [activeCamera, embeddedOutput, prepareScreenshotDataUrl])
 
   const handleCopyScreenshot = useCallback(async (): Promise<void> => {
     setShotAction('copy')
@@ -193,19 +226,24 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
         disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
         seekFrame: async (time) => {
           useCameraStageStore.getState().seek(time)
-          await waitForCameraStageRender()
+          await waitForCameraStageRender(1)
         },
-        onProgress: setVideoProgress,
+        onProgress: (progress) => {
+          setVideoProgress(progress)
+          embeddedOutput?.onProgress(progress.totalFrames > 0 ? progress.doneFrames / progress.totalFrames : 0)
+        },
         onSession: (sessionId) => {
           videoSessionRef.current = sessionId
         },
         isCancelled: () => videoCancelRef.current,
+        saveToLocal: !embeddedOutput,
       })
       if (!result) {
         if (videoCancelRef.current) {
           setShotHint('已取消视频导出')
         }
       } else {
+        if (embeddedOutput) embeddedOutput.onVideo(result)
         const fileName = result.savedPath.split(/[\\/]/).pop() ?? result.savedPath
         setShotHint(`视频已导出：${fileName}`)
       }
@@ -220,8 +258,24 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
       videoSessionRef.current = null
       videoCancelRef.current = false
       setVideoProgress(null)
+      embeddedOutput?.onProgress(null)
     }
-  }, [activeCamera, videoPreset, videoProgress])
+  }, [activeCamera, embeddedOutput, videoPreset, videoProgress])
+
+  useEffect(() => {
+    if (!autoExportVideoRequest
+      || autoExportVideoRequest <= handledAutoExportRequestRef.current) return
+    let cancelled = false
+    void (async () => {
+      for (let attempt = 0; attempt < 10 && !captureRef.current; attempt += 1) {
+        await waitForCameraStageRender()
+      }
+      if (cancelled || !captureRef.current) return
+      handledAutoExportRequestRef.current = autoExportVideoRequest
+      await handleExportVideo()
+    })()
+    return () => { cancelled = true }
+  }, [autoExportVideoRequest, handleExportVideo])
 
   const handleCancelVideoExport = useCallback((): void => {
     videoCancelRef.current = true
@@ -267,13 +321,13 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-app">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
+      <div className="relative flex h-11 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
         {onBackToList && (
           <UiIconButton
             showBorder={false}
             appearance="hover-only"
             className="h-7 w-7"
-            title="返回工程列表"
+            aria-label={backLabel}
             onClick={onBackToList}
           >
             <ArrowLeft size={15} />
@@ -291,54 +345,16 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
           >
             <Undo2 size={14} />
           </UiIconButton>
-          <UiIconButton
-            showBorder={false}
-            appearance="hover-only"
-            disabled={!canRedo}
-            className="h-7 w-7"
-            title="重做 (Ctrl+Shift+Z)"
-            onClick={() => redo()}
-          >
-            <Redo2 size={14} />
-          </UiIconButton>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <UiOptionButton
-            active={viewMode === 'director'}
-            onClick={handleDirectorView}
-            className="py-1.5 text-xs"
-          >
-            自由视角
-          </UiOptionButton>
-          <UiOptionButton
-            active={viewMode === 'camera'}
-            disabled={!activeCamera}
-            onClick={handleCameraView}
-            className="py-1.5 text-xs"
-          >
-            摄像机视角
-          </UiOptionButton>
-          {activeCamera && (
-            <Dropdown<string>
-              value={activeCamera.id}
-              display={activeCamera.name}
-              options={cameras.map((camera) => ({ label: camera.name, value: camera.id }))}
-              onSelect={handleCameraSelect}
-              className="min-w-28"
-              buttonClassName="h-7 py-1.5 text-xs"
-              buttonLabelClassName="text-xs"
-              optionLabelClassName="text-xs"
-              minWidthStrategy="options"
-              panelWidthStrategy="options"
-            />
-          )}
         </div>
 
         <QuickAddGroup />
 
         <span className="mx-1 h-6 w-px shrink-0 bg-border-dark" />
         <StageViewportToolbar />
+
+        <div className="pointer-events-none absolute inset-y-0 left-1/2 z-20 flex max-w-[52%] -translate-x-1/2 items-center">
+          <StagePathContextBar />
+        </div>
 
         <div className="ml-auto flex items-center gap-2">
           {videoProgressLabel && (
@@ -356,7 +372,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
             {projectName}
           </span>
           <EditorModeBadge />
-          <PanelTrigger
+          {embeddedOutput && outputKind === 'image' ? (
+            <UiButton size="sm" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!shotAction} className="py-1.5 text-xs">
+              <Camera size={13} className="mr-1" />{shotAction ? '处理中…' : '更新图片'}
+            </UiButton>
+          ) : !embeddedOutput ? <PanelTrigger
             disabled={!canScreenshot || !!shotAction}
             panelWidth={156}
             closeOnPanelClick
@@ -399,7 +419,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
                 {shotAction ? '处理中…' : '截图'}
               </UiButton>
             )}
-          </PanelTrigger>
+          </PanelTrigger> : null}
           {videoProgress ? (
             <UiButton
               size="sm"
@@ -410,7 +430,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
               <X size={13} className="mr-1" />
               取消导出
             </UiButton>
-          ) : (
+          ) : embeddedOutput && outputKind === 'video' ? (
+            <UiButton size="sm" onClick={() => void handleExportVideo()} disabled={!canExportVideo} className="py-1.5 text-xs">
+              <Film size={13} className="mr-1" />渲染视频
+            </UiButton>
+          ) : !embeddedOutput ? (
             <PanelTrigger
               disabled={!canExportVideo}
               panelWidth={176}
@@ -453,7 +477,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({ onBackToList }) =
                 </UiButton>
               )}
             </PanelTrigger>
-          )}
+          ) : null}
           <UiButton
             size="sm"
             variant="ghost"

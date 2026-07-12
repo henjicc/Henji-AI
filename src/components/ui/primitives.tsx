@@ -76,6 +76,9 @@ interface UiModalProps {
   children: ReactNode;
   footer?: ReactNode;
   widthClassName?: string;
+  contentClassName?: string;
+  hideHeader?: boolean;
+  overlayClassName?: string;
 }
 
 function resolveButtonVariant(variant: ButtonVariant): string {
@@ -374,6 +377,9 @@ export function UiModal({
   children,
   footer,
   widthClassName = 'w-[460px]',
+  contentClassName = 'px-4 py-4',
+  hideHeader = false,
+  overlayClassName = '',
 }: UiModalProps) {
   const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
 
@@ -384,7 +390,7 @@ export function UiModal({
   // 挂到 document.body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
   // 重新建立包含块，导致弹窗被错误地约束在那个祖先容器内而不是真正居中于整个窗口。
   return createPortal(
-    <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-50 flex items-center justify-center`}>
+    <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-50 flex items-center justify-center ${overlayClassName}`}>
       <div
         className={`absolute inset-0 bg-black/55 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
@@ -392,14 +398,16 @@ export function UiModal({
       <UiPanel
         className={`relative transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${widthClassName}`}
       >
-        <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.1)] px-4 py-3">
-          <h2 className="text-sm font-medium text-text-dark">{title}</h2>
-          <UiIconButton className="h-8 w-8" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </UiIconButton>
-        </div>
+        {!hideHeader && (
+          <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.1)] px-4 py-3">
+            <h2 className="text-sm font-medium text-text-dark">{title}</h2>
+            <UiIconButton className="h-8 w-8" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </UiIconButton>
+          </div>
+        )}
 
-        <div className="px-4 py-4">{children}</div>
+        <div className={contentClassName}>{children}</div>
 
         {footer && (
           <div className="flex justify-end gap-2 border-t border-[rgba(255,255,255,0.1)] px-4 py-3">

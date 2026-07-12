@@ -99,7 +99,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
     >
       <StageScene
         viewportSource={source}
-        interactive={active && source.kind !== 'camera'}
+        interactive={active}
         primary={primary}
         captureRef={primary ? captureRef : undefined}
       />

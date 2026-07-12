@@ -3,6 +3,9 @@ import { createDefaultAnimation, createDefaultPlayback } from '../domain/animati
 import { compileShotsToAnimation } from '../domain/shotCompiler'
 import { createCameraObject, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { createShot } from '../domain/shotTypes'
+import type { StageShot } from '../domain/shotTypes'
+import type { StageVec3 } from '../domain/sceneTypes'
+import { applyAnimationAtTime } from './playbackSampling'
 import {
   beginHistorySession,
   clearCameraStageHistory,
@@ -30,6 +33,18 @@ function addShotAt(time: number): void {
   useCameraStageStore.getState().addShot()
 }
 
+function expectAllShotsUseManualTarget(
+  shots: StageShot[],
+  cameraId: string,
+  target: StageVec3,
+): void {
+  for (const shot of shots) {
+    const lookAt = shot.objectStates[cameraId]?.lookAt
+    expect(lookAt?.mode).toBe('manual')
+    if (lookAt?.mode === 'manual') expect(lookAt.target).toEqual(target)
+  }
+}
+
 describe('简易模式 store 分片', () => {
   beforeEach(resetSimpleStore)
 
@@ -54,6 +69,39 @@ describe('简易模式 store 分片', () => {
     expect(state.shots[0].transition.perObject[camera.id].spatialPath?.knots).toHaveLength(1)
     expect(state.shots[1].objectStates[camera.id].transform.position.z).toBeCloseTo(-5, 5)
     expect(state.animation.tracks.some((track) => track.propertyPath === 'transform.position.z')).toBe(true)
+  })
+
+  it('修改轨迹后立即让场景对象对齐当前播放头采样位置', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0), {
+      position: { x: 0, y: 2, z: 5 },
+      target: { x: 0, y: 0, z: 0 },
+    })
+    const shotA = createShot([camera], 'A', camera.id, 0)
+    const movedCamera = {
+      ...camera,
+      transform: {
+        ...camera.transform,
+        position: { x: 6, y: 3, z: 1 },
+      },
+    }
+    const shotB = createShot([movedCamera], 'B', camera.id, 2)
+    const shots = [shotA, shotB]
+    useCameraStageStore.setState({
+      objects: [camera],
+      shots,
+      animation: compileShotsToAnimation(shots, [camera]),
+      playback: { ...createDefaultPlayback(), currentTime: 1 },
+    })
+
+    useCameraStageStore.getState().applyCameraPathPreset(
+      shotA.id,
+      camera.id,
+      { kind: 'orbit', degrees: 90, direction: 'cw' },
+    )
+
+    const state = useCameraStageStore.getState()
+    const sampled = applyAnimationAtTime([camera], state.animation, state.playback.currentTime)[0]
+    expect(state.objects[0].transform.position).toEqual(sampled.transform.position)
   })
 
   it('连续拖动路径锚点合并为单条撤销记录并将预设标记为自定义', () => {
@@ -249,6 +297,52 @@ describe('简易模式 store 分片', () => {
     expect(snapshot?.transform.position).toEqual({ x: 1, y: 2, z: 3 })
     expect(snapshot?.transform.rotation).toEqual({ x: 10, y: 20, z: 30 })
     expect(snapshot?.lookAt).toEqual({ mode: 'manual', target: { x: 4, y: 5, z: 6 } })
+    expectAllShotsUseManualTarget(state.shots, camera.id, { x: 4, y: 5, z: 6 })
+  })
+
+  it('修改注视目标会同步全部镜头卡但不会自动添加关键帧', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    const first = createShot([camera], '关键帧 1', camera.id, 0)
+    const second = createShot([camera], '关键帧 2', camera.id, 2)
+    const shots = [first, second]
+    useCameraStageStore.setState({
+      objects: [camera],
+      shots,
+      selectedShotId: first.id,
+      animation: compileShotsToAnimation(shots, [camera]),
+      playback: { ...createDefaultPlayback(), currentTime: 1 },
+    })
+
+    useCameraStageStore.getState().updateObject(camera.id, {
+      lookAt: { mode: 'manual', target: { x: 3, y: 4, z: 5 } },
+    })
+
+    const state = useCameraStageStore.getState()
+    expect(state.shots).toHaveLength(2)
+    expect(state.playback.currentTime).toBe(1)
+    expectAllShotsUseManualTarget(state.shots, camera.id, { x: 3, y: 4, z: 5 })
+  })
+
+  it('仅更新摄像机注视点时不会自动添加关键帧', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    const first = createShot([camera], '关键帧 1', camera.id, 0)
+    const second = createShot([camera], '关键帧 2', camera.id, 2)
+    const shots = [first, second]
+    useCameraStageStore.setState({
+      objects: [camera],
+      shots,
+      selectedShotId: first.id,
+      animation: compileShotsToAnimation(shots, [camera]),
+      playback: { ...createDefaultPlayback(), currentTime: 1 },
+    })
+
+    useCameraStageStore.getState().updateCameraView(camera.id, {
+      lookAtTarget: { x: -2, y: 1, z: 6 },
+    })
+
+    const state = useCameraStageStore.getState()
+    expect(state.shots).toHaveLength(2)
+    expectAllShotsUseManualTarget(state.shots, camera.id, { x: -2, y: 1, z: 6 })
   })
 
   it('批量删除关键帧：单条撤销记录、清空框选、重算过渡与选中', () => {

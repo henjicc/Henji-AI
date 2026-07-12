@@ -68,10 +68,13 @@ const StageScene: React.FC<StageSceneProps> = ({
   )
 
   useEffect(() => {
+    if (!interactive) return
     const tools = useCameraStageToolStore.getState()
-    const supportsPathEditing = viewportSource?.kind !== 'camera' && viewMode === 'director'
-    if (editorMode !== 'simple' || !supportsPathEditing) {
-      if (tools.tool === 'path') tools.setTool('select')
+    if (editorMode !== 'simple') {
+      if (tools.tool === 'path') {
+        tools.setTool('translate')
+        useCameraStageStore.getState().setGizmoMode('translate')
+      }
       return
     }
     if (tools.tool !== 'path') return
@@ -83,7 +86,7 @@ const StageScene: React.FC<StageSceneProps> = ({
       || tools.pathSelection.shotId !== automaticPathShotId) {
       tools.selectPath({ shotId: automaticPathShotId, objectId: selectedId })
     }
-  }, [automaticPathShotId, editorMode, editorTool, selectedId, viewMode, viewportSource])
+  }, [automaticPathShotId, editorMode, editorTool, interactive, selectedId])
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
@@ -209,7 +212,7 @@ const StageScene: React.FC<StageSceneProps> = ({
             lookAtTarget={activeCameraTarget}
             interactionRef={cameraViewInteractionRef}
           />
-          {activeCamera.lookAt.mode === 'manual' && (
+          {interactive && activeCamera.lookAt.mode === 'manual' && (
             <StageCameraViewControls
               cameraObject={activeCamera}
               lookAtTarget={activeCameraTarget}

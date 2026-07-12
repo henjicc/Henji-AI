@@ -8,7 +8,7 @@ import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
 import { useCameraStageStore } from './store/cameraStageStore'
 
 /**
- * 运镜控制入口：管理"工程列表 ↔ 场景编辑器"两级视图。
+ * 3D 镜头参考入口：管理"工程列表 ↔ 场景编辑器"两级视图。
  * 列表页负责新建/打开/重命名/删除并把场景加载进 store，编辑器负责场景搭建与截图。
  */
 

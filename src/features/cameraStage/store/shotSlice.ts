@@ -10,12 +10,13 @@ import {
   type StageSpatialPath,
   type StageShotTransitionObjectDetail,
 } from '../domain/shotTypes'
-import type { StageObject } from '../domain/sceneTypes'
+import type { StageCameraLookAt, StageObject } from '../domain/sceneTypes'
 import { isCameraId } from '../domain/cameraUtils'
 import { createCameraPresetPath } from '../domain/spatialPath'
 import { markSpatialPathCustom } from '../domain/spatialPath'
 import { clampHold, clampTransition, isTimeInShotStaticSegment, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
 import type { CameraStageState } from './cameraStageStore'
+import { applyAnimationAtTime } from './playbackSampling'
 
 const logger = createLogger('features.cameraStage.simple')
 
@@ -50,6 +51,52 @@ function compile(shots: StageShot[], objects: StageObject[]): CameraStageState['
     trackCount: animation.tracks.length,
   })
   return animation
+}
+
+function compileAndAlignCurrentFrame(
+  state: CameraStageState,
+  shots: StageShot[],
+  objects: StageObject[] = state.objects,
+): Pick<CameraStageState, 'shots' | 'animation' | 'objects'> {
+  const animation = compile(shots, objects)
+  return {
+    shots,
+    animation,
+    objects: state.playback.playing
+      ? objects
+      : applyAnimationAtTime(objects, animation, state.playback.currentTime),
+  }
+}
+
+/**
+ * 注视目标是摄像机级全局设置，不属于时间轴关键帧。
+ * 简易模式仍在镜头卡快照里保留 lookAt 以兼容现有编译/序列化结构，因此修改时必须同步
+ * 所有既有镜头卡，避免切卡后回退到旧目标；整个过程不插入新的状态关键帧。
+ */
+export function syncCameraLookAtAcrossShots(
+  state: CameraStageState,
+  objects: StageObject[],
+  cameraId: string,
+  lookAt: StageCameraLookAt,
+): Pick<CameraStageState, 'shots' | 'animation' | 'objects'> {
+  const shots = state.shots.map((shot) => {
+    const cameraState = shot.objectStates[cameraId]
+    if (!cameraState) return shot
+    return {
+      ...shot,
+      objectStates: {
+        ...shot.objectStates,
+        [cameraId]: { ...cameraState, lookAt: structuredClone(lookAt) },
+      },
+    }
+  })
+  logger.debug('摄像机注视目标已同步到全部镜头卡', {
+    event: 'simple_mode.camera.look_at.synced',
+    cameraId,
+    shotCount: shots.length,
+    lookAtMode: lookAt.mode,
+  })
+  return compileAndAlignCurrentFrame(state, shots, objects)
 }
 
 export function applyShotToObjects(objects: StageObject[], shot: StageShot): StageObject[] {
@@ -349,13 +396,13 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
           cameraMoves: shot.transition.cameraMoves,
         },
       } : shot)
-      return { shots, animation: compile(shots, state.objects) }
+      return compileAndAlignCurrentFrame(state, shots)
     }),
     setShotSpatialPath: (shotId, objectId, path) => set((state) => {
       const shots = state.shots.map((shot) => (
         shot.id === shotId ? replaceSpatialPath(shot, objectId, path) : shot
       ))
-      return { shots, animation: compile(shots, state.objects) }
+      return compileAndAlignCurrentFrame(state, shots)
     }),
     applyCameraPathPreset: (shotId, objectId, preset: StageCameraMovePreset) => set((state) => {
       const index = state.shots.findIndex((shot) => shot.id === shotId)
@@ -387,7 +434,7 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
         preset: preset.kind,
         knotCount: generated.path.knots.length,
       })
-      return { shots, animation: compile(shots, state.objects) }
+      return compileAndAlignCurrentFrame(state, shots)
     }),
     setShotPathAnchor: (shotId, objectId, endpoint, position) => set((state) => {
       const index = state.shots.findIndex((shot) => shot.id === shotId)
@@ -414,7 +461,7 @@ export function createShotSlice(set: StoreApi<CameraStageState>['setState']): Sh
           },
         }
       })
-      return { shots, animation: compile(shots, state.objects) }
+      return compileAndAlignCurrentFrame(state, shots)
     }),
     /**
      * 修改某张镜头卡的拍摄机位（重要记录 005）。重编译是必须的：机位变化可能触发或解除

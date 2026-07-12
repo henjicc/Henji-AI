@@ -110,6 +110,61 @@ export interface HenjiCameraStageProjectsApi {
   deleteProjectRecord(projectId: string): Promise<void>
 }
 
+export type HenjiCameraStageRenderResolutionPreset = '720p' | '1080p'
+
+export interface HenjiCameraStageRenderRequest {
+  requestId: string
+  nodeId: string
+  projectId: string
+  resolutionPreset: HenjiCameraStageRenderResolutionPreset
+}
+
+export interface HenjiCameraStageRenderResult {
+  mediaUrl: string
+  mediaPath: string
+  savedPath: string
+  durationSeconds: number
+  frameCount: number
+  width: number
+  height: number
+}
+
+export type HenjiCameraStageRenderEvent =
+  | {
+      type: 'progress'
+      requestId: string
+      nodeId: string
+      phase: 'preparing' | 'rendering' | 'encoding'
+      progress: number
+    }
+  | {
+      type: 'completed'
+      requestId: string
+      nodeId: string
+      result: HenjiCameraStageRenderResult
+    }
+  | {
+      type: 'failed'
+      requestId: string
+      nodeId: string
+      message: string
+    }
+  | {
+      type: 'cancelled'
+      requestId: string
+      nodeId: string
+    }
+
+export interface HenjiCameraStageRenderApi {
+  start(request: HenjiCameraStageRenderRequest): Promise<{ accepted: true }>
+  cancel(requestId: string): Promise<void>
+  onEvent(handler: (event: HenjiCameraStageRenderEvent) => void): () => void
+  workerReady(): Promise<void>
+  onWorkerJob(handler: (request: HenjiCameraStageRenderRequest) => void): () => void
+  onWorkerCancel(handler: (requestId: string) => void): () => void
+  reportWorkerEvent(event: HenjiCameraStageRenderEvent): Promise<void>
+}
+
 export interface HenjiCustomModelRecord {
   id: string
   name: string
@@ -539,7 +594,7 @@ export interface HenjiMediaApi {
   /** 直接拿渲染层 File 对象对应的本地文件系统路径（webUtils.getPathForFile），
    *  文件不是来自真实磁盘文件（如剪贴板生成的合成 Blob）时返回空字符串。 */
   getPathForFile(file: File): string
-  /** 解析 resources/ 下随应用分发的内置只读资源（如运镜控制角色 GLB）的绝对路径，
+  /** 解析 resources/ 下随应用分发的内置只读资源（如3D 镜头参考角色 GLB）的绝对路径，
    *  并把所在根目录注册进 henji-media:// 白名单；文件不存在或越界时返回 null。 */
   getBundledResourcePath(relativePath: string): Promise<string | null>
 }
@@ -702,6 +757,7 @@ export interface HenjiNativeApi {
   canvasProjects: HenjiCanvasProjectsApi
   storyboardProjects: HenjiStoryboardProjectsApi
   cameraStageProjects: HenjiCameraStageProjectsApi
+  cameraStageRender: HenjiCameraStageRenderApi
   customModels: HenjiCustomModelsApi
   keystore: HenjiKeystoreApi
   fs: HenjiFsApi

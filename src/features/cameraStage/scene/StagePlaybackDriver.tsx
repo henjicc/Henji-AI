@@ -1,10 +1,6 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { listAnimatableGroups } from '../domain/animatableProps'
-import { sampleTrack } from '../domain/keyframeEngine'
-import type { StageTrack } from '../domain/animationTypes'
-import type { StageVec3 } from '../domain/sceneTypes'
-import { runPlaybackAppliers } from '../store/playbackAppliers'
+import { applyAnimationToPlaybackAppliers } from '../store/playbackAppliers'
 import { useCameraStageStore } from '../store/cameraStageStore'
 
 /**
@@ -52,38 +48,7 @@ const StagePlaybackDriver: React.FC = () => {
     }
     timeRef.current = t
 
-    // 轨道按 objectId::path 建索引，再按「分组」聚合分量采样后调用组级 applier。
-    // 摄像机位置即使没有轨道也逐帧下发，以驱动只依赖 time 的程序化效果器。
-    const trackByKey = new Map<string, StageTrack>()
-    for (const track of tracks) trackByKey.set(`${track.objectId}::${track.propertyPath}`, track)
-
-    for (const object of state.objects) {
-      for (const group of listAnimatableGroups(object)) {
-        if (group.valueType === 'vec3') {
-          const base = group.getBaseValue(object) as StageVec3
-          const out: StageVec3 = { ...base }
-          let hit = false
-          for (const child of group.children) {
-            const track = trackByKey.get(`${object.id}::${child.path}`)
-            if (!track || !child.axis) continue
-            const sampled = sampleTrack(track, t, 'scalar')
-            if (sampled === undefined) continue
-            out[child.axis] = sampled as number
-            hit = true
-          }
-          const drivesCameraEffectors = object.type === 'camera'
-            && group.groupPath === 'transform.position'
-            && object.effectors.some((effector) => effector.enabled)
-          if (hit || drivesCameraEffectors) runPlaybackAppliers(object.id, group.groupPath, out, t)
-        } else {
-          const child = group.children[0]
-          const track = trackByKey.get(`${object.id}::${child.path}`)
-          if (!track) continue
-          const sampled = sampleTrack(track, t, group.valueType)
-          if (sampled !== undefined) runPlaybackAppliers(object.id, group.groupPath, sampled, t)
-        }
-      }
-    }
+    applyAnimationToPlaybackAppliers(state.objects, tracks, t)
 
     if (reachedEnd || t - lastPushRef.current >= PLAYHEAD_PUSH_INTERVAL) {
       lastPushRef.current = t

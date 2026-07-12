@@ -1,5 +1,5 @@
 /**
- * 运镜控制关键帧插值引擎离线验证（node 直跑）。
+ * 3D 镜头参考关键帧插值引擎离线验证（node 直跑）。
  *
  * 用 esbuild 把纯逻辑内核（keyframeEngine + animationActions，无 React/three 依赖）打包成
  * 临时 ESM 后动态载入，覆盖：cubic-bezier 与独立参考实现对照、采样边界规则、乱序插入排序、

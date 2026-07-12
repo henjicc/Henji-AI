@@ -3,7 +3,7 @@ import path from 'node:path'
 import { allowMediaRoot } from '../../protocol'
 
 /**
- * 内置只读资源解析：把 resources/ 下随应用分发的资源（如运镜控制的角色 GLB）
+ * 内置只读资源解析：把 resources/ 下随应用分发的资源（如3D 镜头参考的角色 GLB）
  * 解析为绝对路径，并把所在根目录注册进 henji-media:// 协议白名单，
  * 让渲染层能用统一的媒体协议加载内置资源（开发态/打包态行为一致，见重要记录 006）。
  */

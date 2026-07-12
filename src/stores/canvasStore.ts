@@ -37,7 +37,11 @@ import {
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry';
 import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
-import { migrateGenerationNodeData, migrateLegacyTargetHandle } from '@/features/canvas/domain/nodeMigrations';
+import {
+  migrateGenerationNodeData,
+  migrateLegacyTargetHandle,
+  resetTransientNodeRuntimeState,
+} from '@/features/canvas/domain/nodeMigrations';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { canvasNodeFactory } from '@/features/canvas/application/canvasServices';
 import {
@@ -268,13 +272,11 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         mergedData.aspectRatio = DEFAULT_ASPECT_RATIO;
       }
 
-      // Generation tasks do not survive app reload, reset transient generating state.
-      if ('isGenerating' in mergedData && mergedData.isGenerating) {
-        mergedData.isGenerating = false;
-        if ('generationStartedAt' in mergedData) {
-          mergedData.generationStartedAt = null;
-        }
-      }
+      // 后台任务不会跨应用重启恢复，统一清理节点内持久化的瞬时运行态。
+      resetTransientNodeRuntimeState(
+        node.type as CanvasNodeType,
+        mergedData as DynamicValueMap
+      );
 
       return {
         ...node,

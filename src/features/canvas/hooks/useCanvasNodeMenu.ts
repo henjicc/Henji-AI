@@ -323,7 +323,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
           targetHandle &&
           (isParamPortId(targetHandle)
             ? canSourceTypeConnectToTargetHandle(sourceNode.type, targetNode, targetHandle)
-            : isConnectionCompatible(sourceNode.type, targetNode.type))
+            : isConnectionCompatible(sourceNode.type, targetNode.type, pendingConnectStart.handleId))
         )
         if (compatible && sourceNode && targetNode && targetHandle) {
           // 从目标端口起拖：直接沿用起拖时的具体 handle id（精确到行）；

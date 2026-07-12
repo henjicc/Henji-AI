@@ -45,16 +45,17 @@ export interface ParamConnectionValidationResult {
  * 与 graphMediaResolver 对称：媒体走整节点端口，标量值走 `param:<id>` 参数端口。
  * 无节点类型特判——上游值由各节点 getValueOutput 声明。
  */
-function getDeclaredSourceMediaKind(sourceNode: CanvasNode): RowMediaKind | null {
-  const emits = getCanvasNodeDefinition(sourceNode.type)?.ports?.source?.emits;
+function getDeclaredSourceMediaKind(sourceNode: CanvasNode, sourceHandle?: string | null): RowMediaKind | null {
+  const source = getCanvasNodeDefinition(sourceNode.type)?.ports?.source;
+  const emits = source?.handles?.[sourceHandle ?? 'source'] ?? source?.emits;
   return emits === 'image' || emits === 'video' || emits === 'audio' ? emits : null;
 }
 
-function sourceEmitsMediaKind(sourceNode: CanvasNode, mediaKind: RowMediaKind): boolean {
-  if (getDeclaredSourceMediaKind(sourceNode) === mediaKind) {
+function sourceEmitsMediaKind(sourceNode: CanvasNode, mediaKind: RowMediaKind, sourceHandle?: string | null): boolean {
+  if (getDeclaredSourceMediaKind(sourceNode, sourceHandle) === mediaKind) {
     return true;
   }
-  return getNodeMediaOutputs(sourceNode.type, sourceNode.data)
+  return getNodeMediaOutputs(sourceNode.type, sourceNode.data, sourceHandle ?? undefined)
     .some((output) => output.kind === mediaKind);
 }
 
@@ -135,7 +136,8 @@ export function collectInputValues(
 export function isParamConnectionCompatible(
   sourceNode: CanvasNode,
   targetNode: CanvasNode,
-  targetHandle: string | null | undefined
+  targetHandle: string | null | undefined,
+  sourceHandle?: string | null,
 ): boolean {
   const paramId = parseParamPortId(targetHandle);
   if (!paramId) {
@@ -144,7 +146,7 @@ export function isParamConnectionCompatible(
 
   const mediaKind = mediaParamIdToKind(paramId);
   if (mediaKind) {
-    return sourceEmitsMediaKind(sourceNode, mediaKind);
+    return sourceEmitsMediaKind(sourceNode, mediaKind, sourceHandle);
   }
 
   if (paramId === MODEL_PARAM_ID) {
@@ -283,7 +285,7 @@ function countMediaConnections(
     }
 
     const edgeSourceNode = nodeById.get(edge.source);
-    if (edgeSourceNode && sourceEmitsMediaKind(edgeSourceNode, mediaKind)) {
+    if (edgeSourceNode && sourceEmitsMediaKind(edgeSourceNode, mediaKind, edge.sourceHandle)) {
       count += 1;
     }
   }
@@ -296,9 +298,10 @@ export function validateParamConnection(
   targetNode: CanvasNode,
   targetHandle: string | null | undefined,
   nodes: CanvasNode[],
-  edges: CanvasEdge[]
+  edges: CanvasEdge[],
+  sourceHandle?: string | null,
 ): ParamConnectionValidationResult {
-  if (!isParamConnectionCompatible(sourceNode, targetNode, targetHandle)) {
+  if (!isParamConnectionCompatible(sourceNode, targetNode, targetHandle, sourceHandle)) {
     return { compatible: false, reason: 'type-mismatch' };
   }
 
