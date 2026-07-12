@@ -9,7 +9,7 @@ import {
 const logger = createLogger('features.canvas.generation.videoPoster');
 
 const POSTER_MAX_DIMENSION = 512;
-const POSTER_CAPTURE_TIME_SEC = 0.1;
+const POSTER_CAPTURE_TIME_SEC = 0;
 const POSTER_TIMEOUT_MS = 15_000;
 
 export interface VideoPosterInfo {
@@ -157,11 +157,13 @@ async function captureVideoPosterFallback(videoSource: string): Promise<VideoPos
 
       video.onloadedmetadata = () => {
         try {
-          video.currentTime = Math.min(POSTER_CAPTURE_TIME_SEC, Math.max(0, video.duration - 0.01));
+          video.currentTime = 0;
         } catch {
           settle(null);
         }
       };
+      // currentTime 已经是 0 时浏览器不一定触发 seeked，loadeddata 才是首帧可绘制的稳定信号。
+      video.onloadeddata = () => settle(drawPosterDataUrl(video));
       video.onseeked = () => settle(drawPosterDataUrl(video));
       video.onerror = () => settle(null);
       video.src = displayUrl;

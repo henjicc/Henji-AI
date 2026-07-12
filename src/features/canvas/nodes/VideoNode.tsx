@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { Play, Upload, Video } from 'lucide-react';
+import { Upload, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -26,11 +26,11 @@ import {
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
-import { formatDuration } from '@/utils/mediaDimensions';
 import { saveUploadVideo } from '@/utils/save';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
+import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
 
 type VideoNodeProps = NodeProps & {
   id: string;
@@ -59,7 +59,6 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   );
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadSequenceRef = useRef(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.videoUpload;
@@ -86,19 +85,9 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     [data, type]
   );
 
-  const posterSource = useMemo(
-    () => (data.previewImageUrl ? resolveImageDisplayUrl(data.previewImageUrl) : null),
-    [data.previewImageUrl]
-  );
   const videoSource = useMemo(
     () => (data.videoUrl ? resolveImageDisplayUrl(data.videoUrl) : null),
     [data.videoUrl]
-  );
-  const durationLabel = useMemo(
-    () => (typeof data.durationSec === 'number' && data.durationSec > 0
-      ? formatDuration(data.durationSec)
-      : null),
-    [data.durationSec]
   );
 
   const processFile = useCallback(async (file: File) => {
@@ -131,7 +120,6 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       durationSec: poster.durationSec,
       sourceFileName: file.name,
     });
-    setIsPlaying(false);
   }, [id, updateNodeData]);
 
   const handleFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -179,54 +167,12 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       />
 
       <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
-        {videoSource && isPlaying ? (
-          <video
-            className="nodrag nowheel h-full w-full object-contain"
+        {videoSource ? (
+          <CanvasVideoPlayer
             src={videoSource}
-            poster={posterSource ?? undefined}
-            controls
-            autoPlay
-            preload="none"
-            onMouseDown={(event) => event.stopPropagation()}
-            onEnded={() => setIsPlaying(false)}
+            knownDuration={data.durationSec}
+            onOpenViewer={() => setIsViewerOpen(true)}
           />
-        ) : data.videoUrl ? (
-          <>
-            {posterSource ? (
-              <img
-                src={posterSource}
-                alt={resolvedTitle}
-                className="h-full w-full object-contain"
-                draggable={false}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-text-muted/85">
-                <Video className="h-7 w-7 opacity-60" />
-              </div>
-            )}
-            <div
-              className="absolute inset-0 flex cursor-pointer items-center justify-center"
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedNode(id);
-                setIsPlaying(true);
-              }}
-              onDoubleClick={(event) => {
-                event.stopPropagation();
-                setIsPlaying(false);
-                setIsViewerOpen(true);
-              }}
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-bg-dark/70 text-text-dark transition-transform duration-150 group-hover:scale-105">
-                <Play className="ml-0.5 h-5 w-5" />
-              </span>
-            </div>
-            {durationLabel && (
-              <span className="absolute bottom-1.5 right-1.5 rounded bg-bg-dark/75 px-1.5 py-0.5 text-[10px] leading-none text-text-dark">
-                {durationLabel}
-              </span>
-            )}
-          </>
         ) : isUploadVariant ? (
           <label
             className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85"

@@ -97,7 +97,9 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
         })
       : addNode(CANVAS_NODE_TYPES.exportVideo, position, {
           videoUrl: mediaUrl,
-          previewImageUrl: currentData.previewImageUrl ?? null,
+          // 3D 节点上的 previewImageUrl 是用户手动保存的静态画面，可能来自任意时间点，
+          // 不能作为新视频的 poster；视频节点会直接解码并展示自己的第 0 帧。
+          previewImageUrl: null,
           aspectRatio: currentData.aspectRatio,
           durationSec: currentData.durationSec,
           displayName: t('node.cameraStage.videoResultTitle'),

@@ -200,7 +200,7 @@ export async function generateVideoThumbnail(
   let seekTime = timeOffsetSeconds
   try {
     const info = await readVideoInfo(source)
-    seekTime = Math.min(Math.max(0.1, timeOffsetSeconds), Math.max(0.1, info.durationSeconds - 0.1))
+    seekTime = Math.min(Math.max(0, timeOffsetSeconds), Math.max(0, info.durationSeconds - 0.1))
   } catch {
     // use default seek time if info cannot be read
   }
