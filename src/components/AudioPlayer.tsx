@@ -15,6 +15,8 @@ interface AudioPlayerProps {
   waveformWidth?: number
   waveformHeight?: number
   rightActions?: React.ReactNode
+  autoPlay?: boolean
+  active?: boolean
 }
 
 const AudioPlayer: React.FC<AudioPlayerProps> = ({
@@ -26,6 +28,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   waveformWidth,
   waveformHeight,
   rightActions,
+  autoPlay = false,
+  active = true,
 }) => {
   const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -65,12 +69,22 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
     a.addEventListener('loadedmetadata', onLoaded)
     a.addEventListener('timeupdate', onTime)
     a.addEventListener('ended', onEnd)
+    if (autoPlay) {
+      void a.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
+    }
     return () => {
       a.removeEventListener('loadedmetadata', onLoaded)
       a.removeEventListener('timeupdate', onTime)
       a.removeEventListener('ended', onEnd)
     }
-  }, [src])
+  }, [autoPlay, src])
+
+  useEffect(() => {
+    if (active) return
+    const audio = audioRef.current
+    audio?.pause()
+    setIsPlaying(false)
+  }, [active])
 
   const rafRef = useRef<number | null>(null)
   useEffect(() => {

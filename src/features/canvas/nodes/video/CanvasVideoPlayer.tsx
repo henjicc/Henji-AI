@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 
 import { UiIconButton, UiRangeInput } from '@/components/ui';
@@ -23,21 +23,19 @@ export function CanvasVideoPlayer({
   knownDuration,
   onOpenViewer,
 }: CanvasVideoPlayerProps): JSX.Element {
+  const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const clickTimerRef = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(knownDuration ?? 0);
   const [muted, setMuted] = useState(false);
   const [hasAudio, setHasAudio] = useState<boolean | null>(null);
+  const [compactControls, setCompactControls] = useState(false);
 
   useEffect(() => {
     setPlaying(false);
     setCurrentTime(0);
     setDuration(knownDuration ?? 0);
-    return () => {
-      if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
-    };
   }, [knownDuration, src]);
 
   useEffect(() => {
@@ -53,6 +51,22 @@ export function CanvasVideoPlayer({
     );
     return () => { cancelled = true; };
   }, [src]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return undefined;
+
+    const updateControlsDensity = (width: number): void => {
+      setCompactControls(width < 220);
+    };
+    updateControlsDensity(player.getBoundingClientRect().width);
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) updateControlsDensity(entry.contentRect.width);
+    });
+    observer.observe(player);
+    return () => observer.disconnect();
+  }, []);
 
   const togglePlayback = useCallback((): void => {
     const video = videoRef.current;
@@ -72,35 +86,22 @@ export function CanvasVideoPlayer({
     setCurrentTime(clamped);
   }, [duration]);
 
+  const progressPercent = duration > 0
+    ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
+    : 0;
+
   return (
     <div
-      className="nodrag nowheel group/player relative h-full w-full overflow-hidden bg-bg-dark"
-      onPointerDown={(event) => event.stopPropagation()}
+      ref={playerRef}
+      className="group/player relative h-full w-full overflow-hidden bg-bg-dark"
     >
       <video
         ref={videoRef}
         src={src}
-        className="h-full w-full cursor-pointer object-contain"
+        className="pointer-events-none h-full w-full select-none object-contain"
         preload="auto"
         playsInline
         draggable={false}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
-          clickTimerRef.current = window.setTimeout(() => {
-            clickTimerRef.current = null;
-            togglePlayback();
-          }, 180);
-        }}
-        onDoubleClick={(event) => {
-          event.stopPropagation();
-          if (clickTimerRef.current !== null) {
-            window.clearTimeout(clickTimerRef.current);
-            clickTimerRef.current = null;
-          }
-          event.currentTarget.pause();
-          onOpenViewer();
-        }}
         onLoadedMetadata={(event) => {
           const video = event.currentTarget;
           setDuration(Number.isFinite(video.duration) ? video.duration : (knownDuration ?? 0));
@@ -121,72 +122,89 @@ export function CanvasVideoPlayer({
 
       {!playing && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-bg-dark/75 text-text-dark shadow-lg">
+          <UiIconButton
+            aria-label="播放"
+            showBorder={false}
+            className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full !border-white/15 !bg-black/50 !text-white shadow-xl shadow-black/25 backdrop-blur-md hover:!bg-black/65"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              togglePlayback();
+            }}
+          >
             <Play className="ml-0.5 h-5 w-5" />
-          </span>
+          </UiIconButton>
         </div>
       )}
 
       <div
-        className={`absolute inset-x-0 bottom-1 flex h-7 items-center gap-1 px-1.5 transition-opacity duration-150 ${
+        className={`nodrag nowheel absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-9 transition-opacity duration-150 ${
           playing ? 'opacity-0 group-hover/player:opacity-100' : 'opacity-100'
         }`}
+        onPointerDown={(event) => event.stopPropagation()}
       >
-        <UiIconButton
-          className="!h-7 !w-7 shrink-0 !p-0 text-text-dark drop-shadow-sm"
-          showBorder={false}
-          appearance="hover-only"
-          aria-label={playing ? '暂停' : '播放'}
-          onClick={(event) => {
-            event.stopPropagation();
-            togglePlayback();
-          }}
-        >
-          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </UiIconButton>
-        <UiRangeInput
-          min={0}
-          max={Math.max(duration, 0.01)}
-          step={0.01}
-          value={Math.min(currentTime, Math.max(duration, 0.01))}
-          aria-label="视频进度"
-          className="min-w-0 flex-1"
-          onChange={(event) => seekTo(Number(event.target.value))}
-          onClick={(event) => event.stopPropagation()}
-        />
-        <span className="shrink-0 text-[10px] leading-none tabular-nums text-text-dark drop-shadow-sm">
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </span>
-        {hasAudio !== false && (
-          <UiIconButton
-            className="!h-7 !w-7 shrink-0 !p-0 text-text-dark drop-shadow-sm"
-            showBorder={false}
-            appearance="hover-only"
-            aria-label={muted ? '取消静音' : '静音'}
-            onClick={(event) => {
-              event.stopPropagation();
-              const video = videoRef.current;
-              if (!video) return;
-              video.muted = !video.muted;
-              setMuted(video.muted);
-            }}
-          >
-            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </UiIconButton>
-        )}
-        <UiIconButton
-          className="!h-7 !w-7 shrink-0 !p-0 text-text-dark drop-shadow-sm"
-          showBorder={false}
-          appearance="hover-only"
-          aria-label="打开大播放器"
-          onClick={(event) => {
-            event.stopPropagation();
-            videoRef.current?.pause();
-            onOpenViewer();
-          }}
-        >
-          <Maximize2 className="h-3 w-3" strokeWidth={1.75} />
-        </UiIconButton>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent" />
+        <div className="relative flex flex-col gap-0.5">
+          <UiRangeInput
+            min={0}
+            max={Math.max(duration, 0.01)}
+            step={0.01}
+            value={Math.min(currentTime, Math.max(duration, 0.01))}
+            aria-label="视频进度"
+            className="canvas-video-progress h-2.5 min-w-0"
+            style={{ '--video-progress': `${progressPercent}%` } as CSSProperties}
+            onChange={(event) => seekTo(Number(event.target.value))}
+            onClick={(event) => event.stopPropagation()}
+          />
+          <div className="flex h-6 min-w-0 items-center gap-1">
+            <UiIconButton
+              className="!h-6 !w-6 shrink-0 !p-0 !text-white/90 hover:!border-white/10 hover:!bg-white/10 hover:!text-white"
+              showBorder={false}
+              appearance="hover-only"
+              aria-label={playing ? '暂停' : '播放'}
+              onClick={(event) => {
+                event.stopPropagation();
+                togglePlayback();
+              }}
+            >
+              {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            </UiIconButton>
+            <span className="shrink-0 whitespace-nowrap text-[10px] leading-none tabular-nums text-white/90">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+            <span className="min-w-0 flex-1" />
+            {!compactControls && hasAudio !== false && (
+              <UiIconButton
+                className="!h-6 !w-6 shrink-0 !p-0 !text-white/90 hover:!border-white/10 hover:!bg-white/10 hover:!text-white"
+                showBorder={false}
+                appearance="hover-only"
+                aria-label={muted ? '取消静音' : '静音'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const video = videoRef.current;
+                  if (!video) return;
+                  video.muted = !video.muted;
+                  setMuted(video.muted);
+                }}
+              >
+                {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+              </UiIconButton>
+            )}
+            <UiIconButton
+              className="!h-6 !w-6 shrink-0 !p-0 !text-white/90 hover:!border-white/10 hover:!bg-white/10 hover:!text-white"
+              showBorder={false}
+              appearance="hover-only"
+              aria-label="打开大播放器"
+              onClick={(event) => {
+                event.stopPropagation();
+                videoRef.current?.pause();
+                onOpenViewer();
+              }}
+            >
+              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </UiIconButton>
+          </div>
+        </div>
       </div>
     </div>
   );

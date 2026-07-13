@@ -4,6 +4,7 @@ import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
 import CanvasSection from '../sections/CanvasSection'
 import ThemeSection from '../sections/ThemeSection'
+import AssetLibrarySection from '../sections/AssetLibrarySection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
 
@@ -113,6 +114,7 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
           />
         </section>
       )}
+      {currentSectionId === 'interface-assets' && <section><AssetLibrarySection /></section>}
     </div>
   )
 }

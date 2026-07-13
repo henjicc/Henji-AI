@@ -309,6 +309,8 @@ const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
     videoExporting: false,
     videoRenderPhase: null,
     videoRenderRequestId: null,
+    assetCollectionEnabled: false,
+    assetCollectionLibraryId: null,
     videoRenderError: null,
     outputKind: 'image',
   }),

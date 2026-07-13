@@ -171,7 +171,8 @@
       "uploadHint": "点击或拖拽上传音频",
       "waitingResult": "等待输出结果音频",
       "play": "播放",
-      "pause": "暂停"
+      "pause": "暂停",
+      "openViewer": "打开音频预览"
     },
     "cameraStage": {
       "previewAlt": "当前帧预览",

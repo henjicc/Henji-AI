@@ -240,7 +240,18 @@
   "tabs": {
     "generation": "Generation",
     "canvas": "Canvas",
-    "tools": "Toolbox"
+    "tools": "Toolbox",
+    "assets": "Assets"
+  },
+  "assetLibrary": {
+      "collect": "Add to asset library", "assetShort": "Asset", "collected": "Added", "collectSuccess": "Added to asset library", "alreadyCollected": "This asset is already in the library", "collectFailed": "Failed to add",
+    "all": "All assets", "allTypes": "All types", "image": "Images", "video": "Videos", "audio": "Audio",
+    "search": "Search assets", "newest": "Newest", "recent": "Recently used", "manage": "Full manager",
+    "categories": "Asset libraries", "createLibrary": "New asset library", "libraryName": "Asset library name", "confirmDeleteLibrary": "Click again to confirm deletion", "empty": "Your asset library is empty", "noResults": "No matching assets",
+    "error": "Failed to load assets", "restartRequired": "The asset library backend is not loaded. Restart the Electron development process and retry.", "retry": "Retry", "count": "{{count}} items", "loadedCount": "Loaded {{loaded}} of {{count}}", "loadingMore": "Loading more", "scrollForMore": "Scroll to load more", "allLoaded": "All assets loaded", "back": "Back to workspace",
+    "thumbnailSize": "Thumbnail", "viewSettings": "View settings", "thumbnailFit": "Thumbnail fit", "fitCover": "Fill card", "fitContain": "Show all", "fitCoverHint": "Fills the card and crops edges outside the media ratio.", "fitContainHint": "Shows the complete media with background around unused space.",
+    "renameAsset": "Rename asset", "relocate": "Relocate file", "removeFromLibrary": "Remove from this library",
+    "addToLibrary": "Add to another library", "deleteAsset": "Delete from asset library", "allTags": "All tags", "tags": "Tags", "tagPlaceholder": "Search or enter a new tag", "membership": "Asset libraries", "searchLibraries": "Search libraries"
   },
   "windowControls": {
     "appName": "Henji AI",

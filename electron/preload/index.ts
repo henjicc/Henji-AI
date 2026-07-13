@@ -319,6 +319,7 @@ const assetLibraryApi: HenjiAssetLibraryApi = {
   deleteAsset: (id) => nativeInvoke('assetLibrary:deleteAsset', { id }),
   queryAssets: (input) => nativeInvoke('assetLibrary:queryAssets', input),
   touchAsset: (id) => nativeInvoke('assetLibrary:touchAsset', { id }),
+  checkPaths: (filePaths) => nativeInvoke('assetLibrary:checkPaths', { filePaths }),
   inspectAsset: (id) => nativeInvoke('assetLibrary:inspectAsset', { id }),
   inspectAssets: (ids) => nativeInvoke('assetLibrary:inspectAssets', { ids }),
   relocateAsset: (id, filePath) => nativeInvoke('assetLibrary:relocateAsset', { id, filePath }),
@@ -328,6 +329,9 @@ const assetLibraryApi: HenjiAssetLibraryApi = {
   deleteLibrary: (id) => nativeInvoke('assetLibrary:deleteLibrary', { id }),
   addToLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:addToLibrary', { libraryId, assetId }),
   removeFromLibrary: (libraryId, assetId) => nativeInvoke('assetLibrary:removeFromLibrary', { libraryId, assetId }),
+  listTags: () => nativeInvoke('assetLibrary:listTags'),
+  setAssetTags: (assetId, tags) => nativeInvoke('assetLibrary:setAssetTags', { assetId, tags }),
+  rebaseDataRoot: (oldRoot, newRoot) => nativeInvoke('assetLibrary:rebaseDataRoot', { oldRoot, newRoot }),
 }
 
 const cameraStageRenderApi: HenjiCameraStageRenderApi = {

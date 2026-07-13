@@ -19,6 +19,8 @@ const logger = createLogger('cameraStage.screenshot')
 export interface ScreenshotExportResult {
   /** henji-media:// 引用，供应用内预览 */
   mediaUrl: string
+  /** 应用媒体目录中的稳定实际路径，供资产库登记。 */
+  mediaPath: string
   /** 本地实际文件路径 */
   savedPath: string
   /** 保存路径来源 */
@@ -27,12 +29,13 @@ export interface ScreenshotExportResult {
 
 export interface CameraStageFrameResult {
   mediaUrl: string
+  mediaPath: string
 }
 
 /** 仅持久化为应用媒体，供画布节点消费；不会触发系统保存对话框。 */
 export async function persistSceneScreenshot(dataUrl: string): Promise<CameraStageFrameResult> {
   const persistedPath = await persistImageSource(dataUrl)
-  return { mediaUrl: toDisplaySrc(persistedPath) }
+  return { mediaUrl: toDisplaySrc(persistedPath), mediaPath: persistedPath }
 }
 
 function buildFileName(projectName: string): string {

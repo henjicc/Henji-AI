@@ -208,10 +208,23 @@ export function initializeSchema(conn: Database.Database): void {
       PRIMARY KEY (library_id, asset_id)
     );
 
+    CREATE TABLE IF NOT EXISTS asset_tags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS asset_tag_items (
+      tag_id TEXT NOT NULL REFERENCES asset_tags(id) ON DELETE CASCADE,
+      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      PRIMARY KEY (tag_id, asset_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_assets_media_type ON assets(media_type);
     CREATE INDEX IF NOT EXISTS idx_assets_updated_at ON assets(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_assets_last_used_at ON assets(last_used_at DESC);
     CREATE INDEX IF NOT EXISTS idx_asset_library_items_asset ON asset_library_items(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_asset_tag_items_asset ON asset_tag_items(asset_id);
   `)
 }
 

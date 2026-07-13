@@ -547,6 +547,7 @@ const GenerationWorkspace: React.FC = () => {
               onUsePrompt={handleUsePrompt}
               onOpenImageViewer={(url, list, filePaths) => openImageViewer(url, list, filePaths, false)}
               onOpenVideoViewer={openVideoViewer}
+              notify={notify}
             />
           </div>
         </div>

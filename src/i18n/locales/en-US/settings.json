@@ -226,6 +226,11 @@
       "collapseOnScrollLabel": "Collapse only on scroll",
       "collapseOnScrollHint": "Only collapse while scrolling history"
     },
+    "assetLibrary": {
+      "title": "Asset Library", "tabAction": "Title-bar click action", "floating": "Open floating panel", "workspace": "Open full workspace",
+      "panelPosition": "Floating panel position", "top": "Top", "left": "Left", "right": "Right",
+      "edgeTrigger": "Enable edge trigger", "edgeHint": "Suppressed during canvas interaction and pointer dragging", "triggerEdge": "Trigger edge", "delay": "Trigger delay ({{value}} ms)"
+    },
     "theme": {
       "title": "Theme Appearance",
       "description": "Customize the global style with curated color tokens and live preview.",

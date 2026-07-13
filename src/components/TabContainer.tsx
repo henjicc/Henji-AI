@@ -1,13 +1,15 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import type { WorkspaceId } from '@/core/types/workspace'
 
 // 懒加载工作区组件
 const GenerationWorkspace = lazy(() => import('../workspaces/GenerationWorkspace'))
 const CanvasWorkspace = lazy(() => import('../workspaces/CanvasWorkspace'))
 const ToolboxWorkspace = lazy(() => import('../workspaces/ToolboxWorkspace'))
+const AssetLibraryWorkspace = lazy(() => import('../workspaces/AssetLibraryWorkspace'))
 
 interface TabContainerProps {
-    activeTab: string
+    activeTab: WorkspaceId
 }
 
 // Loading 占位组件
@@ -27,7 +29,7 @@ const LoadingPlaceholder: React.FC = () => {
  * 每个工作区使用独立 Suspense 边界，避免某个 Tab 首次懒加载时影响已挂载的其他 Tab。
  */
 const TabContainer: React.FC<TabContainerProps> = ({ activeTab }) => {
-    const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([activeTab]))
+    const [visitedTabs, setVisitedTabs] = useState<Set<WorkspaceId>>(() => new Set([activeTab]))
 
     useEffect(() => {
         if (!visitedTabs.has(activeTab)) {
@@ -55,6 +57,13 @@ const TabContainer: React.FC<TabContainerProps> = ({ activeTab }) => {
                 <div className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
                         <ToolboxWorkspace />
+                    </Suspense>
+                </div>
+            )}
+            {visitedTabs.has('assets') && (
+                <div className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                        <AssetLibraryWorkspace />
                     </Suspense>
                 </div>
             )}

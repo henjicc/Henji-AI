@@ -233,6 +233,8 @@ export interface CameraStageNodeData extends NodeDisplayData {
   videoRenderPhase?: 'preparing' | 'rendering' | 'encoding' | null;
   videoRenderRequestId?: string | null;
   videoRenderError?: string | null;
+  assetCollectionEnabled?: boolean;
+  assetCollectionLibraryId?: string | null;
   /** 场景时间轴决定的唯一可用输出类型；旧节点缺省按静态图片处理。 */
   outputKind?: 'image' | 'video';
 }

@@ -25,6 +25,7 @@ import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
+import { readAssetDragPayload } from '@/features/assets/drag/assetDragPayload';
 
 interface MediaInputRowProps {
   nodeId: string;
@@ -211,6 +212,22 @@ export function MediaInputRow({
         isConnected ? '' : NODE_ROW_HOVER_CLASS
       }`}
       style={isRowDragging ? { zIndex: 40 } : undefined}
+      onDragOver={(event) => {
+        const payload = readAssetDragPayload(event.dataTransfer);
+        if (!isConnected && payload?.type === mediaKind && canAddMore) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = 'copy';
+        }
+      }}
+      onDrop={(event) => {
+        const payload = readAssetDragPayload(event.dataTransfer);
+        if (!isConnected && payload?.type === mediaKind && canAddMore) {
+          event.preventDefault();
+          event.stopPropagation();
+          onInlineChange([...inlineValue, payload.filePath]);
+        }
+      }}
     >
       <Handle
         type="target"

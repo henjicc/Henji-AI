@@ -44,10 +44,12 @@ import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialog } from './ui/NodeToolDialog';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
+import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
 
 interface CanvasToastState {
   message: string;
   id: number;
+  type: 'success' | 'error';
 }
 
 // 静态配置项提升到模块作用域：避免每次 Canvas 渲染都重建新引用传给 <ReactFlow>，
@@ -66,7 +68,11 @@ function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
     <div className="pointer-events-none absolute left-1/2 top-4 z-[12000] -translate-x-1/2">
       <div
         key={toast.id}
-        className="rounded-lg border border-red-400/30 bg-red-500/15 px-4 py-2 text-sm font-medium text-red-100 shadow-2xl backdrop-blur-md"
+        className={`rounded-lg border px-4 py-2 text-sm font-medium shadow-2xl backdrop-blur-md ${
+          toast.type === 'success'
+            ? 'border-green-500/30 bg-green-500/20 text-green-100'
+            : 'border-red-400/30 bg-red-500/15 text-red-100'
+        }`}
       >
         {toast.message}
       </div>
@@ -145,11 +151,11 @@ export function Canvas() {
     [persistCanvasSnapshot]
   );
 
-  const showConnectionToast = useCallback((message: string) => {
+  const showConnectionToast = useCallback((message: string, type: CanvasToastState['type'] = 'error') => {
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
     }
-    setConnectionToast({ message, id: Date.now() });
+    setConnectionToast({ message, id: Date.now(), type });
     toastTimerRef.current = setTimeout(() => {
       setConnectionToast(null);
       toastTimerRef.current = null;
@@ -164,6 +170,9 @@ export function Canvas() {
   }, []);
 
   useEffect(() => {
+    const unsubscribeToast = canvasEventBus.subscribe('canvas/toast', ({ message, type }) => {
+      showConnectionToast(message, type);
+    });
     const unsubscribeOpen = canvasEventBus.subscribe('tool-dialog/open', (payload) => {
       openToolDialog(payload);
     });
@@ -172,10 +181,11 @@ export function Canvas() {
     });
 
     return () => {
+      unsubscribeToast();
       unsubscribeOpen();
       unsubscribeClose();
     };
-  }, [openToolDialog, closeToolDialog]);
+  }, [openToolDialog, closeToolDialog, showConnectionToast]);
 
   useEffect(() => {
     isRestoringCanvasRef.current = true;
@@ -425,9 +435,10 @@ export function Canvas() {
     scheduleCanvasPersist,
     setSelectedNode,
   });
+  const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
 
   return (
-    <div ref={wrapperRef} className="relative h-full w-full">
+    <div ref={wrapperRef} className="relative h-full w-full" onDragOver={assetDrop.onDragOver} onDrop={assetDrop.onDrop}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

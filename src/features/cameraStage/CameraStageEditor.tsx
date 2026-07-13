@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Clipboard, Film, Save, Undo2, X } from 'lucide-react'
-import { Dropdown, PanelTrigger, UiButton, UiIconButton } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiIconButton } from '@/components/ui'
+import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
+import {
+  collectCameraStageAsset,
+  readCameraStageAssetTarget,
+  resolveCameraStageAssetTarget,
+  writeCameraStageAssetTarget,
+  type CameraStageAssetTarget,
+} from '@/features/assets/services/cameraStageAssetCollection'
 import { cancelVideoFrameExport } from '@/commands/video'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from './domain/cameraUtils'
 import { KEYFRAME_TIME_EPSILON } from './domain/animationTypes'
@@ -47,6 +55,8 @@ interface CameraStageEditorProps {
     onVideo: (result: CameraStageVideoExportResult) => void
     onProgress: (progress: number | null) => void
     onOutputKindChange: (kind: 'image' | 'video') => void
+    assetTarget?: CameraStageAssetTarget
+    onAssetTargetChange?: (target: CameraStageAssetTarget) => void
   }
 }
 
@@ -96,11 +106,17 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const [shotAction, setShotAction] = useState<'save' | 'copy' | null>(null)
   const [videoPreset, setVideoPreset] = useState<CameraStageVideoResolutionPreset>('720p')
   const [videoProgress, setVideoProgress] = useState<CameraStageVideoExportProgress | null>(null)
+  const [assetTarget, setAssetTarget] = useState<CameraStageAssetTarget>(
+    embeddedOutput?.assetTarget ?? readCameraStageAssetTarget(),
+  )
+  const [assetLibraries, setAssetLibraries] = useState<AssetLibraryRecord[]>([])
   const captureRef = useRef<StageCaptureFn | null>(null)
   const dockRef = useRef<CameraStageDockHandle>(null)
   const videoSessionRef = useRef<string | null>(null)
   const videoCancelRef = useRef(false)
   const handledAutoExportRequestRef = useRef(0)
+  const embeddedOutputRef = useRef(embeddedOutput)
+  embeddedOutputRef.current = embeddedOutput
 
   const outputKind = hasMultipleTimelineKeyframes(editorMode, shotCount, animation)
     ? 'video'
@@ -114,6 +130,25 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   useEffect(() => {
     embeddedOutput?.onOutputKindChange(outputKind)
   }, [embeddedOutput, outputKind])
+
+  useEffect(() => {
+    let cancelled = false
+    const initialOutput = embeddedOutputRef.current
+    void resolveCameraStageAssetTarget(initialOutput?.assetTarget ?? readCameraStageAssetTarget())
+      .then(({ target, libraries }) => {
+        if (cancelled) return
+        setAssetTarget(target)
+        setAssetLibraries(libraries)
+        initialOutput?.onAssetTargetChange?.(target)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const updateAssetTarget = useCallback((next: CameraStageAssetTarget): void => {
+    setAssetTarget(next)
+    writeCameraStageAssetTarget(next)
+    embeddedOutputRef.current?.onAssetTargetChange?.(next)
+  }, [])
 
   const prepareScreenshotDataUrl = useCallback(async (): Promise<string | null> => {
     const dataUrl = captureRef.current?.()
@@ -138,15 +173,22 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         useCameraStageStore.getState().currentProjectName,
       )
       if (!result) return
+      const collected = await collectCameraStageAsset({
+        filePath: result.mediaPath,
+        mediaType: 'image',
+        displayName: `${useCameraStageStore.getState().currentProjectName}-当前帧`,
+        target: assetTarget,
+      })
       const { savedPath, saveMode } = result
       const fileName = savedPath.split(/[\\/]/).pop() ?? savedPath
-      setShotHint(saveMode === 'quick' ? `已快速保存：${fileName}` : `已保存：${fileName}`)
+      const collectedHint = assetTarget.enabled ? (collected ? '，已加入资产库' : '，资产收录失败') : ''
+      setShotHint(`${saveMode === 'quick' ? '已快速保存' : '已保存'}：${fileName}${collectedHint}`)
     } catch {
       setShotHint('截图导出失败')
     } finally {
       setShotAction(null)
     }
-  }, [prepareScreenshotDataUrl])
+  }, [assetTarget, prepareScreenshotDataUrl])
 
   const handleUpdateCanvasFrame = useCallback(async (): Promise<void> => {
     if (!embeddedOutput) return
@@ -156,11 +198,17 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       if (!dataUrl || !activeCamera) return
       const result = await persistSceneScreenshot(dataUrl)
       embeddedOutput.onFrame({ mediaUrl: result.mediaUrl, selectedTimeSec: useCameraStageStore.getState().playback.currentTime, aspectRatio: activeCamera.aspectRatio.preset })
-      setShotHint('当前帧已更新到画布')
+      const collected = await collectCameraStageAsset({
+        filePath: result.mediaPath,
+        mediaType: 'image',
+        displayName: `${useCameraStageStore.getState().currentProjectName}-当前帧`,
+        target: assetTarget,
+      })
+      setShotHint(assetTarget.enabled && !collected ? '当前帧已更新到画布，资产收录失败' : '当前帧已更新到画布')
     } catch {
       setShotHint('当前帧更新失败')
     } finally { setShotAction(null) }
-  }, [activeCamera, embeddedOutput, prepareScreenshotDataUrl])
+  }, [activeCamera, assetTarget, embeddedOutput, prepareScreenshotDataUrl])
 
   const handleCopyScreenshot = useCallback(async (): Promise<void> => {
     setShotAction('copy')
@@ -244,8 +292,14 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         }
       } else {
         if (embeddedOutput) embeddedOutput.onVideo(result)
+        const collected = await collectCameraStageAsset({
+          filePath: result.mediaPath,
+          mediaType: 'video',
+          displayName: `${exportState.currentProjectName}-视频`,
+          target: assetTarget,
+        })
         const fileName = result.savedPath.split(/[\\/]/).pop() ?? result.savedPath
-        setShotHint(`视频已导出：${fileName}`)
+        setShotHint(assetTarget.enabled && !collected ? `视频已导出：${fileName}，资产收录失败` : `视频已导出：${fileName}`)
       }
     } catch {
       setShotHint('视频导出失败')
@@ -260,7 +314,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       setVideoProgress(null)
       embeddedOutput?.onProgress(null)
     }
-  }, [activeCamera, embeddedOutput, videoPreset, videoProgress])
+  }, [activeCamera, assetTarget, embeddedOutput, videoPreset, videoProgress])
 
   useEffect(() => {
     if (!autoExportVideoRequest
@@ -372,6 +426,51 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             {projectName}
           </span>
           <EditorModeBadge />
+          <PanelTrigger
+            panelWidth={208}
+            panelClassName="overflow-hidden p-2"
+            renderPanel={() => (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-xs text-text-secondary">
+                  <UiCheckbox
+                    checked={assetTarget.enabled}
+                    onCheckedChange={(enabled) => updateAssetTarget({ ...assetTarget, enabled })}
+                  />
+                  导出后加入资产库
+                </label>
+                <Dropdown<string>
+                  value={assetTarget.libraryId ?? '__uncategorized__'}
+                  display={assetLibraries.find((item) => item.id === assetTarget.libraryId)?.name ?? '未分类'}
+                  options={[
+                    { label: '未分类', value: '__uncategorized__' },
+                    ...assetLibraries.map((item) => ({ label: item.name, value: item.id })),
+                  ]}
+                  onSelect={(value) => updateAssetTarget({
+                    ...assetTarget,
+                    libraryId: value === '__uncategorized__' ? null : value,
+                  })}
+                  disabled={!assetTarget.enabled}
+                  className="w-full"
+                  buttonClassName="h-7 py-1.5 text-xs"
+                  buttonLabelClassName="text-xs"
+                  optionLabelClassName="text-xs"
+                  minWidthStrategy="none"
+                />
+              </div>
+            )}
+          >
+            {({ togglePanel }) => (
+              <UiButton
+                size="sm"
+                variant="ghost"
+                onClick={togglePanel}
+                className="py-1.5 text-xs"
+                data-panel-trigger-button
+              >
+                资产：{assetTarget.enabled ? '开启' : '关闭'}
+              </UiButton>
+            )}
+          </PanelTrigger>
           {embeddedOutput && outputKind === 'image' ? (
             <UiButton size="sm" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!shotAction} className="py-1.5 text-xs">
               <Camera size={13} className="mr-1" />{shotAction ? '处理中…' : '更新图片'}

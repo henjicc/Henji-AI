@@ -7,9 +7,10 @@ export interface AudioViewerModalProps {
   audioUrl: string
   filePath?: string
   onClose: () => void
+  autoPlay?: boolean
 }
 
-export function AudioViewerModal({ open, audioUrl, filePath, onClose }: AudioViewerModalProps): JSX.Element | null {
+export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay = false }: AudioViewerModalProps): JSX.Element | null {
   const [visible, setVisible] = useState(open)
   const [overlayOpacity, setOverlayOpacity] = useState(0)
   const [playerOpacity, setPlayerOpacity] = useState(0)
@@ -69,6 +70,15 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose }: AudioVie
   }, [visible])
 
   useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onClose])
+
+  useEffect(() => {
     return () => {
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current)
@@ -81,7 +91,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose }: AudioVie
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6 backdrop-blur-lg"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-6 backdrop-blur-lg"
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 500ms ease',
@@ -100,7 +110,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose }: AudioVie
           transition: 'opacity 500ms ease, transform 500ms ease',
         }}
       >
-        <AudioPlayer src={playbackUrl} filePath={filePath} compact className="!w-[44rem] !max-w-[92vw]" />
+        <AudioPlayer src={playbackUrl} filePath={filePath} autoPlay={autoPlay} active={open} compact className="!w-[44rem] !max-w-[92vw]" />
       </div>
     </div>
   )

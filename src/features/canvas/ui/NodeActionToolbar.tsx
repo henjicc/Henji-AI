@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
-import { Copy, Crop, Download, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
+import { Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
 import { saveDialog } from '@/platform/desktopApi';
 import { useTranslation } from 'react-i18next';
 
@@ -16,6 +16,8 @@ import {
   isStoryboardGenNode,
   isStoryboardSplitNode,
   isUploadNode,
+  isVideoMediaNode,
+  isAudioMediaNode,
   type CanvasNode,
   type NodeToolType,
 } from '@/features/canvas/domain/canvasNodes';
@@ -40,6 +42,9 @@ import {
   NODE_TOOLBAR_POSITION,
 } from './nodeToolbarConfig';
 import { NodeDownloadMenu } from './NodeDownloadMenu';
+import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
+import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
+import { checkAssetPaths } from '@/commands/assetLibrary';
 
 interface NodeActionToolbarProps {
   node: CanvasNode;
@@ -53,7 +58,7 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
 
 const TOOLBAR_BUTTON_RADIUS_CLASS = 'rounded-full';
 const TOOLBAR_NEUTRAL_BUTTON_CLASS =
-  '!border-transparent !bg-transparent text-text-muted hover:!border-border-dark hover:!bg-layer hover:!text-text-dark';
+  '!border-transparent !bg-transparent text-text-dark hover:!border-border-dark hover:!bg-layer hover:!text-text-dark';
 const TOOLBAR_ACCENT_BUTTON_CLASS =
   '!border-transparent !bg-transparent text-accent hover:!border-accent/45 hover:!bg-accent/15';
 const TOOLBAR_DANGER_BUTTON_CLASS =
@@ -79,6 +84,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const [isDownloadMenuVisible, setIsDownloadMenuVisible] = useState(false);
   const [isCopySuccess, setIsCopySuccess] = useState(false);
   const [isCopyTextSuccess, setIsCopyTextSuccess] = useState(false);
+  const { addMedia, collecting } = useAddToAssetLibrary();
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTextFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +96,48 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     return null;
   }, [node]);
   const canHandleImage = Boolean(imageSource);
+  const assetMedia = useMemo((): { filePath: string; mediaType: 'image' | 'video' | 'audio' } | null => {
+    const candidate = isCameraStage
+      ? ((node.data.outputKind ?? 'image') === 'video' ? node.data.videoUrl : node.data.imageUrl)
+      : isVideoMediaNode(node)
+        ? node.data.videoUrl
+        : isAudioMediaNode(node)
+          ? node.data.audioUrl
+          : imageSource;
+    const filePath = resolveLocalAssetPath(candidate);
+    if (!filePath) return null;
+    const mediaType = isCameraStage
+      ? ((node.data.outputKind ?? 'image') === 'video' ? 'video' : 'image')
+      : isVideoMediaNode(node) ? 'video' : isAudioMediaNode(node) ? 'audio' : 'image';
+    return { filePath, mediaType };
+  }, [imageSource, isCameraStage, node]);
+  const [assetCollected, setAssetCollected] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!assetMedia) { setAssetCollected(false); return; }
+    void checkAssetPaths([assetMedia.filePath]).then(([collected]) => {
+      if (!cancelled) setAssetCollected(Boolean(collected));
+    }).catch(() => { if (!cancelled) setAssetCollected(false); });
+    return () => { cancelled = true; };
+  }, [assetMedia]);
+
+  const handleCollectAsset = useCallback(async (): Promise<void> => {
+    if (!assetMedia || collecting) return;
+    try {
+      const asset = await addMedia({ ...assetMedia, source: 'canvas', displayName: node.data.displayName });
+      setAssetCollected(true);
+      canvasEventBus.publish('canvas/toast', {
+        message: t(asset.wasExisting ? 'ui:assetLibrary.alreadyCollected' : 'ui:assetLibrary.collectSuccess'),
+        type: 'success',
+      });
+    } catch (error) {
+      canvasEventBus.publish('canvas/toast', { message: t('ui:assetLibrary.collectFailed') });
+      logger.error('画布节点加入资产库失败', error, {
+        event: 'canvas.asset_collection.failed',
+        context: { nodeId: node.id, mediaType: assetMedia.mediaType },
+      });
+    }
+  }, [addMedia, assetMedia, collecting, node.data.displayName, node.id, t]);
 
   const closeDownloadMenu = useCallback(() => {
     setIsDownloadMenuVisible(false);
@@ -360,6 +408,20 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           >
             <Copy className="h-3.5 w-3.5" />
             {t('nodeToolbar.copy')}
+          </UiChipButton>
+        )}
+        {assetMedia && (
+          <UiChipButton
+            key="asset-collect"
+            disabled={collecting}
+            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} ${assetCollected ? '!text-emerald-400' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleCollectAsset();
+            }}
+          >
+            {assetCollected ? <FolderCheck className="h-3.5 w-3.5" /> : <FolderPlus className="h-3.5 w-3.5" />}
+            {t('ui:assetLibrary.assetShort')}
           </UiChipButton>
         )}
         {!isImageEdit && canCopyStoryboardText && (

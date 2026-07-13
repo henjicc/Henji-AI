@@ -240,7 +240,18 @@
   "tabs": {
     "generation": "生成",
     "canvas": "画布",
-    "tools": "工具箱"
+    "tools": "工具箱",
+    "assets": "资产"
+  },
+  "assetLibrary": {
+      "collect": "添加到资产库", "assetShort": "资产", "collected": "已添加", "collectSuccess": "已添加到资产库", "alreadyCollected": "该资产已在资产库中", "collectFailed": "添加失败",
+    "all": "全部资产", "allTypes": "全部类型", "image": "图片", "video": "视频", "audio": "音频",
+    "search": "搜索资产", "newest": "最新加入", "recent": "最近使用", "manage": "完整管理",
+    "categories": "资产库", "createLibrary": "新建资产库", "libraryName": "资产库名称", "confirmDeleteLibrary": "再次点击确认删除", "empty": "资产库还是空的", "noResults": "没有符合条件的资产",
+    "error": "资产加载失败", "restartRequired": "资产库后端尚未加载，请重启 Electron 开发进程后重试", "retry": "重试", "count": "共 {{count}} 项", "loadedCount": "已加载 {{loaded}} / {{count}} 项", "loadingMore": "正在加载更多", "scrollForMore": "继续滚动加载", "allLoaded": "已经到底了", "back": "返回原工作区",
+    "thumbnailSize": "缩略图", "viewSettings": "显示设置", "thumbnailFit": "缩略图显示方式", "fitCover": "填满卡片", "fitContain": "完整显示", "fitCoverHint": "填满卡片，超出比例的边缘会被裁切。", "fitContainHint": "完整显示媒体内容，空余区域保留背景。",
+    "renameAsset": "重命名资产", "relocate": "重新定位文件", "removeFromLibrary": "从当前库移除",
+    "addToLibrary": "加入其他库", "deleteAsset": "从资产库删除", "allTags": "全部标签", "tags": "标签", "tagPlaceholder": "搜索或输入新标签", "membership": "所属资产库", "searchLibraries": "搜索资产库"
   },
   "windowControls": {
     "appName": "痕迹AI",

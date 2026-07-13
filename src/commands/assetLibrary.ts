@@ -5,6 +5,7 @@ export function updateAsset(id: string, name: string): Promise<AssetRecord> { re
 export function deleteAsset(id: string): Promise<void> { return getPlatform().assetLibrary.deleteAsset(id) }
 export function queryAssets(input: AssetQueryInput = {}): Promise<AssetPage> { return getPlatform().assetLibrary.queryAssets(input) }
 export function touchAsset(id: string): Promise<void> { return getPlatform().assetLibrary.touchAsset(id) }
+export function checkAssetPaths(filePaths: string[]): Promise<boolean[]> { return getPlatform().assetLibrary.checkPaths(filePaths) }
 export function inspectAsset(id: string): Promise<AssetRecord> { return getPlatform().assetLibrary.inspectAsset(id) }
 export function inspectAssets(ids: string[]): Promise<AssetRecord[]> { return getPlatform().assetLibrary.inspectAssets(ids) }
 export function relocateAsset(id: string, filePath: string): Promise<AssetRecord> { return getPlatform().assetLibrary.relocateAsset(id, filePath) }
@@ -14,4 +15,6 @@ export function renameAssetLibrary(id: string, name: string): Promise<AssetLibra
 export function deleteAssetLibrary(id: string): Promise<void> { return getPlatform().assetLibrary.deleteLibrary(id) }
 export function addAssetToLibrary(libraryId: string, assetId: string): Promise<void> { return getPlatform().assetLibrary.addToLibrary(libraryId, assetId) }
 export function removeAssetFromLibrary(libraryId: string, assetId: string): Promise<void> { return getPlatform().assetLibrary.removeFromLibrary(libraryId, assetId) }
-
+export function listAssetTags(): Promise<string[]> { return getPlatform().assetLibrary.listTags() }
+export function setAssetTags(assetId: string, tags: string[]): Promise<AssetRecord> { return getPlatform().assetLibrary.setAssetTags(assetId, tags) }
+export function rebaseAssetDataRoot(oldRoot: string, newRoot: string): Promise<number> { return getPlatform().assetLibrary.rebaseDataRoot(oldRoot, newRoot) }

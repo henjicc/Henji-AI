@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AudioLines, Pause, Play, Upload } from 'lucide-react';
+import { AudioLines, Maximize2, Pause, Play, Upload, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -10,7 +10,7 @@ import {
 } from '@/features/canvas/domain/canvasNodes';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
-import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
+import { isNodeUsingDefaultDisplayName, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import {
   NODE_PORT_NODE_CLASS,
@@ -34,8 +34,8 @@ type AudioNodeProps = NodeProps & {
 
 const AUDIO_NODE_WIDTH = 280;
 const AUDIO_NODE_HEIGHT = 96;
-const AUDIO_WAVEFORM_WIDTH = 210;
-const AUDIO_WAVEFORM_HEIGHT = 28;
+const AUDIO_WAVEFORM_WIDTH = AUDIO_NODE_WIDTH - 24;
+const AUDIO_WAVEFORM_HEIGHT = 44;
 
 /** 音频节点：服务于结果音频与上传音频，卡片式展示 + 懒挂载播放 */
 export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => {
@@ -53,15 +53,20 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [mediaDuration, setMediaDuration] = useState(0);
+  const [muted, setMuted] = useState(false);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.audioUpload;
   const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
 
-  const resolvedTitle = useMemo(
-    () => resolveNodeDisplayName(type as CanvasNodeType, data),
-    [data, type]
-  );
+  const resolvedTitle = useMemo(() => {
+    const nodeType = type as CanvasNodeType;
+    const sourceFileName = typeof data.sourceFileName === 'string' ? data.sourceFileName.trim() : '';
+    if (isUploadVariant && sourceFileName && isNodeUsingDefaultDisplayName(nodeType, data)) {
+      return sourceFileName;
+    }
+    return resolveNodeDisplayName(nodeType, data);
+  }, [data, isUploadVariant, type]);
   const audioSource = useMemo(
     () => (data.audioUrl ? resolveImageDisplayUrl(data.audioUrl) : null),
     [data.audioUrl]
@@ -92,6 +97,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     setIsPlaying(false);
     setCurrentTime(0);
     setMediaDuration(0);
+    setMuted(false);
   }, [audioSource]);
 
   const ensureAudioElement = useCallback((): HTMLAudioElement | null => {
@@ -101,12 +107,13 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     if (!audioRef.current) {
       const element = new Audio(audioSource);
       element.preload = 'metadata';
+      element.muted = muted;
       element.addEventListener('loadedmetadata', () => setMediaDuration(element.duration || 0));
       element.addEventListener('ended', () => setIsPlaying(false));
       audioRef.current = element;
     }
     return audioRef.current;
-  }, [audioSource]);
+  }, [audioSource, muted]);
 
   // 播放中用 rAF 驱动进度，避免原生 timeupdate 事件频率过低（~4Hz）导致波形进度跳动
   useEffect(() => {
@@ -222,44 +229,73 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div className="relative flex h-full w-full items-center gap-2.5 overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3">
+      <div className="relative flex h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3 py-2">
         {data.audioUrl ? (
-          <>
-            <UiIconButton
-              aria-label={isPlaying ? t('node.audioNode.pause') : t('node.audioNode.play')}
-              onClick={(event) => {
-                event.stopPropagation();
-                togglePlay();
-              }}
-              className="nodrag h-9 w-9 shrink-0 rounded-full"
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
-            </UiIconButton>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="nodrag nowheel" style={{ height: AUDIO_WAVEFORM_HEIGHT }}>
-                {waveform ? (
-                  <Waveform
-                    samples={waveform}
-                    width={AUDIO_WAVEFORM_WIDTH}
-                    height={AUDIO_WAVEFORM_HEIGHT}
-                    progress={waveformProgress}
-                    duration={effectiveDuration}
-                    onSeekStart={seekToRatio}
-                    onSeekMove={seekToRatio}
-                    onSeekEnd={handleWaveformSeekEnd}
-                  />
-                ) : (
-                  <div className="h-full w-full rounded bg-layer/50" />
-                )}
-              </div>
-              <div className="flex items-center justify-between text-[10px] leading-none text-text-muted/75">
-                <span className="min-w-0 flex-1 truncate pr-2">{data.sourceFileName || resolvedTitle}</span>
-                <span className="shrink-0 tabular-nums">
-                  {formatDuration(currentTime)} / {durationLabel ?? formatDuration(effectiveDuration)}
-                </span>
-              </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="nodrag nowheel" style={{ height: AUDIO_WAVEFORM_HEIGHT }}>
+              {waveform ? (
+                <Waveform
+                  samples={waveform}
+                  width={AUDIO_WAVEFORM_WIDTH}
+                  height={AUDIO_WAVEFORM_HEIGHT}
+                  progress={waveformProgress}
+                  duration={effectiveDuration}
+                  onSeekStart={seekToRatio}
+                  onSeekMove={seekToRatio}
+                  onSeekEnd={handleWaveformSeekEnd}
+                />
+              ) : (
+                <div className="h-full w-full rounded bg-layer/50" />
+              )}
             </div>
-          </>
+            <div className="flex h-7 min-w-0 items-center gap-1">
+              <UiIconButton
+                aria-label={isPlaying ? t('node.audioNode.pause') : t('node.audioNode.play')}
+                showBorder={false}
+                appearance="hover-only"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  togglePlay();
+                }}
+                className="nodrag !h-7 !w-7 shrink-0 !p-0 text-text-dark"
+              >
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
+              </UiIconButton>
+              <span className="shrink-0 text-[10px] leading-none tabular-nums text-text-muted/85">
+                {formatDuration(currentTime)} / {durationLabel ?? formatDuration(effectiveDuration)}
+              </span>
+              <span className="min-w-0 flex-1" />
+              <UiIconButton
+                aria-label={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
+                showBorder={false}
+                appearance="hover-only"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const element = ensureAudioElement();
+                  if (!element) return;
+                  element.muted = !element.muted;
+                  setMuted(element.muted);
+                }}
+                className="nodrag !h-7 !w-7 shrink-0 !p-0 text-text-dark"
+              >
+                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </UiIconButton>
+              <UiIconButton
+                aria-label={t('node.audioNode.openViewer')}
+                showBorder={false}
+                appearance="hover-only"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  audioRef.current?.pause();
+                  setIsPlaying(false);
+                  setIsViewerOpen(true);
+                }}
+                className="nodrag !h-7 !w-7 shrink-0 !p-0 text-text-dark"
+              >
+                <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </UiIconButton>
+            </div>
+          </div>
         ) : isUploadVariant ? (
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 text-text-muted/85">
             <Upload className="h-6 w-6 opacity-60" />

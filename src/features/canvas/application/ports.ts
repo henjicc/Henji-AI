@@ -77,6 +77,10 @@ export interface CanvasEventMap {
   'camera-stage/render-video': {
     nodeId: string;
   };
+  'canvas/toast': {
+    message: string;
+    type?: 'success' | 'error';
+  };
 }
 
 export interface CanvasEventBus {

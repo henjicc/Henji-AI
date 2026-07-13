@@ -3,6 +3,8 @@ import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UiChipButton, UiIconButton } from '@/components/ui'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import type { WorkspaceId } from '@/core/types/workspace'
+import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
 
 const logger = createLogger('components.WindowControls')
 
@@ -16,18 +18,20 @@ const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
 
 // Tab 配置
 interface TabConfig {
-  id: string
+  id: WorkspaceId
   label: string
   icon: React.ReactNode
 }
 
 interface WindowControlsProps {
-  activeTab?: string
-  onTabChange?: (tabId: string) => void
+  activeTab?: WorkspaceId
+  assetView?: AssetLibraryView
+  onTabChange?: (tabId: WorkspaceId) => void
+  onAssetClick?: () => void
   onOpenSettings?: () => void
 }
 
-const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', onTabChange, onOpenSettings }) => {
+const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings }) => {
   const { t } = useI18n('ui')
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
@@ -60,6 +64,11 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       )
+    },
+    {
+      id: 'assets',
+      label: t('tabs.assets'),
+      icon: <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M5 7l1-3h12l1 3v13H5V7zm4 4h6" /></svg>
     },
   ]
 
@@ -132,11 +141,11 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         <UiChipButton
           key={tab.id}
           type="button"
-          onClick={() => onTabChange?.(tab.id)}
+          onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
           className={`
             !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
             transition-all duration-200 ease-out
-            ${activeTab === tab.id
+            ${(tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id)
               ? 'bg-accent/30 !text-accent'
               : 'text-gray-400 hover:text-gray-200 hover:bg-white/10 bg-transparent'
             }

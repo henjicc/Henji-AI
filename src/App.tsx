@@ -12,6 +12,11 @@ import { registerDefaultPanels } from '@/components/params/panels/registerDefaul
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
+import type { WorkspaceId } from '@/core/types/workspace'
+import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { AssetLibraryFloatingPanel } from '@/features/assets/AssetLibraryFloatingPanel'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
 
 const logger = createLogger('App')
 
@@ -26,9 +31,52 @@ const App: React.FC = () => {
   useApplyRuntimeTheme()
   useDevToolsShortcut()
   useLogWindowShortcut()
-  const [activeTab, setActiveTab] = useState('generation')
+  const [activeTab, setActiveTab] = useState<WorkspaceId>('generation')
   const [isReady, setIsReady] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const assetView = useAssetLibraryStore((state) => state.view)
+  const sourceWorkspace = useAssetLibraryStore((state) => state.sourceWorkspace)
+  const setAssetView = useAssetLibraryStore((state) => state.setView)
+  const setSourceWorkspace = useAssetLibraryStore((state) => state.setSourceWorkspace)
+  const assetTabAction = useSettingsStore((state) => state.assetTabAction)
+  const assetPanelPosition = useSettingsStore((state) => state.assetPanelPosition)
+  const assetEdgeTriggerEnabled = useSettingsStore((state) => state.assetEdgeTriggerEnabled)
+  const assetTriggerEdge = useSettingsStore((state) => state.assetTriggerEdge)
+  const assetEdgeDelayMs = useSettingsStore((state) => state.assetEdgeDelayMs)
+  const assetDragEdgeDelayMs = useSettingsStore((state) => state.assetDragEdgeDelayMs)
+
+  const openAssetFloating = React.useCallback((): void => {
+    if (activeTab !== 'assets') setSourceWorkspace(activeTab)
+    setAssetView('floating')
+  }, [activeTab, setAssetView, setSourceWorkspace])
+  useAssetEdgeTrigger({ enabled: assetEdgeTriggerEnabled && !isSettingsOpen, edge: assetTriggerEdge, delayMs: assetEdgeDelayMs, dragDelayMs: assetDragEdgeDelayMs, open: assetView !== 'closed', onOpen: openAssetFloating })
+
+  const openAssetWorkspace = (): void => {
+    if (activeTab !== 'assets') setSourceWorkspace(activeTab)
+    setAssetView('workspace')
+    setActiveTab('assets')
+  }
+  const closeAssets = React.useCallback((): void => {
+    setAssetView('closed')
+    if (activeTab === 'assets') setActiveTab(sourceWorkspace)
+  }, [activeTab, setAssetView, sourceWorkspace])
+  const handleAssetClick = (): void => {
+    if (assetView !== 'closed') { closeAssets(); return }
+    if (assetTabAction === 'workspace') openAssetWorkspace(); else openAssetFloating()
+  }
+  const handleTabChange = (tab: WorkspaceId): void => { setAssetView('closed'); setActiveTab(tab) }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || assetView === 'closed') return
+      if (document.querySelector('[data-asset-preview="open"], [data-asset-card-menu]')) return
+      if (event.target instanceof HTMLElement && event.target.closest('[data-asset-floating-panel] input')) return
+      closeAssets()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [assetView, closeAssets])
+  useEffect(() => { if (assetView === 'closed' && activeTab === 'assets') setActiveTab(sourceWorkspace) }, [activeTab, assetView, sourceWorkspace])
 
   // 应用初始化
   useEffect(() => {
@@ -90,12 +138,15 @@ const App: React.FC = () => {
       {/* 标题栏（含 Tab 切换） */}
       <WindowControls
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        assetView={assetView}
+        onTabChange={handleTabChange}
+        onAssetClick={handleAssetClick}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* 工作区容器 */}
       <TabContainer activeTab={activeTab} />
+      <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
     </div>
   )

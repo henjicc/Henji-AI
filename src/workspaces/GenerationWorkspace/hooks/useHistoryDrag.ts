@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { useDragDrop } from '@/contexts/DragDropContext'
-import { writeHenjiDragData } from '@/contexts/dragDataTransfer'
+import { clearCompactDragPreview, setCompactDragPreview, writeHenjiDragData } from '@/contexts/dragDataTransfer'
 import { basename, toDisplaySrc } from '@/platform/desktopApi'
 import { detectShell } from '@/platform/runtime'
 import { inferMimeFromPath } from '@/utils/mime'
@@ -9,7 +9,6 @@ import { inferMimeFromPath } from '@/utils/mime'
 const DRAG_DISTANCE_THRESHOLD = 40
 const DRAG_TIME_THRESHOLD = 150
 const CONTEXT_MENU_COOLDOWN = 500
-const BROWSER_DRAG_PREVIEW_SIZE = 64
 
 type DragType = 'image' | 'video'
 
@@ -19,48 +18,12 @@ interface DragThumbnail {
   dataUrl?: string
 }
 
-let browserDragPreviewHost: HTMLDivElement | null = null
-
-function getBrowserDragPreviewHost(): HTMLDivElement {
-  if (browserDragPreviewHost) return browserDragPreviewHost
-
-  const host = document.createElement('div')
-  host.style.position = 'fixed'
-  host.style.left = '-9999px'
-  host.style.top = '-9999px'
-  host.style.width = `${BROWSER_DRAG_PREVIEW_SIZE}px`
-  host.style.height = `${BROWSER_DRAG_PREVIEW_SIZE}px`
-  host.style.pointerEvents = 'none'
-  document.body.appendChild(host)
-  browserDragPreviewHost = host
-  return host
-}
-
 function setSmallBrowserDragPreview(e: ReactDragEvent, previewUrl?: string): void {
-  if (!previewUrl) return
-
-  const host = getBrowserDragPreviewHost()
-  host.replaceChildren()
-
-  const image = document.createElement('img')
-  image.src = previewUrl
-  image.draggable = false
-  image.style.display = 'block'
-  image.style.maxWidth = `${BROWSER_DRAG_PREVIEW_SIZE}px`
-  image.style.maxHeight = `${BROWSER_DRAG_PREVIEW_SIZE}px`
-  image.style.objectFit = 'contain'
-  image.style.borderRadius = '8px'
-  host.appendChild(image)
-
-  e.dataTransfer.setDragImage(
-    host,
-    BROWSER_DRAG_PREVIEW_SIZE / 2,
-    BROWSER_DRAG_PREVIEW_SIZE / 2
-  )
+  setCompactDragPreview(e.dataTransfer, previewUrl)
 }
 
 function clearBrowserDragPreview(): void {
-  browserDragPreviewHost?.replaceChildren()
+  clearCompactDragPreview()
 }
 
 function prepareNativeDragEvent(e: ReactDragEvent, payload: DragPayload, previewUrl?: string): void {

@@ -159,7 +159,7 @@ export function ImageViewerModal({
 
   return (
     <div
-      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-[100] overflow-hidden bg-black/90 backdrop-blur-lg`}
+      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-[110] overflow-hidden bg-black/90 backdrop-blur-lg`}
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 400ms ease',

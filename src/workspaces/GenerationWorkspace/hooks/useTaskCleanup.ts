@@ -7,6 +7,7 @@ import { deleteEditState } from '@/utils/editStatePersistence'
 import { deleteWaveformCacheForAudio, isDesktop, isWithinUploadsDir } from '@/utils/save'
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
+import { checkAssetPaths } from '@/commands/assetLibrary'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskCleanup')
 
@@ -53,6 +54,16 @@ async function removeUploadedSourceSafe(fullPath: string): Promise<void> {
   await removeFileSafe(fullPath)
 }
 
+async function isAssetLibraryReferenced(fullPath: string): Promise<boolean> {
+  try {
+    const [referenced] = await checkAssetPaths([fullPath])
+    return Boolean(referenced)
+  } catch (error) {
+    logger.error('[Workspace] 查询资产库文件引用失败，按仍有引用处理', { data: [fullPath, error] })
+    return true
+  }
+}
+
 export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCleanupParams): UseTaskCleanupReturn {
   const deleteTask = useCallback(async (taskId: string): Promise<void> => {
     const target = tasks.find((t) => t.id === taskId)
@@ -74,6 +85,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     if (target.result?.filePath) {
       const paths = splitMulti(target.result.filePath)
       for (const p of paths) {
+        if (await isAssetLibraryReferenced(p)) continue
         await removeFileSafe(p)
         if (target.result.type === 'image' || target.result.type === 'video') {
           await deleteThumbnailCacheSafe(p)
@@ -98,6 +110,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     if (target.uploadedFilePaths?.length) {
       const presets = await loadPresets()
       for (const filePath of target.uploadedFilePaths) {
+        if (await isAssetLibraryReferenced(filePath)) continue
         const ok = canDeleteFile(filePath, tasks, presets, taskId)
         if (!ok) continue
         await removeUploadedSourceSafe(filePath)
@@ -108,6 +121,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     // 4) 删除上传的视频（仅检查其他任务是否引用）
     if (target.uploadedVideoFilePaths?.length) {
       for (const filePath of target.uploadedVideoFilePaths) {
+        if (await isAssetLibraryReferenced(filePath)) continue
         const usedByOthers = tasks.some((t) => t.id !== taskId && t.uploadedVideoFilePaths?.includes(filePath))
         if (usedByOthers) continue
         await removeUploadedSourceSafe(filePath)
@@ -117,6 +131,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
 
     if (target.uploadedAudioFilePaths?.length) {
       for (const filePath of target.uploadedAudioFilePaths) {
+        if (await isAssetLibraryReferenced(filePath)) continue
         const usedByOthers = tasks.some((t) => t.id !== taskId && t.uploadedAudioFilePaths?.includes(filePath))
         if (usedByOthers) continue
         await removeUploadedSourceSafe(filePath)
@@ -172,11 +187,13 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     for (const f of resultFiles) {
+      if (await isAssetLibraryReferenced(f)) continue
       await removeFileSafe(f)
       await deleteThumbnailCacheSafe(f)
     }
 
     for (const p of resultAudioPaths) {
+      if (await isAssetLibraryReferenced(p)) continue
       try {
         await deleteWaveformCacheForAudio(p)
       } catch (e) {
@@ -185,6 +202,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     for (const filePath of uploadedImages) {
+      if (await isAssetLibraryReferenced(filePath)) continue
       const ok = canDeleteFile(filePath, remainingTasks, presets)
       if (!ok) continue
       await removeUploadedSourceSafe(filePath)
@@ -192,6 +210,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     for (const filePath of uploadedVideos) {
+      if (await isAssetLibraryReferenced(filePath)) continue
       const usedByRemaining = remainingTasks.some((t) => t.uploadedVideoFilePaths?.includes(filePath))
       if (usedByRemaining) continue
       await removeUploadedSourceSafe(filePath)
@@ -199,6 +218,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     for (const filePath of audioPaths) {
+      if (await isAssetLibraryReferenced(filePath)) continue
       const usedByRemaining = remainingTasks.some((t) => t.uploadedAudioFilePaths?.includes(filePath))
       if (usedByRemaining) continue
       await removeUploadedSourceSafe(filePath)
@@ -250,11 +270,13 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     for (const f of resultFiles) {
+      if (await isAssetLibraryReferenced(f)) continue
       await removeFileSafe(f)
       await deleteThumbnailCacheSafe(f)
     }
 
     for (const p of resultAudioPaths) {
+      if (await isAssetLibraryReferenced(p)) continue
       try {
         await deleteWaveformCacheForAudio(p)
       } catch (e) {
@@ -265,6 +287,7 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     // 由于 remainingTasks 为空，canDeleteFile 仅会检查预设引用
     const remainingTasks: GenerationTask[] = []
     for (const filePath of uploadedImages) {
+      if (await isAssetLibraryReferenced(filePath)) continue
       const ok = canDeleteFile(filePath, remainingTasks, presets)
       if (!ok) continue
       await removeUploadedSourceSafe(filePath)
@@ -272,11 +295,13 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
     }
 
     for (const filePath of uploadedVideos) {
+      if (await isAssetLibraryReferenced(filePath)) continue
       await removeUploadedSourceSafe(filePath)
       await deleteThumbnailCacheSafe(filePath)
     }
 
     for (const filePath of audioPaths) {
+      if (await isAssetLibraryReferenced(filePath)) continue
       await removeUploadedSourceSafe(filePath)
       await deleteWaveformCacheForAudio(filePath)
       await deleteThumbnailCacheSafe(filePath)

@@ -18,6 +18,10 @@ import {
 } from '@/core/theme/runtimeTheme';
 
 export type ProviderKeyStatusMap = Record<string, boolean>;
+export type AssetTabAction = 'floating' | 'workspace';
+export type AssetPanelPosition = 'top' | 'left' | 'right';
+export type AssetTriggerEdge = 'left' | 'right';
+export type AssetThumbnailFit = 'cover' | 'contain';
 const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair'] as const;
 const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'bizyair';
 
@@ -45,6 +49,14 @@ interface SettingsState {
   themeTonePreset: ThemeTonePreset;
   accentColor: string;
   themeColors: ThemeColorScheme;
+  assetTabAction: AssetTabAction;
+  assetPanelPosition: AssetPanelPosition;
+  assetEdgeTriggerEnabled: boolean;
+  assetTriggerEdge: AssetTriggerEdge;
+  assetEdgeDelayMs: number;
+  assetDragEdgeDelayMs: number;
+  assetCardSize: number;
+  assetThumbnailFit: AssetThumbnailFit;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
@@ -65,6 +77,13 @@ interface SettingsState {
   setThemeColor: (token: ThemeColorToken, color: string) => void;
   setThemeColors: (colors: Partial<ThemeColorScheme>) => void;
   resetThemeColors: () => void;
+  setAssetTabAction: (action: AssetTabAction) => void;
+  setAssetPanelPosition: (position: AssetPanelPosition) => void;
+  setAssetEdgeTriggerEnabled: (enabled: boolean) => void;
+  setAssetTriggerEdge: (edge: AssetTriggerEdge) => void;
+  setAssetEdgeDelayMs: (delay: number) => void;
+  setAssetCardSize: (size: number) => void;
+  setAssetThumbnailFit: (fit: AssetThumbnailFit) => void;
 }
 
 const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
@@ -177,6 +196,14 @@ export const useSettingsStore = create<SettingsState>()(
       themeTonePreset: 'neutral',
       accentColor: SETTINGS_ACCENT_HEX,
       themeColors: DEFAULT_THEME_COLOR_SCHEME,
+      assetTabAction: 'floating',
+      assetPanelPosition: 'top',
+      assetEdgeTriggerEnabled: true,
+      assetTriggerEdge: 'right',
+      assetEdgeDelayMs: 650,
+      assetDragEdgeDelayMs: 180,
+      assetCardSize: 180,
+      assetThumbnailFit: 'cover',
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -242,10 +269,17 @@ export const useSettingsStore = create<SettingsState>()(
           }),
         })),
       resetThemeColors: () => set({ themeColors: DEFAULT_THEME_COLOR_SCHEME }),
+      setAssetTabAction: (assetTabAction) => set({ assetTabAction }),
+      setAssetPanelPosition: (assetPanelPosition) => set({ assetPanelPosition }),
+      setAssetEdgeTriggerEnabled: (assetEdgeTriggerEnabled) => set({ assetEdgeTriggerEnabled }),
+      setAssetTriggerEdge: (assetTriggerEdge) => set({ assetTriggerEdge }),
+      setAssetEdgeDelayMs: (assetEdgeDelayMs) => set({ assetEdgeDelayMs: Math.min(2000, Math.max(100, assetEdgeDelayMs)) }),
+      setAssetCardSize: (assetCardSize) => set({ assetCardSize: Math.min(280, Math.max(112, assetCardSize)) }),
+      setAssetThumbnailFit: (assetThumbnailFit) => set({ assetThumbnailFit }),
     }),
     {
       name: 'settings-storage',
-      version: 8,
+      version: 9,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀（决策见 docs/task/日志调试中心/decisions.md）。
       partialize: (state) => {

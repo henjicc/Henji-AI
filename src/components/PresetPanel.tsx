@@ -9,6 +9,7 @@ import { remove } from '@/platform/desktopApi'
 import PanelTrigger from './ui/PanelTrigger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+import { checkAssetPaths } from '@/commands/assetLibrary'
 
 const logger = createLogger('components.PresetPanel')
 
@@ -103,6 +104,11 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             if (presetFiles.length > 0) {
                 const tasks = await readJsonFromAppData<Task[]>('Henji-AI/history.json') || []
                 for (const filePath of presetFiles) {
+                    const [assetReferenced] = await checkAssetPaths([filePath]).catch(() => [true])
+                    if (assetReferenced) {
+                        logger.info('[PresetPanel] 保留文件（资产库仍在引用）:', filePath)
+                        continue
+                    }
                     const canDelete = canDeleteFile(filePath, tasks, updatedPresets)
                     if (canDelete) {
                         try {

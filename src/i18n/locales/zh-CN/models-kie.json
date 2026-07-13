@@ -48,6 +48,12 @@
         "description": "KIE Nano Banana Pro 图片生成模型"
       }
     },
+    "kie-nano-banana-2-lite": {
+      "meta": {
+        "name": "Nano Banana 2 Lite",
+        "description": "KIE Nano Banana 2 Lite 图片生成与参考图编辑模型"
+      }
+    },
     "kie-seedance-1.5-pro": {
       "meta": {
         "name": "Seedance 1.5 Pro",
@@ -88,6 +94,12 @@
       "meta": {
         "name": "Seedream 4.5",
         "description": "KIE Seedream 4.5 图片生成模型"
+      }
+    },
+    "kie-seedream-5.0-pro": {
+      "meta": {
+        "name": "Seedream 5.0 Pro",
+        "description": "KIE Seedream 5.0 Pro 图片生成与编辑模型"
       }
     },
     "kie-z-image": {

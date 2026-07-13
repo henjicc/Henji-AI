@@ -19,6 +19,7 @@ export interface TaskListProps {
   onUsePrompt: (prompt: string) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
+  notify: (message: string, type?: 'success' | 'error') => void
 }
 
 export function TaskList({
@@ -36,6 +37,7 @@ export function TaskList({
   onUsePrompt,
   onOpenImageViewer,
   onOpenVideoViewer,
+  notify,
 }: TaskListProps): JSX.Element {
   const { t } = useI18n()
 
@@ -76,6 +78,7 @@ export function TaskList({
             onUsePrompt={onUsePrompt}
             onOpenImageViewer={onOpenImageViewer}
             onOpenVideoViewer={onOpenVideoViewer}
+            notify={notify}
           />
         )
       })}

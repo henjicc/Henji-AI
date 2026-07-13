@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { databaseService } from '@/services/database/DatabaseService'
+import { rebaseAssetDataRoot } from '@/commands/assetLibrary'
 import {
   appLocalDataDir,
   basename,
@@ -378,6 +379,11 @@ export async function migrateData(
 
     // 8. 删除迁移标记
     await removeMigrationMarker(newPath)
+
+    // 应用内资产保存绝对路径；文件复制完成、旧目录删除前同步重写，外部引用不会被改动。
+    if (oldPath !== newPath) {
+      await rebaseAssetDataRoot(oldPath, newPath)
+    }
 
     // 9. 自动删除旧数据（根据用户决策）
     if (oldPath !== newPath) {

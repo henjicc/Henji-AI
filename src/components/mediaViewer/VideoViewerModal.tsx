@@ -127,6 +127,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   useEffect(() => {
     if (open) return
     if (!isVisible) return
+    videoRef.current?.pause()
+    setIsVideoPlaying(false)
+    setAutoPlayOnOpen(false)
     setOverlayOpacity(0)
     setViewerOpacity(0)
     closeTimerRef.current = window.setTimeout(() => {
@@ -395,7 +398,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
+      className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 500ms ease',

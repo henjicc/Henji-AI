@@ -4,6 +4,7 @@ export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
 
 export interface AssetDto {
   id: string
+  wasExisting?: boolean
   mediaType: AssetMediaType
   displayName: string
   filePath: string
@@ -22,11 +23,12 @@ export interface AssetDto {
   lastUsedAt: number | null
   createdAt: number
   updatedAt: number
+  tags: string[]
+  libraryIds: string[]
 }
 
 export interface AssetLibraryDto { id: string; name: string; createdAt: number; updatedAt: number }
 export interface AssetPageDto { items: AssetDto[]; total: number; page: number; pageSize: number }
 export interface CreateAssetRequest { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; libraryIds?: string[] }
 export interface UpdateAssetRequest { id: string; displayName: string }
-export interface AssetQuery { mediaType?: AssetMediaType; libraryId?: string; keyword?: string; page: number; pageSize: number; sort?: 'created' | 'recent' }
-
+export interface AssetQuery { mediaType?: AssetMediaType; libraryId?: string; tag?: string; keyword?: string; page: number; pageSize: number; sort?: 'created' | 'recent' }

@@ -17,8 +17,10 @@ import {
 import { createLogger } from '@/core/logging';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore';
+import { collectCameraStageAsset, type CameraStageAssetTarget } from '@/features/assets/services/cameraStageAssetCollection';
 
 const logger = createLogger('features.canvas.cameraStage');
+const renderAssetTargets = new Map<string, CameraStageAssetTarget>();
 
 export function CameraStageNodeDialog(): JSX.Element | null {
   const { t } = useTranslation();
@@ -64,6 +66,10 @@ export function CameraStageNodeDialog(): JSX.Element | null {
         videoRenderRequestId: requestId,
         videoRenderError: null,
       });
+      renderAssetTargets.set(requestId, {
+        enabled: currentNode.data.assetCollectionEnabled === true,
+        libraryId: currentNode.data.assetCollectionLibraryId ?? null,
+      });
       await startCameraStageRender({
         requestId,
         nodeId: nextNodeId,
@@ -76,6 +82,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
         context: { nodeId: nextNodeId, projectId },
       });
     } catch (error) {
+      renderAssetTargets.delete(requestId);
       const message = error instanceof Error ? error.message : String(error);
       updateNodeData(nextNodeId, {
         videoExporting: false,
@@ -118,8 +125,20 @@ export function CameraStageNodeDialog(): JSX.Element | null {
         videoRenderError: null,
       });
       canvasEventBus.publish('camera-stage/output', { nodeId: event.nodeId, kind: 'video' });
+      const target = renderAssetTargets.get(event.requestId);
+      renderAssetTargets.delete(event.requestId);
+      if (target) {
+        void collectCameraStageAsset({
+          filePath: event.result.mediaPath,
+          mediaType: 'video',
+          displayName: `${currentNode.data.displayName || '3D 镜头参考'}-视频`,
+          target,
+          requestId: event.requestId,
+        });
+      }
       return;
     }
+    renderAssetTargets.delete(event.requestId);
     updateNodeData(event.nodeId, {
       videoExporting: false,
       videoProgress: null,
@@ -209,6 +228,14 @@ export function CameraStageNodeDialog(): JSX.Element | null {
             onBackToList={close}
             backLabel="返回画布"
             embeddedOutput={{
+              assetTarget: {
+                enabled: node.data.assetCollectionEnabled === true,
+                libraryId: node.data.assetCollectionLibraryId ?? null,
+              },
+              onAssetTargetChange: (target) => updateNodeData(nodeId, {
+                assetCollectionEnabled: target.enabled,
+                assetCollectionLibraryId: target.libraryId,
+              }),
               onFrame: ({ mediaUrl, selectedTimeSec, aspectRatio }) => updateNodeData(nodeId, {
                 imageUrl: mediaUrl,
                 previewImageUrl: mediaUrl,

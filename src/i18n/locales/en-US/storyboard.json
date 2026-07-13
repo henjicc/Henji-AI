@@ -171,7 +171,8 @@
       "uploadHint": "Click or drag to upload audio",
       "waitingResult": "Waiting for output audio",
       "play": "Play",
-      "pause": "Pause"
+      "pause": "Pause",
+      "openViewer": "Open audio preview"
     },
     "cameraStage": {
       "previewAlt": "Current frame preview",

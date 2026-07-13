@@ -996,3 +996,41 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   --dv-tabs-and-actions-container-font-size: 12px;
   --dv-tabs-and-actions-container-height: 32px;
 }
+
+/* 画布视频进度条：轨道与滑块共享同一条中心线，已播放段跟随主题强调色。 */
+.canvas-video-progress::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--accent-rgb)) 0,
+    rgb(var(--accent-rgb)) var(--video-progress),
+    rgb(var(--text-muted-rgb) / 0.88) var(--video-progress),
+    rgb(var(--text-muted-rgb) / 0.88) 100%
+  );
+}
+
+.canvas-video-progress::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  background: rgb(var(--accent-rgb));
+}
+
+.canvas-video-progress::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--text-muted-rgb) / 0.88);
+}
+
+.canvas-video-progress::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-rgb));
+}
+
+.canvas-video-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: rgb(var(--accent-rgb));
+}
