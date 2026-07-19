@@ -1,16 +1,34 @@
 import { createLogger } from '@/core/logging'
 import { isDesktopRuntime } from '@/platform/runtime';
-import { toDisplaySrc } from '@/platform/desktopApi';
 
 const logger = createLogger('features.canvas.application.imageData')
 
 import {
-
-  loadImage,
   prepareNodeImageBinary,
-  persistImageSource,
   prepareNodeImageSource,
 } from '@/commands/image';
+import {
+  blobToDataUrl,
+  canvasToDataUrl,
+  imageUrlToDataUrl,
+  isLikelyLocalImagePath,
+  loadImageElement,
+  persistImageLocally,
+  readFileAsDataUrl,
+  resolveImageDisplayUrl,
+} from '@/services/imageSource';
+
+// 通用图片源助手已抽至 services/imageSource,此处 re-export 维持既有导入路径。
+export {
+  blobToDataUrl,
+  canvasToDataUrl,
+  imageUrlToDataUrl,
+  isLikelyLocalImagePath,
+  loadImageElement,
+  persistImageLocally,
+  readFileAsDataUrl,
+  resolveImageDisplayUrl,
+};
 
 export function parseAspectRatio(value: string): number {
   const [width, height] = value.split(':').map((item) => Number(item));
@@ -44,7 +62,6 @@ function greatestCommonDivisor(a: number, b: number): number {
 }
 
 const DEFAULT_PREVIEW_MAX_DIMENSION = 512;
-const LOCAL_PATH_PREFIX_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 
 export interface PreparedNodeImage {
   imageUrl: string;
@@ -62,137 +79,9 @@ export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
 }
 
-export function isLikelyLocalImagePath(imageUrl: string): boolean {
-  if (!imageUrl) {
-    return false;
-  }
-
-  const lower = imageUrl.toLowerCase();
-  if (
-    lower.startsWith('data:') ||
-    lower.startsWith('http://') ||
-    lower.startsWith('https://') ||
-    lower.startsWith('blob:') ||
-    lower.startsWith('asset:') ||
-    lower.startsWith('tauri:') ||
-    lower.startsWith('file://')
-  ) {
-    return false;
-  }
-
-  return LOCAL_PATH_PREFIX_PATTERN.test(imageUrl);
-}
-
-export function resolveImageDisplayUrl(imageUrl: string): string {
-  const lower = imageUrl.toLowerCase();
-  if (lower.startsWith('file://')) {
-    if (!isNativeImageRuntime()) {
-      return imageUrl;
-    }
-
-    try {
-      const parsed = new URL(imageUrl);
-      const decodedPathname = decodeURIComponent(parsed.pathname);
-      const normalizedPath = decodedPathname.replace(/^\/([A-Za-z]:[\\/])/, '$1');
-      if (!normalizedPath) {
-        return imageUrl;
-      }
-      return toDisplaySrc(normalizedPath);
-    } catch {
-      return imageUrl;
-    }
-  }
-
-  if (!isLikelyLocalImagePath(imageUrl)) {
-    return imageUrl;
-  }
-
-  if (!isNativeImageRuntime()) {
-    return imageUrl;
-  }
-
-  return toDisplaySrc(imageUrl);
-}
-
-export async function persistImageLocally(source: string): Promise<string> {
-  if (isLikelyLocalImagePath(source)) {
-    return source;
-  }
-
-  if (!isNativeImageRuntime()) {
-    return source;
-  }
-
-  return await persistImageSource(source);
-}
-
-export async function loadImageElement(source: string): Promise<HTMLImageElement> {
-  const image = new Image();
-  const displaySource = resolveImageDisplayUrl(source);
-  if (
-    displaySource.startsWith('http://') ||
-    displaySource.startsWith('https://') ||
-    displaySource.startsWith('asset:')
-  ) {
-    image.crossOrigin = 'anonymous';
-  }
-
-  return await new Promise((resolve, reject) => {
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('图片加载失败'));
-    image.src = displaySource;
-  });
-}
-
-export async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
-  if (imageUrl.startsWith('data:')) {
-    return imageUrl;
-  }
-
-  if (isLikelyLocalImagePath(imageUrl)) {
-    if (isNativeImageRuntime()) {
-      return await loadImage(imageUrl);
-    }
-    const localResponse = await fetch(resolveImageDisplayUrl(imageUrl));
-    if (!localResponse.ok) {
-      throw new Error('无法读取本地图片数据');
-    }
-    const localBlob = await localResponse.blob();
-    return await blobToDataUrl(localBlob);
-  }
-
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error('无法下载图片数据');
-  }
-
-  const blob = await response.blob();
-  return await blobToDataUrl(blob);
-}
-
-export async function blobToDataUrl(blob: Blob): Promise<string> {
-  const reader = new FileReader();
-
-  return await new Promise((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('图片转换失败'));
-    reader.readAsDataURL(blob);
-  });
-}
-
 export function extractBase64Payload(dataUrl: string): string {
   const [, payload = ''] = dataUrl.split(',');
   return payload;
-}
-
-export async function readFileAsDataUrl(file: File): Promise<string> {
-  const reader = new FileReader();
-
-  return await new Promise((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsDataURL(file);
-  });
 }
 
 function resolveFileExtension(file: File): string {
@@ -263,10 +152,6 @@ export async function prepareNodeImageFromFile(
 export async function detectAspectRatio(imageUrl: string): Promise<string> {
   const image = await loadImageElement(imageUrl);
   return reduceAspectRatio(image.naturalWidth, image.naturalHeight);
-}
-
-export function canvasToDataUrl(canvas: HTMLCanvasElement): string {
-  return canvas.toDataURL('image/png');
 }
 
 function resolvePreviewMimeType(imageUrl: string): string {

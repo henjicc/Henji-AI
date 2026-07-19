@@ -51,8 +51,7 @@ interface NodeActionToolbarProps {
 }
 
 const toolIconMap: Record<ToolIconKey, typeof Crop> = {
-  crop: Crop,
-  annotate: PenLine,
+  edit: PenLine,
   split: Scissors,
 };
 
@@ -151,11 +150,8 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   }, []);
 
   const resolveToolLabel = useCallback((toolType: NodeToolType) => {
-    if (toolType === NODE_TOOL_TYPES.crop) {
-      return t('tool.crop');
-    }
-    if (toolType === NODE_TOOL_TYPES.annotate) {
-      return t('tool.annotate');
+    if (toolType === NODE_TOOL_TYPES.edit) {
+      return t('tool.edit');
     }
     if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
       return t('tool.split');

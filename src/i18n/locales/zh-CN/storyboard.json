@@ -46,8 +46,7 @@
     }
   },
   "tool": {
-    "crop": "裁剪",
-    "annotate": "标注",
+    "edit": "编辑",
     "split": "切割"
   },
   "toolDialog": {
@@ -56,8 +55,7 @@
     "processFailed": "处理失败",
     "processing": "处理中...",
     "apply": "应用",
-    "cropResultTitle": "裁剪结果",
-    "annotateResultTitle": "标注结果"
+    "editResultTitle": "编辑结果"
   },
   "nodeToolbar": {
     "reupload": "重新上传",

@@ -5,7 +5,7 @@ import {
   isUploadNode,
   type CanvasNode,
 } from '../domain/canvasNodes';
-import { stringifyAnnotationItems } from './annotation';
+import { createEmptyMarkDoc, stringifyMarkDoc } from '@/features/imageMark';
 import type { CanvasToolPlugin } from './types';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 
@@ -13,50 +13,22 @@ function supportsImageSourceNode(node: CanvasNode): boolean {
   return isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node);
 }
 
-export const cropToolPlugin: CanvasToolPlugin = {
-  type: NODE_TOOL_TYPES.crop,
-  label: '裁剪',
-  icon: 'crop',
-  editor: 'crop',
-  supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
-  createInitialOptions: () => ({
-    aspectRatio: 'free',
-    customAspectRatio: '',
-  }),
-  fields: [
-    {
-      key: 'aspectRatio',
-      label: '目标比例',
-      type: 'select',
-      options: [
-        { label: '自由', value: 'free' },
-        { label: '1:1', value: '1:1' },
-        { label: '16:9', value: '16:9' },
-        { label: '9:16', value: '9:16' },
-        { label: '4:3', value: '4:3' },
-        { label: '3:4', value: '3:4' },
-      ],
-    },
-  ],
-  execute: async (sourceImageUrl, options, context) =>
-    await context.processTool(NODE_TOOL_TYPES.crop, sourceImageUrl, options),
-};
-
-export const annotateToolPlugin: CanvasToolPlugin = {
-  type: NODE_TOOL_TYPES.annotate,
-  label: '标注',
-  icon: 'annotate',
-  editor: 'annotate',
+/** 统一图片编辑工具:标记(框/箭头/序号/文字/画笔/马赛克)+ 裁剪 + 旋转翻转 */
+export const imageEditToolPlugin: CanvasToolPlugin = {
+  type: NODE_TOOL_TYPES.edit,
+  label: '编辑',
+  icon: 'edit',
+  editor: 'edit',
   supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
   createInitialOptions: () => ({
     color: ANNOTATION_DEFAULT_STROKE_HEX,
     lineWidthPercent: 0.4,
     fontSizePercent: 10,
-    annotations: stringifyAnnotationItems([]),
+    markDoc: stringifyMarkDoc(createEmptyMarkDoc()),
   }),
   fields: [],
   execute: async (sourceImageUrl, options, context) =>
-    await context.processTool(NODE_TOOL_TYPES.annotate, sourceImageUrl, options),
+    await context.processTool(NODE_TOOL_TYPES.edit, sourceImageUrl, options),
 };
 
 export const splitStoryboardToolPlugin: CanvasToolPlugin = {
@@ -76,7 +48,6 @@ export const splitStoryboardToolPlugin: CanvasToolPlugin = {
 };
 
 export const builtInToolPlugins: CanvasToolPlugin[] = [
-  cropToolPlugin,
-  annotateToolPlugin,
+  imageEditToolPlugin,
   splitStoryboardToolPlugin,
 ];

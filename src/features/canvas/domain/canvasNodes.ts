@@ -296,8 +296,7 @@ export interface StoryboardNodeCreationDto {
 }
 
 export const NODE_TOOL_TYPES = {
-  crop: 'crop',
-  annotate: 'annotate',
+  edit: 'edit',
   splitStoryboard: 'split-storyboard',
 } as const;
 

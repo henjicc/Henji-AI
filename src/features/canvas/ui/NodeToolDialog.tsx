@@ -23,8 +23,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { UiButton, UiModal } from '@/components/ui';
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
 import { FormToolEditor } from './tool-editors/FormToolEditor';
-import { CropToolEditor } from './tool-editors/CropToolEditor';
-import { AnnotateToolEditor } from './tool-editors/AnnotateToolEditor';
+import { EditToolEditor } from './tool-editors/EditToolEditor';
 import { SplitStoryboardToolEditor } from './tool-editors/SplitStoryboardToolEditor';
 
 export function NodeToolDialog() {
@@ -174,11 +173,8 @@ export function NodeToolDialog() {
     if (!toolType) {
       return '';
     }
-    if (toolType === NODE_TOOL_TYPES.crop) {
-      return t('tool.crop');
-    }
-    if (toolType === NODE_TOOL_TYPES.annotate) {
-      return t('tool.annotate');
+    if (toolType === NODE_TOOL_TYPES.edit) {
+      return t('tool.edit');
     }
     if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
       return t('tool.split');
@@ -186,11 +182,8 @@ export function NodeToolDialog() {
     return '';
   }, [t]);
   const resolveResultNodeTitle = useCallback((toolType: NodeToolType | undefined) => {
-    if (toolType === NODE_TOOL_TYPES.crop) {
-      return t('toolDialog.cropResultTitle');
-    }
-    if (toolType === NODE_TOOL_TYPES.annotate) {
-      return t('toolDialog.annotateResultTitle');
+    if (toolType === NODE_TOOL_TYPES.edit) {
+      return t('toolDialog.editResultTitle');
     }
     return EXPORT_RESULT_DISPLAY_NAME.generic;
   }, [t]);
@@ -264,13 +257,7 @@ export function NodeToolDialog() {
     if (!activePlugin) {
       return 'w-[min(460px,calc(100vw-40px))]';
     }
-    if (activePlugin.editor === 'crop') {
-      return 'w-[min(980px,calc(100vw-40px))]';
-    }
-    if (activePlugin.editor === 'annotate') {
-      return 'w-[min(1120px,calc(100vw-40px))]';
-    }
-    if (activePlugin.editor === 'split') {
+    if (activePlugin.editor === 'edit' || activePlugin.editor === 'split') {
       return 'w-[min(1120px,calc(100vw-40px))]';
     }
     return 'w-[min(460px,calc(100vw-40px))]';
@@ -281,20 +268,10 @@ export function NodeToolDialog() {
       return null;
     }
 
-    if (activePlugin.editor === 'crop' && sourceImageUrl) {
+    if (activePlugin.editor === 'edit' && sourceImageUrl) {
       return (
-        <CropToolEditor
-          plugin={activePlugin}
-          sourceImageUrl={sourceImageUrl}
-          options={options}
-          onOptionsChange={setOptions}
-        />
-      );
-    }
-
-    if (activePlugin.editor === 'annotate' && sourceImageUrl) {
-      return (
-        <AnnotateToolEditor
+        <EditToolEditor
+          key={dialogKey}
           plugin={activePlugin}
           sourceImageUrl={sourceImageUrl}
           options={options}
@@ -322,7 +299,7 @@ export function NodeToolDialog() {
         onOptionsChange={setOptions}
       />
     );
-  }, [activePlugin, options, sourceImageUrl]);
+  }, [activePlugin, dialogKey, options, sourceImageUrl]);
 
   const isOpen = Boolean(activeToolDialog && isSplitImageReady);
 

@@ -7,19 +7,17 @@ import {
   canvasToDataUrl,
   detectAspectRatio,
   loadImageElement,
-  parseAspectRatio,
   persistImageLocally,
 } from './imageData';
-import { cropImageSource, readStoryboardImageMetadata } from '@/commands/image';
+import { readStoryboardImageMetadata } from '@/commands/image';
 import { isDesktopRuntime } from '@/platform/runtime';
-import { drawAnnotations, parseAnnotationItems } from '../tools/annotation';
+import { exportMarkedImage, parseMarkDoc } from '@/features/imageMark';
 import type {
   IdGenerator,
   ImageSplitGateway,
   ToolProcessor,
   ToolProcessorResult,
 } from './ports';
-import { ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens';
 
 export class CanvasToolProcessor implements ToolProcessor {
   constructor(
@@ -44,168 +42,16 @@ export class CanvasToolProcessor implements ToolProcessor {
       );
     }
 
-    switch (toolType) {
-      case NODE_TOOL_TYPES.crop:
-        return {
-          outputImageUrl: await this.cropImage(sourceImageUrl, options),
-        };
-      case NODE_TOOL_TYPES.annotate:
-        // Keep annotate on frontend for now because it supports free-form vector annotations.
-        // Prefer local source first to avoid CORS taint and repeated remote fetches.
-        return {
-          outputImageUrl: await this.annotateImage(
-            await persistImageLocally(sourceImageUrl),
-            options
-          ),
-        };
-      default:
-        throw new Error('不支持的工具类型');
-    }
-  }
-
-  private async cropImage(sourceImage: string, options: DynamicValueMap): Promise<string> {
-    const payload = {
-      source: sourceImage,
-      aspectRatio: String(options.aspectRatio ?? '1:1'),
-      cropX: Number(options.cropX),
-      cropY: Number(options.cropY),
-      cropWidth: Number(options.cropWidth),
-      cropHeight: Number(options.cropHeight),
-    };
-
-    if (isDesktopRuntime()) {
-      return await cropImageSource(payload);
+    if (toolType === NODE_TOOL_TYPES.edit) {
+      // 编辑(标记/裁剪/旋转)为矢量合成,统一走 imageMark 前端光栅化;
+      // 先本地化,避免远程源 CORS 污染画布。
+      const localSource = await persistImageLocally(sourceImageUrl);
+      return {
+        outputImageUrl: await exportMarkedImage(localSource, parseMarkDoc(options.markDoc)),
+      };
     }
 
-    const aspectRatio = String(options.aspectRatio ?? '1:1');
-    const targetRatio = parseAspectRatio(aspectRatio);
-    const image = await loadImageElement(sourceImage);
-
-    const cropX = Number(options.cropX);
-    const cropY = Number(options.cropY);
-    const cropWidthOption = Number(options.cropWidth);
-    const cropHeightOption = Number(options.cropHeight);
-
-    const hasManualCropArea =
-      Number.isFinite(cropX) &&
-      Number.isFinite(cropY) &&
-      Number.isFinite(cropWidthOption) &&
-      Number.isFinite(cropHeightOption) &&
-      cropWidthOption > 0 &&
-      cropHeightOption > 0;
-
-    let cropWidth = image.naturalWidth;
-    let cropHeight = image.naturalHeight;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    if (hasManualCropArea) {
-      offsetX = Math.min(image.naturalWidth - 1, Math.max(0, Math.floor(cropX)));
-      offsetY = Math.min(image.naturalHeight - 1, Math.max(0, Math.floor(cropY)));
-      cropWidth = Math.max(1, Math.min(Math.floor(cropWidthOption), image.naturalWidth - offsetX));
-      cropHeight = Math.max(1, Math.min(Math.floor(cropHeightOption), image.naturalHeight - offsetY));
-    } else if (aspectRatio === 'free') {
-      offsetX = 0;
-      offsetY = 0;
-      cropWidth = image.naturalWidth;
-      cropHeight = image.naturalHeight;
-    } else {
-      const sourceRatio = image.naturalWidth / image.naturalHeight;
-      if (sourceRatio > targetRatio) {
-        cropWidth = image.naturalHeight * targetRatio;
-      } else {
-        cropHeight = image.naturalWidth / targetRatio;
-      }
-
-      offsetX = (image.naturalWidth - cropWidth) / 2;
-      offsetY = (image.naturalHeight - cropHeight) / 2;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.floor(cropWidth));
-    canvas.height = Math.max(1, Math.floor(cropHeight));
-
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('无法初始化画布');
-    }
-
-    context.drawImage(
-      image,
-      offsetX,
-      offsetY,
-      cropWidth,
-      cropHeight,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-    return canvasToDataUrl(canvas);
-  }
-
-  private async annotateImage(
-    sourceImage: string,
-    options: DynamicValueMap
-  ): Promise<string> {
-    const image = await loadImageElement(sourceImage);
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('无法初始化画布');
-    }
-
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const annotations = parseAnnotationItems(options.annotations);
-
-    if (annotations.length > 0) {
-      drawAnnotations(context, annotations);
-    } else {
-      const text = String(options.text ?? '').trim();
-      const position = String(options.position ?? 'bottom');
-      const color = String(options.color ?? ANNOTATION_DEFAULT_TEXT_HEX);
-
-      if (!text) {
-        return canvasToDataUrl(canvas);
-      }
-
-      const fontSize = Math.max(24, Math.round(canvas.width * 0.04));
-      context.font = `600 ${fontSize}px sans-serif`;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-
-      const textWidth = context.measureText(text).width;
-      const paddingX = Math.round(fontSize * 0.8);
-      const paddingY = Math.round(fontSize * 0.6);
-      const boxWidth = textWidth + paddingX * 2;
-      const boxHeight = fontSize + paddingY * 2;
-
-      const x = canvas.width / 2;
-      const y = this.resolveAnnotateY(position, canvas.height, boxHeight);
-
-      context.fillStyle = 'rgba(0, 0, 0, 0.45)';
-      context.fillRect(x - boxWidth / 2, y - boxHeight / 2, boxWidth, boxHeight);
-      context.fillStyle = color;
-      context.fillText(text, x, y);
-    }
-
-    return canvasToDataUrl(canvas);
-  }
-
-  private resolveAnnotateY(position: string, canvasHeight: number, boxHeight: number): number {
-    if (position === 'top') {
-      return boxHeight / 2 + 24;
-    }
-
-    if (position === 'center') {
-      return canvasHeight / 2;
-    }
-
-    return canvasHeight - boxHeight / 2 - 24;
+    throw new Error('不支持的工具类型');
   }
 
   private async splitStoryboard(

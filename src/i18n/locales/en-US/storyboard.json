@@ -46,8 +46,7 @@
     }
   },
   "tool": {
-    "crop": "Crop",
-    "annotate": "Annotate",
+    "edit": "Edit",
     "split": "Split"
   },
   "toolDialog": {
@@ -56,8 +55,7 @@
     "processFailed": "Processing failed",
     "processing": "Processing...",
     "apply": "Apply",
-    "cropResultTitle": "Crop Result",
-    "annotateResultTitle": "Annotation Result"
+    "editResultTitle": "Edit Result"
   },
   "nodeToolbar": {
     "reupload": "Reupload",
