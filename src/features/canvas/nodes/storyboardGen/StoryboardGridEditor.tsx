@@ -41,7 +41,7 @@ export const StoryboardGridEditor = memo(({
 
   return (
     <>
-      <div className="mb-2.5 flex shrink-0 items-center justify-between gap-2">
+      <div className="canvas-node-lod-detail mb-2.5 flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <GridStepperControl
             label="行"
@@ -62,7 +62,7 @@ export const StoryboardGridEditor = memo(({
         </div>
       </div>
 
-      <div className="mb-2 flex min-h-0 flex-1 items-center justify-center">
+      <div className="canvas-node-lod-detail mb-2 flex min-h-0 flex-1 items-center justify-center">
         <div
           className="grid gap-0.5"
           style={{

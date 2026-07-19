@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { getCustomDataRoot } from './services/dataRoot'
+import { persistMediaRootGrant, restorePersistedMediaRoots } from './services/media/rootGrants'
 
 const MEDIA_SCHEME = 'henji-media'
 const MEDIA_HOST = 'local'
@@ -112,7 +113,29 @@ function assertAllowedMediaPath(targetPath: string): void {
 
 export function allowMediaRoot(rootPath: string): void {
   assertValidMediaPath(rootPath)
-  allowedMediaRoots.add(path.resolve(rootPath))
+  const resolved = path.resolve(rootPath)
+  if (allowedMediaRoots.has(resolved)) {
+    return
+  }
+  // 默认根目录之外的授权持久化落盘，重启后自动恢复；
+  // 否则重启后项目里直接引用原位置媒体文件的节点会静默 403。
+  const isCoveredByDefaults = getAllowedMediaRoots().some((existing) => isInsideRoot(resolved, existing))
+  allowedMediaRoots.add(resolved)
+  if (!isCoveredByDefaults) {
+    persistMediaRootGrant(resolved)
+  }
+}
+
+/** 启动时恢复持久化的授权目录（只进内存，不再重复写盘） */
+export function restoreAllowedMediaRoots(): void {
+  restorePersistedMediaRoots((rootPath) => {
+    try {
+      assertValidMediaPath(rootPath)
+      allowedMediaRoots.add(path.resolve(rootPath))
+    } catch {
+      // 非法路径直接丢弃
+    }
+  })
 }
 
 function decodeMediaPath(url: string): string {

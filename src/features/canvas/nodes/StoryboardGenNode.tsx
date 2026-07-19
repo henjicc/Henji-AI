@@ -36,6 +36,7 @@ import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
+import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
 import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles'
 import PriceEstimate from '@/components/ui/PriceEstimate'
@@ -417,7 +418,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       onClick={() => setSelectedNode(id)}
     >
       <NodeHeader
-        className={NODE_HEADER_FLOATING_POSITION_CLASS}
+        className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
         icon={<Sparkles className="h-4 w-4" />}
         titleText={resolvedTitle}
         iconAdjust={STORYBOARD_GEN_ICON_ADJUST}
@@ -433,6 +434,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         )}
       />
 
+      <NodeLodPlaceholder title={resolvedTitle} icon={<Sparkles className="h-6 w-6" />} />
+
       <StoryboardGridEditor
         nodeData={nodeData}
         totalFrames={totalFrames}
@@ -445,9 +448,9 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onFrameDescriptionChange={handleFrameDescriptionChange}
       />
 
-      {error && <div className="mb-1.5 shrink-0 text-[10px] text-red-400">{error}</div>}
+      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-[10px] text-red-400">{error}</div>}
 
-      <div className={`flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
+      <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
         <ModelInputRow
           mediaType="image"
           modelId={selectedModelId}

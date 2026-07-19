@@ -90,6 +90,23 @@
   will-change: transform;
 }
 
+/* 低倍率内容 LOD：缩放低于阈值（见 useCanvasContentLod）时，Canvas 包装层
+   挂 .canvas-lod-low，内容型节点正文（标 .canvas-node-lod-detail）只隐藏绘制、
+   保留布局（visibility 不改变几何，xyflow 的 handle 测量与连线锚点不受影响），
+   同时显示大号标题占位（.canvas-node-lod-placeholder）。
+   目的：总览缩放时不可读的正文不再参与重光栅，大幅降低 zoom 的坏帧。 */
+.canvas-lod-low .canvas-node-lod-detail {
+  visibility: hidden;
+}
+
+.canvas-node-lod-placeholder {
+  display: none;
+}
+
+.canvas-lod-low .canvas-node-lod-placeholder {
+  display: flex;
+}
+
 .canvas-minimap {
   border-radius: 12px;
   overflow: hidden;

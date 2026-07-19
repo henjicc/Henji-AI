@@ -34,6 +34,7 @@ import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
 import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
+import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
@@ -432,9 +433,19 @@ export function Canvas() {
     setSelectedNode,
   });
   const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
+  // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
+  const isContentLodLow = useCanvasContentLod();
 
+  // 有意不开 onlyRenderVisibleElements：视口层已合成化（storyboard.css 的 will-change），
+  // 视口外内容不参与光栅、裁剪收益基本消失；而裁剪带来的节点挂载/卸载抖动是
+  // 平移/缩放时数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
   return (
-    <div ref={wrapperRef} className="relative h-full w-full" onDragOver={assetDrop.onDragOver} onDrop={assetDrop.onDrop}>
+    <div
+      ref={wrapperRef}
+      className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''}`}
+      onDragOver={assetDrop.onDragOver}
+      onDrop={assetDrop.onDrop}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -461,7 +472,6 @@ export function Canvas() {
         multiSelectionKeyCode={CANVAS_MULTI_SELECTION_KEY_CODE}
         selectionKeyCode={CANVAS_SELECTION_KEY_CODE}
         deleteKeyCode={null}
-        onlyRenderVisibleElements
         zoomOnDoubleClick={false}
         proOptions={CANVAS_PRO_OPTIONS}
         className="bg-bg-dark"

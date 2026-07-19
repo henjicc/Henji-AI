@@ -22,7 +22,7 @@ import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
-import { registerMediaProtocolHandler, registerMediaProtocolScheme } from './protocol'
+import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
 import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
@@ -36,6 +36,7 @@ if (remoteDebuggingPort) {
 
 app.whenReady().then(() => {
   registerMediaProtocolHandler()
+  restoreAllowedMediaRoots()
   registerAiRuntimeIpc()
   registerAudioIpc()
   registerAssetLibraryIpc()
