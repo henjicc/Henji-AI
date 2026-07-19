@@ -1,4 +1,16 @@
 {
+  "largeUpload": {
+    "title": "Large File Handling",
+    "message": "\"{{name}}\" is about {{size}} MB (over 100 MB). Choose how to handle it:",
+    "copyButton": "Copy into data folder",
+    "copyHint": "Safer; uses extra disk space and copying large files takes time.",
+    "referenceButton": "Reference the original file",
+    "referenceHint": "No copy is made; moving or deleting the original will break media on the canvas.",
+    "rememberLabel": "Remember my choice and stop asking",
+    "rememberOn": "Remember",
+    "rememberOff": "Don't remember",
+    "rememberHint": "You can change this anytime in Settings → General → Storage."
+  },
   "confirm": "Confirm",
   "cancel": "Cancel",
   "save": "Save",

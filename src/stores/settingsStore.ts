@@ -18,6 +18,8 @@ import {
 } from '@/core/theme/runtimeTheme';
 
 export type ProviderKeyStatusMap = Record<string, boolean>;
+/** 超过大文件阈值的本地媒体上传处理方式：每次询问 / 复制进数据目录 / 直接引用原文件 */
+export type LargeUploadStrategy = 'ask' | 'copy' | 'reference';
 export type AssetTabAction = 'floating' | 'workspace';
 export type AssetPanelPosition = 'top' | 'left' | 'right';
 export type AssetTriggerEdge = 'left' | 'right';
@@ -29,6 +31,8 @@ interface SettingsState {
   providerKeyStatus: ProviderKeyStatusMap;
   uploadProvider: UploadProvider;
   uploadFallbackEnabled: boolean;
+  /** 本地媒体超过 100MB 时的处理策略（阈值见 services/largeUploadPolicy.ts） */
+  largeUploadStrategy: LargeUploadStrategy;
   downloadPresetPaths: string[];
   useUploadFilenameAsNodeTitle: boolean;
   /** 图片查看器是否显示图片信息面板 */
@@ -62,6 +66,7 @@ interface SettingsState {
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
   setUploadProvider: (provider: UploadProvider) => void;
   setUploadFallbackEnabled: (enabled: boolean) => void;
+  setLargeUploadStrategy: (strategy: LargeUploadStrategy) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
   setEnableImageViewerInfoPanel: (enabled: boolean) => void;
@@ -183,6 +188,7 @@ export const useSettingsStore = create<SettingsState>()(
       providerKeyStatus: createDefaultProviderKeyStatus(),
       uploadProvider: DEFAULT_UPLOAD_PROVIDER,
       uploadFallbackEnabled: true,
+      largeUploadStrategy: 'ask',
       downloadPresetPaths: [],
       useUploadFilenameAsNodeTitle: true,
       enableImageViewerInfoPanel: true,
@@ -229,6 +235,7 @@ export const useSettingsStore = create<SettingsState>()(
         })),
       setUploadProvider: (uploadProvider) => set({ uploadProvider }),
       setUploadFallbackEnabled: (uploadFallbackEnabled) => set({ uploadFallbackEnabled }),
+      setLargeUploadStrategy: (largeUploadStrategy) => set({ largeUploadStrategy }),
       setDownloadPresetPaths: (paths) => {
         const uniquePaths = Array.from(
           new Set(paths.map((path) => path.trim()).filter((path) => path.length > 0))

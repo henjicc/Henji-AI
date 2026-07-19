@@ -2,7 +2,6 @@ import { createLogger } from '@/core/logging'
 import Pica from 'pica'
 import {
   getPathForFile,
-  isPathAllowedForMedia,
   join,
   mkdir,
   nativeFetch as httpFetch,
@@ -11,6 +10,10 @@ import {
   toDisplaySrc,
   writeFile,
 } from '@/platform/desktopApi'
+import {
+  grantMediaAccessForReference,
+  resolveLargeUploadAction,
+} from '@/services/largeUploadPolicy'
 import { getUploadsPath } from '@/utils/dataPath'
 import { inferMimeFromPath as inferMimeFromPathShared } from '@/utils/mime'
 import { fileToBlobSrc, fileToDataUrl, bytesToDataUrl } from './fileUrls'
@@ -101,17 +104,16 @@ export async function saveUploadVideo(
   const mime = file.type || 'video/mp4'
   const ext = mime.includes('webm') ? 'webm' : 'mp4'
 
-  // 桌面端：File 若来自真实磁盘文件（文件选择器/拖拽），直接拿现成路径，
-  // 不需要把整个视频读进内存、算一遍哈希、再写一份重复副本——这对几十上百 MB
-  // 的视频是非常明显的耗时来源。只有合成 Blob（如剪贴板生成）才会落到下面的慢路径。
-  // 但 henji-media:// 协议只允许读取几个白名单根目录下的文件，用户选的视频大概率
-  // 不在这些目录里（桌面、文档、自定义文件夹……）——直接复用这种路径会导致协议
-  // 403 拒绝，<video src> 既不显示缩略图也放不了，且不会报错，必须先确认路径在
-  // 允许范围内才走这条快路径，否则照旧落到下面的慢路径（写进 Uploads 目录，天然在允许范围内）。
+  // 大文件策略（用户约定，见 services/largeUploadPolicy.ts）：
+  // ≤100MB 一律复制进 Uploads；>100MB 按设置执行（每次询问 / 复制 / 引用原路径）。
+  // 引用模式会主动授权原文件所在目录给 henji-media 协议（授权持久化，重启不失效），
+  // 避免复制几百 MB 视频的读取+哈希+落盘耗时；复制模式更稳妥但大文件较慢。
   if (mode === 'persist') {
     const directPath = getPathForFile(file)
-    if (directPath && await isPathAllowedForMedia(directPath)) {
-      logger.info('[save] upload video reused source path (no copy needed)', directPath)
+    const action = await resolveLargeUploadAction(file, directPath ?? null)
+    if (action === 'reference' && directPath) {
+      await grantMediaAccessForReference(directPath)
+      logger.info('[save] upload video referenced source path (no copy)', directPath)
       return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
     }
   }
@@ -180,6 +182,18 @@ export async function saveUploadAudio(
   mode: 'memory' | 'persist' = 'persist'
 ): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
   const { mime, ext } = resolveAudioMimeAndExt(file)
+
+  // 与视频一致的大文件策略：>100MB 的音频（长录音/无损）按设置选择复制或引用原路径
+  if (mode === 'persist') {
+    const directPath = getPathForFile(file)
+    const action = await resolveLargeUploadAction(file, directPath ?? null)
+    if (action === 'reference' && directPath) {
+      await grantMediaAccessForReference(directPath)
+      logger.info('[save] upload audio referenced source path (no copy)', directPath)
+      return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
+    }
+  }
+
   const originalBuf = await file.arrayBuffer()
   const bytes = new Uint8Array(originalBuf)
   const hash = await sha256Hex(originalBuf)

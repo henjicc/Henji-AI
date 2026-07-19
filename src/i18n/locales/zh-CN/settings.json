@@ -280,6 +280,17 @@
         "layer": "层级底色"
       }
     },
+    "largeUpload": {
+      "title": "大文件处理",
+      "description": "上传本地视频/音频时，100MB 及以下的文件总是复制到数据目录；超过 100MB 的文件按此策略处理。",
+      "strategyLabel": "超过 100MB 时",
+      "options": {
+        "ask": "每次询问",
+        "copy": "复制到数据目录",
+        "reference": "直接引用原文件"
+      },
+      "hint": "引用原文件不产生副本、上传更快，但移动或删除原文件会导致画布中的媒体失效。"
+    },
     "upload": {
       "title": "通用文件上传服务",
       "description": "为 ModelScope、PPIO 等不具备原生文件上传功能的模型提供文件托管服务。",

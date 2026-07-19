@@ -15,6 +15,7 @@ import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
 import type { WorkspaceId } from '@/core/types/workspace'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { AssetLibraryFloatingPanel } from '@/features/assets/AssetLibraryFloatingPanel'
+import { LargeUploadChoiceDialog } from '@/components/upload/LargeUploadChoiceDialog'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
 
@@ -148,6 +149,7 @@ const App: React.FC = () => {
       <TabContainer activeTab={activeTab} />
       <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      <LargeUploadChoiceDialog />
     </div>
   )
 }

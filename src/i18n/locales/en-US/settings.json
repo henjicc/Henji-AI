@@ -280,6 +280,17 @@
         "layer": "Layer Base"
       }
     },
+    "largeUpload": {
+      "title": "Large File Handling",
+      "description": "When uploading local video/audio, files up to 100 MB are always copied into the data folder; larger files follow this strategy.",
+      "strategyLabel": "For files over 100 MB",
+      "options": {
+        "ask": "Ask every time",
+        "copy": "Copy into data folder",
+        "reference": "Reference the original file"
+      },
+      "hint": "Referencing skips the copy and is faster, but moving or deleting the original file will break media on the canvas."
+    },
     "upload": {
       "title": "Generic Upload Service",
       "description": "Provide file hosting for models without native uploads (e.g., ModelScope, PPIO).",
