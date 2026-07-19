@@ -3,6 +3,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits';
 import type { ParamDef } from '@/core/types';
 import { deriveSocketType, isSocketCompatible } from '@/core/types/SocketType';
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '../domain/canvasNodes';
+import { getIncomingEdges, getNodeIndexById } from '../domain/connectionIndex';
 import {
   getCanvasNodeDefinition,
   getNodeMediaOutputs,
@@ -82,10 +83,7 @@ function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamD
 /** 返回连到本节点参数端口、且有边的 paramId 集合（不要求上游能解析出值） */
 export function getConnectedParamIds(nodeId: string, edges: CanvasEdge[]): Set<string> {
   const connected = new Set<string>();
-  for (const edge of edges) {
-    if (edge.target !== nodeId) {
-      continue;
-    }
+  for (const edge of getIncomingEdges(edges, nodeId)) {
     const paramId = parseParamPortId(edge.targetHandle);
     if (paramId) {
       connected.add(paramId);
@@ -97,18 +95,23 @@ export function getConnectedParamIds(nodeId: string, edges: CanvasEdge[]): Set<s
 /**
  * 收集连到本节点参数端口的上游标量值，返回 paramId → value 覆盖表。
  * 同一端口多条连线时后者覆盖前者。
+ *
+ * 与 collectInputMedia 同理：被节点级选择器高频调用，
+ * 必须走 connectionIndex 的引用缓存索引，禁止函数内全量扫描。
  */
 export function collectInputValues(
   nodeId: string,
   nodes: CanvasNode[],
   edges: CanvasEdge[]
 ): DynamicValueMap {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const overrides: DynamicValueMap = {};
-  for (const edge of edges) {
-    if (edge.target !== nodeId) {
-      continue;
-    }
+  const incoming = getIncomingEdges(edges, nodeId);
+  if (incoming.length === 0) {
+    return overrides;
+  }
+
+  const nodeById = getNodeIndexById(nodes);
+  for (const edge of incoming) {
     const paramId = parseParamPortId(edge.targetHandle);
     if (!paramId) {
       continue;

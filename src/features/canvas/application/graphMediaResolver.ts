@@ -1,29 +1,34 @@
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
+import { getIncomingEdges, getNodeIndexById } from '../domain/connectionIndex';
 import { getNodeMediaOutputs } from '../domain/nodeRegistry';
 import type { MediaKind, NodeMediaOutput } from '../domain/nodePorts';
 
 /**
  * 收集节点全部上游媒体输出（按连线顺序，URL 去重）。
  * 输出类型由各节点定义的 getOutputs 声明，无节点类型特判。
+ *
+ * 本函数被节点级 zustand 选择器高频调用（每次 store 更新 × 每个节点），
+ * 必须走 connectionIndex 的引用缓存索引，禁止在函数内全量重建 Map/扫描 edges。
  */
 export function collectInputMedia(
   nodeId: string,
   nodes: CanvasNode[],
   edges: CanvasEdge[]
 ): NodeMediaOutput[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const sourceNodeIds = edges
-    .filter((edge) => edge.target === nodeId)
-    .map((edge) => ({ source: edge.source, sourceHandle: edge.sourceHandle ?? 'source' }));
+  const incoming = getIncomingEdges(edges, nodeId);
+  if (incoming.length === 0) {
+    return EMPTY_OUTPUTS;
+  }
 
+  const nodeById = getNodeIndexById(nodes);
   const seen = new Set<string>();
   const outputs: NodeMediaOutput[] = [];
-  for (const { source: sourceId, sourceHandle } of sourceNodeIds) {
-    const sourceNode = nodeById.get(sourceId);
+  for (const edge of incoming) {
+    const sourceNode = nodeById.get(edge.source);
     if (!sourceNode) {
       continue;
     }
-    for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data, sourceHandle)) {
+    for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data, edge.sourceHandle ?? 'source')) {
       if (!output.url || seen.has(output.url)) {
         continue;
       }
@@ -34,6 +39,9 @@ export function collectInputMedia(
   return outputs;
 }
 
+/** 无上游时返回稳定引用，避免选择器每次生成新数组触发相等比较开销 */
+const EMPTY_OUTPUTS: NodeMediaOutput[] = [];
+
 /** 收集指定媒体类型的上游输出（保留 previewUrl，供缩略图展示用原图/预览图取舍） */
 export function collectInputMediaByKind(
   nodeId: string,
@@ -41,7 +49,11 @@ export function collectInputMediaByKind(
   edges: CanvasEdge[],
   kind: MediaKind
 ): NodeMediaOutput[] {
-  return collectInputMedia(nodeId, nodes, edges).filter((output) => output.kind === kind);
+  const outputs = collectInputMedia(nodeId, nodes, edges);
+  if (outputs.length === 0) {
+    return outputs;
+  }
+  return outputs.filter((output) => output.kind === kind);
 }
 
 /** 收集指定媒体类型的上游输出 URL 列表 */

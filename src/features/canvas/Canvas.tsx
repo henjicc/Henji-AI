@@ -344,6 +344,9 @@ export function Canvas() {
     [connectNodes, edges, nodes, scheduleCanvasPersist, showConnectionToast, t]
   );
 
+  // 视口状态只在 moveEnd 时同步进 store：平移/缩放过程中每帧 set() 会把
+  // 全画布节点的 zustand 选择器（含 O(节点+边) 的图遍历）都跑一遍，是大画布掉帧主因之一。
+  // 需要实时视口的调用方一律走 reactFlowInstance.getViewport()。
   const handleMoveEnd = useCallback(
     (_event: DynamicValue, viewport: Viewport) => {
       setViewportState(viewport);
@@ -354,13 +357,6 @@ export function Canvas() {
       saveCurrentProjectViewport(viewport);
     },
     [getCurrentProject, saveCurrentProjectViewport, setViewportState]
-  );
-
-  const handleMove = useCallback(
-    (_event: DynamicValue, viewport: Viewport) => {
-      setViewportState(viewport);
-    },
-    [setViewportState]
   );
 
   const handleMoveStart = useCallback(() => {
@@ -452,7 +448,6 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onPaneClick={handlePaneClick}
-        onMove={handleMove}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}

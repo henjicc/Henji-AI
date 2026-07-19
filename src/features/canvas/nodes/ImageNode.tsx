@@ -28,6 +28,7 @@ import {
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
+import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 type ImageNodeProps = NodeProps & {
@@ -80,12 +81,13 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
     [data, type]
   );
 
-  const imageSource = useMemo(() => {
+  const targetImageSource = useMemo(() => {
     const picked = preferOriginalImage
       ? data.imageUrl || data.previewImageUrl
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
   }, [data.imageUrl, data.previewImageUrl, preferOriginalImage]);
+  const imageSource = useDecodedImageSource(targetImageSource);
 
   // 获取原图 URL 用于查看器
   const originalImageUrl = useMemo(() => {

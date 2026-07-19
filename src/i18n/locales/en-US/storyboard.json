@@ -165,7 +165,8 @@
     },
     "videoNode": {
       "uploadHint": "Click or drag to upload video",
-      "waitingResult": "Waiting for output video"
+      "waitingResult": "Waiting for output video",
+      "play": "Play"
     },
     "audioNode": {
       "uploadHint": "Click or drag to upload audio",

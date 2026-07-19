@@ -46,6 +46,7 @@ import {
 } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
+import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiInput } from '@/components/ui';
@@ -295,7 +296,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     clearTransientPreview();
   }, [clearTransientPreview]);
 
-  const imageSource = useMemo(() => {
+  const targetImageSource = useMemo(() => {
     if (transientPreviewUrl) {
       return transientPreviewUrl;
     }
@@ -304,6 +305,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
   }, [data.imageUrl, data.previewImageUrl, preferOriginalImage, transientPreviewUrl]);
+  const imageSource = useDecodedImageSource(targetImageSource);
 
   return (
     <div

@@ -8,6 +8,8 @@ interface CanvasVideoPlayerProps {
   src: string;
   knownDuration?: number | null;
   onOpenViewer: () => void;
+  /** poster 点击播放场景：挂载后元数据就绪即自动开播 */
+  autoPlayOnMount?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -22,6 +24,7 @@ export function CanvasVideoPlayer({
   src,
   knownDuration,
   onOpenViewer,
+  autoPlayOnMount = false,
 }: CanvasVideoPlayerProps): JSX.Element {
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -107,6 +110,9 @@ export function CanvasVideoPlayer({
           setDuration(Number.isFinite(video.duration) ? video.duration : (knownDuration ?? 0));
           video.currentTime = 0;
           setCurrentTime(0);
+          if (autoPlayOnMount) {
+            void video.play().catch(() => setPlaying(false));
+          }
         }}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime || 0)}
         onPlay={() => setPlaying(true)}

@@ -165,7 +165,8 @@
     },
     "videoNode": {
       "uploadHint": "点击或拖拽上传视频",
-      "waitingResult": "等待输出结果视频"
+      "waitingResult": "等待输出结果视频",
+      "play": "播放"
     },
     "audioNode": {
       "uploadHint": "点击或拖拽上传音频",

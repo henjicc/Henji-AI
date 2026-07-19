@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { Upload, Video } from 'lucide-react';
+import { Play, Upload, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -28,8 +28,9 @@ import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { saveUploadVideo } from '@/utils/save';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { UiInput } from '@/components/ui';
+import { UiIconButton, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
+import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
 
 type VideoNodeProps = NodeProps & {
@@ -89,6 +90,18 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     () => (data.videoUrl ? resolveImageDisplayUrl(data.videoUrl) : null),
     [data.videoUrl]
   );
+  const posterSource = useMemo(
+    () => (data.previewImageUrl ? resolveImageDisplayUrl(data.previewImageUrl) : null),
+    [data.previewImageUrl]
+  );
+
+  // poster 优先：有封面时默认只渲染 <img>，点击播放才挂载 <video>。
+  // 每个常驻 <video preload="auto"> 都是一个解码器实例，几十个视频节点时内存/解码开销可观。
+  const [isPlayerActive, setIsPlayerActive] = useState(false);
+  useEffect(() => {
+    setIsPlayerActive(false);
+  }, [videoSource]);
+  const shouldMountPlayer = Boolean(videoSource) && (isPlayerActive || !posterSource);
 
   const processFile = useCallback(async (file: File) => {
     const sequence = uploadSequenceRef.current + 1;
@@ -167,12 +180,43 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       />
 
       <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
-        {videoSource ? (
+        {videoSource && shouldMountPlayer ? (
           <CanvasVideoPlayer
             src={videoSource}
             knownDuration={data.durationSec}
             onOpenViewer={() => setIsViewerOpen(true)}
+            autoPlayOnMount={isPlayerActive}
           />
+        ) : videoSource && posterSource ? (
+          <div
+            className="group/poster relative h-full w-full"
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              setIsViewerOpen(true);
+            }}
+          >
+            <CanvasNodeImage
+              src={posterSource}
+              alt={resolvedTitle}
+              className="pointer-events-none h-full w-full select-none object-contain"
+              disableViewer
+              draggable={false}
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <UiIconButton
+                aria-label={t('node.videoNode.play')}
+                showBorder={false}
+                className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full !border-white/15 !bg-black/50 !text-white shadow-xl shadow-black/25 backdrop-blur-md hover:!bg-black/65"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsPlayerActive(true);
+                }}
+              >
+                <Play className="ml-0.5 h-5 w-5" />
+              </UiIconButton>
+            </div>
+          </div>
         ) : isUploadVariant ? (
           <label
             className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85"

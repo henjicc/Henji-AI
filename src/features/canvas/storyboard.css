@@ -82,6 +82,14 @@
   border-radius: var(--ui-radius-lg);
 }
 
+/* 视口层合成化：xyflow 默认不给 .react-flow__viewport 提升合成层，
+   平移/缩放的每帧 transform 变化都会触发整棵节点树重绘（光栅），
+   80 个内容型节点时平移只有 ~27fps；提升为合成层后平移是纯合成器移动，恢复 60fps。
+   实测层级（tile 化）显存开销可控，优于给每个节点单独建层。 */
+.react-flow__viewport {
+  will-change: transform;
+}
+
 .canvas-minimap {
   border-radius: 12px;
   overflow: hidden;

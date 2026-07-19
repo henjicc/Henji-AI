@@ -43,6 +43,42 @@ export function getMainPortConnectionFlags(edges: CanvasEdge[]): Map<string, Mai
   return map;
 }
 
+let edgesByTargetCacheKey: CanvasEdge[] | null = null;
+let edgesByTargetCacheValue: Map<string, CanvasEdge[]> | null = null;
+
+const EMPTY_EDGES: CanvasEdge[] = [];
+
+/**
+ * 按 target 节点 id 分桶索引边。用 edges 数组引用做单槽缓存：
+ * 节点级 zustand 选择器（collectInputMedia/collectInputValues 等）在每次 store
+ * 更新时都会执行，若各自全量扫 edges，总开销是 O(节点数 × 边数)；
+ * 这里一次建桶后各节点只按入度取自己的边。
+ */
+export function getEdgesByTarget(edges: CanvasEdge[]): Map<string, CanvasEdge[]> {
+  if (edgesByTargetCacheKey === edges && edgesByTargetCacheValue) {
+    return edgesByTargetCacheValue;
+  }
+
+  const map = new Map<string, CanvasEdge[]>();
+  for (const edge of edges) {
+    const bucket = map.get(edge.target);
+    if (bucket) {
+      bucket.push(edge);
+    } else {
+      map.set(edge.target, [edge]);
+    }
+  }
+
+  edgesByTargetCacheKey = edges;
+  edgesByTargetCacheValue = map;
+  return map;
+}
+
+/** 取指向某节点的全部边（无则返回稳定的空数组引用） */
+export function getIncomingEdges(edges: CanvasEdge[], nodeId: string): CanvasEdge[] {
+  return getEdgesByTarget(edges).get(nodeId) ?? EMPTY_EDGES;
+}
+
 let nodeIndexCacheKey: CanvasNode[] | null = null;
 let nodeIndexCacheValue: Map<string, CanvasNode> | null = null;
 
