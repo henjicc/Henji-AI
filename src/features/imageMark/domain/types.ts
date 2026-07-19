@@ -21,34 +21,36 @@ export interface MarkShapeStyle {
   lineWidth: number;
 }
 
-export interface RectMark extends MarkShapeStyle {
+/** 标签字段:文本挂在图形上,跟随图形移动;labelDx/Dy 为用户拖动后的相对偏移(相对图形参考点) */
+interface MarkLabelFields {
+  label?: string;
+  labelFontSize?: number;
+  labelDx?: number;
+  labelDy?: number;
+}
+
+export interface RectMark extends MarkShapeStyle, MarkLabelFields {
   id: string;
   type: 'rect';
   x: number;
   y: number;
   width: number;
   height: number;
-  label?: string;
-  labelFontSize?: number;
 }
 
-export interface EllipseMark extends MarkShapeStyle {
+export interface EllipseMark extends MarkShapeStyle, MarkLabelFields {
   id: string;
   type: 'ellipse';
   x: number;
   y: number;
   width: number;
   height: number;
-  label?: string;
-  labelFontSize?: number;
 }
 
-export interface ArrowMark extends MarkShapeStyle {
+export interface ArrowMark extends MarkShapeStyle, MarkLabelFields {
   id: string;
   type: 'arrow';
   points: [number, number, number, number];
-  label?: string;
-  labelFontSize?: number;
 }
 
 export interface PenMark extends MarkShapeStyle {
@@ -77,6 +79,8 @@ export interface NumberMark {
   fontSize: number;
 }
 
+export type MosaicMode = 'pixel' | 'blur';
+
 export interface MosaicMark {
   id: string;
   type: 'mosaic';
@@ -86,6 +90,8 @@ export interface MosaicMark {
   height: number;
   /** 打码强度:色块边长占图片短边的百分比,缺省用 DEFAULT_MOSAIC_STRENGTH_PERCENT */
   strengthPercent?: number;
+  /** pixel=马赛克(默认);blur=高斯模糊 */
+  mode?: MosaicMode;
 }
 
 export type MarkItem =

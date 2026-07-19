@@ -1,5 +1,7 @@
-import { clamp, getPointsBounds } from './geometry';
+import { clamp, getPointsBounds, labelRefPoint } from './geometry';
 import type { LabeledMark } from './types';
+
+export { labelRefPoint };
 
 /**
  * 编辑器(Konva)与光栅化导出共用的度量函数。
@@ -71,6 +73,15 @@ export function resolveMosaicPixelSize(
   return clamp(Math.round((base * strength) / 100), 4, 128);
 }
 
+/** 高斯模糊模式的模糊半径(图片像素) */
+export function resolveMosaicBlurRadius(
+  width: number,
+  height: number,
+  strengthPercent: number = DEFAULT_MOSAIC_STRENGTH_PERCENT
+): number {
+  return Math.max(2, Math.round(resolveMosaicPixelSize(width, height, strengthPercent) * 0.5));
+}
+
 // ==================== 标签(框选/箭头旁的文字) ====================
 
 /** 粗略估算文本宽度:CJK 记 1em,其余 0.62em;仅用于边界收敛,不追求精确 */
@@ -94,16 +105,23 @@ export interface LabelPlacement {
   y: number;
 }
 
+
 /**
  * 标签锚点(文本块左上角):
- * - 矩形/椭圆:放在形状右下角外侧(标注工具的拖动落点),越界时向内收敛
- * - 箭头:放在终点(箭头尖)旁,按边界自动换侧
+ * - 用户拖动过标签(labelDx/Dy)时按相对偏移跟随图形
+ * - 矩形/椭圆默认放在形状右下角外侧(标注工具的拖动落点),越界时向内收敛
+ * - 箭头默认放在终点(箭头尖)旁,按边界自动换侧
  */
 export function resolveLabelPlacement(
   item: LabeledMark,
   imageWidth: number,
   imageHeight: number
 ): LabelPlacement {
+  if (typeof item.labelDx === 'number' && typeof item.labelDy === 'number') {
+    const ref = labelRefPoint(item);
+    return { x: ref.x + item.labelDx, y: ref.y + item.labelDy };
+  }
+
   const label = item.label ?? '';
   const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
   const lines = label.split('\n');
@@ -133,4 +151,61 @@ export function resolveLabelPlacement(
     ? belowY
     : clamp(item.y - gap - blockHeight, 0, Math.max(0, imageHeight - blockHeight));
   return { x, y };
+}
+
+/** 标签文本块的外接矩形(含估算宽高) */
+export function resolveLabelBlockRect(
+  item: LabeledMark,
+  imageWidth: number,
+  imageHeight: number
+): { x: number; y: number; width: number; height: number; fontSize: number } {
+  const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
+  const lines = (item.label ?? '').split('\n');
+  const placement = resolveLabelPlacement(item, imageWidth, imageHeight);
+  return {
+    x: placement.x,
+    y: placement.y,
+    width: Math.max(...lines.map((line) => estimateTextWidth(line, fontSize)), fontSize),
+    height: Math.max(1, lines.length) * fontSize * TEXT_LINE_HEIGHT,
+    fontSize,
+  };
+}
+
+function closestPointOnRect(
+  px: number,
+  py: number,
+  rect: { x: number; y: number; width: number; height: number }
+): { x: number; y: number } {
+  return {
+    x: clamp(px, rect.x, rect.x + rect.width),
+    y: clamp(py, rect.y, rect.y + rect.height),
+  };
+}
+
+/**
+ * 标签引导线:用户把标签拖离图形后,画一条从标签指向图形的细线。
+ * 返回 null 表示不需要引导线(未拖动/距离太近)。
+ */
+export function resolveLabelConnector(
+  item: LabeledMark,
+  imageWidth: number,
+  imageHeight: number
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  if (typeof item.labelDx !== 'number' || typeof item.labelDy !== 'number' || !item.label) {
+    return null;
+  }
+  const block = resolveLabelBlockRect(item, imageWidth, imageHeight);
+  const shapeRect = item.type === 'arrow'
+    ? { x: item.points[2], y: item.points[3], width: 0, height: 0 }
+    : { x: item.x, y: item.y, width: item.width, height: item.height };
+
+  const shapeCenter = { x: shapeRect.x + shapeRect.width / 2, y: shapeRect.y + shapeRect.height / 2 };
+  const blockCenter = { x: block.x + block.width / 2, y: block.y + block.height / 2 };
+  const start = closestPointOnRect(shapeCenter.x, shapeCenter.y, block);
+  const end = closestPointOnRect(blockCenter.x, blockCenter.y, shapeRect);
+
+  if (Math.hypot(end.x - start.x, end.y - start.y) < block.fontSize * 0.8) {
+    return null;
+  }
+  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
 }

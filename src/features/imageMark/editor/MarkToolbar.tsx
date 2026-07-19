@@ -181,21 +181,60 @@ export function MarkToolbar({
             </UiChipButton>
           </>
         ) : tool === 'mosaic' ? (
-          <div ref={mosaicSliderRef} className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">强度</span>
-            <UiRangeInput
-              min={MIN_MOSAIC_STRENGTH_PERCENT}
-              max={MAX_MOSAIC_STRENGTH_PERCENT}
-              step={0.5}
-              value={Number(style.mosaicStrengthPercent.toFixed(1))}
-              onChange={(event) => onStylePatch({ mosaicStrengthPercent: Number(event.target.value) })}
-              className="!w-36"
-            />
-            <span className="w-9 text-xs text-text-muted">{style.mosaicStrengthPercent.toFixed(1)}%</span>
-            <span className="text-xs text-text-muted">拖拽框选需要打码的区域,滚轮可调强度</span>
-          </div>
+          <>
+            <UiChipButton
+              type="button"
+              active={style.mosaicMode === 'pixel'}
+              onClick={() => onStylePatch({ mosaicMode: 'pixel' })}
+              className={CHIP_CLASS}
+            >
+              马赛克
+            </UiChipButton>
+            <UiChipButton
+              type="button"
+              active={style.mosaicMode === 'blur'}
+              onClick={() => onStylePatch({ mosaicMode: 'blur' })}
+              className={CHIP_CLASS}
+            >
+              高斯模糊
+            </UiChipButton>
+            <div ref={mosaicSliderRef} className="flex items-center gap-2" title="滚轮可调">
+              <span className="text-xs text-text-muted">强度</span>
+              <UiRangeInput
+                min={MIN_MOSAIC_STRENGTH_PERCENT}
+                max={MAX_MOSAIC_STRENGTH_PERCENT}
+                step={0.5}
+                value={Number(style.mosaicStrengthPercent.toFixed(1))}
+                onChange={(event) => onStylePatch({ mosaicStrengthPercent: Number(event.target.value) })}
+                className="!w-36"
+              />
+              <span className="w-9 text-xs text-text-muted">{style.mosaicStrengthPercent.toFixed(1)}%</span>
+            </div>
+            <span className="text-xs text-text-muted">拖拽框选需要打码的区域</span>
+          </>
         ) : (
           <>
+            {tool === 'callout' && (
+              <div className="mr-1 flex items-center gap-1">
+                <span className="text-xs text-text-muted">形状</span>
+                <UiChipButton
+                  type="button"
+                  active={style.calloutShape === 'rect'}
+                  onClick={() => onStylePatch({ calloutShape: 'rect' })}
+                  className={CHIP_CLASS}
+                >
+                  矩形
+                </UiChipButton>
+                <UiChipButton
+                  type="button"
+                  active={style.calloutShape === 'ellipse'}
+                  onClick={() => onStylePatch({ calloutShape: 'ellipse' })}
+                  className={CHIP_CLASS}
+                >
+                  圆形
+                </UiChipButton>
+              </div>
+            )}
             {showColor && (
               <>
                 <div className="flex items-center gap-1">

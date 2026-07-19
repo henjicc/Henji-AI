@@ -6,13 +6,23 @@ import {
   MARK_FONT_FAMILY,
   TEXT_LINE_HEIGHT,
   numberBadgeRadius,
+  resolveLabelConnector,
   resolveLabelFontSize,
   resolveLabelPlacement,
+  resolveMosaicBlurRadius,
   resolveMosaicPixelSize,
   resolveTextBaseSize,
 } from '../domain/metrics';
-import { isLabeledMark, type MarkItem } from '../domain/types';
-import { drawMosaicRegion } from '../render/orientedImage';
+import { isLabeledMark, type LabeledMark, type MarkItem } from '../domain/types';
+import { drawBlurRegion, drawMosaicRegion } from '../render/orientedImage';
+
+/** 悬停在标记上时把光标切成移动型,离开时还原为工具光标 */
+function setStageCursor(event: KonvaEventObject<MouseEvent>, cursor: string): void {
+  const container = event.target.getStage()?.container();
+  if (container) {
+    container.style.cursor = cursor;
+  }
+}
 
 interface MarkShapeNodeProps {
   item: MarkItem;
@@ -22,6 +32,8 @@ interface MarkShapeNodeProps {
   imageHeight: number;
   /** 按像素块尺寸取打码取样源 */
   getMosaicSource: (pixelSize: number) => HTMLCanvasElement | null;
+  /** 高斯模糊模式的取样源(当前朝向位图) */
+  blurSource?: HTMLCanvasElement | null;
   draggable: boolean;
   listening: boolean;
   opacity?: number;
@@ -32,6 +44,8 @@ interface MarkShapeNodeProps {
   onDragEnd?: (item: MarkItem, event: KonvaEventObject<DragEvent>) => void;
   onTransformEnd?: (item: MarkItem, event: KonvaEventObject<Event>) => void;
   onDblClick?: (item: MarkItem) => void;
+  /** 标签被单独拖动后回写相对偏移 */
+  onLabelDragEnd?: (item: LabeledMark, node: Konva.Node) => void;
 }
 
 export function MarkShapeNode({
@@ -40,6 +54,7 @@ export function MarkShapeNode({
   imageWidth,
   imageHeight,
   getMosaicSource,
+  blurSource = null,
   draggable,
   listening,
   opacity = 1,
@@ -49,6 +64,7 @@ export function MarkShapeNode({
   onDragEnd,
   onTransformEnd,
   onDblClick,
+  onLabelDragEnd,
 }: MarkShapeNodeProps): JSX.Element {
   const commonHandlers = {
     draggable,
@@ -61,10 +77,21 @@ export function MarkShapeNode({
       event.cancelBubble = true;
       onDblClick?.(item);
     },
+    onMouseEnter: (event: KonvaEventObject<MouseEvent>) => setStageCursor(event, 'move'),
+    onMouseLeave: (event: KonvaEventObject<MouseEvent>) => setStageCursor(event, ''),
   };
 
   const labelNode = isLabeledMark(item) && item.label && !hideLabel ? (
-    <LabelTextNode item={item} imageWidth={imageWidth} imageHeight={imageHeight} opacity={opacity} />
+    <LabelTextNode
+      item={item}
+      imageWidth={imageWidth}
+      imageHeight={imageHeight}
+      opacity={opacity}
+      listening={listening}
+      onSelect={onSelect}
+      onDblClick={onDblClick}
+      onLabelDragEnd={onLabelDragEnd}
+    />
   ) : null;
 
   if (item.type === 'rect') {
@@ -78,6 +105,8 @@ export function MarkShapeNode({
           height={item.height}
           stroke={item.stroke}
           strokeWidth={item.lineWidth}
+          // 透明填充让空心内部可命中,支持从中间拖动整体
+          fill="transparent"
           opacity={opacity}
           strokeScaleEnabled={false}
           hitStrokeWidth={Math.max(item.lineWidth, 12)}
@@ -99,6 +128,7 @@ export function MarkShapeNode({
           radiusY={Math.max(1, item.height / 2)}
           stroke={item.stroke}
           strokeWidth={item.lineWidth}
+          fill="transparent"
           opacity={opacity}
           strokeScaleEnabled={false}
           hitStrokeWidth={Math.max(item.lineWidth, 12)}
@@ -186,11 +216,12 @@ export function MarkShapeNode({
         />
         <Text
           x={-radius}
-          y={-radius + item.fontSize * 0.05}
+          y={-radius}
           width={radius * 2}
           height={radius * 2}
           align="center"
           verticalAlign="middle"
+          lineHeight={1}
           text={String(numberValue)}
           fill={WHITE_HEX}
           fontStyle="bold"
@@ -202,10 +233,14 @@ export function MarkShapeNode({
     );
   }
 
-  // mosaic:sceneFunc 直接从取样源低清放大绘制
+  // mosaic:sceneFunc 直接从取样源低清放大/模糊绘制
   const mosaicPixelSize = item.type === 'mosaic'
     ? resolveMosaicPixelSize(imageWidth, imageHeight, item.strengthPercent)
     : 0;
+  const mosaicBlurRadius = item.type === 'mosaic'
+    ? resolveMosaicBlurRadius(imageWidth, imageHeight, item.strengthPercent)
+    : 0;
+  const isBlurMode = item.type === 'mosaic' && item.mode === 'blur';
   return (
     <Shape
       ref={(node) => bindRef?.(item.id, node)}
@@ -216,16 +251,14 @@ export function MarkShapeNode({
       opacity={opacity}
       sceneFunc={(context, shape) => {
         const native = context._context;
+        const region = { x: shape.x(), y: shape.y(), width: shape.width(), height: shape.height() };
+        if (isBlurMode && blurSource) {
+          drawBlurRegion(native, blurSource, mosaicBlurRadius, region, 0, 0);
+          return;
+        }
         const mosaicSource = getMosaicSource(mosaicPixelSize);
         if (mosaicSource) {
-          drawMosaicRegion(
-            native,
-            mosaicSource,
-            mosaicPixelSize,
-            { x: shape.x(), y: shape.y(), width: shape.width(), height: shape.height() },
-            0,
-            0
-          );
+          drawMosaicRegion(native, mosaicSource, mosaicPixelSize, region, 0, 0);
         } else {
           native.fillStyle = 'rgba(127, 127, 127, 0.6)';
           native.fillRect(0, 0, shape.width(), shape.height());
@@ -247,32 +280,63 @@ function LabelTextNode({
   imageWidth,
   imageHeight,
   opacity,
+  listening,
+  onSelect,
+  onDblClick,
+  onLabelDragEnd,
 }: {
   item: MarkItem & { label?: string };
   imageWidth: number;
   imageHeight: number;
   opacity: number;
+  listening: boolean;
+  onSelect?: (id: string) => void;
+  onDblClick?: (item: MarkItem) => void;
+  onLabelDragEnd?: (item: LabeledMark, node: Konva.Node) => void;
 }): JSX.Element | null {
   if (!isLabeledMark(item) || !item.label) {
     return null;
   }
   const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
   const placement = resolveLabelPlacement(item, imageWidth, imageHeight);
+  const connector = resolveLabelConnector(item, imageWidth, imageHeight);
   return (
-    <Text
-      x={placement.x}
-      y={placement.y}
-      text={item.label}
-      fill={item.stroke}
-      fontStyle="bold"
-      fontFamily={MARK_FONT_FAMILY}
-      fontSize={fontSize}
-      lineHeight={TEXT_LINE_HEIGHT}
-      opacity={opacity}
-      listening={false}
-      shadowColor="rgba(0, 0, 0, 0.55)"
-      shadowBlur={Math.max(1, fontSize * 0.08)}
-      shadowOffsetY={Math.max(1, Math.round(fontSize * 0.04))}
-    />
+    <>
+      {connector && (
+        <Line
+          points={[connector.x1, connector.y1, connector.x2, connector.y2]}
+          stroke={item.stroke}
+          strokeWidth={Math.max(1, item.lineWidth * 0.5)}
+          opacity={opacity}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      )}
+      <Text
+        x={placement.x}
+        y={placement.y}
+        text={item.label}
+        fill={item.stroke}
+        fontStyle="bold"
+        fontFamily={MARK_FONT_FAMILY}
+        fontSize={fontSize}
+        lineHeight={TEXT_LINE_HEIGHT}
+        opacity={opacity}
+        listening={listening}
+        draggable={listening}
+        onClick={() => onSelect?.(item.id)}
+        onTap={() => onSelect?.(item.id)}
+        onDblClick={(event) => {
+          event.cancelBubble = true;
+          onDblClick?.(item);
+        }}
+        onDragEnd={(event) => onLabelDragEnd?.(item, event.target)}
+        onMouseEnter={(event) => setStageCursor(event, 'move')}
+        onMouseLeave={(event) => setStageCursor(event, '')}
+        shadowColor="rgba(0, 0, 0, 0.55)"
+        shadowBlur={Math.max(1, fontSize * 0.08)}
+        shadowOffsetY={Math.max(1, Math.round(fontSize * 0.04))}
+      />
+    </>
   );
 }

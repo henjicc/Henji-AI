@@ -3,7 +3,8 @@ import { Group, Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'rea
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
-import type { ImageMarkDoc, MarkItem, MarkToolType } from '../domain/types';
+import { labelRefPoint } from '../domain/geometry';
+import type { ImageMarkDoc, LabeledMark, MarkItem, MarkToolType } from '../domain/types';
 import { resolveNumberValues } from '../render/drawMarks';
 import { CropOverlayBox } from './CropOverlayBox';
 import { MarkShapeNode } from './markShapes';
@@ -116,6 +117,17 @@ export function MarkCanvas({
     onItemsUpdated(doc.items.map((current) => (current.id === item.id ? updated : current)));
   }, [doc.items, onItemsUpdated]);
 
+  // 标签单独拖动:把新位置记为相对图形参考点的偏移,之后仍随图形移动
+  const handleLabelDragEnd = useCallback((item: LabeledMark, node: Konva.Node) => {
+    const ref = labelRefPoint(item);
+    const updated: MarkItem = {
+      ...item,
+      labelDx: node.x() - ref.x,
+      labelDy: node.y() - ref.y,
+    };
+    onItemsUpdated(doc.items.map((current) => (current.id === item.id ? updated : current)));
+  }, [doc.items, onItemsUpdated]);
+
   const transformerKeepRatio = selectedItem?.type === 'text' || selectedItem?.type === 'number';
   const transformerAnchors: Konva.TransformerConfig['enabledAnchors'] = transformerKeepRatio
     ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -207,6 +219,7 @@ export function MarkCanvas({
                       imageWidth={imageWidth}
                       imageHeight={imageHeight}
                       getMosaicSource={getMosaicSource}
+                      blurSource={orientedCanvas}
                       draggable={tool !== 'crop'}
                       listening={tool !== 'crop'}
                       hideLabel={textEditor?.kind === 'label' && textEditor.itemId === item.id}
@@ -215,6 +228,7 @@ export function MarkCanvas({
                       onDragEnd={handleDragEnd}
                       onTransformEnd={handleTransformEnd}
                       onDblClick={onStartTextEditing}
+                      onLabelDragEnd={handleLabelDragEnd}
                     />
                   );
                 })}
@@ -265,6 +279,7 @@ export function MarkCanvas({
                     imageWidth={imageWidth}
                     imageHeight={imageHeight}
                     getMosaicSource={getMosaicSource}
+                    blurSource={orientedCanvas}
                     draggable={false}
                     listening={false}
                     opacity={0.75}

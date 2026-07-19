@@ -34,8 +34,9 @@ export function TextEditOverlay({
 
   const displayFontSize = Math.max(10, state.fontSize * scale);
   const lines = state.value === '' ? [''] : state.value.split('\n');
+  // 空内容也保留一个明显的输入框,方便定位与后续缩放
   const contentWidth = Math.max(
-    displayFontSize * 3,
+    displayFontSize * 4,
     ...lines.map((line) => estimateTextWidth(line, displayFontSize))
   );
   const contentHeight = Math.max(1, lines.length) * displayFontSize * TEXT_LINE_HEIGHT;
@@ -75,7 +76,7 @@ export function TextEditOverlay({
         }
       }}
       rows={1}
-      className="absolute z-20 !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-none !border-0 !bg-transparent !p-0 font-semibold caret-accent outline-dashed outline-1 outline-white/35 focus:!ring-0"
+      className="absolute z-20 !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm !border-0 !bg-transparent !p-0 font-semibold caret-accent outline outline-2 outline-accent/90 focus:!ring-0"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,

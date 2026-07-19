@@ -11,9 +11,11 @@ import {
   Type,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { MarkItem, MarkToolType } from '../domain/types';
+import type { MarkItem, MarkToolType, MosaicMode } from '../domain/types';
 import { normalizeMarkRect } from '../domain/geometry';
 import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '../domain/metrics';
+
+export type CalloutShape = 'rect' | 'ellipse';
 
 export const VIEWPORT_PADDING_PX = 16;
 export const VIEWPORT_MIN_WIDTH_PX = 220;
@@ -26,6 +28,8 @@ export interface MarkEditorStyleState {
   lineWidthPercent: number;
   textSizePercent: number;
   mosaicStrengthPercent: number;
+  mosaicMode: MosaicMode;
+  calloutShape: CalloutShape;
 }
 
 export type DraftState = {
@@ -131,11 +135,17 @@ function constrainDraftEnd(
   return { x: currentX, y: currentY };
 }
 
+export interface DraftBuildOptions {
+  mosaicStrengthPercent?: number;
+  mosaicMode?: MosaicMode;
+  calloutShape?: CalloutShape;
+}
+
 export function buildDraftMark(
   draft: DraftState | null,
   color: string,
   lineWidth: number,
-  mosaicStrengthPercent: number = DEFAULT_MOSAIC_STRENGTH_PERCENT
+  options: DraftBuildOptions = {}
 ): MarkItem | null {
   if (!draft) {
     return null;
@@ -170,14 +180,20 @@ export function buildDraftMark(
       id: 'draft-mosaic',
       type: 'mosaic',
       ...rect,
-      strengthPercent: mosaicStrengthPercent,
+      strengthPercent: options.mosaicStrengthPercent ?? DEFAULT_MOSAIC_STRENGTH_PERCENT,
+      mode: options.mosaicMode ?? 'pixel',
     };
   }
 
-  // 标注(callout)在数据上就是带 label 的矩形,草稿阶段先画纯矩形
+  // 标注(callout)在数据上就是带 label 的矩形/椭圆,形状由参数面板选择
+  const shapeType = draft.tool === 'ellipse'
+    ? 'ellipse'
+    : draft.tool === 'callout'
+      ? (options.calloutShape ?? 'rect')
+      : 'rect';
   return {
-    id: draft.tool === 'ellipse' ? 'draft-ellipse' : 'draft-rect',
-    type: draft.tool === 'ellipse' ? 'ellipse' : 'rect',
+    id: `draft-${shapeType}`,
+    type: shapeType,
     ...rect,
     stroke: color,
     lineWidth,

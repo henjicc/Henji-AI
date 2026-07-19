@@ -27,6 +27,8 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
     lineWidthPercent: toNumber(options.lineWidthPercent),
     textSizePercent: toNumber(options.fontSizePercent),
     mosaicStrengthPercent: toNumber(options.mosaicStrengthPercent),
+    mosaicMode: options.mosaicMode === 'blur' ? 'blur' : undefined,
+    calloutShape: options.calloutShape === 'ellipse' ? 'ellipse' : undefined,
   }));
 
   return (
@@ -44,6 +46,8 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
           lineWidthPercent: style.lineWidthPercent,
           fontSizePercent: style.textSizePercent,
           mosaicStrengthPercent: style.mosaicStrengthPercent,
+          mosaicMode: style.mosaicMode,
+          calloutShape: style.calloutShape,
         });
       }}
       className="h-[min(76vh,900px)]"

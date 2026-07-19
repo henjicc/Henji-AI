@@ -1,10 +1,19 @@
 import type {
   ImageMarkDoc,
+  LabeledMark,
   MarkCropRect,
   MarkItem,
   MarkOrientation,
   MarkRotation,
 } from './types';
+
+/** 标签相对偏移的参考点:矩形/椭圆为左上角,箭头为箭头尖 */
+export function labelRefPoint(item: LabeledMark): { x: number; y: number } {
+  if (item.type === 'arrow') {
+    return { x: item.points[2], y: item.points[3] };
+  }
+  return { x: item.x, y: item.y };
+}
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -191,13 +200,35 @@ function remapPoints(points: number[], width: number, height: number, op: Orient
   return next;
 }
 
+/** 图形重映射后,把拖动过的标签锚点也映射到新坐标系并重算相对偏移 */
+function remapLabelOffset(
+  previous: LabeledMark,
+  next: LabeledMark,
+  width: number,
+  height: number,
+  op: OrientationOp
+): LabeledMark {
+  if (typeof previous.labelDx !== 'number' || typeof previous.labelDy !== 'number') {
+    return next;
+  }
+  const previousRef = labelRefPoint(previous);
+  const anchor = remapPoint(previousRef.x + previous.labelDx, previousRef.y + previous.labelDy, width, height, op);
+  const nextRef = labelRefPoint(next);
+  return { ...next, labelDx: anchor.x - nextRef.x, labelDy: anchor.y - nextRef.y };
+}
+
 function remapMarkItem(item: MarkItem, width: number, height: number, op: OrientationOp): MarkItem {
-  if (item.type === 'rect' || item.type === 'ellipse' || item.type === 'mosaic') {
+  if (item.type === 'rect' || item.type === 'ellipse') {
+    const next = { ...item, ...remapRect(item, width, height, op) };
+    return remapLabelOffset(item, next, width, height, op);
+  }
+  if (item.type === 'mosaic') {
     return { ...item, ...remapRect(item, width, height, op) };
   }
   if (item.type === 'arrow') {
     const points = remapPoints(item.points, width, height, op);
-    return { ...item, points: [points[0], points[1], points[2], points[3]] };
+    const next: MarkItem = { ...item, points: [points[0], points[1], points[2], points[3]] };
+    return remapLabelOffset(item, next as LabeledMark, width, height, op);
   }
   if (item.type === 'pen') {
     return { ...item, points: remapPoints(item.points, width, height, op) };

@@ -20,12 +20,21 @@ function isFiniteNumber(value: DynamicValue): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function readLabelFields(raw: DynamicValueMap): { label?: string; labelFontSize?: number } {
-  const result: { label?: string; labelFontSize?: number } = {};
+function readLabelFields(raw: DynamicValueMap): {
+  label?: string;
+  labelFontSize?: number;
+  labelDx?: number;
+  labelDy?: number;
+} {
+  const result: { label?: string; labelFontSize?: number; labelDx?: number; labelDy?: number } = {};
   if (typeof raw.label === 'string' && raw.label.trim().length > 0) {
     result.label = raw.label;
     if (isFiniteNumber(raw.labelFontSize)) {
       result.labelFontSize = Math.max(8, raw.labelFontSize);
+    }
+    if (isFiniteNumber(raw.labelDx) && isFiniteNumber(raw.labelDy)) {
+      result.labelDx = raw.labelDx;
+      result.labelDy = raw.labelDy;
     }
   }
   return result;
@@ -146,6 +155,7 @@ export function sanitizeMarkItem(item: DynamicValue): MarkItem | null {
       ...(isFiniteNumber(raw.strengthPercent)
         ? { strengthPercent: Math.max(0.1, raw.strengthPercent) }
         : {}),
+      ...(raw.mode === 'blur' ? { mode: 'blur' as const } : {}),
     };
   }
 

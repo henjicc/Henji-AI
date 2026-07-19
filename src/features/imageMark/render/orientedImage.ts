@@ -58,6 +58,39 @@ export function buildMosaicSourceCanvas(
   return canvas;
 }
 
+/** 高斯模糊模式:从原位图取区域,经 CSS filter 模糊后绘制 */
+export function drawBlurRegion(
+  context: CanvasRenderingContext2D,
+  source: HTMLCanvasElement,
+  blurRadius: number,
+  rect: { x: number; y: number; width: number; height: number },
+  destX = rect.x,
+  destY = rect.y
+): void {
+  if (rect.width < 1 || rect.height < 1) {
+    return;
+  }
+  context.save();
+  context.beginPath();
+  context.rect(destX, destY, rect.width, rect.height);
+  context.clip();
+  context.filter = `blur(${Math.max(1, blurRadius)}px)`;
+  // 多取一圈边缘,避免模糊边界发虚露出清晰底图
+  const pad = blurRadius * 2;
+  context.drawImage(
+    source,
+    rect.x - pad,
+    rect.y - pad,
+    rect.width + pad * 2,
+    rect.height + pad * 2,
+    destX - pad,
+    destY - pad,
+    rect.width + pad * 2,
+    rect.height + pad * 2
+  );
+  context.restore();
+}
+
 /** 从马赛克取样源绘制一块区域到目标上下文(目标坐标 = 朝向坐标) */
 export function drawMosaicRegion(
   context: CanvasRenderingContext2D,

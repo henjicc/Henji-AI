@@ -61,6 +61,8 @@ export function MarkEditor({
     lineWidthPercent: initialStyle?.lineWidthPercent ?? DEFAULT_LINE_WIDTH_PERCENT,
     textSizePercent: initialStyle?.textSizePercent ?? DEFAULT_TEXT_SIZE_PERCENT,
     mosaicStrengthPercent: initialStyle?.mosaicStrengthPercent ?? DEFAULT_MOSAIC_STRENGTH_PERCENT,
+    mosaicMode: initialStyle?.mosaicMode ?? 'pixel',
+    calloutShape: initialStyle?.calloutShape ?? 'rect',
   }));
   const [cropRatioValue, setCropRatioValue] = useState('free');
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });

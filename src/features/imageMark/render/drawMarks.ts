@@ -4,13 +4,15 @@ import {
   MARK_FONT_STYLE,
   TEXT_LINE_HEIGHT,
   numberBadgeRadius,
+  resolveLabelConnector,
   resolveLabelFontSize,
   resolveLabelPlacement,
+  resolveMosaicBlurRadius,
   resolveMosaicPixelSize,
   resolveTextBaseSize,
 } from '../domain/metrics';
 import type { LabeledMark, MarkItem } from '../domain/types';
-import { buildMosaicSourceCanvas, drawMosaicRegion } from './orientedImage';
+import { buildMosaicSourceCanvas, drawBlurRegion, drawMosaicRegion } from './orientedImage';
 
 function markFont(fontSize: number): string {
   return `${MARK_FONT_STYLE} ${fontSize}px ${MARK_FONT_FAMILY}`;
@@ -76,6 +78,20 @@ function drawLabel(
   const baseSize = resolveTextBaseSize(imageWidth, imageHeight);
   const fontSize = resolveLabelFontSize(item, baseSize);
   const placement = resolveLabelPlacement(item, imageWidth, imageHeight);
+
+  // 标签被拖离图形后画引导线
+  const connector = resolveLabelConnector(item, imageWidth, imageHeight);
+  if (connector) {
+    context.save();
+    context.strokeStyle = item.stroke;
+    context.lineWidth = Math.max(1, item.lineWidth * 0.5);
+    context.beginPath();
+    context.moveTo(connector.x1, connector.y1);
+    context.lineTo(connector.x2, connector.y2);
+    context.stroke();
+    context.restore();
+  }
+
   context.save();
   drawTextBlock(context, item.label, placement.x, placement.y, fontSize, item.stroke);
   context.restore();
@@ -103,7 +119,7 @@ function drawNumberBadge(
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = WHITE_HEX;
-  context.fillText(String(value), x, y + fontSize * 0.05);
+  context.fillText(String(value), x, y);
   context.restore();
 }
 
@@ -153,6 +169,17 @@ export function drawMarkItems(
 
   for (const item of items) {
     if (item.type === 'mosaic') {
+      if (item.mode === 'blur') {
+        if (options.baseCanvas) {
+          drawBlurRegion(
+            context,
+            options.baseCanvas,
+            resolveMosaicBlurRadius(imageWidth, imageHeight, item.strengthPercent),
+            item
+          );
+        }
+        continue;
+      }
       const pixelSize = resolveMosaicPixelSize(imageWidth, imageHeight, item.strengthPercent);
       const mosaicSource = getMosaicSource(pixelSize);
       if (mosaicSource) {

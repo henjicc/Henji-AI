@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type MutableRefObject } from 'react';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { createMarkId } from '../domain/codec';
 import { isLabeledMark, type ImageMarkDoc, type LabeledMark, type MarkItem, type MarkToolType } from '../domain/types';
-import { buildDraftMark, type DraftState } from './shared';
+import { buildDraftMark, type DraftBuildOptions, type DraftState } from './shared';
 
 export interface UseMarkPointerParams {
   docRef: MutableRefObject<ImageMarkDoc>;
@@ -10,7 +10,7 @@ export interface UseMarkPointerParams {
   color: string;
   lineWidth: number;
   fontSize: number;
-  mosaicStrengthPercent: number;
+  draftOptions: DraftBuildOptions;
   commitItems: (items: MarkItem[], recordHistory?: boolean) => void;
   setSelectedId: (id: string | null) => void;
   setTextEditor: (state: null) => void;
@@ -27,7 +27,7 @@ export function useMarkPointer({
   color,
   lineWidth,
   fontSize,
-  mosaicStrengthPercent,
+  draftOptions,
   commitItems,
   setSelectedId,
   setTextEditor,
@@ -39,8 +39,8 @@ export function useMarkPointer({
   const [draft, setDraft] = useState<DraftState | null>(null);
 
   const draftMark = useMemo(
-    () => buildDraftMark(draft, color, lineWidth, mosaicStrengthPercent),
-    [color, draft, lineWidth, mosaicStrengthPercent]
+    () => buildDraftMark(draft, color, lineWidth, draftOptions),
+    [color, draft, draftOptions, lineWidth]
   );
 
   const isBackgroundTarget = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -83,6 +83,8 @@ export function useMarkPointer({
         fontSize,
       };
       commitItems([...docRef.current.items, nextItem]);
+      // 创建即选中,与其他标注工具一致
+      setSelectedId(nextItem.id);
       return;
     }
 
@@ -133,7 +135,7 @@ export function useMarkPointer({
     const finalDraft: DraftState = { ...draft };
     setDraft(null);
 
-    const nextItem = buildDraftMark(finalDraft, color, lineWidth, mosaicStrengthPercent);
+    const nextItem = buildDraftMark(finalDraft, color, lineWidth, draftOptions);
     if (!nextItem) {
       return;
     }
@@ -161,7 +163,7 @@ export function useMarkPointer({
     if (finalDraft.tool === 'callout' && isLabeledMark(createdItem)) {
       openLabelEditor(createdItem);
     }
-  }, [color, commitItems, docRef, draft, lineWidth, mosaicStrengthPercent, openLabelEditor, setSelectedId]);
+  }, [color, commitItems, docRef, draft, draftOptions, lineWidth, openLabelEditor, setSelectedId]);
 
   const handleStageDblClick = useCallback((event: KonvaEventObject<MouseEvent>) => {
     if (tool === 'crop' || !isBackgroundTarget(event)) {

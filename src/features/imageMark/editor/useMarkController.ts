@@ -149,13 +149,19 @@ export function useMarkController({
     labelFontSize,
   });
 
+  const draftOptions = useMemo(() => ({
+    mosaicStrengthPercent: style.mosaicStrengthPercent,
+    mosaicMode: style.mosaicMode,
+    calloutShape: style.calloutShape,
+  }), [style.calloutShape, style.mosaicMode, style.mosaicStrengthPercent]);
+
   const pointer = useMarkPointer({
     docRef,
     tool,
     color: style.color,
     lineWidth,
     fontSize,
-    mosaicStrengthPercent: style.mosaicStrengthPercent,
+    draftOptions,
     commitItems: history.commitItems,
     setSelectedId,
     setTextEditor: textEditing.setTextEditor,
@@ -242,6 +248,8 @@ export function useMarkController({
         MIN_MOSAIC_STRENGTH_PERCENT,
         MAX_MOSAIC_STRENGTH_PERCENT
       ),
+      mosaicMode: patch.mosaicMode ?? style.mosaicMode,
+      calloutShape: patch.calloutShape ?? style.calloutShape,
     };
     setStyle(nextStyle);
     onStyleChange?.(nextStyle);
@@ -261,7 +269,11 @@ export function useMarkController({
         };
       }
       if (item.type === 'mosaic') {
-        return { ...item, strengthPercent: nextStyle.mosaicStrengthPercent };
+        return {
+          ...item,
+          strengthPercent: nextStyle.mosaicStrengthPercent,
+          mode: nextStyle.mosaicMode,
+        };
       }
       const next = {
         ...item,
@@ -346,6 +358,7 @@ export function useMarkController({
           MIN_MOSAIC_STRENGTH_PERCENT,
           MAX_MOSAIC_STRENGTH_PERCENT
         ),
+        mosaicMode: selectedItem.mode ?? 'pixel',
       };
     } else {
       patch = {
