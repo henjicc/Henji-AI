@@ -8,7 +8,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import { UiChipButton, UiColorInput, UiIconButton, UiInput, UiRangeInput } from '@/components/ui';
+import { UiChipButton, UiColorInput, UiIconButton, UiRangeInput } from '@/components/ui';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import {
   MAX_LINE_WIDTH_PERCENT,
@@ -18,15 +18,20 @@ import {
   MIN_MOSAIC_STRENGTH_PERCENT,
   MIN_TEXT_SIZE_PERCENT,
 } from '../domain/metrics';
+import { useRef } from 'react';
 import type { MarkToolType } from '../domain/types';
 import type { OrientationOp } from '../domain/geometry';
 import { CROP_RATIO_OPTIONS, TOOL_BUTTONS, type MarkEditorStyleState } from './shared';
+import { useNonPassiveWheel } from './useNonPassiveWheel';
+import type { NumericStyleKey } from './useMarkController';
 
 interface MarkToolbarProps {
   tool: MarkToolType;
   setTool: (tool: MarkToolType) => void;
   style: MarkEditorStyleState;
   onStylePatch: (patch: Partial<MarkEditorStyleState>) => void;
+  /** 滑块悬停滚轮微调 */
+  onStyleWheel: (key: NumericStyleKey, deltaY: number) => void;
   cropRatioValue: string;
   onCropRatioChange: (value: string) => void;
   onCropReset: () => void;
@@ -57,6 +62,7 @@ export function MarkToolbar({
   setTool,
   style,
   onStylePatch,
+  onStyleWheel,
   cropRatioValue,
   onCropRatioChange,
   onCropReset,
@@ -74,6 +80,22 @@ export function MarkToolbar({
     tool === 'callout' || tool === 'rect' || tool === 'ellipse' || tool === 'arrow' || tool === 'pen' || tool === 'select';
   const showTextSize = tool === 'callout' || tool === 'text' || tool === 'number' || tool === 'select';
   const showColor = tool !== 'crop' && tool !== 'mosaic';
+
+  const widthSliderRef = useRef<HTMLDivElement>(null);
+  const textSizeSliderRef = useRef<HTMLDivElement>(null);
+  const mosaicSliderRef = useRef<HTMLDivElement>(null);
+  useNonPassiveWheel(widthSliderRef, (event) => {
+    event.preventDefault();
+    onStyleWheel('lineWidthPercent', event.deltaY);
+  }, tool);
+  useNonPassiveWheel(textSizeSliderRef, (event) => {
+    event.preventDefault();
+    onStyleWheel('textSizePercent', event.deltaY);
+  }, tool);
+  useNonPassiveWheel(mosaicSliderRef, (event) => {
+    event.preventDefault();
+    onStyleWheel('mosaicStrengthPercent', event.deltaY);
+  }, tool);
 
   return (
     <div className="flex flex-col gap-2">
@@ -159,7 +181,7 @@ export function MarkToolbar({
             </UiChipButton>
           </>
         ) : tool === 'mosaic' ? (
-          <div className="flex items-center gap-2">
+          <div ref={mosaicSliderRef} className="flex items-center gap-2">
             <span className="text-xs text-text-muted">强度</span>
             <UiRangeInput
               min={MIN_MOSAIC_STRENGTH_PERCENT}
@@ -170,7 +192,7 @@ export function MarkToolbar({
               className="!w-36"
             />
             <span className="w-9 text-xs text-text-muted">{style.mosaicStrengthPercent.toFixed(1)}%</span>
-            <span className="text-xs text-text-muted">拖拽框选需要打码的区域</span>
+            <span className="text-xs text-text-muted">拖拽框选需要打码的区域,滚轮可调强度</span>
           </div>
         ) : (
           <>
@@ -204,7 +226,7 @@ export function MarkToolbar({
               </>
             )}
             {showWidth && (
-              <div className="flex items-center gap-2">
+              <div ref={widthSliderRef} className="flex items-center gap-2" title="滚轮可调;选中图形后在画布上滚轮也可调">
                 <span className="text-xs text-text-muted">线宽</span>
                 <UiRangeInput
                   min={MIN_LINE_WIDTH_PERCENT}
@@ -218,18 +240,17 @@ export function MarkToolbar({
               </div>
             )}
             {showTextSize && (
-              <div className="flex items-center gap-1">
+              <div ref={textSizeSliderRef} className="flex items-center gap-2" title="滚轮可调">
                 <span className="text-xs text-text-muted">字号</span>
-                <UiInput
-                  type="number"
+                <UiRangeInput
                   min={MIN_TEXT_SIZE_PERCENT}
                   max={MAX_TEXT_SIZE_PERCENT}
                   step={0.5}
                   value={Number(style.textSizePercent.toFixed(1))}
                   onChange={(event) => onStylePatch({ textSizePercent: Number(event.target.value) })}
-                  className="h-8 w-20 px-2"
+                  className="!w-36"
                 />
-                <span className="text-xs text-text-muted">%</span>
+                <span className="w-9 text-xs text-text-muted">{style.textSizePercent.toFixed(1)}%</span>
               </div>
             )}
           </>

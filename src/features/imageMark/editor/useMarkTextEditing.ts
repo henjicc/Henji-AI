@@ -51,14 +51,24 @@ export function useMarkTextEditing({
       x: placement.x,
       y: placement.y,
       value: item.label ?? '',
+      fontSize: item.labelFontSize ?? labelFontSize,
+      color: item.stroke,
     });
     setSelectedId(item.id);
     focusTextInput();
-  }, [focusTextInput, imageHeight, imageWidth, setSelectedId]);
+  }, [focusTextInput, imageHeight, imageWidth, labelFontSize, setSelectedId]);
 
   const startTextEditing = useCallback((item: MarkItem | null, fallbackPoint?: { x: number; y: number }) => {
     if (item && item.type === 'text') {
-      setTextEditor({ kind: 'text', itemId: item.id, x: item.x, y: item.y, value: item.text });
+      setTextEditor({
+        kind: 'text',
+        itemId: item.id,
+        x: item.x,
+        y: item.y,
+        value: item.text,
+        fontSize: item.fontSize,
+        color: item.color,
+      });
       setSelectedId(item.id);
       focusTextInput();
       return;
@@ -73,10 +83,12 @@ export function useMarkTextEditing({
       x: fallbackPoint?.x ?? 0,
       y: fallbackPoint?.y ?? 0,
       value: '',
+      fontSize,
+      color: textColor,
     });
     setSelectedId(null);
     focusTextInput();
-  }, [focusTextInput, openLabelEditor, setSelectedId]);
+  }, [focusTextInput, fontSize, openLabelEditor, setSelectedId, textColor]);
 
   const handleCommitTextEditor = useCallback(() => {
     const editor = textEditor;
@@ -94,7 +106,7 @@ export function useMarkTextEditing({
           const { label: _label, labelFontSize: _size, ...rest } = item;
           return rest as MarkItem;
         }
-        return { ...item, label: value, labelFontSize: item.labelFontSize ?? labelFontSize };
+        return { ...item, label: value, labelFontSize: item.labelFontSize ?? editor.fontSize };
       });
       commitItems(nextItems);
       setTextEditor(null);
@@ -129,13 +141,13 @@ export function useMarkTextEditing({
       x: editor.x,
       y: editor.y,
       text: value,
-      color: textColor,
-      fontSize,
+      color: editor.color,
+      fontSize: editor.fontSize,
     };
     commitItems([...docRef.current.items, nextItem]);
     setSelectedId(nextItem.id);
     setTextEditor(null);
-  }, [commitItems, docRef, fontSize, labelFontSize, setSelectedId, textColor, textEditor]);
+  }, [commitItems, docRef, setSelectedId, textEditor]);
 
   const handleCancelTextEditor = useCallback(() => {
     setTextEditor(null);

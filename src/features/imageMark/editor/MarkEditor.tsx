@@ -18,6 +18,7 @@ import { buildMosaicSourceCanvas, renderOrientedCanvas } from '../render/oriente
 import { MarkCanvas } from './MarkCanvas';
 import { MarkToolbar } from './MarkToolbar';
 import { useMarkController } from './useMarkController';
+import { useNonPassiveWheel } from './useNonPassiveWheel';
 import {
   CROP_RATIO_OPTIONS,
   VIEWPORT_MIN_HEIGHT_PX,
@@ -184,6 +185,18 @@ export function MarkEditor({
     textInputRef,
   });
 
+  // 选中标记后在画布上滚轮直接调节线宽/字号/打码强度
+  const adjustSelectedByWheel = controller.adjustSelectedByWheel;
+  useNonPassiveWheel(
+    viewportRef,
+    (event) => {
+      if (adjustSelectedByWheel(event.deltaY)) {
+        event.preventDefault();
+      }
+    },
+    image
+  );
+
   // 编辑器挂载期间全局响应快捷键(输入控件聚焦时除外),不要求画布先获得焦点
   const editorKeyDownHandler = controller.handleEditorKeyDown;
   useEffect(() => {
@@ -254,6 +267,7 @@ export function MarkEditor({
         setTool={controller.selectTool}
         style={style}
         onStylePatch={controller.handleStylePatch}
+        onStyleWheel={controller.adjustStyleByWheel}
         cropRatioValue={cropRatioValue}
         onCropRatioChange={handleCropRatioChange}
         onCropReset={controller.handleCropReset}

@@ -194,23 +194,30 @@ export function MarkCanvas({
                   height={imageHeight}
                   fill="transparent"
                 />
-                {doc.items.map((item) => (
-                  <MarkShapeNode
-                    key={item.id}
-                    item={item}
-                    numberValue={numberValues.get(item.id) ?? 0}
-                    imageWidth={imageWidth}
-                    imageHeight={imageHeight}
-                    getMosaicSource={getMosaicSource}
-                    draggable={tool !== 'crop'}
-                    listening={tool !== 'crop'}
-                    bindRef={bindShapeRef}
-                    onSelect={onSelectedIdChange}
-                    onDragEnd={handleDragEnd}
-                    onTransformEnd={handleTransformEnd}
-                    onDblClick={onStartTextEditing}
-                  />
-                ))}
+                {doc.items.map((item) => {
+                  // 原位编辑中的文字项整体隐藏;标签编辑中只隐藏标签文字
+                  if (textEditor?.kind === 'text' && textEditor.itemId === item.id) {
+                    return null;
+                  }
+                  return (
+                    <MarkShapeNode
+                      key={item.id}
+                      item={item}
+                      numberValue={numberValues.get(item.id) ?? 0}
+                      imageWidth={imageWidth}
+                      imageHeight={imageHeight}
+                      getMosaicSource={getMosaicSource}
+                      draggable={tool !== 'crop'}
+                      listening={tool !== 'crop'}
+                      hideLabel={textEditor?.kind === 'label' && textEditor.itemId === item.id}
+                      bindRef={bindShapeRef}
+                      onSelect={onSelectedIdChange}
+                      onDragEnd={handleDragEnd}
+                      onTransformEnd={handleTransformEnd}
+                      onDblClick={onStartTextEditing}
+                    />
+                  );
+                })}
                 {/* 非裁剪模式下提示既有裁剪范围 */}
                 {doc.crop && tool !== 'crop' && (
                   <Rect
@@ -286,6 +293,7 @@ export function MarkCanvas({
           <TextEditOverlay
             state={textEditor}
             position={textEditorHostPos}
+            scale={scale}
             textInputRef={textInputRef}
             onChange={onTextEditorChange}
             onCommit={onCommitTextEditor}

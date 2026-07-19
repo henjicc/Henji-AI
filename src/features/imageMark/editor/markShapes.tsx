@@ -25,6 +25,8 @@ interface MarkShapeNodeProps {
   draggable: boolean;
   listening: boolean;
   opacity?: number;
+  /** 标签正在原位编辑时隐藏已渲染的标签文字 */
+  hideLabel?: boolean;
   bindRef?: (id: string, node: Konva.Node | null) => void;
   onSelect?: (id: string) => void;
   onDragEnd?: (item: MarkItem, event: KonvaEventObject<DragEvent>) => void;
@@ -41,6 +43,7 @@ export function MarkShapeNode({
   draggable,
   listening,
   opacity = 1,
+  hideLabel = false,
   bindRef,
   onSelect,
   onDragEnd,
@@ -60,7 +63,7 @@ export function MarkShapeNode({
     },
   };
 
-  const labelNode = isLabeledMark(item) && item.label ? (
+  const labelNode = isLabeledMark(item) && item.label && !hideLabel ? (
     <LabelTextNode item={item} imageWidth={imageWidth} imageHeight={imageHeight} opacity={opacity} />
   ) : null;
 

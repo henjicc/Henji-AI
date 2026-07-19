@@ -1,10 +1,14 @@
-import type { RefObject } from 'react';
-import { UiButton, UiTextAreaField } from '@/components/ui';
+import { useRef, type RefObject } from 'react';
+import { UiTextAreaField } from '@/components/ui';
+import { MARK_FONT_FAMILY, TEXT_LINE_HEIGHT, estimateTextWidth } from '../domain/metrics';
 import type { TextEditorState } from './shared';
 
 interface TextEditOverlayProps {
   state: TextEditorState;
+  /** 文本锚点在宿主容器中的位置(显示像素) */
   position: { x: number; y: number };
+  /** 显示像素 / 图片像素 */
+  scale: number;
   textInputRef: RefObject<HTMLTextAreaElement>;
   onChange: (value: string) => void;
   onCommit: () => void;
@@ -12,64 +16,77 @@ interface TextEditOverlayProps {
 }
 
 /**
- * 文字/标签统一输入浮层。
- * 文字模式:Ctrl+Enter 确认,支持多行;
- * 标签模式:Enter 直接确认(Shift+Enter 换行),满足"框选完立刻输入"的连贯操作。
+ * 原位文字输入:直接在最终渲染位置以最终字号/颜色编辑,无对话框。
+ * 标注标签:Enter 确认(Shift+Enter 换行);独立文字:Ctrl+Enter 确认;
+ * 失焦即确认,Esc 取消。
  */
 export function TextEditOverlay({
   state,
   position,
+  scale,
   textInputRef,
   onChange,
   onCommit,
   onCancel,
 }: TextEditOverlayProps): JSX.Element {
   const isLabel = state.kind === 'label';
+  const settledRef = useRef(false);
+
+  const displayFontSize = Math.max(10, state.fontSize * scale);
+  const lines = state.value === '' ? [''] : state.value.split('\n');
+  const contentWidth = Math.max(
+    displayFontSize * 3,
+    ...lines.map((line) => estimateTextWidth(line, displayFontSize))
+  );
+  const contentHeight = Math.max(1, lines.length) * displayFontSize * TEXT_LINE_HEIGHT;
+
+  const settle = (action: () => void): void => {
+    if (settledRef.current) {
+      return;
+    }
+    settledRef.current = true;
+    action();
+  };
+
   return (
-    <div
-      className="absolute z-20 flex flex-col gap-2 rounded-md border border-[rgba(255,255,255,0.2)] bg-black/75 p-2 backdrop-blur-sm"
+    <UiTextAreaField
+      ref={textInputRef}
+      value={state.value}
+      placeholder={isLabel ? '输入文字' : ''}
+      spellCheck={false}
+      wrap="off"
+      onChange={(event) => onChange(event.target.value)}
+      onBlur={() => settle(onCommit)}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          settle(onCancel);
+          return;
+        }
+        if (isLabel && event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          settle(onCommit);
+          return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          event.preventDefault();
+          settle(onCommit);
+        }
+      }}
+      rows={1}
+      className="absolute z-20 !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-none !border-0 !bg-transparent !p-0 font-semibold caret-accent outline-dashed outline-1 outline-white/35 focus:!ring-0"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
-        // 标签输入停靠在标签渲染位置(框右下角);独立文字仍悬浮在点击点上方
-        transform: isLabel ? 'none' : 'translate(0, -100%)',
-        minWidth: '180px',
-        maxWidth: '300px',
+        width: `${Math.ceil(contentWidth + displayFontSize * 0.6)}px`,
+        height: `${Math.ceil(contentHeight)}px`,
+        fontSize: `${displayFontSize}px`,
+        lineHeight: TEXT_LINE_HEIGHT,
+        fontFamily: MARK_FONT_FAMILY,
+        color: state.color,
+        textShadow: '0 1px 2px rgba(0, 0, 0, 0.55)',
       }}
-    >
-      <UiTextAreaField
-        ref={textInputRef}
-        value={state.value}
-        placeholder={isLabel ? '输入标注文字,Enter 确认' : ''}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (isLabel && event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            onCommit();
-            return;
-          }
-          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-            event.preventDefault();
-            onCommit();
-            return;
-          }
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            onCancel();
-          }
-        }}
-        rows={isLabel ? 1 : 3}
-        className="w-full rounded border border-[rgba(255,255,255,0.18)] bg-bg-dark/90 px-2 py-1.5 text-sm text-text-dark outline-none focus:border-accent"
-      />
-      <div className="flex items-center justify-end gap-2">
-        <UiButton type="button" variant="ghost" size="sm" onClick={onCancel}>
-          取消
-        </UiButton>
-        <UiButton type="button" variant="primary" size="sm" onClick={onCommit}>
-          确认
-        </UiButton>
-      </div>
-    </div>
+    />
   );
 }

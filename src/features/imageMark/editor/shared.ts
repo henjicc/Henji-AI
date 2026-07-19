@@ -46,6 +46,9 @@ export interface TextEditorState {
   x: number;
   y: number;
   value: string;
+  /** 原位输入使用的字号(图片像素)与颜色,与最终渲染一致 */
+  fontSize: number;
+  color: string;
 }
 
 export interface ToolButtonDef {

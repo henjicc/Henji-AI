@@ -25,6 +25,8 @@ import {
 } from '../domain/metrics';
 import { isLabeledMark, type ImageMarkDoc, type MarkToolType } from '../domain/types';
 import { TOOL_SHORTCUT_MAP, getMarkPosition, type MarkEditorStyleState } from './shared';
+
+export type NumericStyleKey = 'lineWidthPercent' | 'textSizePercent' | 'mosaicStrengthPercent';
 import { useMarkCropOrientation } from './useMarkCropOrientation';
 import { useMarkHistory } from './useMarkHistory';
 import { useMarkPointer } from './useMarkPointer';
@@ -222,7 +224,7 @@ export function useMarkController({
 
   // ==================== 样式变更(同时作用于选中项) ====================
 
-  const handleStylePatch = useCallback((patch: Partial<MarkEditorStyleState>) => {
+  const applyStylePatch = useCallback((patch: Partial<MarkEditorStyleState>, recordHistory: boolean) => {
     const nextStyle: MarkEditorStyleState = {
       color: patch.color ?? style.color,
       lineWidthPercent: clamp(
@@ -275,8 +277,52 @@ export function useMarkController({
       }
       return next;
     });
-    history.commitItems(nextItems);
+    history.commitItems(nextItems, recordHistory);
   }, [baseSize, history, onStyleChange, selectedItem, setStyle, style]);
+
+  const handleStylePatch = useCallback((patch: Partial<MarkEditorStyleState>) => {
+    applyStylePatch(patch, true);
+  }, [applyStylePatch]);
+
+  // ==================== 滚轮微调(合并为一次历史) ====================
+
+  const wheelGestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const beginWheelGesture = useCallback(() => {
+    if (wheelGestureTimerRef.current === null) {
+      history.pushHistorySnapshot(docRef.current);
+    } else {
+      clearTimeout(wheelGestureTimerRef.current);
+    }
+    wheelGestureTimerRef.current = setTimeout(() => {
+      wheelGestureTimerRef.current = null;
+    }, 600);
+  }, [history]);
+
+  /** 滑块悬停滚轮:调节对应样式值(选中项跟随变化) */
+  const adjustStyleByWheel = useCallback((key: NumericStyleKey, deltaY: number) => {
+    const direction = deltaY < 0 ? 1 : -1;
+    const step = key === 'lineWidthPercent' ? 0.1 : 0.5;
+    if (selectedItem) {
+      beginWheelGesture();
+    }
+    applyStylePatch({ [key]: style[key] + direction * step }, false);
+  }, [applyStylePatch, beginWheelGesture, selectedItem, style]);
+
+  /** 画布上滚轮:按选中项类型调节线宽/字号/打码强度 */
+  const adjustSelectedByWheel = useCallback((deltaY: number): boolean => {
+    if (!selectedItem) {
+      return false;
+    }
+    const key: NumericStyleKey =
+      selectedItem.type === 'text' || selectedItem.type === 'number'
+        ? 'textSizePercent'
+        : selectedItem.type === 'mosaic'
+          ? 'mosaicStrengthPercent'
+          : 'lineWidthPercent';
+    adjustStyleByWheel(key, deltaY);
+    return true;
+  }, [adjustStyleByWheel, selectedItem]);
 
   // 选中项变化时,把样式面板同步为该项的样式
   useEffect(() => {
@@ -435,6 +481,8 @@ export function useMarkController({
     handleDeleteSelected,
     handleClear,
     handleStylePatch,
+    adjustStyleByWheel,
+    adjustSelectedByWheel,
     handlePointerDown: pointer.handlePointerDown,
     handlePointerMove: pointer.handlePointerMove,
     handlePointerUp: pointer.handlePointerUp,
