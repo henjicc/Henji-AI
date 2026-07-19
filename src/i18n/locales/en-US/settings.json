@@ -178,7 +178,15 @@
       "storyboardNoTextLabel": "Disable text in storyboard images",
       "storyboardAutoInferEmptyFrameLabel": "Auto-infer empty storyboard frames",
       "storyboardAutoInferEmptyFrameHint": "When enabled, frames left without a description get \"infer based on prior content\" appended to the prompt so the model fills them in",
-      "ignoreAtTagLabel": "Ignore @image tags when copying and generating"
+      "ignoreAtTagLabel": "Ignore @image tags when copying and generating",
+      "lodLabel": "Simplify rendering when zoomed out",
+      "lodHint": "Below the threshold, node bodies switch to lightweight skeletons and media thumbnails drop a tier to keep zooming and panning smooth. Detail-first only simplifies at very small zoom, performance-first simplifies earlier, and off always renders in full.",
+      "lodOptions": {
+        "off": "Off",
+        "detail": "Detail first",
+        "balanced": "Balanced (recommended)",
+        "performance": "Performance first"
+      }
     },
     "promptOptimization": {
       "title": "Prompt Optimization",

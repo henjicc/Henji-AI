@@ -28,6 +28,8 @@ import {
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
+import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
+import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 
@@ -81,13 +83,16 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
     [data, type]
   );
 
-  const targetImageSource = useMemo(() => {
+  const baseImageSource = useMemo(() => {
     const picked = preferOriginalImage
       ? data.imageUrl || data.previewImageUrl
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
   }, [data.imageUrl, data.previewImageUrl, preferOriginalImage]);
-  const imageSource = useDecodedImageSource(targetImageSource);
+  // 低倍率降为微缩略图：生成完成前继续显示原缩略图，不闪空白
+  const preferMicroImage = useMediaMicroLod();
+  const microImageSource = useMicroThumbnail(baseImageSource, preferMicroImage);
+  const imageSource = useDecodedImageSource(microImageSource ?? baseImageSource);
 
   // 获取原图 URL 用于查看器
   const originalImageUrl = useMemo(() => {

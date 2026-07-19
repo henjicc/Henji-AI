@@ -26,6 +26,8 @@ import {
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
+import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
+import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { saveUploadVideo } from '@/utils/save';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiIconButton, UiInput } from '@/components/ui';
@@ -94,6 +96,10 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     () => (data.previewImageUrl ? resolveImageDisplayUrl(data.previewImageUrl) : null),
     [data.previewImageUrl]
   );
+  // 低倍率下封面降为微缩略图，生成完成前继续显示原封面
+  const preferMicroImage = useMediaMicroLod();
+  const microPosterSource = useMicroThumbnail(posterSource, preferMicroImage);
+  const displayedPosterSource = microPosterSource ?? posterSource;
 
   // poster 优先：有封面时默认只渲染 <img>，点击播放才挂载 <video>。
   // 每个常驻 <video preload="auto"> 都是一个解码器实例，几十个视频节点时内存/解码开销可观。
@@ -196,7 +202,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             }}
           >
             <CanvasNodeImage
-              src={posterSource}
+              src={displayedPosterSource ?? ''}
               alt={resolvedTitle}
               className="pointer-events-none h-full w-full select-none object-contain"
               disableViewer

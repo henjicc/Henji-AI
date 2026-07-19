@@ -46,6 +46,8 @@ import {
 } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
+import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
+import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -296,7 +298,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     clearTransientPreview();
   }, [clearTransientPreview]);
 
-  const targetImageSource = useMemo(() => {
+  const baseImageSource = useMemo(() => {
     if (transientPreviewUrl) {
       return transientPreviewUrl;
     }
@@ -305,7 +307,13 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
   }, [data.imageUrl, data.previewImageUrl, preferOriginalImage, transientPreviewUrl]);
-  const imageSource = useDecodedImageSource(targetImageSource);
+  // 低倍率降为微缩略图；上传中的临时 blob 预览是短命源，不参与微缩略图生成
+  const preferMicroImage = useMediaMicroLod();
+  const microImageSource = useMicroThumbnail(
+    baseImageSource,
+    preferMicroImage && !transientPreviewUrl
+  );
+  const imageSource = useDecodedImageSource(microImageSource ?? baseImageSource);
 
   return (
     <div

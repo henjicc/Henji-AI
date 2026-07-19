@@ -178,7 +178,15 @@
       "storyboardNoTextLabel": "分镜生成禁止生成描述文字",
       "storyboardAutoInferEmptyFrameLabel": "分镜格子留空时自动推测内容",
       "storyboardAutoInferEmptyFrameHint": "开启后，未填写描述的分镜格子会在提示词中补充“依据之前的内容进行推测”，交给模型自动续写",
-      "ignoreAtTagLabel": "复制与生成时忽略 @图 标记"
+      "ignoreAtTagLabel": "复制与生成时忽略 @图 标记",
+      "lodLabel": "缩小画布时简化绘制",
+      "lodHint": "缩小到阈值以下时，节点正文换为轻量骨架、媒体缩略图降档，保持缩放平移流畅。细节优先只在极小倍率简化，性能优先更早简化，关闭则始终完整绘制。",
+      "lodOptions": {
+        "off": "关闭",
+        "detail": "细节优先",
+        "balanced": "平衡（推荐）",
+        "performance": "性能优先"
+      }
     },
     "promptOptimization": {
       "title": "提示词优化",

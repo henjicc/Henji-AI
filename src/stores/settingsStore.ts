@@ -20,6 +20,8 @@ import {
 export type ProviderKeyStatusMap = Record<string, boolean>;
 /** 超过大文件阈值的本地媒体上传处理方式：每次询问 / 复制进数据目录 / 直接引用原文件 */
 export type LargeUploadStrategy = 'ask' | 'copy' | 'reference';
+/** 画布缩放简化（LOD）等级：off 不简化；detail 只在极小倍率简化；balanced 默认；performance 更早简化 */
+export type CanvasLodLevel = 'off' | 'detail' | 'balanced' | 'performance';
 export type AssetTabAction = 'floating' | 'workspace';
 export type AssetPanelPosition = 'top' | 'left' | 'right';
 export type AssetTriggerEdge = 'left' | 'right';
@@ -44,6 +46,8 @@ interface SettingsState {
   /** 分镜格子描述为空时，自动在 prompt 中补一句"依据之前的内容进行推测" */
   storyboardGenAutoInferEmptyFrame: boolean;
   ignoreAtTagWhenCopyingAndGenerating: boolean;
+  /** 画布低倍率简化等级（阈值映射见 features/canvas/nodes/shared/useCanvasContentLod.ts） */
+  canvasLodLevel: CanvasLodLevel;
   /**
    * 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。
    * 不持久化——应用重启回落 standard，避免用户忘记关闭导致日志膨胀（见 `partialize`）。
@@ -75,6 +79,7 @@ interface SettingsState {
   setStoryboardGenDisableTextInImage: (enabled: boolean) => void;
   setStoryboardGenAutoInferEmptyFrame: (enabled: boolean) => void;
   setIgnoreAtTagWhenCopyingAndGenerating: (enabled: boolean) => void;
+  setCanvasLodLevel: (level: CanvasLodLevel) => void;
   setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
@@ -197,6 +202,7 @@ export const useSettingsStore = create<SettingsState>()(
       storyboardGenDisableTextInImage: true,
       storyboardGenAutoInferEmptyFrame: true,
       ignoreAtTagWhenCopyingAndGenerating: true,
+      canvasLodLevel: 'balanced',
       logCaptureMode: 'standard',
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
@@ -254,6 +260,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ storyboardGenAutoInferEmptyFrame: enabled }),
       setIgnoreAtTagWhenCopyingAndGenerating: (enabled) =>
         set({ ignoreAtTagWhenCopyingAndGenerating: enabled }),
+      setCanvasLodLevel: (canvasLodLevel) => set({ canvasLodLevel }),
       setLogCaptureMode: (mode) => {
         set({ logCaptureMode: mode });
         void syncLogCaptureMode(mode).catch(() => undefined);
