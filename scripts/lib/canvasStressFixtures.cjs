@@ -2,9 +2,9 @@ const GRID_COLUMNS = 10
 const GRID_SPACING_X = 240
 const GRID_SPACING_Y = 200
 
-function buildNodes(imageNodeCount, videoNodeCount) {
+function buildNodes(imageNodeCount, videoNodeCount, genNodeCount = 0) {
   const nodes = []
-  const totalCount = imageNodeCount + videoNodeCount
+  const totalCount = imageNodeCount + videoNodeCount + genNodeCount
   for (let i = 0; i < totalCount; i += 1) {
     const col = i % GRID_COLUMNS
     const row = Math.floor(i / GRID_COLUMNS)
@@ -23,7 +23,7 @@ function buildNodes(imageNodeCount, videoNodeCount) {
           sourceFileName: 'stress.png',
         },
       })
-    } else {
+    } else if (i < imageNodeCount + videoNodeCount) {
       const videoIndex = i - imageNodeCount
       nodes.push({
         id: `stress-video-${videoIndex}`,
@@ -39,9 +39,40 @@ function buildNodes(imageNodeCount, videoNodeCount) {
           isSizeManuallyAdjusted: false,
         },
       })
+    } else {
+      const genIndex = i - imageNodeCount - videoNodeCount
+      nodes.push({
+        id: `stress-gen-${genIndex}`,
+        type: 'imageNode',
+        position,
+        data: {
+          displayName: `压测生成 ${genIndex}`,
+          prompt: `stress prompt ${genIndex}`,
+        },
+      })
     }
   }
   return nodes
+}
+
+/**
+ * 生成节点连线：每个生成节点接一个上传图片节点作为上游（有多少接多少），
+ * 覆盖"生成节点 + 连线"这一真实业务里的主要性能路径。
+ */
+function buildEdges(imageNodeCount, genNodeCount) {
+  const edges = []
+  const wiredCount = Math.min(imageNodeCount, genNodeCount)
+  for (let i = 0; i < wiredCount; i += 1) {
+    edges.push({
+      id: `stress-edge-${i}`,
+      source: `stress-image-${i}`,
+      target: `stress-gen-${i}`,
+      sourceHandle: 'source',
+      targetHandle: 'target',
+      type: 'disconnectableEdge',
+    })
+  }
+  return edges
 }
 
 function computeFitViewport(nodeCount, canvasWidth = 2560, canvasHeight = 1360) {
@@ -54,4 +85,4 @@ function computeFitViewport(nodeCount, canvasWidth = 2560, canvasHeight = 1360) 
   return { x, y, zoom }
 }
 
-module.exports = { buildNodes, computeFitViewport, GRID_COLUMNS }
+module.exports = { buildNodes, buildEdges, computeFitViewport, GRID_COLUMNS }
