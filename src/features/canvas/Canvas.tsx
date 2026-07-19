@@ -350,6 +350,10 @@ export function Canvas() {
   // 需要实时视口的调用方一律走 reactFlowInstance.getViewport()。
   const handleMoveEnd = useCallback(
     (_event: DynamicValue, viewport: Viewport) => {
+      // 手势结束撤掉合成层提升：常驻 will-change 会让缩放后的文字停留在旧倍率
+      // 光栅位图上（表现为放大后模糊、点击节点局部重绘才变清晰）；
+      // 撤掉后浏览器立刻按当前倍率重新光栅化，文字恢复清晰。
+      wrapperRef.current?.classList.remove('canvas-viewport-moving');
       setViewportState(viewport);
       const project = getCurrentProject();
       if (!project || isRestoringCanvasRef.current) {
@@ -361,6 +365,9 @@ export function Canvas() {
   );
 
   const handleMoveStart = useCallback(() => {
+    // 手势开始才提升合成层（配合 storyboard.css 的 .canvas-viewport-moving 规则），
+    // 平移/缩放期间是纯合成器移动；用 classList 直改 DOM，避免手势起点多一次 React 渲染
+    wrapperRef.current?.classList.add('canvas-viewport-moving');
     cancelPendingViewportPersist();
   }, [cancelPendingViewportPersist]);
 
