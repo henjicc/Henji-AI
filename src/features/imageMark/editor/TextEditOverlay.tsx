@@ -31,7 +31,8 @@ export function TextEditOverlay({
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
-        transform: 'translate(0, -100%)',
+        // 标签输入停靠在标签渲染位置(框右下角);独立文字仍悬浮在点击点上方
+        transform: isLabel ? 'none' : 'translate(0, -100%)',
         minWidth: '180px',
         maxWidth: '300px',
       }}

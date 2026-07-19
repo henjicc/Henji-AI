@@ -49,16 +49,21 @@ export function useMarkCropOrientation({
     if (docRef.current.crop || imageWidth <= 0) {
       return;
     }
-    const inset = 0.1;
-    const crop: MarkCropRect = {
-      x: imageWidth * inset,
-      y: imageHeight * inset,
-      width: imageWidth * (1 - inset * 2),
-      height: imageHeight * (1 - inset * 2),
-    };
-    // 进入裁剪时的初始框不记历史,由拖拽结束时提交
+    // 初始框 = 全图(等价于不裁剪),只有用户真正拖动后才产生裁剪效果
+    const crop: MarkCropRect = { x: 0, y: 0, width: imageWidth, height: imageHeight };
     setDoc((previous) => ({ ...previous, crop }));
   }, [docRef, imageHeight, imageWidth, setDoc]);
+
+  /** 离开裁剪工具时调用:未产生实际裁剪(仍为全图)则静默清掉,不留虚线框 */
+  const normalizeCropSilently = useCallback(() => {
+    const current = docRef.current.crop;
+    if (!current || normalizeCrop(current) !== null) {
+      return;
+    }
+    const next = { ...docRef.current, crop: null };
+    setDoc(next);
+    onDocChange?.(next);
+  }, [docRef, normalizeCrop, onDocChange, setDoc]);
 
   const handleCropChange = useCallback((crop: MarkCropRect) => {
     if (!cropGestureBaseRef.current) {
@@ -88,6 +93,7 @@ export function useMarkCropOrientation({
   return {
     applyOrientation,
     ensureCropExists,
+    normalizeCropSilently,
     handleCropChange,
     handleCropCommit,
     handleCropReset,

@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
   type SetStateAction,
 } from 'react';
@@ -14,15 +13,17 @@ import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import { clamp, updateMarkPosition } from '../domain/geometry';
 import {
   MAX_LINE_WIDTH_PERCENT,
+  MAX_MOSAIC_STRENGTH_PERCENT,
   MAX_TEXT_SIZE_PERCENT,
   MIN_LINE_WIDTH_PERCENT,
+  MIN_MOSAIC_STRENGTH_PERCENT,
   MIN_TEXT_SIZE_PERCENT,
   fontSizeToPercent,
   lineWidthToPercent,
   percentToFontSize,
   percentToLineWidth,
 } from '../domain/metrics';
-import type { ImageMarkDoc, MarkToolType } from '../domain/types';
+import { isLabeledMark, type ImageMarkDoc, type MarkToolType } from '../domain/types';
 import { TOOL_SHORTCUT_MAP, getMarkPosition, type MarkEditorStyleState } from './shared';
 import { useMarkCropOrientation } from './useMarkCropOrientation';
 import { useMarkHistory } from './useMarkHistory';
@@ -152,6 +153,7 @@ export function useMarkController({
     color: style.color,
     lineWidth,
     fontSize,
+    mosaicStrengthPercent: style.mosaicStrengthPercent,
     commitItems: history.commitItems,
     setSelectedId,
     setTextEditor: textEditing.setTextEditor,
@@ -180,7 +182,14 @@ export function useMarkController({
 
   // ==================== 工具切换 ====================
 
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
+
   const selectTool = useCallback((next: MarkToolType) => {
+    // 离开裁剪工具时,没动过的全图初始框静默清掉,避免残留虚线/意外裁剪
+    if (toolRef.current === 'crop' && next !== 'crop') {
+      cropOrientation.normalizeCropSilently();
+    }
     setTool(next);
     if (next === 'crop') {
       cropOrientation.ensureCropExists();
@@ -226,6 +235,11 @@ export function useMarkController({
         MIN_TEXT_SIZE_PERCENT,
         MAX_TEXT_SIZE_PERCENT
       ),
+      mosaicStrengthPercent: clamp(
+        patch.mosaicStrengthPercent ?? style.mosaicStrengthPercent,
+        MIN_MOSAIC_STRENGTH_PERCENT,
+        MAX_MOSAIC_STRENGTH_PERCENT
+      ),
     };
     setStyle(nextStyle);
     onStyleChange?.(nextStyle);
@@ -245,13 +259,21 @@ export function useMarkController({
         };
       }
       if (item.type === 'mosaic') {
-        return item;
+        return { ...item, strengthPercent: nextStyle.mosaicStrengthPercent };
       }
-      return {
+      const next = {
         ...item,
         stroke: nextStyle.color,
         lineWidth: percentToLineWidth(nextStyle.lineWidthPercent, baseSize),
       };
+      // 带标签的图形:字号设置同时作用于标签文字
+      if (isLabeledMark(next) && next.label && patch.textSizePercent !== undefined) {
+        return {
+          ...next,
+          labelFontSize: percentToFontSize(nextStyle.textSizePercent, baseSize),
+        };
+      }
+      return next;
     });
     history.commitItems(nextItems);
   }, [baseSize, history, onStyleChange, selectedItem, setStyle, style]);
@@ -271,7 +293,15 @@ export function useMarkController({
           MAX_TEXT_SIZE_PERCENT
         ),
       };
-    } else if (selectedItem.type !== 'mosaic') {
+    } else if (selectedItem.type === 'mosaic') {
+      patch = {
+        mosaicStrengthPercent: clamp(
+          selectedItem.strengthPercent ?? style.mosaicStrengthPercent,
+          MIN_MOSAIC_STRENGTH_PERCENT,
+          MAX_MOSAIC_STRENGTH_PERCENT
+        ),
+      };
+    } else {
       patch = {
         color: selectedItem.stroke,
         lineWidthPercent: clamp(
@@ -280,6 +310,13 @@ export function useMarkController({
           MAX_LINE_WIDTH_PERCENT
         ),
       };
+      if (isLabeledMark(selectedItem) && selectedItem.label && selectedItem.labelFontSize) {
+        patch.textSizePercent = clamp(
+          fontSizeToPercent(selectedItem.labelFontSize, baseSize),
+          MIN_TEXT_SIZE_PERCENT,
+          MAX_TEXT_SIZE_PERCENT
+        );
+      }
     }
     setStyle((previous) => {
       const next = { ...previous, ...patch };
@@ -293,7 +330,13 @@ export function useMarkController({
 
   // ==================== 键盘 ====================
 
-  const handleStageKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleEditorKeyDown = useCallback((event: {
+    key: string;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    shiftKey: boolean;
+    preventDefault: () => void;
+  }) => {
     if (textEditing.textEditor) {
       return;
     }
@@ -396,7 +439,7 @@ export function useMarkController({
     handlePointerMove: pointer.handlePointerMove,
     handlePointerUp: pointer.handlePointerUp,
     handleStageDblClick: pointer.handleStageDblClick,
-    handleStageKeyDown,
+    handleEditorKeyDown,
     startTextEditing: textEditing.startTextEditing,
     handleCommitTextEditor: textEditing.handleCommitTextEditor,
     handleCancelTextEditor: textEditing.handleCancelTextEditor,

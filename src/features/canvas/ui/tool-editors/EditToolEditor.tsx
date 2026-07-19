@@ -26,6 +26,7 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
     color: typeof options.color === 'string' ? options.color : undefined,
     lineWidthPercent: toNumber(options.lineWidthPercent),
     textSizePercent: toNumber(options.fontSizePercent),
+    mosaicStrengthPercent: toNumber(options.mosaicStrengthPercent),
   }));
 
   return (
@@ -42,9 +43,10 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
           color: style.color,
           lineWidthPercent: style.lineWidthPercent,
           fontSizePercent: style.textSizePercent,
+          mosaicStrengthPercent: style.mosaicStrengthPercent,
         });
       }}
-      className="h-[min(62vh,640px)]"
+      className="h-[min(76vh,900px)]"
     />
   );
 }

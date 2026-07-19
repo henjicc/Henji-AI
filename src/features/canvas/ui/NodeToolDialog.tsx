@@ -257,7 +257,10 @@ export function NodeToolDialog() {
     if (!activePlugin) {
       return 'w-[min(460px,calc(100vw-40px))]';
     }
-    if (activePlugin.editor === 'edit' || activePlugin.editor === 'split') {
+    if (activePlugin.editor === 'edit') {
+      return 'w-[min(90vw,1560px)]';
+    }
+    if (activePlugin.editor === 'split') {
       return 'w-[min(1120px,calc(100vw-40px))]';
     }
     return 'w-[min(460px,calc(100vw-40px))]';

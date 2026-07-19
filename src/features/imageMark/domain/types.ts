@@ -6,6 +6,7 @@
 
 export type MarkToolType =
   | 'select'
+  | 'callout'
   | 'rect'
   | 'ellipse'
   | 'arrow'
@@ -83,6 +84,8 @@ export interface MosaicMark {
   y: number;
   width: number;
   height: number;
+  /** 打码强度:色块边长占图片短边的百分比,缺省用 DEFAULT_MOSAIC_STRENGTH_PERCENT */
+  strengthPercent?: number;
 }
 
 export type MarkItem =

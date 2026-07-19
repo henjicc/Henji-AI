@@ -51,11 +51,24 @@ export function numberBadgeRadius(fontSize: number): number {
   return Math.max(9, Math.round(fontSize * 0.78));
 }
 
-// ==================== 马赛克 ====================
+// ==================== 打码 ====================
 
-export function resolveMosaicPixelSize(width: number, height: number): number {
+export const DEFAULT_MOSAIC_STRENGTH_PERCENT = 2;
+export const MIN_MOSAIC_STRENGTH_PERCENT = 0.5;
+export const MAX_MOSAIC_STRENGTH_PERCENT = 8;
+
+export function resolveMosaicPixelSize(
+  width: number,
+  height: number,
+  strengthPercent: number = DEFAULT_MOSAIC_STRENGTH_PERCENT
+): number {
   const base = Math.min(width, height);
-  return clamp(Math.round(base * 0.02), 6, 64);
+  const strength = clamp(
+    Number.isFinite(strengthPercent) ? strengthPercent : DEFAULT_MOSAIC_STRENGTH_PERCENT,
+    MIN_MOSAIC_STRENGTH_PERCENT,
+    MAX_MOSAIC_STRENGTH_PERCENT
+  );
+  return clamp(Math.round((base * strength) / 100), 4, 128);
 }
 
 // ==================== 标签(框选/箭头旁的文字) ====================
@@ -83,7 +96,7 @@ export interface LabelPlacement {
 
 /**
  * 标签锚点(文本块左上角):
- * - 矩形/椭圆:优先放在形状上方,顶部放不下时放到形状下方
+ * - 矩形/椭圆:放在形状右下角外侧(标注工具的拖动落点),越界时向内收敛
  * - 箭头:放在终点(箭头尖)旁,按边界自动换侧
  */
 export function resolveLabelPlacement(
@@ -110,8 +123,14 @@ export function resolveLabelPlacement(
     return { x, y };
   }
 
-  const aboveY = item.y - gap - blockHeight;
-  const y = aboveY >= 0 ? aboveY : item.y + item.height + gap;
-  const x = clamp(item.x, 0, Math.max(0, imageWidth - blockWidth));
-  return { x, y: clamp(y, 0, Math.max(0, imageHeight - blockHeight)) };
+  // 右下角外侧;右侧放不下时贴框内右缘,下方放不下时翻到框上方
+  const rightX = item.x + item.width + gap;
+  const x = rightX + blockWidth <= imageWidth
+    ? rightX
+    : clamp(item.x + item.width - blockWidth, 0, Math.max(0, imageWidth - blockWidth));
+  const belowY = item.y + item.height + gap;
+  const y = belowY + blockHeight <= imageHeight
+    ? belowY
+    : clamp(item.y - gap - blockHeight, 0, Math.max(0, imageHeight - blockHeight));
+  return { x, y };
 }

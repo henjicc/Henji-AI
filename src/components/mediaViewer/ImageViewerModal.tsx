@@ -188,14 +188,11 @@ export function ImageViewerModal({
           <ViewerMarkEditor
             imageUrl={imageUrl}
             session={initialMarkSession}
-            imageList={imageList}
-            currentIndex={currentIndex}
             onClose={() => onExitEditor?.()}
             onSave={(dataUrl, session) => {
               onSaveEdit?.(dataUrl, session);
               onExitEditor?.();
             }}
-            onNavigate={onNavigate}
           />
         </div>
       ) : (

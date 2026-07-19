@@ -4,8 +4,8 @@ import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
 import {
   DEFAULT_LINE_WIDTH_PERCENT,
+  DEFAULT_MOSAIC_STRENGTH_PERCENT,
   DEFAULT_TEXT_SIZE_PERCENT,
-  resolveMosaicPixelSize,
   resolveTextBaseSize,
 } from '../domain/metrics';
 import { clampCropRect } from '../domain/geometry';
@@ -32,6 +32,8 @@ export interface MarkEditorProps {
   onDocChange?: (doc: ImageMarkDoc) => void;
   initialStyle?: Partial<MarkEditorStyleState>;
   onStyleChange?: (style: MarkEditorStyleState) => void;
+  /** 宿主动作(取消/保存/复制等),渲染在工具行最右侧 */
+  toolbarActions?: React.ReactNode;
   /** 根容器高度控制,默认适配对话框;全屏宿主传 h-full */
   className?: string;
 }
@@ -47,15 +49,17 @@ export function MarkEditor({
   onDocChange,
   initialStyle,
   onStyleChange,
+  toolbarActions,
   className = 'h-[min(70vh,760px)]',
 }: MarkEditorProps): JSX.Element {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [doc, setDoc] = useState<ImageMarkDoc>(() => initialDoc ?? createEmptyMarkDoc());
-  const [tool, setToolState] = useState<MarkToolType>('rect');
+  const [tool, setToolState] = useState<MarkToolType>('callout');
   const [style, setStyle] = useState<MarkEditorStyleState>(() => ({
     color: initialStyle?.color ?? ANNOTATION_DEFAULT_STROKE_HEX,
     lineWidthPercent: initialStyle?.lineWidthPercent ?? DEFAULT_LINE_WIDTH_PERCENT,
     textSizePercent: initialStyle?.textSizePercent ?? DEFAULT_TEXT_SIZE_PERCENT,
+    mosaicStrengthPercent: initialStyle?.mosaicStrengthPercent ?? DEFAULT_MOSAIC_STRENGTH_PERCENT,
   }));
   const [cropRatioValue, setCropRatioValue] = useState('free');
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -100,20 +104,33 @@ export function MarkEditor({
   const imageWidth = orientedCanvas?.width ?? 0;
   const imageHeight = orientedCanvas?.height ?? 0;
   const baseSize = resolveTextBaseSize(imageWidth, imageHeight);
-  const hasMosaic = useMemo(() => doc.items.some((item) => item.type === 'mosaic'), [doc.items]);
 
-  const mosaicSource = useMemo(() => {
-    if (!orientedCanvas || !hasMosaic) {
+  // 打码取样源:按像素块尺寸惰性构建并缓存,朝向位图变化时整体失效;
+  // 绘制草稿时即可取到,保证拖拽实时预览
+  const mosaicSourceCacheRef = useRef<{
+    canvas: HTMLCanvasElement | null;
+    bySize: Map<number, HTMLCanvasElement>;
+  }>({ canvas: null, bySize: new Map() });
+  const getMosaicSource = useCallback((pixelSize: number): HTMLCanvasElement | null => {
+    if (!orientedCanvas || pixelSize <= 0) {
       return null;
     }
-    return buildMosaicSourceCanvas(
-      orientedCanvas,
-      resolveMosaicPixelSize(orientedCanvas.width, orientedCanvas.height)
-    );
-  }, [hasMosaic, orientedCanvas]);
+    const cache = mosaicSourceCacheRef.current;
+    if (cache.canvas !== orientedCanvas) {
+      cache.canvas = orientedCanvas;
+      cache.bySize.clear();
+    }
+    let source = cache.bySize.get(pixelSize) ?? null;
+    if (!source) {
+      source = buildMosaicSourceCanvas(orientedCanvas, pixelSize);
+      cache.bySize.set(pixelSize, source);
+    }
+    return source;
+  }, [orientedCanvas]);
 
   // ==================== 视口与缩放 ====================
 
+  // 依赖 image:加载占位阶段视口容器尚未挂载,图片就绪后重新绑定 ResizeObserver
   useEffect(() => {
     const element = viewportRef.current;
     if (!element) {
@@ -130,7 +147,7 @@ export function MarkEditor({
     const observer = new ResizeObserver(updateViewportSize);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [image]);
 
   const { stageWidth, stageHeight, scale } = useMemo(() => {
     if (!imageWidth || !imageHeight) {
@@ -166,6 +183,23 @@ export function MarkEditor({
     stageHostRef,
     textInputRef,
   });
+
+  // 编辑器挂载期间全局响应快捷键(输入控件聚焦时除外),不要求画布先获得焦点
+  const editorKeyDownHandler = controller.handleEditorKeyDown;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
+      editorKeyDownHandler(event);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editorKeyDownHandler]);
 
   const resolveRatio = useCallback((value: string): number | null => {
     if (value === 'free') {
@@ -227,17 +261,16 @@ export function MarkEditor({
         onOrientation={controller.applyOrientation}
         onUndo={controller.handleUndo}
         onRedo={controller.handleRedo}
-        onDeleteSelected={controller.handleDeleteSelected}
         onClear={controller.handleClear}
         canUndo={controller.canUndo}
         canRedo={controller.canRedo}
-        canDeleteSelected={Boolean(controller.selectedId)}
         canClear={doc.items.length > 0}
+        actions={toolbarActions}
       />
 
       <MarkCanvas
         orientedCanvas={orientedCanvas}
-        mosaicSource={mosaicSource}
+        getMosaicSource={getMosaicSource}
         doc={doc}
         draftMark={controller.draftMark}
         tool={tool}
@@ -254,7 +287,6 @@ export function MarkEditor({
         stageRef={stageRef}
         contentGroupRef={contentGroupRef}
         textInputRef={textInputRef}
-        onStageKeyDown={controller.handleStageKeyDown}
         onPointerDown={controller.handlePointerDown}
         onPointerMove={controller.handlePointerMove}
         onPointerUp={controller.handlePointerUp}

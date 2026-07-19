@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ClipboardCopy, FolderOpen, ImagePlus, Save } from 'lucide-react';
+import { ClipboardCopy, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { UiButton } from '@/components/ui';
 import { useNotification } from '@/contexts/NotificationContext';
+import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { basename, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
-import { copyImageSourceToClipboard, saveImageSourceToPath } from '@/commands/image';
+import {
+  copyImageSourceToClipboard,
+  persistImageSource,
+  saveImageSourceToPath,
+} from '@/commands/image';
 import { readFileAsDataUrl } from '@/services/imageSource';
 import { createEmptyMarkDoc, type ImageMarkDoc } from '../domain/types';
 import { exportMarkedImage } from '../render/exportMarkedImage';
@@ -25,6 +30,7 @@ interface ImageMarkSource {
  */
 export function ImageMarkTool(): JSX.Element {
   const { showNotification } = useNotification();
+  const { addMedia, collecting } = useAddToAssetLibrary();
   const [source, setSource] = useState<ImageMarkSource | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -106,7 +112,7 @@ export function ImageMarkTool(): JSX.Element {
     });
   }, [acceptFile, showNotification]);
 
-  const runExport = useCallback(async (action: 'copy' | 'save') => {
+  const runExport = useCallback(async (action: 'copy' | 'save' | 'collect') => {
     if (!source || isBusy) {
       return;
     }
@@ -117,7 +123,7 @@ export function ImageMarkTool(): JSX.Element {
         await copyImageSourceToClipboard(dataUrl);
         logger.info('image_mark.standalone.copy.completed', { name: source.name });
         showNotification('已复制到剪贴板');
-      } else {
+      } else if (action === 'save') {
         const defaultName = source.name.replace(/\.[^.]+$/, '') || 'image';
         const targetPath = await saveDialog({
           defaultPath: `${defaultName}-标记.png`,
@@ -129,17 +135,30 @@ export function ImageMarkTool(): JSX.Element {
         await saveImageSourceToPath(dataUrl, targetPath);
         logger.info('image_mark.standalone.save.completed', { targetPath });
         showNotification('已保存');
+      } else {
+        const filePath = await persistImageSource(dataUrl);
+        await addMedia({
+          filePath,
+          mediaType: 'image',
+          source: 'imported',
+          displayName: source.name,
+        });
+        logger.info('image_mark.standalone.collect.completed', { name: source.name });
+        showNotification('已加入资产库');
       }
     } catch (error) {
       logger.error('image_mark.standalone.export.failed', {
         action,
         error: error instanceof Error ? error.message : String(error),
       });
-      showNotification(action === 'copy' ? '复制失败' : '保存失败', 'error');
+      showNotification(
+        action === 'copy' ? '复制失败' : action === 'save' ? '保存失败' : '加入资产库失败',
+        'error'
+      );
     } finally {
       setIsBusy(false);
     }
-  }, [isBusy, showNotification, source]);
+  }, [addMedia, isBusy, showNotification, source]);
 
   if (!source) {
     return (
@@ -175,23 +194,14 @@ export function ImageMarkTool(): JSX.Element {
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <UiButton variant="ghost" size="sm" onClick={() => void handleOpenFile()}>
           <FolderOpen size={15} className="mr-1.5" />
           打开图片
         </UiButton>
-        <span className="max-w-[280px] truncate text-xs text-text-muted" title={source.name}>
+        <span className="max-w-[320px] truncate text-xs text-text-muted" title={source.name}>
           {source.name}
         </span>
-        <div className="flex-1" />
-        <UiButton variant="ghost" size="sm" disabled={isBusy} onClick={() => void runExport('copy')}>
-          <ClipboardCopy size={15} className="mr-1.5" />
-          复制到剪贴板
-        </UiButton>
-        <UiButton variant="primary" size="sm" disabled={isBusy} onClick={() => void runExport('save')}>
-          <Save size={15} className="mr-1.5" />
-          {isBusy ? '处理中…' : '另存为…'}
-        </UiButton>
       </div>
 
       <MarkEditor
@@ -200,6 +210,27 @@ export function ImageMarkTool(): JSX.Element {
         onDocChange={(doc) => {
           docRef.current = doc;
         }}
+        toolbarActions={
+          <>
+            <UiButton variant="ghost" size="sm" disabled={isBusy} onClick={() => void runExport('copy')}>
+              <ClipboardCopy size={15} className="mr-1.5" />
+              复制
+            </UiButton>
+            <UiButton
+              variant="ghost"
+              size="sm"
+              disabled={isBusy || collecting}
+              onClick={() => void runExport('collect')}
+            >
+              <LibraryBig size={15} className="mr-1.5" />
+              加入资产库
+            </UiButton>
+            <UiButton variant="primary" size="sm" disabled={isBusy} onClick={() => void runExport('save')}>
+              <Save size={15} className="mr-1.5" />
+              {isBusy ? '处理中…' : '另存为…'}
+            </UiButton>
+          </>
+        }
         className="min-h-0 flex-1"
       />
     </div>

@@ -4,7 +4,6 @@ import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
 import type { ImageMarkDoc, MarkItem, MarkToolType } from '../domain/types';
-import { resolveMosaicPixelSize } from '../domain/metrics';
 import { resolveNumberValues } from '../render/drawMarks';
 import { CropOverlayBox } from './CropOverlayBox';
 import { MarkShapeNode } from './markShapes';
@@ -14,7 +13,7 @@ import type { TextEditorState } from './shared';
 
 interface MarkCanvasProps {
   orientedCanvas: HTMLCanvasElement | null;
-  mosaicSource: HTMLCanvasElement | null;
+  getMosaicSource: (pixelSize: number) => HTMLCanvasElement | null;
   doc: ImageMarkDoc;
   draftMark: MarkItem | null;
   tool: MarkToolType;
@@ -31,7 +30,6 @@ interface MarkCanvasProps {
   stageRef: React.MutableRefObject<Konva.Stage | null>;
   contentGroupRef: React.MutableRefObject<Konva.Group | null>;
   textInputRef: React.RefObject<HTMLTextAreaElement>;
-  onStageKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onPointerDown: (event: KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onPointerMove: (event: KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onPointerUp: () => void;
@@ -48,7 +46,7 @@ interface MarkCanvasProps {
 
 export function MarkCanvas({
   orientedCanvas,
-  mosaicSource,
+  getMosaicSource,
   doc,
   draftMark,
   tool,
@@ -65,7 +63,6 @@ export function MarkCanvas({
   stageRef,
   contentGroupRef,
   textInputRef,
-  onStageKeyDown,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -85,10 +82,6 @@ export function MarkCanvas({
   const imageWidth = orientedCanvas?.width ?? 0;
   const imageHeight = orientedCanvas?.height ?? 0;
   const numberValues = useMemo(() => resolveNumberValues(doc.items), [doc.items]);
-  const mosaicPixelSize = useMemo(
-    () => resolveMosaicPixelSize(Math.max(1, imageWidth), Math.max(1, imageHeight)),
-    [imageHeight, imageWidth]
-  );
 
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -152,7 +145,6 @@ export function MarkCanvas({
         ref={stageHostRef}
         tabIndex={0}
         className="relative flex h-full w-full items-center justify-center p-2 outline-none"
-        onKeyDown={onStageKeyDown}
       >
         <div className="relative" style={{ width: stageWidth, height: stageHeight }}>
           <Stage
@@ -209,8 +201,7 @@ export function MarkCanvas({
                     numberValue={numberValues.get(item.id) ?? 0}
                     imageWidth={imageWidth}
                     imageHeight={imageHeight}
-                    mosaicSource={mosaicSource}
-                    mosaicPixelSize={mosaicPixelSize}
+                    getMosaicSource={getMosaicSource}
                     draggable={tool !== 'crop'}
                     listening={tool !== 'crop'}
                     bindRef={bindShapeRef}
@@ -266,8 +257,7 @@ export function MarkCanvas({
                     numberValue={0}
                     imageWidth={imageWidth}
                     imageHeight={imageHeight}
-                    mosaicSource={mosaicSource}
-                    mosaicPixelSize={mosaicPixelSize}
+                    getMosaicSource={getMosaicSource}
                     draggable={false}
                     listening={false}
                     opacity={0.75}

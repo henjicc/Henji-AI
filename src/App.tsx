@@ -18,6 +18,7 @@ import { AssetLibraryFloatingPanel } from '@/features/assets/AssetLibraryFloatin
 import { LargeUploadChoiceDialog } from '@/components/upload/LargeUploadChoiceDialog'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
+import { NotificationProvider } from '@/contexts/NotificationContext'
 
 const logger = createLogger('App')
 
@@ -129,28 +130,30 @@ const App: React.FC = () => {
   }, [])
 
   return (
-    <div
-      className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
-      style={{
-        opacity: isReady ? 1 : 0,
-        transition: 'opacity 0.3s ease-in-out'
-      }}
-    >
-      {/* 标题栏（含 Tab 切换） */}
-      <WindowControls
-        activeTab={activeTab}
-        assetView={assetView}
-        onTabChange={handleTabChange}
-        onAssetClick={handleAssetClick}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
+    <NotificationProvider>
+      <div
+        className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
+        style={{
+          opacity: isReady ? 1 : 0,
+          transition: 'opacity 0.3s ease-in-out'
+        }}
+      >
+        {/* 标题栏（含 Tab 切换） */}
+        <WindowControls
+          activeTab={activeTab}
+          assetView={assetView}
+          onTabChange={handleTabChange}
+          onAssetClick={handleAssetClick}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        />
 
-      {/* 工作区容器 */}
-      <TabContainer activeTab={activeTab} />
-      <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
-      <LargeUploadChoiceDialog />
-    </div>
+        {/* 工作区容器 */}
+        <TabContainer activeTab={activeTab} />
+        <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
+        {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+        <LargeUploadChoiceDialog />
+      </div>
+    </NotificationProvider>
   )
 }
 

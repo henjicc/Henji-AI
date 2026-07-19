@@ -143,6 +143,9 @@ export function sanitizeMarkItem(item: DynamicValue): MarkItem | null {
       y: raw.y,
       width: Math.max(0, raw.width),
       height: Math.max(0, raw.height),
+      ...(isFiniteNumber(raw.strengthPercent)
+        ? { strengthPercent: Math.max(0.1, raw.strengthPercent) }
+        : {}),
     };
   }
 

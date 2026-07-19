@@ -8,6 +8,7 @@ import {
   numberBadgeRadius,
   resolveLabelFontSize,
   resolveLabelPlacement,
+  resolveMosaicPixelSize,
   resolveTextBaseSize,
 } from '../domain/metrics';
 import { isLabeledMark, type MarkItem } from '../domain/types';
@@ -19,8 +20,8 @@ interface MarkShapeNodeProps {
   numberValue?: number;
   imageWidth: number;
   imageHeight: number;
-  mosaicSource: HTMLCanvasElement | null;
-  mosaicPixelSize: number;
+  /** 按像素块尺寸取打码取样源 */
+  getMosaicSource: (pixelSize: number) => HTMLCanvasElement | null;
   draggable: boolean;
   listening: boolean;
   opacity?: number;
@@ -36,8 +37,7 @@ export function MarkShapeNode({
   numberValue = 0,
   imageWidth,
   imageHeight,
-  mosaicSource,
-  mosaicPixelSize,
+  getMosaicSource,
   draggable,
   listening,
   opacity = 1,
@@ -200,6 +200,9 @@ export function MarkShapeNode({
   }
 
   // mosaic:sceneFunc 直接从取样源低清放大绘制
+  const mosaicPixelSize = item.type === 'mosaic'
+    ? resolveMosaicPixelSize(imageWidth, imageHeight, item.strengthPercent)
+    : 0;
   return (
     <Shape
       ref={(node) => bindRef?.(item.id, node)}
@@ -210,12 +213,13 @@ export function MarkShapeNode({
       opacity={opacity}
       sceneFunc={(context, shape) => {
         const native = context._context;
+        const mosaicSource = getMosaicSource(mosaicPixelSize);
         if (mosaicSource) {
           drawMosaicRegion(
             native,
             mosaicSource,
             mosaicPixelSize,
-            { x: item.x, y: item.y, width: shape.width(), height: shape.height() },
+            { x: shape.x(), y: shape.y(), width: shape.width(), height: shape.height() },
             0,
             0
           );

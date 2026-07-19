@@ -5,6 +5,7 @@ import {
   Crop,
   Grid3x3,
   ListOrdered,
+  MessageSquareText,
   MousePointer2,
   Square,
   Type,
@@ -12,6 +13,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { MarkItem, MarkToolType } from '../domain/types';
 import { normalizeMarkRect } from '../domain/geometry';
+import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '../domain/metrics';
 
 export const VIEWPORT_PADDING_PX = 16;
 export const VIEWPORT_MIN_WIDTH_PX = 220;
@@ -23,10 +25,11 @@ export interface MarkEditorStyleState {
   color: string;
   lineWidthPercent: number;
   textSizePercent: number;
+  mosaicStrengthPercent: number;
 }
 
 export type DraftState = {
-  tool: 'rect' | 'ellipse' | 'arrow' | 'pen' | 'mosaic';
+  tool: 'callout' | 'rect' | 'ellipse' | 'arrow' | 'pen' | 'mosaic';
   startX: number;
   startY: number;
   currentX: number;
@@ -54,13 +57,14 @@ export interface ToolButtonDef {
 
 export const TOOL_BUTTONS: ToolButtonDef[] = [
   { type: 'select', label: '选择', shortcut: 'V', icon: MousePointer2 },
+  { type: 'callout', label: '标注', shortcut: 'B', icon: MessageSquareText },
   { type: 'rect', label: '矩形', shortcut: 'R', icon: Square },
   { type: 'ellipse', label: '圆形', shortcut: 'O', icon: Circle },
   { type: 'arrow', label: '箭头', shortcut: 'A', icon: ArrowRight },
   { type: 'number', label: '序号', shortcut: 'N', icon: ListOrdered },
   { type: 'text', label: '文字', shortcut: 'T', icon: Type },
   { type: 'pen', label: '画笔', shortcut: 'P', icon: Brush },
-  { type: 'mosaic', label: '马赛克', shortcut: 'M', icon: Grid3x3 },
+  { type: 'mosaic', label: '打码', shortcut: 'M', icon: Grid3x3 },
   { type: 'crop', label: '裁剪', shortcut: 'C', icon: Crop },
 ];
 
@@ -105,7 +109,7 @@ function constrainDraftEnd(
   }
   const dx = currentX - draft.startX;
   const dy = currentY - draft.startY;
-  if (draft.tool === 'rect' || draft.tool === 'ellipse' || draft.tool === 'mosaic') {
+  if (draft.tool === 'rect' || draft.tool === 'callout' || draft.tool === 'ellipse' || draft.tool === 'mosaic') {
     const size = Math.max(Math.abs(dx), Math.abs(dy));
     return {
       x: draft.startX + Math.sign(dx || 1) * size,
@@ -127,7 +131,8 @@ function constrainDraftEnd(
 export function buildDraftMark(
   draft: DraftState | null,
   color: string,
-  lineWidth: number
+  lineWidth: number,
+  mosaicStrengthPercent: number = DEFAULT_MOSAIC_STRENGTH_PERCENT
 ): MarkItem | null {
   if (!draft) {
     return null;
@@ -162,12 +167,14 @@ export function buildDraftMark(
       id: 'draft-mosaic',
       type: 'mosaic',
       ...rect,
+      strengthPercent: mosaicStrengthPercent,
     };
   }
 
+  // 标注(callout)在数据上就是带 label 的矩形,草稿阶段先画纯矩形
   return {
-    id: draft.tool === 'rect' ? 'draft-rect' : 'draft-ellipse',
-    type: draft.tool,
+    id: draft.tool === 'ellipse' ? 'draft-ellipse' : 'draft-rect',
+    type: draft.tool === 'ellipse' ? 'ellipse' : 'rect',
     ...rect,
     stroke: color,
     lineWidth,

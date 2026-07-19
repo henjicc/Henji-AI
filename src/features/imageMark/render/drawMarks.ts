@@ -121,9 +121,7 @@ export function resolveNumberValues(items: MarkItem[]): Map<string, number> {
 }
 
 export interface DrawMarksOptions {
-  /** 马赛克取样源;不传且存在马赛克项时会基于 baseCanvas 现建 */
-  mosaicSource?: HTMLCanvasElement;
-  /** 生成/使用马赛克源所用的原位图(通常即被绘制的画布本身) */
+  /** 生成打码取样源所用的原位图(通常即被绘制的画布本身) */
   baseCanvas?: HTMLCanvasElement;
 }
 
@@ -139,14 +137,24 @@ export function drawMarkItems(
   options: DrawMarksOptions = {}
 ): void {
   const numberValues = resolveNumberValues(items);
-  const pixelSize = resolveMosaicPixelSize(imageWidth, imageHeight);
-  let mosaicSource = options.mosaicSource ?? null;
+  // 打码取样源按像素块尺寸缓存,同强度的块共用一份
+  const mosaicSources = new Map<number, HTMLCanvasElement>();
+  const getMosaicSource = (pixelSize: number): HTMLCanvasElement | null => {
+    if (!options.baseCanvas) {
+      return null;
+    }
+    let source = mosaicSources.get(pixelSize) ?? null;
+    if (!source) {
+      source = buildMosaicSourceCanvas(options.baseCanvas, pixelSize);
+      mosaicSources.set(pixelSize, source);
+    }
+    return source;
+  };
 
   for (const item of items) {
     if (item.type === 'mosaic') {
-      if (!mosaicSource && options.baseCanvas) {
-        mosaicSource = buildMosaicSourceCanvas(options.baseCanvas, pixelSize);
-      }
+      const pixelSize = resolveMosaicPixelSize(imageWidth, imageHeight, item.strengthPercent);
+      const mosaicSource = getMosaicSource(pixelSize);
       if (mosaicSource) {
         context.save();
         drawMosaicRegion(context, mosaicSource, pixelSize, item);

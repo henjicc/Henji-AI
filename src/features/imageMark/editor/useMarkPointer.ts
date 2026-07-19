@@ -10,6 +10,7 @@ export interface UseMarkPointerParams {
   color: string;
   lineWidth: number;
   fontSize: number;
+  mosaicStrengthPercent: number;
   commitItems: (items: MarkItem[], recordHistory?: boolean) => void;
   setSelectedId: (id: string | null) => void;
   setTextEditor: (state: null) => void;
@@ -26,6 +27,7 @@ export function useMarkPointer({
   color,
   lineWidth,
   fontSize,
+  mosaicStrengthPercent,
   commitItems,
   setSelectedId,
   setTextEditor,
@@ -37,8 +39,8 @@ export function useMarkPointer({
   const [draft, setDraft] = useState<DraftState | null>(null);
 
   const draftMark = useMemo(
-    () => buildDraftMark(draft, color, lineWidth),
-    [color, draft, lineWidth]
+    () => buildDraftMark(draft, color, lineWidth, mosaicStrengthPercent),
+    [color, draft, lineWidth, mosaicStrengthPercent]
   );
 
   const isBackgroundTarget = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -131,7 +133,7 @@ export function useMarkPointer({
     const finalDraft: DraftState = { ...draft };
     setDraft(null);
 
-    const nextItem = buildDraftMark(finalDraft, color, lineWidth);
+    const nextItem = buildDraftMark(finalDraft, color, lineWidth, mosaicStrengthPercent);
     if (!nextItem) {
       return;
     }
@@ -155,11 +157,11 @@ export function useMarkPointer({
     commitItems([...docRef.current.items, createdItem]);
     setSelectedId(createdItem.id);
 
-    // 框选/箭头完成后立刻在旁边给出文字输入
-    if (isLabeledMark(createdItem)) {
+    // 标注工具:画完立刻在框右下角给出文字输入;纯图形工具不打扰
+    if (finalDraft.tool === 'callout' && isLabeledMark(createdItem)) {
       openLabelEditor(createdItem);
     }
-  }, [color, commitItems, docRef, draft, lineWidth, openLabelEditor, setSelectedId]);
+  }, [color, commitItems, docRef, draft, lineWidth, mosaicStrengthPercent, openLabelEditor, setSelectedId]);
 
   const handleStageDblClick = useCallback((event: KonvaEventObject<MouseEvent>) => {
     if (tool === 'crop' || !isBackgroundTarget(event)) {
