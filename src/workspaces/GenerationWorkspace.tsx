@@ -13,7 +13,7 @@ import {
   useGenerationHistoryFilterStore,
   type GenerationHistoryMediaType,
 } from '@/stores/generationHistoryFilterStore.ts'
-import type { ImageEditState } from '@/components/ImageEditor'
+import type { ImageMarkSession } from '@/features/imageMark'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
@@ -187,7 +187,7 @@ const GenerationWorkspace: React.FC = () => {
     tasks,
     setTasks,
   })
-  const imageEditStatesRef = useRef<Map<string, ImageEditState>>(new Map())
+  const imageEditStatesRef = useRef<Map<string, ImageMarkSession>>(new Map())
   const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const setUploadedFilePathsRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const generationMessages = useMemo(() => {
@@ -297,13 +297,8 @@ const GenerationWorkspace: React.FC = () => {
     setCurrentImage(currentImageList[nextIndex])
     setIsEditorMode(false)
   }
-  const handleSaveImageEdit = (dataUrl: string, editState: ImageEditState) => {
-    const nextState: ImageEditState = {
-      ...editState,
-      imageId: dataUrl,
-      originalSrc: editState.originalSrc,
-    }
-    imageEditStatesRef.current.set(dataUrl, nextState)
+  const handleSaveImageEdit = (dataUrl: string, session: ImageMarkSession) => {
+    imageEditStatesRef.current.set(dataUrl, session)
     setCurrentImageList((prev) => {
       const next = [...prev]
       next[currentImageIndex] = dataUrl
@@ -596,7 +591,7 @@ const GenerationWorkspace: React.FC = () => {
         currentIndex={currentImageIndex}
         fromUpload={isFromUploadArea}
         isEditorMode={isEditorMode}
-        initialEditState={imageEditStatesRef.current.get(currentImage)}
+        initialMarkSession={imageEditStatesRef.current.get(currentImage)}
         onClose={closeImageViewer}
         onNavigate={navigateImage}
         onEnterEditor={() => setIsEditorMode(true)}

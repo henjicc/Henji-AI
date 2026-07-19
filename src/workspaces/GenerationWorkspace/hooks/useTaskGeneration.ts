@@ -16,7 +16,7 @@ import {
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
-import type { ImageEditState } from '@/components/ImageEditor'
+import type { ImageMarkSession } from '@/features/imageMark'
 import { saveEditState } from '@/utils/editStatePersistence'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { splitMulti } from '../utils/multiFile'
@@ -44,7 +44,7 @@ export interface UseTaskGenerationParams {
   updateProgress: (taskId: string, progress: number) => void
   notify: (message: string, type?: ToastNotification['type']) => void
   messages: UseTaskGenerationMessages
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageMarkSession>>
   setUploadedImagesRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
   setUploadedFilePathsRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
 }
@@ -401,22 +401,16 @@ export function useTaskGeneration({
           const jpegBytes = await ensureCompressedJpegBytesWithPica(blob)
           const saved = await saveBytesToUploads(jpegBytes, 'image/jpeg')
 
-          const editState = imageEditStatesRef.current.get(img)
-          if (editState) {
-            let originalSrc = editState.originalSrc
-            if (originalSrc.startsWith('data:')) {
-              const savedOrg = await saveBase64ToUploads(originalSrc)
-              originalSrc = savedOrg.displaySrc
-            }
-
-            const nextState: ImageEditState = {
-              ...editState,
-              imageId: saved.relativePath,
-              originalSrc,
+          const session = imageEditStatesRef.current.get(img)
+          if (session) {
+            let sourceUrl = session.sourceUrl
+            if (sourceUrl.startsWith('data:')) {
+              const savedOrg = await saveBase64ToUploads(sourceUrl)
+              sourceUrl = savedOrg.displaySrc
             }
 
             imageEditStatesRef.current.delete(img)
-            imageEditStatesRef.current.set(saved.displaySrc, nextState)
+            imageEditStatesRef.current.set(saved.displaySrc, { ...session, sourceUrl })
           }
 
           images[i] = saved.displaySrc
@@ -585,7 +579,7 @@ export function useTaskGeneration({
     const taskId = createTaskId()
 
     const imagesForState = isStringArray(options.images) ? options.images : []
-    const imageEditStates = imagesForState.reduce<Record<string, ImageEditState>>((acc, url, index) => {
+    const imageEditStates = imagesForState.reduce<Record<string, ImageMarkSession>>((acc, url, index) => {
       const state = imageEditStatesRef.current.get(url)
       if (state) {
         acc[String(index)] = state

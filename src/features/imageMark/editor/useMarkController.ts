@@ -9,17 +9,9 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from 'react';
-import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
-import { createMarkId } from '../domain/codec';
-import {
-  applyOrientationOpToDoc,
-  clamp,
-  clampCropRect,
-  updateMarkPosition,
-  type OrientationOp,
-} from '../domain/geometry';
+import { clamp, updateMarkPosition } from '../domain/geometry';
 import {
   MAX_LINE_WIDTH_PERCENT,
   MAX_TEXT_SIZE_PERCENT,
@@ -29,24 +21,13 @@ import {
   lineWidthToPercent,
   percentToFontSize,
   percentToLineWidth,
-  resolveLabelPlacement,
 } from '../domain/metrics';
-import {
-  isLabeledMark,
-  type ImageMarkDoc,
-  type MarkCropRect,
-  type MarkItem,
-  type MarkToolType,
-} from '../domain/types';
-import {
-  HISTORY_LIMIT,
-  TOOL_SHORTCUT_MAP,
-  buildDraftMark,
-  getMarkPosition,
-  type DraftState,
-  type MarkEditorStyleState,
-  type TextEditorState,
-} from './shared';
+import type { ImageMarkDoc, MarkToolType } from '../domain/types';
+import { TOOL_SHORTCUT_MAP, getMarkPosition, type MarkEditorStyleState } from './shared';
+import { useMarkCropOrientation } from './useMarkCropOrientation';
+import { useMarkHistory } from './useMarkHistory';
+import { useMarkPointer } from './useMarkPointer';
+import { useMarkTextEditing } from './useMarkTextEditing';
 
 export interface UseMarkControllerParams {
   doc: ImageMarkDoc;
@@ -67,6 +48,7 @@ export interface UseMarkControllerParams {
   textInputRef: MutableRefObject<HTMLTextAreaElement | null>;
 }
 
+/** 编辑器总控:组合历史、文字/标签、指针、裁剪/朝向子控制器,并承载选中、样式与键盘 */
 export function useMarkController({
   doc,
   setDoc,
@@ -85,12 +67,7 @@ export function useMarkController({
   stageHostRef,
   textInputRef,
 }: UseMarkControllerParams) {
-  const [draft, setDraft] = useState<DraftState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
-  const [undoStack, setUndoStack] = useState<ImageMarkDoc[]>([]);
-  const [redoStack, setRedoStack] = useState<ImageMarkDoc[]>([]);
-  const cropGestureBaseRef = useRef<ImageMarkDoc | null>(null);
   const docRef = useRef(doc);
   docRef.current = doc;
 
@@ -103,53 +80,18 @@ export function useMarkController({
     [doc.items, selectedId]
   );
 
-  const emitStyle = useCallback((next: MarkEditorStyleState) => {
-    setStyle(next);
-    onStyleChange?.(next);
-  }, [onStyleChange, setStyle]);
+  // 撤销/重做/朝向切换后的清理,由子 hook 通过 ref 回调触发
+  const interactionCleanupRef = useRef<() => void>(() => undefined);
+  const runInteractionCleanup = useCallback(() => {
+    interactionCleanupRef.current();
+  }, []);
 
-  // ==================== 文档提交与历史 ====================
-
-  const commitDoc = useCallback((next: ImageMarkDoc, recordHistory = true) => {
-    if (recordHistory) {
-      setUndoStack((prev) => [...prev, docRef.current].slice(-HISTORY_LIMIT));
-      setRedoStack([]);
-    }
-    setDoc(next);
-    onDocChange?.(next);
-  }, [onDocChange, setDoc]);
-
-  const commitItems = useCallback((items: MarkItem[], recordHistory = true) => {
-    commitDoc({ ...docRef.current, items }, recordHistory);
-  }, [commitDoc]);
-
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) {
-      return;
-    }
-    const previous = undoStack[undoStack.length - 1];
-    setUndoStack(undoStack.slice(0, -1));
-    setRedoStack((redo) => [...redo, docRef.current].slice(-HISTORY_LIMIT));
-    setDoc(previous);
-    onDocChange?.(previous);
-    setSelectedId(null);
-    setTextEditor(null);
-    setDraft(null);
-  }, [onDocChange, setDoc, undoStack]);
-
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) {
-      return;
-    }
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack(redoStack.slice(0, -1));
-    setUndoStack((undo) => [...undo, docRef.current].slice(-HISTORY_LIMIT));
-    setDoc(next);
-    onDocChange?.(next);
-    setSelectedId(null);
-    setTextEditor(null);
-    setDraft(null);
-  }, [onDocChange, redoStack, setDoc]);
+  const history = useMarkHistory({
+    docRef,
+    setDoc,
+    onDocChange,
+    onHistoryNavigate: runInteractionCleanup,
+  });
 
   // ==================== 坐标转换 ====================
 
@@ -190,261 +132,64 @@ export function useMarkController({
     };
   }, [contentGroupRef, scale, stageHostRef, stageRef]);
 
-  // ==================== 文字 / 标签编辑 ====================
+  // ==================== 子控制器 ====================
 
-  const focusTextInput = useCallback(() => {
-    requestAnimationFrame(() => {
-      textInputRef.current?.focus();
-      textInputRef.current?.select();
-    });
-  }, [textInputRef]);
+  const textEditing = useMarkTextEditing({
+    docRef,
+    commitItems: history.commitItems,
+    setSelectedId,
+    imageWidth,
+    imageHeight,
+    textInputRef,
+    textColor: style.color,
+    fontSize,
+    labelFontSize,
+  });
 
-  const startTextEditing = useCallback((item: MarkItem | null, fallbackPoint?: { x: number; y: number }) => {
-    if (item && item.type === 'text') {
-      setTextEditor({ kind: 'text', itemId: item.id, x: item.x, y: item.y, value: item.text });
-      setSelectedId(item.id);
-      focusTextInput();
-      return;
-    }
-    if (item && isLabeledMark(item)) {
-      const placement = resolveLabelPlacement(
-        { ...item, label: item.label ?? '标' },
-        imageWidth,
-        imageHeight
-      );
-      setTextEditor({
-        kind: 'label',
-        itemId: item.id,
-        x: placement.x,
-        y: placement.y,
-        value: item.label ?? '',
-      });
-      setSelectedId(item.id);
-      focusTextInput();
-      return;
-    }
-    setTextEditor({
-      kind: 'text',
-      itemId: null,
-      x: fallbackPoint?.x ?? 0,
-      y: fallbackPoint?.y ?? 0,
-      value: '',
-    });
+  const pointer = useMarkPointer({
+    docRef,
+    tool,
+    color: style.color,
+    lineWidth,
+    fontSize,
+    commitItems: history.commitItems,
+    setSelectedId,
+    setTextEditor: textEditing.setTextEditor,
+    startTextEditing: textEditing.startTextEditing,
+    openLabelEditor: textEditing.openLabelEditor,
+    getImagePoint,
+    stageHostRef,
+  });
+
+  const cropOrientation = useMarkCropOrientation({
+    docRef,
+    setDoc,
+    onDocChange,
+    commitDoc: history.commitDoc,
+    pushHistorySnapshot: history.pushHistorySnapshot,
+    imageWidth,
+    imageHeight,
+    onBeforeOrientation: runInteractionCleanup,
+  });
+
+  interactionCleanupRef.current = () => {
     setSelectedId(null);
-    focusTextInput();
-  }, [focusTextInput, imageHeight, imageWidth]);
+    textEditing.setTextEditor(null);
+    pointer.setDraft(null);
+  };
 
-  const handleCommitTextEditor = useCallback(() => {
-    const editor = textEditor;
-    if (!editor) {
-      return;
-    }
-    const value = editor.value.replace(/\s+$/, '');
+  // ==================== 工具切换 ====================
 
-    if (editor.kind === 'label') {
-      const nextItems = docRef.current.items.map((item) => {
-        if (item.id !== editor.itemId || !isLabeledMark(item)) {
-          return item;
-        }
-        if (!value.trim()) {
-          const { label: _label, labelFontSize: _size, ...rest } = item;
-          return rest as MarkItem;
-        }
-        return { ...item, label: value, labelFontSize: item.labelFontSize ?? labelFontSize };
-      });
-      commitItems(nextItems);
-      setTextEditor(null);
-      return;
+  const selectTool = useCallback((next: MarkToolType) => {
+    setTool(next);
+    if (next === 'crop') {
+      cropOrientation.ensureCropExists();
     }
-
-    if (editor.itemId) {
-      const nextItems = docRef.current.items
-        .map((item) => {
-          if (item.id !== editor.itemId || item.type !== 'text') {
-            return item;
-          }
-          if (!value.trim()) {
-            return null;
-          }
-          return { ...item, text: value };
-        })
-        .filter((item): item is MarkItem => item !== null);
-      commitItems(nextItems);
-      setTextEditor(null);
-      return;
+    if (next !== 'text') {
+      textEditing.setTextEditor(null);
     }
-
-    if (!value.trim()) {
-      setTextEditor(null);
-      return;
-    }
-
-    const nextItem: MarkItem = {
-      id: createMarkId(),
-      type: 'text',
-      x: editor.x,
-      y: editor.y,
-      text: value,
-      color: style.color,
-      fontSize,
-    };
-    commitItems([...docRef.current.items, nextItem]);
-    setSelectedId(nextItem.id);
-    setTextEditor(null);
-  }, [commitItems, fontSize, labelFontSize, style.color, textEditor]);
-
-  const handleCancelTextEditor = useCallback(() => {
-    setTextEditor(null);
-  }, []);
-
-  // ==================== 指针交互 ====================
-
-  const draftMark = useMemo(
-    () => buildDraftMark(draft, style.color, lineWidth),
-    [draft, lineWidth, style.color]
-  );
-
-  const isBackgroundTarget = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
-    const target = event.target;
-    return target === target.getStage() || target.name() === 'mark-background';
-  }, []);
-
-  const handlePointerDown = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
-    stageHostRef.current?.focus({ preventScroll: true });
-    if (tool === 'crop') {
-      return;
-    }
-    const point = getImagePoint();
-    if (!point) {
-      return;
-    }
-    if (!isBackgroundTarget(event)) {
-      return;
-    }
-
-    if (tool === 'select') {
-      setSelectedId(null);
-      setTextEditor(null);
-      return;
-    }
-
-    if (tool === 'text') {
-      startTextEditing(null, point);
-      return;
-    }
-
-    if (tool === 'number') {
-      setTextEditor(null);
-      const nextItem: MarkItem = {
-        id: createMarkId(),
-        type: 'number',
-        x: point.x,
-        y: point.y,
-        color: style.color,
-        fontSize,
-      };
-      commitItems([...docRef.current.items, nextItem]);
-      return;
-    }
-
-    setTextEditor(null);
-    setSelectedId(null);
-    const shiftKey = 'shiftKey' in event.evt ? event.evt.shiftKey : false;
-    setDraft({
-      tool,
-      startX: point.x,
-      startY: point.y,
-      currentX: point.x,
-      currentY: point.y,
-      shiftKey,
-      points: tool === 'pen' ? [point.x, point.y] : undefined,
-    });
-  }, [commitItems, fontSize, getImagePoint, isBackgroundTarget, stageHostRef, startTextEditing, style.color, tool]);
-
-  const handlePointerMove = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
-    if (!draft) {
-      return;
-    }
-    const point = getImagePoint();
-    if (!point) {
-      return;
-    }
-    const shiftKey = 'shiftKey' in event.evt ? event.evt.shiftKey : draft.shiftKey;
-    setDraft((previous) => {
-      if (!previous) {
-        return previous;
-      }
-      if (previous.tool === 'pen') {
-        return {
-          ...previous,
-          currentX: point.x,
-          currentY: point.y,
-          shiftKey,
-          points: [...(previous.points ?? [previous.startX, previous.startY]), point.x, point.y],
-        };
-      }
-      return { ...previous, currentX: point.x, currentY: point.y, shiftKey };
-    });
-  }, [draft, getImagePoint]);
-
-  const handlePointerUp = useCallback(() => {
-    if (!draft) {
-      return;
-    }
-    const finalDraft: DraftState = { ...draft };
-    setDraft(null);
-
-    const nextItem = buildDraftMark(finalDraft, style.color, lineWidth);
-    if (!nextItem) {
-      return;
-    }
-    if (
-      (nextItem.type === 'rect' || nextItem.type === 'ellipse' || nextItem.type === 'mosaic') &&
-      (nextItem.width < 4 || nextItem.height < 4)
-    ) {
-      return;
-    }
-    if (nextItem.type === 'arrow') {
-      const [x1, y1, x2, y2] = nextItem.points;
-      if (Math.hypot(x2 - x1, y2 - y1) < 4) {
-        return;
-      }
-    }
-    if (nextItem.type === 'pen' && nextItem.points.length < 6) {
-      return;
-    }
-
-    const createdItem = { ...nextItem, id: createMarkId() } as MarkItem;
-    commitItems([...docRef.current.items, createdItem]);
-    setSelectedId(createdItem.id);
-
-    // 框选/箭头完成后立刻在旁边给出文字输入
-    if (isLabeledMark(createdItem)) {
-      const placement = resolveLabelPlacement(
-        { ...createdItem, label: '标' },
-        imageWidth,
-        imageHeight
-      );
-      setTextEditor({
-        kind: 'label',
-        itemId: createdItem.id,
-        x: placement.x,
-        y: placement.y,
-        value: '',
-      });
-      focusTextInput();
-    }
-  }, [commitItems, draft, focusTextInput, imageHeight, imageWidth, lineWidth, style.color]);
-
-  const handleStageDblClick = useCallback((event: KonvaEventObject<MouseEvent>) => {
-    if (tool === 'crop' || !isBackgroundTarget(event)) {
-      return;
-    }
-    const point = getImagePoint();
-    if (point) {
-      startTextEditing(null, point);
-    }
-  }, [getImagePoint, isBackgroundTarget, startTextEditing, tool]);
+    pointer.setDraft(null);
+  }, [cropOrientation, pointer, setTool, textEditing]);
 
   // ==================== 删除 / 清空 ====================
 
@@ -452,19 +197,19 @@ export function useMarkController({
     if (!selectedId) {
       return;
     }
-    commitItems(docRef.current.items.filter((item) => item.id !== selectedId));
+    history.commitItems(docRef.current.items.filter((item) => item.id !== selectedId));
     setSelectedId(null);
-    setTextEditor(null);
-  }, [commitItems, selectedId]);
+    textEditing.setTextEditor(null);
+  }, [history, selectedId, textEditing]);
 
   const handleClear = useCallback(() => {
     if (docRef.current.items.length === 0) {
       return;
     }
-    commitItems([]);
+    history.commitItems([]);
     setSelectedId(null);
-    setTextEditor(null);
-  }, [commitItems]);
+    textEditing.setTextEditor(null);
+  }, [history, textEditing]);
 
   // ==================== 样式变更(同时作用于选中项) ====================
 
@@ -482,7 +227,8 @@ export function useMarkController({
         MAX_TEXT_SIZE_PERCENT
       ),
     };
-    emitStyle(nextStyle);
+    setStyle(nextStyle);
+    onStyleChange?.(nextStyle);
 
     if (!selectedItem) {
       return;
@@ -507,12 +253,12 @@ export function useMarkController({
         lineWidth: percentToLineWidth(nextStyle.lineWidthPercent, baseSize),
       };
     });
-    commitItems(nextItems);
-  }, [baseSize, commitItems, emitStyle, selectedItem, style]);
+    history.commitItems(nextItems);
+  }, [baseSize, history, onStyleChange, selectedItem, setStyle, style]);
 
   // 选中项变化时,把样式面板同步为该项的样式
   useEffect(() => {
-    if (!selectedItem || textEditor) {
+    if (!selectedItem || textEditing.textEditor) {
       return;
     }
     let patch: Partial<MarkEditorStyleState> = {};
@@ -545,90 +291,10 @@ export function useMarkController({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在选中项变化时同步一次样式
   }, [selectedItem?.id]);
 
-  // ==================== 朝向与裁剪 ====================
-
-  // ==================== 工具切换 ====================
-
-  const ensureCropExistsRef = useRef<() => void>(() => undefined);
-
-  const selectTool = useCallback((next: MarkToolType) => {
-    setTool(next);
-    if (next === 'crop') {
-      ensureCropExistsRef.current();
-    }
-    if (next !== 'text') {
-      setTextEditor(null);
-    }
-    setDraft(null);
-  }, [setTool]);
-
-  const applyOrientation = useCallback((op: OrientationOp) => {
-    setDraft(null);
-    setTextEditor(null);
-    setSelectedId(null);
-    commitDoc(applyOrientationOpToDoc(docRef.current, imageWidth, imageHeight, op));
-  }, [commitDoc, imageHeight, imageWidth]);
-
-  const normalizeCrop = useCallback((crop: MarkCropRect | null): MarkCropRect | null => {
-    if (!crop) {
-      return null;
-    }
-    const clamped = clampCropRect(crop, imageWidth, imageHeight);
-    const coversAll =
-      clamped.x <= 0.5 &&
-      clamped.y <= 0.5 &&
-      clamped.width >= imageWidth - 1 &&
-      clamped.height >= imageHeight - 1;
-    return coversAll ? null : clamped;
-  }, [imageHeight, imageWidth]);
-
-  const ensureCropExists = useCallback(() => {
-    if (docRef.current.crop || imageWidth <= 0) {
-      return;
-    }
-    const inset = 0.1;
-    const crop: MarkCropRect = {
-      x: imageWidth * inset,
-      y: imageHeight * inset,
-      width: imageWidth * (1 - inset * 2),
-      height: imageHeight * (1 - inset * 2),
-    };
-    // 进入裁剪时的初始框不记历史,由确认/拖拽提交
-    setDoc((previous) => ({ ...previous, crop }));
-  }, [imageHeight, imageWidth, setDoc]);
-
-  ensureCropExistsRef.current = ensureCropExists;
-
-  const handleCropChange = useCallback((crop: MarkCropRect) => {
-    if (!cropGestureBaseRef.current) {
-      cropGestureBaseRef.current = docRef.current;
-    }
-    setDoc((previous) => ({ ...previous, crop }));
-  }, [setDoc]);
-
-  const handleCropCommit = useCallback(() => {
-    const base = cropGestureBaseRef.current;
-    cropGestureBaseRef.current = null;
-    const next = { ...docRef.current, crop: normalizeCrop(docRef.current.crop) };
-    if (base) {
-      setUndoStack((prev) => [...prev, base].slice(-HISTORY_LIMIT));
-      setRedoStack([]);
-    }
-    setDoc(next);
-    onDocChange?.(next);
-  }, [normalizeCrop, onDocChange, setDoc]);
-
-  const handleCropReset = useCallback(() => {
-    if (!docRef.current.crop) {
-      return;
-    }
-    commitDoc({ ...docRef.current, crop: null });
-  }, [commitDoc]);
-
   // ==================== 键盘 ====================
 
   const handleStageKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (textEditor) {
+    if (textEditing.textEditor) {
       return;
     }
     const key = event.key.toLowerCase();
@@ -636,12 +302,12 @@ export function useMarkController({
 
     if (command && key === 'z' && !event.shiftKey) {
       event.preventDefault();
-      handleUndo();
+      history.handleUndo();
       return;
     }
     if (command && (key === 'y' || (key === 'z' && event.shiftKey))) {
       event.preventDefault();
-      handleRedo();
+      history.handleRedo();
       return;
     }
     if (command) {
@@ -654,9 +320,9 @@ export function useMarkController({
       return;
     }
     if (event.key === 'Escape') {
-      if (draft) {
+      if (pointer.draft) {
         event.preventDefault();
-        setDraft(null);
+        pointer.setDraft(null);
         return;
       }
       if (selectedId) {
@@ -677,7 +343,7 @@ export function useMarkController({
       const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
       const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
       const position = getMarkPosition(item);
-      commitItems(
+      history.commitItems(
         docRef.current.items.map((entry) =>
           entry.id === selectedId
             ? updateMarkPosition(entry, position.x + dx, position.y + dy)
@@ -699,57 +365,45 @@ export function useMarkController({
       event.preventDefault();
       selectTool(shortcutTool);
     }
-  }, [
-    commitItems,
-    draft,
-    handleDeleteSelected,
-    handleRedo,
-    handleStylePatch,
-    handleUndo,
-    selectTool,
-    selectedId,
-    textEditor,
-  ]);
+  }, [handleDeleteSelected, handleStylePatch, history, pointer, selectTool, selectedId, textEditing.textEditor]);
 
   const textEditorHostPos = useMemo(() => {
-    if (!textEditor) {
+    if (!textEditing.textEditor) {
       return null;
     }
-    return toHostPoint(textEditor.x, textEditor.y);
-  }, [textEditor, toHostPoint]);
+    return toHostPoint(textEditing.textEditor.x, textEditing.textEditor.y);
+  }, [textEditing.textEditor, toHostPoint]);
 
   return {
-    draft,
-    setDraft,
-    draftMark,
+    draftMark: pointer.draftMark,
     selectedId,
     setSelectedId,
     selectedItem,
-    textEditor,
-    setTextEditor,
+    textEditor: textEditing.textEditor,
+    setTextEditor: textEditing.setTextEditor,
     textEditorHostPos,
-    canUndo: undoStack.length > 0,
-    canRedo: redoStack.length > 0,
+    canUndo: history.canUndo,
+    canRedo: history.canRedo,
     selectTool,
-    commitDoc,
-    commitItems,
-    handleUndo,
-    handleRedo,
+    commitDoc: history.commitDoc,
+    commitItems: history.commitItems,
+    handleUndo: history.handleUndo,
+    handleRedo: history.handleRedo,
     handleDeleteSelected,
     handleClear,
     handleStylePatch,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUp,
-    handleStageDblClick,
+    handlePointerDown: pointer.handlePointerDown,
+    handlePointerMove: pointer.handlePointerMove,
+    handlePointerUp: pointer.handlePointerUp,
+    handleStageDblClick: pointer.handleStageDblClick,
     handleStageKeyDown,
-    startTextEditing,
-    handleCommitTextEditor,
-    handleCancelTextEditor,
-    applyOrientation,
-    ensureCropExists,
-    handleCropChange,
-    handleCropCommit,
-    handleCropReset,
+    startTextEditing: textEditing.startTextEditing,
+    handleCommitTextEditor: textEditing.handleCommitTextEditor,
+    handleCancelTextEditor: textEditing.handleCancelTextEditor,
+    applyOrientation: cropOrientation.applyOrientation,
+    ensureCropExists: cropOrientation.ensureCropExists,
+    handleCropChange: cropOrientation.handleCropChange,
+    handleCropCommit: cropOrientation.handleCropCommit,
+    handleCropReset: cropOrientation.handleCropReset,
   };
 }

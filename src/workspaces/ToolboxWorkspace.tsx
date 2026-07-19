@@ -1,16 +1,17 @@
 import React, { useState } from 'react'
-import { ArrowLeft, Clapperboard } from 'lucide-react'
+import { ArrowLeft, Clapperboard, SquarePen } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UiIconButton, UiOptionButton } from '@/components/ui'
 import CameraStageApp from '@/features/cameraStage/CameraStageApp'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
+import ImageMarkTool from '@/features/imageMark/standalone/ImageMarkTool'
 
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
  * 新工具在 TOOLS 里登记并在 renderTool 中接线即可，不改布局骨架。
  */
 
-type ToolboxToolId = 'cameraStage'
+type ToolboxToolId = 'cameraStage' | 'imageMark'
 
 interface ToolboxToolMeta {
   id: ToolboxToolId
@@ -20,6 +21,12 @@ interface ToolboxToolMeta {
 }
 
 const TOOLS: ToolboxToolMeta[] = [
+  {
+    id: 'imageMark',
+    name: '图片编辑',
+    description: '打开或粘贴图片,快速打序号、框选、画箭头、加文字、打码,支持裁剪与旋转,一键复制或保存',
+    icon: SquarePen,
+  },
   {
     id: 'cameraStage',
     name: '3D 镜头参考',
@@ -32,6 +39,8 @@ function renderTool(id: ToolboxToolId): React.ReactNode {
   switch (id) {
     case 'cameraStage':
       return <CameraStageApp />
+    case 'imageMark':
+      return <ImageMarkTool />
   }
 }
 

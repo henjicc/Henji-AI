@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
 
 import { UiButton, UiIconButton } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
-import { ImageEditor, type ImageEditState } from '@/components/ImageEditor';
+import { ViewerMarkEditor, type ImageMarkSession } from '@/features/imageMark';
 import { ImageInfoPanel } from './ImageInfoPanel';
 import { useImageViewerTransform } from './useImageViewerTransform';
 
@@ -26,10 +26,10 @@ export interface ImageViewerModalProps {
   filePaths?: string[];
   fromUpload?: boolean;
   isEditorMode?: boolean;
-  initialEditState?: ImageEditState;
+  initialMarkSession?: ImageMarkSession;
   onEnterEditor?: () => void;
   onExitEditor?: () => void;
-  onSaveEdit?: (dataUrl: string, editState: ImageEditState) => void;
+  onSaveEdit?: (dataUrl: string, session: ImageMarkSession) => void;
   onContextMenu?: (e: React.MouseEvent, filePath?: string) => void;
 }
 
@@ -61,7 +61,7 @@ export function ImageViewerModal({
   filePaths,
   fromUpload = false,
   isEditorMode = false,
-  initialEditState,
+  initialMarkSession,
   onEnterEditor,
   onExitEditor,
   onSaveEdit,
@@ -185,15 +185,14 @@ export function ImageViewerModal({
 
       {isEditorMode && editorAvailable ? (
         <div className="h-full w-full">
-          <ImageEditor
+          <ViewerMarkEditor
             imageUrl={imageUrl}
-            imageId={imageUrl}
+            session={initialMarkSession}
             imageList={imageList}
             currentIndex={currentIndex}
-            initialEditState={initialEditState}
             onClose={() => onExitEditor?.()}
-            onSave={(dataUrl, editState) => {
-              onSaveEdit?.(dataUrl, editState);
+            onSave={(dataUrl, session) => {
+              onSaveEdit?.(dataUrl, session);
               onExitEditor?.();
             }}
             onNavigate={onNavigate}
