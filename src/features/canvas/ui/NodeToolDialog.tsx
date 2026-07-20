@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeToolDialog')
@@ -38,6 +38,18 @@ export function NodeToolDialog() {
   const [options, setOptions] = useState<ToolOptions>({});
   const [isSplitImageReady, setIsSplitImageReady] = useState(true);
   const [displayToolDialog, setDisplayToolDialog] = useState(activeToolDialog);
+  // 每次打开自增,作为编辑器 key 的一部分,强制每次打开都重建编辑器实例
+  // (避免取消后快速重开时复用旧内部状态,导致未保存的标注仍然出现)
+  const [openSeq, setOpenSeq] = useState(0);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    const isOpen = Boolean(activeToolDialog);
+    if (isOpen && !wasOpenRef.current) {
+      setOpenSeq((seq) => seq + 1);
+    }
+    wasOpenRef.current = isOpen;
+  }, [activeToolDialog]);
 
   useEffect(() => {
     if (activeToolDialog) {
@@ -83,6 +95,8 @@ export function NodeToolDialog() {
   const dialogKey = displayToolDialog
     ? `${displayToolDialog.nodeId}:${displayToolDialog.toolType}`
     : null;
+  // 编辑器 key 追加 openSeq,保证每次打开都是全新实例,取消后重开不残留旧标注
+  const editorKey = dialogKey ? `${dialogKey}:${openSeq}` : null;
 
   useEffect(() => {
     if (!sourceNode || !activePlugin) {
@@ -166,6 +180,9 @@ export function NodeToolDialog() {
   }, [activePlugin?.editor, sourceImageUrl]);
 
   const closeDialog = useCallback(() => {
+    // 立即清空本地编辑选项,避免取消后未保存的标注在重开时被重新读取
+    setOptions({});
+    setError(null);
     canvasEventBus.publish('tool-dialog/close', undefined);
   }, []);
 
@@ -274,7 +291,7 @@ export function NodeToolDialog() {
     if (activePlugin.editor === 'edit' && sourceImageUrl) {
       return (
         <EditToolEditor
-          key={dialogKey}
+          key={editorKey}
           plugin={activePlugin}
           sourceImageUrl={sourceImageUrl}
           options={options}
@@ -302,7 +319,7 @@ export function NodeToolDialog() {
         onOptionsChange={setOptions}
       />
     );
-  }, [activePlugin, dialogKey, options, sourceImageUrl]);
+  }, [activePlugin, editorKey, options, sourceImageUrl]);
 
   const isOpen = Boolean(activeToolDialog && isSplitImageReady);
 

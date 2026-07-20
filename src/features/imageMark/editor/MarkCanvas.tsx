@@ -101,7 +101,11 @@ export function MarkCanvas({
     if (!parentItem || !isLabeledMark(parentItem)) {
       return null;
     }
-    const block = resolveLabelBlockRect({ ...parentItem, label: textEditor.value }, imageWidth, imageHeight);
+    const block = resolveLabelBlockRect(
+      { ...parentItem, label: textEditor.value, labelFontSize: textEditor.fontSize },
+      imageWidth,
+      imageHeight
+    );
     const connector = resolveConnectorLine(resolveShapeAnchorRect(parentItem), block);
     if (!connector) {
       return null;

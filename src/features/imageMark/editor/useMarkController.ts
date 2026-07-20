@@ -161,6 +161,7 @@ export function useMarkController({
     lineWidth,
     fontSize,
     draftOptions,
+    isTextEditorOpen: Boolean(textEditing.textEditor),
     commitItems: history.commitItems,
     setSelectedId,
     setTextEditor: textEditing.setTextEditor,
@@ -334,7 +335,12 @@ export function useMarkController({
     if (editor.kind === 'label') {
       const parentItem = doc.items.find((item) => item.id === editor.itemId);
       if (parentItem && isLabeledMark(parentItem)) {
-        const placement = resolveLabelPlacement({ ...parentItem, label: editor.value }, imageWidth, imageHeight);
+        // 必须带上编辑中的字号:未确认的标签尚无 labelFontSize,否则定位会退回默认字号导致确认时跳动
+        const placement = resolveLabelPlacement(
+          { ...parentItem, label: editor.value, labelFontSize: editor.fontSize },
+          imageWidth,
+          imageHeight
+        );
         return toHostPoint(placement.x, placement.y);
       }
     }

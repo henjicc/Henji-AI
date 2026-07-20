@@ -11,6 +11,8 @@ export interface UseMarkPointerParams {
   lineWidth: number;
   fontSize: number;
   draftOptions: DraftBuildOptions;
+  /** 当前是否有未确认的文字输入;有则空白点击判定为"确认"而非新开输入 */
+  isTextEditorOpen: boolean;
   commitItems: (items: MarkItem[], recordHistory?: boolean) => void;
   setSelectedId: (id: string | null) => void;
   setTextEditor: (state: null) => void;
@@ -28,6 +30,7 @@ export function useMarkPointer({
   lineWidth,
   fontSize,
   draftOptions,
+  isTextEditorOpen,
   commitItems,
   setSelectedId,
   setTextEditor,
@@ -68,6 +71,10 @@ export function useMarkPointer({
     }
 
     if (tool === 'text') {
+      // 已有未确认输入:空白点击视为确认当前(失焦会提交/清空空框),不再新开输入框
+      if (isTextEditorOpen) {
+        return;
+      }
       startTextEditing(null, point);
       return;
     }
@@ -100,7 +107,7 @@ export function useMarkPointer({
       shiftKey,
       points: tool === 'pen' ? [point.x, point.y] : undefined,
     });
-  }, [color, commitItems, docRef, fontSize, getImagePoint, isBackgroundTarget, setSelectedId, setTextEditor, stageHostRef, startTextEditing, tool]);
+  }, [color, commitItems, docRef, fontSize, getImagePoint, isBackgroundTarget, isTextEditorOpen, setSelectedId, setTextEditor, stageHostRef, startTextEditing, tool]);
 
   const handlePointerMove = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!draft) {
