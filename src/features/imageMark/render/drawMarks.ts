@@ -84,7 +84,7 @@ function drawLabel(
   if (connector) {
     context.save();
     context.strokeStyle = item.stroke;
-    context.lineWidth = Math.max(1, item.lineWidth * 0.5);
+    context.lineWidth = item.lineWidth;
     context.beginPath();
     context.moveTo(connector.x1, connector.y1);
     context.lineTo(connector.x2, connector.y2);

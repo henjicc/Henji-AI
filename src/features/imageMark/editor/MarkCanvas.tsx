@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Group, Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konva';
+import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Transformer } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
 import { labelRefPoint } from '../domain/geometry';
-import type { ImageMarkDoc, LabeledMark, MarkItem, MarkToolType } from '../domain/types';
+import { estimateTextBlockSize, resolveConnectorLine, resolveShapeAnchorRect } from '../domain/metrics';
+import { isLabeledMark, type ImageMarkDoc, type LabeledMark, type MarkItem, type MarkToolType } from '../domain/types';
 import { resolveNumberValues } from '../render/drawMarks';
 import { CropOverlayBox } from './CropOverlayBox';
 import { MarkShapeNode } from './markShapes';
@@ -21,6 +22,8 @@ interface MarkCanvasProps {
   cropRatio: number | null;
   selectedId: string | null;
   selectedItem: MarkItem | null;
+  /** 当前激活的标签子选中目标(标签独立选中/拖动/调整大小时与父图形区分) */
+  activeLabelId: string | null;
   textEditor: TextEditorState | null;
   textEditorHostPos: { x: number; y: number } | null;
   stageWidth: number;
@@ -36,6 +39,7 @@ interface MarkCanvasProps {
   onPointerUp: () => void;
   onStageDblClick: (event: KonvaEventObject<MouseEvent>) => void;
   onSelectedIdChange: (id: string | null) => void;
+  onSelectLabel: (id: string) => void;
   onItemsUpdated: (items: MarkItem[]) => void;
   onStartTextEditing: (item: MarkItem) => void;
   onTextEditorChange: (value: string) => void;
@@ -54,6 +58,7 @@ export function MarkCanvas({
   cropRatio,
   selectedId,
   selectedItem,
+  activeLabelId,
   textEditor,
   textEditorHostPos,
   stageWidth,
@@ -69,6 +74,7 @@ export function MarkCanvas({
   onPointerUp,
   onStageDblClick,
   onSelectedIdChange,
+  onSelectLabel,
   onItemsUpdated,
   onStartTextEditing,
   onTextEditorChange,
@@ -78,18 +84,44 @@ export function MarkCanvas({
   onCropCommit,
 }: MarkCanvasProps): JSX.Element {
   const shapeRefs = useRef<Map<string, Konva.Node>>(new Map());
+  const labelRefs = useRef<Map<string, Konva.Node>>(new Map());
   const transformerRef = useRef<Konva.Transformer | null>(null);
 
   const imageWidth = orientedCanvas?.width ?? 0;
   const imageHeight = orientedCanvas?.height ?? 0;
   const numberValues = useMemo(() => resolveNumberValues(doc.items), [doc.items]);
 
+  // 标签原位输入期间(尚未提交到 item.label)的引导线预览,保证创建标注时引导线立即可见
+  const labelEditPreview = useMemo(() => {
+    if (textEditor?.kind !== 'label') {
+      return null;
+    }
+    const parentItem = doc.items.find((entry) => entry.id === textEditor.itemId);
+    if (!parentItem || !isLabeledMark(parentItem)) {
+      return null;
+    }
+    const block = estimateTextBlockSize(textEditor.value, textEditor.fontSize);
+    const connector = resolveConnectorLine(resolveShapeAnchorRect(parentItem), {
+      x: textEditor.x,
+      y: textEditor.y,
+      width: block.width,
+      height: block.height,
+    });
+    if (!connector) {
+      return null;
+    }
+    return { connector, stroke: parentItem.stroke, lineWidth: parentItem.lineWidth };
+  }, [doc.items, textEditor]);
+
   useEffect(() => {
     const transformer = transformerRef.current;
     if (!transformer) {
       return;
     }
-    const selectedNode = selectedId ? shapeRefs.current.get(selectedId) : null;
+    const isLabelTarget = Boolean(selectedId && activeLabelId === selectedId);
+    const selectedNode = selectedId
+      ? (isLabelTarget ? labelRefs.current : shapeRefs.current).get(selectedId)
+      : null;
     if (!selectedNode || !selectedItem || tool === 'crop') {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
@@ -97,7 +129,7 @@ export function MarkCanvas({
     }
     transformer.nodes([selectedNode]);
     transformer.getLayer()?.batchDraw();
-  }, [selectedId, selectedItem, tool, doc.items]);
+  }, [selectedId, selectedItem, activeLabelId, tool, doc.items]);
 
   const bindShapeRef = useCallback((id: string, node: Konva.Node | null) => {
     if (node) {
@@ -105,6 +137,14 @@ export function MarkCanvas({
       return;
     }
     shapeRefs.current.delete(id);
+  }, []);
+
+  const bindLabelRef = useCallback((id: string, node: Konva.Node | null) => {
+    if (node) {
+      labelRefs.current.set(id, node);
+      return;
+    }
+    labelRefs.current.delete(id);
   }, []);
 
   const handleDragEnd = useCallback((item: MarkItem, event: KonvaEventObject<DragEvent>) => {
@@ -128,7 +168,21 @@ export function MarkCanvas({
     onItemsUpdated(doc.items.map((current) => (current.id === item.id ? updated : current)));
   }, [doc.items, onItemsUpdated]);
 
-  const transformerKeepRatio = selectedItem?.type === 'text' || selectedItem?.type === 'number';
+  // 标签独立选中后通过变换框拖角调整字号(与拖动一致,松手才回写)
+  const handleLabelTransformEnd = useCallback((item: LabeledMark, node: Konva.Node) => {
+    const textNode = node as Konva.Text;
+    const scale = Math.max(textNode.scaleX(), textNode.scaleY());
+    textNode.scaleX(1);
+    textNode.scaleY(1);
+    const updated: MarkItem = {
+      ...item,
+      labelFontSize: Math.max(8, Math.round(textNode.fontSize() * scale)),
+    };
+    onItemsUpdated(doc.items.map((current) => (current.id === item.id ? updated : current)));
+  }, [doc.items, onItemsUpdated]);
+
+  const isLabelSelected = Boolean(selectedItem && activeLabelId === selectedItem.id);
+  const transformerKeepRatio = isLabelSelected || selectedItem?.type === 'text' || selectedItem?.type === 'number';
   const transformerAnchors: Konva.TransformerConfig['enabledAnchors'] = transformerKeepRatio
     ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
     : [
@@ -224,14 +278,32 @@ export function MarkCanvas({
                       listening={tool !== 'crop'}
                       hideLabel={textEditor?.kind === 'label' && textEditor.itemId === item.id}
                       bindRef={bindShapeRef}
+                      bindLabelRef={bindLabelRef}
                       onSelect={onSelectedIdChange}
+                      onSelectLabel={onSelectLabel}
                       onDragEnd={handleDragEnd}
                       onTransformEnd={handleTransformEnd}
                       onDblClick={onStartTextEditing}
                       onLabelDragEnd={handleLabelDragEnd}
+                      onLabelTransformEnd={handleLabelTransformEnd}
                     />
                   );
                 })}
+                {/* 创建标注原位输入期间的引导线预览,标签尚未提交也能立即看到 */}
+                {labelEditPreview && (
+                  <Line
+                    points={[
+                      labelEditPreview.connector.x1,
+                      labelEditPreview.connector.y1,
+                      labelEditPreview.connector.x2,
+                      labelEditPreview.connector.y2,
+                    ]}
+                    stroke={labelEditPreview.stroke}
+                    strokeWidth={labelEditPreview.lineWidth}
+                    strokeScaleEnabled={false}
+                    listening={false}
+                  />
+                )}
                 {/* 非裁剪模式下提示既有裁剪范围 */}
                 {doc.crop && tool !== 'crop' && (
                   <Rect

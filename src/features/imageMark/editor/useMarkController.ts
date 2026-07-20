@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -11,26 +10,16 @@ import {
 import type Konva from 'konva';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import { clamp, updateMarkPosition } from '../domain/geometry';
-import {
-  MAX_LINE_WIDTH_PERCENT,
-  MAX_MOSAIC_STRENGTH_PERCENT,
-  MAX_TEXT_SIZE_PERCENT,
-  MIN_LINE_WIDTH_PERCENT,
-  MIN_MOSAIC_STRENGTH_PERCENT,
-  MIN_TEXT_SIZE_PERCENT,
-  fontSizeToPercent,
-  lineWidthToPercent,
-  percentToFontSize,
-  percentToLineWidth,
-} from '../domain/metrics';
-import { isLabeledMark, type ImageMarkDoc, type MarkToolType } from '../domain/types';
+import { percentToFontSize, percentToLineWidth } from '../domain/metrics';
+import { type ImageMarkDoc, type MarkToolType } from '../domain/types';
 import { TOOL_SHORTCUT_MAP, getMarkPosition, type MarkEditorStyleState } from './shared';
-
-export type NumericStyleKey = 'lineWidthPercent' | 'textSizePercent' | 'mosaicStrengthPercent';
 import { useMarkCropOrientation } from './useMarkCropOrientation';
 import { useMarkHistory } from './useMarkHistory';
 import { useMarkPointer } from './useMarkPointer';
+import { useMarkStyleSync } from './useMarkStyleSync';
 import { useMarkTextEditing } from './useMarkTextEditing';
+
+export type { NumericStyleKey } from './useMarkStyleSync';
 
 export interface UseMarkControllerParams {
   doc: ImageMarkDoc;
@@ -70,7 +59,17 @@ export function useMarkController({
   stageHostRef,
   textInputRef,
 }: UseMarkControllerParams) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(null);
+  // 标签是否为当前激活的子选中目标(区别于其父图形);任何非标签路径的选中都清空它
+  const [activeLabelId, setActiveLabelId] = useState<string | null>(null);
+  const setSelectedId = useCallback((id: string | null) => {
+    setSelectedIdState(id);
+    setActiveLabelId(null);
+  }, []);
+  const selectLabel = useCallback((id: string) => {
+    setSelectedIdState(id);
+    setActiveLabelId(id);
+  }, []);
   const docRef = useRef(doc);
   docRef.current = doc;
 
@@ -217,7 +216,7 @@ export function useMarkController({
     history.commitItems(docRef.current.items.filter((item) => item.id !== selectedId));
     setSelectedId(null);
     textEditing.setTextEditor(null);
-  }, [history, selectedId, textEditing]);
+  }, [history, selectedId, setSelectedId, textEditing]);
 
   const handleClear = useCallback(() => {
     if (docRef.current.items.length === 0) {
@@ -226,166 +225,22 @@ export function useMarkController({
     history.commitItems([]);
     setSelectedId(null);
     textEditing.setTextEditor(null);
-  }, [history, textEditing]);
+  }, [history, setSelectedId, textEditing]);
 
-  // ==================== 样式变更(同时作用于选中项) ====================
+  // ==================== 样式变更(同时作用于选中项)/ 滚轮微调 ====================
 
-  const applyStylePatch = useCallback((patch: Partial<MarkEditorStyleState>, recordHistory: boolean) => {
-    const nextStyle: MarkEditorStyleState = {
-      color: patch.color ?? style.color,
-      lineWidthPercent: clamp(
-        patch.lineWidthPercent ?? style.lineWidthPercent,
-        MIN_LINE_WIDTH_PERCENT,
-        MAX_LINE_WIDTH_PERCENT
-      ),
-      textSizePercent: clamp(
-        patch.textSizePercent ?? style.textSizePercent,
-        MIN_TEXT_SIZE_PERCENT,
-        MAX_TEXT_SIZE_PERCENT
-      ),
-      mosaicStrengthPercent: clamp(
-        patch.mosaicStrengthPercent ?? style.mosaicStrengthPercent,
-        MIN_MOSAIC_STRENGTH_PERCENT,
-        MAX_MOSAIC_STRENGTH_PERCENT
-      ),
-      mosaicMode: patch.mosaicMode ?? style.mosaicMode,
-      calloutShape: patch.calloutShape ?? style.calloutShape,
-    };
-    setStyle(nextStyle);
-    onStyleChange?.(nextStyle);
-
-    if (!selectedItem) {
-      return;
-    }
-    const nextItems = docRef.current.items.map((item) => {
-      if (item.id !== selectedItem.id) {
-        return item;
-      }
-      if (item.type === 'text' || item.type === 'number') {
-        return {
-          ...item,
-          color: nextStyle.color,
-          fontSize: percentToFontSize(nextStyle.textSizePercent, baseSize),
-        };
-      }
-      if (item.type === 'mosaic') {
-        return {
-          ...item,
-          strengthPercent: nextStyle.mosaicStrengthPercent,
-          mode: nextStyle.mosaicMode,
-        };
-      }
-      const next = {
-        ...item,
-        stroke: nextStyle.color,
-        lineWidth: percentToLineWidth(nextStyle.lineWidthPercent, baseSize),
-      };
-      // 带标签的图形:字号设置同时作用于标签文字
-      if (isLabeledMark(next) && next.label && patch.textSizePercent !== undefined) {
-        return {
-          ...next,
-          labelFontSize: percentToFontSize(nextStyle.textSizePercent, baseSize),
-        };
-      }
-      return next;
-    });
-    history.commitItems(nextItems, recordHistory);
-  }, [baseSize, history, onStyleChange, selectedItem, setStyle, style]);
-
-  const handleStylePatch = useCallback((patch: Partial<MarkEditorStyleState>) => {
-    applyStylePatch(patch, true);
-  }, [applyStylePatch]);
-
-  // ==================== 滚轮微调(合并为一次历史) ====================
-
-  const wheelGestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const beginWheelGesture = useCallback(() => {
-    if (wheelGestureTimerRef.current === null) {
-      history.pushHistorySnapshot(docRef.current);
-    } else {
-      clearTimeout(wheelGestureTimerRef.current);
-    }
-    wheelGestureTimerRef.current = setTimeout(() => {
-      wheelGestureTimerRef.current = null;
-    }, 600);
-  }, [history]);
-
-  /** 滑块悬停滚轮:调节对应样式值(选中项跟随变化) */
-  const adjustStyleByWheel = useCallback((key: NumericStyleKey, deltaY: number) => {
-    const direction = deltaY < 0 ? 1 : -1;
-    const step = key === 'lineWidthPercent' ? 0.1 : 0.5;
-    if (selectedItem) {
-      beginWheelGesture();
-    }
-    applyStylePatch({ [key]: style[key] + direction * step }, false);
-  }, [applyStylePatch, beginWheelGesture, selectedItem, style]);
-
-  /** 画布上滚轮:按选中项类型调节线宽/字号/打码强度 */
-  const adjustSelectedByWheel = useCallback((deltaY: number): boolean => {
-    if (!selectedItem) {
-      return false;
-    }
-    const key: NumericStyleKey =
-      selectedItem.type === 'text' || selectedItem.type === 'number'
-        ? 'textSizePercent'
-        : selectedItem.type === 'mosaic'
-          ? 'mosaicStrengthPercent'
-          : 'lineWidthPercent';
-    adjustStyleByWheel(key, deltaY);
-    return true;
-  }, [adjustStyleByWheel, selectedItem]);
-
-  // 选中项变化时,把样式面板同步为该项的样式
-  useEffect(() => {
-    if (!selectedItem || textEditing.textEditor) {
-      return;
-    }
-    let patch: Partial<MarkEditorStyleState> = {};
-    if (selectedItem.type === 'text' || selectedItem.type === 'number') {
-      patch = {
-        color: selectedItem.color,
-        textSizePercent: clamp(
-          fontSizeToPercent(selectedItem.fontSize, baseSize),
-          MIN_TEXT_SIZE_PERCENT,
-          MAX_TEXT_SIZE_PERCENT
-        ),
-      };
-    } else if (selectedItem.type === 'mosaic') {
-      patch = {
-        mosaicStrengthPercent: clamp(
-          selectedItem.strengthPercent ?? style.mosaicStrengthPercent,
-          MIN_MOSAIC_STRENGTH_PERCENT,
-          MAX_MOSAIC_STRENGTH_PERCENT
-        ),
-        mosaicMode: selectedItem.mode ?? 'pixel',
-      };
-    } else {
-      patch = {
-        color: selectedItem.stroke,
-        lineWidthPercent: clamp(
-          lineWidthToPercent(selectedItem.lineWidth, baseSize),
-          MIN_LINE_WIDTH_PERCENT,
-          MAX_LINE_WIDTH_PERCENT
-        ),
-      };
-      if (isLabeledMark(selectedItem) && selectedItem.label && selectedItem.labelFontSize) {
-        patch.textSizePercent = clamp(
-          fontSizeToPercent(selectedItem.labelFontSize, baseSize),
-          MIN_TEXT_SIZE_PERCENT,
-          MAX_TEXT_SIZE_PERCENT
-        );
-      }
-    }
-    setStyle((previous) => {
-      const next = { ...previous, ...patch };
-      const changed = Object.entries(patch).some(
-        ([key, value]) => !Object.is(previous[key as keyof MarkEditorStyleState], value)
-      );
-      return changed ? next : previous;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在选中项变化时同步一次样式
-  }, [selectedItem?.id]);
+  const { handleStylePatch, adjustStyleByWheel, adjustSelectedByWheel } = useMarkStyleSync({
+    docRef,
+    selectedItem,
+    activeLabelId,
+    style,
+    setStyle,
+    onStyleChange,
+    baseSize,
+    commitItems: history.commitItems,
+    pushHistorySnapshot: history.pushHistorySnapshot,
+    isTextEditorOpen: Boolean(textEditing.textEditor),
+  });
 
   // ==================== 键盘 ====================
 
@@ -467,7 +322,7 @@ export function useMarkController({
       event.preventDefault();
       selectTool(shortcutTool);
     }
-  }, [handleDeleteSelected, handleStylePatch, history, pointer, selectTool, selectedId, textEditing.textEditor]);
+  }, [handleDeleteSelected, handleStylePatch, history, pointer, selectTool, selectedId, setSelectedId, textEditing.textEditor]);
 
   const textEditorHostPos = useMemo(() => {
     if (!textEditing.textEditor) {
@@ -480,6 +335,8 @@ export function useMarkController({
     draftMark: pointer.draftMark,
     selectedId,
     setSelectedId,
+    activeLabelId,
+    selectLabel,
     selectedItem,
     textEditor: textEditing.textEditor,
     setTextEditor: textEditing.setTextEditor,

@@ -293,6 +293,7 @@ export function MarkEditor({
         cropRatio={resolveRatio(cropRatioValue)}
         selectedId={controller.selectedId}
         selectedItem={controller.selectedItem}
+        activeLabelId={controller.activeLabelId}
         textEditor={controller.textEditor}
         textEditorHostPos={controller.textEditorHostPos}
         stageWidth={stageWidth}
@@ -308,6 +309,7 @@ export function MarkEditor({
         onPointerUp={controller.handlePointerUp}
         onStageDblClick={controller.handleStageDblClick}
         onSelectedIdChange={controller.setSelectedId}
+        onSelectLabel={controller.selectLabel}
         onItemsUpdated={(items) => controller.commitItems(items)}
         onStartTextEditing={(item) => controller.startTextEditing(item)}
         onTextEditorChange={(value) =>

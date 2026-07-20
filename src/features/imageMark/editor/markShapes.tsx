@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Arrow, Circle, Ellipse, Group, Line, Rect, Shape, Text } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
@@ -6,11 +7,14 @@ import {
   MARK_FONT_FAMILY,
   TEXT_LINE_HEIGHT,
   numberBadgeRadius,
+  resolveConnectorLine,
+  resolveLabelBlockRect,
   resolveLabelConnector,
   resolveLabelFontSize,
   resolveLabelPlacement,
   resolveMosaicBlurRadius,
   resolveMosaicPixelSize,
+  resolveShapeAnchorRect,
   resolveTextBaseSize,
 } from '../domain/metrics';
 import { isLabeledMark, type LabeledMark, type MarkItem } from '../domain/types';
@@ -40,12 +44,18 @@ interface MarkShapeNodeProps {
   /** 标签正在原位编辑时隐藏已渲染的标签文字 */
   hideLabel?: boolean;
   bindRef?: (id: string, node: Konva.Node | null) => void;
+  /** 绑定标签自身的 Konva 节点,供 Transformer 单独定位 */
+  bindLabelRef?: (id: string, node: Konva.Node | null) => void;
   onSelect?: (id: string) => void;
+  /** 直接点击/拖动标签时触发,与选中父图形区分 */
+  onSelectLabel?: (id: string) => void;
   onDragEnd?: (item: MarkItem, event: KonvaEventObject<DragEvent>) => void;
   onTransformEnd?: (item: MarkItem, event: KonvaEventObject<Event>) => void;
   onDblClick?: (item: MarkItem) => void;
   /** 标签被单独拖动后回写相对偏移 */
   onLabelDragEnd?: (item: LabeledMark, node: Konva.Node) => void;
+  /** 标签独立选中后拖角变换,回写标签字号 */
+  onLabelTransformEnd?: (item: LabeledMark, node: Konva.Node) => void;
 }
 
 export function MarkShapeNode({
@@ -60,11 +70,14 @@ export function MarkShapeNode({
   opacity = 1,
   hideLabel = false,
   bindRef,
+  bindLabelRef,
   onSelect,
+  onSelectLabel,
   onDragEnd,
   onTransformEnd,
   onDblClick,
   onLabelDragEnd,
+  onLabelTransformEnd,
 }: MarkShapeNodeProps): JSX.Element {
   const commonHandlers = {
     draggable,
@@ -88,9 +101,12 @@ export function MarkShapeNode({
       imageHeight={imageHeight}
       opacity={opacity}
       listening={listening}
+      bindRef={bindLabelRef}
       onSelect={onSelect}
+      onSelectLabel={onSelectLabel}
       onDblClick={onDblClick}
       onLabelDragEnd={onLabelDragEnd}
+      onLabelTransformEnd={onLabelTransformEnd}
     />
   ) : null;
 
@@ -281,38 +297,72 @@ function LabelTextNode({
   imageHeight,
   opacity,
   listening,
+  bindRef,
   onSelect,
+  onSelectLabel,
   onDblClick,
   onLabelDragEnd,
+  onLabelTransformEnd,
 }: {
   item: MarkItem & { label?: string };
   imageWidth: number;
   imageHeight: number;
   opacity: number;
   listening: boolean;
+  bindRef?: (id: string, node: Konva.Node | null) => void;
   onSelect?: (id: string) => void;
+  onSelectLabel?: (id: string) => void;
   onDblClick?: (item: MarkItem) => void;
   onLabelDragEnd?: (item: LabeledMark, node: Konva.Node) => void;
+  onLabelTransformEnd?: (item: LabeledMark, node: Konva.Node) => void;
 }): JSX.Element | null {
+  const connectorRef = useRef<Konva.Line>(null);
+
   if (!isLabeledMark(item) || !item.label) {
     return null;
   }
   const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
   const placement = resolveLabelPlacement(item, imageWidth, imageHeight);
+  const shapeRect = resolveShapeAnchorRect(item);
+  // 拖动期间用于实时重算引导线的文本块尺寸(位置由拖动中的节点坐标实时提供)
+  const blockSize = resolveLabelBlockRect(item, imageWidth, imageHeight);
   const connector = resolveLabelConnector(item, imageWidth, imageHeight);
+
+  const handleLabelDragMove = (event: KonvaEventObject<DragEvent>): void => {
+    const lineNode = connectorRef.current;
+    if (!lineNode) {
+      return;
+    }
+    const node = event.target;
+    const nextConnector = resolveConnectorLine(shapeRect, {
+      x: node.x(),
+      y: node.y(),
+      width: blockSize.width,
+      height: blockSize.height,
+    });
+    if (nextConnector) {
+      lineNode.points([nextConnector.x1, nextConnector.y1, nextConnector.x2, nextConnector.y2]);
+      lineNode.visible(true);
+    } else {
+      lineNode.visible(false);
+    }
+    lineNode.getLayer()?.batchDraw();
+  };
+
   return (
     <>
-      {connector && (
-        <Line
-          points={[connector.x1, connector.y1, connector.x2, connector.y2]}
-          stroke={item.stroke}
-          strokeWidth={Math.max(1, item.lineWidth * 0.5)}
-          opacity={opacity}
-          strokeScaleEnabled={false}
-          listening={false}
-        />
-      )}
+      <Line
+        ref={connectorRef}
+        points={connector ? [connector.x1, connector.y1, connector.x2, connector.y2] : [0, 0, 0, 0]}
+        visible={Boolean(connector)}
+        stroke={item.stroke}
+        strokeWidth={item.lineWidth}
+        opacity={opacity}
+        strokeScaleEnabled={false}
+        listening={false}
+      />
       <Text
+        ref={(node) => bindRef?.(item.id, node)}
         x={placement.x}
         y={placement.y}
         text={item.label}
@@ -324,13 +374,22 @@ function LabelTextNode({
         opacity={opacity}
         listening={listening}
         draggable={listening}
-        onClick={() => onSelect?.(item.id)}
-        onTap={() => onSelect?.(item.id)}
+        onClick={() => {
+          onSelect?.(item.id);
+          onSelectLabel?.(item.id);
+        }}
+        onTap={() => {
+          onSelect?.(item.id);
+          onSelectLabel?.(item.id);
+        }}
         onDblClick={(event) => {
           event.cancelBubble = true;
           onDblClick?.(item);
         }}
+        onDragStart={() => onSelectLabel?.(item.id)}
+        onDragMove={handleLabelDragMove}
         onDragEnd={(event) => onLabelDragEnd?.(item, event.target)}
+        onTransformEnd={(event) => onLabelTransformEnd?.(item, event.target)}
         onMouseEnter={(event) => setStageCursor(event, 'move')}
         onMouseLeave={(event) => setStageCursor(event, '')}
         shadowColor="rgba(0, 0, 0, 0.55)"

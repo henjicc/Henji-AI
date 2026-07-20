@@ -182,30 +182,67 @@ function closestPointOnRect(
   };
 }
 
+export interface LabelConnectorRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** 图形侧的引导线锚点区域:矩形/椭圆为自身外框,箭头为箭头尖(零尺寸点) */
+export function resolveShapeAnchorRect(item: LabeledMark): LabelConnectorRect {
+  if (item.type === 'arrow') {
+    return { x: item.points[2], y: item.points[3], width: 0, height: 0 };
+  }
+  return { x: item.x, y: item.y, width: item.width, height: item.height };
+}
+
+function rectsOverlap(a: LabelConnectorRect, b: LabelConnectorRect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
 /**
- * 标签引导线:用户把标签拖离图形后,画一条从标签指向图形的细线。
- * 返回 null 表示不需要引导线(未拖动/距离太近)。
+ * 两个矩形间的引导线(图形侧最近点 → 文本侧最近点)。
+ * 文本块落在图形范围内(视为"在框内")时不需要引导线,返回 null。
+ * 编辑器实时拖拽预览与光栅化导出共用此函数,保证行为一致。
+ */
+export function resolveConnectorLine(
+  shapeRect: LabelConnectorRect,
+  block: LabelConnectorRect
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  if (rectsOverlap(shapeRect, block)) {
+    return null;
+  }
+  const shapeCenter = { x: shapeRect.x + shapeRect.width / 2, y: shapeRect.y + shapeRect.height / 2 };
+  const blockCenter = { x: block.x + block.width / 2, y: block.y + block.height / 2 };
+  const start = closestPointOnRect(shapeCenter.x, shapeCenter.y, block);
+  const end = closestPointOnRect(blockCenter.x, blockCenter.y, shapeRect);
+  if (Math.hypot(end.x - start.x, end.y - start.y) < 2) {
+    return null;
+  }
+  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
+}
+
+/** 原位文字输入框的文本块尺寸估算(图片像素空间),用于创建标注时的引导线预览 */
+export function estimateTextBlockSize(value: string, fontSize: number): { width: number; height: number } {
+  const lines = value === '' ? [''] : value.split('\n');
+  const width = Math.max(fontSize * 4, ...lines.map((line) => estimateTextWidth(line, fontSize)));
+  const height = Math.max(1, lines.length) * fontSize * TEXT_LINE_HEIGHT;
+  return { width, height };
+}
+
+/**
+ * 标签引导线:标签文本块与图形分离时,画一条从标签指向图形的细线。
+ * 标签落在图形范围内时不需要引导线(返回 null)。
  */
 export function resolveLabelConnector(
   item: LabeledMark,
   imageWidth: number,
   imageHeight: number
 ): { x1: number; y1: number; x2: number; y2: number } | null {
-  if (typeof item.labelDx !== 'number' || typeof item.labelDy !== 'number' || !item.label) {
+  if (!item.label) {
     return null;
   }
   const block = resolveLabelBlockRect(item, imageWidth, imageHeight);
-  const shapeRect = item.type === 'arrow'
-    ? { x: item.points[2], y: item.points[3], width: 0, height: 0 }
-    : { x: item.x, y: item.y, width: item.width, height: item.height };
-
-  const shapeCenter = { x: shapeRect.x + shapeRect.width / 2, y: shapeRect.y + shapeRect.height / 2 };
-  const blockCenter = { x: block.x + block.width / 2, y: block.y + block.height / 2 };
-  const start = closestPointOnRect(shapeCenter.x, shapeCenter.y, block);
-  const end = closestPointOnRect(blockCenter.x, blockCenter.y, shapeRect);
-
-  if (Math.hypot(end.x - start.x, end.y - start.y) < block.fontSize * 0.8) {
-    return null;
-  }
-  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
+  return resolveConnectorLine(resolveShapeAnchorRect(item), block);
 }
