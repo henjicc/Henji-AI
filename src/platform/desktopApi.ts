@@ -13,6 +13,18 @@ export function toDisplaySrc(localPath: string): string {
 }
 
 /**
+ * 授权某个目录进入 henji-media:// 协议可读根目录范围。
+ * 用户从任意磁盘位置打开/拖入的媒体默认不在白名单内,直接用 henji-media:// 引用会 403,
+ * 引用其原始路径前需先授权其所在目录。
+ */
+export async function allowMediaRoot(rootPath: string): Promise<void> {
+  if (!isDesktopRuntime()) {
+    return
+  }
+  await getPlatform().media.allowRoot(rootPath)
+}
+
+/**
  * 渲染层 File 对象若来自真实磁盘文件（文件选择器/拖拽），直接拿到它的文件系统路径，
  * 不需要再读字节、算哈希、写一份新文件——只有合成 Blob（如剪贴板生成）才会返回空字符串。
  */

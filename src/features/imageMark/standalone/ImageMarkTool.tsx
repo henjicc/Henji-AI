@@ -4,13 +4,13 @@ import { createLogger } from '@/core/logging';
 import { UiButton } from '@/components/ui';
 import { useNotification } from '@/contexts/NotificationContext';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
-import { basename, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
+import { allowMediaRoot, basename, dirname, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
 import {
   copyImageSourceToClipboard,
   persistImageSource,
   saveImageSourceToPath,
 } from '@/commands/image';
-import { readFileAsDataUrl } from '@/services/imageSource';
+import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
 import { createEmptyMarkDoc, type ImageMarkDoc } from '../domain/types';
 import { exportMarkedImage } from '../render/exportMarkedImage';
 import { MarkEditor } from '../editor/MarkEditor';
@@ -36,8 +36,19 @@ export function ImageMarkTool(): JSX.Element {
   const [isDragOver, setIsDragOver] = useState(false);
   const docRef = useRef<ImageMarkDoc>(createEmptyMarkDoc());
 
-  const acceptSource = useCallback((url: string, name: string) => {
+  const acceptSource = useCallback(async (url: string, name: string) => {
     docRef.current = createEmptyMarkDoc();
+    // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
+    // 否则 henji-media:// 会 403,编辑器会一直卡在"图片加载中"
+    if (isLikelyLocalImagePath(url)) {
+      try {
+        await allowMediaRoot(await dirname(url));
+      } catch (error) {
+        logger.warn('image_mark.standalone.allow_root.failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     setSource({ url, name });
     logger.info('image_mark.standalone.open.completed', { name });
   }, []);
@@ -45,11 +56,11 @@ export function ImageMarkTool(): JSX.Element {
   const acceptFile = useCallback(async (file: File) => {
     const nativePath = getPathForFile(file);
     if (nativePath) {
-      acceptSource(nativePath, basename(nativePath));
+      await acceptSource(nativePath, basename(nativePath));
       return;
     }
     const dataUrl = await readFileAsDataUrl(file);
-    acceptSource(dataUrl, file.name || `image-${Date.now()}.png`);
+    await acceptSource(dataUrl, file.name || `image-${Date.now()}.png`);
   }, [acceptSource]);
 
   const handleOpenFile = useCallback(async () => {
@@ -62,7 +73,7 @@ export function ImageMarkTool(): JSX.Element {
       if (!path) {
         return;
       }
-      acceptSource(path, basename(path));
+      await acceptSource(path, basename(path));
     } catch (error) {
       logger.error('image_mark.standalone.open.failed', {
         error: error instanceof Error ? error.message : String(error),

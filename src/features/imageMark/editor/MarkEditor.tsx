@@ -54,6 +54,7 @@ export function MarkEditor({
   className = 'h-[min(70vh,760px)]',
 }: MarkEditorProps): JSX.Element {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [doc, setDoc] = useState<ImageMarkDoc>(() => initialDoc ?? createEmptyMarkDoc());
   const [tool, setToolState] = useState<MarkToolType>('callout');
   const [style, setStyle] = useState<MarkEditorStyleState>(() => ({
@@ -77,6 +78,7 @@ export function MarkEditor({
 
   useEffect(() => {
     let cancelled = false;
+    setLoadFailed(false);
     const img = new window.Image();
     img.onload = () => {
       if (!cancelled) {
@@ -86,6 +88,7 @@ export function MarkEditor({
     img.onerror = () => {
       if (!cancelled) {
         setImage(null);
+        setLoadFailed(true);
       }
     };
     img.src = resolveImageDisplayUrl(sourceImageUrl);
@@ -257,7 +260,7 @@ export function MarkEditor({
   if (!image) {
     return (
       <div className={`flex items-center justify-center rounded-xl border border-border-dark bg-bg-dark/85 ${className}`}>
-        <span className="text-sm text-text-muted">图片加载中…</span>
+        <span className="text-sm text-text-muted">{loadFailed ? '图片加载失败' : '图片加载中…'}</span>
       </div>
     );
   }
