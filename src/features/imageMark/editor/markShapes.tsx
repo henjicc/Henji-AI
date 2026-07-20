@@ -5,6 +5,7 @@ import type Konva from 'konva';
 import { WHITE_HEX } from '@/core/theme/colorTokens';
 import {
   MARK_FONT_FAMILY,
+  MARK_FONT_STYLE,
   TEXT_LINE_HEIGHT,
   numberBadgeRadius,
   resolveConnectorLine,
@@ -201,7 +202,7 @@ export function MarkShapeNode({
         y={item.y}
         text={item.text}
         fill={item.color}
-        fontStyle="bold"
+        fontStyle={MARK_FONT_STYLE}
         fontFamily={MARK_FONT_FAMILY}
         fontSize={item.fontSize}
         lineHeight={TEXT_LINE_HEIGHT}
@@ -240,7 +241,7 @@ export function MarkShapeNode({
           lineHeight={1}
           text={String(numberValue)}
           fill={WHITE_HEX}
-          fontStyle="bold"
+          fontStyle={MARK_FONT_STYLE}
           fontFamily={MARK_FONT_FAMILY}
           fontSize={item.fontSize}
           listening={false}
@@ -367,7 +368,7 @@ function LabelTextNode({
         y={placement.y}
         text={item.label}
         fill={item.stroke}
-        fontStyle="bold"
+        fontStyle={MARK_FONT_STYLE}
         fontFamily={MARK_FONT_FAMILY}
         fontSize={fontSize}
         lineHeight={TEXT_LINE_HEIGHT}
