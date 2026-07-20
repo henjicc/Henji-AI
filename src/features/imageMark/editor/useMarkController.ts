@@ -10,8 +10,8 @@ import {
 import type Konva from 'konva';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import { clamp, updateMarkPosition } from '../domain/geometry';
-import { percentToFontSize, percentToLineWidth } from '../domain/metrics';
-import { type ImageMarkDoc, type MarkToolType } from '../domain/types';
+import { percentToFontSize, percentToLineWidth, resolveLabelPlacement } from '../domain/metrics';
+import { isLabeledMark, type ImageMarkDoc, type MarkToolType } from '../domain/types';
 import { TOOL_SHORTCUT_MAP, getMarkPosition, type MarkEditorStyleState } from './shared';
 import { useMarkCropOrientation } from './useMarkCropOrientation';
 import { useMarkHistory } from './useMarkHistory';
@@ -324,12 +324,22 @@ export function useMarkController({
     }
   }, [handleDeleteSelected, handleStylePatch, history, pointer, selectTool, selectedId, setSelectedId, textEditing.textEditor]);
 
+  // 标签原位输入的锚点必须随实时输入内容重算(与最终渲染用同一函数),
+  // 否则确认时会因为占位符宽度与真实文字宽度不同而发生跳动
   const textEditorHostPos = useMemo(() => {
-    if (!textEditing.textEditor) {
+    const editor = textEditing.textEditor;
+    if (!editor) {
       return null;
     }
-    return toHostPoint(textEditing.textEditor.x, textEditing.textEditor.y);
-  }, [textEditing.textEditor, toHostPoint]);
+    if (editor.kind === 'label') {
+      const parentItem = doc.items.find((item) => item.id === editor.itemId);
+      if (parentItem && isLabeledMark(parentItem)) {
+        const placement = resolveLabelPlacement({ ...parentItem, label: editor.value }, imageWidth, imageHeight);
+        return toHostPoint(placement.x, placement.y);
+      }
+    }
+    return toHostPoint(editor.x, editor.y);
+  }, [doc.items, imageHeight, imageWidth, textEditing.textEditor, toHostPoint]);
 
   return {
     draftMark: pointer.draftMark,

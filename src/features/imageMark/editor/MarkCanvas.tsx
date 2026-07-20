@@ -4,7 +4,7 @@ import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
 import { labelRefPoint } from '../domain/geometry';
-import { estimateTextBlockSize, resolveConnectorLine, resolveShapeAnchorRect } from '../domain/metrics';
+import { resolveConnectorLine, resolveLabelBlockRect, resolveShapeAnchorRect } from '../domain/metrics';
 import { isLabeledMark, type ImageMarkDoc, type LabeledMark, type MarkItem, type MarkToolType } from '../domain/types';
 import { resolveNumberValues } from '../render/drawMarks';
 import { CropOverlayBox } from './CropOverlayBox';
@@ -91,7 +91,8 @@ export function MarkCanvas({
   const imageHeight = orientedCanvas?.height ?? 0;
   const numberValues = useMemo(() => resolveNumberValues(doc.items), [doc.items]);
 
-  // 标签原位输入期间(尚未提交到 item.label)的引导线预览,保证创建标注时引导线立即可见
+  // 标签原位输入期间(尚未提交到 item.label)的引导线预览,保证创建标注时引导线立即可见;
+  // 锚点必须用实时输入内容重算(与最终渲染同一函数),否则确认时会因占位符与真实文字宽度不同而跳动
   const labelEditPreview = useMemo(() => {
     if (textEditor?.kind !== 'label') {
       return null;
@@ -100,18 +101,13 @@ export function MarkCanvas({
     if (!parentItem || !isLabeledMark(parentItem)) {
       return null;
     }
-    const block = estimateTextBlockSize(textEditor.value, textEditor.fontSize);
-    const connector = resolveConnectorLine(resolveShapeAnchorRect(parentItem), {
-      x: textEditor.x,
-      y: textEditor.y,
-      width: block.width,
-      height: block.height,
-    });
+    const block = resolveLabelBlockRect({ ...parentItem, label: textEditor.value }, imageWidth, imageHeight);
+    const connector = resolveConnectorLine(resolveShapeAnchorRect(parentItem), block);
     if (!connector) {
       return null;
     }
     return { connector, stroke: parentItem.stroke, lineWidth: parentItem.lineWidth };
-  }, [doc.items, textEditor]);
+  }, [doc.items, imageHeight, imageWidth, textEditor]);
 
   useEffect(() => {
     const transformer = transformerRef.current;

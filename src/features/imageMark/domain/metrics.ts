@@ -223,14 +223,6 @@ export function resolveConnectorLine(
   return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
 }
 
-/** 原位文字输入框的文本块尺寸估算(图片像素空间),用于创建标注时的引导线预览 */
-export function estimateTextBlockSize(value: string, fontSize: number): { width: number; height: number } {
-  const lines = value === '' ? [''] : value.split('\n');
-  const width = Math.max(fontSize * 4, ...lines.map((line) => estimateTextWidth(line, fontSize)));
-  const height = Math.max(1, lines.length) * fontSize * TEXT_LINE_HEIGHT;
-  return { width, height };
-}
-
 /**
  * 标签引导线:标签文本块与图形分离时,画一条从标签指向图形的细线。
  * 标签落在图形范围内时不需要引导线(返回 null)。
