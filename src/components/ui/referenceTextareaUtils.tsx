@@ -8,8 +8,36 @@ export interface PickerAnchor {
   top: number
 }
 
+export interface TextareaViewState {
+  scrollTop: number
+  scrollLeft: number
+}
+
+interface TextareaViewTarget extends TextareaViewState {
+  focus: (options?: FocusOptions) => void
+  setSelectionRange: (selectionStart: number, selectionEnd: number) => void
+}
+
 export const PICKER_FALLBACK_ANCHOR: PickerAnchor = { left: 8, top: 8 }
 export const DEFAULT_PICKER_OFFSET_Y = 20
+
+export function captureTextareaView(textarea: TextareaViewState): TextareaViewState {
+  return {
+    scrollTop: textarea.scrollTop,
+    scrollLeft: textarea.scrollLeft,
+  }
+}
+
+export function restoreTextareaView(
+  textarea: TextareaViewTarget,
+  cursor: number,
+  view: TextareaViewState
+): void {
+  textarea.focus({ preventScroll: true })
+  textarea.setSelectionRange(cursor, cursor)
+  textarea.scrollTop = view.scrollTop
+  textarea.scrollLeft = view.scrollLeft
+}
 
 function getTextareaCaretOffset(
   textarea: HTMLTextAreaElement,

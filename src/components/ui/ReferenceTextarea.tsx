@@ -20,11 +20,13 @@ import {
   resolveReferenceAwareDeleteRange,
 } from '@/core/inputs/referenceTokens';
 import {
+  captureTextareaView,
   DEFAULT_PICKER_OFFSET_Y,
   PICKER_FALLBACK_ANCHOR,
   type PickerAnchor,
   renderHighlightedText,
   resolvePickerAnchor,
+  restoreTextareaView,
 } from './referenceTextareaUtils';
 import { UiOptionButton, UiTextAreaField } from './primitives';
 export interface ReferenceItem {
@@ -191,6 +193,9 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
       return;
     }
 
+    const textareaView = textareaRef.current
+      ? captureTextareaView(textareaRef.current)
+      : null;
     const marker = resolveToken(selected, index);
     const cursor = pickerCursor ?? value.length;
     const inserted = insertReferenceToken(value, cursor, marker);
@@ -210,8 +215,12 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
         return;
       }
 
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(normalized.nextCursor, normalized.nextCursor);
+      if (textareaView) {
+        restoreTextareaView(textareaRef.current, normalized.nextCursor, textareaView);
+      } else {
+        textareaRef.current.focus({ preventScroll: true });
+        textareaRef.current.setSelectionRange(normalized.nextCursor, normalized.nextCursor);
+      }
       syncHighlightScroll();
     });
   }, [closePicker, literalTokens, onChange, pickerCursor, referenceLabels, references, resolveToken, syncHighlightScroll, tokenPrefix, value]);
@@ -457,6 +466,12 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
               key={item.id}
               type="button"
               active={active}
+              onMouseDown={(event) => {
+                // 候选按钮不能抢走 textarea 焦点，否则受控 value 更新后重新 focus
+                // 会让 Chromium 按临时位于文本末尾的 selection 自动滚动。
+                event.preventDefault();
+                event.stopPropagation();
+              }}
               onClick={(event) => {
                 event.stopPropagation();
                 insertReference(index);
