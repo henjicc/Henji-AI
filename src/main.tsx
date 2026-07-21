@@ -1,8 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import LogsShell from './features/logs/LogsShell'
-import CameraStageRenderWorker from './features/cameraStage/render/CameraStageRenderWorker'
 import './index.css'
 import './styles/scrollbar.css'
 import { DragDropProvider } from './contexts/DragDropContext'
@@ -36,13 +34,25 @@ window.addEventListener('unhandledrejection', (event) => {
 const isLogsView = new URLSearchParams(window.location.search).get('view') === 'logs'
 const isCameraStageRenderView = new URLSearchParams(window.location.search).get('view') === 'camera-stage-render'
 
+// 日志窗口与三维渲染窗口都只在各自的 `?view=` 分流下挂载，主窗口永远用不到。
+// 静态导入会把 three/@react-three 整包压进启动 chunk，主窗口每次启动都要白解析一遍，
+// 因此改为按视图懒加载：主窗口启动路径不再包含这两棵子树。
+const LogsShell = React.lazy(() => import('./features/logs/LogsShell'))
+const CameraStageRenderWorker = React.lazy(
+  () => import('./features/cameraStage/render/CameraStageRenderWorker'),
+)
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
     isCameraStageRenderView ? (
-        <CameraStageRenderWorker />
+        <React.Suspense fallback={null}>
+            <CameraStageRenderWorker />
+        </React.Suspense>
     ) : (
         <React.StrictMode>
             {isLogsView ? (
-                <LogsShell />
+                <React.Suspense fallback={null}>
+                    <LogsShell />
+                </React.Suspense>
             ) : (
                 <GlobalContextMenuProvider>
                     <DragDropProvider>

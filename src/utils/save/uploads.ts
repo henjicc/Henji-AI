@@ -1,5 +1,4 @@
 import { createLogger } from '@/core/logging'
-import Pica from 'pica'
 import {
   getPathForFile,
   join,
@@ -407,6 +406,9 @@ export async function ensureCompressedJpegBytesWithPica(
   destCanvas.height = h
 
   try {
+    // pica 只在这一处缩放用到，静态导入会把它压进启动 chunk；
+    // 本函数已是 async 且带 catch 兜底，动态导入失败会自然回落到下方 canvas 缩放。
+    const { default: Pica } = await import('pica')
     const pica = new Pica()
     await pica.resize(srcCanvas, destCanvas, { quality: 3 })
     const outBlob: Blob = await pica.toBlob(destCanvas, 'image/jpeg', quality)
