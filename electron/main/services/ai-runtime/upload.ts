@@ -1,7 +1,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getAiProviderApiKey } from '../keystore'
+import { createMainLogger } from '../logging'
 import { AiRuntimeError } from './errors'
+import {
+  type MediaKind,
+  type MediaSourceIndex,
+  buildMediaSourceIndex,
+  inheritMediaKind,
+  isLocalMediaSource,
+  isRemoteHttpUrl,
+  normalizeLocalSource,
+  resolveMediaKind,
+} from './media-fields'
 import { resolvePpioMediaRewriteMode } from './ppio-media'
 import type { JsonObject, JsonValue } from './types'
 import {
@@ -13,28 +24,23 @@ import {
   uploadToKie,
 } from './upload-providers'
 
-const IMAGE_FIELD_HINTS = [
-  'image', 'images', 'img_url', 'img_urls', 'image_url', 'image_urls',
-  'start_image_url', 'end_image_url', 'first_frame_image_url', 'last_frame_image_url',
-  'reference_image_urls', 'input_urls', 'reference_images', 'input_image',
-]
-const VIDEO_FIELD_HINTS = [
-  'video', 'videos', 'video_url', 'video_urls', 'reference_video_urls',
-  'uploaded_video_file_paths', 'uploaded_video_paths', 'input_video',
-]
-const AUDIO_FIELD_HINTS = [
-  'audio', 'audios', 'audio_url', 'audio_urls', 'prompt_audio_url',
-  'prompt_audio_urls', 'reference_audio_url', 'input_audio',
-]
+const logger = createMainLogger('ai-runtime')
 const PUBLIC_URL_UPLOAD_PROVIDERS = ['bizyair', 'kie'] as const
 const UPLOAD_PROVIDER_PRIORITY = ['bizyair', 'kie', 'fal'] as const
 
-type MediaKind = 'image' | 'video' | 'audio' | 'unknown'
 type PublicUrlUploadProvider = typeof PUBLIC_URL_UPLOAD_PROVIDERS[number]
 
 interface UploadStrategy {
   primaryProvider?: string
   fallbackEnabled: boolean
+}
+
+interface PreprocessContext {
+  providerId: string
+  route: string
+  strategy: UploadStrategy
+  /** 值 → 媒体类型。由 params 里的媒体源反查，不依赖 builder 起的字段名。 */
+  mediaSources: MediaSourceIndex
 }
 
 export async function preprocessRequestBody(
@@ -44,8 +50,51 @@ export async function preprocessRequestBody(
   params: JsonObject = {}
 ): Promise<JsonValue> {
   const next = cloneJson(body)
-  await preprocessFieldValue(providerId, route, resolveUploadStrategy(params), 'unknown', undefined, next)
+  const context: PreprocessContext = {
+    providerId,
+    route,
+    strategy: resolveUploadStrategy(params),
+    mediaSources: buildMediaSourceIndex(params),
+  }
+  await preprocessFieldValue(context, 'unknown', undefined, next)
+  warnUnresolvedLocalMedia(providerId, route, next)
   return next
+}
+
+/**
+ * 媒体字段靠字段名 hint 识别；hint 漏配时本地路径会原样发给上游，
+ * 上游只会回一个含糊的参数无效错误。这里在发请求前把漏网字段打出来。
+ */
+function warnUnresolvedLocalMedia(providerId: string, route: string, body: JsonValue): void {
+  const fields: string[] = []
+  const visit = (value: JsonValue, fieldName: string | undefined): void => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (fieldName && trimmed && isLocalMediaSource(trimmed)) {
+        pushUnique(fields, fieldName)
+      }
+      return
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, fieldName)
+      return
+    }
+    if (isJsonObject(value)) {
+      for (const [key, nested] of Object.entries(value)) visit(nested, key)
+    }
+  }
+  visit(body, undefined)
+  if (fields.length === 0) {
+    return
+  }
+  logger.warn('请求体仍包含未上传的本地媒体路径，字段名可能未命中媒体 hint', {
+    event: 'ai_runtime.upload.unresolved_local_media',
+    context: { providerId, route, fields },
+  })
+}
+
+function pushUnique(target: string[], value: string): void {
+  if (!target.includes(value)) target.push(value)
 }
 
 function resolveUploadStrategy(body: JsonValue): UploadStrategy {
@@ -58,24 +107,25 @@ function resolveUploadStrategy(body: JsonValue): UploadStrategy {
 }
 
 async function preprocessFieldValue(
-  providerId: string,
-  route: string,
-  strategy: UploadStrategy,
+  context: PreprocessContext,
   mediaKind: MediaKind,
   fieldName: string | undefined,
   value: JsonValue
 ): Promise<void> {
-  if (typeof value === 'string' && mediaKind !== 'unknown') {
+  if (typeof value === 'string') {
     return
   }
 
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
       const item = value[index]
-      if (typeof item === 'string' && mediaKind !== 'unknown') {
-        value[index] = await rewriteMediaSource(providerId, route, strategy, mediaKind, fieldName, item)
+      if (typeof item === 'string') {
+        const kind = resolveMediaKind(context.mediaSources, mediaKind, item)
+        if (kind !== 'unknown') {
+          value[index] = await rewriteMediaSource(context, kind, fieldName, item)
+        }
       } else {
-        await preprocessFieldValue(providerId, route, strategy, mediaKind, fieldName, item)
+        await preprocessFieldValue(context, mediaKind, fieldName, item)
       }
     }
     return
@@ -85,24 +135,25 @@ async function preprocessFieldValue(
     return
   }
 
-  await preprocessPpioWan27ReferenceMediaObject(providerId, route, strategy, value)
+  await preprocessPpioWan27ReferenceMediaObject(context, value)
   for (const [key, nestedValue] of Object.entries(value)) {
     const nextKind = inheritMediaKind(mediaKind, key)
-    if (typeof nestedValue === 'string' && nextKind !== 'unknown') {
-      value[key] = await rewriteMediaSource(providerId, route, strategy, nextKind, key, nestedValue)
+    if (typeof nestedValue === 'string') {
+      const kind = resolveMediaKind(context.mediaSources, nextKind, nestedValue)
+      if (kind !== 'unknown') {
+        value[key] = await rewriteMediaSource(context, kind, key, nestedValue)
+      }
     } else {
-      await preprocessFieldValue(providerId, route, strategy, nextKind, key, nestedValue)
+      await preprocessFieldValue(context, nextKind, key, nestedValue)
     }
   }
 }
 
 async function preprocessPpioWan27ReferenceMediaObject(
-  providerId: string,
-  route: string,
-  strategy: UploadStrategy,
+  context: PreprocessContext,
   obj: JsonObject
 ): Promise<void> {
-  if (providerId !== 'ppio' || route !== '/async/wan2.7-r2v') {
+  if (context.providerId !== 'ppio' || context.route !== '/async/wan2.7-r2v') {
     return
   }
   const type = typeof obj.type === 'string' ? obj.type : ''
@@ -111,25 +162,15 @@ async function preprocessPpioWan27ReferenceMediaObject(
     : (type === 'reference_image' || type === 'first_frame' ? 'image' : 'unknown')
 
   if (mediaKind !== 'unknown' && typeof obj.url === 'string') {
-    obj.url = await rewriteMediaSource(providerId, route, strategy, mediaKind, 'url', obj.url)
+    obj.url = await rewriteMediaSource(context, mediaKind, 'url', obj.url)
   }
   if (typeof obj.reference_voice === 'string') {
-    obj.reference_voice = await rewriteMediaSource(providerId, route, strategy, 'audio', 'reference_voice', obj.reference_voice)
+    obj.reference_voice = await rewriteMediaSource(context, 'audio', 'reference_voice', obj.reference_voice)
   }
-}
-
-function inheritMediaKind(current: MediaKind, key: string): MediaKind {
-  if (current === 'unknown' && key.toLowerCase() === 'url') {
-    return 'unknown'
-  }
-  const nested = classifyMediaKey(key)
-  return nested === 'unknown' ? current : nested
 }
 
 async function rewriteMediaSource(
-  providerId: string,
-  route: string,
-  strategy: UploadStrategy,
+  context: PreprocessContext,
   mediaKind: MediaKind,
   fieldName: string | undefined,
   source: string
@@ -146,16 +187,16 @@ async function rewriteMediaSource(
   }
 
   const prepared = prepareMediaBinary(trimmed, mediaKind)
-  if (providerId === 'fal') {
+  if (context.providerId === 'fal') {
     return uploadToFal(prepared)
   }
-  if (providerId === 'ppio') {
-    const mode = resolvePpioMediaRewriteMode(route, fieldName, mediaKind === 'video')
-    if (mode === 'public-url') return await uploadForPublicUrl(prepared, strategy)
+  if (context.providerId === 'ppio') {
+    const mode = resolvePpioMediaRewriteMode(context.route, fieldName, mediaKind === 'video')
+    if (mode === 'public-url') return await uploadForPublicUrl(prepared, context.strategy)
     if (mode === 'raw-base64') return toBase64(prepared.bytes)
     return toDataUri(prepared.bytes, prepared.mimeType)
   }
-  if (providerId === 'kie' || providerId === 'modelscope') {
+  if (context.providerId === 'kie' || context.providerId === 'modelscope') {
     return await uploadForHostedUrl(prepared)
   }
   return toDataUri(prepared.bytes, prepared.mimeType)
@@ -259,41 +300,9 @@ function parseDataUri(input: string): { bytes: Uint8Array; mimeType: string } | 
   return { bytes, mimeType }
 }
 
-function normalizeLocalSource(source: string): string | undefined {
-  for (const prefix of [
-    'henji-media://local/',
-    'http://asset.localhost/', 'https://asset.localhost/',
-    'http://tauri.localhost/', 'https://tauri.localhost/',
-    'asset://localhost/', 'tauri://localhost/',
-    'file://localhost/', 'file:///', 'file://',
-  ]) {
-    if (source.startsWith(prefix)) {
-      return stripWindowsDrivePrefix(safeDecodeURIComponent(source.slice(prefix.length)))
-    }
-  }
-  return isLocalPath(source) ? source : undefined
-}
 
-function classifyMediaKey(key: string): MediaKind {
-  const normalized = key.toLowerCase()
-  if (IMAGE_FIELD_HINTS.some((hint) => normalized.includes(hint))) return 'image'
-  if (VIDEO_FIELD_HINTS.some((hint) => normalized.includes(hint))) return 'video'
-  if (AUDIO_FIELD_HINTS.some((hint) => normalized.includes(hint))) return 'audio'
-  return 'unknown'
-}
 
-function isRemoteHttpUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value) &&
-    !value.startsWith('http://asset.localhost/') &&
-    !value.startsWith('http://tauri.localhost/')
-}
 
-function isLocalPath(value: string): boolean {
-  return value.startsWith('\\\\') ||
-    value.startsWith('/') ||
-    value.startsWith('~/') ||
-    /^[a-zA-Z]:[\\/]/.test(value)
-}
 
 function inferMimeFromPath(filePath: string, mediaKind: MediaKind): string {
   const ext = path.extname(filePath).toLowerCase()
@@ -345,17 +354,7 @@ function cloneJson(value: JsonValue): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue
 }
 
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
 
-function stripWindowsDrivePrefix(value: string): string {
-  return /^\/[a-zA-Z]:/.test(value) ? value.slice(1) : value
-}
 
 function isJsonObject(value: JsonValue): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
