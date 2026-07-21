@@ -1,5 +1,5 @@
 import { AiRuntimeError } from '../errors'
-import { pollUntilResult } from '../polling'
+import { POLL_QUERY_FAILED, pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
 
@@ -57,7 +57,8 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     const payload = await readJsonResponse(response, 'KIE')
     const code = getPointer(payload, '/code')
     if (typeof code === 'number' && code !== 200) {
-      return undefined
+      // 查询本身没成功（含 taskId 已被清理的情况），不是"任务还在跑"
+      return POLL_QUERY_FAILED
     }
     const state = stringAt(payload, '/data/state') ?? ''
     if (state === 'success') return payload
