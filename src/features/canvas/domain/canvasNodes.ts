@@ -75,7 +75,20 @@ export interface NodeDisplayData {
   [key: string]: DynamicValue;
 }
 
-export interface NodeImageData extends NodeDisplayData {
+/**
+ * 结果节点的生成状态。
+ * 占位节点在点击生成时就已建好（见 GenerationNodeShell），这组字段描述它此刻处于
+ * 生成中 / 成功 / 失败的哪一态；失败原因写在这里而不是回挂到发起节点上。
+ */
+export interface NodeGenerationStatus {
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
+  /** 生成失败原因；有值时结果节点显示红色描边与错误内容 */
+  generationError?: string | null;
+}
+
+export interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {
   imageUrl: string | null;
   previewImageUrl?: string | null;
   aspectRatio: string;
@@ -206,7 +219,7 @@ export interface MediaGenNodeData extends NodeDisplayData {
 export type VideoGenNodeData = MediaGenNodeData;
 export type AudioGenNodeData = MediaGenNodeData;
 
-export interface VideoMediaNodeData extends NodeDisplayData {
+export interface VideoMediaNodeData extends NodeDisplayData, NodeGenerationStatus {
   videoUrl: string | null;
   /** 视频首帧 poster（本地路径），节点展示与缩略图共用 */
   previewImageUrl?: string | null;
@@ -214,9 +227,6 @@ export interface VideoMediaNodeData extends NodeDisplayData {
   durationSec?: number | null;
   sourceFileName?: string | null;
   isSizeManuallyAdjusted?: boolean;
-  isGenerating?: boolean;
-  generationStartedAt?: number | null;
-  generationDurationMs?: number;
   [key: string]: DynamicValue;
 }
 
@@ -239,13 +249,10 @@ export interface CameraStageNodeData extends NodeDisplayData {
   outputKind?: 'image' | 'video';
 }
 
-export interface AudioMediaNodeData extends NodeDisplayData {
+export interface AudioMediaNodeData extends NodeDisplayData, NodeGenerationStatus {
   audioUrl: string | null;
   durationSec?: number | null;
   sourceFileName?: string | null;
-  isGenerating?: boolean;
-  generationStartedAt?: number | null;
-  generationDurationMs?: number;
   [key: string]: DynamicValue;
 }
 

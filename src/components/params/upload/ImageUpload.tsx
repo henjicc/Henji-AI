@@ -15,6 +15,7 @@ import { FilePreview } from './FilePreview'
 import { fileToBase64 } from '@/utils/fileConverter'
 import { calculateAspectRatio } from '@/utils/smartMatch'
 import { getI18nText } from '@/core/types/I18nText'
+import { useNotification } from '@/contexts/NotificationContext'
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
@@ -38,6 +39,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   disabled = false
 }) => {
   const { i18n, t } = useTranslation('ui')
+  const { showNotification } = useNotification()
   // const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   // 获取显示名称
@@ -47,7 +49,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   const handleUpload = async (file: File) => {
     const maxCount = param.maxCount || 1
     if (value.length >= maxCount) {
-      alert(t('uploadArea.maxImages', { max: maxCount }))
+      showNotification(t('uploadArea.maxImages', { max: maxCount }), 'error')
       return
     }
 

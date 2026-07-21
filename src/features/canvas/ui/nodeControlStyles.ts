@@ -39,3 +39,7 @@ export const NODE_ROW_HOVER_CLASS = 'hover:bg-white/[0.06]';
 /** 行与行之间的间隙（替代旧版贴边 divide-y），让每行读成独立卡片 */
 export const NODE_ROW_GAP_CLASS = 'gap-1.5';
 
+/** 结果节点生成失败时的红色描边（配合 NodeGenerationError 覆盖层使用） */
+export const NODE_GENERATION_ERROR_BORDER_CLASS =
+  'border-red-500/70 shadow-[0_0_0_1px_rgba(239,68,68,0.28)]';
+

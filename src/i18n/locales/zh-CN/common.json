@@ -11,6 +11,12 @@
     "rememberOff": "不记住",
     "rememberHint": "可随时在 设置 → 通用 → 存储 中修改。"
   },
+  "alertDialog": {
+    "goToSettings": "去设置",
+    "copyDetail": "复制错误详情",
+    "detailCopied": "已复制"
+  },
+
   "confirm": "确定",
   "cancel": "取消",
   "save": "保存",

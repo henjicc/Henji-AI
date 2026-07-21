@@ -20,7 +20,6 @@ import ModelSelectorPanel from './components/ModelSelectorPanel'
 import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
 import { PromptOptimizeButton } from './components/PromptOptimizeButton'
-import AlertDialog from '../ui/AlertDialog'
 import PanelTrigger from '../ui/PanelTrigger'
 import { UiButton } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -551,15 +550,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         />
       </div>
 
-      {/* 全局 Alert Dialog */}
-      <AlertDialog
-        isOpen={uiState.alertDialog.isOpen}
-        title={uiState.alertDialog.title}
-        message={uiState.alertDialog.message}
-        type={uiState.alertDialog.type}
-        scope="container"
-        onClose={() => uiState.setAlertDialog({ ...uiState.alertDialog, isOpen: false })}
-      />
     </div>
   )
 }

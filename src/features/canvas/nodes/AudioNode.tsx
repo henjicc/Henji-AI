@@ -14,11 +14,13 @@ import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionI
 import { isNodeUsingDefaultDisplayName, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import {
+  NODE_GENERATION_ERROR_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
+import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 import { formatDuration, getAudioDuration } from '@/utils/mediaDimensions';
 import { useAudioWaveform } from '@/hooks/useAudioWaveform';
 import { saveUploadAudio } from '@/utils/save';
@@ -59,6 +61,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.audioUpload;
   const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
+  const generationError = typeof data.generationError === 'string' ? data.generationError : null;
 
   const resolvedTitle = useMemo(() => {
     const nodeType = type as CanvasNodeType;
@@ -213,9 +216,11 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     <div
       className={`
         group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 transition-colors duration-150
-        ${selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-          : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
+        ${generationError
+          ? NODE_GENERATION_ERROR_BORDER_CLASS
+          : selected
+            ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
+            : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
       `}
       style={{ width: AUDIO_NODE_WIDTH, height: AUDIO_NODE_HEIGHT }}
       onClick={handleNodeClick}
@@ -240,7 +245,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
       />
 
       <div className="relative flex h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark px-3 py-2">
-        {data.audioUrl ? (
+        {generationError ? null : data.audioUrl ? (
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="nodrag nowheel" style={{ height: AUDIO_WAVEFORM_HEIGHT }}>
               {waveform ? (
@@ -327,6 +332,8 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
             />
           </div>
         )}
+
+        {generationError && <NodeGenerationError message={generationError} />}
       </div>
 
       {isUploadVariant && (

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import AlertDialog from '@/components/ui/AlertDialog'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { ReferenceTextarea, StackedMediaUploader, UiIconButton } from '@/components/ui'
 import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -101,19 +101,9 @@ const InputArea: React.FC<InputAreaProps> = ({
   onGenerate
 }) => {
   const { t } = useTranslation('ui')
-  const [alertDialog, setAlertDialog] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    type: 'info' | 'warning' | 'error'
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    type: 'warning'
-  })
+  // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
-    setAlertDialog({ isOpen: true, title, message, type })
+    showAlertDialog({ title, message, type })
   }
   const inputLimits = resolveInputLimits(
     selectedModel,
@@ -493,15 +483,6 @@ const InputArea: React.FC<InputAreaProps> = ({
           </UiIconButton>
         </div>
 
-      {/* Alert Dialog */}
-      <AlertDialog
-        isOpen={alertDialog.isOpen}
-        title={alertDialog.title}
-        message={alertDialog.message}
-        type={alertDialog.type}
-        scope="container"
-        onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
-      />
     </div>
   )
 }

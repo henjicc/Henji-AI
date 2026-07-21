@@ -3,7 +3,7 @@ import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
 import { UiButton, UiInput } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
-import AlertDialog from '@/components/ui/AlertDialog'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
 import { GenerationService } from '@/core/services/GenerationService'
 import type { MinimaxVoiceClonePanelConfig } from '@/core/types/PanelTypes'
@@ -29,13 +29,6 @@ import { useAudioPreviewSource } from './minimaxVoiceClone/useAudioPreviewSource
 
 const logger = createLogger('components.params.panels.MinimaxVoiceClonePanel')
 let hasResetClonePanelOnSessionStart = false
-
-type CloneAlertState = {
-  isOpen: boolean
-  title: string
-  message: string
-  type: 'info' | 'warning' | 'error'
-}
 
 interface MinimaxVoiceClonePanelProps {
   value: DynamicValue
@@ -64,12 +57,6 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   const [promptAudioFile, setPromptAudioFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
-  const [alertState, setAlertState] = useState<CloneAlertState>({
-    isOpen: false,
-    title: '',
-    message: '',
-    type: 'warning',
-  })
   const panelValueRef = useRef(panelValue)
   const previousResultAudioFilePathRef = useRef(panelValue.lastPreviewAudioFilePath)
   const isPersistingResultAudioRef = useRef(false)
@@ -145,8 +132,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   }, [panelValue.lastPreviewAudioUrl, panelValue.lastPreviewAudioFilePath, patchValue])
 
   const showWarningDialog = (message: string): void => {
-    setAlertState({
-      isOpen: true,
+    showAlertDialog({
       title: '参数未完成',
       message,
       type: 'warning',
@@ -190,11 +176,11 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
     } catch (error) {
       logger.error('[MinimaxVoiceClonePanel] 音色名称重名校验失败', error)
       const message = error instanceof Error ? error.message : String(error)
-      setAlertState({
-        isOpen: true,
+      showAlertDialog({
         title: '校验失败',
         message: message || '检查音色名称是否重复失败，请稍后重试。',
         type: 'error',
+        detail: message,
       })
       return 'error'
     }
@@ -245,8 +231,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
       return
     }
     if (duplicateState === 'duplicated') {
-      setAlertState({
-        isOpen: true,
+      showAlertDialog({
         title: '音色名称重复',
         message: `音色名称“${voiceName}”已存在，请更换后再克隆。`,
         type: 'warning',
@@ -538,14 +523,6 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
         </div>
       </div>
 
-      <AlertDialog
-        isOpen={alertState.isOpen}
-        title={alertState.title}
-        message={alertState.message}
-        type={alertState.type}
-        scope="container"
-        onClose={() => setAlertState((prev) => ({ ...prev, isOpen: false }))}
-      />
     </div>
   )
 }

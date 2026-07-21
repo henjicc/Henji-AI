@@ -54,6 +54,7 @@ import { ReferenceTextarea } from '@/components/ui';
 import PriceEstimate from '@/components/ui/PriceEstimate';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { showAlertDialog } from '@/stores/alertDialogStore';
 
 const DEFAULT_GENERATION_DURATION_MS = 60_000;
 const RESULT_TITLE_MAX_CHARS = 10;
@@ -130,7 +131,8 @@ export const GenerationNodeShell = memo(({
   maxHeight = 1000,
 }: GenerationNodeShellProps) => {
   const { t } = useTranslation();
-  const [error, setError] = useState<string | null>(null);
+  // 提示词漏填只把输入框标红（视线本来就在这儿），不弹窗也不占用节点高度
+  const [promptInvalid, setPromptInvalid] = useState(false);
 
   const [promptDraft, setPromptDraft] = useState(() => data.prompt ?? '');
   const promptDraftRef = useRef(promptDraft);
@@ -293,6 +295,11 @@ export const GenerationNodeShell = memo(({
   // 手动调整过后则严格使用用户拖拽出的尺寸（仍受 min/max 约束）。
   const hasManualWidth = typeof width === 'number' && Number.isFinite(width);
   const resolvedWidth = hasManualWidth ? Math.max(minWidth, Math.round(width)) : null;
+  // 高度同时用确定 height + min-height:fit-content 两条约束表达，缺一不可：
+  // - 确定 height 让纵向拖拽和横向一样 1:1 跟手（只给 min-height 的话，
+  //   拖拽在没超过内容自然高度前毫无反应，手感上像是被识别成了横向拖拽）
+  // - min-height:fit-content 在 CSS 中优先级高于 height，兜住"拖得比内容还矮"的情况，
+  //   节点自动撑回内容所需的最小高度，各行不会溢出到边框外
   const resolvedHeight = typeof height === 'number' && Number.isFinite(height)
     ? Math.max(minHeight, Math.round(height))
     : minHeight;
@@ -319,12 +326,20 @@ export const GenerationNodeShell = memo(({
   const handleGenerate = useCallback(async () => {
     const prompt = stripReferenceAtPrefix(promptOverrideValue ?? promptDraft).trim();
     if (!prompt) {
-      setError(t(promptRequiredKey));
+      setPromptInvalid(true);
       return;
     }
+    setPromptInvalid(false);
 
+    // 缺 API Key 是"还没开始生成"的前置失败，不建输出节点；
+    // 它有明确的补救动作，所以走带「去设置」的统一弹窗
     if (!providerKeyConfigured) {
-      setError(t(apiKeyRequiredKey));
+      showAlertDialog({
+        title: t('common:error'),
+        message: t(apiKeyRequiredKey),
+        type: 'warning',
+        settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+      });
       return;
     }
 
@@ -357,7 +372,6 @@ export const GenerationNodeShell = memo(({
     const generationDurationMs = estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS;
     const generationStartedAt = Date.now();
     const resultNodeTitle = buildResultNodeTitle(prompt, t(resultTitleKey));
-    setError(null);
 
     const newNodePosition = findNodePosition(
       id,
@@ -395,17 +409,21 @@ export const GenerationNodeShell = memo(({
         ...resultPatch,
         isGenerating: false,
         generationStartedAt: null,
+        generationError: null,
       });
     } catch (generationError) {
-      setError(generationError instanceof Error ? generationError.message : t('ai.error'));
+      // 失败信息写回输出节点：失败的是那次生成，红边和原因就应该长在它自己身上，
+      // 而不是回头挂在发起节点的底部（那里既看不出对应哪次生成，也会把节点撑变形）
       updateNodeData(newNodeId, {
         isGenerating: false,
         generationStartedAt: null,
+        generationError:
+          generationError instanceof Error ? generationError.message : t('ai.error'),
       });
     } finally {
       setNodeGenerationProgress(newNodeId, null);
     }
-  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
     if (nodeId !== id) {
@@ -426,7 +444,8 @@ export const GenerationNodeShell = memo(({
         width: resolvedWidth !== null ? `${resolvedWidth}px` : 'max-content',
         minWidth: `${minWidth}px`,
         maxWidth: `${maxWidth}px`,
-        minHeight: `${resolvedHeight}px`,
+        height: `${resolvedHeight}px`,
+        minHeight: 'fit-content',
       }}
       onClick={() => setSelectedNode(id)}
     >
@@ -448,8 +467,12 @@ export const GenerationNodeShell = memo(({
 
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
 
-      <div className="canvas-node-lod-detail relative flex flex-col gap-1.5">
-        <div className="group/row relative min-h-[100px]">
+      {/* 这里绝对不能加 min-h-0：它会把本层对内容最小尺寸的贡献归零，
+          令根容器的 min-height:fit-content 算成 0，height 直接胜出，各行溢出到边框外。
+          实测：加 min-h-0 时根高被钉在 160px 且溢出 162px，去掉后自动撑到 323px。 */}
+      <div className="canvas-node-lod-detail relative flex flex-1 flex-col gap-1.5">
+        {/* 提示词区是唯一的伸缩项：节点拉高多出来的空间全部由它吸收，下方各行保持原高与行距 */}
+        <div className="group/row relative flex min-h-[100px] flex-1 flex-col">
           <Handle
             type="target"
             id={promptPortId()}
@@ -458,26 +481,30 @@ export const GenerationNodeShell = memo(({
             className={`${NODE_PORT_ROW_CLASS} ${isPromptOverridden ? NODE_PORT_VISIBLE_CLASS : ''}`}
           />
           <div
-            className={`h-full p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS}`}
+            className={`flex min-h-0 flex-1 flex-col p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS} ${promptInvalid ? '!border-red-500/70' : ''}`}
           >
             <ReferenceTextarea
               value={promptOverrideValue ?? promptDraft}
               onChange={(nextValue) => {
                 setPromptDraft(nextValue);
                 commitPromptDraft(nextValue);
+                if (promptInvalid && nextValue.trim()) {
+                  setPromptInvalid(false);
+                }
               }}
               disabled={Boolean(promptOverrideValue)}
               references={incomingImageItems}
               onMouseDown={(event) => event.stopPropagation()}
-              placeholder={t(promptPlaceholderKey)}
+              // 漏填时把"请输入提示词"直接顶到空框里当占位，比在节点底部加一行红字更省空间
+              placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
               submitShortcut="mod-enter"
               onSubmit={() => {
                 void handleGenerate();
               }}
-              className="relative h-full min-h-[86px] overflow-visible rounded-md"
+              className="relative flex min-h-[86px] flex-1 flex-col overflow-visible rounded-md"
               highlightLayerClassName="text-sm leading-6 text-text-dark"
               highlightContentClassName="min-h-full px-1.5 py-1"
-              textareaClassName="ui-scrollbar nodrag nowheel !border-0 !bg-transparent !shadow-none relative z-10 h-full min-h-[86px] w-full resize-none overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 selection:bg-accent/45 selection:text-white focus:!border-transparent focus:!ring-0 focus:!shadow-none focus-visible:!ring-0 whitespace-pre-wrap break-words disabled:cursor-default"
+              textareaClassName={`ui-scrollbar nodrag nowheel !border-0 !bg-transparent !shadow-none relative z-10 min-h-[86px] w-full flex-1 resize-none overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 text-transparent caret-text-dark outline-none selection:bg-accent/45 selection:text-white focus:!border-transparent focus:!ring-0 focus:!shadow-none focus-visible:!ring-0 whitespace-pre-wrap break-words disabled:cursor-default ${promptInvalid ? 'placeholder:text-red-400/90' : 'placeholder:text-text-muted/80'}`}
               pickerClassName="z-[90] w-[120px]"
               pickerListClassName="max-h-[180px]"
             />
@@ -485,6 +512,7 @@ export const GenerationNodeShell = memo(({
         </div>
 
         <NodeInputRows
+          className="shrink-0"
           nodeId={id}
           modelId={effectiveModelId}
           mediaType={modelType}
@@ -505,7 +533,6 @@ export const GenerationNodeShell = memo(({
         />
       </div>
 
-      {error && <div className="canvas-node-lod-detail mt-1 shrink-0 text-xs text-red-400">{error}</div>}
 
       <Handle
         type="source"

@@ -19,6 +19,9 @@ import { LargeUploadChoiceDialog } from '@/components/upload/LargeUploadChoiceDi
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
 import { NotificationProvider } from '@/contexts/NotificationContext'
+import { useUiStore } from '@/stores/uiStore'
+import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
+import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
 
 const logger = createLogger('App')
 
@@ -35,7 +38,11 @@ const App: React.FC = () => {
   useLogWindowShortcut()
   const [activeTab, setActiveTab] = useState<WorkspaceId>('generation')
   const [isReady, setIsReady] = useState(false)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  // 设置面板开关提到 uiStore：错误弹窗的「去设置」可能从任意深度的组件触发
+  const isSettingsOpen = useUiStore((state) => state.isSettingsOpen)
+  const settingsTarget = useUiStore((state) => state.settingsTarget)
+  const openSettings = useUiStore((state) => state.openSettings)
+  const closeSettings = useUiStore((state) => state.closeSettings)
   const assetView = useAssetLibraryStore((state) => state.view)
   const sourceWorkspace = useAssetLibraryStore((state) => state.sourceWorkspace)
   const setAssetView = useAssetLibraryStore((state) => state.setView)
@@ -108,6 +115,11 @@ const App: React.FC = () => {
         logger.error('[App] Failed to initialize canvas project storage:', error)
       }
 
+      // 2.2 同步各供应商密钥配置状态
+      // 不能等设置面板打开才同步：画布/生成前置校验读的就是这个状态，
+      // 冷启动不同步会拿持久化旧值误判"未配置 API Key"
+      await syncProviderKeyStatuses()
+
       // 3. 加载启用的自定义模型
       try {
         const customModelService = getCustomModelService(databaseService)
@@ -144,14 +156,15 @@ const App: React.FC = () => {
           assetView={assetView}
           onTabChange={handleTabChange}
           onAssetClick={handleAssetClick}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => openSettings()}
         />
 
         {/* 工作区容器 */}
         <TabContainer activeTab={activeTab} />
         <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
-        {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+        {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         <LargeUploadChoiceDialog />
+        <GlobalAlertDialog />
       </div>
     </NotificationProvider>
   )

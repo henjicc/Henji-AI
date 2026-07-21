@@ -11,6 +11,12 @@
     "rememberOff": "Don't remember",
     "rememberHint": "You can change this anytime in Settings → General → Storage."
   },
+  "alertDialog": {
+    "goToSettings": "Open Settings",
+    "copyDetail": "Copy error details",
+    "detailCopied": "Copied"
+  },
+
   "confirm": "Confirm",
   "cancel": "Cancel",
   "save": "Save",

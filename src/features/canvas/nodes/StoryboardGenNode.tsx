@@ -34,6 +34,7 @@ import { registry } from '@/core/ModelRegistry'
 import type { ModelTag } from '@/core/types'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
@@ -289,8 +290,14 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       setError('请填写至少一个分镜内容描述')
       return
     }
+    // 缺 API Key 有明确补救动作，走带「去设置」的统一弹窗（与 GenerationNodeShell 一致）
     if (!providerKeyConfigured) {
-      setError('请在设置中填写 API Key')
+      showAlertDialog({
+        title: t('common:error'),
+        message: t('node.imageEdit.apiKeyRequired'),
+        type: 'warning',
+        settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+      })
       return
     }
 
@@ -359,14 +366,20 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         aspectRatio: generated.aspectRatio,
         isGenerating: false,
         generationStartedAt: null,
+        generationError: null,
       })
     } catch (generationError) {
-      setError(generationError instanceof Error ? generationError.message : '生成失败')
-      updateNodeData(newNodeId, { isGenerating: false, generationStartedAt: null })
+      // 失败信息写回输出节点，红边 + 原因长在失败的那次生成上
+      updateNodeData(newNodeId, {
+        isGenerating: false,
+        generationStartedAt: null,
+        generationError:
+          generationError instanceof Error ? generationError.message : '生成失败',
+      })
     } finally {
       setNodeGenerationProgress(newNodeId, null)
     }
-  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, updateNodeData])
+  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
 
   useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
     if (nodeId !== id) {

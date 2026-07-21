@@ -10,6 +10,7 @@ const logger = createLogger('components.params.upload.UploadArea')
 import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UiInput } from '@/components/ui'
+import { useNotification } from '@/contexts/NotificationContext'
 
 interface UploadAreaProps {
   accept: string[]
@@ -28,6 +29,8 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const { t } = useTranslation('ui')
+  // 上传校验是即时操作反馈、且没有可跳转的补救动作，用轻量 toast 不打断操作流
+  const { showNotification } = useNotification()
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
@@ -55,13 +58,13 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
   const processFile = async (file: File) => {
     // 验证文件类型
     if (!accept.includes(file.type)) {
-      alert(t('uploadArea.unsupportedType', { type: file.type }))
+      showNotification(t('uploadArea.unsupportedType', { type: file.type }), 'error')
       return
     }
 
     // 验证文件大小
     if (maxSize && file.size > maxSize * 1024 * 1024) {
-      alert(t('uploadArea.tooLarge', { maxSize }))
+      showNotification(t('uploadArea.tooLarge', { maxSize }), 'error')
       return
     }
 
@@ -70,7 +73,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
       await onUpload(file)
     } catch (error) {
       logger.error('Upload failed:', error)
-      alert(t('uploadArea.uploadFailed'))
+      showNotification(t('uploadArea.uploadFailed'), 'error')
     } finally {
       setUploading(false)
     }

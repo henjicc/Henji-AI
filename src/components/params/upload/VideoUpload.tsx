@@ -10,6 +10,7 @@ import type { VideoUploadParamDef } from '@/core/types'
 import { UploadArea } from './UploadArea'
 import { FilePreview } from './FilePreview'
 import { getI18nText } from '@/core/types/I18nText'
+import { useNotification } from '@/contexts/NotificationContext'
 
 interface VideoUploadProps {
   param: VideoUploadParamDef
@@ -32,6 +33,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
   disabled = false
 }) => {
   const { i18n, t } = useTranslation('ui')
+  const { showNotification } = useNotification()
 
   // 获取显示名称
   const displayName = getI18nText(param.name, i18n.language)
@@ -40,7 +42,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
   const handleUpload = async (file: File) => {
     const maxCount = param.maxCount || 1
     if (value.length >= maxCount) {
-      alert(t('uploadArea.maxVideos', { max: maxCount }))
+      showNotification(t('uploadArea.maxVideos', { max: maxCount }), 'error')
       return
     }
 
@@ -49,7 +51,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
 
     // 验证时长限制
     if (param.maxDuration && metadata.duration > param.maxDuration) {
-      alert(t('uploadArea.maxDuration', { maxDuration: param.maxDuration }))
+      showNotification(t('uploadArea.maxDuration', { maxDuration: param.maxDuration }), 'error')
       return
     }
 

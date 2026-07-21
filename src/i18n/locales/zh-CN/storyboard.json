@@ -82,6 +82,9 @@
     "collapse": "收起"
   },
   "node": {
+    "generationError": {
+      "viewDetail": "点击查看详情"
+    },
     "menu": {
       "uploadImage": "上传图片",
       "aiImageGeneration": "AI 图片",

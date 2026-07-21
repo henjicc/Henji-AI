@@ -7,3 +7,6 @@ export * from './UiMarqueeText';
 export * from './UiDatePicker';
 export * from './fileUploader/StackedMediaUploader';
 export * from './TaskHistoryFilterBar';
+export { default as AlertDialog } from './AlertDialog';
+export type { AlertDialogAction } from './AlertDialog';
+export * from './GlobalAlertDialog';

@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import {
   aiGetProviderApiKey,
-  aiGetProviderKeyStatus,
   aiRemoveProviderApiKey,
   aiSetProviderApiKey,
 } from '@/commands/aiRuntime'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
 
 const logger = createLogger('components.Settings.hooks.useApiKeys')
 
@@ -41,7 +41,6 @@ export function useApiKeys(): UseApiKeysResult {
   const [keys, setKeys] = useState<ApiKeys>(createEmptyKeys())
   const [visibility, setVisibility] = useState<ApiKeyVisibility>(createVisibilityState())
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({})
-  const setProviderKeyStatuses = useSettingsStore((state) => state.setProviderKeyStatuses)
   const setProviderKeyStatus = useSettingsStore((state) => state.setProviderKeyStatus)
 
   useEffect(() => {
@@ -49,17 +48,16 @@ export function useApiKeys(): UseApiKeysResult {
 
     const bootstrap = async (): Promise<void> => {
       try {
-        const statusList = await aiGetProviderKeyStatus()
+        // 状态同步与写回 store 复用启动时的同一个函数，这里只额外取密钥明文用于回填输入框
+        const statusMap = await syncProviderKeyStatuses()
         if (disposed) return
 
         const loadedKeys = createEmptyKeys()
-        const statusMap: Record<string, boolean> = {}
         const configuredProviders: ApiKeyProvider[] = []
 
-        statusList.forEach((item) => {
-          statusMap[item.providerId] = item.configured
-          if (item.configured && item.providerId in loadedKeys) {
-            configuredProviders.push(item.providerId as ApiKeyProvider)
+        Object.entries(statusMap).forEach(([providerId, configured]) => {
+          if (configured && providerId in loadedKeys) {
+            configuredProviders.push(providerId as ApiKeyProvider)
           }
         })
 
@@ -81,7 +79,6 @@ export function useApiKeys(): UseApiKeysResult {
           loadedKeys[providerId] = apiKey
         })
 
-        setProviderKeyStatuses(statusMap)
         setKeys(loadedKeys)
       } catch (error) {
         logger.error('[useApiKeys] load key status failed', error)
@@ -97,7 +94,7 @@ export function useApiKeys(): UseApiKeysResult {
         if (timer) clearTimeout(timer)
       })
     }
-  }, [setProviderKeyStatuses])
+  }, [])
 
   const updateKey = (provider: ApiKeyProvider, value: string) => {
     setKeys((prev) => ({ ...prev, [provider]: value }))

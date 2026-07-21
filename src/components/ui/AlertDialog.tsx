@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
 import { UiButton, UiPanel } from './primitives'
+import { useI18n } from '@/hooks/useI18n'
+
+/** 弹窗底部的一个动作按钮 */
+export interface AlertDialogAction {
+  label: string
+  onClick: () => void
+  variant?: 'primary' | 'muted'
+}
 
 interface AlertDialogProps {
   isOpen: boolean
@@ -8,11 +16,16 @@ interface AlertDialogProps {
   onClose: () => void
   type?: 'info' | 'warning' | 'error'
   scope?: 'viewport' | 'container'
+  /**
+   * 关闭按钮左侧的额外动作（如「去设置」「复制错误详情」）。
+   * 省略时只渲染一个关闭按钮，行为与升级前一致。
+   */
+  actions?: AlertDialogAction[]
 }
 
 /**
- * 统一的提示弹窗组件
- * 样式与清除历史弹窗保持一致
+ * 统一的提示/报错弹窗组件。
+ * 全局报错请走 GlobalAlertDialog + alertDialogStore，不要在业务组件里自建开关 state。
  */
 export default function AlertDialog({
   isOpen,
@@ -21,7 +34,9 @@ export default function AlertDialog({
   onClose,
   type = 'warning',
   scope = 'viewport',
+  actions,
 }: AlertDialogProps) {
+  const { t } = useI18n('common')
   const [opacity, setOpacity] = useState(0)
 
   useEffect(() => {
@@ -75,15 +90,12 @@ export default function AlertDialog({
   const rootClassName = scope === 'container'
     ? 'absolute inset-0 z-50 flex items-center justify-center'
     : 'fixed inset-0 z-50 flex items-center justify-center'
-  const backdropClassName = scope === 'container'
-    ? 'absolute inset-0 bg-black/70 backdrop-blur-sm'
-    : 'absolute inset-0 bg-black/70 backdrop-blur-sm'
 
   return (
     <div className={rootClassName}>
       {/* 背景遮罩 */}
       <div
-        className={backdropClassName}
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         style={{ opacity, transition: 'opacity 180ms ease' }}
         onClick={handleClose}
       />
@@ -104,10 +116,24 @@ export default function AlertDialog({
         </div>
 
         {/* 消息内容 */}
-        <div className="text-zinc-300 text-sm mt-2 whitespace-pre-line">{message}</div>
+        <div className="ui-scrollbar max-h-[280px] overflow-y-auto text-zinc-300 text-sm mt-2 whitespace-pre-line break-words">
+          {message}
+        </div>
 
-        {/* 确定按钮 */}
-        <div className="mt-4 flex justify-end">
+        {/* 动作按钮：额外动作在左，关闭在右 */}
+        <div className="mt-4 flex justify-end gap-2">
+          {actions?.map((action) => (
+            <UiButton
+              key={action.label}
+              type="button"
+              size="sm"
+              variant={action.variant ?? 'muted'}
+              onClick={action.onClick}
+              className="h-9 px-4"
+            >
+              {action.label}
+            </UiButton>
+          ))}
           <UiButton
             type="button"
             size="sm"
@@ -115,7 +141,7 @@ export default function AlertDialog({
             onClick={handleClose}
             className="h-9 px-4"
           >
-            确定
+            {t('close')}
           </UiButton>
         </div>
       </UiPanel>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { UiButton, UiIconButton, UiNavButton } from '@/components/ui'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
@@ -6,18 +6,48 @@ import ApiKeysTab from './tabs/ApiKeysTab'
 import InterfaceTab from './tabs/InterfaceTab'
 import ModelsTab from './tabs/ModelsTab'
 import { useI18n } from '@/hooks/useI18n'
+import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
 
 interface SettingsModalProps {
   onClose: () => void
+  /** 由 uiStore 传入的定位目标（如错误弹窗「去设置」直达平台密钥）；省略则用默认分节 */
+  target?: SettingsNavigationTarget | null
 }
 
-type SettingsTab = 'general' | 'api' | 'interface' | 'models'
+type SettingsTab = SettingsTabId
 type SettingsSection = { id: string; label: string }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+// 静态导航结构，提到模块作用域后初始 state 可以直接查表定位到目标分节
+const SECTION_MAP: Record<SettingsTab, SettingsSection[]> = {
+  general: [
+    { id: 'general-basic', label: '基础设置' },
+    { id: 'general-storage', label: '数据与下载' },
+    { id: 'general-behavior', label: '行为与并发' },
+    { id: 'general-maintenance', label: '更新维护' }
+  ],
+  api: [
+    { id: 'api-keys', label: '平台密钥' },
+    { id: 'api-upload', label: '上传策略' },
+    { id: 'api-llm', label: '大语言模型' }
+  ],
+  interface: [
+    { id: 'interface-layout', label: '布局行为' },
+    { id: 'interface-assets', label: '资产库' },
+    { id: 'interface-canvas', label: '画布' },
+    { id: 'interface-theme', label: '主题外观' }
+  ],
+  models: [
+    { id: 'models-visibility', label: '显示与管理' }
+  ]
+}
+
+const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const { t } = useI18n('settings')
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
-  const [activeSectionId, setActiveSectionId] = useState<string>('general-basic')
+  const initialTab: SettingsTab = target?.tab ?? 'general'
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
+  const [activeSectionId, setActiveSectionId] = useState<string>(
+    target?.sectionId ?? SECTION_MAP[initialTab][0]?.id ?? ''
+  )
   const [closing, setClosing] = useState(false)
   const contentRef = useRef<HTMLDivElement | null>(null)
 
@@ -34,30 +64,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   ]
 
   const ActiveTabComponent = tabs.find(t => t.id === activeTab)?.component
-  const sectionMap = useMemo<Record<SettingsTab, SettingsSection[]>>(() => ({
-    general: [
-      { id: 'general-basic', label: '基础设置' },
-      { id: 'general-storage', label: '数据与下载' },
-      { id: 'general-behavior', label: '行为与并发' },
-      { id: 'general-maintenance', label: '更新维护' }
-    ],
-    api: [
-      { id: 'api-keys', label: '平台密钥' },
-      { id: 'api-upload', label: '上传策略' },
-      { id: 'api-llm', label: '大语言模型' }
-    ],
-    interface: [
-      { id: 'interface-layout', label: '布局行为' },
-      { id: 'interface-assets', label: '资产库' },
-      { id: 'interface-canvas', label: '画布' },
-      { id: 'interface-theme', label: '主题外观' }
-    ],
-    models: [
-      { id: 'models-visibility', label: '显示与管理' }
-    ]
-  }), [])
-
-  const activeSections = sectionMap[activeTab]
+  const activeSections = SECTION_MAP[activeTab]
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -70,7 +77,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   const handleTabSelect = (tabId: SettingsTab): void => {
     setActiveTab(tabId)
-    setActiveSectionId(sectionMap[tabId][0]?.id ?? '')
+    setActiveSectionId(SECTION_MAP[tabId][0]?.id ?? '')
   }
 
   const handleSectionSelect = (sectionId: string): void => {

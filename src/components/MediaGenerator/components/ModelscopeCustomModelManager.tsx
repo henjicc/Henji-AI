@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
-import AlertDialog from '@/components/ui/AlertDialog'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { UiButton, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
@@ -25,19 +25,9 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const [editName, setEditName] = useState('')
   const [editModelType, setEditModelType] = useState<'imageGeneration' | 'imageEditing'>('imageGeneration')
   const [isAddingNew, setIsAddingNew] = useState(false)
-  const [alertDialog, setAlertDialog] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    type: 'info' | 'warning' | 'error'
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    type: 'warning'
-  })
+  // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
-    setAlertDialog({ isOpen: true, title, message, type })
+    showAlertDialog({ title, message, type })
   }
   useEffect(() => {
     loadModels()
@@ -363,13 +353,6 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           </div>
         )}
       </div>
-      <AlertDialog
-        isOpen={alertDialog.isOpen}
-        title={alertDialog.title}
-        message={alertDialog.message}
-        type={alertDialog.type}
-        onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
-      />
     </div>
   )
 }

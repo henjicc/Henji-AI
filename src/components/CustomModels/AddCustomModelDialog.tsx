@@ -5,6 +5,7 @@
 import React, { useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiInput, UiPanel, UiTextAreaField } from '@/components/ui'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 
 interface AddCustomModelDialogProps {
   onAdd: (name: string, modelUrl: string, description?: string) => void
@@ -21,7 +22,11 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
     e.preventDefault()
 
     if (!name.trim() || !modelUrl.trim()) {
-      alert(t('customModels.validation.missingNameOrUrl'))
+      showAlertDialog({
+        title: t('common:error'),
+        message: t('customModels.validation.missingNameOrUrl'),
+        type: 'warning',
+      })
       return
     }
 

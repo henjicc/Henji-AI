@@ -10,6 +10,8 @@ import PanelTrigger from './ui/PanelTrigger'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
 import { checkAssetPaths } from '@/commands/assetLibrary'
+import { showAlertDialog } from '@/stores/alertDialogStore'
+import { useNotification } from '@/contexts/NotificationContext'
 
 const logger = createLogger('components.PresetPanel')
 
@@ -24,6 +26,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     disabled
 }) => {
     const { t } = useI18n()
+    const { showNotification } = useNotification()
     const [presets, setPresets] = useState<Preset[]>([])
     const [isSaving, setIsSaving] = useState(false)
     const [saveMode, setSaveMode] = useState<PresetSaveMode | null>(null)
@@ -43,7 +46,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
         const state = getCurrentState()
         const input = typeof state.input === 'string' ? state.input : ''
         if (!input.trim()) {
-            alert(t('ui:input.required'))
+            showNotification(t('ui:input.required'), 'error')
             return
         }
         setSaveMode(mode)
@@ -76,7 +79,12 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             setPresetName('')
         } catch (error) {
             logger.error('保存预设失败:', error)
-            alert(t('ui:presets.alerts.saveFailed'))
+            showAlertDialog({
+                title: t('common:error'),
+                message: t('ui:presets.alerts.saveFailed'),
+                type: 'error',
+                detail: error instanceof Error ? error.message : String(error),
+            })
         }
     }
     const handleCancelSave = () => {
@@ -124,7 +132,12 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             }
         } catch (error) {
             logger.error('删除预设失败:', error)
-            alert(t('ui:presets.alerts.deleteFailed'))
+            showAlertDialog({
+                title: t('common:error'),
+                message: t('ui:presets.alerts.deleteFailed'),
+                type: 'error',
+                detail: error instanceof Error ? error.message : String(error),
+            })
         } finally {
             setDeletingClosing(true)
             setTimeout(() => {

@@ -22,11 +22,13 @@ import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
+  NODE_GENERATION_ERROR_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
+import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
 import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { saveUploadVideo } from '@/utils/save';
@@ -67,6 +69,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.videoUpload;
   const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
+  const generationError = typeof data.generationError === 'string' ? data.generationError : null;
 
   const resolvedAspectRatio = data.aspectRatio || '16:9';
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
@@ -180,9 +183,11 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     <div
       className={`
         group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-150
-        ${selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-          : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
+        ${generationError
+          ? NODE_GENERATION_ERROR_BORDER_CLASS
+          : selected
+            ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
+            : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
       `}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={handleNodeClick}
@@ -196,7 +201,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       />
 
       <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
-        {videoSource && shouldMountPlayer ? (
+        {generationError ? null : videoSource && shouldMountPlayer ? (
           <CanvasVideoPlayer
             src={videoSource}
             knownDuration={data.durationSec}
@@ -258,6 +263,8 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             />
           </div>
         )}
+
+        {generationError && <NodeGenerationError message={generationError} />}
       </div>
 
       {isUploadVariant && (

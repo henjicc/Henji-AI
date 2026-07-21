@@ -12,6 +12,7 @@ import { databaseService } from '@/services/database/DatabaseService'
 import { AddCustomModelDialog } from './AddCustomModelDialog'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiChipButton, UiPanel } from '@/components/ui'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 
 export function CustomModelManager() {
   const [models, setModels] = useState<CustomModel[]>([])
@@ -52,7 +53,12 @@ export function CustomModelManager() {
       setShowAddDialog(false)
     } catch (error) {
       logger.error('Failed to add custom model:', error)
-      alert(t('customModels.addFailed') + ': ' + (error as Error).message)
+      showAlertDialog({
+        title: t('common:error'),
+        message: t('customModels.addFailed'),
+        type: 'error',
+        detail: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 

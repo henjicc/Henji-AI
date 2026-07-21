@@ -19,6 +19,8 @@ const MEDIA_LIMIT_KEY: Record<RowMediaKind, 'images' | 'videos' | 'audios'> = {
 };
 
 interface NodeInputRowsProps {
+  /** 由宿主节点控制该区域在纵向布局中的伸缩行为（如拉高时保持不变形的 shrink-0） */
+  className?: string;
   nodeId: string;
   modelId: string;
   mediaType: CanvasModelMediaType;
@@ -48,6 +50,7 @@ interface NodeInputRowsProps {
  * 行的可见性与顺序完全由节点声明（accepts/schema）与模型 inputLimits 推导，无节点类型特判。
  */
 export function NodeInputRows({
+  className = '',
   nodeId,
   modelId,
   mediaType,
@@ -78,7 +81,7 @@ export function NodeInputRows({
   );
 
   return (
-    <div className={`flex flex-col ${NODE_ROW_GAP_CLASS}`}>
+    <div className={`flex flex-col ${NODE_ROW_GAP_CLASS} ${className}`}>
       <ModelInputRow
         mediaType={mediaType}
         modelId={modelId}

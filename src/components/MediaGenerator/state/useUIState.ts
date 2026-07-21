@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FileOrderItem } from '../components/InputArea'
 import { getAvailableProviders } from '@/utils/modelHelpers'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 /**
  * 纯 UI 状态管理（不包含模型参数）
  * 职责：管理界面交互状态
@@ -35,15 +36,9 @@ export const useUIState = () => {
   const [modelFilterFunction, setModelFilterFunction] = useState<string>('all')
   const [favoriteModels, setFavoriteModels] = useState<Set<string>>(new Set())
 
-  const [alertDialog, setAlertDialog] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    type: 'warning' as 'info' | 'warning' | 'error'
-  })
-
+  // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') =>
-    setAlertDialog({ isOpen: true, title, message, type })
+    showAlertDialog({ title, message, type })
   useEffect(() => {
     const currentProviders = getAvailableProviders()
     if (currentProviders.length === 0) return
@@ -104,8 +99,6 @@ export const useUIState = () => {
     favoriteModels,
     setFavoriteModels,
 
-    alertDialog,
-    setAlertDialog,
     showAlert
   }
 }
