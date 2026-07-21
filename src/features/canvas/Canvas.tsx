@@ -405,6 +405,8 @@ export function Canvas() {
   });
 
   useCanvasShortcuts({
+    wrapperRef,
+    reactFlowInstance,
     selectedUploadNodeId,
     selectedNodeIds,
     selectedNodeId,
@@ -417,6 +419,7 @@ export function Canvas() {
     redo,
     scheduleCanvasPersist,
     duplicateNodes: (sourceNodeIds) => duplicateNodes(sourceNodeIds),
+    addNode,
     setSelectedNode,
   });
 

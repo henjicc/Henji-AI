@@ -9,6 +9,7 @@ import {
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { isNodeUsingDefaultDisplayName, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
@@ -198,6 +199,15 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
       inputRef.current?.click();
     }
   }, [data.audioUrl, id, isUploadVariant, setSelectedNode]);
+
+  useEffect(() => {
+    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
+      if (nodeId !== id || !file.type.startsWith('audio/')) {
+        return;
+      }
+      void processFile(file);
+    });
+  }, [id, processFile]);
 
   return (
     <div

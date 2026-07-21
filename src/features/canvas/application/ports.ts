@@ -64,6 +64,10 @@ export interface CanvasEventMap {
     nodeId: string;
     file: File;
   };
+  'canvas/paste-media': {
+    nodeId: string;
+    file: File;
+  };
   'generation/run': {
     nodeId: string;
   };

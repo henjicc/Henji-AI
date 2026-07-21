@@ -102,14 +102,51 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return tagName === 'input' || tagName === 'textarea' || element.isContentEditable
 }
 
-export function resolveClipboardImageFile(event: ClipboardEvent): File | null {
-  const clipboardItems = event.clipboardData?.items
+export type ClipboardMediaKind = 'image' | 'video' | 'audio'
+
+export interface ClipboardMediaFile {
+  kind: ClipboardMediaKind
+  file: File
+}
+
+const CLIPBOARD_MEDIA_KIND_BY_PREFIX: Array<{ kind: ClipboardMediaKind; prefix: string; extFallback: string }> = [
+  { kind: 'image', prefix: 'image/', extFallback: 'png' },
+  { kind: 'video', prefix: 'video/', extFallback: 'mp4' },
+  { kind: 'audio', prefix: 'audio/', extFallback: 'mp3' },
+]
+
+function matchClipboardMediaKind(mimeType: string): ClipboardMediaKind | null {
+  return CLIPBOARD_MEDIA_KIND_BY_PREFIX.find((entry) => mimeType.startsWith(entry.prefix))?.kind ?? null
+}
+
+/**
+ * 解析剪贴板中的媒体文件：优先取真实文件（如从文件管理器复制，带文件名/路径），
+ * 兼容截图等非路径格式的媒体数据（DataTransferItem 只有 MIME 类型、没有文件名）。
+ */
+export function resolveClipboardMediaFile(event: ClipboardEvent): ClipboardMediaFile | null {
+  const clipboardData = event.clipboardData
+  if (!clipboardData) {
+    return null
+  }
+
+  const files = clipboardData.files
+  if (files && files.length > 0) {
+    for (const file of Array.from(files)) {
+      const kind = matchClipboardMediaKind(file.type)
+      if (kind) {
+        return { kind, file }
+      }
+    }
+  }
+
+  const clipboardItems = clipboardData.items
   if (!clipboardItems) {
     return null
   }
 
   for (const item of Array.from(clipboardItems)) {
-    if (!item.type.startsWith('image/')) {
+    const kind = matchClipboardMediaKind(item.type)
+    if (!kind) {
       continue
     }
 
@@ -120,17 +157,26 @@ export function resolveClipboardImageFile(event: ClipboardEvent): File | null {
 
     const existingName = typeof file.name === 'string' ? file.name.trim() : ''
     if (existingName) {
-      return file
+      return { kind, file }
     }
 
-    const subtype = item.type.split('/')[1]?.split('+')[0] || 'png'
-    return new File([file], `pasted-image.${subtype}`, {
-      type: file.type || item.type,
-      lastModified: Date.now(),
-    })
+    const fallbackExt = CLIPBOARD_MEDIA_KIND_BY_PREFIX.find((entry) => entry.kind === kind)?.extFallback ?? 'bin'
+    const subtype = item.type.split('/')[1]?.split('+')[0] || fallbackExt
+    return {
+      kind,
+      file: new File([file], `pasted-${kind}.${subtype}`, {
+        type: file.type || item.type,
+        lastModified: Date.now(),
+      }),
+    }
   }
 
   return null
+}
+
+export function resolveClipboardImageFile(event: ClipboardEvent): File | null {
+  const media = resolveClipboardMediaFile(event)
+  return media?.kind === 'image' ? media.file : null
 }
 
 export function resolveAllowedNodeTypes(

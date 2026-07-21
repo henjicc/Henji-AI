@@ -15,6 +15,7 @@ import {
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { captureVideoPoster, detectVideoAspectRatioFromSource } from '@/features/canvas/generation/videoPoster';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
@@ -165,6 +166,15 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       inputRef.current?.click();
     }
   }, [data.videoUrl, id, isUploadVariant, setSelectedNode]);
+
+  useEffect(() => {
+    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
+      if (nodeId !== id || !file.type.startsWith('video/')) {
+        return;
+      }
+      void processFile(file);
+    });
+  }, [id, processFile]);
 
   return (
     <div

@@ -286,6 +286,15 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     });
   }, [id, processFile]);
 
+  useEffect(() => {
+    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
+      if (nodeId !== id || !file.type.startsWith('image/')) {
+        return;
+      }
+      void processFile(file);
+    });
+  }, [id, processFile]);
+
   const handleNodeClick = useCallback(() => {
     setSelectedNode(id);
     if (!data.imageUrl && !transientPreviewUrl) {
