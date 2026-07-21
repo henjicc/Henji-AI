@@ -66,14 +66,15 @@ export function useModelPickerList({ mediaType, modelId, requiredTags = [] }: Us
       .map(([id, count]) => ({ id, label: getProviderDisplayName(id), count }))
       .sort((a, b) => a.label.localeCompare(b.label, i18n.language));
   }, [i18n.language, models]);
+  const providerModels = useMemo(
+    () => providerFilter === 'all'
+      ? models
+      : models.filter((model) => model.meta.provider === providerFilter),
+    [models, providerFilter]
+  );
   const filteredModels = useMemo(
-    () => models.filter((model) => {
-      if (providerFilter !== 'all' && model.meta.provider !== providerFilter) {
-        return false;
-      }
-      return matchesModelSearch(model, modelSearchQuery, i18n.language);
-    }),
-    [i18n.language, modelSearchQuery, models, providerFilter]
+    () => providerModels.filter((model) => matchesModelSearch(model, modelSearchQuery, i18n.language)),
+    [i18n.language, modelSearchQuery, providerModels]
   );
   const selectedModel = useMemo(
     () => registry.getModel(modelId) ?? models[0],
@@ -96,6 +97,7 @@ export function useModelPickerList({ mediaType, modelId, requiredTags = [] }: Us
     providerFilter,
     setProviderFilter,
     models,
+    providerModels,
     providerOptions,
     filteredModels,
     selectedModel,

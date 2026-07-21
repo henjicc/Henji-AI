@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { Check, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,9 +26,16 @@ interface ModelPickerListProps {
   filteredModels: ModelDefinition[];
   selectedModel: ModelDefinition | undefined;
   onModelChange: (modelId: string) => void;
+  /** 浮层宽度按当前供应商的完整候选集测量，搜索时保持稳定 */
+  modelsForWidthMeasurement?: ModelDefinition[];
+  onPreferredWidthChange?: (width: number) => void;
+  /** 面板打开时，将当前模型尽可能垂直居中到列表视口 */
+  revealSelectedModel?: boolean;
   /** floating：悬浮面板，列表固定上限高度；inline：节点内嵌正文，列表随可用空间伸展 */
   variant?: 'floating' | 'inline';
 }
+
+const MODEL_LIST_SCROLLBAR_CHROME = 11;
 
 function getModelFunctionLabels(model: ModelDefinition, translateTag: (tag: string) => string): string[] {
   return (model.meta.tags ?? [])
@@ -47,16 +54,99 @@ export function ModelPickerList({
   filteredModels,
   selectedModel,
   onModelChange,
+  modelsForWidthMeasurement,
+  onPreferredWidthChange,
+  revealSelectedModel = false,
   variant = 'floating',
 }: ModelPickerListProps) {
   const { t, i18n } = useTranslation();
   const { t: tModels } = useTranslation('models');
+  const listRef = useRef<HTMLDivElement>(null);
+  const selectedModelRef = useRef<HTMLButtonElement>(null);
+  const widthMeasurementRef = useRef<HTMLDivElement>(null);
+  const searchPlaceholder = t('modelParams.searchPlaceholder', { defaultValue: '搜索模型名称、供应商或描述' });
+  const measuredModels = modelsForWidthMeasurement ?? filteredModels;
   const listClassName = variant === 'inline'
     ? 'ui-scrollbar mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1'
     : 'ui-scrollbar mt-2 max-h-[300px] space-y-1 overflow-y-auto pr-1';
 
+  useLayoutEffect(() => {
+    if (!revealSelectedModel) {
+      return;
+    }
+    const listElement = listRef.current;
+    const selectedElement = selectedModelRef.current;
+    if (!listElement || !selectedElement) {
+      return;
+    }
+
+    const listRect = listElement.getBoundingClientRect();
+    const selectedRect = selectedElement.getBoundingClientRect();
+    const selectedTop = selectedRect.top - listRect.top + listElement.scrollTop;
+    const centeredScrollTop = selectedTop - (listElement.clientHeight - selectedElement.offsetHeight) / 2;
+    const maxScrollTop = Math.max(0, listElement.scrollHeight - listElement.clientHeight);
+    listElement.scrollTop = Math.min(maxScrollTop, Math.max(0, centeredScrollTop));
+  }, [revealSelectedModel, selectedModel?.meta.id]);
+
+  useLayoutEffect(() => {
+    const measurementElement = widthMeasurementRef.current;
+    if (!measurementElement || !onPreferredWidthChange) {
+      return;
+    }
+    const reportWidth = (): void => {
+      onPreferredWidthChange(Math.ceil(measurementElement.getBoundingClientRect().width));
+    };
+    reportWidth();
+    const observer = new ResizeObserver(reportWidth);
+    observer.observe(measurementElement);
+    return () => observer.disconnect();
+  }, [onPreferredWidthChange]);
+
   return (
-    <div className={variant === 'inline' ? 'flex h-full min-h-0 w-full flex-col' : undefined}>
+    <div className={variant === 'inline' ? 'flex h-full min-h-0 w-full flex-col' : 'relative'}>
+      {onPreferredWidthChange && (
+        <div
+          ref={widthMeasurementRef}
+          aria-hidden
+          className="pointer-events-none invisible fixed left-0 top-0 -z-10 flex w-max flex-col items-start"
+        >
+          <div className="whitespace-nowrap border border-transparent px-8 text-xs">{searchPlaceholder}</div>
+          <div className="mt-2 inline-flex gap-1">
+            <div className="inline-flex h-6 items-center rounded-md border border-transparent px-2 text-[11px]">
+              {t('modelParams.allProviders', { defaultValue: '全部' })}
+            </div>
+            {providerOptions.map((provider) => (
+              <div
+                key={provider.id}
+                className="inline-flex h-6 items-center gap-2 rounded-md border border-transparent px-2 text-[11px]"
+              >
+                <span>{provider.label}</span>
+                <span className="text-[10px]">{provider.count}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex w-max flex-col items-start" style={{ paddingRight: MODEL_LIST_SCROLLBAR_CHROME }}>
+            {measuredModels.map((model) => {
+              const displayName = getI18nText(model.meta.name, i18n.language) || model.meta.id;
+              const functionLabels = getModelFunctionLabels(model, (tag) => tModels(`tags.${tag}`, { defaultValue: tag }));
+
+              return (
+                <div key={model.meta.id} className="inline-flex items-start gap-2.5 border border-transparent px-2.5 py-1.5">
+                  {model.meta.icon && <span className="h-7 w-7 shrink-0" />}
+                  <div className="flex flex-col">
+                    <span className="whitespace-nowrap text-[13px]">{displayName}</span>
+                    <span className="whitespace-nowrap text-[11px]">
+                      {getProviderDisplayName(model.meta.provider)}
+                      {functionLabels.length > 0 ? ` · ${functionLabels.join(' · ')}` : ''}
+                    </span>
+                  </div>
+                  <Check className="h-3.5 w-3.5 shrink-0" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="space-y-2 border-b border-border-dark/70 pb-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
@@ -67,7 +157,7 @@ export function ModelPickerList({
             onChange={(event) => onSearchChange(event.target.value)}
             textHistory={{ onValueChange: onSearchChange }}
             onKeyDown={(event) => event.stopPropagation()}
-            placeholder={t('modelParams.searchPlaceholder', { defaultValue: '搜索模型名称、供应商或描述' })}
+            placeholder={searchPlaceholder}
             className="h-7 rounded-md pl-8 pr-8 text-xs"
           />
           {modelSearchQuery && (
@@ -114,7 +204,7 @@ export function ModelPickerList({
           ))}
         </div>
       </div>
-      <div className={listClassName}>
+      <div ref={listRef} className={listClassName}>
         {filteredModels.map((model) => {
           const active = model.meta.id === selectedModel?.meta.id;
           const displayName = getI18nText(model.meta.name, i18n.language) || model.meta.id;
@@ -122,6 +212,7 @@ export function ModelPickerList({
 
           return (
             <UiOptionButton
+              ref={active ? selectedModelRef : undefined}
               key={model.meta.id}
               active={active}
               className={`w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 ${

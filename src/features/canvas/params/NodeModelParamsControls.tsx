@@ -40,6 +40,10 @@ interface PanelAnchor {
   top: number;
 }
 
+const MODEL_PANEL_FALLBACK_CONTENT_WIDTH = 302;
+const MODEL_PANEL_HORIZONTAL_CHROME = 18;
+const MODEL_PANEL_VIEWPORT_GUTTER = 12;
+
 function getPanelAnchor(triggerElement: HTMLDivElement | null): PanelAnchor | null {
   if (!triggerElement) {
     return null;
@@ -59,6 +63,27 @@ function buildPanelStyle(anchor: PanelAnchor | null): React.CSSProperties | unde
     left: anchor.left,
     top: anchor.top,
     transform: 'translateX(-50%) translateY(-100%)',
+  };
+}
+
+function buildAdaptivePanelStyle(
+  anchor: PanelAnchor | null,
+  panelWidth: number,
+  viewportWidth: number
+): React.CSSProperties | undefined {
+  if (!anchor) {
+    return undefined;
+  }
+  const centeredLeft = anchor.left - panelWidth / 2;
+  const maxLeft = Math.max(
+    MODEL_PANEL_VIEWPORT_GUTTER,
+    viewportWidth - panelWidth - MODEL_PANEL_VIEWPORT_GUTTER
+  );
+  return {
+    left: Math.min(Math.max(MODEL_PANEL_VIEWPORT_GUTTER, centeredLeft), maxLeft),
+    top: anchor.top,
+    width: panelWidth,
+    transform: 'translateY(-100%)',
   };
 }
 
@@ -89,16 +114,29 @@ export const NodeModelParamsControls = memo(({
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [modelPanelAnchor, setModelPanelAnchor] = useState<PanelAnchor | null>(null);
   const [paramsPanelAnchor, setParamsPanelAnchor] = useState<PanelAnchor | null>(null);
+  const [modelPanelContentWidth, setModelPanelContentWidth] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(() => (
+    typeof window === 'undefined' ? 1024 : window.innerWidth
+  ));
   const {
     modelSearchQuery,
     setModelSearchQuery,
     providerFilter,
     setProviderFilter,
     providerOptions,
+    providerModels,
     filteredModels,
     selectedModel,
     selectedModelName,
   } = useModelPickerList({ mediaType, modelId, requiredTags });
+
+  const desiredModelPanelWidth = (
+    modelPanelContentWidth || MODEL_PANEL_FALLBACK_CONTENT_WIDTH
+  ) + MODEL_PANEL_HORIZONTAL_CHROME;
+  const modelPanelWidth = Math.min(
+    desiredModelPanelWidth,
+    Math.max(0, viewportWidth - MODEL_PANEL_VIEWPORT_GUTTER * 2)
+  );
 
   const { schema, values, setParam } = useNodeModelParams({
     modelId: selectedModel?.meta.id ?? modelId,
@@ -127,6 +165,12 @@ export const NodeModelParamsControls = memo(({
   }, [i18n.language, incomingImages, schema, values]);
 
   const hasConfigurableParams = showParamsChip && schema.length > 0;
+
+  useEffect(() => {
+    const handleResize = (): void => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const animationDurationMs = 200;
@@ -220,6 +264,8 @@ export const NodeModelParamsControls = memo(({
               setOpenPanel(null);
               return;
             }
+            setModelSearchQuery('');
+            setProviderFilter(selectedModel?.meta.provider ?? 'all');
             setModelPanelAnchor(getPanelAnchor(modelTriggerRef.current));
             setOpenPanel('model');
           }}
@@ -283,9 +329,9 @@ export const NodeModelParamsControls = memo(({
           className={`nodrag nowheel fixed z-[80] transition-opacity duration-200 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
-          style={buildPanelStyle(modelPanelAnchor)}
+          style={buildAdaptivePanelStyle(modelPanelAnchor, modelPanelWidth, viewportWidth)}
         >
-          <UiPanel className="w-[420px] p-2">
+          <UiPanel className="w-full p-2">
             <ModelPickerList
               variant="floating"
               modelSearchQuery={modelSearchQuery}
@@ -294,8 +340,11 @@ export const NodeModelParamsControls = memo(({
               providerFilter={providerFilter}
               onProviderFilterChange={setProviderFilter}
               providerOptions={providerOptions}
+              modelsForWidthMeasurement={providerModels}
+              onPreferredWidthChange={setModelPanelContentWidth}
               filteredModels={filteredModels}
               selectedModel={selectedModel}
+              revealSelectedModel={openPanel === 'model'}
               onModelChange={(nextModelId) => {
                 onModelChange(nextModelId);
                 setOpenPanel(null);
