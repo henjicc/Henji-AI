@@ -33,6 +33,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelTag } from '@/core/types'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -80,7 +81,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
-  const setNodeGenerationProgress = useCanvasStore((state) => state.setNodeGenerationProgress)
+  const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress)
   const addNode = useCanvasStore((state) => state.addNode)
   const addEdge = useCanvasStore((state) => state.addEdge)
   const findNodePosition = useCanvasStore((state) => state.findNodePosition)

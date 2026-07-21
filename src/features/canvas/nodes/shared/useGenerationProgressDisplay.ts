@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { useCanvasStore } from '@/stores/canvasStore';
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import {
   DEFAULT_PROGRESS_CURVE,
   computeProgress,
@@ -29,7 +29,7 @@ export function useGenerationProgressDisplay(
   nodeId: string,
   data: GenerationProgressSource
 ): GenerationProgressDisplay {
-  const realProgress = useCanvasStore((state) => state.nodeGenerationProgress[nodeId]);
+  const realProgress = useCanvasGenerationProgressStore((state) => state.progress[nodeId]);
   const [now, setNow] = useState(() => Date.now());
 
   const isGenerating = data.isGenerating === true;

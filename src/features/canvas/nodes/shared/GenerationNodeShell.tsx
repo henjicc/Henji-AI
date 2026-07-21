@@ -52,6 +52,7 @@ import { GenerationService } from '@/core/services/GenerationService';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { ReferenceTextarea } from '@/components/ui';
 import PriceEstimate from '@/components/ui/PriceEstimate';
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { showAlertDialog } from '@/stores/alertDialogStore';
@@ -139,7 +140,7 @@ export const GenerationNodeShell = memo(({
 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const setNodeGenerationProgress = useCanvasStore((state) => state.setNodeGenerationProgress);
+  const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress);
   const addNode = useCanvasStore((state) => state.addNode);
   const findNodePosition = useCanvasStore((state) => state.findNodePosition);
   const addEdge = useCanvasStore((state) => state.addEdge);

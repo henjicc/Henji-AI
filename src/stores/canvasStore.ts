@@ -51,6 +51,7 @@ import {
   resolveSizeInsideTargetBox,
 } from '@/features/canvas/application/imageNodeSizing';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
 import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 
@@ -84,8 +85,6 @@ interface CanvasState {
   activeToolDialog: ActiveToolDialog | null;
   history: CanvasHistoryState;
   dragHistorySnapshot: CanvasHistorySnapshot | null;
-  /** 瞬态生成进度（nodeId -> 0~1）；不进节点 data，不参与历史快照与持久化 */
-  nodeGenerationProgress: Record<string, number>;
   currentViewport: Viewport;
   canvasViewportSize: { width: number; height: number };
   imageViewer: {
@@ -138,7 +137,6 @@ interface CanvasState {
   /** 模型选择器节点展开/折叠专用：collapsedWidth 由组件按当前选中模型 chip 的实测内容宽度传入，
    * 让折叠态节点尺寸精确收紧到内容可容纳的最小宽度，而不是固定常量。 */
   setModelSelectorExpanded: (nodeId: string, isExpanded: boolean, collapsedWidth?: number) => void;
-  setNodeGenerationProgress: (nodeId: string, progress: number | null) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateStoryboardFrame: (
     nodeId: string,
@@ -347,10 +345,11 @@ function getNodeSize(node: CanvasNode): { width: number; height: number } {
   };
 }
 
-function isImageAutoResizableType(type: CanvasNodeType): boolean {
+function isMediaAutoResizableType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.upload
     || type === CANVAS_NODE_TYPES.imageEdit
     || type === CANVAS_NODE_TYPES.exportImage
+    || type === CANVAS_NODE_TYPES.exportVideo
     || type === CANVAS_NODE_TYPES.videoUpload;
 }
 
@@ -449,12 +448,12 @@ function resolveDerivedAspectRatio(
  * - 重新上传已有内容 -> 参考尺寸取节点当前尺寸，按新比例自适应贴合，不低于最小可拖拽尺寸
  * 其余类型（AI 编辑结果、导出结果）维持原有“手动调整后锁定”行为。
  */
-function maybeApplyImageAutoResize(
+function maybeApplyMediaAutoResize(
   node: CanvasNode,
   mergedData: CanvasNodeData,
   patch: Partial<CanvasNodeData>
 ): CanvasNode {
-  if (!isImageAutoResizableType(node.type)) {
+  if (!isMediaAutoResizableType(node.type)) {
     return { ...node, data: mergedData };
   }
 
@@ -489,10 +488,11 @@ function maybeApplyImageAutoResize(
 
   // 上传类节点只要新比例到位就立即重新适配，不必等真正的图片/视频地址落地——
   // 否则会先维持旧尺寸，等地址写入后才突然跳变，产生明显的“慢半拍”感。
-  // 其余类型（AI 编辑结果、导出结果）仍要求地址已写入才计算尺寸。
+  // 其余类型（AI 编辑结果、图片/视频结果）仍要求媒体地址已写入才计算尺寸。
   const readyToResize = isAdaptiveUploadType
     ? 'aspectRatio' in patchData
-    : typeof nextData.imageUrl === 'string' && nextData.imageUrl.trim().length > 0;
+    : (typeof nextData.imageUrl === 'string' && nextData.imageUrl.trim().length > 0)
+      || (typeof nextData.videoUrl === 'string' && nextData.videoUrl.trim().length > 0);
   if (!readyToResize) {
     return { ...node, data: mergedData };
   }
@@ -509,7 +509,7 @@ function maybeApplyImageAutoResize(
       : { width: baseConstraints.minWidth, height: baseConstraints.minHeight };
     nextSize = resolveAdaptiveAutoFitSize(nextAspectRatio, referenceSize, baseConstraints);
   } else {
-    nextSize = node.type === CANVAS_NODE_TYPES.exportImage
+    nextSize = node.type === CANVAS_NODE_TYPES.exportImage || node.type === CANVAS_NODE_TYPES.exportVideo
       ? resolveAutoImageNodeDimensions(nextAspectRatio, {
         minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
         minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
@@ -623,7 +623,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeToolDialog: null,
   history: { past: [], future: [] },
   dragHistorySnapshot: null,
-  nodeGenerationProgress: {},
   currentViewport: { x: 0, y: 0, zoom: 1 },
   canvasViewportSize: { width: 0, height: 0 },
   imageViewer: {
@@ -650,7 +649,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       let nextNodes = applyNodeChanges<CanvasNode>(changes, state.nodes);
       if (resizedNodeIds.size > 0) {
         nextNodes = nextNodes.map((node) => {
-          if (!resizedNodeIds.has(node.id) || !isImageAutoResizableType(node.type)) {
+          if (!resizedNodeIds.has(node.id) || !isMediaAutoResizableType(node.type)) {
             return node;
           }
           return withManualSizeLock(node);
@@ -763,8 +762,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activeToolDialog: null,
       history: normalizeHistory(history),
       dragHistorySnapshot: null,
-      nodeGenerationProgress: {},
     });
+    useCanvasGenerationProgressStore.getState().clearAllProgress();
   },
 
   setViewportState: (viewport) => {
@@ -1171,7 +1170,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ...node.data,
           ...data,
         } as CanvasNodeData;
-        const resizedNode = maybeApplyImageAutoResize(node, mergedData, data);
+        const resizedNode = maybeApplyMediaAutoResize(node, mergedData, data);
 
         changed = true;
         return resizedNode;
@@ -1244,31 +1243,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           future: [],
         },
         dragHistorySnapshot: null,
-      };
-    });
-  },
-
-  setNodeGenerationProgress: (nodeId, progress) => {
-    set((state) => {
-      const current = state.nodeGenerationProgress[nodeId];
-      if (progress === null) {
-        if (current === undefined) {
-          return {};
-        }
-        const next = { ...state.nodeGenerationProgress };
-        delete next[nodeId];
-        return { nodeGenerationProgress: next };
-      }
-
-      const clamped = Math.min(1, Math.max(0, progress));
-      if (current !== undefined && Math.abs(current - clamped) < 0.001) {
-        return {};
-      }
-      return {
-        nodeGenerationProgress: {
-          ...state.nodeGenerationProgress,
-          [nodeId]: clamped,
-        },
       };
     });
   },
@@ -1411,6 +1385,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return;
     }
 
+    let removedNodeIds: ReadonlySet<string> | null = null;
+
     set((state) => {
       const existingIds = uniqueIds.filter((nodeId) => state.nodes.some((node) => node.id === nodeId));
       if (existingIds.length === 0) {
@@ -1422,17 +1398,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const nextEdges = state.edges.filter(
         (edge) => !deleteSet.has(edge.source) && !deleteSet.has(edge.target)
       );
-      let nextGenerationProgress = state.nodeGenerationProgress;
-      if (Object.keys(nextGenerationProgress).some((nodeId) => deleteSet.has(nodeId))) {
-        nextGenerationProgress = Object.fromEntries(
-          Object.entries(nextGenerationProgress).filter(([nodeId]) => !deleteSet.has(nodeId))
-        );
-      }
+      removedNodeIds = deleteSet;
 
       return {
         nodes: nextNodes,
         edges: nextEdges,
-        nodeGenerationProgress: nextGenerationProgress,
         selectedNodeId:
           state.selectedNodeId && deleteSet.has(state.selectedNodeId) ? null : state.selectedNodeId,
         activeToolDialog:
@@ -1446,6 +1416,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         dragHistorySnapshot: null,
       };
     });
+
+    if (removedNodeIds) {
+      useCanvasGenerationProgressStore.getState().clearProgress(removedNodeIds);
+    }
   },
 
   groupNodes: (nodeIds) => {
@@ -1743,8 +1717,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           future: [],
         },
         dragHistorySnapshot: null,
-        nodeGenerationProgress: {},
       };
     });
+    useCanvasGenerationProgressStore.getState().clearAllProgress();
   },
 }));

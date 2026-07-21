@@ -146,6 +146,16 @@
   animation: canvas-edge-flow 0.9s linear infinite;
 }
 
+/* 平移/缩放手势期间暂停流动动画。
+   stroke-dashoffset 不是合成器可加速属性，浏览器每帧都要在主线程重绘这条 SVG，
+   而边层就在 .react-flow__viewport 内——手势期间该层被 will-change 提升为合成层，
+   本应是纯合成器搬运；动画每帧把该层弄脏，就得按新位置重新光栅整层（含所有节点内容），
+   表现为"有节点在生成时拖画布慢半拍"。手势期间暂停后恢复纯合成器平移，
+   手势结束动画从暂停处继续（不重置进度，视觉上无跳变）。 */
+.canvas-viewport-moving .canvas-processing-edge__flow {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .canvas-processing-edge__flow {
     animation: none;

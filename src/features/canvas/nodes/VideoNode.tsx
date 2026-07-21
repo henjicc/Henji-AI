@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import {
   CANVAS_NODE_TYPES,
+  DEFAULT_ASPECT_RATIO,
   EXPORT_RESULT_NODE_MIN_HEIGHT,
   EXPORT_RESULT_NODE_MIN_WIDTH,
   type CanvasNodeType,
@@ -71,7 +72,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
 
-  const resolvedAspectRatio = data.aspectRatio || '16:9';
+  const resolvedAspectRatio = data.aspectRatio || DEFAULT_ASPECT_RATIO;
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
     minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
     minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,

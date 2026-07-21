@@ -141,7 +141,7 @@ export const exportVideoNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData>
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.exportVideo],
     videoUrl: null,
     previewImageUrl: null,
-    aspectRatio: '16:9',
+    aspectRatio: DEFAULT_ASPECT_RATIO,
     durationSec: null,
     isSizeManuallyAdjusted: false,
     isGenerating: false,

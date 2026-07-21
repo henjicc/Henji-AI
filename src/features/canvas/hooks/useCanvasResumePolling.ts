@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { createLogger } from '@/core/logging';
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 import { getResultNodeMediaType } from '../domain/nodeRegistry';
@@ -21,7 +22,7 @@ const logger = createLogger('features.canvas.hooks.useCanvasResumePolling');
 export function useCanvasResumePolling(): void {
   const nodes = useCanvasStore((state) => state.nodes);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const setNodeGenerationProgress = useCanvasStore((state) => state.setNodeGenerationProgress);
+  const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress);
 
   // 同一个任务只续查一次：nodes 每次变化都会重跑 effect，不去重会叠出多条轮询
   const resumedTaskIdsRef = useRef<Set<string>>(new Set());
@@ -64,7 +65,9 @@ interface ResumeNodeTaskInput {
   taskId: string;
   modelId: string;
   updateNodeData: ReturnType<typeof useCanvasStore.getState>['updateNodeData'];
-  setNodeGenerationProgress: ReturnType<typeof useCanvasStore.getState>['setNodeGenerationProgress'];
+  setNodeGenerationProgress: ReturnType<
+    typeof useCanvasGenerationProgressStore.getState
+  >['setProgress'];
 }
 
 async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
