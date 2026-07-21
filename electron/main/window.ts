@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
+import { resolveAppIconPath } from './app-icon'
 import { bindWindowStateEvents } from './ipc/window'
 import { createMainLogger } from './services/logging/main-logger'
 import { cleanupAllVideoFrameExports } from './services/video/frame-export'
@@ -10,6 +11,7 @@ import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 const logger = createMainLogger('main.window')
 
 export function createWindow(): BrowserWindow {
+  const iconPath = resolveAppIconPath()
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -19,6 +21,7 @@ export function createWindow(): BrowserWindow {
     frame: false,
     backgroundColor: APP_WINDOW_BACKGROUND_HEX,
     title: '痕迹AI',
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

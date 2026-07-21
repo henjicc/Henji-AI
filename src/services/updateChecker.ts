@@ -62,8 +62,8 @@ function compareVersions(v1: string, v2: string): boolean {
  * 获取当前应用版本
  */
 export function getCurrentVersion(): string {
-  // 从 package.json 获取版本号
-  return '0.1.1'
+  // 与 package.json 的 version 保持一致
+  return '2.0.0'
 }
 
 function mapElectronUpdaterResult(result: UpdaterCheckResult): UpdateCheckResult {

@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import path from 'node:path'
 import { bindWindowStateEvents } from '../ipc/window'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../../src/core/theme/colorTokens'
+import { resolveAppIconPath } from '../app-icon'
 
 let logWindowInstance: BrowserWindow | null = null
 
@@ -20,6 +21,7 @@ export function openLogWindow(): void {
     return
   }
 
+  const iconPath = resolveAppIconPath()
   const win = new BrowserWindow({
     width: 1040,
     height: 720,
@@ -29,6 +31,7 @@ export function openLogWindow(): void {
     frame: false,
     backgroundColor: APP_WINDOW_BACKGROUND_HEX,
     title: '痕迹AI - 日志',
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

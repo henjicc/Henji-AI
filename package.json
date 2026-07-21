@@ -1,7 +1,7 @@
 {
   "name": "henji-ai",
   "private": true,
-  "version": "0.1.1",
+  "version": "2.0.0",
   "description": "一个聚合多家AI供应商，一站式生成图片、视频和音频的客户端",
   "author": "Henji AI",
   "main": "out/main/index.cjs",
