@@ -43,7 +43,7 @@ export const kieSeedance20FastModel = defineModel({
       type: 'dropdown',
       order: 1,
       name: sharedFieldText('mode'),
-      default: 'text-image-to-video',
+      default: 'reference-to-video',
       options: [
         { value: 'text-image-to-video', label: sharedModeText('textImageToVideo') },
         { value: 'reference-to-video', label: sharedModeText('referenceToVideo') }

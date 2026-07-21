@@ -5,6 +5,7 @@ import type { ParamDef } from '@/core/types';
 import { resolveInputLimits } from '@/core/inputs/inputLimits';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes';
+import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import type { VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { MediaInputRow } from './MediaInputRow';
@@ -79,6 +80,9 @@ export function NodeInputRows({
       .filter((row) => row.max > 0),
     [acceptedMediaKinds, limits]
   );
+
+  // 媒体行随模型/模式联动增减（如切到"参考生视频"多出视频行），端口位置随之下移
+  useNodeHandlesSync(nodeId, mediaRows.map((row) => row.kind).join('|'));
 
   return (
     <div className={`flex flex-col ${NODE_ROW_GAP_CLASS} ${className}`}>

@@ -15,6 +15,7 @@ import {
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
 import { paramPortId } from '@/features/canvas/domain/socketTypes';
+import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import {
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
@@ -84,6 +85,9 @@ export const NodeParamRows = memo(({
         .sort((a, b) => a.order - b.order),
     [schema, excluded, mergedValues]
   );
+
+  // 参数行随联动 hide/show 增减，端口纵向位置会整体位移
+  useNodeHandlesSync(nodeId, visibleParams.map((param) => param.id).join('|'));
 
   return (
     <>
