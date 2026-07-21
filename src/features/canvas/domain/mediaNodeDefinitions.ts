@@ -121,6 +121,7 @@ export const exportVideoNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData>
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarDownload: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -158,6 +159,7 @@ export const exportAudioNodeDefinition: CanvasNodeDefinition<AudioMediaNodeData>
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarDownload: true,
   },
   connectivity: {
     sourceHandle: true,

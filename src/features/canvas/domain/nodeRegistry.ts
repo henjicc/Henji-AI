@@ -62,6 +62,8 @@ export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'video' | 
 export interface CanvasNodeCapabilities {
   toolbar: boolean;
   promptInput: boolean;
+  /** 是否在节点已有可用媒体结果时显示下载入口（默认 false）。 */
+  toolbarDownload?: boolean;
   /**
    * 是否在选中节点时的顶部工具条显示"生成"按钮（默认 false）。
    * 仅逐行模式（GenerationNodeShell）节点声明为 true；节点内不再渲染生成按钮。
@@ -132,6 +134,7 @@ const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarDownload: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -211,6 +214,7 @@ const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarDownload: true,
   },
   connectivity: {
     sourceHandle: true,

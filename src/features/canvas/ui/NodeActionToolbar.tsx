@@ -2,7 +2,6 @@ import { createLogger } from '@/core/logging'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeToolbar as ReactFlowNodeToolbar } from '@xyflow/react';
 import { Copy, Crop, Download, FolderCheck, FolderPlus, Image, PenLine, RefreshCw, Scissors, Sparkles, Trash2, Unlink2, Video } from 'lucide-react';
-import { saveDialog } from '@/platform/desktopApi';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
@@ -26,14 +25,9 @@ import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { getNodeToolPlugins } from '@/features/canvas/tools';
 import type { ToolIconKey } from '@/features/canvas/tools';
 import { UiChipButton, UiPanel } from '@/components/ui';
-import {
-  copyImageSourceToClipboard,
-  saveImageSourceToDirectory,
-  saveImageSourceToPath,
-} from '@/commands/image';
+import { copyImageSourceToClipboard } from '@/commands/image';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
 import { sanitizeStoryboardText } from '@/features/canvas/application/storyboardText';
 import {
   NODE_TOOLBAR_ALIGN,
@@ -45,6 +39,7 @@ import { NodeDownloadMenu } from './NodeDownloadMenu';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
 import { checkAssetPaths } from '@/commands/assetLibrary';
+import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
 
 interface NodeActionToolbarProps {
   node: CanvasNode;
@@ -76,18 +71,24 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
   const canReupload = isUploadNode(node) && Boolean(node.data.imageUrl);
   const downloadPresetPaths = useSettingsStore((state) => state.downloadPresetPaths);
+  const {
+    canDownload,
+    downloadMenu,
+    isDownloadMenuVisible,
+    downloadMenuRef,
+    closeDownloadMenu,
+    handleDownloadClick,
+    handleDownloadSaveAs,
+    handleDownloadToPreset,
+  } = useNodeDownload(node, downloadPresetPaths);
   const ignoreAtTagWhenCopyingAndGenerating = useSettingsStore(
     (state) => state.ignoreAtTagWhenCopyingAndGenerating
   );
-  const [downloadMenu, setDownloadMenu] = useState<{ x: number; y: number } | null>(null);
-  const [isDownloadMenuVisible, setIsDownloadMenuVisible] = useState(false);
   const [isCopySuccess, setIsCopySuccess] = useState(false);
   const [isCopyTextSuccess, setIsCopyTextSuccess] = useState(false);
   const { addMedia, collecting } = useAddToAssetLibrary();
-  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTextFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const downloadMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imageSource = useMemo(() => {
     if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node)) {
       return node.data.imageUrl || node.data.previewImageUrl || null;
@@ -138,17 +139,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     }
   }, [addMedia, assetMedia, collecting, node.data.displayName, node.id, t]);
 
-  const closeDownloadMenu = useCallback(() => {
-    setIsDownloadMenuVisible(false);
-    if (downloadMenuCloseTimerRef.current) {
-      clearTimeout(downloadMenuCloseTimerRef.current);
-    }
-    downloadMenuCloseTimerRef.current = setTimeout(() => {
-      setDownloadMenu(null);
-      downloadMenuCloseTimerRef.current = null;
-    }, UI_POPOVER_TRANSITION_MS);
-  }, []);
-
   const resolveToolLabel = useCallback((toolType: NodeToolType) => {
     if (toolType === NODE_TOOL_TYPES.edit) {
       return t('tool.edit');
@@ -160,50 +150,12 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   }, [t]);
 
   useEffect(() => {
-    if (!downloadMenu) {
-      return;
-    }
-
-    const onPointerDown = (event: PointerEvent) => {
-      const menuElement = downloadMenuRef.current;
-      if (!menuElement) {
-        closeDownloadMenu();
-        return;
-      }
-      if (menuElement.contains(event.target as Node)) {
-        return;
-      }
-      closeDownloadMenu();
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [closeDownloadMenu, downloadMenu]);
-
-  useEffect(() => {
-    if (!downloadMenu) {
-      return;
-    }
-    const frameId = requestAnimationFrame(() => {
-      setIsDownloadMenuVisible(true);
-    });
-    return () => {
-      cancelAnimationFrame(frameId);
-    };
-  }, [downloadMenu]);
-
-  useEffect(() => {
     return () => {
       if (copyFeedbackTimerRef.current) {
         clearTimeout(copyFeedbackTimerRef.current);
       }
       if (copyTextFeedbackTimerRef.current) {
         clearTimeout(copyTextFeedbackTimerRef.current);
-      }
-      if (downloadMenuCloseTimerRef.current) {
-        clearTimeout(downloadMenuCloseTimerRef.current);
       }
     };
   }, []);
@@ -273,40 +225,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       logger.error('Failed to copy storyboard text', error);
     }
   }, [storyboardText]);
-
-  const handleDownloadSaveAs = useCallback(async () => {
-    if (!imageSource) {
-      return;
-    }
-
-    try {
-      const selectedPath = await saveDialog({
-        defaultPath: `node-${node.id}.png`,
-      });
-      if (!selectedPath || Array.isArray(selectedPath)) {
-        return;
-      }
-      await saveImageSourceToPath(imageSource, selectedPath);
-      closeDownloadMenu();
-    } catch (error) {
-      logger.error('Failed to save image with save-as', error);
-    }
-  }, [closeDownloadMenu, imageSource, node.id]);
-
-  const handleDownloadToPreset = useCallback(
-    async (targetDir: string) => {
-      if (!imageSource) {
-        return;
-      }
-      try {
-        await saveImageSourceToDirectory(imageSource, targetDir, `node-${node.id}`);
-        closeDownloadMenu();
-      } catch (error) {
-        logger.error('Failed to save image to preset dir', error);
-      }
-    },
-    [closeDownloadMenu, imageSource, node.id]
-  );
 
   return (
     <ReactFlowNodeToolbar
@@ -436,22 +354,11 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             {t('nodeToolbar.copyText')}
           </UiChipButton>
         )}
-        {!isImageEdit && canHandleImage && (
+        {canDownload && (
           <UiChipButton
-            key="image-download"
+            key="media-download"
             className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (downloadPresetPaths.length === 0) {
-                void handleDownloadSaveAs();
-                return;
-              }
-              setDownloadMenu({
-                x: event.clientX,
-                y: event.clientY,
-              });
-              setIsDownloadMenuVisible(false);
-            }}
+            onClick={handleDownloadClick}
           >
             <Download className="h-3.5 w-3.5" />
             {t('nodeToolbar.download')}
@@ -485,7 +392,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         </UiChipButton>
       </UiPanel>
 
-      {!isImageEdit && (
+      {canDownload && (
         <NodeDownloadMenu
           menu={downloadMenu}
           isVisible={isDownloadMenuVisible}
