@@ -43,12 +43,12 @@ export interface ToolExecutionContext {
   processTool: (
     toolType: NodeToolType,
     sourceImageUrl: string,
-    options: Record<string, unknown>
+    options: DynamicValueMap
   ) => Promise<ToolProcessorResult>;
 }
 
-export type ToolIconKey = 'crop' | 'annotate' | 'split';
-export type ToolEditorKind = 'form' | 'crop' | 'annotate' | 'split';
+export type ToolIconKey = 'edit' | 'split';
+export type ToolEditorKind = 'form' | 'edit' | 'split';
 
 export interface CanvasToolPlugin {
   type: NodeToolType;

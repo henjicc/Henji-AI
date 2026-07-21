@@ -10,13 +10,14 @@ const logger = createLogger('core.ModelRegistry')
 import {
   ModelDefinition,
   ParamDef,
-  EndpointConfig,
   ModelType,
   ProviderId,
-  ModelTag
+  ModelTag,
+  getI18nText
 } from './types'
-import { validateModel, ModelValidationError } from './validators/modelValidator'
+import { validateModel } from './validators/modelValidator'
 import { EndpointSelector } from './request/EndpointSelector'
+import { compareModelsBySeries } from './modelSortOrder'
 
 /**
  * 模型注册中心类
@@ -257,9 +258,9 @@ export class ModelRegistry {
    * // { prompt: '', aspectRatio: '1:1', numImages: 1, ... }
    * ```
    */
-  getDefaultValues(id: string): Record<string, any> {
+  getDefaultValues(id: string): DynamicValueMap {
     const schema = this.getSchema(id)
-    const defaults: Record<string, any> = {}
+    const defaults: DynamicValueMap = {}
 
     schema.forEach((param) => {
       defaults[param.id] = param.default
@@ -307,6 +308,10 @@ export class ModelRegistry {
     return Array.from(ids)
       .map((id) => this.models.get(id)!)
       .filter(Boolean)
+      .sort((a, b) => compareModelsBySeries(
+        { id: a.meta.id, name: getI18nText(a.meta.name, 'en'), seriesId: a.meta.seriesId, seriesRank: a.meta.seriesRank },
+        { id: b.meta.id, name: getI18nText(b.meta.name, 'en'), seriesId: b.meta.seriesId, seriesRank: b.meta.seriesRank }
+      ))
   }
 
   /**
@@ -346,7 +351,7 @@ export class ModelRegistry {
    * logger.info(`Price: ¥${price.toFixed(2)}`)
    * ```
    */
-  calculatePrice(modelId: string, params: Record<string, any>): number {
+  calculatePrice(modelId: string, params: DynamicValueMap): number {
     const model = this.models.get(modelId)
     if (!model) {
       logger.warn(`Model not found: ${modelId}`)
@@ -389,7 +394,7 @@ export class ModelRegistry {
    * // 返回: '/fal-ai/image-to-image' 或 '/fal-ai/text-to-image'
    * ```
    */
-  async selectEndpoint(modelId: string, params: Record<string, any>): Promise<string | undefined> {
+  async selectEndpoint(modelId: string, params: DynamicValueMap): Promise<string | undefined> {
     const model = this.models.get(modelId)
     if (!model) {
       logger.warn(`Model not found: ${modelId}`)
@@ -452,7 +457,7 @@ export class ModelRegistry {
    * // }
    * ```
    */
-  getModelInfo(id: string): Record<string, any> | undefined {
+  getModelInfo(id: string): DynamicValueMap | undefined {
     const model = this.models.get(id)
     if (!model) return undefined
 
@@ -492,7 +497,7 @@ export class ModelRegistry {
    * // }
    * ```
    */
-  getStats(): Record<string, any> {
+  getStats(): DynamicValueMap {
     const allModels = this.listAllModels()
     const totalEntries = this.models.size
     const totalModels = allModels.length

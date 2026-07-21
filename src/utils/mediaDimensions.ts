@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { toDisplaySrc } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.mediaDimensions')
 
@@ -102,15 +103,14 @@ export const getMediaDimensions = async (
       return null
     }
 
-    // 如果是本地文件路径（convertFileSrc 格式），需要转换
+    // 如果是本地文件路径，需要转换为桌面展示 URL
     let mediaUrl = url
     if (url.startsWith('http://asset.localhost/')) {
-      // 已经是 convertFileSrc 格式，直接使用
+      // 已经是桌面展示 URL，直接使用
       mediaUrl = url
     } else if (url.startsWith('file://') || url.startsWith('/') || url.match(/^[A-Z]:\\/)) {
       // 本地文件路径，需要转换
-      const { convertFileSrc } = await import('@tauri-apps/api/core')
-      mediaUrl = convertFileSrc(url)
+      mediaUrl = toDisplaySrc(url)
     }
 
     // 根据类型获取尺寸
@@ -141,15 +141,14 @@ export const getMediaDurationFormatted = async (
       return null
     }
 
-    // 如果是本地文件路径（convertFileSrc 格式），需要转换
+    // 如果是本地文件路径，需要转换为桌面展示 URL
     let mediaUrl = url
     if (url.startsWith('http://asset.localhost/')) {
-      // 已经是 convertFileSrc 格式，直接使用
+      // 已经是桌面展示 URL，直接使用
       mediaUrl = url
     } else if (url.startsWith('file://') || url.startsWith('/') || url.match(/^[A-Z]:\\/)) {
       // 本地文件路径，需要转换
-      const { convertFileSrc } = await import('@tauri-apps/api/core')
-      mediaUrl = convertFileSrc(url)
+      mediaUrl = toDisplaySrc(url)
     }
 
     // 根据类型获取时长

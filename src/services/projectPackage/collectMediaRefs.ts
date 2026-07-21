@@ -20,10 +20,10 @@ function basenameOf(filePath: string): string {
 }
 
 function mapMediaFields(
-  data: Record<string, unknown>,
+  data: DynamicValueMap,
   mapValue: (value: string) => string
-): Record<string, unknown> {
-  const next: Record<string, unknown> = { ...data };
+): DynamicValueMap {
+  const next: DynamicValueMap = { ...data };
 
   for (const field of MEDIA_URL_FIELDS) {
     const value = next[field];
@@ -37,7 +37,7 @@ function mapMediaFields(
       if (!frame || typeof frame !== 'object') {
         return frame;
       }
-      const frameRecord = { ...(frame as Record<string, unknown>) };
+      const frameRecord = { ...(frame as DynamicValueMap) };
       for (const field of ['imageUrl', 'previewImageUrl'] as const) {
         const value = frameRecord[field];
         if (typeof value === 'string' && value) {
@@ -75,7 +75,7 @@ export function collectAndRewriteMedia(nodes: CanvasNode[]): CollectMediaResult 
 
   const rewrittenNodes = nodes.map((node) => ({
     ...node,
-    data: mapMediaFields(node.data as Record<string, unknown>, mapValue),
+    data: mapMediaFields(node.data as DynamicValueMap, mapValue),
   })) as CanvasNode[];
 
   return { nodes: rewrittenNodes, mediaFiles };
@@ -95,6 +95,6 @@ export function rewritePackagePathsToLocal(
 
   return nodes.map((node) => ({
     ...node,
-    data: mapMediaFields(node.data as Record<string, unknown>, mapValue),
+    data: mapMediaFields(node.data as DynamicValueMap, mapValue),
   })) as CanvasNode[];
 }

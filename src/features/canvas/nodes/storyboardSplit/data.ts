@@ -47,6 +47,20 @@ export function collectIncomingImageRefs(
   return Array.from(dedupedByImageUrl.values());
 }
 
+/** 内容相等比较（供 store selector 用，避免上游节点无关字段变化也触发本节点重渲染） */
+export function areIncomingImageRefsEqual(a: IncomingImageRef[], b: IncomingImageRef[]): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((item, index) => {
+    const other = b[index];
+    return item.imageUrl === other.imageUrl && item.previewImageUrl === other.previewImageUrl;
+  });
+}
+
 export function buildIncomingImageItems(incomingImageRefs: IncomingImageRef[]): IncomingImageItem[] {
   return incomingImageRefs.map((item, index) => ({
     imageUrl: item.imageUrl,

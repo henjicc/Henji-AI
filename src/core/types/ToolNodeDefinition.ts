@@ -45,7 +45,7 @@ export interface ToolNodeDefinition {
   outputs: OutputPort[]
 
   /** 执行函数 */
-  execute: (inputs: Record<string, any>) => Promise<NodeOutput> | NodeOutput
+  execute: (inputs: DynamicValueMap) => Promise<NodeOutput> | NodeOutput
 
   /** 配置 Schema（可选） */
   configSchema?: ParamDef[]

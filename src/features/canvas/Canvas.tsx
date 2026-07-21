@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import {
   ReactFlow,
@@ -13,6 +14,7 @@ import {
   SelectionMode,
   useReactFlow,
   type Connection,
+  type DefaultEdgeOptions,
   type EdgeChange,
   type NodeChange,
   type Viewport,
@@ -29,8 +31,10 @@ import {
 } from '@/features/canvas/domain/canvasNodes';
 import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
-import { isParamConnectionCompatible } from '@/features/canvas/application/graphValueResolver';
+import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
+import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
 import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
+import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
@@ -39,7 +43,43 @@ import { edgeTypes } from './edges';
 import { CANVAS_GRID_ALT_HEX } from '@/core/theme/colorTokens';
 import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialog } from './ui/NodeToolDialog';
+import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
+import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
+
+interface CanvasToastState {
+  message: string;
+  id: number;
+  type: 'success' | 'error';
+}
+
+// 静态配置项提升到模块作用域：避免每次 Canvas 渲染都重建新引用传给 <ReactFlow>，
+// 引用稳定才能让 ReactFlow 内部依赖这些 props 的 effect/memo 不被无谓触发。
+const CANVAS_DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = { type: 'disconnectableEdge' };
+const CANVAS_PRO_OPTIONS = { hideAttribution: true };
+const CANVAS_MULTI_SELECTION_KEY_CODE = ['Control', 'Meta'];
+const CANVAS_SELECTION_KEY_CODE = ['Control', 'Meta'];
+
+function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
+  if (!toast) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-4 z-[12000] -translate-x-1/2">
+      <div
+        key={toast.id}
+        className={`rounded-lg border px-4 py-2 text-sm font-medium shadow-2xl backdrop-blur-md ${
+          toast.type === 'success'
+            ? 'border-green-500/30 bg-green-500/20 text-green-100'
+            : 'border-red-400/30 bg-red-500/15 text-red-100'
+        }`}
+      >
+        {toast.message}
+      </div>
+    </div>
+  );
+}
 
 export function Canvas() {
   const { t } = useTranslation();
@@ -47,6 +87,8 @@ export function Canvas() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const isRestoringCanvasRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [connectionToast, setConnectionToast] = useState<CanvasToastState | null>(null);
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const history = useCanvasStore((state) => state.history);
@@ -110,7 +152,28 @@ export function Canvas() {
     [persistCanvasSnapshot]
   );
 
+  const showConnectionToast = useCallback((message: string, type: CanvasToastState['type'] = 'error') => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setConnectionToast({ message, id: Date.now(), type });
+    toastTimerRef.current = setTimeout(() => {
+      setConnectionToast(null);
+      toastTimerRef.current = null;
+    }, 2400);
+  }, []);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
+    const unsubscribeToast = canvasEventBus.subscribe('canvas/toast', ({ message, type }) => {
+      showConnectionToast(message, type);
+    });
     const unsubscribeOpen = canvasEventBus.subscribe('tool-dialog/open', (payload) => {
       openToolDialog(payload);
     });
@@ -119,10 +182,11 @@ export function Canvas() {
     });
 
     return () => {
+      unsubscribeToast();
       unsubscribeOpen();
       unsubscribeClose();
     };
-  }, [openToolDialog, closeToolDialog]);
+  }, [openToolDialog, closeToolDialog, showConnectionToast]);
 
   useEffect(() => {
     isRestoringCanvasRef.current = true;
@@ -255,20 +319,41 @@ export function Canvas() {
         return;
       }
       // 参数端口连线走插槽类型兼容；整节点媒体连线走媒体端口兼容
-      const compatible = isParamPortId(connection.targetHandle)
-        ? isParamConnectionCompatible(sourceNode, targetNode, connection.targetHandle)
-        : isConnectionCompatible(sourceNode.type, targetNode.type);
+      const paramValidation = isParamPortId(connection.targetHandle)
+        ? validateParamConnection(sourceNode, targetNode, connection.targetHandle, nodes, edges, connection.sourceHandle)
+        : null;
+      const compatible = paramValidation
+        ? paramValidation.compatible
+        : isConnectionCompatible(sourceNode.type, targetNode.type, connection.sourceHandle);
       if (!compatible) {
+        if (paramValidation?.reason === 'media-limit-exceeded') {
+          const mediaLabel = paramValidation.mediaKind
+            ? t(`node.mediaRow.${paramValidation.mediaKind}`)
+            : t('canvas.connection.mediaFallback');
+          showConnectionToast(t('canvas.connection.mediaLimitExceeded', {
+            media: mediaLabel,
+            max: paramValidation.maxCount ?? 0,
+          }));
+        } else {
+          showConnectionToast(t('canvas.connection.typeMismatch'));
+        }
         return;
       }
       connectNodes(connection);
       scheduleCanvasPersist(0);
     },
-    [connectNodes, nodes, scheduleCanvasPersist]
+    [connectNodes, edges, nodes, scheduleCanvasPersist, showConnectionToast, t]
   );
 
+  // 视口状态只在 moveEnd 时同步进 store：平移/缩放过程中每帧 set() 会把
+  // 全画布节点的 zustand 选择器（含 O(节点+边) 的图遍历）都跑一遍，是大画布掉帧主因之一。
+  // 需要实时视口的调用方一律走 reactFlowInstance.getViewport()。
   const handleMoveEnd = useCallback(
-    (_event: unknown, viewport: Viewport) => {
+    (_event: DynamicValue, viewport: Viewport) => {
+      // 手势结束撤掉合成层提升：常驻 will-change 会让缩放后的文字停留在旧倍率
+      // 光栅位图上（表现为放大后模糊、点击节点局部重绘才变清晰）；
+      // 撤掉后浏览器立刻按当前倍率重新光栅化，文字恢复清晰。
+      wrapperRef.current?.classList.remove('canvas-viewport-moving');
       setViewportState(viewport);
       const project = getCurrentProject();
       if (!project || isRestoringCanvasRef.current) {
@@ -279,18 +364,24 @@ export function Canvas() {
     [getCurrentProject, saveCurrentProjectViewport, setViewportState]
   );
 
-  const handleMove = useCallback(
-    (_event: unknown, viewport: Viewport) => {
-      setViewportState(viewport);
-    },
-    [setViewportState]
-  );
-
   const handleMoveStart = useCallback(() => {
+    // 手势开始才提升合成层（配合 storyboard.css 的 .canvas-viewport-moving 规则），
+    // 平移/缩放期间是纯合成器移动；用 classList 直改 DOM，避免手势起点多一次 React 渲染
+    wrapperRef.current?.classList.add('canvas-viewport-moving');
     cancelPendingViewportPersist();
   }, [cancelPendingViewportPersist]);
 
-  const selectedNodeIds = useMemo(() => nodes.filter((node) => Boolean(node.selected)).map((node) => node.id), [nodes]);
+  const rawSelectedNodeIds = useMemo(
+    () => nodes.filter((node) => Boolean(node.selected)).map((node) => node.id),
+    [nodes]
+  );
+  const selectedNodeIdsRef = useRef<string[]>([]);
+  // nodes 引用几乎每次交互都变（包括与选中无关的字段编辑），但选中的 id 集合通常不变；
+  // 这里按内容比较复用旧引用，避免下游 useEffect/useCallback（依赖 selectedNodeIds）被无谓触发。
+  if (!areStringListsEqual(selectedNodeIdsRef.current, rawSelectedNodeIds)) {
+    selectedNodeIdsRef.current = rawSelectedNodeIds;
+  }
+  const selectedNodeIds = selectedNodeIdsRef.current;
   const selectedUploadNodeId = useMemo(() => {
     if (selectedNodeIds.length !== 1) {
       return null;
@@ -314,6 +405,8 @@ export function Canvas() {
   });
 
   useCanvasShortcuts({
+    wrapperRef,
+    reactFlowInstance,
     selectedUploadNodeId,
     selectedNodeIds,
     selectedNodeId,
@@ -326,6 +419,7 @@ export function Canvas() {
     redo,
     scheduleCanvasPersist,
     duplicateNodes: (sourceNodeIds) => duplicateNodes(sourceNodeIds),
+    addNode,
     setSelectedNode,
   });
 
@@ -348,9 +442,20 @@ export function Canvas() {
     scheduleCanvasPersist,
     setSelectedNode,
   });
+  const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
+  // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
+  const isContentLodLow = useCanvasContentLod();
 
+  // 有意不开 onlyRenderVisibleElements：视口层已合成化（storyboard.css 的 will-change），
+  // 视口外内容不参与光栅、裁剪收益基本消失；而裁剪带来的节点挂载/卸载抖动是
+  // 平移/缩放时数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
   return (
-    <div ref={wrapperRef} className="relative h-full w-full">
+    <div
+      ref={wrapperRef}
+      className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''}`}
+      onDragOver={assetDrop.onDragOver}
+      onDrop={assetDrop.onDrop}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -364,23 +469,21 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onPaneClick={handlePaneClick}
-        onMove={handleMove}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        defaultEdgeOptions={{ type: 'disconnectableEdge' }}
+        defaultEdgeOptions={CANVAS_DEFAULT_EDGE_OPTIONS}
         defaultViewport={DEFAULT_VIEWPORT}
         minZoom={0.1}
         maxZoom={5}
         selectionOnDrag
         selectionMode={SelectionMode.Partial}
-        multiSelectionKeyCode={['Control', 'Meta']}
-        selectionKeyCode={['Control', 'Meta']}
+        multiSelectionKeyCode={CANVAS_MULTI_SELECTION_KEY_CODE}
+        selectionKeyCode={CANVAS_SELECTION_KEY_CODE}
         deleteKeyCode={null}
-        onlyRenderVisibleElements
         zoomOnDoubleClick={false}
-        proOptions={{ hideAttribution: true }}
+        proOptions={CANVAS_PRO_OPTIONS}
         className="bg-bg-dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
@@ -397,6 +500,8 @@ export function Canvas() {
       </ReactFlow>
 
       <NodeToolDialog />
+      <CameraStageNodeDialog />
+      <CanvasConnectionToast toast={connectionToast} />
 
       <CanvasOverlays
         nodesCount={nodes.length} emptyTitle={t('canvas.emptyHintTitle')} emptySubtitle={t('canvas.emptyHintSubtitle')}

@@ -16,8 +16,8 @@ import './composite/styles.css'
 
 export interface CompositePanelProps {
   config: CompositePanelConfig
-  value: Record<string, any>
-  onChange: (value: Record<string, any>) => void
+  value: DynamicValueMap
+  onChange: (value: DynamicValueMap) => void
 }
 
 export const CompositePanel: React.FC<CompositePanelProps> = ({
@@ -28,7 +28,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
   const { i18n } = useTranslation()
 
   // 处理子组件值变化
-  const handleComponentChange = useCallback((componentId: string, componentValue: any) => {
+  const handleComponentChange = useCallback((componentId: string, componentValue: DynamicValue) => {
     const newValue = { ...value, [componentId]: componentValue }
 
     // 执行联动
@@ -87,7 +87,7 @@ export const CompositePanel: React.FC<CompositePanelProps> = ({
         <Component
           config={componentConfig.config}
           value={value[componentConfig.id]}
-          onChange={(v: any) => handleComponentChange(componentConfig.id, v)}
+          onChange={(v: DynamicValue) => handleComponentChange(componentConfig.id, v)}
           disabled={isDisabled}
         />
       </div>

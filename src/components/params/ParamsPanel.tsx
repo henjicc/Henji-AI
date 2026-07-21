@@ -15,14 +15,14 @@ import './ParamsPanel.css'
 
 interface ParamsPanelProps {
   modelId: string
-  onChange?: (params: Record<string, any>) => void
+  onChange?: (params: DynamicValueMap) => void
   className?: string
 }
 
 export interface ParamsPanelRef {
-  getParams: () => Record<string, any>
+  getParams: () => DynamicValueMap
   resetParams: () => void
-  setParam: (key: string, value: any) => void
+  setParam: (key: string, value: DynamicValue) => void
 }
 
 /**

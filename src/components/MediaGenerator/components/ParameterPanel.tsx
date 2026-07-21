@@ -15,12 +15,12 @@ import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import AspectResolutionPanel from './AspectResolutionPanel'
 
 interface ParameterPanelProps {
-  currentModel: any
+  currentModel: DynamicValue
   selectedModel: string
   uploadedImages: string[]
   uploadedVideos: string[]
-  values: Record<string, any>
-  onChange: (id: string, value: any) => void
+  values: DynamicValueMap
+  onChange: (id: string, value: DynamicValue) => void
 }
 
 const DURATION_PARAM_HINT = /(duration|video[_\s-]?length|时长|秒)/i
@@ -60,31 +60,24 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   // 从 ModelRegistry 获取模型定义
   const modelDef = registry.getModel(selectedModel)
 
-  // 模型未在 ModelRegistry 中注册（可能是旧模型）- 静默返回 null
-  if (!modelDef) {
-    return null
-  }
-
   // 获取参数定义（按 order 排序，便于统一处理）
   const params = useMemo(() => {
+    if (!modelDef) {
+      return []
+    }
     return [...registry.getSchema(selectedModel)].sort((a, b) => {
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER
       return orderA - orderB
     })
-  }, [selectedModel])
-
-  // 没有可配置参数 - 静默返回 null
-  if (params.length === 0) {
-    return null
-  }
+  }, [modelDef, selectedModel])
 
   const linkageEngine = useMemo(() => {
-    if (!modelDef.linkages || modelDef.linkages.length === 0) {
+    if (!modelDef?.linkages || modelDef.linkages.length === 0) {
       return null
     }
     return new LinkageEngine(modelDef.linkages)
-  }, [modelDef.linkages])
+  }, [modelDef?.linkages])
 
   const runtimeValues = useMemo(
     () => ({
@@ -117,11 +110,11 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   }, [linkageEngine, params, runtimeValues, visibleParams])
 
   const specialPanelSpec = useMemo(() => {
-    if (modelDef.meta.provider === 'modelscope') {
+    if (!modelDef || modelDef.meta.provider === 'modelscope') {
       return null
     }
     return analyzeRatioResolutionParams(filteredParams, uploadedImages)
-  }, [modelDef.meta.provider, filteredParams, uploadedImages])
+  }, [modelDef, filteredParams, uploadedImages])
 
   const consumedParamIds = new Set(specialPanelSpec?.consumedParamIds || [])
   const renderParams = filteredParams.filter((param) => !consumedParamIds.has(param.id))
@@ -141,6 +134,11 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     const normalParams = nonModeParams.filter((param) => !isDurationParam(param))
     return [...durationParams, ...normalParams]
   }, [nonModeParams, specialPanelSpec])
+
+  // 模型未在 ModelRegistry 中注册（可能是旧模型）或没有参数 - 静默返回 null
+  if (!modelDef || params.length === 0) {
+    return null
+  }
 
   // 渲染参数：主模式参数始终跟在模型选择器后，分辨率/比例面板保持其余参数前置
   return (

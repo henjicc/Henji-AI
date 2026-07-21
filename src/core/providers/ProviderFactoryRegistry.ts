@@ -11,7 +11,7 @@ const BUILTIN_PROVIDER_IDS: ProviderId[] = ['ppio', 'fal', 'kie', 'modelscope', 
 /**
  * ProviderFactoryRegistry is kept for compatibility.
  *
- * In backend runtime mode, all provider execution is handled by Rust `ai_runtime`.
+ * In backend runtime mode, all provider execution is handled by Electron `ai-runtime`.
  */
 export class ProviderFactoryRegistry {
   private readonly providerIds = new Set<ProviderId>(BUILTIN_PROVIDER_IDS)

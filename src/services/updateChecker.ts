@@ -6,7 +6,9 @@ const logger = createLogger('services.updateChecker')
  * 通过 GitHub API 检查应用是否有新版本
  */
 
-import { fetch } from '@tauri-apps/plugin-http'
+import { nativeFetch as fetch } from '@/platform/desktopApi'
+import { detectShell, getPlatform } from '@/platform/runtime'
+import type { UpdaterCheckResult } from '@/platform/contracts/updater'
 
 export interface ReleaseInfo {
   version: string
@@ -15,6 +17,9 @@ export interface ReleaseInfo {
   publishedAt: string
   htmlUrl: string
   downloadUrl?: string
+  source?: 'github-release' | 'electron-updater'
+  updateStatus?: UpdaterCheckResult['status']
+  progressPercent?: number
 }
 
 export interface UpdateCheckResult {
@@ -22,11 +27,14 @@ export interface UpdateCheckResult {
   currentVersion: string
   latestVersion?: string
   releaseInfo?: ReleaseInfo
+  status?: UpdaterCheckResult['status']
+  errorMessage?: string
 }
 
 const GITHUB_REPO_OWNER = 'henjicc'
 const GITHUB_REPO_NAME = 'Henji-AI'
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`
+const GITHUB_RELEASES_URL = `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`
 
 /**
  * 比较版本号
@@ -54,14 +62,45 @@ function compareVersions(v1: string, v2: string): boolean {
  * 获取当前应用版本
  */
 export function getCurrentVersion(): string {
-  // 从 package.json 获取版本号
-  return '0.1.1'
+  // 与 package.json 的 version 保持一致
+  return '2.0.0'
+}
+
+function mapElectronUpdaterResult(result: UpdaterCheckResult): UpdateCheckResult {
+  return {
+    hasUpdate: result.hasUpdate,
+    currentVersion: result.currentVersion,
+    latestVersion: result.latestVersion,
+    status: result.status,
+    errorMessage: result.errorMessage,
+    releaseInfo: result.releaseInfo
+      ? {
+          version: result.releaseInfo.version,
+          name: result.releaseInfo.name,
+          body: result.releaseInfo.body,
+          publishedAt: result.releaseInfo.publishedAt,
+          htmlUrl: result.releaseInfo.htmlUrl || GITHUB_RELEASES_URL,
+          source: 'electron-updater',
+          updateStatus: result.status,
+          progressPercent: result.progress?.percent,
+        }
+      : undefined,
+  }
+}
+
+async function checkElectronUpdates(): Promise<UpdateCheckResult> {
+  const result = await getPlatform().updater.checkForUpdates()
+  return mapElectronUpdaterResult(result)
 }
 
 /**
  * 检查是否有新版本
  */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
+  if (detectShell() === 'electron') {
+    return await checkElectronUpdates()
+  }
+
   const currentVersion = getCurrentVersion()
 
   try {
@@ -110,7 +149,8 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       body: data.body,
       publishedAt: data.published_at,
       htmlUrl: data.html_url,
-      downloadUrl: msiAsset?.browser_download_url
+      downloadUrl: msiAsset?.browser_download_url,
+      source: 'github-release',
     }
 
     return {
@@ -123,6 +163,15 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     logger.error('检查更新失败:', error)
     throw error
   }
+}
+
+export async function downloadElectronUpdate(): Promise<UpdateCheckResult> {
+  const result = await getPlatform().updater.downloadUpdate()
+  return mapElectronUpdaterResult(result)
+}
+
+export async function installElectronUpdate(): Promise<void> {
+  await getPlatform().updater.quitAndInstall()
 }
 
 /**

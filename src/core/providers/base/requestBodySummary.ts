@@ -18,12 +18,12 @@ export interface SummarizeRequestBodyOptions {
 }
 
 export function summarizeRequestBody(
-  body: Record<string, unknown>,
+  body: DynamicValueMap,
   options: SummarizeRequestBodyOptions = {}
-): Record<string, unknown> {
+): DynamicValueMap {
   const internalFields = options.internalFields ?? DEFAULT_INTERNAL_FIELDS_FOR_LOG
 
-  const summarized: Record<string, unknown> = {}
+  const summarized: DynamicValueMap = {}
 
   for (const [key, value] of Object.entries(body)) {
     // 1) Skip undefined (these won't be sent by JSON.stringify either)
@@ -36,7 +36,7 @@ export function summarizeRequestBody(
       summarized[key] = value.map((item) => {
         if (typeof item === 'string' && item.startsWith('data:')) {
           const mimeMatch = item.match(/^data:([^;]+);/)
-          const mimeType = mimeMatch ? mimeMatch[1] : 'unknown'
+          const mimeType = mimeMatch ? mimeMatch[1] : 'DynamicValue'
           const base64Part = item.split(',')[1] || ''
           const sizeKB = Math.round((base64Part.length * 3) / 4 / 1024)
           return `[BASE64 ${mimeType} ~${sizeKB}KB]`
@@ -48,7 +48,7 @@ export function summarizeRequestBody(
 
     if (typeof value === 'string' && value.startsWith('data:')) {
       const mimeMatch = value.match(/^data:([^;]+);/)
-      const mimeType = mimeMatch ? mimeMatch[1] : 'unknown'
+      const mimeType = mimeMatch ? mimeMatch[1] : 'DynamicValue'
       const base64Part = value.split(',')[1] || ''
       const sizeKB = Math.round((base64Part.length * 3) / 4 / 1024)
       summarized[key] = `[BASE64 ${mimeType} ~${sizeKB}KB]`

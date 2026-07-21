@@ -1,7 +1,15 @@
 import { createLogger } from '@/core/logging'
-import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
-import { appLocalDataDir, dirname, downloadDir, join } from '@tauri-apps/api/path';
-import { mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime';
+import {
+  appLocalDataDir,
+  dirname,
+  downloadDir,
+  join,
+  mkdir,
+  readFile,
+  toDisplaySrc,
+  writeFile,
+} from '@/platform/desktopApi';
 
 const logger = createLogger('commands.image')
 
@@ -19,14 +27,39 @@ const storyboardMetadataStore = new Map<string, StoryboardImageMetadata>();
 const IMAGE_CMD_LOG_PREFIX = '[ImageCmd]';
 const IMAGE_CMD_LOG_ENABLED = false;
 
-function imageCmdInfo(message: string, payload: unknown): void {
+function isNativeImageRuntime(): boolean {
+  return isDesktopRuntime();
+}
+
+function imageCmdInfo(message: string, payload: DynamicValue): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
   logger.info(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }
 
-function imageCmdWarn(message: string, payload: unknown): void {
+function imageCmdWarn(message: string, payload: DynamicValue): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
   logger.warn(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function throwNativeImageFailure(
+  operation: string,
+  startedAt: number,
+  error: unknown,
+  context: DynamicValueMap = {}
+): never {
+  imageCmdWarn(`${operation} native-failed`, {
+    runtime: 'desktop',
+    totalMs: Math.round(performance.now() - startedAt),
+    error: normalizeErrorMessage(error),
+    ...context,
+  });
+  throw error instanceof Error
+    ? error
+    : new Error(`${operation} failed: ${String(error)}`);
 }
 
 function sourceKindForLog(source: string): 'data-url' | 'http' | 'blob' | 'local-path' | 'other' {
@@ -124,7 +157,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 
 function resolveDisplaySource(source: string): string {
   if (isLikelyLocalPath(source)) {
-    return convertFileSrc(normalizeLocalPath(source));
+    return toDisplaySrc(normalizeLocalPath(source));
   }
   return source;
 }
@@ -223,6 +256,7 @@ function resolveSafeFilename(input: string): string {
   const fallback = `image-${Date.now()}`;
   const trimmed = input.trim();
   if (!trimmed) return fallback;
+  // eslint-disable-next-line no-control-regex
   return trimmed.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
 }
 
@@ -375,7 +409,7 @@ export async function splitImage(
   lineThickness = 0
 ): Promise<string[]> {
   const startedAt = performance.now();
-  const runtime = isTauri() ? 'tauri' : 'web';
+  const runtime = isNativeImageRuntime() ? 'desktop' : 'web';
   imageCmdInfo('splitImage start', {
     runtime,
     rows,
@@ -383,7 +417,7 @@ export async function splitImage(
     lineThickness,
   });
 
-  if (!isTauri()) {
+  if (!isNativeImageRuntime()) {
     const fallback = await localSplitImage(imageBase64, rows, cols, lineThickness);
     imageCmdInfo('splitImage fallback(web)', {
       frames: fallback.length,
@@ -393,28 +427,14 @@ export async function splitImage(
   }
 
   try {
-    const rustResult = await invoke<string[]>('split_image', {
-      imageBase64,
-      rows,
-      cols,
-      lineThickness,
-    });
+    const rustResult = await getPlatform().image.splitImage(imageBase64, rows, cols, lineThickness);
     imageCmdInfo('splitImage rust', {
       frames: rustResult.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
     return rustResult;
   } catch (error) {
-    imageCmdWarn('splitImage rust-failed -> fallback', {
-      totalMs: Math.round(performance.now() - startedAt),
-      error: error instanceof Error ? error.message : String(error),
-    });
-    const fallback = await localSplitImage(imageBase64, rows, cols, lineThickness);
-    imageCmdInfo('splitImage fallback', {
-      frames: fallback.length,
-      totalMs: Math.round(performance.now() - startedAt),
-    });
-    return fallback;
+    throwNativeImageFailure('splitImage', startedAt, error, { rows, cols, lineThickness });
   }
 }
 
@@ -425,7 +445,7 @@ export async function splitImageSource(
   lineThickness = 0
 ): Promise<string[]> {
   const startedAt = performance.now();
-  const runtime = isTauri() ? 'tauri' : 'web';
+  const runtime = isNativeImageRuntime() ? 'desktop' : 'web';
   imageCmdInfo('splitImageSource start', {
     runtime,
     sourceKind: sourceKindForLog(source),
@@ -434,7 +454,7 @@ export async function splitImageSource(
     lineThickness,
   });
 
-  if (!isTauri()) {
+  if (!isNativeImageRuntime()) {
     const fallback = await localSplitImage(source, rows, cols, lineThickness);
     imageCmdInfo('splitImageSource fallback(web)', {
       frames: fallback.length,
@@ -444,28 +464,19 @@ export async function splitImageSource(
   }
 
   try {
-    const rustResult = await invoke<string[]>('split_image_source', {
-      source,
-      rows,
-      cols,
-      lineThickness,
-    });
+    const rustResult = await getPlatform().image.splitImageSource(source, rows, cols, lineThickness);
     imageCmdInfo('splitImageSource rust', {
       frames: rustResult.length,
       totalMs: Math.round(performance.now() - startedAt),
     });
     return rustResult;
   } catch (error) {
-    imageCmdWarn('splitImageSource rust-failed -> fallback', {
-      totalMs: Math.round(performance.now() - startedAt),
-      error: error instanceof Error ? error.message : String(error),
+    throwNativeImageFailure('splitImageSource', startedAt, error, {
+      sourceKind: sourceKindForLog(source),
+      rows,
+      cols,
+      lineThickness,
     });
-    const fallback = await localSplitImage(source, rows, cols, lineThickness);
-    imageCmdInfo('splitImageSource fallback', {
-      frames: fallback.length,
-      totalMs: Math.round(performance.now() - startedAt),
-    });
-    return fallback;
   }
 }
 
@@ -526,10 +537,17 @@ export interface MergeStoryboardImagesResult {
 export async function mergeStoryboardImages(
   payload: MergeStoryboardImagesPayload
 ): Promise<MergeStoryboardImagesResult> {
-  try {
-    return await invoke<MergeStoryboardImagesResult>('merge_storyboard_images', { payload });
-  } catch {
-    // fallback to frontend merge implementation
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.mergeStoryboardImages(payload);
+    } catch (error) {
+      throwNativeImageFailure('mergeStoryboardImages', startedAt, error, {
+        frames: payload.frameSources.length,
+        rows: payload.rows,
+        cols: payload.cols,
+      });
+    }
   }
 
   const rows = Math.max(1, Math.floor(payload.rows));
@@ -666,27 +684,39 @@ export async function mergeStoryboardImages(
 export async function readStoryboardImageMetadata(
   source: string
 ): Promise<StoryboardImageMetadata | null> {
-  try {
-    return await invoke<StoryboardImageMetadata | null>('read_storyboard_image_metadata', { source });
-  } catch {
-    return storyboardMetadataStore.get(normalizeSourceKey(source)) ?? null;
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.readStoryboardImageMetadata(source);
+    } catch (error) {
+      throwNativeImageFailure('readStoryboardImageMetadata', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
   }
+  return storyboardMetadataStore.get(normalizeSourceKey(source)) ?? null;
 }
 
 export async function embedStoryboardImageMetadata(
   source: string,
   metadata: StoryboardImageMetadata
 ): Promise<string> {
-  try {
-    return await invoke<string>('embed_storyboard_image_metadata', { source, metadata });
-  } catch {
-    storyboardMetadataStore.set(normalizeSourceKey(source), {
-      gridRows: Math.max(1, Math.floor(metadata.gridRows)),
-      gridCols: Math.max(1, Math.floor(metadata.gridCols)),
-      frameNotes: Array.isArray(metadata.frameNotes) ? metadata.frameNotes : [],
-    });
-    return source;
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.embedStoryboardImageMetadata(source, metadata);
+    } catch (error) {
+      throwNativeImageFailure('embedStoryboardImageMetadata', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
   }
+  storyboardMetadataStore.set(normalizeSourceKey(source), {
+    gridRows: Math.max(1, Math.floor(metadata.gridRows)),
+    gridCols: Math.max(1, Math.floor(metadata.gridCols)),
+    frameNotes: Array.isArray(metadata.frameNotes) ? metadata.frameNotes : [],
+  });
+  return source;
 }
 
 function renderPreviewDataUrl(
@@ -721,13 +751,16 @@ export async function prepareNodeImageSource(
   source: string,
   maxPreviewDimension = 512
 ): Promise<PrepareNodeImageSourceResult> {
-  try {
-    return await invoke<PrepareNodeImageSourceResult>('prepare_node_image_source', {
-      source,
-      maxPreviewDimension,
-    });
-  } catch {
-    // fallback to frontend preparation
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.prepareNodeImageSource(source, maxPreviewDimension);
+    } catch (error) {
+      throwNativeImageFailure('prepareNodeImageSource', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+        maxPreviewDimension,
+      });
+    }
   }
 
   const imagePath = await persistImageSource(source);
@@ -753,14 +786,17 @@ export async function prepareNodeImageBinary(
   extension?: string,
   maxPreviewDimension = 512
 ): Promise<PrepareNodeImageSourceResult> {
-  try {
-    return await invoke<PrepareNodeImageSourceResult>('prepare_node_image_binary', {
-      bytes: Array.from(bytes),
-      extension,
-      maxPreviewDimension,
-    });
-  } catch {
-    // fallback to frontend preparation
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.prepareNodeImageBinary(bytes, extension, maxPreviewDimension);
+    } catch (error) {
+      throwNativeImageFailure('prepareNodeImageBinary', startedAt, error, {
+        byteLength: bytes.byteLength,
+        extension,
+        maxPreviewDimension,
+      });
+    }
   }
 
   const mime = extensionToMime(extension || 'png');
@@ -771,10 +807,16 @@ export async function prepareNodeImageBinary(
 export async function cropImageSource(
   payload: CropImageSourcePayload
 ): Promise<string> {
-  try {
-    return await invoke<string>('crop_image_source', { payload });
-  } catch {
-    // fallback to frontend crop
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.cropImageSource(payload);
+    } catch (error) {
+      throwNativeImageFailure('cropImageSource', startedAt, error, {
+        sourceKind: sourceKindForLog(payload.source),
+        aspectRatio: payload.aspectRatio,
+      });
+    }
   }
 
   const image = await loadImageElement(payload.source);
@@ -838,22 +880,33 @@ export interface ImageInfoResult {
 }
 
 export async function readImageInfo(source: string): Promise<ImageInfoResult> {
-  return await invoke<ImageInfoResult>('read_image_info', { source });
+  return await getPlatform().image.readImageInfo(source);
 }
 
 export async function loadImage(filePath: string): Promise<string> {
-  try {
-    return await invoke<string>('load_image', { filePath });
-  } catch {
-    return await fileToDataUrl(normalizeLocalPath(filePath));
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.loadImage(filePath);
+    } catch (error) {
+      throwNativeImageFailure('loadImage', startedAt, error, {
+        sourceKind: sourceKindForLog(filePath),
+      });
+    }
   }
+  return await fileToDataUrl(normalizeLocalPath(filePath));
 }
 
 export async function persistImageSource(source: string): Promise<string> {
-  try {
-    return await invoke<string>('persist_image_source', { source });
-  } catch {
-    // fallback to frontend persistence
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.persistImageSource(source);
+    } catch (error) {
+      throwNativeImageFailure('persistImageSource', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
   }
 
   if (isLikelyLocalPath(source)) {
@@ -872,24 +925,34 @@ export async function persistImageBinary(
   bytes: Uint8Array,
   extension = 'png'
 ): Promise<string> {
-  try {
-    return await invoke<string>('persist_image_binary', {
-      bytes: Array.from(bytes),
-      extension,
-    });
-  } catch {
-    return await persistBytes(bytes, extensionToMime(extension));
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.persistImageBinary(bytes, extension);
+    } catch (error) {
+      throwNativeImageFailure('persistImageBinary', startedAt, error, {
+        byteLength: bytes.byteLength,
+        extension,
+      });
+    }
   }
+  return await persistBytes(bytes, extensionToMime(extension));
 }
 
 export async function saveImageSourceToDownloads(
   source: string,
   suggestedFileName?: string
 ): Promise<string> {
-  try {
-    return await invoke<string>('save_image_source_to_downloads', { source, suggestedFileName });
-  } catch {
-    // fallback to frontend file save
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.saveImageSourceToDownloads(source, suggestedFileName);
+    } catch (error) {
+      throwNativeImageFailure('saveImageSourceToDownloads', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+        suggestedFileName,
+      });
+    }
   }
 
   try {
@@ -906,10 +969,15 @@ export async function saveImageSourceToPath(
   source: string,
   targetPath: string
 ): Promise<string> {
-  try {
-    return await invoke<string>('save_image_source_to_path', { source, targetPath });
-  } catch {
-    // fallback to frontend file save
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.saveImageSourceToPath(source, targetPath);
+    } catch (error) {
+      throwNativeImageFailure('saveImageSourceToPath', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
   }
 
   const { bytes } = await sourceToBytes(source);
@@ -929,14 +997,16 @@ export async function saveImageSourceToDirectory(
   targetDir: string,
   suggestedFileName?: string
 ): Promise<string> {
-  try {
-    return await invoke<string>('save_image_source_to_directory', {
-      source,
-      targetDir,
-      suggestedFileName,
-    });
-  } catch {
-    // fallback to frontend file save
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.saveImageSourceToDirectory(source, targetDir, suggestedFileName);
+    } catch (error) {
+      throwNativeImageFailure('saveImageSourceToDirectory', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+        suggestedFileName,
+      });
+    }
   }
 
   const { bytes, mime } = await sourceToBytes(source);
@@ -960,14 +1030,17 @@ export async function saveImageSourceToAppDebugDir(
   category = 'grid',
   suggestedFileName?: string
 ): Promise<string> {
-  try {
-    return await invoke<string>('save_image_source_to_app_debug_dir', {
-      source,
-      category,
-      suggestedFileName,
-    });
-  } catch {
-    // fallback to frontend file save
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.saveImageSourceToAppDebugDir(source, category, suggestedFileName);
+    } catch (error) {
+      throwNativeImageFailure('saveImageSourceToAppDebugDir', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+        category,
+        suggestedFileName,
+      });
+    }
   }
 
   const appDir = await appLocalDataDir();
@@ -976,21 +1049,29 @@ export async function saveImageSourceToAppDebugDir(
 }
 
 export async function copyImageSourceToClipboard(source: string): Promise<void> {
+  const startedAt = performance.now();
   try {
-    await invoke('copy_image_source_to_clipboard', { source });
+    await getPlatform().clipboard.writeImageFromSource(source);
     return;
-  } catch {
-    // fallback
+  } catch (error) {
+    if (!isNativeImageRuntime()) {
+      imageCmdWarn('copyImageSourceToClipboard native-unavailable -> web fallback', {
+        runtime: 'web',
+        error: normalizeErrorMessage(error),
+      });
+    }
   }
 
   const localPath = await persistImageSource(source);
 
-  if (isTauri()) {
+  if (isNativeImageRuntime()) {
     try {
-      await invoke('copy_image_to_clipboard', { filePath: localPath });
+      await getPlatform().clipboard.writeImageFromPath(localPath);
       return;
-    } catch {
-      // fallback to browser clipboard
+    } catch (error) {
+      throwNativeImageFailure('copyImageSourceToClipboard', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
     }
   }
 

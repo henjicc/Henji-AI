@@ -7,8 +7,8 @@ import React from 'react'
 import type { ParamValueRecord } from '@/core/debug/types'
 
 interface ValueDisplayProps {
-  value: any
-  previousValue?: any
+  value: DynamicValue
+  previousValue?: DynamicValue
   record?: ParamValueRecord
 }
 
@@ -16,7 +16,7 @@ export function ValueDisplay({ value, previousValue, record }: ValueDisplayProps
   const hasChanged = previousValue !== undefined && value !== previousValue
   const hasTransform = record?.transformedFrom !== undefined
 
-  const formatValue = (val: any): string => {
+  const formatValue = (val: DynamicValue): string => {
     if (val === null) return 'null'
     if (val === undefined) return 'undefined'
     if (typeof val === 'string') return `"${val}"`

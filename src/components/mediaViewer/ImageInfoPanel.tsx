@@ -11,7 +11,7 @@ const logger = createLogger('components.mediaViewer.ImageInfoPanel');
 
 interface ImageInfoPanelProps {
   open: boolean;
-  /** 原始图片来源（本地路径或 URL，非 convertFileSrc 结果） */
+  /** 原始图片来源（本地路径或 URL，非桌面展示 URL） */
   imageSource: string;
 }
 
@@ -102,7 +102,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
     const formatDate = (value: number | null): string =>
       typeof value === 'number' && Number.isFinite(value)
         ? dateFormatter.format(value)
-        : t('viewer.unknown', '未知');
+        : t('viewer.DynamicValue', '未知');
 
     return [
       { label: t('viewer.resolution', '分辨率'), value: `${info.width} x ${info.height} px` },

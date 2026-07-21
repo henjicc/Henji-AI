@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
-import type { ImageEditState } from '@/components/ImageEditor'
+import { toDisplaySrc } from '@/platform/desktopApi'
+import { coerceMarkSession, type ImageMarkSession } from '@/features/imageMark'
 import { loadEditState } from '@/utils/editStatePersistence'
 import type { GenerationTask, GeneratorOptions, MediaType } from '../types'
 import { isRecord, isStringArray } from '../utils/typeGuards'
@@ -9,8 +9,8 @@ import { isRecord, isStringArray } from '../utils/typeGuards'
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskReplay')
 
 export interface UseTaskReplayParams {
-  handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
+  handleGenerate: (input: string, model: string, type: MediaType, options?: DynamicValue) => Promise<void>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageMarkSession>>
 }
 
 export interface UseTaskReplayReturn {
@@ -22,45 +22,36 @@ function cloneOptions(options?: GeneratorOptions): GeneratorOptions {
   return { ...(options ?? {}) }
 }
 
-async function restoreEditStatesFromFile(
-  editStateFile: string,
+/** 兼容旧 ImageEditState 与新 ImageMarkSession 两种落盘格式 */
+function restoreEditStates(
+  states: DynamicValue,
   images: string[],
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
-): Promise<void> {
-  try {
-    const statesUnknown = await loadEditState(editStateFile)
-    if (!statesUnknown || !isRecord(statesUnknown)) return
-
-    for (const [key, value] of Object.entries(statesUnknown)) {
-      const index = Number.parseInt(key, 10)
-      if (Number.isFinite(index) && images[index]) {
-        imageEditStatesRef.current.set(images[index], value as ImageEditState)
-        continue
-      }
-      if (typeof key === 'string' && images.includes(key)) {
-        imageEditStatesRef.current.set(key, value as ImageEditState)
-      }
-    }
-  } catch (e) {
-    logger.error('[Workspace] 从文件恢复编辑状态失败', e)
-  }
-}
-
-function restoreEditStatesInline(
-  inline: unknown,
-  images: string[],
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageMarkSession>>
 ): void {
-  if (!isRecord(inline)) return
-  for (const [key, value] of Object.entries(inline)) {
+  if (!isRecord(states)) return
+  for (const [key, value] of Object.entries(states)) {
     const index = Number.parseInt(key, 10)
     if (Number.isFinite(index) && images[index]) {
-      imageEditStatesRef.current.set(images[index], value as ImageEditState)
+      imageEditStatesRef.current.set(images[index], coerceMarkSession(value, images[index]))
       continue
     }
     if (typeof key === 'string' && images.includes(key)) {
-      imageEditStatesRef.current.set(key, value as ImageEditState)
+      imageEditStatesRef.current.set(key, coerceMarkSession(value, key))
     }
+  }
+}
+
+async function restoreEditStatesFromFile(
+  editStateFile: string,
+  images: string[],
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageMarkSession>>
+): Promise<void> {
+  try {
+    const statesUnknown = await loadEditState(editStateFile)
+    if (!statesUnknown) return
+    restoreEditStates(statesUnknown, images, imageEditStatesRef)
+  } catch (e) {
+    logger.error('[Workspace] 从文件恢复编辑状态失败', e)
   }
 }
 
@@ -75,21 +66,21 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
     if (uploadedFilePaths.length > 0) {
       options.uploadedFilePaths = uploadedFilePaths
       if (!isStringArray(options.images) || options.images.length === 0) {
-        options.images = uploadedFilePaths.map((p) => convertFileSrc(p))
+        options.images = uploadedFilePaths.map((p) => toDisplaySrc(p))
       }
     }
 
     if (uploadedVideoFilePaths.length > 0) {
       options.uploadedVideoFilePaths = uploadedVideoFilePaths
       if (!('video' in options)) {
-        options.video = convertFileSrc(uploadedVideoFilePaths[0])
+        options.video = toDisplaySrc(uploadedVideoFilePaths[0])
       }
     }
 
     if (uploadedAudioFilePaths.length > 0) {
       options.uploadedAudioFilePaths = uploadedAudioFilePaths
       if (!isStringArray(options.audios) || options.audios.length === 0) {
-        options.audios = uploadedAudioFilePaths.map((p) => convertFileSrc(p))
+        options.audios = uploadedAudioFilePaths.map((p) => toDisplaySrc(p))
       }
     }
 
@@ -99,7 +90,7 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
       await restoreEditStatesFromFile(options.editStateFile, images, imageEditStatesRef)
       logger.info('[Workspace] 已从文件恢复编辑状态', { file: options.editStateFile, count: images.length })
     } else if (options.imageEditStates && images.length > 0) {
-      restoreEditStatesInline(options.imageEditStates, images, imageEditStatesRef)
+      restoreEditStates(options.imageEditStates, images, imageEditStatesRef)
     }
 
     await handleGenerate(task.prompt, task.model, task.type, options)
@@ -122,5 +113,3 @@ export function useTaskReplay({ handleGenerate, imageEditStatesRef }: UseTaskRep
 
   return { handleRegenerate, handleReedit }
 }
-
-

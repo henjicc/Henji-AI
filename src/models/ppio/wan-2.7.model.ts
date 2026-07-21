@@ -19,13 +19,15 @@ const WAN27_EDIT_RATIO_MAP = {
 export const wan27Model = defineModel({
   meta: {
     id: 'ppio-wan-2.7',
+    seriesId: 'wan',
+    seriesRank: 2.7,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-wan-2.7',
-    name: { key: 'meta.name', fallback: 'Want 2.7' },
+    name: { key: 'meta.name', fallback: 'Wan 2.7' },
     description: {
       key: 'meta.description',
-      fallback: 'PPIO Want 2.7 video generation model, supports unified text/image-to-video, reference-to-video, and video-edit modes'
+      fallback: 'PPIO Wan 2.7 video generation model, supports unified text/image-to-video, reference-to-video, and video-edit modes'
     },
     tags: [
       'text-to-video',
@@ -248,10 +250,10 @@ export const wan27Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const filterSources = (value: unknown): string[] => Array.isArray(value)
+      const filterSources = (value: DynamicValue): string[] => Array.isArray(value)
         ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
         : []
-      const pickSources = (primary: unknown, fallback: unknown): string[] => {
+      const pickSources = (primary: DynamicValue, fallback: DynamicValue): string[] => {
         const preferred = filterSources(primary)
         return preferred.length > 0 ? preferred : filterSources(fallback)
       }
@@ -274,21 +276,21 @@ export const wan27Model = defineModel({
         '4:3': { '720P': '1088*832', '1080P': '1632*1248' },
         '3:4': { '720P': '832*1088', '1080P': '1248*1632' }
       }
-      const clampDuration = (value: unknown, min: number, max: number, fallback: number): number => {
+      const clampDuration = (value: DynamicValue, min: number, max: number, fallback: number): number => {
         const parsed = Number(value)
         if (!Number.isFinite(parsed)) {
           return fallback
         }
         return Math.min(max, Math.max(min, Math.round(parsed)))
       }
-      const readText = (value: unknown, maxLength: number): string => {
+      const readText = (value: DynamicValue, maxLength: number): string => {
         return typeof value === 'string' ? value.slice(0, maxLength) : ''
       }
       const prompt = readText(params.prompt, mode === 'text-image-to-video' || mode === 'video-edit' ? 5000 : 1500)
       const promptExtend = params.ppioWan27PromptExtend !== undefined
         ? params.ppioWan27PromptExtend === true
         : params.prompt_extend !== false
-      const requestData: Record<string, unknown> = { watermark: false }
+      const requestData: DynamicValueMap = { watermark: false }
 
       if (mode === 'video-edit') {
         const duration = clampDuration(params.ppioWan27Duration ?? params.duration, 0, 10, 0)

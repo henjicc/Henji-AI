@@ -199,7 +199,7 @@ export const kling26ProExample: ModelDefinition = {
 
   request: {
     builder: (params) => {
-      const request: Record<string, any> = {
+      const request: DynamicValueMap = {
         prompt: params.prompt,
         mode: params.mode || 'text-to-video'
       }

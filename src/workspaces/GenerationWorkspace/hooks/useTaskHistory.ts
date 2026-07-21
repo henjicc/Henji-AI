@@ -1,7 +1,7 @@
-﻿import { createLogger } from '@/core/logging'
+import { createLogger } from '@/core/logging'
 import type React from 'react'
 import { useCallback, useEffect } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { exists, toDisplaySrc } from '@/platform/desktopApi'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
@@ -19,26 +19,21 @@ function normalizeHistoryStatus(status: HistoryRecord['status']): TaskStatus {
   return status
 }
 
-async function toTauriUrl(fullPath: string): Promise<string> {
-  return convertFileSrc(fullPath.replace(/\\/g, '/'))
-}
-
 async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video'): Promise<string> {
   // For images, try to use cached thumbnail first
   if (kind === 'image') {
     try {
       const { getHistoryThumbnailCachePath } = await import('@/utils/historyThumbnail')
-      const { exists } = await import('@tauri-apps/plugin-fs')
       const cachePath = await getHistoryThumbnailCachePath(fullPath)
       if (await exists(cachePath)) {
-        return convertFileSrc(cachePath.replace(/\\/g, '/'))
+        return toDisplaySrc(cachePath.replace(/\\/g, '/'))
       }
     } catch {
       // Fall through to full URL
     }
   }
   // For non-image or when thumbnail is unavailable, use the original file
-  return convertFileSrc(fullPath.replace(/\\/g, '/'))
+  return toDisplaySrc(fullPath.replace(/\\/g, '/'))
 }
 
 async function toDisplayUrlString(
@@ -63,11 +58,11 @@ function parseHistoryTimestamp(value?: string | null): Date {
 
 async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): Promise<GenerationTask> {
   const createdAt = parseHistoryTimestamp(record.createdAt)
-  const rawParams: unknown = record.params
-  const safeParams: Record<string, unknown> = isRecord(rawParams) ? rawParams : {}
+  const rawParams: DynamicValue = record.params
+  const safeParams: DynamicValueMap = isRecord(rawParams) ? rawParams : {}
   const resultUrlFromParams = typeof safeParams['__resultUrl'] === 'string' ? safeParams['__resultUrl'] : undefined
   const dimensionsFromParams = typeof safeParams['__dimensions'] === 'string' ? safeParams['__dimensions'] : undefined
-  const paramsForTaskOptions: Record<string, unknown> = { ...safeParams }
+  const paramsForTaskOptions: DynamicValueMap = { ...safeParams }
   delete paramsForTaskOptions['__resultUrl']
   delete paramsForTaskOptions['__dimensions']
 
@@ -226,7 +221,7 @@ export interface UseSaveTaskHistoryParams {
   isInitialLoadRef: React.MutableRefObject<boolean>
 }
 
-function deleteKeys(target: Record<string, unknown>, keys: string[]): void {
+function deleteKeys(target: DynamicValueMap, keys: string[]): void {
   for (const k of keys) delete target[k]
 }
 
@@ -255,7 +250,7 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
         }
 
         for (const task of tasksToSave) {
-          const optionsCopy: Record<string, unknown> = { ...(task.options ?? {}) }
+          const optionsCopy: DynamicValueMap = { ...(task.options ?? {}) }
           deleteKeys(optionsCopy, [
             'images',
             'image_url',
@@ -289,7 +284,7 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
             modelId: task.model,
             type: task.type,
             prompt: task.prompt,
-            params: optionsCopy as unknown as HistoryRecord['params'],
+            params: optionsCopy as DynamicValue as HistoryRecord['params'],
             filePath: relativeFilePath,
             taskId: task.serverTaskId ?? null,
             status: task.status,

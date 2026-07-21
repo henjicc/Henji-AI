@@ -12,7 +12,7 @@
   --app-rgb: 10 10 10;
   --canvas-rgb: 10 10 10;
   --panel-rgb: 23 23 23;
-  --layer-rgb: 38 38 38;
+  --layer-rgb: 64 64 64;
   --brand-300-rgb: 122 174 255;
   --brand-500-rgb: 76 136 255;
   --brand-600-rgb: 47 98 209;
@@ -38,7 +38,7 @@ body,
 }
 
 /* 禁用浏览器默认的聚焦样式（白色 ring） */
-/* 这解决了 Tauri WebView 中输入框等元素点击时出现白色边框的问题 */
+/* 这解决了桌面 WebView/Chromium 中输入框等元素点击时出现白色边框的问题 */
 *:focus,
 *:focus-visible {
   outline: none !important;
@@ -966,4 +966,71 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   height: 1px;
   background: rgba(113, 113, 122, 0.3);
   margin: 0.25rem 0;
+}
+
+/* ── 3D 镜头参考 dockview 主题映射 ──
+ * 用复合选择器（.henji-cameraStage-dock.dockview-theme-abyss，特指度 0,2,0）压过
+ * abyss 主题自身的 .dockview-theme-abyss 规则（0,1,0），确保下列 --dv-* 覆盖始终生效，
+ * 否则 dockview 样式表加载在后会用回 abyss 默认（含 rgb(91,30,207) 紫色强调色）。
+ * 让停靠面板的背景/标签/分隔线与应用整体一致。颜色一律引用 index.css 既有 token，
+ * 不写死十六进制。变更 dockview 观感只在此处调整。 */
+.henji-cameraStage-dock.dockview-theme-abyss {
+  /* 彻底中和 abyss 紫色强调色：所有引用它的地方（sash / 选中描边等）改用项目 accent */
+  --dv-color-abyss-accent: rgb(var(--accent-rgb));
+  --dv-background-color: rgb(var(--app-rgb));
+  --dv-group-view-background-color: rgb(var(--app-rgb));
+  --dv-tabs-and-actions-container-background-color: rgb(var(--app-rgb));
+  --dv-activegroup-visiblepanel-tab-background-color: rgb(var(--surface-rgb));
+  --dv-activegroup-visiblepanel-tab-color: rgb(var(--text-rgb));
+  --dv-inactivegroup-visiblepanel-tab-background-color: rgb(var(--app-rgb));
+  --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--text-muted-rgb));
+  --dv-activegroup-hiddenpanel-tab-background-color: rgb(var(--app-rgb));
+  --dv-activegroup-hiddenpanel-tab-color: rgb(var(--text-muted-rgb));
+  --dv-inactivegroup-hiddenpanel-tab-background-color: rgb(var(--app-rgb));
+  --dv-inactivegroup-hiddenpanel-tab-color: rgb(var(--text-muted-rgb));
+  --dv-separator-border: rgb(var(--border-rgb));
+  --dv-tab-divider-color: rgb(var(--border-rgb));
+  --dv-paneview-active-outline-color: rgb(var(--accent-rgb));
+  --dv-icon-hover-background-color: rgb(var(--layer-rgb));
+  --dv-active-sash-color: rgb(var(--accent-rgb));
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: 32px;
+}
+
+/* 画布视频进度条：轨道与滑块共享同一条中心线，已播放段跟随主题强调色。 */
+.canvas-video-progress::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    rgb(var(--accent-rgb)) 0,
+    rgb(var(--accent-rgb)) var(--video-progress),
+    rgb(var(--text-muted-rgb) / 0.88) var(--video-progress),
+    rgb(var(--text-muted-rgb) / 0.88) 100%
+  );
+}
+
+.canvas-video-progress::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  background: rgb(var(--accent-rgb));
+}
+
+.canvas-video-progress::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--text-muted-rgb) / 0.88);
+}
+
+.canvas-video-progress::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-rgb));
+}
+
+.canvas-video-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: rgb(var(--accent-rgb));
 }

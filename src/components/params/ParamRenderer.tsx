@@ -32,14 +32,14 @@ import { CompositePanel } from './panels/CompositePanel'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import Tooltip from '@/components/ui/Tooltip'
 
-function isCompositePanelConfig(value: unknown): value is CompositePanelConfig {
+function isCompositePanelConfig(value: DynamicValue): value is CompositePanelConfig {
   if (!value || typeof value !== 'object') return false
-  const record = value as Record<string, unknown>
+  const record = value as DynamicValueMap
   return Array.isArray(record.components)
 }
 
 // 组件映射表
-const COMPONENT_MAP: Partial<Record<string, React.ComponentType<any>>> = {
+const COMPONENT_MAP: Partial<Record<string, React.ComponentType<DynamicValue>>> = {
   text: TextInput,
   textarea: TextInput,
   number: NumberInput,
@@ -53,9 +53,9 @@ const COMPONENT_MAP: Partial<Record<string, React.ComponentType<any>>> = {
 
 interface ParamRendererProps {
   param: ParamDef
-  value: unknown
-  onChange: (value: unknown) => void
-  allValues: Record<string, unknown>
+  value: DynamicValue
+  onChange: (value: DynamicValue) => void
+  allValues: DynamicValueMap
   uploadedImages?: string[]
   uploadedVideos?: string[]
   disabled?: boolean
@@ -71,8 +71,6 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   value,
   onChange,
   allValues,
-  uploadedImages = [],
-  uploadedVideos = [],
   disabled: externalDisabled = false
 }) => {
   const { i18n } = useTranslation()
@@ -97,7 +95,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
 
     // 如果指定了 panel 字段，使用 PanelRegistry 获取对应的面板组件
     if (compositeParam.panel) {
-      const PanelComponent = panelRegistry.get(compositeParam.panel as any)
+      const PanelComponent = panelRegistry.get(compositeParam.panel as DynamicValue)
 
       if (PanelComponent) {
         const defaultPanelWidth = (() => {
@@ -158,7 +156,7 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
     }
 
     const compositeValue =
-      value && typeof value === 'object' ? (value as Record<string, any>) : {}
+      value && typeof value === 'object' ? (value as DynamicValueMap) : {}
 
     const compositePanel = (
       <CompositePanel

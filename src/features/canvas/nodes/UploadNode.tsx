@@ -10,7 +10,7 @@ import {
   type DragEvent,
   type SyntheticEvent,
 } from 'react';
-import { Handle, Position, useViewport, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,6 +26,7 @@ import {
   resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import {
   isNodeUsingDefaultDisplayName,
   resolveNodeDisplayName,
@@ -34,11 +35,20 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
+import { getSocketColor } from '@/features/canvas/domain/socketTypes';
+import {
+  detectAspectRatio,
   prepareNodeImageFromFile,
   resolveImageDisplayUrl,
-  shouldUseOriginalImageByZoom,
 } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
+import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
+import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
+import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiInput } from '@/components/ui';
@@ -58,10 +68,14 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 
 export const UploadNode = memo(({ id, data, selected, width, height }: UploadNodeProps) => {
   const { t } = useTranslation();
+  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const hasSourceConnections = useCanvasStore(
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
+  );
   const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
-  const { zoom } = useViewport();
+  const preferOriginalImage = useOriginalImageLod();
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadSequenceRef = useRef(0);
   const uploadPerfRef = useRef<{
@@ -86,6 +100,11 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   });
   const resizeMinWidth = resizeConstraints.minWidth;
   const resizeMinHeight = resizeConstraints.minHeight;
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
+
   const resolvedTitle = useMemo(() => {
     const sourceFileName = typeof data.sourceFileName === 'string' ? data.sourceFileName.trim() : '';
     if (
@@ -133,6 +152,18 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
           `[upload-perf][e2e] preview-state-committed nodeId=${id} name="${file.name}" elapsed=${Math.round(performance.now() - started)}ms`
         );
       });
+
+      // 用本地预览图直接探测宽高比，不等待真正的图片落盘处理完成，
+      // 让节点尺寸与预览图几乎同时到位，避免“先维持旧尺寸、地址写入后再跳变”的延迟感
+      detectAspectRatio(optimisticPreviewUrl)
+        .then((ratio) => {
+          if (uploadSequenceRef.current === sequence) {
+            updateNodeData(id, { aspectRatio: ratio });
+          }
+        })
+        .catch(() => {
+          // 探测失败时静默忽略，最终尺寸仍由下方 prepareNodeImageFromFile 的结果兜底
+        });
 
       try {
         const prepared = await prepareNodeImageFromFile(file);
@@ -255,6 +286,15 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     });
   }, [id, processFile]);
 
+  useEffect(() => {
+    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
+      if (nodeId !== id || !file.type.startsWith('image/')) {
+        return;
+      }
+      void processFile(file);
+    });
+  }, [id, processFile]);
+
   const handleNodeClick = useCallback(() => {
     setSelectedNode(id);
     if (!data.imageUrl && !transientPreviewUrl) {
@@ -267,16 +307,22 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     clearTransientPreview();
   }, [clearTransientPreview]);
 
-  const imageSource = useMemo(() => {
+  const baseImageSource = useMemo(() => {
     if (transientPreviewUrl) {
       return transientPreviewUrl;
     }
-    const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-    const picked = preferOriginal
+    const picked = preferOriginalImage
       ? data.imageUrl || data.previewImageUrl
       : data.previewImageUrl || data.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, transientPreviewUrl, zoom]);
+  }, [data.imageUrl, data.previewImageUrl, preferOriginalImage, transientPreviewUrl]);
+  // 低倍率降为微缩略图；上传中的临时 blob 预览是短命源，不参与微缩略图生成
+  const preferMicroImage = useMediaMicroLod();
+  const microImageSource = useMicroThumbnail(
+    baseImageSource,
+    preferMicroImage && !transientPreviewUrl
+  );
+  const imageSource = useDecodedImageSource(microImageSource ?? baseImageSource);
 
   return (
     <div
@@ -333,7 +379,8 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('IMAGE'), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={resizeMinWidth}

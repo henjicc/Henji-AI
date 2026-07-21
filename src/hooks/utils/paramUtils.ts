@@ -23,10 +23,10 @@
  * ```
  */
 export function setNestedValue(
-  obj: Record<string, any>,
+  obj: DynamicValueMap,
   path: string,
-  value: any
-): Record<string, any> {
+  value: DynamicValue
+): DynamicValueMap {
   // 如果路径不包含 '.'，直接设置
   if (!path.includes('.')) {
     return {
@@ -37,7 +37,7 @@ export function setNestedValue(
 
   const keys = path.split('.')
   const result = { ...obj }
-  let current: any = result
+  let current: DynamicValue = result
 
   // 遍历路径，创建新对象
   for (let i = 0; i < keys.length - 1; i++) {
@@ -70,9 +70,9 @@ export function setNestedValue(
  * ```
  */
 export function getNestedValue(
-  obj: Record<string, any>,
+  obj: DynamicValueMap,
   path: string
-): any {
+): DynamicValue {
   // 如果路径不包含 '.'，直接获取
   if (!path.includes('.')) {
     return obj[path]
@@ -110,9 +110,9 @@ export function getNestedValue(
  * ```
  */
 export function batchSetNestedValues(
-  obj: Record<string, any>,
-  updates: Record<string, any>
-): Record<string, any> {
+  obj: DynamicValueMap,
+  updates: DynamicValueMap
+): DynamicValueMap {
   let result = obj
 
   for (const [path, value] of Object.entries(updates)) {
@@ -130,7 +130,7 @@ export function batchSetNestedValues(
  * @returns 路径是否存在
  */
 export function hasNestedPath(
-  obj: Record<string, any>,
+  obj: DynamicValueMap,
   path: string
 ): boolean {
   return getNestedValue(obj, path) !== undefined

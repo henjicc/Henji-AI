@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.ui.NodeToolDialog')
@@ -23,14 +23,12 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { UiButton, UiModal } from '@/components/ui';
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
 import { FormToolEditor } from './tool-editors/FormToolEditor';
-import { CropToolEditor } from './tool-editors/CropToolEditor';
-import { AnnotateToolEditor } from './tool-editors/AnnotateToolEditor';
+import { EditToolEditor } from './tool-editors/EditToolEditor';
 import { SplitStoryboardToolEditor } from './tool-editors/SplitStoryboardToolEditor';
 
 export function NodeToolDialog() {
   const { t } = useTranslation();
   const activeToolDialog = useCanvasStore((state) => state.activeToolDialog);
-  const nodes = useCanvasStore((state) => state.nodes);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
   const addStoryboardSplitNode = useCanvasStore((state) => state.addStoryboardSplitNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
@@ -40,6 +38,18 @@ export function NodeToolDialog() {
   const [options, setOptions] = useState<ToolOptions>({});
   const [isSplitImageReady, setIsSplitImageReady] = useState(true);
   const [displayToolDialog, setDisplayToolDialog] = useState(activeToolDialog);
+  // 每次打开自增,作为编辑器 key 的一部分,强制每次打开都重建编辑器实例
+  // (避免取消后快速重开时复用旧内部状态,导致未保存的标注仍然出现)
+  const [openSeq, setOpenSeq] = useState(0);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    const isOpen = Boolean(activeToolDialog);
+    if (isOpen && !wasOpenRef.current) {
+      setOpenSeq((seq) => seq + 1);
+    }
+    wasOpenRef.current = isOpen;
+  }, [activeToolDialog]);
 
   useEffect(() => {
     if (activeToolDialog) {
@@ -56,13 +66,11 @@ export function NodeToolDialog() {
     };
   }, [activeToolDialog]);
 
-  const sourceNode = useMemo(() => {
-    if (!displayToolDialog) {
-      return null;
-    }
-
-    return nodes.find((node) => node.id === displayToolDialog.nodeId) ?? null;
-  }, [displayToolDialog, nodes]);
+  // 直接在 selector 里按 id 查找，避免订阅整个 nodes 数组——
+  // 画布上任意其他节点编辑都会换 nodes 数组引用，但只有目标节点对象本身变化时才需要重渲染。
+  const sourceNode = useCanvasStore((state) =>
+    displayToolDialog ? state.nodes.find((node) => node.id === displayToolDialog.nodeId) ?? null : null
+  );
 
   const sourceImageUrl = useMemo(() => {
     if (!sourceNode) {
@@ -87,6 +95,8 @@ export function NodeToolDialog() {
   const dialogKey = displayToolDialog
     ? `${displayToolDialog.nodeId}:${displayToolDialog.toolType}`
     : null;
+  // 编辑器 key 追加 openSeq,保证每次打开都是全新实例,取消后重开不残留旧标注
+  const editorKey = dialogKey ? `${dialogKey}:${openSeq}` : null;
 
   useEffect(() => {
     if (!sourceNode || !activePlugin) {
@@ -170,6 +180,9 @@ export function NodeToolDialog() {
   }, [activePlugin?.editor, sourceImageUrl]);
 
   const closeDialog = useCallback(() => {
+    // 立即清空本地编辑选项,避免取消后未保存的标注在重开时被重新读取
+    setOptions({});
+    setError(null);
     canvasEventBus.publish('tool-dialog/close', undefined);
   }, []);
 
@@ -177,11 +190,8 @@ export function NodeToolDialog() {
     if (!toolType) {
       return '';
     }
-    if (toolType === NODE_TOOL_TYPES.crop) {
-      return t('tool.crop');
-    }
-    if (toolType === NODE_TOOL_TYPES.annotate) {
-      return t('tool.annotate');
+    if (toolType === NODE_TOOL_TYPES.edit) {
+      return t('tool.edit');
     }
     if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
       return t('tool.split');
@@ -189,11 +199,8 @@ export function NodeToolDialog() {
     return '';
   }, [t]);
   const resolveResultNodeTitle = useCallback((toolType: NodeToolType | undefined) => {
-    if (toolType === NODE_TOOL_TYPES.crop) {
-      return t('toolDialog.cropResultTitle');
-    }
-    if (toolType === NODE_TOOL_TYPES.annotate) {
-      return t('toolDialog.annotateResultTitle');
+    if (toolType === NODE_TOOL_TYPES.edit) {
+      return t('toolDialog.editResultTitle');
     }
     return EXPORT_RESULT_DISPLAY_NAME.generic;
   }, [t]);
@@ -267,11 +274,8 @@ export function NodeToolDialog() {
     if (!activePlugin) {
       return 'w-[min(460px,calc(100vw-40px))]';
     }
-    if (activePlugin.editor === 'crop') {
-      return 'w-[min(980px,calc(100vw-40px))]';
-    }
-    if (activePlugin.editor === 'annotate') {
-      return 'w-[min(1120px,calc(100vw-40px))]';
+    if (activePlugin.editor === 'edit') {
+      return 'w-[min(90vw,1560px)]';
     }
     if (activePlugin.editor === 'split') {
       return 'w-[min(1120px,calc(100vw-40px))]';
@@ -284,20 +288,10 @@ export function NodeToolDialog() {
       return null;
     }
 
-    if (activePlugin.editor === 'crop' && sourceImageUrl) {
+    if (activePlugin.editor === 'edit' && sourceImageUrl) {
       return (
-        <CropToolEditor
-          plugin={activePlugin}
-          sourceImageUrl={sourceImageUrl}
-          options={options}
-          onOptionsChange={setOptions}
-        />
-      );
-    }
-
-    if (activePlugin.editor === 'annotate' && sourceImageUrl) {
-      return (
-        <AnnotateToolEditor
+        <EditToolEditor
+          key={editorKey}
           plugin={activePlugin}
           sourceImageUrl={sourceImageUrl}
           options={options}
@@ -325,7 +319,7 @@ export function NodeToolDialog() {
         onOptionsChange={setOptions}
       />
     );
-  }, [activePlugin, options, sourceImageUrl]);
+  }, [activePlugin, editorKey, options, sourceImageUrl]);
 
   const isOpen = Boolean(activeToolDialog && isSplitImageReady);
 

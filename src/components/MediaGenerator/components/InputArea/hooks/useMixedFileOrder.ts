@@ -18,6 +18,7 @@ interface UseMixedFileOrderParams {
   onImageClick?: (imageUrl: string, imageList: string[]) => void
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
+  onVideoTrim?: (index: number) => void
   onVideoClick?: (videoUrl: string) => void
   onAudioRemove?: (index: number) => void
   onAudioReplace?: (index: number, file: File) => void
@@ -31,6 +32,7 @@ interface UseMixedFileOrderReturn {
   shouldHideUploadButton: boolean
   handleMixedFileRemove: (index: number) => void
   handleMixedFileReplace: (index: number, file: File) => void
+  handleMixedFileTrim: (index: number) => void
   handleMixedFileReorder: (from: number, to: number) => void
   handleMixedFileClick: (fileUrl: string, fileList: string[]) => void
 }
@@ -60,6 +62,7 @@ export function useMixedFileOrder({
   onImageClick,
   onVideoRemove,
   onVideoReplace,
+  onVideoTrim,
   onVideoClick,
   onAudioRemove,
   onAudioReplace,
@@ -167,6 +170,19 @@ export function useMixedFileOrder({
     }
   }
 
+  const handleMixedFileTrim = (index: number): void => {
+    if (!needsVideoUpload || currentFileOrder.length === 0) {
+      return
+    }
+
+    const item = currentFileOrder[index]
+    if (!item) return
+
+    if (item.type === 'video' && onVideoTrim) {
+      onVideoTrim(item.index)
+    }
+  }
+
   const handleMixedFileReorder = (from: number, to: number): void => {
     if (!needsVideoUpload || currentFileOrder.length === 0) {
       onImageReorder(from, to)
@@ -265,6 +281,7 @@ export function useMixedFileOrder({
     shouldHideUploadButton,
     handleMixedFileRemove,
     handleMixedFileReplace,
+    handleMixedFileTrim,
     handleMixedFileReorder,
     handleMixedFileClick
   }

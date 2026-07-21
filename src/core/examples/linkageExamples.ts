@@ -100,7 +100,7 @@ export const seedream40Linkages: Linkage[] = [
     trigger: 'images',
     effect: 'autoSwitch',
     target: 'mode',
-    condition: (images: any[]) => images && images.length > 0,
+    condition: (images: DynamicValue[]) => images && images.length > 0,
     value: 'image-to-image',
     noRestore: false,
     description: '上传图片后自动切换为图生图模式'
@@ -144,7 +144,7 @@ export const viduQ1Linkages: Linkage[] = [
     trigger: 'mode',
     effect: 'filterOptions',
     target: 'duration',
-    filter: (mode: string, options: any[]) => {
+    filter: (mode: string, options: DynamicValue[]) => {
       if (mode === 'reference-to-video') {
         // 参考模式只支持 4 秒和 8 秒
         return options.filter((o) => o.value === 4 || o.value === 8)
@@ -158,7 +158,7 @@ export const viduQ1Linkages: Linkage[] = [
   {
     trigger: 'mode',
     effect: 'custom',
-    handler: (mode: string, allParams: any, updateParam: any) => {
+    handler: (_mode: string, _allParams: DynamicValue, _updateParam: DynamicValue) => {
       if (mode === 'reference-to-video') {
         // 参考模式下自动调整多个参数
         updateParam('duration', 4)
@@ -179,8 +179,8 @@ export const nanoBananaLinkages: Linkage[] = [
     trigger: 'images',
     effect: 'autoSwitch',
     target: 'aspectRatio',
-    condition: (images: any[]) => images && images.length > 0,
-    value: (images: any[], allParams: any) => {
+    condition: (images: DynamicValue[]) => images && images.length > 0,
+    value: (images: DynamicValue[], allParams: DynamicValue) => {
       // 获取第一张图片的宽高比
       const firstImage = images[0]
       if (firstImage && firstImage.dimensions) {
@@ -200,7 +200,7 @@ export const nanoBananaLinkages: Linkage[] = [
     trigger: 'images',
     effect: 'setValue',
     target: 'numImages',
-    value: (images: any[]) => {
+    value: (images: DynamicValue[]) => {
       if (images && images.length > 0) {
         // 有参考图片时，默认生成 1 张
         return 1
@@ -227,7 +227,7 @@ export const priorityExampleLinkages: Linkage[] = [
     trigger: 'mode',
     effect: 'custom',
     priority: 0, // 覆盖默认优先级（custom 默认为 8）
-    handler: (mode: string, allParams: any, updateParam: any) => {
+    handler: (_mode: string, _allParams: DynamicValue, _updateParam: DynamicValue) => {
       logger.info('模式切换前的准备工作')
     },
     description: '在重置之前执行的自定义逻辑'
@@ -251,7 +251,7 @@ export const debounceExampleLinkages: Linkage[] = [
     trigger: 'cfgScale',
     effect: 'custom',
     debounce: 300, // 300ms 防抖
-    handler: (cfgScale: number, allParams: any, updateParam: any) => {
+    handler: (cfgScale: number, _allParams: DynamicValue, _updateParam: DynamicValue) => {
       // 复杂的参数计算...
       logger.info('CFG Scale 调整为:', cfgScale)
     },

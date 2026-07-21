@@ -25,6 +25,10 @@ export const useUIState = () => {
   const [uploadedAudioFilePaths, setUploadedAudioFilePaths] = useState<string[]>([])
   const [fileOrder, setFileOrder] = useState<FileOrderItem[]>([])
   const [uploadedVideoDuration, setUploadedVideoDuration] = useState(0)
+  // 裁剪窗口选中的 [start, end]（秒）：只是附加在完整视频上的元数据，不替换 uploadedVideoFilePaths；
+  // null 表示尚未裁剪过（生成时直接用完整视频）
+  const [uploadedVideoTrimStart, setUploadedVideoTrimStart] = useState<number | null>(null)
+  const [uploadedVideoTrimEnd, setUploadedVideoTrimEnd] = useState<number | null>(null)
 
   const [modelFilterProvider, setModelFilterProvider] = useState<string>('all')
   const [modelFilterType, setModelFilterType] = useState<'all' | 'favorite' | 'image' | 'video' | 'audio'>('all')
@@ -86,6 +90,10 @@ export const useUIState = () => {
     setFileOrder,
     uploadedVideoDuration,
     setUploadedVideoDuration,
+    uploadedVideoTrimStart,
+    setUploadedVideoTrimStart,
+    uploadedVideoTrimEnd,
+    setUploadedVideoTrimEnd,
 
     modelFilterProvider,
     setModelFilterProvider,

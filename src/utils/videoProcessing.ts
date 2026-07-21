@@ -27,15 +27,30 @@ export async function generateVideoThumbnail(
   videoFile: File,
   timeOffset: number = 1.0
 ): Promise<string> {
+  // Fast path: use main process ffmpeg when a real file path is available
+  const filePath = window.henjiNative?.media.getPathForFile(videoFile)
+  if (filePath) {
+    const result = await window.henjiNative!.video.generateThumbnail({
+      source: filePath,
+      timeOffsetSeconds: timeOffset,
+    })
+    return result.dataUrl
+  }
+  return generateVideoThumbnailFallback(videoFile, timeOffset)
+}
+
+async function generateVideoThumbnailFallback(
+  videoFile: File,
+  timeOffset: number = 1.0
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    video.preload = 'auto'  // 使用 auto 确保加载足够的数据
+    video.preload = 'auto'
     video.muted = true
     video.playsInline = true
 
     const objectUrl = URL.createObjectURL(videoFile)
 
-    // 清理函数：确保在释放 blob URL 之前停止视频加载
     const cleanup = () => {
       video.pause()
       video.removeAttribute('src')
@@ -44,7 +59,6 @@ export async function generateVideoThumbnail(
       video.remove()
     }
 
-    // 实际截图逻辑
     const captureFrame = () => {
       try {
         const canvas = document.createElement('canvas')
@@ -68,14 +82,12 @@ export async function generateVideoThumbnail(
     }
 
     video.addEventListener('loadedmetadata', () => {
-      // 确保时间点不超过视频时长，且至少为 0.1 秒（避免第一帧可能是黑的）
       const seekTime = Math.min(Math.max(0.1, timeOffset), Math.max(0.1, video.duration - 0.1))
       video.currentTime = seekTime
     }, { once: true })
 
     video.addEventListener('seeked', () => {
       // 【macOS/WebKit 修复】seeked 事件触发时，视频帧可能还没完全准备好渲染
-      // 添加 200ms 延迟确保帧数据已解码
       setTimeout(captureFrame, 200)
     }, { once: true })
 
@@ -85,7 +97,7 @@ export async function generateVideoThumbnail(
     }, { once: true })
 
     video.src = objectUrl
-    video.load()  // 显式调用 load() 开始加载
+    video.load()
   })
 }
 
@@ -128,9 +140,8 @@ export async function getVideoMetadata(videoFile: File): Promise<VideoMetadata> 
 }
 
 /**
- * 验证视频是否符合 Kling O1 的约束
- * @param metadata 视频元数据
- * @returns 验证结果
+ * 视频校验约束（按模型 inputLimits.videoConstraints 驱动，所有字段均为可选——
+ * 不声明即不校验，不套用任何隐含默认值）
  */
 export interface VideoValidationOptions {
   minDuration?: number
@@ -153,40 +164,32 @@ export function validateVideo(
   const errors: string[] = []
   const warnings: string[] = []
 
-  const {
-    minDuration = 3,
-    maxDuration = 10,
-    minWidth = 720,
-    maxWidth = 2160,
-    maxSizeMB = 200
-  } = options
+  const { minDuration, maxDuration, minWidth, maxWidth } = options
 
-  // 时长验证
-  if (metadata.duration < minDuration) {
+  // 时长验证（无法靠本地处理修复，仍然硬校验）——只在模型显式声明时才校验，
+  // 不再给未声明的字段套用旧版 Kling O1 专用默认值（之前的默认值会对所有模型
+  // 误生效，比如只声明了 maxDurationSec 的模型也会被不存在的 minDuration=3 拦截）。
+  if (typeof minDuration === 'number' && metadata.duration < minDuration) {
     errors.push(`视频时长过短（${metadata.duration.toFixed(1)}秒），最少需要${minDuration}秒`)
-  } else if (metadata.duration > maxDuration) {
+  } else if (typeof maxDuration === 'number' && metadata.duration > maxDuration) {
     errors.push(`视频时长过长（${metadata.duration.toFixed(1)}秒），最多支持${maxDuration}秒`)
   }
 
-  // 分辨率验证
+  // 分辨率验证——同理，仅在显式提供 minWidth/maxWidth 时才校验。当前 VideoConstraints
+  // 类型尚未暴露这两个字段给模型定义，所以实际上不会有任何模型触发这两条。
   const minDimension = Math.min(metadata.width, metadata.height)
   const maxDimension = Math.max(metadata.width, metadata.height)
 
-  if (minDimension < minWidth) {
+  if (typeof minWidth === 'number' && minDimension < minWidth) {
     errors.push(`视频分辨率过低（${metadata.width}x${metadata.height}），最小边至少需要${minWidth}px`)
   }
 
-  if (maxDimension > maxWidth) {
+  if (typeof maxWidth === 'number' && maxDimension > maxWidth) {
     errors.push(`视频分辨率过高（${metadata.width}x${metadata.height}），最大边不能超过${maxWidth}px`)
   }
 
-  // 文件大小验证
-  const fileSizeMB = metadata.fileSize / (1024 * 1024)
-  if (fileSizeMB > maxSizeMB) {
-    errors.push(`文件大小过大（${fileSizeMB.toFixed(1)}MB），最大支持${maxSizeMB}MB`)
-  } else if (fileSizeMB > maxSizeMB * 0.75) {
-    warnings.push(`文件较大（${fileSizeMB.toFixed(1)}MB），上传可能需要较长时间`)
-  }
+  // 文件大小不再在此处硬校验：超出 maxSizeMB 时由上传流程调用 ffmpeg 本地压缩到限制内，
+  // 而不是拒绝上传（见 commands/video.ts 的 compressVideoToFit）。
 
   // 宽高比警告
   if (metadata.aspectRatio < 0.4 || metadata.aspectRatio > 2.5) {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
 import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
 
@@ -14,7 +15,13 @@ type PanelTriggerProps = {
   zIndex?: number
   panelWidth?: number
   alignment?: 'bottomLeft' | 'aboveCenter'
+  /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45，与画布节点行内紧凑触发器保持一致时可调小） */
+  gap?: number
   panelHeight?: number
+  /**
+   * 是否在点击面板内容后关闭。交互型面板默认保持打开；
+   * 纯动作菜单应显式传入 true，或用函数只匹配会完成选择的元素。
+   */
   closeOnPanelClick?: boolean | ((target: Node) => boolean)
   renderPanel: () => React.ReactNode
   stableHeight?: boolean
@@ -42,8 +49,9 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     zIndex = 1000,
     panelWidth,
     alignment = 'bottomLeft',
+    gap: gapProp = 45,
     panelHeight: _panelHeight,
-    closeOnPanelClick = true,
+    closeOnPanelClick,
     renderPanel,
     stableHeight,
     stableHeightKey,
@@ -77,7 +85,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
     let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
     left = Math.max(margin, Math.min(left, viewportW - w - margin))
-    const gap = 45
+    const gap = gapProp
 
     if (alignment === 'aboveCenter') {
       const bottom = viewportH - rect.top + gap
@@ -91,7 +99,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     const maxHeight = viewportH - top - margin
     setReady(false)
     setPos({ top, left, width: w, maxHeight })
-  }, [alignment, panelWidth])
+  }, [alignment, panelWidth, gapProp])
 
   const closePanel = useCallback((): void => {
     setClosing(true)
@@ -123,15 +131,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       if (inTrigger) return
       if (inPortaledPanelControl) return
       if (inPanel) {
-        if (open) {
-          if (typeof closeOnPanelClick === 'function') {
-            const shouldClose = closeOnPanelClick(target)
-            if (shouldClose) {
-              closePanel()
-            }
-          } else if (closeOnPanelClick === true) {
-            closePanel()
-          }
+        if (open && shouldClosePanelAfterInternalClick(closeOnPanelClick, target)) {
+          closePanel()
         }
         return
       }
@@ -139,8 +140,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         closePanel()
       }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
   }, [closePanel, open, closeOnPanelClick])
 
   useEffect(() => {
@@ -164,11 +165,11 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const viewportW = window.innerWidth
       const viewportH = window.innerHeight
       const margin = 8
-      const titleBarHeight = 40 // Tauri 标题栏高度
+      const titleBarHeight = 40 // 桌面标题栏高度
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
       left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = 45
+      const gap = gapProp
 
       if (alignment === 'aboveCenter') {
         const bottom = viewportH - rect.top + gap
@@ -197,7 +198,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         window.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, alignment, panelWidth, freezePositionOnOpen])
+  }, [open, alignment, panelWidth, gapProp, freezePositionOnOpen])
 
   useLayoutEffect(() => {
     if (freezePositionOnOpen) return
@@ -210,12 +211,12 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const viewportW = window.innerWidth
       const viewportH = window.innerHeight
       const margin = 8
-      const titleBarHeight = 40 // Tauri 标题栏高度
+      const titleBarHeight = 40 // 桌面标题栏高度
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
 
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
       left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = 45
+      const gap = gapProp
 
       if (alignment === 'aboveCenter') {
         const bottom = viewportH - rect.top + gap
@@ -238,7 +239,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     }
 
     updatePos()
-  }, [open, alignment, panelWidth, stableHeight, freezePositionOnOpen])
+  }, [open, alignment, panelWidth, gapProp, stableHeight, freezePositionOnOpen])
 
   useEffect(() => {
     if (!open || !panelRef.current) return
@@ -265,12 +266,12 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const viewportW = window.innerWidth
       const viewportH = window.innerHeight
       const margin = 8
-      const titleBarHeight = 40 // Tauri 标题栏高度
+      const titleBarHeight = 40 // 桌面标题栏高度
       const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
 
       let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
       left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = 45
+      const gap = gapProp
 
       if (alignment === 'aboveCenter') {
         const bottom = viewportH - rect.top + gap
@@ -291,7 +292,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
       setReady(true)
     })
-  }, [open, alignment, panelWidth, stableHeight, freezePositionOnOpen])
+  }, [open, alignment, panelWidth, gapProp, stableHeight, freezePositionOnOpen])
 
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>

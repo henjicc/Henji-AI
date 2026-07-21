@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   UI_FIELD_LABEL_CLASS,
@@ -7,8 +7,9 @@ import {
   UI_TRIGGER_PANEL_CLASS,
 } from './styleTokens'
 import { UiButton, UiOptionButton } from './primitives'
+import { resolveDropdownDisplay } from './dropdownUtils'
 
-type Option<T extends string | number | boolean> = {
+export type DropdownOption<T extends string | number | boolean> = {
   label: string
   value: T
   disabled?: boolean
@@ -18,7 +19,7 @@ type DropdownProps<T extends string | number | boolean> = {
   label?: string
   value?: T
   display?: string
-  options?: Option<T>[]
+  options?: DropdownOption<T>[]
   onSelect?: (value: T) => void
   renderPanel?: () => React.ReactNode
   disabled?: boolean
@@ -55,18 +56,20 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
   const lastButtonMinWidthRef = useRef<number | null>(null)
   const lastPanelMinWidthRef = useRef<number | null>(null)
+  const resolvedDisplay = resolveDropdownDisplay(display, value, options)
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
     return String(value) === String(optValue)
   }
-  const getOptionLabels = (source?: Option<T>[]): string[] => {
+  const getOptionLabels = useCallback((source?: DropdownOption<T>[]): string[] => {
     return (source || []).map((option) => String(option.label))
-  }
+  }, [])
   const measureTextMinWidth = (targetButton: HTMLElement, labels: string[]): number | null => {
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
@@ -85,7 +88,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!ref.current) return
-      if (!ref.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const inTrigger = ref.current.contains(target)
+      const inPanel = panelRef.current?.contains(target) ?? false
+      if (!inTrigger && !inPanel) {
         if (open) {
           setClosing(true)
           setTimeout(() => { setOpen(false); setClosing(false) }, 200)
@@ -103,7 +109,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const btn = ref.current.querySelector('[data-dropdown-button]') as HTMLElement | null
     if (!btn) return
     const computeMinWidth = () => {
-      const displayText = String(display ?? value ?? '')
+      const displayText = resolvedDisplay
       const optionLabels = getOptionLabels(options)
       if (minWidthStrategy === 'none') {
         if (lastButtonMinWidthRef.current !== null || buttonMinWidthPx !== null) {
@@ -137,7 +143,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       }
     }
     computeMinWidth()
-  }, [display, minWidthStrategy, options, panelWidthStrategy, value])
+  }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, resolvedDisplay])
 
   useEffect(() => {
     const updatePos = () => {
@@ -186,13 +192,15 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           ...(buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : {})
         }}
       >
-        <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{display ?? String(value ?? '')}</span>
+        <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{resolvedDisplay}</span>
         <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
       </UiButton>
       {(open || closing) && (
         portal && fixedPos ? (
           createPortal(
-            <div className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            <div
+              ref={panelRef}
+              className={`${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
               style={{
                 position: 'fixed',
                 top: fixedPos.top,
@@ -235,6 +243,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
           )
         ) : (
           <div
+            ref={panelRef}
             className={`absolute left-0 z-50 mt-1 ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"

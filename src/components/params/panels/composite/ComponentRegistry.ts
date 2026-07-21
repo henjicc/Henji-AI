@@ -11,14 +11,14 @@ import type { ComponentType } from '@/core/types/CompositePanel'
  * 组件注册中心类
  */
 class ComponentRegistry {
-  private components: Map<ComponentType, React.ComponentType<any>> = new Map()
+  private components: Map<ComponentType, React.ComponentType<DynamicValue>> = new Map()
 
   /**
    * 注册组件
    * @param type 组件类型
    * @param component 组件
    */
-  register(type: ComponentType, component: React.ComponentType<any>): void {
+  register(type: ComponentType, component: React.ComponentType<DynamicValue>): void {
     if (this.components.has(type)) {
       // 已注册则跳过（支持 React StrictMode 的双重调用）
       return
@@ -31,7 +31,7 @@ class ComponentRegistry {
    * @param type 组件类型
    * @returns 组件或 undefined
    */
-  get(type: ComponentType): React.ComponentType<any> | undefined {
+  get(type: ComponentType): React.ComponentType<DynamicValue> | undefined {
     return this.components.get(type)
   }
 

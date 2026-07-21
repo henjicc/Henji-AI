@@ -7,6 +7,10 @@ docs/GITHUB_ACTIONS_GUIDE.md
 docs/Storyboard-Copilot
 docs/rust-genai
 docs/ref
+release/
+release2/
+resources-source/
+public/camera-stage-verify/
 # Dependencies
 node_modules/
 npm-debug.log*
@@ -17,6 +21,7 @@ yarn-error.log*
 dist/
 build/
 .vite/
+out/
 *.tgz
 *.tar.gz
 
@@ -44,7 +49,7 @@ ehthumbs.db
 Thumbs.db
 
 # Logs
-logs
+/logs
 *.log
 
 # Runtime data
@@ -112,9 +117,9 @@ jspm_packages/
 
 # TypeScript cache
 *.tsbuildinfo
-src-tauri/target/
-src-tauri/gen/
-src-tauri/resources/model-manifest.json
-src-tauri/resources/progress-seeds.json
+src-tauri/
+resources/model-manifest.json
+resources/progress-seeds.json
 dev-data/
+scratchpad_feed/
 nul

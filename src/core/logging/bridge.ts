@@ -1,5 +1,5 @@
-import { isTauri } from '@tauri-apps/api/core'
 import { logFrontendEvents } from '@/commands/logging'
+import { isDesktopRuntime } from '@/platform/runtime'
 import { getLogConfig } from './config'
 import type { LogEventBridgeDto } from './types'
 
@@ -24,7 +24,7 @@ async function flushLogQueue(): Promise<void> {
     return
   }
 
-  if (!isTauri()) {
+  if (!isDesktopRuntime()) {
     queue = []
     return
   }

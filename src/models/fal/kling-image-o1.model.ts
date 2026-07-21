@@ -67,7 +67,7 @@ export const klingImageO1Model = defineModel({
       const images = params.images || []
       const prompt = params.prompt || ''
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         image_urls: images
       }

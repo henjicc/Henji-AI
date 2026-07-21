@@ -3,38 +3,21 @@ import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import AlertDialog from '@/components/ui/AlertDialog'
 import { UiButton, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
-import { open } from '@tauri-apps/plugin-shell'
+import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
+import {
+  modelscopeCustomModelService,
+  type ModelscopeCustomModelEntry,
+} from '@/services/modelscopeCustomModels/ModelscopeCustomModelService'
 
 const logger = createLogger('components.MediaGenerator.components.ModelscopeCustomModelManager')
 
-interface CustomModel {
-  id: string
-  name: string
-  modelType: {
-    imageGeneration: boolean
-    imageEditing: boolean
-  }
-}
 interface ModelscopeCustomModelManagerProps {
-  onModelsChange?: () => void
-}
-function parseModelType(raw: unknown): { imageGeneration: boolean; imageEditing: boolean } {
-
-  if (typeof raw !== 'object' || raw === null) {
-    return { imageGeneration: true, imageEditing: false }
-  }
-  const value = raw as { imageGeneration?: unknown; imageEditing?: unknown }
-  const imageGeneration = value.imageGeneration === true
-  const imageEditing = value.imageEditing === true && !imageGeneration
-  if (!imageGeneration && !imageEditing) {
-    return { imageGeneration: true, imageEditing: false }
-  }
-  return { imageGeneration, imageEditing }
+  onModelsChange?: () => void | Promise<void>
 }
 const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> = ({ onModelsChange }) => {
   const { t } = useI18n('ui')
-  const [models, setModels] = useState<CustomModel[]>([])
+  const [models, setModels] = useState<ModelscopeCustomModelEntry[]>([])
   const [newModelId, setNewModelId] = useState('')
   const [newModelName, setNewModelName] = useState('')
   const [newModelType, setNewModelType] = useState<'imageGeneration' | 'imageEditing'>('imageGeneration')
@@ -59,43 +42,22 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   useEffect(() => {
     loadModels()
   }, [])
-  const loadModels = () => {
+  const loadModels = async (): Promise<void> => {
     try {
-      const stored = localStorage.getItem('modelscope_custom_models')
-      if (stored) {
-        const loadedModels: unknown = JSON.parse(stored)
-        if (!Array.isArray(loadedModels)) {
-          setModels([])
-          return
-        }
-        const migratedModels = loadedModels
-          .map((rawModel) => {
-            if (typeof rawModel !== 'object' || rawModel === null) return null
-            const candidate = rawModel as { id?: unknown; name?: unknown; modelType?: unknown }
-            if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') return null
-            return {
-              id: candidate.id.trim(),
-              name: candidate.name.trim(),
-              modelType: parseModelType(candidate.modelType)
-            } satisfies CustomModel
-          })
-          .filter((item): item is CustomModel => item !== null && item.id.length > 0 && item.name.length > 0)
-        setModels(migratedModels)
-      }
+      const nextModels = await modelscopeCustomModelService.listModels()
+      setModels(nextModels)
     } catch (e) {
       logger.error('Failed to load custom models:', e)
     }
   }
-  const saveModels = (newModels: CustomModel[]) => {
+  const notifyModelsChange = async (): Promise<void> => {
     try {
-      localStorage.setItem('modelscope_custom_models', JSON.stringify(newModels))
-      setModels(newModels)
-      onModelsChange?.()
+      await onModelsChange?.()
     } catch (e) {
-      logger.error('Failed to save custom models:', e)
+      logger.error('Failed to notify custom model changes:', e)
     }
   }
-  const handleAdd = () => {
+  const handleAdd = async (): Promise<void> => {
     if (!newModelId.trim() || !newModelName.trim()) {
       showAlert(t('modelscopeCustomModel.alerts.incomplete.title'), t('modelscopeCustomModel.alerts.incomplete.message'), 'warning')
       return
@@ -104,19 +66,24 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       showAlert(t('modelscopeCustomModel.alerts.duplicate.title'), t('modelscopeCustomModel.alerts.duplicate.message'), 'warning')
       return
     }
-    const newModels = [...models, {
-      id: newModelId.trim(),
-      name: newModelName.trim(),
-      modelType: {
-        imageGeneration: newModelType === 'imageGeneration',
-        imageEditing: newModelType === 'imageEditing'
-      }
-    }]
-    saveModels(newModels)
-    setNewModelId('')
-    setNewModelName('')
-    setNewModelType('imageGeneration')
-    setIsAddingNew(false)
+    try {
+      await modelscopeCustomModelService.addModel({
+        id: newModelId.trim(),
+        name: newModelName.trim(),
+        modelType: {
+          imageGeneration: newModelType === 'imageGeneration',
+          imageEditing: newModelType === 'imageEditing'
+        }
+      })
+      await loadModels()
+      await notifyModelsChange()
+      setNewModelId('')
+      setNewModelName('')
+      setNewModelType('imageGeneration')
+      setIsAddingNew(false)
+    } catch (e) {
+      logger.error('Failed to save custom model:', e)
+    }
   }
   const handleOpenModelLibrary = async () => {
     try {
@@ -125,36 +92,43 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       logger.error('Failed to open model library:', error)
     }
   }
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string): Promise<void> => {
     if (confirm(t('modelscopeCustomModel.confirmDelete'))) {
-      const newModels = models.filter(m => m.id !== id)
-      saveModels(newModels)
+      try {
+        await modelscopeCustomModelService.deleteModel(id)
+        await loadModels()
+        await notifyModelsChange()
+      } catch (e) {
+        logger.error('Failed to delete custom model:', e)
+      }
     }
   }
-  const handleStartEdit = (model: CustomModel) => {
+  const handleStartEdit = (model: ModelscopeCustomModelEntry) => {
     setEditingId(model.id)
     setEditName(model.name)
     setEditModelType(model.modelType.imageGeneration ? 'imageGeneration' : 'imageEditing')
   }
-  const handleSaveEdit = (id: string) => {
+  const handleSaveEdit = async (id: string): Promise<void> => {
     if (!editName.trim()) {
       showAlert(t('modelscopeCustomModel.alerts.nameEmpty.title'), t('modelscopeCustomModel.alerts.nameEmpty.message'), 'warning')
       return
     }
-    const newModels = models.map(m =>
-      m.id === id ? {
-        ...m,
+    try {
+      await modelscopeCustomModelService.updateModel(id, {
         name: editName.trim(),
         modelType: {
           imageGeneration: editModelType === 'imageGeneration',
           imageEditing: editModelType === 'imageEditing'
         }
-      } : m
-    )
-    saveModels(newModels)
-    setEditingId(null)
-    setEditName('')
-    setEditModelType('imageGeneration')
+      })
+      await loadModels()
+      await notifyModelsChange()
+      setEditingId(null)
+      setEditName('')
+      setEditModelType('imageGeneration')
+    } catch (e) {
+      logger.error('Failed to update custom model:', e)
+    }
   }
   const handleCancelEdit = () => {
     setEditingId(null)
@@ -251,7 +225,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               <UiButton
                 type="button"
                 variant="primary"
-                onClick={handleAdd}
+                onClick={() => void handleAdd()}
                 className="flex-1"
               >
                 {t('modelscopeCustomModel.actions.confirmAdd')}
@@ -322,7 +296,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         type="button"
                         size="sm"
                         variant="primary"
-                        onClick={() => handleSaveEdit(model.id)}
+                        onClick={() => void handleSaveEdit(model.id)}
                         className="flex-1"
                       >
                         {t('common:save')}
@@ -375,7 +349,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(model.id)}
+                        onClick={() => void handleDelete(model.id)}
                         className="h-7 px-2.5 text-xs text-red-400 hover:bg-red-500/10"
                         title={t('modelscopeCustomModel.actions.deleteTitle')}
                       >

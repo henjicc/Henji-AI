@@ -22,9 +22,9 @@ import {
 interface AspectResolutionPanelProps {
   aspectParam?: ChoiceParamDescriptor
   resolutionParam?: ChoiceParamDescriptor
-  values: Record<string, unknown>
+  values: DynamicValueMap
   uploadedImages: string[]
-  onChange: (paramId: string, value: unknown) => void
+  onChange: (paramId: string, value: DynamicValue) => void
 }
 
 interface AspectRenderOption {
@@ -63,14 +63,14 @@ function toSectionWidthStyle(width: number): React.CSSProperties | undefined {
   return { width: `${Math.round(width)}px` }
 }
 
-function isUnsetValue(value: unknown): boolean {
+function isUnsetValue(value: DynamicValue): boolean {
   return value === undefined || value === null || value === ''
 }
 
 function getEffectiveChoiceValue(
   param: ChoiceParamDescriptor | undefined,
-  value: unknown
-): unknown {
+  value: DynamicValue
+): DynamicValue {
   if (!param) {
     return value
   }
@@ -94,7 +94,7 @@ function getOptionLabel(
     : label
 }
 
-function isChoiceValueMatch(left: unknown, right: unknown): boolean {
+function isChoiceValueMatch(left: DynamicValue, right: DynamicValue): boolean {
   if (left === right) {
     return true
   }
@@ -109,7 +109,7 @@ function isChoiceValueMatch(left: unknown, right: unknown): boolean {
 
 function getActiveLabel(
   param: ChoiceParamDescriptor | undefined,
-  value: unknown,
+  value: DynamicValue,
   language: string,
   smartLabel: string,
   normalizeAspectRatio = false
@@ -134,7 +134,7 @@ function getActiveLabel(
 
 function getCurrentDerivedOption(
   spec: SizeDerivedSpec | null,
-  resolutionValue: unknown
+  resolutionValue: DynamicValue
 ) {
   if (!spec) {
     return null

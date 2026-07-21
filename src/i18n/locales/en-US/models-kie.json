@@ -1,5 +1,11 @@
 {
   "defs": {
+    "kie-gemini-omni-video": {
+      "meta": {
+        "name": "Gemini Omni",
+        "description": "KIE Gemini Omni video generation model with multi-image and video reference input"
+      }
+    },
     "kie-grok-imagine-video": {
       "meta": {
         "name": "Grok Imagine Video",
@@ -42,10 +48,46 @@
         "description": "KIE Nano Banana Pro image generation model"
       }
     },
-    "kie-seedance-v3": {
+    "kie-nano-banana-2": {
       "meta": {
-        "name": "Seedance 3",
-        "description": "KIE Seedance V3 video generation model"
+        "name": "Nano Banana 2",
+        "description": "KIE Nano Banana 2 image generation and reference image editing model"
+      }
+    },
+    "kie-nano-banana-2-lite": {
+      "meta": {
+        "name": "Nano Banana 2 Lite",
+        "description": "KIE Nano Banana 2 Lite image generation and reference image editing model"
+      }
+    },
+    "kie-seedance-1.5-pro": {
+      "meta": {
+        "name": "Seedance 1.5 Pro",
+        "description": "KIE Seedance 1.5 Pro video generation model with text, image, and start-end-frame modes"
+      }
+    },
+    "kie-seedance-2.0": {
+      "meta": {
+        "name": "Seedance 2.0",
+        "description": "KIE Seedance 2.0 video generation model with text/image-to-video and multi-modal reference-to-video modes"
+      }
+    },
+    "kie-seedance-2.0-fast": {
+      "meta": {
+        "name": "Seedance 2.0 Fast",
+        "description": "KIE Seedance 2.0 Fast video generation model with text/image-to-video and multi-modal reference-to-video modes"
+      }
+    },
+    "kie-seedance-2.0-mini": {
+      "meta": {
+        "name": "Seedance 2.0 Mini",
+        "description": "KIE Seedance 2.0 Mini video generation model with text/image-to-video and multi-modal reference-to-video modes"
+      }
+    },
+    "kie-seedance-v1": {
+      "meta": {
+        "name": "Seedance 1.0",
+        "description": "KIE Seedance 1.0 video generation model with text, image, and start-end-frame modes"
       }
     },
     "kie-seedream-4.0": {
@@ -60,10 +102,16 @@
         "description": "KIE Seedream 4.5 image generation model"
       }
     },
-    "kie-sora-2": {
+    "kie-seedream-5.0-pro": {
       "meta": {
-        "name": "Sora 2",
-        "description": "KIE Sora 2 video generation model"
+        "name": "Seedream 5.0 Pro",
+        "description": "KIE Seedream 5.0 Pro image generation and editing model"
+      }
+    },
+    "kie-seedream-5.0-lite": {
+      "meta": {
+        "name": "Seedream 5.0 Lite",
+        "description": "KIE Seedream 5.0 Lite image generation and editing model"
       }
     },
     "kie-z-image": {

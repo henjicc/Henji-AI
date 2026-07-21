@@ -10,7 +10,7 @@ import {
 interface PriceEstimateProps {
     providerId: string
     modelId: string
-    params: Record<string, unknown>
+    params: DynamicValueMap
     /** panel=对话模式面板样式（默认）；badge=画布节点紧凑徽标 */
     variant?: 'panel' | 'badge'
 }

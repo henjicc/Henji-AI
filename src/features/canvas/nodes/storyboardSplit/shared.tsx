@@ -16,9 +16,24 @@ export interface PanelAnchor {
 export const STORYBOARD_NODE_WIDTH_PX = 318;
 export const STORYBOARD_NODE_MIN_HEIGHT_PX = 320;
 export const STORYBOARD_GRID_GAP_PX = 1;
-export const STORYBOARD_SPLIT_HEADER_ADJUST = { x: 0, y: 0, scale: 1 };
-export const STORYBOARD_SPLIT_ICON_ADJUST = { x: 0, y: 0, scale: 1 };
-export const STORYBOARD_SPLIT_TITLE_ADJUST = { x: 0, y: 0, scale: 1 };
+/** 节点内边距（p-2 上下/左右合计） */
+export const STORYBOARD_NODE_VERTICAL_PADDING_PX = 16;
+export const STORYBOARD_NODE_HORIZONTAL_PADDING_PX = 16;
+/** 底部操作行（导出设置 + 合并导出）高度与上边距，对应 h-7 + mt-2 */
+export const STORYBOARD_BOTTOM_ROW_HEIGHT_PX = 28;
+export const STORYBOARD_BOTTOM_ROW_MARGIN_TOP_PX = 8;
+/** 节点首次创建/未触发自适应缩放时，格子按该基准高度估算初始尺寸 */
+export const STORYBOARD_GRID_BASE_CELL_HEIGHT_PX = 96;
+export const STORYBOARD_GRID_MAX_WIDTH_PX = 480;
+export const FRAME_CELL_MIN_WIDTH_PX = 32;
+export const FRAME_CELL_MIN_HEIGHT_PX = 24;
+/** 分镜描述叠加层文字随格子尺寸自适应缩放的取值区间 */
+export const FRAME_NOTE_MIN_FONT_SIZE_PX = 8;
+export const FRAME_NOTE_MAX_FONT_SIZE_PX = 11;
+export const FRAME_NOTE_SCALE_MIN_CELL_WIDTH_PX = 60;
+export const FRAME_NOTE_SCALE_MAX_CELL_WIDTH_PX = 220;
+export const FRAME_NOTE_MIN_HEIGHT_PX = 18;
+export const FRAME_NOTE_MAX_HEIGHT_PX = 56;
 
 export function SplitResultIcon({ className }: { className?: string }): JSX.Element {
   return (

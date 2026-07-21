@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useEffect } from 'react'
+import { readFile } from '@/platform/desktopApi'
 import type { ModelState } from '../state/useModelState'
 import type { UIState } from '../state/useUIState'
 
@@ -13,10 +14,10 @@ interface ReEditEventDetail {
   uploadedVideoFilePaths?: string[]
   model?: string
   provider?: string
-  options?: Record<string, unknown>
+  options?: DynamicValueMap
 }
 
-function sanitizePresetOptions(options: Record<string, unknown>): Record<string, unknown> {
+function sanitizePresetOptions(options: DynamicValueMap): DynamicValueMap {
   const paramsToSet = { ...options }
   delete paramsToSet.images
   delete paramsToSet.uploadedFilePaths
@@ -56,7 +57,6 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
       if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths) && uploadedVideoFilePaths.length > 0) {
         logger.info('[MediaGenerator] Restoring videos from paths:', uploadedVideoFilePaths)
         try {
-          const { readFile } = await import('@tauri-apps/plugin-fs')
           const { generateVideoThumbnail } = await import('@/utils/videoProcessing')
 
           const restorePromises = uploadedVideoFilePaths.map(async (filePath: string, index: number) => {

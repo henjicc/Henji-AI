@@ -37,6 +37,7 @@ interface VideoViewerControlsProps {
   videoDuration: number
   muted: boolean
   volume: number
+  hasAudio: boolean | null
   setMuted: React.Dispatch<React.SetStateAction<boolean>>
   updateVolume: (next: number) => void
   playbackRate: number
@@ -46,6 +47,8 @@ interface VideoViewerControlsProps {
   onDownload?: (filePath: string) => void
   filePath?: string
   isBuffering: boolean
+  /** 若有保存过的裁剪选区，在进度条上高亮标出对应区间，帮助用户理解播放为何在某点跳回 */
+  trimRange?: { start: number; end: number }
 }
 
 export function VideoViewerControls({
@@ -66,6 +69,7 @@ export function VideoViewerControls({
   videoDuration,
   muted,
   volume,
+  hasAudio,
   setMuted,
   updateVolume,
   playbackRate,
@@ -75,6 +79,7 @@ export function VideoViewerControls({
   onDownload,
   filePath,
   isBuffering,
+  trimRange,
 }: VideoViewerControlsProps): JSX.Element {
   const { t } = useI18n()
 
@@ -105,6 +110,16 @@ export function VideoViewerControls({
           onMouseLeave={() => setIsDraggingProgress(false)}
         >
           <div ref={progressFillRef} className="progress-bar" />
+          {trimRange && videoDuration > 0 && (
+            <div
+              className="absolute inset-y-0 pointer-events-none rounded-sm"
+              style={{
+                left: `${(trimRange.start / videoDuration) * 100}%`,
+                width: `${((trimRange.end - trimRange.start) / videoDuration) * 100}%`,
+                background: 'rgba(var(--text-rgb),0.25)',
+              }}
+            />
+          )}
         </div>
 
         <div className="controls-main">
@@ -113,42 +128,44 @@ export function VideoViewerControls({
           </UiIconButton>
           <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
           <div className="controls-right">
-            <div
-              className="speed-control"
-              onMouseEnter={() => setIsVolumeMenuOpen(true)}
-              onMouseLeave={() => setIsVolumeMenuOpen(false)}
-            >
+            {hasAudio !== false && (
               <div
-                className="speed-display"
-                onClick={() => setMuted((value) => !value)}
-                title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
+                className="speed-control"
+                onMouseEnter={() => setIsVolumeMenuOpen(true)}
+                onMouseLeave={() => setIsVolumeMenuOpen(false)}
               >
-                {muted || volume === 0 ? <VolumeMutedIcon className="w-5 h-5" /> : <VolumeOnIcon className="w-5 h-5" />}
-              </div>
-              <div
-                className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`}
-                onWheel={(e) => {
-                  e.preventDefault()
-                  const delta = e.deltaY > 0 ? -0.05 : 0.05
-                  updateVolume((muted ? 0 : volume) + delta)
-                }}
-              >
-                <div className="volume-vertical">
-                  <div className="volume-percent">{Math.round((muted ? 0 : volume) * 100)}</div>
-                  <div
-                    className="volume-track"
-                    onClick={(e) => {
-                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
-                      const percent = 1 - Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
-                      updateVolume(percent)
-                    }}
-                  >
-                    <div className="volume-fill" style={{ height: `calc(5px + (100% - 10px) * ${muted ? 0 : volume})` }} />
-                    <div className="volume-thumb" style={{ bottom: `calc(5px + (100% - 10px) * ${muted ? 0 : volume})` }} />
+                <div
+                  className="speed-display"
+                  onClick={() => setMuted((value) => !value)}
+                  title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
+                >
+                  {muted || volume === 0 ? <VolumeMutedIcon className="w-5 h-5" /> : <VolumeOnIcon className="w-5 h-5" />}
+                </div>
+                <div
+                  className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`}
+                  onWheel={(e) => {
+                    e.preventDefault()
+                    const delta = e.deltaY > 0 ? -0.05 : 0.05
+                    updateVolume((muted ? 0 : volume) + delta)
+                  }}
+                >
+                  <div className="volume-vertical">
+                    <div className="volume-percent">{Math.round((muted ? 0 : volume) * 100)}</div>
+                    <div
+                      className="volume-track"
+                      onClick={(e) => {
+                        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+                        const percent = 1 - Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
+                        updateVolume(percent)
+                      }}
+                    >
+                      <div className="volume-fill" style={{ height: `calc(5px + (100% - 10px) * ${muted ? 0 : volume})` }} />
+                      <div className="volume-thumb" style={{ bottom: `calc(5px + (100% - 10px) * ${muted ? 0 : volume})` }} />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div
               className="speed-control"
@@ -199,4 +216,3 @@ export function VideoViewerControls({
     </div>
   )
 }
-

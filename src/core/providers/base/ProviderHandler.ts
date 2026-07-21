@@ -1,7 +1,7 @@
 /**
  * Legacy compatibility shell for old frontend providers.
  *
- * Generation is now executed by Rust backend runtime. This class is retained
+ * Generation is now executed by the Electron backend runtime. This class is retained
  * only to avoid breaking old imports during migration.
  */
 
@@ -15,7 +15,7 @@ export abstract class ProviderHandler {
     this.providerName = providerName
   }
 
-  async generate(_model: ModelDefinition, _params: Record<string, unknown>): Promise<GenerateResult> {
+  async generate(_model: ModelDefinition, _params: DynamicValueMap): Promise<GenerateResult> {
     throw new Error(`[${this.providerName}] Frontend provider execution is deprecated`) 
   }
 }

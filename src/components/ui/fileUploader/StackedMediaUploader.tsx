@@ -1,9 +1,10 @@
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef, useState } from 'react'
-import { readFile } from '@tauri-apps/plugin-fs'
-import { RefreshCw } from 'lucide-react'
+import { readFile } from '@/platform/desktopApi'
+import { RefreshCw, Scissors } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
-import { useTauriDragDrop } from '@/hooks/useTauriDragDrop'
+import { readHenjiDragData, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
+import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
 import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
@@ -23,6 +24,7 @@ interface StackedMediaUploaderProps {
   onUpload: (files: File[]) => Promise<void> | void
   onRemove: (index: number) => void
   onReplace?: (index: number, file: File) => Promise<void> | void
+  onTrim?: (index: number) => void
   onReorder?: (from: number, to: number) => void
   onFileClick?: (fileUrl: string, fileList: string[]) => void
   onDragStateChange?: (isDragging: boolean) => void
@@ -54,6 +56,38 @@ function inferAudioMimeFromPath(path: string): string {
   return 'audio/mpeg'
 }
 
+async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<File | null> {
+  if (dragData.type === 'image') {
+    if (dragData.filePath && isDesktop()) {
+      const bytes = await readFile(dragData.filePath)
+      const mime = inferMimeFromPath(dragData.filePath)
+      const blob = new Blob([bytes], { type: mime })
+      const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
+      return new File([blob], filename, { type: mime })
+    }
+
+    return await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+  }
+
+  if (dragData.type === 'video' && dragData.filePath && isDesktop()) {
+    const bytes = await readFile(dragData.filePath)
+    const mime = inferVideoMimeFromPath(dragData.filePath)
+    const blob = new Blob([bytes], { type: mime })
+    const filename = dragData.filePath.split(/[\\/]/).pop() || `video-${Date.now()}.mp4`
+    return new File([blob], filename, { type: mime })
+  }
+
+  if (dragData.type === 'audio' && dragData.filePath && isDesktop()) {
+    const bytes = await readFile(dragData.filePath)
+    const mime = inferAudioMimeFromPath(dragData.filePath)
+    const blob = new Blob([bytes], { type: mime })
+    const filename = dragData.filePath.split(/[\\/]/).pop() || `audio-${Date.now()}.mp3`
+    return new File([blob], filename, { type: mime })
+  }
+
+  return null
+}
+
 function AudioPreviewIcon(): JSX.Element {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-8 w-8 text-white/90" fill="none">
@@ -75,6 +109,7 @@ export function StackedMediaUploader({
   onUpload,
   onRemove,
   onReplace,
+  onTrim,
   onReorder,
   onFileClick,
   onDragStateChange,
@@ -93,10 +128,10 @@ export function StackedMediaUploader({
   const { expanded, hoverCapable, onMouseEnter, onMouseLeave, onToggle, beginExpandLock, endExpandLock } = useStackedExpand()
   const dragCounter = useRef(0)
   const { isDragging: isCustomDragging, dragData, endDrag } = useDragDrop()
-  const { isDragging: isTauriDragging, elementRef } = useTauriDragDrop((droppedFiles) => {
+  const { isDragging: isNativeDragging, elementRef } = useNativeDragDrop((droppedFiles) => {
     void handleFiles(droppedFiles)
   }, disabled)
-  const isDragging = isHtmlDragging || isCustomDragging || isTauriDragging
+  const isDragging = isHtmlDragging || isCustomDragging || isNativeDragging
   const canUploadMore = !maxCount || files.length < maxCount
   const showUploadCard = canUploadMore && !hideUploadButton && !disabled
 
@@ -189,6 +224,19 @@ export function StackedMediaUploader({
     if (disabled) return
     if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
       await handleFiles(Array.from(event.dataTransfer.files))
+      return
+    }
+
+    const transferredDragData = readHenjiDragData(event.dataTransfer)
+    if (transferredDragData) {
+      try {
+        const file = await dragTransferDataToFile(transferredDragData)
+        if (file) {
+          await handleFiles([file])
+        }
+      } catch (error) {
+        logger.error('StackedMediaUploader convert transferred drag data failed', error)
+      }
     }
   }
 
@@ -196,40 +244,31 @@ export function StackedMediaUploader({
     if (!isCustomDragging || !dragData) return
     if (dragData.type === 'image') {
       try {
-        let file: File
-        if (dragData.filePath && isDesktop()) {
-          const bytes = await readFile(dragData.filePath)
-          const mime = inferMimeFromPath(dragData.filePath)
-          const blob = new Blob([bytes], { type: mime })
-          const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
-          file = new File([blob], filename, { type: mime })
-        } else {
-          file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+        const file = await dragTransferDataToFile(dragData)
+        if (file) {
+          await handleFiles([file])
         }
-        await handleFiles([file])
       } catch (error) {
         logger.error('StackedMediaUploader convert image failed', error)
       }
     }
 
-    if (dragData.type === 'video' && dragData.filePath && isDesktop()) {
+    if (dragData.type === 'video') {
       try {
-        const bytes = await readFile(dragData.filePath)
-        const mime = inferVideoMimeFromPath(dragData.filePath)
-        const blob = new Blob([bytes], { type: mime })
-        const filename = dragData.filePath.split(/[\\/]/).pop() || `video-${Date.now()}.mp4`
-        await handleFiles([new File([blob], filename, { type: mime })])
+        const file = await dragTransferDataToFile(dragData)
+        if (file) {
+          await handleFiles([file])
+        }
       } catch (error) {
         logger.error('StackedMediaUploader convert video failed', error)
       }
     }
-    if (dragData.type === 'audio' && dragData.filePath && isDesktop()) {
+    if (dragData.type === 'audio') {
       try {
-        const bytes = await readFile(dragData.filePath)
-        const mime = inferAudioMimeFromPath(dragData.filePath)
-        const blob = new Blob([bytes], { type: mime })
-        const filename = dragData.filePath.split(/[\\/]/).pop() || `audio-${Date.now()}.mp3`
-        await handleFiles([new File([blob], filename, { type: mime })])
+        const file = await dragTransferDataToFile(dragData)
+        if (file) {
+          await handleFiles([file])
+        }
       } catch (error) {
         logger.error('StackedMediaUploader convert audio failed', error)
       }
@@ -355,6 +394,19 @@ export function StackedMediaUploader({
                     title="替换"
                   >
                     <RefreshCw className="h-3.5 w-3.5 text-white" strokeWidth={2.3} />
+                  </UiIconButton>
+                )}
+                {onTrim && isVideo && (
+                  <UiIconButton
+                    type="button"
+                    className={`absolute -bottom-1 -left-1 z-20 h-5 w-5 rounded border-zinc-500/70 bg-zinc-900/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onTrim(index)
+                    }}
+                    title="裁剪"
+                  >
+                    <Scissors className="h-3.5 w-3.5 text-white" strokeWidth={2.3} />
                   </UiIconButton>
                 )}
               </div>

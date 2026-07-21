@@ -30,14 +30,14 @@ interface ExportStoryboardImagesParams {
   linkExportNode: (createdNodeId: string) => void;
 }
 
-function exportTraceInfo(message: string, payload: unknown): void {
+function exportTraceInfo(message: string, payload: DynamicValue): void {
   if (!EXPORT_TRACE_ENABLED) {
     return;
   }
   logger.info(`${EXPORT_TRACE_PREFIX} ${message}`, payload);
 }
 
-function exportTraceWarn(message: string, payload: unknown): void {
+function exportTraceWarn(message: string, payload: DynamicValue): void {
   if (!EXPORT_TRACE_ENABLED) {
     return;
   }

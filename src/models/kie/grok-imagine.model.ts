@@ -42,7 +42,7 @@ export const kieGrokImagineModel = defineModel({
       const prompt = params.prompt || ''
       const aspectRatio = params.kieGrokImagineAspectRatio || params.aspect_ratio
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
         input.aspect_ratio = aspectRatio

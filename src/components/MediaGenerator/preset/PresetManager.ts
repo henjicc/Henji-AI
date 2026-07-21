@@ -35,11 +35,11 @@ export class PresetManager {
    * // { duration: 10, aspectRatio: '16:9' }
    * ```
    */
-  static loadPreset(presetData: Record<string, unknown>, modelId: string): Record<string, unknown> {
+  static loadPreset(presetData: DynamicValueMap, modelId: string): DynamicValueMap {
     const model = this.getModelOrWarn(modelId)
     if (!model) return {}
 
-    const params: Record<string, unknown> = {}
+    const params: DynamicValueMap = {}
 
     for (const paramDef of model.params) {
       const presetValue = presetData[paramDef.id]
@@ -69,11 +69,11 @@ export class PresetManager {
    * // (uploadedImages 被过滤掉)
    * ```
    */
-  static savePreset(params: Record<string, unknown>, modelId: string): Record<string, unknown> {
+  static savePreset(params: DynamicValueMap, modelId: string): DynamicValueMap {
     const model = this.getModelOrWarn(modelId)
     if (!model) return {}
 
-    const presetData: Record<string, unknown> = {}
+    const presetData: DynamicValueMap = {}
 
     for (const paramDef of model.params) {
       const value = params[paramDef.id]
@@ -123,9 +123,9 @@ export class PresetManager {
    * ```
    */
   static applyPreset(
-    presetData: Record<string, unknown>,
+    presetData: DynamicValueMap,
     modelId: string,
-    setParam: (key: string, value: unknown) => void
+    setParam: (key: string, value: DynamicValue) => void
   ): void {
     const params = this.loadPreset(presetData, modelId)
 
@@ -143,7 +143,7 @@ export class PresetManager {
    * @param modelId - 模型 ID
    * @returns 是否兼容
    */
-  static isCompatible(presetData: Record<string, unknown>, modelId: string): boolean {
+  static isCompatible(presetData: DynamicValueMap, modelId: string): boolean {
     const model = this.getModelOrWarn(modelId)
     if (!model) return false
 
@@ -167,10 +167,10 @@ export class PresetManager {
    * @returns 合并后的参数对象
    */
   static merge(
-    presetData: Record<string, unknown>,
-    currentParams: Record<string, unknown>,
+    presetData: DynamicValueMap,
+    currentParams: DynamicValueMap,
     modelId: string
-  ): Record<string, unknown> {
+  ): DynamicValueMap {
     const presetParams = this.loadPreset(presetData, modelId)
 
     return {

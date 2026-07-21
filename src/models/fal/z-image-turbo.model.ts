@@ -13,7 +13,7 @@ export const zImageTurboModel = defineModel({
         i18nScope: 'models.defs.fal-ai-z-image-turbo',
     name: { key: 'meta.name', fallback: 'Z-Image Turbo' },
     description: 'Z-Image Turbo 快速图片生成模型',
-    tags: ['image', 'text-to-image', 'image-to-image', 'fast']
+    tags: ['image', 'text-to-image', 'fast']
   },
   inputLimits: {
     images: { max: 0 },
@@ -80,7 +80,7 @@ export const zImageTurboModel = defineModel({
       const prompt = params.prompt || ''
       const imageSize = parseImageSize(params.falZImageTurboImageSize)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         image_size: imageSize,
         num_inference_steps: params.falZImageTurboNumInferenceSteps || 8,

@@ -14,16 +14,16 @@ import Dropdown from '@/components/ui/Dropdown'
 
 interface DropdownInputProps {
   param: DropdownParamDef
-  value: unknown
+  value: DynamicValue
   onChange: (value: string | number) => void
   disabled?: boolean
 }
 
-function isUnsetValue(value: unknown): boolean {
+function isUnsetValue(value: DynamicValue): boolean {
   return value === undefined || value === null || value === ''
 }
 
-function isSameValue(left: unknown, right: unknown): boolean {
+function isSameValue(left: DynamicValue, right: DynamicValue): boolean {
   if (left === right) {
     return true
   }

@@ -4,33 +4,15 @@
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CREATE_TASK_ENDPOINT } from './utils'
+import { getModelscopeCustomModel } from './customModelRegistry'
 
-const MODELSCOPE_CUSTOM_STORAGE_KEY = 'modelscope_custom_models'
-
-const getCustomModel = (modelId: string): { id?: string; modelType?: { imageEditing?: boolean } } | undefined => {
-  try {
-    if (typeof localStorage === 'undefined') return undefined
-    const stored = localStorage.getItem(MODELSCOPE_CUSTOM_STORAGE_KEY)
-    if (!stored) return undefined
-    const parsed = JSON.parse(stored)
-    if (!Array.isArray(parsed)) return undefined
-    return parsed.find((item: unknown) => {
-      if (!item || typeof item !== 'object') return false
-      const record = item as Record<string, unknown>
-      return record.id === modelId
-    }) as { id?: string; modelType?: { imageEditing?: boolean } } | undefined
-  } catch {
-    return undefined
-  }
-}
-
-const resolveCustomInputLimits = (params: Record<string, unknown>) => {
+const resolveCustomInputLimits = (params: DynamicValueMap) => {
   const customId = typeof params.modelscopeCustomModel === 'string' ? params.modelscopeCustomModel.trim() : ''
   if (!customId) {
     return { images: { max: 0 }, videos: { max: 0 } }
   }
 
-  const model = getCustomModel(customId)
+  const model = getModelscopeCustomModel(customId)
   const supportsImageEditing = model?.modelType?.imageEditing === true
 
   return {

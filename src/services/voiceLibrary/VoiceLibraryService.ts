@@ -31,11 +31,11 @@ export interface UpsertVoiceLibraryInput {
   expiresAt?: string
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function normalizeString(value: unknown): string | undefined {
+function normalizeString(value: DynamicValue): string | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -43,7 +43,7 @@ function normalizeString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined
 }
 
-function normalizeRecord(value: unknown): VoiceLibraryRecord | null {
+function normalizeRecord(value: DynamicValue): VoiceLibraryRecord | null {
   if (!isRecord(value)) {
     return null
   }
@@ -75,7 +75,7 @@ function parseVoiceRecords(raw: string | null): VoiceLibraryRecord[] {
     return []
   }
   try {
-    const parsed = JSON.parse(raw) as unknown
+    const parsed = JSON.parse(raw) as DynamicValue
     if (!Array.isArray(parsed)) {
       return []
     }

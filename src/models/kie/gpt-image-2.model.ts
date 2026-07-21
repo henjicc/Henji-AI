@@ -122,7 +122,7 @@ export const kieGptImage2Model = defineModel({
         }
         return best
       }
-      const filterMediaSources = (values: unknown): string[] => {
+      const filterMediaSources = (values: DynamicValue): string[] => {
         return Array.isArray(values)
           ? values.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
           : []
@@ -150,7 +150,7 @@ export const kieGptImage2Model = defineModel({
         throw new Error('GPT Image 2 does not support 4K output for 1:1 aspect ratio')
       }
 
-      const input: Record<string, unknown> = {
+      const input: DynamicValueMap = {
         prompt,
         aspect_ratio: aspectRatio,
         resolution

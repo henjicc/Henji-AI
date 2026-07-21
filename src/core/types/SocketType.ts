@@ -7,6 +7,7 @@
  */
 
 import type { ComponentType, ValueType } from './ComponentTypes'
+import type { NumberParamDef } from './ParamDef'
 import {
   SOCKET_TYPE_COLOR_HEX,
   SOCKET_TYPE_COLOR_FALLBACK_HEX,
@@ -32,6 +33,17 @@ const SOCKET_TYPE_ALIASES: Record<string, string[]> = {
   NUMBER: ['INT', 'FLOAT'],
 }
 
+function hasFraction(value: number | undefined): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && !Number.isInteger(value)
+}
+
+function deriveNumberSocketType(input: { step?: number; min?: number; max?: number }): SocketType {
+  if (hasFraction(input.step) || hasFraction(input.min) || hasFraction(input.max)) {
+    return 'FLOAT'
+  }
+  return 'INT'
+}
+
 /** 组件类型 → 插槽类型的默认推导（无需逐个 .model.ts 声明） */
 export function deriveSocketType(input: {
   type: ComponentType
@@ -46,7 +58,7 @@ export function deriveSocketType(input: {
     case 'textarea':
       return 'STRING'
     case 'number':
-      return 'NUMBER'
+      return deriveNumberSocketType(input as NumberParamDef)
     case 'switch':
       return 'BOOLEAN'
     case 'dropdown':

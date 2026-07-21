@@ -39,9 +39,9 @@ export class LinkageEngine {
    */
   execute(
     changedKey: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     schema: ParamDef[]
-  ): Record<string, any> {
+  ): DynamicValueMap {
     // 防止循环联动
     if (this.executionDepth >= this.maxDepth) {
       logger.warn(
@@ -112,9 +112,9 @@ export class LinkageEngine {
    */
   getFilteredOptions(
     paramId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     schema: ParamDef[]
-  ): any[] {
+  ): DynamicValue[] {
     const paramDef = schema.find((p) => p.id === paramId)
 
     if (!paramDef) {
@@ -165,7 +165,7 @@ export class LinkageEngine {
    */
   getFilteredRange(
     paramId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     schema: ParamDef[]
   ): { min?: number; max?: number; step?: number } | null {
 
@@ -221,7 +221,7 @@ export class LinkageEngine {
    * @param params - 当前参数值
    * @returns 是否禁用
    */
-  isParamDisabled(paramId: string, params: Record<string, any>): boolean {
+  isParamDisabled(paramId: string, params: DynamicValueMap): boolean {
     for (const linkage of this.linkages) {
       if (linkage.effect !== 'disable') {
         continue
@@ -251,7 +251,7 @@ export class LinkageEngine {
    * @param params - 当前参数值
    * @returns 是否隐藏
    */
-  isParamHidden(paramId: string, params: Record<string, any>): boolean {
+  isParamHidden(paramId: string, params: DynamicValueMap): boolean {
     for (const linkage of this.linkages) {
       if (linkage.effect !== 'hide') {
         continue

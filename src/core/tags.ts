@@ -1,6 +1,3 @@
-import { createLogger } from '@/core/logging'
-
-const logger = createLogger('core.tags')
 /**
  * 模型标签系统工具函数
  */

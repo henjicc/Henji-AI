@@ -1,8 +1,9 @@
-﻿import React from "react"
-import { convertFileSrc } from "@tauri-apps/api/core"
+import React from "react"
+import { toDisplaySrc } from '@/platform/desktopApi'
 import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
+import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
 import { UiButton, UiIconButton } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
@@ -12,6 +13,9 @@ import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
 import { CopyIcon, DownloadIcon, UsePromptIcon } from "./TaskActionIcons"
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
+import { FolderCheck, FolderPlus } from 'lucide-react'
+import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
+import { checkAssetPaths } from '@/commands/assetLibrary'
 
 export interface TaskCardProps {
   task: GenerationTask
@@ -24,8 +28,9 @@ export interface TaskCardProps {
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
-  onOpenVideoViewer: (url: string, filePath?: string) => void
+  onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
+  notify: (message: string, type?: 'success' | 'error') => void
 }
 
 const TaskCard = React.memo(function TaskCard({
@@ -41,9 +46,43 @@ const TaskCard = React.memo(function TaskCard({
   onOpenImageViewer,
   onOpenVideoViewer,
   showMenu,
+  notify,
 }: TaskCardProps): JSX.Element {
   const { t, i18n } = useI18n()
-  const { startImageDrag, startVideoDrag, shouldIgnoreClick, markContextMenu } = useHistoryDrag()
+  const { addMedia, collecting } = useAddToAssetLibrary()
+  const resultFilePaths = React.useMemo(() => task.result?.filePath ? splitMulti(task.result.filePath) : [], [task.result?.filePath])
+  const [collectedPaths, setCollectedPaths] = React.useState<Set<string>>(() => new Set())
+  React.useEffect(() => {
+    let cancelled = false
+    if (resultFilePaths.length === 0) { setCollectedPaths(new Set()); return }
+    void checkAssetPaths(resultFilePaths).then((statuses) => {
+      if (!cancelled) setCollectedPaths(new Set(resultFilePaths.filter((_, index) => statuses[index])))
+    }).catch(() => { if (!cancelled) setCollectedPaths(new Set()) })
+    return () => { cancelled = true }
+  }, [resultFilePaths])
+  const collectionIcon = (filePath: string | undefined, className: string): React.ReactNode => filePath && collectedPaths.has(filePath)
+    ? <FolderCheck className={`${className} text-emerald-400`} />
+    : <FolderPlus className={className} />
+  const collectResult = async (filePath: string | undefined, mediaType: 'image' | 'video' | 'audio'): Promise<void> => {
+    if (!filePath) return
+    try {
+      const asset = await addMedia({ filePath, mediaType, source: 'generated' })
+      setCollectedPaths((current) => new Set(current).add(filePath))
+      notify(t(asset.wasExisting ? 'ui:assetLibrary.alreadyCollected' : 'ui:assetLibrary.collectSuccess'))
+    } catch {
+      notify(t('ui:assetLibrary.collectFailed'), 'error')
+    }
+  }
+  const {
+    startImageDrag,
+    startVideoDrag,
+    startImageNativeDrag,
+    startVideoNativeDrag,
+    endNativeDrag,
+    isNativeFileDragEnabled,
+    shouldIgnoreClick,
+    markContextMenu
+  } = useHistoryDrag()
 
   const formatDate = (value?: Date): string => {
     if (!value) return ""
@@ -63,7 +102,7 @@ const TaskCard = React.memo(function TaskCard({
     if (shouldIgnoreClick()) return
     // Use full-resolution URLs for the viewer (thumbnail URLs are for display only)
     const fullUrls = filePaths.length > 0
-      ? filePaths.map(fp => convertFileSrc(fp.replace(/\\\\/g, '/')))
+      ? filePaths.map(fp => toDisplaySrc(fp.replace(/\\\\/g, '/')))
       : list
     onOpenImageViewer(fullUrls[0], fullUrls, filePaths)
   }
@@ -71,6 +110,18 @@ const TaskCard = React.memo(function TaskCard({
   const handleVideoClick = (url: string, filePath?: string) => {
     if (shouldIgnoreClick()) return
     onOpenVideoViewer(url, filePath)
+  }
+
+  // 点击历史记录里"输入视频"的缩略图：如果这个任务有保存过的裁剪选区，
+  // 把它带进播放器，让播放器只在选区内播放——结果视频不受影响，用 handleVideoClick。
+  const handleInputVideoClick = (url: string, filePath?: string) => {
+    if (shouldIgnoreClick()) return
+    const trimStart = task.options?.uploadedVideoTrimStart
+    const trimEnd = task.options?.uploadedVideoTrimEnd
+    const trimRange = typeof trimStart === 'number' && typeof trimEnd === 'number'
+      ? { start: trimStart, end: trimEnd }
+      : undefined
+    onOpenVideoViewer(url, filePath, trimRange)
   }
 
   const modelName = getModelDisplayName(task.model)
@@ -113,7 +164,7 @@ const TaskCard = React.memo(function TaskCard({
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent mb-3" />
             <p className="text-zinc-400 mb-3">{t("ui:workspace.status.generating")}</p>
             {progressValue !== undefined && (
-              <ProgressBar progress={progressValue} className="mt-3" duration={progressValue >= 99 ? 450 : 2800} />
+              <ProgressBar progress={progressValue} className="mt-3" duration={getProgressTransitionDurationMs(progressValue)} />
             )}
           </div>
         </div>
@@ -161,6 +212,13 @@ const TaskCard = React.memo(function TaskCard({
                       disabled: !filePath,
                     },
                     {
+                      id: "add-image-to-assets",
+                      label: t("ui:assetLibrary.collect"),
+                      icon: collectionIcon(filePath, 'w-4 h-4'),
+                      onClick: () => void collectResult(filePath, 'image'),
+                      disabled: !filePath || collecting,
+                    },
+                    {
                       id: "download-image",
                       label: t("common:actions.download"),
                       icon: <DownloadIcon className="w-4 h-4" />,
@@ -175,6 +233,9 @@ const TaskCard = React.memo(function TaskCard({
                   e.stopPropagation()
                   startImageDrag(e, url, filePath)
                 }}
+                draggable={isNativeFileDragEnabled && Boolean(filePath)}
+                onDragStart={(e) => startImageNativeDrag(e, url, filePath)}
+                onDragEnd={endNativeDrag}
                 onContextMenuCapture={() => markContextMenu()}
               >
                 <img
@@ -197,13 +258,20 @@ const TaskCard = React.memo(function TaskCard({
       const urls = splitMulti(task.result.url)
       const filePaths = task.result.filePath ? splitMulti(task.result.filePath) : []
       const filePath = filePaths[0]
-      const videoUrl = filePath ? convertFileSrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
+      const videoUrl = filePath ? toDisplaySrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
       return (
         <div
           className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 cursor-pointer"
           onClick={() => handleVideoClick(videoUrl, filePath)}
           onContextMenu={(e) =>
             showMenu(e, [
+              {
+                id: "add-video-to-assets",
+                label: t("ui:assetLibrary.collect"),
+                icon: collectionIcon(filePath, 'w-4 h-4'),
+                onClick: () => void collectResult(filePath, 'video'),
+                disabled: !filePath || collecting,
+              },
               {
                 id: "download-video",
                 label: t("common:actions.download"),
@@ -219,6 +287,9 @@ const TaskCard = React.memo(function TaskCard({
             e.stopPropagation()
             startVideoDrag(e, videoUrl, filePath)
           }}
+          draggable={isNativeFileDragEnabled && Boolean(filePath)}
+          onDragStart={(e) => startVideoNativeDrag(e, videoUrl, filePath)}
+          onDragEnd={endNativeDrag}
           onContextMenuCapture={() => markContextMenu()}
         >
           <video src={videoUrl} className="w-full h-auto block" draggable={false} muted preload="metadata" />
@@ -241,6 +312,13 @@ const TaskCard = React.memo(function TaskCard({
           filePath={filePath}
           onContextMenu={(e) =>
             showMenu(e, [
+              {
+                id: "add-audio-to-assets",
+                label: t("ui:assetLibrary.collect"),
+                icon: collectionIcon(filePath, 'w-4 h-4'),
+                onClick: () => void collectResult(filePath, 'audio'),
+                disabled: !filePath || collecting,
+              },
               {
                 id: "download-audio",
                 label: t("common:actions.download"),
@@ -267,9 +345,13 @@ const TaskCard = React.memo(function TaskCard({
           uploadedFilePaths={task.uploadedFilePaths}
           uploadedVideoFilePaths={task.uploadedVideoFilePaths}
           onOpenImage={handleImageClick}
-          onOpenVideo={handleVideoClick}
+          onOpenVideo={handleInputVideoClick}
           onStartImageDrag={startImageDrag}
           onStartVideoDrag={startVideoDrag}
+          onStartImageNativeDrag={startImageNativeDrag}
+          onStartVideoNativeDrag={startVideoNativeDrag}
+          onNativeDragEnd={endNativeDrag}
+          nativeFileDragEnabled={isNativeFileDragEnabled}
           shouldIgnoreClick={shouldIgnoreClick}
        />
         <div className="min-w-0 flex-1 relative">
@@ -311,6 +393,18 @@ const TaskCard = React.memo(function TaskCard({
             >
               <UsePromptIcon className="h-4 w-4" />
             </UiIconButton>
+            {task.result?.filePath && (
+              <UiIconButton
+                onClick={async () => {
+                  for (const fp of splitMulti(task.result!.filePath!)) await collectResult(fp, task.type)
+                }}
+                disabled={collecting}
+                className={`!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50 ${resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? '!text-emerald-400' : ''}`}
+                title={t("ui:assetLibrary.collect")}
+              >
+                {resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? <FolderCheck className="h-4 w-4" /> : <FolderPlus className="h-4 w-4" />}
+              </UiIconButton>
+            )}
             {task.result?.filePath && (
               <UiIconButton
                 onClick={async () => {

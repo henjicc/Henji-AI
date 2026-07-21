@@ -16,6 +16,11 @@ import {
   writePromptOptimizationButtonBehavior,
   type PromptOptimizationButtonBehavior,
 } from '@/core/llm/promptOptimizationBehavior'
+import {
+  COLLAPSE_SETTING_SPECS,
+  QUICK_DOWNLOAD_SETTING_SPECS,
+  readLocalStorageSettings,
+} from '@/hooks/useLocalStorageSetting'
 
 interface Settings {
   maxHistoryCount: number
@@ -75,17 +80,15 @@ export function useSettings(): UseSettingsResult {
   useEffect(() => {
     const loadSettings = () => {
       const priceSettings = readPriceEstimateDisplaySettings()
+      const collapseSettings = readLocalStorageSettings(COLLAPSE_SETTING_SPECS)
+      const quickDownloadSettings = readLocalStorageSettings(QUICK_DOWNLOAD_SETTING_SPECS)
       const loaded: Settings = {
         maxHistoryCount: parseInt(localStorage.getItem('max_history_count') || '50', 10),
         showPriceEstimate: priceSettings.showPriceEstimate,
         priceEstimateCurrencyMode: priceSettings.currencyMode,
         usdToCnyRate: priceSettings.usdToCnyRate,
-        enableAutoCollapse: localStorage.getItem('enable_auto_collapse') !== 'false',
-        collapseDelay: parseInt(localStorage.getItem('collapse_delay') || '500', 10),
-        collapseOnScrollOnly: localStorage.getItem('collapse_on_scroll_only') !== 'false',
-        enableQuickDownload: localStorage.getItem('enable_quick_download') === 'true',
-        quickDownloadButtonOnly: localStorage.getItem('quick_download_button_only') !== 'false',
-        quickDownloadPath: localStorage.getItem('quick_download_path') || '',
+        ...collapseSettings,
+        ...quickDownloadSettings,
         enableAutoFocusModelSearch: localStorage.getItem('enable_auto_focus_model_search') !== 'false',
         maxConcurrentTasks: parseInt(localStorage.getItem('max_concurrent_tasks') || '2', 10),
         promptOptimizationButtonBehavior: readPromptOptimizationButtonBehavior(),
@@ -97,18 +100,19 @@ export function useSettings(): UseSettingsResult {
 
   // 更新单个设置
   const updateSetting = <K extends SettingsKey>(key: K, value: Settings[K]) => {
+    if (key === 'promptOptimizationButtonBehavior') {
+      const nextValue = normalizePromptOptimizationButtonBehavior(value)
+      setSettings(prev => ({ ...prev, [key]: nextValue }))
+      writePromptOptimizationButtonBehavior(nextValue)
+      return
+    }
+
     const nextValue = key === 'priceEstimateCurrencyMode'
       ? normalizePriceEstimateCurrencyMode(value)
       : key === 'usdToCnyRate'
         ? normalizeUsdToCnyRate(value)
-        : key === 'promptOptimizationButtonBehavior'
-          ? normalizePromptOptimizationButtonBehavior(value)
         : value
     setSettings(prev => ({ ...prev, [key]: nextValue }))
-    if (key === 'promptOptimizationButtonBehavior') {
-      writePromptOptimizationButtonBehavior(nextValue)
-      return
-    }
     const storageKey = key === 'showPriceEstimate'
       ? SHOW_PRICE_ESTIMATE_STORAGE_KEY
       : key === 'priceEstimateCurrencyMode'

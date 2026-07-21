@@ -6,34 +6,5 @@
   "delete": "Delete",
   "confirmDelete": "Are you sure you want to delete this record?",
   "loadMore": "Load More",
-  "noMore": "No more records",
-  "migration": {
-    "title": "Database Migration",
-    "notice": "We found legacy history files and need to migrate them to the new database format.",
-    "willDo": "This will:",
-    "steps": {
-      "backup": "Back up existing data",
-      "cleanupBase64": "Clean Base64 data to reduce storage",
-      "migrateSqlite": "Migrate to SQLite",
-      "fasterQuery": "Enable faster queries and filtering"
-    },
-    "actions": {
-      "start": "Start migration",
-      "migrating": "Migrating...",
-      "later": "Later",
-      "done": "Done"
-    },
-    "result": {
-      "success": "✓ Migration successful!",
-      "failed": "✗ Migration failed"
-    },
-    "stats": {
-      "total": "Total records: {{count}}",
-      "migrated": "Migrated: {{count}}",
-      "skipped": "Skipped: {{count}}",
-      "fileSize": "File size: {{original}} MB → {{current}} KB",
-      "saved": "Space saved: {{percent}}%",
-      "viewErrors": "View errors ({{count}})"
-    }
-  }
+  "noMore": "No more records"
 }

@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { getPlatform } from '@/platform/runtime'
 
 const logger = createLogger('components.UpdateDialog')
 /**
@@ -7,8 +8,12 @@ const logger = createLogger('components.UpdateDialog')
  */
 
 import React, { useState, useEffect } from 'react'
-import { open } from '@tauri-apps/plugin-shell'
-import { ReleaseInfo, formatReleaseDate } from '../services/updateChecker'
+import {
+  ReleaseInfo,
+  downloadElectronUpdate,
+  formatReleaseDate,
+  installElectronUpdate,
+} from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
 import { useI18n } from '@/hooks/useI18n'
 import { UiButton, UiIconButton, UiPanel } from '@/components/ui'
@@ -22,6 +27,7 @@ interface UpdateDialogProps {
 const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion, onClose }) => {
   const { t } = useI18n('ui')
   const [dialogOpacity, setDialogOpacity] = useState(0)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
     requestAnimationFrame(() => setDialogOpacity(1))
@@ -36,11 +42,25 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
 
   const handleUpdate = async () => {
     try {
+      if (releaseInfo.source === 'electron-updater') {
+        if (releaseInfo.updateStatus === 'downloaded') {
+          await installElectronUpdate()
+          return
+        }
+        setIsUpdating(true)
+        const result = await downloadElectronUpdate()
+        if (result.status === 'downloaded') {
+          await installElectronUpdate()
+        }
+        return
+      }
       // 打开 GitHub Release 页面
-      await open(releaseInfo.htmlUrl)
+      await getPlatform().system.shell.openExternal(releaseInfo.htmlUrl)
       handleClose()
     } catch (error) {
       logger.error('打开更新页面失败:', error)
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -49,6 +69,16 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
     addIgnoredVersion(releaseInfo.version)
     handleClose()
   }
+
+  const actionLabel = releaseInfo.source === 'electron-updater'
+    ? releaseInfo.updateStatus === 'downloaded'
+      ? t('updateDialog.actions.installNow', { defaultValue: '重启安装' })
+      : releaseInfo.updateStatus === 'downloading'
+        ? t('updateDialog.actions.downloading', {
+            defaultValue: `下载中 ${Math.round(releaseInfo.progressPercent || 0)}%`
+          })
+        : t('updateDialog.actions.updateNow')
+    : t('updateDialog.actions.updateNow')
 
   // 解析更新说明（Markdown 格式）
   const renderReleaseNotes = () => {
@@ -214,11 +244,12 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           </UiButton>
           <UiButton
             onClick={handleUpdate}
+            disabled={isUpdating || releaseInfo.updateStatus === 'downloading'}
             variant="primary"
             size="sm"
             className="px-5 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
           >
-            {t('updateDialog.actions.updateNow')}
+            {isUpdating ? t('updateDialog.actions.downloading', { defaultValue: '下载中' }) : actionLabel}
           </UiButton>
         </div>
       </UiPanel>

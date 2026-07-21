@@ -9,32 +9,32 @@ import { UiInput, UiOptionButton } from '@/components/ui'
 
 const logger = createLogger('components.ui.UniversalResolutionSelector')
 
-type SelectorOption = { value: unknown; label: string; disabled?: boolean }
+type SelectorOption = { value: DynamicValue; label: string; disabled?: boolean }
 
 interface UniversalResolutionSelectorProps {
   label?: string
-  value: unknown
+  value: DynamicValue
   options: SelectorOption[]
   config: ResolutionConfig
   customWidth?: string
   customHeight?: string
-  qualityValue?: unknown
+  qualityValue?: DynamicValue
   baseSizeValue?: number
-  values?: Record<string, unknown>
-  onChange: (value: unknown) => void
+  values?: DynamicValueMap
+  onChange: (value: DynamicValue) => void
   onWidthChange?: (value: string) => void
   onHeightChange?: (value: string) => void
-  onQualityChange?: (value: unknown) => void
+  onQualityChange?: (value: DynamicValue) => void
   onBaseSizeChange?: (value: number) => void
 }
 
 const SMART_VALUES = new Set(['smart', 'auto', '智能'])
 
-function isSmartValue(value: unknown): boolean {
+function isSmartValue(value: DynamicValue): boolean {
   return typeof value === 'string' && SMART_VALUES.has(value)
 }
 
-function parseRatio(value: unknown): { width: number; height: number } | null {
+function parseRatio(value: DynamicValue): { width: number; height: number } | null {
   if (typeof value !== 'string' || isSmartValue(value) || !value.includes(':')) {
     return null
   }
@@ -47,7 +47,7 @@ function parseRatio(value: unknown): { width: number; height: number } | null {
   return { width, height }
 }
 
-function resolveQualityOptions(config: ResolutionConfig, values?: Record<string, unknown>): SelectorOption[] {
+function resolveQualityOptions(config: ResolutionConfig, values?: DynamicValueMap): SelectorOption[] {
   if (!config.qualityOptions) {
     return []
   }
@@ -63,7 +63,7 @@ function resolveQualityOptions(config: ResolutionConfig, values?: Record<string,
   }))
 }
 
-function shouldHideAspectRatio(config: ResolutionConfig, values?: Record<string, unknown>): boolean {
+function shouldHideAspectRatio(config: ResolutionConfig, values?: DynamicValueMap): boolean {
   if (!config.hideAspectRatio) {
     return false
   }
@@ -205,15 +205,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
       onWidthChange(String(size.width))
       onHeightChange(String(size.height))
     })
-  }, [
-    value,
-    baseSize,
-    qualityValue,
-    config.customInput,
-    config.useQwenCalculator,
-    config.useSeedreamCalculator,
-    config.seedreamProvider,
-  ])
+  }, [value, baseSize, qualityValue, config.customInput, config.useQwenCalculator, config.useSeedreamCalculator, config.seedreamProvider, onWidthChange, onHeightChange])
 
   const displayLabel = label || (
     config.type === 'aspect_ratio' && !config.qualityOptions && !config.customInput
@@ -240,7 +232,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
     return selected?.label || String(value ?? '')
   })()
 
-  const renderVisualization = (optionValue: unknown) => {
+  const renderVisualization = (optionValue: DynamicValue) => {
     if (!config.visualize || config.type === 'resolution') {
       return null
     }

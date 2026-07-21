@@ -20,12 +20,13 @@ export interface ProgressTracker {
   fail: (message?: string) => void
 }
 
-const DEFAULT_CURVE: Required<ProgressCurveConfig> = {
+export const DEFAULT_PROGRESS_CURVE: Required<ProgressCurveConfig> = {
   slowStart: 80,
   slowEnd: 95,
   cap: 99,
   tailFactor: 1.2
 }
+const DEFAULT_CURVE = DEFAULT_PROGRESS_CURVE
 
 const DEFAULT_TICK_MS = 300
 const DEFAULT_POLLING_ATTEMPTS = 120
@@ -39,7 +40,7 @@ const DEFAULT_DURATION_BY_TYPE: Record<ModelType, { baseMs: number; minMs: numbe
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
-const parseNumberLike = (value: unknown): number | null => {
+const parseNumberLike = (value: DynamicValue): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
   }
@@ -54,7 +55,7 @@ const parseNumberLike = (value: unknown): number | null => {
   return null
 }
 
-const pickFirstFiniteNumber = (params: Record<string, unknown>, keys: string[]): number | null => {
+const pickFirstFiniteNumber = (params: DynamicValueMap, keys: string[]): number | null => {
   for (const key of keys) {
     const raw = parseNumberLike(params[key])
     if (raw !== null) {
@@ -64,7 +65,7 @@ const pickFirstFiniteNumber = (params: Record<string, unknown>, keys: string[]):
   return null
 }
 
-const resolveAudioTextLength = (params: Record<string, unknown>): number => {
+const resolveAudioTextLength = (params: DynamicValueMap): number => {
   const textCandidates = [params.text, params.prompt]
   for (const candidate of textCandidates) {
     if (typeof candidate === 'string') {
@@ -79,7 +80,7 @@ const resolveAudioTextLength = (params: Record<string, unknown>): number => {
 
 const resolveGenericDurationMs = (
   modelType: ModelType,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   defaults: { baseMs: number; minMs: number; maxMs: number }
 ): number => {
   if (modelType === 'image') {
@@ -120,7 +121,7 @@ const resolveGenericDurationMs = (
   return clamp(durationMs, defaults.minMs, defaults.maxMs)
 }
 
-const getUnitCount = (params: Record<string, unknown>, scaleWith?: string): number => {
+const getUnitCount = (params: DynamicValueMap, scaleWith?: string): number => {
   if (!scaleWith) return 1
   const raw = params[scaleWith]
 
@@ -151,7 +152,7 @@ const resolveCurve = (curve?: ProgressCurveConfig): Required<ProgressCurveConfig
 
 const resolveExpectedDurationMs = (
   model: ModelDefinition,
-  params: Record<string, unknown>
+  params: DynamicValueMap
 ): ResolvedProgressShape | null => {
   const progress = model.meta.progress
   const mode: ProgressConfig['mode'] = progress?.mode ?? 'time'
@@ -206,7 +207,7 @@ const resolveExpectedDurationMs = (
   }
 }
 
-const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
+export const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
   if (spec.expectedDurationMs <= 0) return 0
 
   const t = elapsedMs / spec.expectedDurationMs
@@ -233,9 +234,16 @@ const computeProgress = (elapsedMs: number, spec: ProgressSpec): number => {
   return slowEnd + tail
 }
 
+const PROGRESS_BAR_FINAL_TRANSITION_MS = 450
+const PROGRESS_BAR_DEFAULT_TRANSITION_MS = 2800
+
+/** 进度条 CSS 过渡时长：临近完成时收短，制造丝滑结尾，与生成 Tab 保持一致 */
+export const getProgressTransitionDurationMs = (progressPercent: number): number =>
+  progressPercent >= 99 ? PROGRESS_BAR_FINAL_TRANSITION_MS : PROGRESS_BAR_DEFAULT_TRANSITION_MS
+
 export const resolveProgressSpec = (
   model: ModelDefinition,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   expectedDurationOverrideMs?: number
 ): ProgressSpec | null => {
   const resolved = resolveExpectedDurationMs(model, params)

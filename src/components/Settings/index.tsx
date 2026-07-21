@@ -48,6 +48,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     ],
     interface: [
       { id: 'interface-layout', label: '布局行为' },
+      { id: 'interface-assets', label: '资产库' },
       { id: 'interface-canvas', label: '画布' },
       { id: 'interface-theme', label: '主题外观' }
     ],

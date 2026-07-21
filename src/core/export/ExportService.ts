@@ -30,7 +30,7 @@ export class ExportService {
    */
   exportCurrentParams(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     options: ExportOptions = {}
   ): ExportData {
     const schema = registry.getSchema(modelId)
@@ -85,8 +85,8 @@ export class ExportService {
    */
   async exportAPIRequest(
     modelId: string,
-    params: Record<string, any>,
-    context: Record<string, any> = {},
+    params: DynamicValueMap,
+    context: DynamicValueMap = {},
     options: ExportOptions = {}
   ): Promise<ExportData> {
     const request = await requestBuilder.build(modelId, params, { context })
@@ -105,7 +105,7 @@ export class ExportService {
    */
   exportAsPreset(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     presetName: string,
     options: ExportOptions = {}
   ): ExportData {
@@ -138,7 +138,7 @@ export class ExportService {
   export(
     type: ExportType,
     modelId: string,
-    data: any,
+    data: DynamicValue,
     options: ExportOptions = {}
   ): ExportData {
     return this.createExportData(type, modelId, data, options)
@@ -186,7 +186,7 @@ export class ExportService {
   private createExportData(
     type: ExportType,
     modelId: string,
-    data: any,
+    data: DynamicValue,
     options: ExportOptions
   ): ExportData {
     const exportData: ExportData = {

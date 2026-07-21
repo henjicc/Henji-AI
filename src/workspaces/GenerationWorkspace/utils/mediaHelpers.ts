@@ -67,7 +67,7 @@ export function getFileExtension(filename: string): string {
 /**
  * 生成缩略图 URL
  */
-export function generateThumbnailUrl(url: string, width: number = 200): string {
+export function generateThumbnailUrl(url: string, _width: number = 200): string {
   // 这里可以根据实际需求实现缩略图生成逻辑
   // 目前直接返回原 URL
   return url

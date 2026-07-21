@@ -1,5 +1,5 @@
 import React from 'react'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { openDialog } from '@/platform/desktopApi'
 import Toggle from '@/components/ui/Toggle'
 import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
 import SectionCard from '../components/SectionCard'

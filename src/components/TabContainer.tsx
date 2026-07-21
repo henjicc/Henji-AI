@@ -1,13 +1,15 @@
-import React, { Suspense, lazy } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import type { WorkspaceId } from '@/core/types/workspace'
 
 // 懒加载工作区组件
 const GenerationWorkspace = lazy(() => import('../workspaces/GenerationWorkspace'))
 const CanvasWorkspace = lazy(() => import('../workspaces/CanvasWorkspace'))
-const ToolboxPlaceholder = lazy(() => import('../workspaces/ToolboxPlaceholder'))
+const ToolboxWorkspace = lazy(() => import('../workspaces/ToolboxWorkspace'))
+const AssetLibraryWorkspace = lazy(() => import('../workspaces/AssetLibraryWorkspace'))
 
 interface TabContainerProps {
-    activeTab: string
+    activeTab: WorkspaceId
 }
 
 // Loading 占位组件
@@ -22,16 +24,49 @@ const LoadingPlaceholder: React.FC = () => {
 
 /**
  * Tab 工作区容器
- * 根据 activeTab 渲染对应的工作区组件
+ * 每个工作区首次激活后保持挂载，切换 Tab 只用 CSS 隐藏非激活项，
+ * 避免反复卸载/重建组件树（DOM、图片、ReactFlow 实例等）导致的切换延迟。
+ * 每个工作区使用独立 Suspense 边界，避免某个 Tab 首次懒加载时影响已挂载的其他 Tab。
  */
 const TabContainer: React.FC<TabContainerProps> = ({ activeTab }) => {
+    const [visitedTabs, setVisitedTabs] = useState<Set<WorkspaceId>>(() => new Set([activeTab]))
+
+    useEffect(() => {
+        if (!visitedTabs.has(activeTab)) {
+            setVisitedTabs((prev) => new Set(prev).add(activeTab))
+        }
+    }, [activeTab, visitedTabs])
+
     return (
         <div className="flex-1 min-h-0 overflow-hidden pt-10">
-            <Suspense fallback={<LoadingPlaceholder />}>
-                {activeTab === 'generation' && <GenerationWorkspace />}
-                {activeTab === 'nodes' && <CanvasWorkspace />}
-                {activeTab === 'tools' && <ToolboxPlaceholder />}
-            </Suspense>
+            {visitedTabs.has('generation') && (
+                <div className={activeTab === 'generation' ? 'h-full' : 'hidden'}>
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                        <GenerationWorkspace />
+                    </Suspense>
+                </div>
+            )}
+            {visitedTabs.has('nodes') && (
+                <div className={activeTab === 'nodes' ? 'h-full' : 'hidden'}>
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                        <CanvasWorkspace />
+                    </Suspense>
+                </div>
+            )}
+            {visitedTabs.has('tools') && (
+                <div className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                        <ToolboxWorkspace />
+                    </Suspense>
+                </div>
+            )}
+            {visitedTabs.has('assets') && (
+                <div className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
+                    <Suspense fallback={<LoadingPlaceholder />}>
+                        <AssetLibraryWorkspace />
+                    </Suspense>
+                </div>
+            )}
         </div>
     )
 }

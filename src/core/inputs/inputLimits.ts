@@ -12,7 +12,7 @@ export interface ResolvedInputLimits {
 export interface InputLimitContext {
   imagesCount?: number
   videosCount?: number
-  [key: string]: unknown
+  [key: string]: DynamicValue
 }
 
 const DEFAULT_IMAGE_MAX = 6
@@ -37,7 +37,7 @@ const mergeLimit = (base: { min: number; max: number }, override?: InputCountLim
   }
 }
 
-const resolveConfig = (inputLimits: InputLimits | undefined, params: Record<string, unknown>): InputLimitsConfig => {
+const resolveConfig = (inputLimits: InputLimits | undefined, params: DynamicValueMap): InputLimitsConfig => {
   if (!inputLimits) return {}
   if (typeof inputLimits === 'function') {
     return inputLimits(params)
@@ -47,19 +47,19 @@ const resolveConfig = (inputLimits: InputLimits | undefined, params: Record<stri
 
 const resolveRules = (
   rules: InputLimitRule[] | undefined,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   context: InputLimitContext
 ): Array<{ rule: InputLimitRule; matches: boolean }> => {
   if (!rules || rules.length === 0) return []
   return rules.map(rule => ({
     rule,
-    matches: evaluateCondition(rule.when, params as Record<string, any>, context)
+    matches: evaluateCondition(rule.when, params as DynamicValueMap, context)
   }))
 }
 
 export function resolveInputLimits(
   modelId: string,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   context: InputLimitContext = {}
 ): ResolvedInputLimits {
   const model = registry.getModel(modelId)

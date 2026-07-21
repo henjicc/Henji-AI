@@ -3,7 +3,7 @@
  * 用于追踪参数从 UI 输入到 API 请求的完整流程
  */
 
-import type { ParamFlowRecord, FlowStage, ParamValueRecord, Linkage } from './types'
+import type { ParamFlowRecord, FlowStage, Linkage } from './types'
 
 export class ParamFlowTracker {
   private records: ParamFlowRecord[] = []
@@ -24,7 +24,7 @@ export class ParamFlowTracker {
   /**
    * 记录 UI 输入阶段
    */
-  recordUIInput(params: Record<string, any>): void {
+  recordUIInput(params: DynamicValueMap): void {
     if (!this.currentRecord) return
 
     const stage: FlowStage = {
@@ -48,7 +48,7 @@ export class ParamFlowTracker {
    */
   recordLinkage(
     triggeredBy: string,
-    changes: Record<string, any>,
+    changes: DynamicValueMap,
     linkageRule: Linkage
   ): void {
     if (!this.currentRecord) return
@@ -76,8 +76,8 @@ export class ParamFlowTracker {
    */
   recordTransform(
     paramId: string,
-    fromValue: any,
-    toValue: any,
+    fromValue: DynamicValue,
+    toValue: DynamicValue,
     transformer: string
   ): void {
     if (!this.currentRecord) return
@@ -106,7 +106,7 @@ export class ParamFlowTracker {
   /**
    * 记录 API 构建阶段
    */
-  recordAPIBuild(apiParams: Record<string, any>): void {
+  recordAPIBuild(apiParams: DynamicValueMap): void {
     if (!this.currentRecord) return
 
     const stage: FlowStage = {

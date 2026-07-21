@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const minimaxHailuo23Model = defineModel({
   meta: {
     id: 'ppio-minimax-hailuo-2.3',
+    seriesId: 'hailuo',
+    seriesRank: 2.3,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-minimax-hailuo-2.3',
@@ -122,7 +124,7 @@ export const minimaxHailuo23Model = defineModel({
       const enable = params.ppioHailuo23PromptExtend === undefined ? (params.enable_prompt_expansion === undefined ? true : params.enable_prompt_expansion) : params.ppioHailuo23PromptExtend
       const prompt = params.prompt || ''
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration,
         resolution,

@@ -1,6 +1,6 @@
-import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
 import { createLogger } from '@/core/logging'
 import type { LlmChatRequest, LlmStreamEvent } from '@/core/llm/types'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 const logger = createLogger('commands.llmRuntime')
 
@@ -10,29 +10,29 @@ export interface LlmProviderKeyStatusDto {
 }
 
 function ensureDesktopRuntime(): void {
-  if (!isTauri()) {
-    throw new Error('LLM Runtime only available in Tauri desktop mode')
+  if (!isDesktopRuntime()) {
+    throw new Error('LLM Runtime only available in desktop mode')
   }
 }
 
 export async function llmSetProviderApiKey(providerId: string, apiKey: string): Promise<void> {
   ensureDesktopRuntime()
-  await invoke('llm_set_provider_api_key', { providerId, apiKey })
+  await getPlatform().llmRuntime.setProviderApiKey(providerId, apiKey)
 }
 
 export async function llmRemoveProviderApiKey(providerId: string): Promise<void> {
   ensureDesktopRuntime()
-  await invoke('llm_remove_provider_api_key', { providerId })
+  await getPlatform().llmRuntime.removeProviderApiKey(providerId)
 }
 
 export async function llmGetProviderApiKey(providerId: string): Promise<string | null> {
   ensureDesktopRuntime()
-  return await invoke<string | null>('llm_get_provider_api_key', { providerId })
+  return await getPlatform().llmRuntime.getProviderApiKey(providerId)
 }
 
 export async function llmGetProviderKeyStatus(providerIds: string[]): Promise<LlmProviderKeyStatusDto[]> {
   ensureDesktopRuntime()
-  return await invoke<LlmProviderKeyStatusDto[]>('llm_get_provider_key_status', { providerIds })
+  return await getPlatform().llmRuntime.getProviderKeyStatus(providerIds)
 }
 
 export async function llmChatStream(
@@ -40,24 +40,11 @@ export async function llmChatStream(
   onEvent: (event: LlmStreamEvent) => void
 ): Promise<void> {
   ensureDesktopRuntime()
-  const channel = new Channel<LlmStreamEvent>()
-  channel.onmessage = (event) => {
-    if (event.type === 'Error') {
-      logger.error('[LlmRuntimeCmd] LLM 请求失败', event.data, {
-        event: 'llm_runtime.chat_stream.failed',
-        requestId: request.requestId,
-        providerId: request.providerId,
-        modelId: request.modelId,
-        context: {
-          request,
-          streamError: event.data,
-        },
-      })
-    }
-    onEvent(event)
-  }
+  // 流内 Error 事件对应的失败事实已由主进程 `llm/runtime.ts` 直接记录为
+  // `llm_runtime.chat_stream.failed`（含完整脱敏请求/错误信息），这里不再重复记录同一事实，
+  // 只保留 IPC 调用本身失败（`invoke_failed`）这一前端独有视角。
   try {
-    await invoke('llm_chat_stream', { request, onEvent: channel })
+    await getPlatform().llmRuntime.chatStream(request, onEvent)
   } catch (error) {
     logger.error('[LlmRuntimeCmd] LLM 请求调用失败', error, {
       event: 'llm_runtime.chat_stream.invoke_failed',
@@ -74,5 +61,5 @@ export async function llmChatStream(
 
 export async function llmCancelTask(taskId: string): Promise<void> {
   ensureDesktopRuntime()
-  await invoke('llm_cancel_task', { taskId })
+  await getPlatform().llmRuntime.cancelTask(taskId)
 }

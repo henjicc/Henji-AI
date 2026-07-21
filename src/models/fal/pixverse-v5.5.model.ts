@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 export const pixverseV55Model = defineModel({
   meta: {
     id: 'fal-ai-pixverse-v5.5',
+    seriesId: 'pixverse',
+    seriesRank: 5.5,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-pixverse-v5.5',
@@ -115,7 +117,7 @@ export const pixverseV55Model = defineModel({
       const resolution = params.pixverseResolution
       const duration = params.falPixverse55VideoDuration || 5
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
 
       if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
         requestData.aspect_ratio = aspectRatio

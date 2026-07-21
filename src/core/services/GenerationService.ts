@@ -4,7 +4,7 @@ const logger = createLogger('core.services.GenerationService')
 /**
  * GenerationService - unified AI runtime gateway.
  *
- * Frontend only prepares model params and delegates execution to Rust backend.
+ * Frontend only prepares model params and delegates execution to the Electron backend.
  */
 
 import { registry } from '@/core/ModelRegistry'
@@ -13,6 +13,9 @@ import { createProgressTracker, resolveProgressSpec } from '@/core/progress/prog
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ModelDefinition, ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
+import { readImageInfo } from '@/commands/image'
+import { compressVideoToFit, readVideoInfo, trimVideoSource } from '@/commands/video'
+import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { recordApiTrace } from '@/utils/testMode'
 import {
 
@@ -41,12 +44,12 @@ export interface GenerationExecutionOptions {
 
 interface PendingProgressSampleContext {
   startedAtMs: number
-  params: Record<string, unknown>
+  params: DynamicValueMap
   source: 'generation' | 'canvas'
   estimate: AiProgressEstimateDto | null
 }
 
-function getErrorMessage(error: unknown): string {
+function getErrorMessage(error: DynamicValue): string {
   if (typeof error === 'string') {
     const trimmed = error.trim()
     return trimmed.length > 0 ? trimmed : 'Generation failed'
@@ -57,7 +60,7 @@ function getErrorMessage(error: unknown): string {
   }
 
   if (error && typeof error === 'object') {
-    const record = error as Record<string, unknown>
+    const record = error as DynamicValueMap
     if (typeof record.message === 'string' && record.message.trim().length > 0) {
       return record.message
     }
@@ -73,7 +76,7 @@ function createRequestId(modelId: string): string {
   return `${modelId}-${suffix}`
 }
 
-function attachUploadRuntimeParams(params: Record<string, unknown>): Record<string, unknown> {
+function attachUploadRuntimeParams(params: DynamicValueMap): DynamicValueMap {
   const uploadService = UploadService.getInstance()
   const next = {
     ...params,
@@ -87,7 +90,7 @@ function attachUploadRuntimeParams(params: Record<string, unknown>): Record<stri
   return next
 }
 
-function formatFailedMetadata(metadata: Record<string, unknown> | undefined): string {
+function formatFailedMetadata(metadata: DynamicValueMap | undefined): string {
   if (!metadata || Object.keys(metadata).length === 0) return ''
   try {
     return `: ${JSON.stringify(metadata)}`
@@ -96,12 +99,12 @@ function formatFailedMetadata(metadata: Record<string, unknown> | undefined): st
   }
 }
 
-function isStringArray(value: unknown): value is string[] {
+function isStringArray(value: DynamicValue): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-function getFirstImageSource(params: Record<string, unknown>): string | null {
-  const candidates: unknown[] = [params.images, params.uploadedFilePaths]
+function getFirstImageSource(params: DynamicValueMap): string | null {
+  const candidates: DynamicValue[] = [params.images, params.uploadedFilePaths]
   for (const candidate of candidates) {
     if (!isStringArray(candidate)) {
       continue
@@ -114,6 +117,129 @@ function getFirstImageSource(params: Record<string, unknown>): string | null {
   }
 
   return null
+}
+
+function getFirstVideoSource(params: DynamicValueMap): string | null {
+  const candidates: DynamicValue[] = [params.uploadedVideoFilePaths, params.videos]
+  for (const candidate of candidates) {
+    if (!isStringArray(candidate)) {
+      continue
+    }
+
+    const first = candidate.find((item) => item.trim().length > 0)
+    if (first) {
+      return first
+    }
+  }
+
+  return null
+}
+
+function replaceVideoSourceInParams(params: DynamicValueMap, oldSource: string, newSource: string): DynamicValueMap {
+  const next = { ...params }
+  for (const key of ['uploadedVideoFilePaths', 'videos'] as const) {
+    const candidate = next[key]
+    if (!isStringArray(candidate)) {
+      continue
+    }
+    const index = candidate.indexOf(oldSource)
+    if (index === -1) {
+      continue
+    }
+    const updated = [...candidate]
+    updated[index] = newSource
+    next[key] = updated
+  }
+  return next
+}
+
+/**
+ * 体积超限的视频在生成提交时压缩，而不是上传时拦截/拒绝：上传体验保持即时，
+ * 压缩耗时由已经启动的任务进度条覆盖，用户感知更"无感"。已在限制内时
+ * compressVideoToFit 内部直接短路返回原路径，这里不会产生多余开销。
+ */
+async function compressFirstVideoIfNeeded(model: ModelDefinition, params: DynamicValueMap): Promise<DynamicValueMap> {
+  const firstVideoSource = getFirstVideoSource(params)
+  if (!firstVideoSource) {
+    return params
+  }
+
+  const limits = resolveInputLimits(model.meta.id, params)
+  const maxSizeMB = limits.videoConstraints?.maxSizeMB
+  if (!maxSizeMB) {
+    return params
+  }
+
+  try {
+    const compressed = await compressVideoToFit(firstVideoSource, maxSizeMB)
+    if (compressed.path === firstVideoSource) {
+      return params
+    }
+    return replaceVideoSourceInParams(params, firstVideoSource, compressed.path)
+  } catch (error) {
+    logger.warn('[GenerationService] 视频压缩失败，使用原始文件继续生成', error)
+    return params
+  }
+}
+
+/**
+ * 裁剪窗口确认时只记录用户选中的 [start, end]（uploadedVideoTrimStart/End），不立即跑 ffmpeg；
+ * 真正切出这段画面发生在这里——生成提交那一刻，藏在已经在走的任务进度条后面。
+ * 作用在 compressFirstVideoIfNeeded 之后（即已压缩、关键帧已铺密的版本上），裁剪可以一直
+ * 用代价极低的流复制，且能精确卡在用户选的秒数上。trimVideoSource 内部已有哈希缓存，
+ * 同一个源 + 同一段 [start,end] 重复提交（如改了别的参数再生成一次）不会重复编码。
+ */
+async function trimFirstVideoIfSelected(params: DynamicValueMap): Promise<DynamicValueMap> {
+  const start = params.uploadedVideoTrimStart
+  const end = params.uploadedVideoTrimEnd
+  if (typeof start !== 'number' || typeof end !== 'number' || !(end > start)) {
+    return params
+  }
+
+  const source = getFirstVideoSource(params)
+  if (!source) {
+    return params
+  }
+
+  try {
+    const result = await trimVideoSource(source, start, end)
+    return replaceVideoSourceInParams(params, source, result.path)
+  } catch (error) {
+    logger.warn('[GenerationService] 视频裁剪失败，使用未裁剪版本继续生成', error)
+    return params
+  }
+}
+
+async function readVideoDurationSeconds(videoSource: string): Promise<number | null> {
+  try {
+    const info = await readVideoInfo(videoSource)
+    return info.durationSeconds > 0 ? info.durationSeconds : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * request.builder 在 Node VM 中执行、无法读取真实视频时长；这里在生成前统一探测
+ * "第一个视频输入"的真实时长，写入 __firstVideoDurationSeconds，供需要 start/end
+ * 截取秒数的视频模型（如 Gemini Omni 的 video_list）直接读取，而不必各自重复探测。
+ */
+async function attachFirstVideoDuration(params: DynamicValueMap): Promise<DynamicValueMap> {
+  const firstVideoSource = getFirstVideoSource(params)
+  if (!firstVideoSource) {
+    if (params.__firstVideoDurationSeconds === undefined) {
+      return params
+    }
+    const next = { ...params }
+    delete next.__firstVideoDurationSeconds
+    return next
+  }
+
+  const durationSeconds = await readVideoDurationSeconds(firstVideoSource)
+  if (durationSeconds === null) {
+    return params
+  }
+  return { ...params, __firstVideoDurationSeconds: durationSeconds }
 }
 
 type SmartAspectResolveReason = 'reference-image' | 'fallback-square' | 'fallback-nearest'
@@ -133,7 +259,7 @@ interface SmartAspectResolutionReport {
 }
 
 interface SmartAspectNormalizationResult {
-  params: Record<string, unknown>
+  params: DynamicValueMap
   report: {
     hasReferenceImage: boolean
     hasImageInput: boolean
@@ -146,7 +272,7 @@ interface SmartAspectNormalizationResult {
 }
 
 interface ResolutionPreprocessSummary {
-  mode: 'smart' | 'fixed' | 'unknown'
+  mode: 'smart' | 'fixed' | 'DynamicValue'
   aspectRatio?: string
   quality?: string
   width?: number
@@ -156,7 +282,7 @@ interface ResolutionPreprocessSummary {
 
 function resolveChoiceSmartAspectValues(
   model: ModelDefinition,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   hasReferenceImage: boolean,
   targetRatio: number
 ): SmartAspectResolutionReport {
@@ -214,29 +340,22 @@ function resolveChoiceSmartAspectValues(
 }
 
 async function readImageRatio(imageSource: string): Promise<number | null> {
-  if (typeof Image === 'undefined') {
+  try {
+    const info = await readImageInfo(imageSource)
+    if (info.width > 0 && info.height > 0) {
+      return info.width / info.height
+    }
+    return null
+  } catch {
     return null
   }
-
-  return new Promise((resolve) => {
-    const image = new Image()
-    image.onload = () => {
-      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-        resolve(image.naturalWidth / image.naturalHeight)
-        return
-      }
-      resolve(null)
-    }
-    image.onerror = () => resolve(null)
-    image.src = imageSource
-  })
 }
 
 async function normalizeSmartAspectParams(
   model: ModelDefinition,
-  params: Record<string, unknown>
+  params: DynamicValueMap
 ): Promise<SmartAspectNormalizationResult> {
-  const nextParams: Record<string, unknown> = { ...params }
+  const nextParams: DynamicValueMap = { ...params }
   const firstImageSource = getFirstImageSource(nextParams)
   const hasImageInput = typeof firstImageSource === 'string' && firstImageSource.trim().length > 0
   const imageRatio = firstImageSource ? await readImageRatio(firstImageSource) : null
@@ -265,21 +384,21 @@ async function normalizeSmartAspectParams(
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function getNumberValue(value: unknown): number | undefined {
+function getNumberValue(value: DynamicValue): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function getStringValue(value: unknown): string | undefined {
+function getStringValue(value: DynamicValue): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined
 }
 
 function buildResolutionPreprocessSummary(
-  sourceParams: Record<string, unknown>,
-  runtimeParams: Record<string, unknown>
+  sourceParams: DynamicValueMap,
+  runtimeParams: DynamicValueMap
 ): ResolutionPreprocessSummary | null {
   const resolution = isRecord(sourceParams.resolution) ? sourceParams.resolution : null
   if (!resolution) {
@@ -313,7 +432,7 @@ function buildResolutionPreprocessSummary(
   }
 
   return {
-    mode: 'unknown',
+    mode: 'DynamicValue',
     quality,
     width,
     height,
@@ -321,23 +440,23 @@ function buildResolutionPreprocessSummary(
   }
 }
 
-function countNonEmptyStringItems(value: unknown): number {
+function countNonEmptyStringItems(value: DynamicValue): number {
   if (!Array.isArray(value)) {
     return 0
   }
   return value.filter((item) => typeof item === 'string' && item.trim().length > 0).length
 }
 
-function hasPromptInput(params: Record<string, unknown>): boolean {
+function hasPromptInput(params: DynamicValueMap): boolean {
   const candidates = [params.prompt, params.text]
   return candidates.some((candidate) => typeof candidate === 'string' && candidate.trim().length > 0)
 }
 
 function buildGeneratePreflightSummary(
-  sourceParams: Record<string, unknown>,
-  runtimeParams: Record<string, unknown>,
+  sourceParams: DynamicValueMap,
+  runtimeParams: DynamicValueMap,
   normalization: SmartAspectNormalizationResult['report']
-): Record<string, unknown> {
+): DynamicValueMap {
   const imagesCount = countNonEmptyStringItems(runtimeParams.images)
   const videosCount = countNonEmptyStringItems(runtimeParams.videos)
   const uploadedImagePathCount = countNonEmptyStringItems(runtimeParams.uploadedFilePaths)
@@ -373,26 +492,17 @@ function buildGeneratePreflightSummary(
 
 function recordRuntimeTrace(
   modelId: string,
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   trace: AiGenerateResponseDto['trace']
 ): void {
   if (!trace) {
     return
   }
 
-  logger.info('[GenerationService] API原始响应(JSON)', {
-    event: 'generation.runtime.response_json',
-    requestId: trace.requestId,
-    taskId: trace.taskId,
-    modelId: trace.modelId || modelId,
-    providerId: trace.providerId,
-    context: {
-      phase: trace.phase,
-      route: trace.route,
-      method: trace.method,
-      responseBody: trace.responseBody,
-    },
-  })
+  // 主进程（ai-runtime/runtime.ts）已经用同一份 trace 直接落盘 generation.runtime.response_json，
+  // 渲染层不再重复记录——独立日志窗口（2.1）通过 henji://log-event 实时订阅主进程权威事件。
+  // 这里只保留 recordApiTrace()：测试模式下 opt-in 的独立调试通道（api.trace），语义与用途
+  // 都和统一日志事件不同，不属于本次删除范围（1.2/1.3 决策已确立，见 decisions.md）。
 
   const prompt = typeof params.prompt === 'string'
     ? params.prompt
@@ -430,13 +540,13 @@ export class GenerationService {
 
   async generate(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
     const requestId = createRequestId(modelId)
-    const sourceParams = params as Record<string, unknown>
+    const sourceParams = params as DynamicValueMap
     const progressSource = options.progressSource ?? 'generation'
     const startedAtMs = Date.now()
 
@@ -459,7 +569,10 @@ export class GenerationService {
       progressTracker?.start()
 
       const normalized = await normalizeSmartAspectParams(model, sourceParams)
-      const runtimeParams = attachUploadRuntimeParams(normalized.params)
+      const paramsWithCompressedVideo = await compressFirstVideoIfNeeded(model, normalized.params)
+      const paramsWithTrimmedVideo = await trimFirstVideoIfSelected(paramsWithCompressedVideo)
+      const paramsWithVideoDuration = await attachFirstVideoDuration(paramsWithTrimmedVideo)
+      const runtimeParams = attachUploadRuntimeParams(paramsWithVideoDuration)
       const preflightSummary = buildGeneratePreflightSummary(sourceParams, runtimeParams, normalized.report)
       logger.info('[GenerationService] 开始生成', {
         event: 'generation.generate.start',
@@ -561,7 +674,7 @@ export class GenerationService {
 
   async generateImage(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -570,7 +683,7 @@ export class GenerationService {
 
   async generateVideo(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -579,7 +692,7 @@ export class GenerationService {
 
   async generateAudio(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -589,7 +702,7 @@ export class GenerationService {
   async continuePolling(
     modelId: string,
     taskId: string,
-    params: Record<string, unknown> = {},
+    params: DynamicValueMap = {},
     onProgress?: (status: ProgressStatus) => void,
     options: GenerationExecutionOptions = {}
   ): Promise<GenerateResult> {
@@ -758,7 +871,7 @@ export class GenerationService {
 
   async getProgressEstimate(
     modelId: string,
-    params: Record<string, unknown>
+    params: DynamicValueMap
   ): Promise<AiProgressEstimateDto | null> {
     try {
       return await aiGetProgressEstimate({
@@ -776,7 +889,7 @@ export class GenerationService {
 
   private async recordProgressSample(
     modelId: string,
-    params: Record<string, unknown>,
+    params: DynamicValueMap,
     startedAtMs: number,
     finishedAtMs: number,
     source: 'generation' | 'canvas'
@@ -821,7 +934,7 @@ export class GenerationService {
   private buildProgressTimingContext(
     estimate: AiProgressEstimateDto | null,
     recorded: AiRecordProgressSampleResponseDto | null
-  ): Record<string, unknown> {
+  ): DynamicValueMap {
     return {
       estimatedDurationMs: estimate?.durationMs,
       estimatedSource: estimate?.source,

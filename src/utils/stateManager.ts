@@ -6,11 +6,11 @@ const logger = createLogger('utils.stateManager')
  * 通用状态管理器
  * 用于预设系统的自动化状态保存和恢复
  */
-export interface StateSetter<T = any> {
+export interface StateSetter<T = DynamicValue> {
     (value: T): void
 }
 
-export interface StateDescriptor<T = any> {
+export interface StateDescriptor<T = DynamicValue> {
     get: () => T
     set: StateSetter<T>
 }
@@ -20,8 +20,8 @@ export type StateMap = Record<string, StateDescriptor>
 /**
  * 从状态映射中提取当前值
  */
-export function captureState(stateMap: StateMap): Record<string, any> {
-    const captured: Record<string, any> = {}
+export function captureState(stateMap: StateMap): DynamicValueMap {
+    const captured: DynamicValueMap = {}
 
     for (const [key, descriptor] of Object.entries(stateMap)) {
         try {
@@ -37,7 +37,7 @@ export function captureState(stateMap: StateMap): Record<string, any> {
 /**
  * 将保存的状态恢复到状态映射
  */
-export function restoreState(stateMap: StateMap, savedState: Record<string, any>): void {
+export function restoreState(stateMap: StateMap, savedState: DynamicValueMap): void {
     for (const [key, value] of Object.entries(savedState)) {
         const descriptor = stateMap[key]
 
@@ -74,8 +74,8 @@ export interface CategorizedStateMap {
 export function captureCategorizedState(
     categorizedMap: CategorizedStateMap,
     categories?: string[]
-): Record<string, any> {
-    const result: Record<string, any> = {}
+): DynamicValueMap {
+    const result: DynamicValueMap = {}
 
     const targetCategories = categories || Object.keys(categorizedMap)
 
@@ -94,7 +94,7 @@ export function captureCategorizedState(
  */
 export function restoreCategorizedState(
     categorizedMap: CategorizedStateMap,
-    savedState: Record<string, any>
+    savedState: DynamicValueMap
 ): void {
     for (const [category, categoryState] of Object.entries(savedState)) {
         const stateMap = categorizedMap[category]

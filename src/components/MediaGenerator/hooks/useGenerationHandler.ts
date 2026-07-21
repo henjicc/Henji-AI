@@ -23,7 +23,9 @@ export const useGenerationHandler = (
   uploadedFilePaths: string[],
   uploadedVideoFilePaths: string[],
   uploadedAudioFilePaths: string[],
-  onGenerate: (input: string, model: string, type: ModelType, options?: unknown) => void | Promise<void>
+  onGenerate: (input: string, model: string, type: ModelType, options?: DynamicValue) => void | Promise<void>,
+  uploadedVideoTrimStart?: number | null,
+  uploadedVideoTrimEnd?: number | null
 ) => {
   const handleGenerate = useCallback(async () => {
     // 获取模型信息
@@ -34,7 +36,7 @@ export const useGenerationHandler = (
       return
     }
 
-    const rawType: unknown = modelInfo.type
+    const rawType: DynamicValue = modelInfo.type
     const modelType: ModelType = rawType === 'image' || rawType === 'video' || rawType === 'audio' ? rawType : 'image'
 
     // 准备生成选项
@@ -49,7 +51,11 @@ export const useGenerationHandler = (
       uploadedVideoFilePaths,
       uploadedAudioFilePaths,
       // 仅用于需要参考视频的模型
-      video: uploadedVideoFiles[0]
+      video: uploadedVideoFiles[0],
+      // 裁剪窗口选中的 [start, end]（若用户裁剪过）；GenerationService 在生成提交时
+      // 用它对完整视频做一次快速裁剪，不在这里提前处理
+      ...(typeof uploadedVideoTrimStart === 'number' ? { uploadedVideoTrimStart } : {}),
+      ...(typeof uploadedVideoTrimEnd === 'number' ? { uploadedVideoTrimEnd } : {})
     }
 
     const options = rawOptions
@@ -79,7 +85,9 @@ export const useGenerationHandler = (
     uploadedFilePaths,
     uploadedVideoFilePaths,
     uploadedAudioFilePaths,
-    onGenerate
+    onGenerate,
+    uploadedVideoTrimStart,
+    uploadedVideoTrimEnd
   ])
 
   return { handleGenerate }

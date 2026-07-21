@@ -11,6 +11,7 @@ import {
   type CanvasNodeData,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
@@ -18,13 +19,18 @@ import {
   MODEL_PARAM_ID,
   PROMPT_PARAM_ID,
   getSocketColor,
-  getSocketTintColor,
   promptPortId,
   type RowMediaKind,
 } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
+import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import { NODE_ROW_CARD_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_ROW_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+  NODE_ROW_CARD_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
 import {
   areMediaOutputListsEqual,
   collectInputMedia,
@@ -39,6 +45,7 @@ import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
 import { registry } from '@/core/ModelRegistry';
 import { GenerationService } from '@/core/services/GenerationService';
@@ -58,10 +65,13 @@ export interface GenerationNodeShellData {
   displayName?: string;
   prompt: string;
   modelId?: string;
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   /** 媒体行未连线时的本地内联上传值 */
   mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
-  [key: string]: unknown;
+  /** 视频裁剪窗口选中的范围（秒），仅是元数据，不替换 mediaInputs.video 里的完整视频引用 */
+  videoTrimStart?: number;
+  videoTrimEnd?: number;
+  [key: string]: DynamicValue;
 }
 
 export interface GenerationNodeShellProps {
@@ -78,7 +88,7 @@ export interface GenerationNodeShellProps {
   apiKeyRequiredKey: string;
   resultTitleKey: string;
   /** 结果节点的附加初始数据（如 resultKind） */
-  resultNodeExtraData?: Record<string, unknown>;
+  resultNodeExtraData?: DynamicValueMap;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -132,6 +142,9 @@ export const GenerationNodeShell = memo(({
   const findNodePosition = useCanvasStore((state) => state.findNodePosition);
   const addEdge = useCanvasStore((state) => state.addEdge);
   const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus);
+  const hasSourceConnections = useCanvasStore(
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
+  );
 
   const definition = useMemo(() => getNodeDefinition(nodeType), [nodeType]);
   const generationSpec = definition.generation;
@@ -185,12 +198,37 @@ export const GenerationNodeShell = memo(({
     updateNodeData(id, { mediaInputs: { ...mediaInputs, [kind]: next } });
   }, [id, mediaInputs, updateNodeData]);
 
+  // 裁剪窗口选中的 [start, end] 只是附加在视频引用上的元数据，不替换 mediaInputs.video——
+  // 完整视频始终保留，重新打开裁剪窗口可以在完整时长范围内重新选择。
+  const videoTrimRange = useMemo(
+    () => (
+      typeof data.videoTrimStart === 'number' && typeof data.videoTrimEnd === 'number'
+        ? { start: data.videoTrimStart, end: data.videoTrimEnd }
+        : null
+    ),
+    [data.videoTrimStart, data.videoTrimEnd]
+  );
+  const handleVideoTrimRangeChange = useCallback((range: { start: number; end: number }) => {
+    updateNodeData(id, { videoTrimStart: range.start, videoTrimEnd: range.end });
+  }, [id, updateNodeData]);
+
+  // 换了一个视频（节点切换了引用，不只是同一个视频重新拖了选区）时清空裁剪选区，
+  // 对齐对话面板"换视频重置选区"的逻辑。
+  const primaryVideoRef = useRef<string | null>(null);
+  useEffect(() => {
+    const primaryVideo = effectiveVideos[0] ?? null;
+    if (primaryVideoRef.current !== null && primaryVideoRef.current !== primaryVideo && (data.videoTrimStart !== undefined || data.videoTrimEnd !== undefined)) {
+      updateNodeData(id, { videoTrimStart: undefined, videoTrimEnd: undefined });
+    }
+    primaryVideoRef.current = primaryVideo;
+  }, [effectiveVideos, data.videoTrimStart, data.videoTrimEnd, id, updateNodeData]);
+
   const incomingImageItems = useMemo(
     () =>
       effectiveImages.map((imageUrl, index) => ({
         id: `image-ref-${index}`,
         label: `图${index + 1}`,
-        thumbnailSrc: imageUrl,
+        thumbnailSrc: resolveImageDisplayUrl(imageUrl),
       })),
     [effectiveImages]
   );
@@ -230,7 +268,7 @@ export const GenerationNodeShell = memo(({
     ? providerKeyStatus[effectiveModel.meta.provider] === true
     : false;
 
-  const handleParamsChange = useCallback((nextParams: Record<string, unknown>) => {
+  const handleParamsChange = useCallback((nextParams: DynamicValueMap) => {
     updateNodeData(id, { params: nextParams });
   }, [id, updateNodeData]);
 
@@ -238,6 +276,7 @@ export const GenerationNodeShell = memo(({
     modelId: effectiveModelId,
     storedParams: data.params,
     onParamsChange: handleParamsChange,
+    media: { images: effectiveImages, videos: effectiveVideos, audios: effectiveAudios },
   });
 
   const handleModelChange = useCallback((nextModelId: string) => {
@@ -292,13 +331,17 @@ export const GenerationNodeShell = memo(({
     // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
     const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState();
     const injectedParamValues = collectInputValues(id, graphNodes, graphEdges);
-    const generationParams: Record<string, unknown> = {
+    const generationParams: DynamicValueMap = {
       ...modelParamValues,
       ...injectedParamValues,
       prompt,
       text: prompt,
+      // 裁剪窗口选中的 [start, end]（若用户裁剪过）；GenerationService 在生成提交时
+      // 用它对完整视频做一次快速裁剪，不在这里提前处理
+      ...(typeof data.videoTrimStart === 'number' ? { uploadedVideoTrimStart: data.videoTrimStart } : {}),
+      ...(typeof data.videoTrimEnd === 'number' ? { uploadedVideoTrimEnd: data.videoTrimEnd } : {}),
     };
-    const estimateParams: Record<string, unknown> = {
+    const estimateParams: DynamicValueMap = {
       ...generationParams,
       ...(effectiveImages.length > 0
         ? { images: effectiveImages, uploadedFilePaths: effectiveImages }
@@ -362,7 +405,7 @@ export const GenerationNodeShell = memo(({
     } finally {
       setNodeGenerationProgress(newNodeId, null);
     }
-  }, [addEdge, addNode, apiKeyRequiredKey, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
     if (nodeId !== id) {
@@ -388,7 +431,7 @@ export const GenerationNodeShell = memo(({
       onClick={() => setSelectedNode(id)}
     >
       <NodeHeader
-        className={NODE_HEADER_FLOATING_POSITION_CLASS}
+        className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
         icon={icon ?? <Sparkles className="h-4 w-4" />}
         titleText={resolvedTitle}
         editable
@@ -403,18 +446,19 @@ export const GenerationNodeShell = memo(({
         )}
       />
 
-      <div className="relative flex flex-col gap-1.5">
-        <div className="relative min-h-[100px]">
+      <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
+
+      <div className="canvas-node-lod-detail relative flex flex-col gap-1.5">
+        <div className="group/row relative min-h-[100px]">
           <Handle
             type="target"
             id={promptPortId()}
             position={Position.Left}
-            style={{ background: getSocketColor('STRING'), left: 0, top: 20, transform: 'translateX(-50%)' }}
-            className="!h-2.5 !w-2.5 !border !border-surface-dark"
+            style={{ background: getSocketColor('STRING'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+            className={`${NODE_PORT_ROW_CLASS} ${isPromptOverridden ? NODE_PORT_VISIBLE_CLASS : ''}`}
           />
           <div
-            className={`h-full p-2 ${NODE_ROW_CARD_CLASS}`}
-            style={promptOverrideValue ? { backgroundColor: getSocketTintColor('STRING') } : undefined}
+            className={`h-full p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS}`}
           >
             <ReferenceTextarea
               value={promptOverrideValue ?? promptDraft}
@@ -430,11 +474,11 @@ export const GenerationNodeShell = memo(({
               onSubmit={() => {
                 void handleGenerate();
               }}
-              className="relative h-full min-h-0"
+              className="relative h-full min-h-[86px] overflow-visible rounded-md"
               highlightLayerClassName="text-sm leading-6 text-text-dark"
-              highlightContentClassName="px-1 py-0.5"
-              textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words disabled:cursor-default"
-              pickerClassName="w-[120px]"
+              highlightContentClassName="min-h-full px-1.5 py-1"
+              textareaClassName="ui-scrollbar nodrag nowheel !border-0 !bg-transparent !shadow-none relative z-10 h-full min-h-[86px] w-full resize-none overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 selection:bg-accent/45 selection:text-white focus:!border-transparent focus:!ring-0 focus:!shadow-none focus-visible:!ring-0 whitespace-pre-wrap break-words disabled:cursor-default"
+              pickerClassName="z-[90] w-[120px]"
               pickerListClassName="max-h-[180px]"
             />
           </div>
@@ -456,16 +500,19 @@ export const GenerationNodeShell = memo(({
           onModelChange={handleModelChange}
           onParamsChange={handleParamsChange}
           incomingImages={effectiveImages}
+          videoTrimRange={videoTrimRange}
+          onVideoTrimRangeChange={handleVideoTrimRangeChange}
         />
       </div>
 
-      {error && <div className="mt-1 shrink-0 text-xs text-red-400">{error}</div>}
+      {error && <div className="canvas-node-lod-detail mt-1 shrink-0 text-xs text-red-400">{error}</div>}
 
       <Handle
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor(modelType.toUpperCase()), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={minWidth}

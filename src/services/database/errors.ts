@@ -8,7 +8,7 @@ export class DatabaseError extends Error {
   constructor(
     message: string,
     public code: string,
-    public originalError?: any
+    public originalError?: DynamicValue
   ) {
     super(message)
     this.name = 'DatabaseError'
@@ -22,7 +22,7 @@ export class DatabaseNotInitializedError extends DatabaseError {
 }
 
 export class DatabaseQueryError extends DatabaseError {
-  constructor(query: string, originalError: any) {
+  constructor(query: string, originalError: DynamicValue) {
     super(
       `Query execution failed: ${query}`,
       'DB_QUERY_ERROR',
@@ -32,7 +32,7 @@ export class DatabaseQueryError extends DatabaseError {
 }
 
 export class DatabaseConstraintError extends DatabaseError {
-  constructor(constraint: string, originalError: any) {
+  constructor(constraint: string, originalError: DynamicValue) {
     super(
       `Constraint violation: ${constraint}`,
       'DB_CONSTRAINT_ERROR',
@@ -42,7 +42,7 @@ export class DatabaseConstraintError extends DatabaseError {
 }
 
 export class DatabaseConnectionError extends DatabaseError {
-  constructor(originalError: any) {
+  constructor(originalError: DynamicValue) {
     super(
       'Failed to connect to database',
       'DB_CONNECTION_ERROR',

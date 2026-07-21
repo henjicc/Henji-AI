@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import type { ParamDef } from '@/core/types';
-import { deriveSocketType, getSocketColor, getSocketTintColor } from '@/core/types/SocketType';
+import { deriveSocketType, getSocketColor } from '@/core/types/SocketType';
 import { getI18nText } from '@/core/types/I18nText';
 import { isParamVisible } from '@/components/params/paramVisibility';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -20,6 +20,8 @@ import {
   NODE_ROW_CONTROL_SLOT_CLASS,
   NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
+  NODE_PORT_ROW_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { NodeParamControl } from './NodeParamControl';
 
@@ -29,9 +31,9 @@ interface NodeParamRowsProps {
   /** 模型参数 schema（registry.getSchema 结果） */
   schema: ParamDef[];
   /** 默认值与持久化合并后的当前参数值 */
-  values: Record<string, unknown>;
+  values: DynamicValueMap;
   /** 参数变化回写 */
-  setParam: (key: string, value: unknown) => void;
+  setParam: (key: string, value: DynamicValue) => void;
   /** 不在逐行区渲染的参数（如 prompt，由 shell 单独渲染） */
   excludeParamIds?: string[];
 }
@@ -96,14 +98,13 @@ export const NodeParamRows = memo(({
             className={`${NODE_ROW_CLASS} ${
               isConnected ? '' : NODE_ROW_HOVER_CLASS
             }`}
-            style={isConnected ? { backgroundColor: getSocketTintColor(socketType) } : undefined}
           >
             <Handle
               type="target"
               id={paramPortId(param.id)}
               position={Position.Left}
               style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-              className="!h-2.5 !w-2.5 !border !border-surface-dark"
+              className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
             />
             <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
             <div className={NODE_ROW_CONTROL_SLOT_CLASS}>

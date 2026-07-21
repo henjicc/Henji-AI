@@ -22,6 +22,8 @@ const SUPPORTED_ASPECT_RATIOS = [
 export const nanoBanana2Model = defineModel({
   meta: {
     id: 'ppio-nano-banana-2',
+    seriesId: 'nano-banana',
+    seriesRank: 3,
     provider: 'ppio',
     type: 'image',
     i18nScope: 'models.defs.ppio-nano-banana-2',
@@ -143,7 +145,7 @@ export const nanoBanana2Model = defineModel({
         ? resolveClosestAspectRatio(imageRatioHint)
         : rawAspectRatio
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size: quality === '0.5K' || quality === '1K' || quality === '2K' || quality === '4K' ? quality : '1K',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1'
@@ -160,7 +162,7 @@ export const nanoBanana2Model = defineModel({
     currency: '¥',
     calculator: (params) => {
       const resolution = params.resolution && typeof params.resolution === 'object'
-        ? params.resolution as Record<string, unknown>
+        ? params.resolution as DynamicValueMap
         : undefined
       const quality = typeof resolution?.quality === 'string'
         ? resolution.quality

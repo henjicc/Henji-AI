@@ -3,6 +3,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   type CanvasNodeData,
   type CanvasNodeType,
+  type CameraStageNodeData,
   type ExportImageNodeData,
   type GroupNodeData,
   type ImageEditNodeData,
@@ -41,6 +42,7 @@ import {
   type NodeValueOutput,
 } from './nodePorts';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
+import type { ModelTag } from '@/core/types';
 
 /**
  * 新增画布节点 SOP：
@@ -102,7 +104,7 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   /** 生成类节点的生成规格 */
   generation?: NodeGenerationSpec;
   /** 提取该节点对下游的媒体输出（参数为宽类型以保证注册表协变，内部自行收窄） */
-  getOutputs?: (data: CanvasNodeData) => NodeMediaOutput[];
+  getOutputs?: (data: CanvasNodeData, sourceHandle?: string) => NodeMediaOutput[];
   /** 提取该节点对下游参数端口的标量值输出（数值/源节点专用） */
   getValueOutput?: (data: CanvasNodeData) => NodeValueOutput | null;
   createDefaultData: () => TData;
@@ -110,11 +112,11 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
 
 /** 通用提取：节点 data 上的 imageUrl/previewImageUrl 作为图片输出 */
 function imageOutputsFromData(data: CanvasNodeData): NodeMediaOutput[] {
-  const imageUrl = (data as { imageUrl?: unknown }).imageUrl;
+  const imageUrl = (data as { imageUrl?: DynamicValue }).imageUrl;
   if (typeof imageUrl !== 'string' || !imageUrl) {
     return [];
   }
-  const previewImageUrl = (data as { previewImageUrl?: unknown }).previewImageUrl;
+  const previewImageUrl = (data as { previewImageUrl?: DynamicValue }).previewImageUrl;
   return [{
     kind: 'image',
     url: imageUrl,
@@ -282,6 +284,38 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
   }),
 };
 
+const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
+  type: CANVAS_NODE_TYPES.cameraStage,
+  menuLabelKey: 'node.menu.cameraStage',
+  menuIcon: 'video',
+  visibleInMenu: true,
+  capabilities: { toolbar: true, promptInput: false },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: false,
+    connectMenu: { fromSource: false, fromTarget: true },
+    manualSource: false,
+  },
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.cameraStage],
+    projectId: null,
+    imageUrl: null,
+    previewImageUrl: null,
+    videoUrl: null,
+    aspectRatio: '16:9',
+    durationSec: null,
+    selectedTimeSec: 0,
+    videoProgress: null,
+    videoExporting: false,
+    videoRenderPhase: null,
+    videoRenderRequestId: null,
+    assetCollectionEnabled: false,
+    assetCollectionLibraryId: null,
+    videoRenderError: null,
+    outputKind: 'image',
+  }),
+};
+
 const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardSplit,
   menuLabelKey: 'node.menu.storyboard',
@@ -298,6 +332,7 @@ const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> =
       fromSource: false,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'image', role: 'result' },
   ports: {
@@ -326,6 +361,9 @@ const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> =
   }),
 };
 
+/** 分镜生成始终向模型发送栅格参考图，因此默认模型也只能从支持图片编辑的模型中选取 */
+const STORYBOARD_GEN_MODEL_REQUIRED_TAGS: ModelTag[] = ['image-to-image'];
+
 const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardGen,
   menuLabelKey: 'node.menu.storyboardGen',
@@ -334,6 +372,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
   capabilities: {
     toolbar: true,
     promptInput: false,
+    toolbarGenerate: true,
   },
   connectivity: {
     sourceHandle: true,
@@ -342,6 +381,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
       fromSource: true,
       fromTarget: false,
     },
+    targetHandleMode: 'rows',
   },
   media: { kind: 'image', role: 'generator' },
   ports: {
@@ -359,8 +399,9 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
     gridRows: 2,
     gridCols: 2,
     frames: [],
-    modelId: getDefaultModelId('image'),
+    modelId: getDefaultModelId('image', STORYBOARD_GEN_MODEL_REQUIRED_TAGS),
     params: {},
+    mediaInputs: {},
     imageUrl: null,
     previewImageUrl: null,
     aspectRatio: DEFAULT_ASPECT_RATIO,
@@ -391,6 +432,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.imageModelSelector]: imageModelSelectorNodeDefinition,
   [CANVAS_NODE_TYPES.videoModelSelector]: videoModelSelectorNodeDefinition,
   [CANVAS_NODE_TYPES.audioModelSelector]: audioModelSelectorNodeDefinition,
+  [CANVAS_NODE_TYPES.cameraStage]: cameraStageNodeDefinition,
 };
 
 export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {
@@ -453,11 +495,13 @@ export function getConnectMenuNodeTypes(
 /** 连接是否类型兼容（上游 emits ∈ 下游 accepts） */
 export function isConnectionCompatible(
   sourceType: CanvasNodeType,
-  targetType: CanvasNodeType
+  targetType: CanvasNodeType,
+  sourceHandle?: string | null,
 ): boolean {
   return arePortsCompatible(
     canvasNodeDefinitions[sourceType]?.ports,
-    canvasNodeDefinitions[targetType]?.ports
+    canvasNodeDefinitions[targetType]?.ports,
+    sourceHandle,
   );
 }
 
@@ -469,10 +513,11 @@ export function canNodeTypeStartManualConnection(type: CanvasNodeType): boolean 
 /** 提取节点对下游的媒体输出 */
 export function getNodeMediaOutputs(
   type: CanvasNodeType,
-  data: CanvasNodeData
+  data: CanvasNodeData,
+  sourceHandle?: string,
 ): ReturnType<NonNullable<CanvasNodeDefinition['getOutputs']>> {
   const definition = canvasNodeDefinitions[type];
-  return definition?.getOutputs?.(data) ?? [];
+  return definition?.getOutputs?.(data, sourceHandle) ?? [];
 }
 
 /** 提取节点对下游参数端口的标量值输出（无则返回 null） */

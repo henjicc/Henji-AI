@@ -1,12 +1,10 @@
 import { createLogger } from '@/core/logging'
-import { readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { save as saveDialog } from '@tauri-apps/plugin-dialog'
-import * as path from '@tauri-apps/api/path'
+import { join, readFile, saveDialog, writeFile } from '@/platform/desktopApi'
 
 const logger = createLogger('utils.save.downloadDialogs')
 
 function getFileExtension(filePath: string): string {
-  const fileName = filePath.split(/\\|\//).pop() || ''
+  const fileName = filePath.split(/[\\/]/).pop() || ''
   const match = fileName.match(/\.([^.]+)$/)
   return match ? match[1].toLowerCase() : ''
 }
@@ -21,7 +19,7 @@ function ensureExtension(fileName: string, extension: string): string {
 }
 
 export async function downloadAudioFile(sourcePath: string, suggestedName?: string): Promise<string> {
-  const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `audio-${Date.now()}.mp3`)
+  const name = suggestedName ?? (sourcePath.split(/[\\/]/).pop() || `audio-${Date.now()}.mp3`)
   const ext = getFileExtension(sourcePath) || 'mp3'
 
   const filters = [{ name: '音频文件', extensions: [ext] }]
@@ -36,14 +34,14 @@ export async function downloadAudioFile(sourcePath: string, suggestedName?: stri
   const finalTarget = ensureExtension(target, ext)
 
   const bytes = await readFile(sourcePath)
-  await writeFile(finalTarget, bytes as any)
+  await writeFile(finalTarget, bytes)
 
   logger.info('[save] 音频文件已保存:', finalTarget)
   return finalTarget
 }
 
 export async function downloadMediaFile(sourcePath: string, suggestedName?: string): Promise<string> {
-  const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
+  const name = suggestedName ?? (sourcePath.split(/[\\/]/).pop() || `media-${Date.now()}`)
   const ext = getFileExtension(sourcePath)
 
   if (!ext) {
@@ -73,7 +71,7 @@ export async function downloadMediaFile(sourcePath: string, suggestedName?: stri
   const finalTarget = ensureExtension(target, ext)
 
   const bytes = await readFile(sourcePath)
-  await writeFile(finalTarget, bytes as any)
+  await writeFile(finalTarget, bytes)
 
   logger.info('[save] 媒体文件已保存:', finalTarget)
   return finalTarget
@@ -91,17 +89,17 @@ export async function quickDownloadMediaFile(sourcePath: string, targetDir: stri
       throw new Error('目标目录路径为空，请先在设置中配置快速下载路径')
     }
 
-    const name = suggestedName ?? (sourcePath.split(/\\|\//).pop() || `media-${Date.now()}`)
+    const name = suggestedName ?? (sourcePath.split(/[\\/]/).pop() || `media-${Date.now()}`)
     logger.info('[save] 目标文件名:', name)
 
-    const target = await path.join(targetDir, name)
+    const target = await join(targetDir, name)
     logger.info('[save] 完整目标路径:', target)
 
     try {
       const bytes = await readFile(sourcePath)
       logger.info('[save] 源文件读取成功，大小:', { data: [bytes.length, 'bytes'] })
 
-      await writeFile(target, bytes as any)
+      await writeFile(target, bytes)
       logger.info('[save] 快速下载成功保存到:', target)
 
       return target

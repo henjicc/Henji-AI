@@ -3,6 +3,7 @@ import { useSettings } from '../hooks/useSettings'
 import LanguageSection from '../sections/LanguageSection'
 import HistorySection from '../sections/HistorySection'
 import DataPathSection from '../sections/DataPathSection'
+import LargeUploadSection from '../sections/LargeUploadSection'
 import ConcurrencySection from '../sections/ConcurrencySection'
 import DisplaySection from '../sections/DisplaySection'
 import DownloadSection from '../sections/DownloadSection'
@@ -32,6 +33,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
       {currentSectionId === 'general-storage' && (
         <section className="space-y-5">
           <DataPathSection />
+          <LargeUploadSection />
           <DownloadSection
             enableQuickDownload={settings.enableQuickDownload}
             quickDownloadButtonOnly={settings.quickDownloadButtonOnly}

@@ -1,6 +1,6 @@
 export const NODE_CONTROL_CHIP_CLASS = '!h-7 !rounded-md !px-2.5 !text-xs !font-normal !gap-1.5';
 
-export const NODE_CONTROL_MODEL_CHIP_CLASS = '!max-w-[260px] !justify-start';
+export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-full !min-w-0 !max-w-[260px] !justify-start';
 
 export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!max-w-[120px] !justify-start';
 
@@ -8,6 +8,15 @@ export const NODE_CONTROL_PRIMARY_BUTTON_CLASS =
   '!h-7 !rounded-lg !px-2.5 !text-[11px] !gap-1.5 border border-transparent';
 
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
+
+export const NODE_PORT_BASE_CLASS =
+  '!h-2.5 !w-2.5 !border !border-surface-dark !opacity-0 transition-opacity duration-150';
+
+export const NODE_PORT_VISIBLE_CLASS = '!opacity-100';
+
+export const NODE_PORT_ROW_CLASS = `${NODE_PORT_BASE_CLASS} group-hover/row:!opacity-100`;
+
+export const NODE_PORT_NODE_CLASS = `${NODE_PORT_BASE_CLASS} group-hover:!opacity-100`;
 
 /**
  * 节点逐行输入的统一卡片外壳（媒体/参数/模型/提示词行共用）。
@@ -18,7 +27,7 @@ export const NODE_ROW_CARD_CLASS =
   'rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 transition-colors';
 
 export const NODE_ROW_CLASS =
-  `relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
+  `group/row relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
 
 export const NODE_ROW_LABEL_CLASS = 'w-[64px] shrink-0 text-left text-xs text-text-muted';
 

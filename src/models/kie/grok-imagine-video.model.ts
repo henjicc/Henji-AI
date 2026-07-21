@@ -68,7 +68,7 @@ export const kieGrokImagineVideoModel = defineModel({
         ? 'grok-imagine/image-to-video'
         : 'grok-imagine/text-to-video'
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       if (!hasImages && aspectRatio) {
         input.aspect_ratio = aspectRatio

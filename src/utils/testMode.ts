@@ -40,11 +40,11 @@ const DEFAULT_OPTIONS: TestModeOptions = {
   enableDevTools: false
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null
 }
 
-function normalizeTestModeState(value: unknown): TestModeState {
+function normalizeTestModeState(value: DynamicValue): TestModeState {
   if (!isRecord(value)) {
     return {
       enabled: false,
@@ -114,20 +114,20 @@ export function updateTestOptions(options: Partial<TestModeOptions>): void {
 /**
  * 格式化 Base64 数据，只显示标识而不显示完整内容
  */
-function formatBase64(value: any): any {
+function formatBase64(value: DynamicValue): DynamicValue {
   if (typeof value === 'string') {
     // 检测 Base64 数据（data:image/... 或 data:video/...）
     if (value.startsWith('data:image/') || value.startsWith('data:video/') || value.startsWith('data:audio/')) {
       const match = value.match(/^data:([^;]+);/)
 
-      const mimeType = match ? match[1] : 'unknown'
+      const mimeType = match ? match[1] : 'DynamicValue'
       const sizeKB = Math.round(value.length * 0.75 / 1024) // 估算大小
       return `[Base64 ${mimeType} ~${sizeKB}KB]`
     }
   } else if (Array.isArray(value)) {
     return value.map(formatBase64)
   } else if (value && typeof value === 'object') {
-    const formatted: any = {}
+    const formatted: DynamicValue = {}
     for (const [key, val] of Object.entries(value)) {
       formatted[key] = formatBase64(val)
     }
@@ -139,8 +139,8 @@ function formatBase64(value: any): any {
 /**
  * 提取关键参数
  */
-function extractKeyParams(options: any, type: string): Record<string, any> {
-  const keyParams: Record<string, any> = {}
+function extractKeyParams(options: DynamicValue, type: string): DynamicValueMap {
+  const keyParams: DynamicValueMap = {}
 
   // 通用参数
   if (options.mode) keyParams['模式'] = options.mode
@@ -185,8 +185,8 @@ function extractKeyParams(options: any, type: string): Record<string, any> {
 /**
  * 分析上传的文件
  */
-function analyzeUploadedFiles(options: any): Record<string, any> {
-  const files: Record<string, any> = {}
+function analyzeUploadedFiles(options: DynamicValue): DynamicValueMap {
+  const files: DynamicValueMap = {}
 
   // 图片
   if (options.images) {
@@ -236,7 +236,7 @@ function analyzeUploadedFiles(options: any): Record<string, any> {
 }
 
 // 记录请求参数
-export function logRequestParams(params: any): void {
+export function logRequestParams(params: DynamicValue): void {
   const state = getTestModeState()
 
   if (!state.enabled) return

@@ -4,7 +4,67 @@ import {
   isSmartAspectValue,
 } from '@/core/params/ratioResolution';
 
+import {
+  CANVAS_NODE_TYPES,
+  type CanvasNode,
+  type CanvasNodeType,
+} from './canvasNodes';
 import { getDefaultModelId } from './defaultModels';
+import { getCanvasNodeDefinition } from './nodeRegistry';
+import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
+
+const LEGACY_TARGET_HANDLE_ID = 'target';
+
+/**
+ * 清理无法跨应用生命周期恢复的节点运行态。
+ * 直接修改传入对象；调用方应传入节点数据副本，避免影响当前运行中的任务。
+ */
+export function resetTransientNodeRuntimeState(
+  nodeType: CanvasNodeType,
+  data: DynamicValueMap
+): void {
+  if (data.isGenerating === true) {
+    data.isGenerating = false;
+    if ('generationStartedAt' in data) {
+      data.generationStartedAt = null;
+    }
+  }
+
+  if (nodeType !== CANVAS_NODE_TYPES.cameraStage) {
+    return;
+  }
+
+  data.videoExporting = false;
+  data.videoProgress = null;
+  data.videoRenderPhase = null;
+  data.videoRenderRequestId = null;
+  data.videoRenderError = null;
+}
+
+/**
+ * 节点由旧版单一 target Handle 迁移为逐行媒体端口（connectivity.targetHandleMode: 'rows'）后，
+ * 历史画布里残留的 'target' 连线需要重新指向对应媒体类型的专属端口，否则连线会失去锚点。
+ * 仅在该节点只声明了一种可接受媒体类型时才能无歧义推断；多媒体类型节点保留原值不处理。
+ */
+export function migrateLegacyTargetHandle(targetNode: CanvasNode, targetHandle: string): string {
+  if (targetHandle !== LEGACY_TARGET_HANDLE_ID) {
+    return targetHandle;
+  }
+
+  const definition = getCanvasNodeDefinition(targetNode.type);
+  if (definition?.connectivity.targetHandleMode !== 'rows') {
+    return targetHandle;
+  }
+
+  const acceptedRowKinds = (definition.ports?.target?.accepts ?? []).filter(
+    (kind): kind is RowMediaKind => kind === 'image' || kind === 'video' || kind === 'audio'
+  );
+  if (acceptedRowKinds.length !== 1) {
+    return targetHandle;
+  }
+
+  return resolveMediaTargetHandle(targetNode.type, acceptedRowKinds[0]);
+}
 
 /**
  * 旧版生成节点数据（model/size/requestAspectRatio/extraParams）
@@ -15,7 +75,7 @@ import { getDefaultModelId } from './defaultModels';
 
 const LEGACY_KEYS = ['model', 'size', 'requestAspectRatio', 'extraParams'] as const;
 
-function resolveMigratedModelId(legacyModelId: unknown): string {
+function resolveMigratedModelId(legacyModelId: DynamicValue): string {
   const requested = typeof legacyModelId === 'string' ? legacyModelId.trim() : '';
   if (requested && registry.getModel(requested)) {
     return requested;
@@ -41,15 +101,15 @@ function resolveMigratedModelId(legacyModelId: unknown): string {
 
 function buildMigratedParams(
   modelId: string,
-  legacy: Record<string, unknown>
-): Record<string, unknown> {
+  legacy: DynamicValueMap
+): DynamicValueMap {
   const schema = registry.getSchema(modelId);
-  const params: Record<string, unknown> = {};
+  const params: DynamicValueMap = {};
 
   const legacyExtraParams = legacy.extraParams;
   if (legacyExtraParams && typeof legacyExtraParams === 'object') {
     const schemaIds = new Set(schema.map((param) => param.id));
-    for (const [key, value] of Object.entries(legacyExtraParams as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(legacyExtraParams as DynamicValueMap)) {
       if (schemaIds.has(key)) {
         params[key] = value;
       }
@@ -84,7 +144,7 @@ function buildMigratedParams(
   return params;
 }
 
-function stripLegacyKeys(data: Record<string, unknown>): void {
+function stripLegacyKeys(data: DynamicValueMap): void {
   for (const key of LEGACY_KEYS) {
     if (key in data) {
       delete data[key];
@@ -96,7 +156,7 @@ function stripLegacyKeys(data: Record<string, unknown>): void {
  * 迁移生成类节点（AI 图片 / 分镜生成）的模型数据。
  * 直接修改传入对象（normalizeNodes 中的 mergedData 是新对象，安全）。
  */
-export function migrateGenerationNodeData(data: Record<string, unknown>): void {
+export function migrateGenerationNodeData(data: DynamicValueMap): void {
   // 模型清单尚未加载时跳过，等待下次 normalize
   if (registry.getModelsByType('image').length === 0) {
     return;
@@ -117,7 +177,7 @@ export function migrateGenerationNodeData(data: Record<string, unknown>): void {
   data.modelId = modelId;
   data.params = {
     ...params,
-    ...((data.params && typeof data.params === 'object') ? (data.params as Record<string, unknown>) : {}),
+    ...((data.params && typeof data.params === 'object') ? (data.params as DynamicValueMap) : {}),
   };
   stripLegacyKeys(data);
 }

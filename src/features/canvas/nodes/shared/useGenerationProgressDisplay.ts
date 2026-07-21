@@ -1,21 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
+import {
+  DEFAULT_PROGRESS_CURVE,
+  computeProgress,
+  getProgressTransitionDurationMs,
+} from '@/core/progress/progressTracker';
 
 interface GenerationProgressSource {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface GenerationProgressDisplay {
   isGenerating: boolean;
-  /** 0~1；优先真进度，缺失时按估时模拟（封顶 0.96） */
+  /** 0~1；优先真进度，缺失时按生成 Tab 同款曲线模拟 */
   progress: number;
+  /** 进度条 CSS 过渡时长（毫秒），与生成 Tab 的 ProgressBar 保持一致 */
+  transitionDurationMs: number;
 }
 
-/** 结果节点的生成进度显示：消费瞬态真进度，回退估时模拟 */
+const FALLBACK_TICK_MS = 120;
+
+/** 结果节点的生成进度显示：消费瞬态真进度，回退时复用生成 Tab 同款估时曲线 */
 export function useGenerationProgressDisplay(
   nodeId: string,
   data: GenerationProgressSource
@@ -37,24 +46,32 @@ export function useGenerationProgressDisplay(
     }
     const timer = window.setInterval(() => {
       setNow(Date.now());
-    }, 120);
+    }, FALLBACK_TICK_MS);
     return () => {
       window.clearInterval(timer);
     };
   }, [isGenerating, realProgress]);
 
-  const progress = useMemo(() => {
+  const progressPercent = useMemo(() => {
     if (!isGenerating) {
       return 0;
     }
     if (typeof realProgress === 'number') {
-      return realProgress;
+      return realProgress * 100;
     }
     const startedAt = generationStartedAt ?? Date.now();
     const duration = Math.max(1000, generationDurationMs ?? 1000);
     const elapsed = Math.max(0, now - startedAt);
-    return Math.min(elapsed / duration, 0.96);
+    return computeProgress(elapsed, {
+      expectedDurationMs: duration,
+      tickMs: FALLBACK_TICK_MS,
+      curve: DEFAULT_PROGRESS_CURVE,
+    });
   }, [generationDurationMs, generationStartedAt, isGenerating, now, realProgress]);
 
-  return { isGenerating, progress };
+  return {
+    isGenerating,
+    progress: progressPercent / 100,
+    transitionDurationMs: getProgressTransitionDurationMs(progressPercent),
+  };
 }

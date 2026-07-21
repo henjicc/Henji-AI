@@ -68,7 +68,7 @@ export interface RequestConfig {
    * }
    * ```
    */
-  preprocess?: (params: Record<string, any>) => Record<string, any>
+  preprocess?: (params: DynamicValueMap) => DynamicValueMap
 
   /**
    * 自定义请求构建函数
@@ -91,5 +91,5 @@ export interface RequestConfig {
    * }
    * ```
    */
-  builder?: (params: Record<string, any>) => Record<string, any>
+  builder?: (params: DynamicValueMap) => DynamicValueMap
 }

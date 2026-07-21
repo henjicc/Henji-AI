@@ -15,8 +15,8 @@ import { UiButton, UiCheckbox, UiOptionButton } from '@/components/ui'
 
 interface ExportPanelProps {
   modelId: string
-  params: Record<string, unknown>
-  context?: Record<string, unknown>
+  params: DynamicValueMap
+  context?: DynamicValueMap
 }
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, context = {} }) => {

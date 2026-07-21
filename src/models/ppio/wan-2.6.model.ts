@@ -10,6 +10,8 @@ import { resolvePpioImageSources, resolvePpioPrimaryVideoSource, resolvePpioVide
 export const wan26Model = defineModel({
   meta: {
     id: 'ppio-wan-2.6',
+    seriesId: 'wan',
+    seriesRank: 2.6,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-wan-2.6',
@@ -147,7 +149,7 @@ export const wan26Model = defineModel({
       trigger: 'ppioWan26Mode',
       effect: 'autoSwitch',
       target: 'ppioWan26VideoDuration',
-      condition: (mode: string, allParams: Record<string, any>) => {
+      condition: (mode: string, allParams: DynamicValueMap) => {
         const duration = allParams.ppioWan26VideoDuration || 5
         return mode === 'reference-to-video' && duration === 15
       },
@@ -190,7 +192,7 @@ export const wan26Model = defineModel({
         '3:4': { '720P': '832*1088', '1080P': '1248*1632' }
       }
 
-      const input: Record<string, any> = { prompt }
+      const input: DynamicValueMap = { prompt }
       if (params.audio_url) {
         input.audio_url = params.audio_url
       }
@@ -206,7 +208,7 @@ export const wan26Model = defineModel({
         }
       }
 
-      const parameters: Record<string, any> = {
+      const parameters: DynamicValueMap = {
         audio,
         duration,
         shot_type: shotType,

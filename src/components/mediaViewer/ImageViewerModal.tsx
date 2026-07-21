@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
 
 import { UiButton, UiIconButton } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
-import { ImageEditor, type ImageEditState } from '@/components/ImageEditor';
+import { ViewerMarkEditor, type ImageMarkSession } from '@/features/imageMark';
 import { ImageInfoPanel } from './ImageInfoPanel';
 import { useImageViewerTransform } from './useImageViewerTransform';
 
@@ -26,14 +26,14 @@ export interface ImageViewerModalProps {
   filePaths?: string[];
   fromUpload?: boolean;
   isEditorMode?: boolean;
-  initialEditState?: ImageEditState;
+  initialMarkSession?: ImageMarkSession;
   onEnterEditor?: () => void;
   onExitEditor?: () => void;
-  onSaveEdit?: (dataUrl: string, editState: ImageEditState) => void;
+  onSaveEdit?: (dataUrl: string, session: ImageMarkSession) => void;
   onContextMenu?: (e: React.MouseEvent, filePath?: string) => void;
 }
 
-/** asset.localhost 显示链接还原为本地路径，供 Rust 信息读取 */
+/** asset.localhost 显示链接还原为本地路径，供信息面板读取 */
 function normalizeInfoSource(url: string): string {
   const match = url.match(/^https?:\/\/asset\.localhost\/(.+)$/i);
   if (!match) {
@@ -61,7 +61,7 @@ export function ImageViewerModal({
   filePaths,
   fromUpload = false,
   isEditorMode = false,
-  initialEditState,
+  initialMarkSession,
   onEnterEditor,
   onExitEditor,
   onSaveEdit,
@@ -159,7 +159,7 @@ export function ImageViewerModal({
 
   return (
     <div
-      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-[100] overflow-hidden bg-black/90 backdrop-blur-lg`}
+      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-[110] overflow-hidden bg-black/90 backdrop-blur-lg`}
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 400ms ease',
@@ -185,18 +185,14 @@ export function ImageViewerModal({
 
       {isEditorMode && editorAvailable ? (
         <div className="h-full w-full">
-          <ImageEditor
+          <ViewerMarkEditor
             imageUrl={imageUrl}
-            imageId={imageUrl}
-            imageList={imageList}
-            currentIndex={currentIndex}
-            initialEditState={initialEditState}
+            session={initialMarkSession}
             onClose={() => onExitEditor?.()}
-            onSave={(dataUrl, editState) => {
-              onSaveEdit?.(dataUrl, editState);
+            onSave={(dataUrl, session) => {
+              onSaveEdit?.(dataUrl, session);
               onExitEditor?.();
             }}
-            onNavigate={onNavigate}
           />
         </div>
       ) : (

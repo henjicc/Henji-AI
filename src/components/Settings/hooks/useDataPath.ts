@@ -1,7 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useEffect, useState } from 'react'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { path } from '@tauri-apps/api'
+import { join, openDialog } from '@/platform/desktopApi'
 import {
 
   getDataRoot,
@@ -150,7 +149,7 @@ export function useDataPath(): UseDataPathResult {
     if (!selected || Array.isArray(selected)) {
       return
     }
-    const targetPath = await path.join(selected, 'Henji-AI')
+    const targetPath = await join(selected, 'Henji-AI')
     const hasData = await hasExistingData(targetPath)
     if (hasData) {
       setConflict({ open: true, targetPath })

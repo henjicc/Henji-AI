@@ -14,6 +14,7 @@ import {
   UI_HIGHLIGHT_RING_INSET_CLASS
 } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
+import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
 interface ModelSelectorPanelProps {
   selectedProvider: string
   selectedModel: string
@@ -54,22 +55,9 @@ const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
 const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
 const MODEL_CARD_META_TEXT_CLASS = 'text-[11px] leading-4 text-zinc-400'
 
-const PROVIDER_ORDER: Record<string, number> = {
-  ppio: 0,
-  kie: 1,
-  modelscope: 2,
-  fal: 3
-}
-
-const MODEL_TYPE_ORDER: Record<'image' | 'video' | 'audio', number> = {
-  image: 0,
-  video: 1,
-  audio: 2
-}
-
 function compareModelItems(
-  a: { p: { id: string; name: string }; m: { type: 'image' | 'video' | 'audio'; name: string } },
-  b: { p: { id: string; name: string }; m: { type: 'image' | 'video' | 'audio'; name: string } }
+  a: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } },
+  b: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } }
 ): number {
   const providerDiff = (PROVIDER_ORDER[a.p.id] ?? Number.MAX_SAFE_INTEGER) - (PROVIDER_ORDER[b.p.id] ?? Number.MAX_SAFE_INTEGER)
   if (providerDiff !== 0) return providerDiff
@@ -77,7 +65,7 @@ function compareModelItems(
   const typeDiff = MODEL_TYPE_ORDER[a.m.type] - MODEL_TYPE_ORDER[b.m.type]
   if (typeDiff !== 0) return typeDiff
 
-  return a.m.name.localeCompare(b.m.name, 'en', { sensitivity: 'base' })
+  return compareModelsBySeries(a.m, b.m)
 }
 
 function getFilterChipClass(active: boolean, dimmed = false): string {

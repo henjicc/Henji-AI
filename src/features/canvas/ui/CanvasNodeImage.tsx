@@ -60,6 +60,7 @@ export const CanvasNodeImage = memo(({
 
   return (
     <img
+      decoding="async"
       {...props}
       src={src}
       data-viewer-src={

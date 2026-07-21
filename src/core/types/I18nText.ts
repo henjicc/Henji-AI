@@ -35,22 +35,22 @@ function isModelKey(key: string): boolean {
   return key.startsWith('models:') || key.startsWith('models.') || key.startsWith(MODEL_DEFS_PREFIX)
 }
 
-function getNestedValue(obj: unknown, path: string[]): unknown {
-  let current: unknown = obj
+function getNestedValue(obj: DynamicValue, path: string[]): DynamicValue {
+  let current: DynamicValue = obj
   for (const segment of path) {
     if (!current || typeof current !== 'object') return undefined
-    const record = current as Record<string, unknown>
+    const record = current as DynamicValueMap
     if (!(segment in record)) return undefined
     current = record[segment]
   }
   return current
 }
 
-function getModelResourceBundle(locale: string): Record<string, unknown> | null {
+function getModelResourceBundle(locale: string): DynamicValueMap | null {
   try {
     const bundle = i18n.getResourceBundle(locale, MODEL_NAMESPACE)
     if (bundle && typeof bundle === 'object') {
-      return bundle as Record<string, unknown>
+      return bundle as DynamicValueMap
     }
   } catch {
     return null
@@ -100,7 +100,7 @@ function getModelTranslation(rawKey: string, locale: string): string | undefined
     if (!bundle) continue
     const defs = bundle.defs
     if (!defs || typeof defs !== 'object') continue
-    const model = (defs as Record<string, unknown>)[modelId]
+    const model = (defs as DynamicValueMap)[modelId]
     const value = getNestedValue(model, path)
     if (typeof value === 'string') return value
   }
@@ -142,7 +142,7 @@ type I18nKeyText = {
 }
 
 function isI18nKeyText(text: Exclude<I18nText, string>): text is I18nKeyText {
-  const record = text as Record<string, unknown>
+  const record = text as DynamicValueMap
   if (typeof record.key !== 'string') return false
 
   // Avoid treating language maps as key objects just because they contain a "key" field.
@@ -210,7 +210,7 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
     }
   }
 
-  const dict = text as Record<string, unknown>
+  const dict = text as DynamicValueMap
 
   // 1. Exact locale match (e.g. 'zh-CN')
   const exact = dict[locale]

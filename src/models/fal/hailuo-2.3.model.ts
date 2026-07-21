@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText } from '@/core'
 export const hailuo23Model = defineModel({
   meta: {
     id: 'fal-ai-minimax-hailuo-2.3',
+    seriesId: 'hailuo',
+    seriesRank: 2.3,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-minimax-hailuo-2.3',
@@ -89,7 +91,7 @@ export const hailuo23Model = defineModel({
       const duration = params.falHailuo23Duration || '6'
       const promptOptimizer = params.falHailuo23PromptOptimizer !== false
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
 
       if (promptOptimizer !== undefined) {
         requestData.prompt_optimizer = promptOptimizer

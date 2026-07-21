@@ -25,8 +25,8 @@ export interface CanvasExtension {
 
 /** 自定义参数控件渲染器签名（与 src/components/params 的控件 props 对齐） */
 export type CanvasWidgetRenderer = ReactComponentType<{
-  value: unknown;
-  onChange: (value: unknown) => void;
+  value: DynamicValue;
+  onChange: (value: DynamicValue) => void;
   disabled?: boolean;
 }>;
 

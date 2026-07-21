@@ -8,7 +8,6 @@ const logger = createLogger('core.NodeConverter')
  */
 
 import { registry } from './ModelRegistry'
-import { requestBuilder } from './request/RequestBuilder'
 import type {
 
   ModelDefinition,
@@ -144,7 +143,7 @@ export class NodeConverter implements INodeConverter {
         return 'video'
       case 'panel':
         // 根据面板类型决定
-        if ((param as any).panelType === 'resolution') return 'object'
+        if ((param as DynamicValue).panelType === 'resolution') return 'object'
         return 'any'
       default:
         return 'any'
@@ -179,10 +178,10 @@ export class NodeConverter implements INodeConverter {
    * 创建节点执行器
    */
   private createExecutor(model: ModelDefinition): NodeExecutor {
-    return async (inputs, context) => {
+    return async (inputs, _context) => {
       try {
         // 1. 构建请求参数
-        const params = this.inputsToParams(inputs, model.params)
+        const _params = this.inputsToParams(inputs, model.params)
 
         // 2. 使用 RequestBuilder 构建请求
         // const _request = requestBuilder.build(model.meta.id, params, {
@@ -200,7 +199,7 @@ export class NodeConverter implements INodeConverter {
             error: 'Node execution not fully implemented yet'
           }
         }
-      } catch (error: any) {
+      } catch (error: DynamicValue) {
         logger.error(`Node execution failed:`, error)
         return {
           output: null,
@@ -217,10 +216,10 @@ export class NodeConverter implements INodeConverter {
    * 输入转换为参数
    */
   private inputsToParams(
-    inputs: Record<string, any>,
+    inputs: DynamicValueMap,
     paramDefs: ParamDef[]
-  ): Record<string, any> {
-    const params: Record<string, any> = {}
+  ): DynamicValueMap {
+    const params: DynamicValueMap = {}
 
     for (const paramDef of paramDefs) {
       const value = inputs[paramDef.id]
@@ -253,7 +252,7 @@ export class NodeConverter implements INodeConverter {
     }
     if (filter?.tags) {
       models = models.filter(m =>
-        filter.tags!.some(tag => m.meta.tags?.includes(tag as any))
+        filter.tags!.some(tag => m.meta.tags?.includes(tag as DynamicValue))
       )
     }
 

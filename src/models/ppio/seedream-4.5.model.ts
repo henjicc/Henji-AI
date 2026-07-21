@@ -37,6 +37,8 @@ const SEEDREAM_45_CONSTRAINTS = {
 export const seedream45Model = defineModel({
     meta: {
         id: 'ppio-seedream-4.5',
+        seriesId: 'seedream',
+        seriesRank: 4.5,
         provider: 'ppio',
         type: 'image',
         i18nScope: 'models.defs.ppio-seedream-4.5',
@@ -181,7 +183,7 @@ export const seedream45Model = defineModel({
                 finalPrompt = `生成${maxImages}张图片。${params.prompt}`
             }
 
-            const requestData: Record<string, unknown> = {
+            const requestData: DynamicValueMap = {
                 prompt: finalPrompt,
                 watermark: false
             }

@@ -21,9 +21,9 @@ interface InputAreaProps {
   promptRedoTriggerValue?: string | null
   promptRedoReplacementValue?: string | null
   onRedoPromptReplacement?: () => void
-  currentModel: any
+  currentModel: DynamicValue
   selectedModel: string
-  modelParams: Record<string, unknown>
+  modelParams: DynamicValueMap
   uploadedImages: string[]
   isLoading: boolean
   isGenerating?: boolean
@@ -39,6 +39,7 @@ interface InputAreaProps {
   onVideoUpload?: (files: File[]) => void
   onVideoRemove?: (index: number) => void
   onVideoReplace?: (index: number, file: File) => void
+  onVideoTrim?: (index: number) => void
   onVideoClick?: (videoUrl: string) => void
   uploadedAudios?: string[]
   onAudioUpload?: (files: File[]) => void
@@ -86,6 +87,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onVideoUpload,
   onVideoRemove,
   onVideoReplace,
+  onVideoTrim,
   onVideoClick,
   uploadedAudios = [],
   onAudioUpload,
@@ -161,6 +163,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     shouldHideUploadButton,
     handleMixedFileRemove,
     handleMixedFileReplace,
+    handleMixedFileTrim,
     handleMixedFileReorder,
     handleMixedFileClick
   } = useMixedFileOrder({
@@ -180,6 +183,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     onImageClick,
     onVideoRemove,
     onVideoReplace,
+    onVideoTrim,
     onVideoClick,
     onAudioRemove,
     onAudioReplace,
@@ -226,17 +230,8 @@ const InputArea: React.FC<InputAreaProps> = ({
     if (videoFiles.length > 0 && onVideoUpload && currentVideoCount < maxVideoCount) {
       const file = videoFiles[0]
       if (videoConstraints) {
-        if (videoConstraints.maxSizeMB) {
-          const maxSizeBytes = videoConstraints.maxSizeMB * 1024 * 1024
-          if (file.size > maxSizeBytes) {
-            showAlert(
-              t('inputArea.alerts.videoSize.title'),
-              t('inputArea.alerts.videoSize.message', { maxSizeMB: videoConstraints.maxSizeMB }),
-              'warning'
-            )
-            return
-          }
-        }
+        // 文件体积超限不在上传时拦截：本地有 ffmpeg 后改为生成提交时按需压缩（见 GenerationService），
+        // 让上传体验保持即时，压缩耗时由任务进度条覆盖。
         if (videoConstraints.minDurationSec || videoConstraints.maxDurationSec) {
           try {
             const duration = await getVideoDuration(file)
@@ -361,6 +356,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
               onRemove={(needsVideoUpload || needsAudioUpload) ? handleMixedFileRemove : onImageRemove}
               onReplace={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReplace : onImageReplace}
+              onTrim={needsVideoUpload && videoConstraints?.trim ? handleMixedFileTrim : undefined}
               onReorder={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReorder : onImageReorder}
               onFileClick={(needsVideoUpload || needsAudioUpload) ? handleMixedFileClick : onImageClick}
               accept={needsVideoOnly
@@ -416,11 +412,11 @@ const InputArea: React.FC<InputAreaProps> = ({
                 ? t('inputArea.placeholder.englishOnly')
                 : t('inputArea.placeholder.default')
           }
-          className="relative isolate overflow-hidden rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
+          className="relative isolate overflow-visible rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
           highlightLayerClassName="text-sm leading-6 text-white"
           highlightContentClassName={`${promptMinHeightClass} ${promptLeftPaddingClass} py-3 pr-14`}
           textareaClassName={`ui-scrollbar !border-0 !bg-transparent !backdrop-blur-0 !shadow-none !rounded-2xl w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden focus:!ring-0 focus:!shadow-none transition-colors duration-200 ease-out text-transparent caret-white placeholder-zinc-500/85 whitespace-pre-wrap break-words`}
-          pickerClassName="w-[150px]"
+          pickerClassName="z-50 w-[150px]"
           pickerListClassName="max-h-[180px]"
           renderPickerItem={({ item }) => (
             <>

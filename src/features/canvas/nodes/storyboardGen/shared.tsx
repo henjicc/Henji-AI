@@ -23,11 +23,10 @@ export const STORYBOARD_GRID_BASE_CELL_HEIGHT_PX = 78
 export const STORYBOARD_GRID_MAX_WIDTH_PX = 320
 export const STORYBOARD_CONTROL_ROW_WIDTH_PX = 274
 export const STORYBOARD_PARAMS_ROW_WIDTH_PX = 286
-export const STORYBOARD_GEN_NODE_MIN_WIDTH_PX = 520
+/** 逐行参数区取代旧版单行 chip 工具条后，节点不再需要为容纳工具条预留过宽空间 */
+export const STORYBOARD_GEN_NODE_MIN_WIDTH_PX = 320
 export const STORYBOARD_GEN_NODE_MIN_HEIGHT_PX = 320
-export const STORYBOARD_GEN_HEADER_ADJUST = { x: 0, y: 0, scale: 1 }
 export const STORYBOARD_GEN_ICON_ADJUST = { x: 0, y: 0, scale: 0.95 }
-export const STORYBOARD_GEN_TITLE_ADJUST = { x: 0, y: 0, scale: 1 }
 const GRID_CONTROL_CONTAINER_CLASS = 'flex h-5 items-center gap-0.5 rounded-full border border-[rgba(255,255,255,0.14)] bg-[rgba(255,255,255,0.04)] px-1'
 const GRID_CONTROL_LABEL_CLASS = 'text-[9px] text-text-muted'
 const GRID_CONTROL_BUTTON_CLASS = 'flex h-3 w-3 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-dark'
@@ -38,11 +37,42 @@ export const FRAME_GRID_GAP_PX = 2
 export const CONTROL_ROW_HEIGHT_PX = 20
 export const CONTROL_ROW_MARGIN_BOTTOM_PX = 10
 export const FRAME_GRID_MARGIN_BOTTOM_PX = 8
-export const PARAM_ROW_HEIGHT_PX = 20
+/** 与 NODE_ROW_CLASS 的 min-h-10 保持一致（逐行参数区每行高度） */
+export const STORYBOARD_PARAM_ROW_HEIGHT_PX = 40
+/** 与 NODE_ROW_GAP_CLASS 的 gap-1.5 保持一致（逐行参数区行间距） */
+export const STORYBOARD_PARAM_ROW_GAP_PX = 6
 export const NODE_VERTICAL_PADDING_PX = 24
+/**
+ * 分镜格子描述文字随格子尺寸自适应缩放的取值区间。
+ * 上限放宽到 18：旧的 10px 上限在节点略大于最小尺寸时就被顶满，导致放大节点时字号"看着没变"；
+ * 放宽后从最小到放大全程都有可见的字号变化，同时仍有封顶避免无限增大。
+ */
+export const FRAME_TEXT_MIN_FONT_SIZE_PX = 2
+export const FRAME_TEXT_MAX_FONT_SIZE_PX = 18
 export const FRAME_CELL_MIN_WIDTH_PX = 24
 export const FRAME_CELL_MIN_HEIGHT_PX = 16
+/** 格子内文字单侧内边距，需与 StoryboardGridEditor 中 textarea 的 px-1.5 保持一致 */
+export const FRAME_CELL_TEXT_PADDING_PX = 6
 const GRID_LINE_THICKNESS_PERCENT = 0.4
+/**
+ * 占位文案"分镜 NN 描述"按字号换算的单行所需宽度（单位：字号倍数）。
+ * 也会影响到实际渲染时的字号计算
+ * 现在是我手动调整后觉得不错的值
+ */
+const FRAME_TEXT_PLACEHOLDER_WIDTH_PER_FONT_SIZE = 10
+
+/**
+ * 按格子可用文字宽度反推字号，取"能单行容纳占位文案的最大字号"。
+ * 用 Math.floor 而非 round：round 会向上取整、反而超出可用宽度导致换行；
+ * floor 保证算出的字号一定塞得下，再按 [最小, 最大] 区间截断。
+ */
+export function computeFrameTextFontSizePx(availableContentWidthPx: number): number {
+  const idealFontSizePx = availableContentWidthPx / FRAME_TEXT_PLACEHOLDER_WIDTH_PER_FONT_SIZE
+  return Math.min(
+    FRAME_TEXT_MAX_FONT_SIZE_PX,
+    Math.max(FRAME_TEXT_MIN_FONT_SIZE_PX, Math.floor(idealFontSizePx))
+  )
+}
 
 interface GridStepperControlProps {
   label: string

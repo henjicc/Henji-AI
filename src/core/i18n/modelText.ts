@@ -1,5 +1,8 @@
 import type { I18nText } from '@/core/types'
 
+// These dictionaries are intentionally `var` because model modules can import
+// shared text helpers through a circular barrel during registry initialization.
+/* eslint-disable no-var */
 var SHARED_FIELDS = {
   acceleration: 'Acceleration',
   aspectRatio: 'Aspect Ratio',
@@ -111,6 +114,7 @@ var SHARED_TEXTS = {
   'tips.numberOfImagesLimit': 'Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.',
   'tips.promptOptimization': 'When enabled, the model will automatically optimize prompts for better generation results. Currently only supports standard mode.',
 } as const
+/* eslint-enable no-var */
 
 export type SharedFieldKey = keyof typeof SHARED_FIELDS
 export type SharedOptionKey = keyof typeof SHARED_OPTIONS

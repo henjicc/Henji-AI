@@ -240,7 +240,18 @@
   "tabs": {
     "generation": "Generation",
     "canvas": "Canvas",
-    "tools": "Toolbox"
+    "tools": "Toolbox",
+    "assets": "Assets"
+  },
+  "assetLibrary": {
+      "collect": "Add to asset library", "assetShort": "Asset", "collected": "Added", "collectSuccess": "Added to asset library", "alreadyCollected": "This asset is already in the library", "collectFailed": "Failed to add",
+    "all": "All assets", "allTypes": "All types", "image": "Images", "video": "Videos", "audio": "Audio",
+    "search": "Search assets", "newest": "Newest", "recent": "Recently used", "manage": "Full manager",
+    "categories": "Asset libraries", "createLibrary": "New asset library", "libraryName": "Asset library name", "confirmDeleteLibrary": "Click again to confirm deletion", "empty": "Your asset library is empty", "noResults": "No matching assets",
+    "error": "Failed to load assets", "restartRequired": "The asset library backend is not loaded. Restart the Electron development process and retry.", "retry": "Retry", "count": "{{count}} items", "loadedCount": "Loaded {{loaded}} of {{count}}", "loadingMore": "Loading more", "scrollForMore": "Scroll to load more", "allLoaded": "All assets loaded", "back": "Back to workspace",
+    "thumbnailSize": "Thumbnail", "viewSettings": "View settings", "thumbnailFit": "Thumbnail fit", "fitCover": "Fill card", "fitContain": "Show all", "fitCoverHint": "Fills the card and crops edges outside the media ratio.", "fitContainHint": "Shows the complete media with background around unused space.",
+    "renameAsset": "Rename asset", "relocate": "Relocate file", "removeFromLibrary": "Remove from this library",
+    "addToLibrary": "Add to another library", "deleteAsset": "Delete from asset library", "allTags": "All tags", "tags": "Tags", "tagPlaceholder": "Search or enter a new tag", "membership": "Asset libraries", "searchLibraries": "Search libraries"
   },
   "windowControls": {
     "appName": "Henji AI",
@@ -259,7 +270,9 @@
     "actions": {
       "skip": "Skip this version",
       "remindLater": "Remind me later",
-      "updateNow": "Update now"
+      "updateNow": "Update now",
+      "downloading": "Downloading",
+      "installNow": "Restart to install"
     }
   },
   "viewer": {
@@ -397,7 +410,74 @@
         "fullParams": "Full params:"
       }
     },
-    "emptyHint": "After generating, request parameters will appear here."
+    "emptyHint": "After generating, request parameters will appear here.",
+    "logsWindow": {
+      "title": "Logs Window",
+      "description": "The standalone logs window shows live frontend/backend logs with filters and pause.",
+      "openButton": "Open Logs Window"
+    }
+  },
+  "logsWindow": {
+    "title": "Henji AI - Logs",
+    "toolbar": {
+      "mode": {
+        "live": "Live",
+        "history": "History"
+      },
+      "source": {
+        "label": "Source",
+        "all": "All sources",
+        "frontend": "Frontend",
+        "backend": "Backend"
+      },
+      "level": {
+        "label": "Level",
+        "all": "All levels"
+      },
+      "domain": {
+        "label": "Domain",
+        "all": "All domains"
+      },
+      "keywordPlaceholder": "Filter by keyword (message/context/error)",
+      "errorOnly": "Errors only",
+      "chainLookupPlaceholder": "Enter/paste requestId to view chain",
+      "pause": "Pause",
+      "resume": "Resume",
+      "clear": "Clear",
+      "captureMode": {
+        "title": "Full capture",
+        "description": "When on, long text and images are no longer truncated; audio/video and sensitive fields like API keys are still summarized/masked."
+      },
+      "historyDate": {
+        "empty": "No history logs",
+        "corrupted": "Skipped {{count}} corrupted line(s)"
+      }
+    },
+    "list": {
+      "empty": "No logs yet",
+      "loadMore": "Load older logs",
+      "loading": "Loading...",
+      "paused": "Paused, new logs are buffered"
+    },
+    "detail": {
+      "empty": "Select a log entry on the left to see details",
+      "truncatedNotice": "This event was truncated for exceeding the size limit, original size {{bytes}} bytes",
+      "jsonTree": {
+        "expandString": "Expand ({{count}} chars)",
+        "collapseString": "Collapse"
+      }
+    },
+    "chain": {
+      "title": "Request chain",
+      "viewButton": "View full chain",
+      "count": "{{count}} events",
+      "empty": "No events found for this requestId"
+    },
+    "copy": {
+      "markdown": "Copy Markdown",
+      "json": "Copy JSON",
+      "copied": "Copied"
+    }
   },
   "imageEditor": {
     "actions": {

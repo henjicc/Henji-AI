@@ -10,7 +10,7 @@ import type { Linkage } from '../types'
  * AutoSwitch 状态
  */
 interface AutoSwitchState {
-  originalValue: any
+  originalValue: DynamicValue
   isActive: boolean
 }
 
@@ -36,10 +36,10 @@ export class AutoSwitchManager {
    */
   execute(
     linkage: Linkage & { effect: 'autoSwitch' },
-    triggerValue: any,
-    params: Record<string, any>,
-    changedKey: string
-  ): Record<string, any> | null {
+    triggerValue: DynamicValue,
+    params: DynamicValueMap,
+    _changedKey: string
+  ): DynamicValueMap | null {
     const target = linkage.target
     if (!target) return null
 
@@ -68,10 +68,10 @@ export class AutoSwitchManager {
    */
   private applySwitch(
     target: string,
-    value: any,
-    params: Record<string, any>,
-    noRestore?: boolean
-  ): Record<string, any> {
+    value: DynamicValue,
+    params: DynamicValueMap,
+    _noRestore?: boolean
+  ): DynamicValueMap {
     // 如果没有记录原始值，记录当前值
     if (!this.originalValues.has(target)) {
       this.originalValues.set(target, {
@@ -92,7 +92,7 @@ export class AutoSwitchManager {
    * @param target - 目标参数 ID
    * @returns 参数变更对象，如果没有需要恢复的值则返回 null
    */
-  private restoreOriginal(target: string): Record<string, any> | null {
+  private restoreOriginal(target: string): DynamicValueMap | null {
     const state = this.originalValues.get(target)
 
     if (!state || !state.isActive) {

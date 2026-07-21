@@ -4,7 +4,7 @@ import { sleep } from './utils'
 
 export interface PollTaskStatusOptions {
   providerName: string
-  log?: (message: string, data?: unknown) => void
+  log?: (message: string, data?: DynamicValue) => void
 }
 
 /**

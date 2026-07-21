@@ -34,8 +34,8 @@ export class ContextBuilder {
    * ```
    */
   static build(
-    params: Record<string, any>,
-    customContext: Record<string, any> = {}
+    params: DynamicValueMap,
+    customContext: DynamicValueMap = {}
   ): SelectContext {
     const context: SelectContext = { ...customContext }
 

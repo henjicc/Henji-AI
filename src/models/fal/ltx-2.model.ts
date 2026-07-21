@@ -186,7 +186,7 @@ export const ltx2Model = defineModel({
       const retakeStartTime = params.falLtx2RetakeStartTime || 0
       const retakeMode = params.falLtx2RetakeMode || 'replace_audio_and_video'
       const retakeDuration = params.falLtx2RetakeDuration || duration
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: any) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
 
       if (mode === 'retake-video') {
         return {
@@ -198,7 +198,7 @@ export const ltx2Model = defineModel({
         }
       }
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration,
         resolution,

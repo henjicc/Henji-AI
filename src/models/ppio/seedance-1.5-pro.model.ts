@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const seedance15ProModel = defineModel({
   meta: {
     id: 'ppio-seedance-v1.5-pro',
+    seriesId: 'seedance',
+    seriesRank: 1.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-seedance-v1.5-pro',
@@ -120,7 +122,7 @@ export const seedance15ProModel = defineModel({
       trigger: 'uploadedImages',
       effect: 'autoSwitch',
       target: 'ppioSeedance15ProAspectRatio',
-      condition: (images: string[], allParams: Record<string, any>) => {
+      condition: (images: string[], allParams: DynamicValueMap) => {
         const imageCount = images?.length || 0
         const currentRatio = allParams.ppioSeedance15ProAspectRatio
         return imageCount > 0 && currentRatio !== 'adaptive'
@@ -133,7 +135,7 @@ export const seedance15ProModel = defineModel({
       trigger: 'uploadedImages',
       effect: 'autoSwitch',
       target: 'ppioSeedance15ProAspectRatio',
-      condition: (images: string[], allParams: Record<string, any>) => {
+      condition: (images: string[], allParams: DynamicValueMap) => {
         const imageCount = images?.length || 0
         const currentRatio = allParams.ppioSeedance15ProAspectRatio
         return imageCount === 0 && currentRatio === 'adaptive'
@@ -146,7 +148,7 @@ export const seedance15ProModel = defineModel({
       trigger: 'uploadedImages',
       effect: 'filterOptions',
       target: 'ppioSeedance15ProAspectRatio',
-      filter: (images: string[], options: any[]) => {
+      filter: (images: string[], options: DynamicValue[]) => {
         const imageCount = images?.length || 0
         if (imageCount > 0) {
           // Add smart option at the beginning
@@ -176,7 +178,7 @@ export const seedance15ProModel = defineModel({
       const generateAudio = params.ppioSeedance15ProGenerateAudio !== undefined ? params.ppioSeedance15ProGenerateAudio : (params.generate_audio !== undefined ? params.generate_audio : true)
       const ratio = params.ppioSeedance15ProAspectRatio || params.ratio || 'adaptive'
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt: params.prompt,
         resolution,
         ratio,

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { setLogCaptureMode as syncLogCaptureMode, type LogCaptureMode } from '@/commands/logging';
 import type { UploadProvider } from '@/core/config/providers';
 import {
   LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
@@ -17,6 +18,14 @@ import {
 } from '@/core/theme/runtimeTheme';
 
 export type ProviderKeyStatusMap = Record<string, boolean>;
+/** 超过大文件阈值的本地媒体上传处理方式：每次询问 / 复制进数据目录 / 直接引用原文件 */
+export type LargeUploadStrategy = 'ask' | 'copy' | 'reference';
+/** 画布缩放简化（LOD）等级：off 不简化；detail 只在极小倍率简化；balanced 默认；performance 更早简化 */
+export type CanvasLodLevel = 'off' | 'detail' | 'balanced' | 'performance';
+export type AssetTabAction = 'floating' | 'workspace';
+export type AssetPanelPosition = 'top' | 'left' | 'right';
+export type AssetTriggerEdge = 'left' | 'right';
+export type AssetThumbnailFit = 'cover' | 'contain';
 const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair'] as const;
 const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'bizyair';
 
@@ -24,6 +33,8 @@ interface SettingsState {
   providerKeyStatus: ProviderKeyStatusMap;
   uploadProvider: UploadProvider;
   uploadFallbackEnabled: boolean;
+  /** 本地媒体超过 100MB 时的处理策略（阈值见 services/largeUploadPolicy.ts） */
+  largeUploadStrategy: LargeUploadStrategy;
   downloadPresetPaths: string[];
   useUploadFilenameAsNodeTitle: boolean;
   /** 图片查看器是否显示图片信息面板 */
@@ -32,29 +43,57 @@ interface SettingsState {
   imageViewerInfoPanelCollapsed: boolean;
   storyboardGenKeepStyleConsistent: boolean;
   storyboardGenDisableTextInImage: boolean;
+  /** 分镜格子描述为空时，自动在 prompt 中补一句"依据之前的内容进行推测" */
+  storyboardGenAutoInferEmptyFrame: boolean;
   ignoreAtTagWhenCopyingAndGenerating: boolean;
+  /** 画布低倍率简化等级（阈值映射见 features/canvas/nodes/shared/useCanvasContentLod.ts） */
+  canvasLodLevel: CanvasLodLevel;
+  /**
+   * 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。
+   * 不持久化——应用重启回落 standard，避免用户忘记关闭导致日志膨胀（见 `partialize`）。
+   */
+  logCaptureMode: LogCaptureMode;
   uiRadiusPreset: UiRadiusPreset;
   themeTonePreset: ThemeTonePreset;
   accentColor: string;
   themeColors: ThemeColorScheme;
+  assetTabAction: AssetTabAction;
+  assetPanelPosition: AssetPanelPosition;
+  assetEdgeTriggerEnabled: boolean;
+  assetTriggerEdge: AssetTriggerEdge;
+  assetEdgeDelayMs: number;
+  assetDragEdgeDelayMs: number;
+  assetCardSize: number;
+  assetThumbnailFit: AssetThumbnailFit;
   setProviderApiKey: (providerId: string, key: string) => void;
   setProviderKeyStatus: (providerId: string, configured: boolean) => void;
   setProviderKeyStatuses: (status: ProviderKeyStatusMap) => void;
   setUploadProvider: (provider: UploadProvider) => void;
   setUploadFallbackEnabled: (enabled: boolean) => void;
+  setLargeUploadStrategy: (strategy: LargeUploadStrategy) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
   setEnableImageViewerInfoPanel: (enabled: boolean) => void;
   setImageViewerInfoPanelCollapsed: (collapsed: boolean) => void;
   setStoryboardGenKeepStyleConsistent: (enabled: boolean) => void;
   setStoryboardGenDisableTextInImage: (enabled: boolean) => void;
+  setStoryboardGenAutoInferEmptyFrame: (enabled: boolean) => void;
   setIgnoreAtTagWhenCopyingAndGenerating: (enabled: boolean) => void;
+  setCanvasLodLevel: (level: CanvasLodLevel) => void;
+  setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
   setAccentColor: (color: string) => void;
   setThemeColor: (token: ThemeColorToken, color: string) => void;
   setThemeColors: (colors: Partial<ThemeColorScheme>) => void;
   resetThemeColors: () => void;
+  setAssetTabAction: (action: AssetTabAction) => void;
+  setAssetPanelPosition: (position: AssetPanelPosition) => void;
+  setAssetEdgeTriggerEnabled: (enabled: boolean) => void;
+  setAssetTriggerEdge: (edge: AssetTriggerEdge) => void;
+  setAssetEdgeDelayMs: (delay: number) => void;
+  setAssetCardSize: (size: number) => void;
+  setAssetThumbnailFit: (fit: AssetThumbnailFit) => void;
 }
 
 const HEX_COLOR_PATTERN = /^#?[0-9a-fA-F]{6}$/;
@@ -112,13 +151,13 @@ function createDefaultProviderKeyStatus(): ProviderKeyStatusMap {
   }, {});
 }
 
-function normalizeProviderKeyStatus(input: unknown): ProviderKeyStatusMap {
+function normalizeProviderKeyStatus(input: DynamicValue): ProviderKeyStatusMap {
   const defaults = createDefaultProviderKeyStatus();
   if (!input || typeof input !== 'object') {
     return defaults;
   }
 
-  const entries = Object.entries(input as Record<string, unknown>);
+  const entries = Object.entries(input as DynamicValueMap);
   entries.forEach(([providerId, configured]) => {
     if (!providerId.trim()) return;
     defaults[providerId] = configured === true;
@@ -127,7 +166,7 @@ function normalizeProviderKeyStatus(input: unknown): ProviderKeyStatusMap {
   return defaults;
 }
 
-function normalizeUploadProvider(input: unknown): UploadProvider {
+function normalizeUploadProvider(input: DynamicValue): UploadProvider {
   return input === 'fal' || input === 'kie' || input === 'bizyair'
     ? input
     : DEFAULT_UPLOAD_PROVIDER;
@@ -154,17 +193,29 @@ export const useSettingsStore = create<SettingsState>()(
       providerKeyStatus: createDefaultProviderKeyStatus(),
       uploadProvider: DEFAULT_UPLOAD_PROVIDER,
       uploadFallbackEnabled: true,
+      largeUploadStrategy: 'ask',
       downloadPresetPaths: [],
       useUploadFilenameAsNodeTitle: true,
       enableImageViewerInfoPanel: true,
       imageViewerInfoPanelCollapsed: true,
       storyboardGenKeepStyleConsistent: true,
       storyboardGenDisableTextInImage: true,
+      storyboardGenAutoInferEmptyFrame: true,
       ignoreAtTagWhenCopyingAndGenerating: true,
+      canvasLodLevel: 'balanced',
+      logCaptureMode: 'standard',
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
       accentColor: SETTINGS_ACCENT_HEX,
       themeColors: DEFAULT_THEME_COLOR_SCHEME,
+      assetTabAction: 'floating',
+      assetPanelPosition: 'top',
+      assetEdgeTriggerEnabled: true,
+      assetTriggerEdge: 'right',
+      assetEdgeDelayMs: 650,
+      assetDragEdgeDelayMs: 180,
+      assetCardSize: 180,
+      assetThumbnailFit: 'cover',
       setProviderApiKey: (providerId, key) => {
         const normalizedKey = normalizeApiKey(key);
         set((state) => ({
@@ -190,6 +241,7 @@ export const useSettingsStore = create<SettingsState>()(
         })),
       setUploadProvider: (uploadProvider) => set({ uploadProvider }),
       setUploadFallbackEnabled: (uploadFallbackEnabled) => set({ uploadFallbackEnabled }),
+      setLargeUploadStrategy: (largeUploadStrategy) => set({ largeUploadStrategy }),
       setDownloadPresetPaths: (paths) => {
         const uniquePaths = Array.from(
           new Set(paths.map((path) => path.trim()).filter((path) => path.length > 0))
@@ -204,8 +256,15 @@ export const useSettingsStore = create<SettingsState>()(
         set({ storyboardGenKeepStyleConsistent: enabled }),
       setStoryboardGenDisableTextInImage: (enabled) =>
         set({ storyboardGenDisableTextInImage: enabled }),
+      setStoryboardGenAutoInferEmptyFrame: (enabled) =>
+        set({ storyboardGenAutoInferEmptyFrame: enabled }),
       setIgnoreAtTagWhenCopyingAndGenerating: (enabled) =>
         set({ ignoreAtTagWhenCopyingAndGenerating: enabled }),
+      setCanvasLodLevel: (canvasLodLevel) => set({ canvasLodLevel }),
+      setLogCaptureMode: (mode) => {
+        set({ logCaptureMode: mode });
+        void syncLogCaptureMode(mode).catch(() => undefined);
+      },
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
       setAccentColor: (color) => set({ accentColor: normalizeHexColor(color) }),
@@ -224,11 +283,24 @@ export const useSettingsStore = create<SettingsState>()(
           }),
         })),
       resetThemeColors: () => set({ themeColors: DEFAULT_THEME_COLOR_SCHEME }),
+      setAssetTabAction: (assetTabAction) => set({ assetTabAction }),
+      setAssetPanelPosition: (assetPanelPosition) => set({ assetPanelPosition }),
+      setAssetEdgeTriggerEnabled: (assetEdgeTriggerEnabled) => set({ assetEdgeTriggerEnabled }),
+      setAssetTriggerEdge: (assetTriggerEdge) => set({ assetTriggerEdge }),
+      setAssetEdgeDelayMs: (assetEdgeDelayMs) => set({ assetEdgeDelayMs: Math.min(2000, Math.max(100, assetEdgeDelayMs)) }),
+      setAssetCardSize: (assetCardSize) => set({ assetCardSize: Math.min(280, Math.max(112, assetCardSize)) }),
+      setAssetThumbnailFit: (assetThumbnailFit) => set({ assetThumbnailFit }),
     }),
     {
       name: 'settings-storage',
-      version: 8,
-      migrate: (persistedState: unknown) => {
+      version: 9,
+      // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
+      // "完整捕获" 导致日志长期膨胀（决策见 docs/task/日志调试中心/decisions.md）。
+      partialize: (state) => {
+        const { logCaptureMode: _logCaptureMode, ...persisted } = state;
+        return persisted;
+      },
+      migrate: (persistedState: DynamicValue) => {
         const state = (persistedState ?? {}) as {
           apiKey?: string;
           apiKeys?: Record<string, string>;

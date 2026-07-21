@@ -11,6 +11,10 @@ export interface TaskInputPreviewProps {
   onOpenVideo: (url: string, filePath?: string) => void
   onStartImageDrag?: (e: React.MouseEvent, imageUrl: string, filePath?: string) => void
   onStartVideoDrag?: (e: React.MouseEvent, videoUrl: string, filePath?: string) => void
+  onStartImageNativeDrag?: (e: React.DragEvent, imageUrl: string, filePath?: string) => void
+  onStartVideoNativeDrag?: (e: React.DragEvent, videoUrl: string, filePath?: string) => void
+  onNativeDragEnd?: () => void
+  nativeFileDragEnabled?: boolean
   shouldIgnoreClick?: () => boolean
 }
 
@@ -24,6 +28,10 @@ export function TaskInputPreview({
   onOpenVideo,
   onStartImageDrag,
   onStartVideoDrag,
+  onStartImageNativeDrag,
+  onStartVideoNativeDrag,
+  onNativeDragEnd,
+  nativeFileDragEnabled = false,
   shouldIgnoreClick,
 }: TaskInputPreviewProps): JSX.Element | null {
   if (inputImages.length === 0 && inputVideos.length === 0) return null
@@ -39,6 +47,10 @@ export function TaskInputPreview({
         onOpenVideo={onOpenVideo}
         onStartImageDrag={onStartImageDrag}
         onStartVideoDrag={onStartVideoDrag}
+        onStartImageNativeDrag={onStartImageNativeDrag}
+        onStartVideoNativeDrag={onStartVideoNativeDrag}
+        onNativeDragEnd={onNativeDragEnd}
+        nativeFileDragEnabled={nativeFileDragEnabled}
         shouldIgnoreClick={shouldIgnoreClick}
       />
       <StackPreview
@@ -50,6 +62,10 @@ export function TaskInputPreview({
         onOpenVideo={onOpenVideo}
         onStartImageDrag={onStartImageDrag}
         onStartVideoDrag={onStartVideoDrag}
+        onStartImageNativeDrag={onStartImageNativeDrag}
+        onStartVideoNativeDrag={onStartVideoNativeDrag}
+        onNativeDragEnd={onNativeDragEnd}
+        nativeFileDragEnabled={nativeFileDragEnabled}
         shouldIgnoreClick={shouldIgnoreClick}
       />
     </div>
@@ -65,6 +81,10 @@ interface StackPreviewProps {
   onOpenVideo: (url: string, filePath?: string) => void
   onStartImageDrag?: (e: React.MouseEvent, imageUrl: string, filePath?: string) => void
   onStartVideoDrag?: (e: React.MouseEvent, videoUrl: string, filePath?: string) => void
+  onStartImageNativeDrag?: (e: React.DragEvent, imageUrl: string, filePath?: string) => void
+  onStartVideoNativeDrag?: (e: React.DragEvent, videoUrl: string, filePath?: string) => void
+  onNativeDragEnd?: () => void
+  nativeFileDragEnabled: boolean
   shouldIgnoreClick?: () => boolean
 }
 
@@ -77,6 +97,10 @@ function StackPreview({
   onOpenVideo,
   onStartImageDrag,
   onStartVideoDrag,
+  onStartImageNativeDrag,
+  onStartVideoNativeDrag,
+  onNativeDragEnd,
+  nativeFileDragEnabled,
   shouldIgnoreClick,
 }: StackPreviewProps): JSX.Element | null {
   const { t } = useI18n()
@@ -86,7 +110,10 @@ function StackPreview({
   const [renderExtra, setRenderExtra] = useState(false)
   const [extraVisible, setExtraVisible] = useState(false)
 
-  if (items.length === 0) return null
+  const visible = items.slice(0, 3)
+  const extra = items.length - visible.length
+  const displayItems = renderAll ? items : visible
+  const showExtra = renderExtra && extra > 0
 
   useEffect(() => {
     if (!expanded) {
@@ -98,11 +125,6 @@ function StackPreview({
     const raf = requestAnimationFrame(() => setFadeIn(true))
     return () => cancelAnimationFrame(raf)
   }, [expanded])
-
-  const visible = items.slice(0, 3)
-  const extra = items.length - visible.length
-  const displayItems = renderAll ? items : visible
-  const showExtra = renderExtra && extra > 0
 
   useEffect(() => {
     if (extra <= 0) {
@@ -119,6 +141,8 @@ function StackPreview({
     const raf = requestAnimationFrame(() => setExtraVisible(true))
     return () => cancelAnimationFrame(raf)
   }, [expanded, extra])
+
+  if (items.length === 0) return null
 
   const base = 48
   const overlap = 12
@@ -147,6 +171,15 @@ function StackPreview({
         onStartVideoDrag?.(e, item, filePaths?.[index])
       }
     }
+    const handleDragStart = (e: React.DragEvent) => {
+      e.stopPropagation()
+      if (kind === 'image') {
+        onStartImageNativeDrag?.(e, item, filePaths?.[index])
+      } else {
+        onStartVideoNativeDrag?.(e, item, filePaths?.[index])
+      }
+    }
+    const filePath = filePaths?.[index]
     return (
       <div
         key={`${taskId}-${kind}-${index}`}
@@ -156,6 +189,9 @@ function StackPreview({
         style={{ zIndex: 20 - index }}
         onClick={handleClick}
         onMouseDown={handleMouseDown}
+        draggable={nativeFileDragEnabled && Boolean(filePath)}
+        onDragStart={handleDragStart}
+        onDragEnd={onNativeDragEnd}
       >
         {kind === 'image' ? (
           <img

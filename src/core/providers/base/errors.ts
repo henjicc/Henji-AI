@@ -46,7 +46,7 @@ export class ProviderError extends Error {
   public readonly code: ProviderErrorCode
 
   /** 错误详情 */
-  public readonly details?: any
+  public readonly details?: DynamicValue
 
   /** 时间戳 */
   public readonly timestamp: Date
@@ -63,7 +63,7 @@ export class ProviderError extends Error {
     message: string,
     provider: string,
     code: ProviderErrorCode,
-    details?: any
+    details?: DynamicValue
   ) {
     super(message)
     this.provider = provider
@@ -118,7 +118,7 @@ export class ProviderError extends Error {
    * @param defaultCode - 默认错误码
    */
   static fromError(
-    error: any,
+    error: DynamicValue,
     provider: string,
     defaultCode: ProviderErrorCode = ProviderErrorCode.UNKNOWN_ERROR
   ): ProviderError {
@@ -178,7 +178,7 @@ export function createPollingTimeoutError(
  */
 export function createInvalidResponseError(
   provider: string,
-  response: any,
+  response: DynamicValue,
   reason?: string
 ): ProviderError {
   return new ProviderError(

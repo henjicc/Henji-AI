@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, Position, useUpdateNodeInternals, useViewport } from '@xyflow/react'
 import { Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import {
   CANVAS_NODE_TYPES,
@@ -11,22 +12,36 @@ import {
 } from '@/features/canvas/domain/canvasNodes'
 import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay'
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels'
+import { MODEL_PARAM_ID } from '@/features/canvas/domain/socketTypes'
 import {
   areStringListsEqual,
   collectInputMediaUrls,
 } from '@/features/canvas/application/graphMediaResolver'
+import {
+  areStringSetsEqual,
+  areValueOverridesEqual,
+  collectInputValues,
+  getConnectedParamIds,
+} from '@/features/canvas/application/graphValueResolver'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams'
+import { ModelInputRow } from '@/features/canvas/params/ModelInputRow'
+import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
+import { NodeParamRows } from '@/features/canvas/params/NodeParamRows'
+import { isParamVisible } from '@/components/params/paramVisibility'
+import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { registry } from '@/core/ModelRegistry'
+import type { ModelTag } from '@/core/types'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
+import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
+import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles'
+import PriceEstimate from '@/components/ui/PriceEstimate'
 import {
-  STORYBOARD_GEN_HEADER_ADJUST,
   STORYBOARD_GEN_ICON_ADJUST,
-  STORYBOARD_GEN_TITLE_ADJUST,
   areFrameDescriptionDraftsEqual,
   buildFrameDescriptionDrafts,
   generateFrameId,
@@ -41,8 +56,14 @@ import {
   generateStoryboardImage,
 } from '@/features/canvas/nodes/storyboardGen/generation'
 import { GenerationService } from '@/core/services/GenerationService'
+import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor'
-import { StoryboardParamsBar } from '@/features/canvas/nodes/storyboardGen/StoryboardParamsBar'
+
+/** prompt/text 由分镜格子描述拼装，不进入逐行参数区 */
+const PROMPT_PARAM_IDS = ['prompt', 'text']
+
+/** 分镜生成始终向模型发送栅格参考图，因此只允许支持图片编辑的模型 */
+const IMAGE_EDIT_REQUIRED_TAGS: ModelTag[] = ['image-to-image']
 
 type StoryboardGenNodeProps = {
   id: string
@@ -53,6 +74,7 @@ type StoryboardGenNodeProps = {
 }
 
 export const StoryboardGenNode = memo(({ id, data, selected, width, height }: StoryboardGenNodeProps) => {
+  const { t } = useTranslation()
   const { zoom } = useViewport()
   const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
@@ -64,6 +86,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const keepStyleConsistent = useSettingsStore((state) => state.storyboardGenKeepStyleConsistent)
   const disableTextInImage = useSettingsStore((state) => state.storyboardGenDisableTextInImage)
+  const autoInferEmptyFrame = useSettingsStore((state) => state.storyboardGenAutoInferEmptyFrame)
   const ignoreAtTagWhenCopyingAndGenerating = useSettingsStore(
     (state) => state.ignoreAtTagWhenCopyingAndGenerating
   )
@@ -85,36 +108,64 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     (state) => collectInputMediaUrls(id, state.nodes, state.edges, 'image'),
     areStringListsEqual
   )
+  const mediaInputs = useMemo(() => nodeData.mediaInputs ?? {}, [nodeData.mediaInputs])
+  const handleImageInputChange = useCallback((next: string[]) => {
+    updateNodeData(id, { mediaInputs: { ...mediaInputs, image: next } })
+  }, [id, mediaInputs, updateNodeData])
+  // 生效图片 = 已连线则用上游，否则用节点上的本地内联上传（与媒体行内部的双态逻辑一致）
+  const effectiveImages = useMemo(
+    () => (incomingImages.length > 0 ? incomingImages : (mediaInputs.image ?? [])),
+    [incomingImages, mediaInputs]
+  )
   const incomingImageItems = useMemo(
     () =>
-      incomingImages.map((imageUrl, index) => ({
+      effectiveImages.map((imageUrl, index) => ({
         id: `image-ref-${index}`,
         label: `图${index + 1}`,
         thumbnailSrc: imageUrl,
       })),
-    [incomingImages]
+    [effectiveImages]
   )
+
+  // 模型端口覆盖：连上模型选择器节点后，节点内选择只读，生效模型以连线为准
+  const connectedParamIds = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => getConnectedParamIds(id, state.edges),
+    areStringSetsEqual
+  )
+  const injectedValues = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => collectInputValues(id, state.nodes, state.edges),
+    areValueOverridesEqual
+  )
+  const isModelOverridden = connectedParamIds.has(MODEL_PARAM_ID)
+  const overrideModelId = isModelOverridden && typeof injectedValues[MODEL_PARAM_ID] === 'string'
+    ? injectedValues[MODEL_PARAM_ID] as string
+    : null
 
   const selectedModelId = useMemo(() => {
     const stored = typeof nodeData.modelId === 'string' ? nodeData.modelId.trim() : ''
-    if (stored && registry.getModel(stored)) {
+    const storedModel = stored ? registry.getModel(stored) : undefined
+    if (storedModel && IMAGE_EDIT_REQUIRED_TAGS.every((tag) => storedModel.meta.tags?.includes(tag))) {
       return stored
     }
-    return getDefaultModelId('image')
+    return getDefaultModelId('image', IMAGE_EDIT_REQUIRED_TAGS)
   }, [nodeData.modelId])
-  const selectedModel = useMemo(() => registry.getModel(selectedModelId), [selectedModelId])
-  const providerKeyConfigured = selectedModel
-    ? providerKeyStatus[selectedModel.meta.provider] === true
+  const effectiveModelId = overrideModelId ?? selectedModelId
+  const effectiveModel = useMemo(() => registry.getModel(effectiveModelId), [effectiveModelId])
+  const providerKeyConfigured = effectiveModel
+    ? providerKeyStatus[effectiveModel.meta.provider] === true
     : false
 
-  const handleParamsChange = useCallback((nextParams: Record<string, unknown>) => {
+  const handleParamsChange = useCallback((nextParams: DynamicValueMap) => {
     updateNodeData(id, { params: nextParams })
   }, [id, updateNodeData])
 
-  const { schema: modelParamSchema, values: modelParamValues } = useNodeModelParams({
-    modelId: selectedModelId,
+  const { schema: modelParamSchema, values: modelParamValues, setParam } = useNodeModelParams({
+    modelId: effectiveModelId,
     storedParams: nodeData.params,
     onParamsChange: handleParamsChange,
+    media: { images: effectiveImages },
   })
 
   const handleModelChange = useCallback((nextModelId: string) => {
@@ -122,9 +173,23 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   }, [id, updateNodeData])
 
   const ratioSpec = useMemo(
-    () => analyzeRatioResolutionParams(modelParamSchema, incomingImages),
-    [incomingImages, modelParamSchema]
+    () => analyzeRatioResolutionParams(modelParamSchema, effectiveImages),
+    [effectiveImages, modelParamSchema]
   )
+
+  // 图片行数量上限：由所选模型的 inputLimits 决定，0 表示该模型不支持图片输入
+  const imageRowMax = useMemo(
+    () => resolveInputLimits(effectiveModelId, modelParamValues).images.max,
+    [effectiveModelId, modelParamValues]
+  )
+
+  // 逐行参数区行数（模型行 + 可选图片行 + 可见标量参数行），用于动态计算节点底部高度
+  const paramsRowCount = useMemo(() => {
+    const visibleParamCount = modelParamSchema.filter(
+      (param) => !PROMPT_PARAM_IDS.includes(param.id) && isParamVisible(param, modelParamValues, null)
+    ).length
+    return 1 + (imageRowMax > 0 ? 1 : 0) + visibleParamCount
+  }, [imageRowMax, modelParamSchema, modelParamValues])
 
   // 栅格布局所需的具体宽高比：取 schema 宽高比参数当前值，smart/缺失时回退已检测比例
   const frameAspectRatioValue = useMemo(() => {
@@ -144,8 +209,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   }, [modelParamValues, ratioSpec])
 
   const baseFrameLayout = useMemo(
-    () => computeStoryboardBaseFrameLayout(frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows),
-    [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows]
+    () => computeStoryboardBaseFrameLayout(frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows, paramsRowCount),
+    [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows, paramsRowCount]
   )
   const totalFrames = useMemo(
     () => (nodeData.gridRows ?? 1) * (nodeData.gridCols ?? 1),
@@ -161,9 +226,10 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         nodeData.gridCols,
         nodeData.gridRows,
         resolvedNodeHeight,
-        resolvedNodeWidth
+        resolvedNodeWidth,
+        paramsRowCount
       ),
-    [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows, resolvedNodeHeight, resolvedNodeWidth]
+    [frameAspectRatioValue, nodeData.gridCols, nodeData.gridRows, resolvedNodeHeight, resolvedNodeWidth, paramsRowCount]
   )
 
   useEffect(() => {
@@ -212,8 +278,9 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       frameDescriptionDrafts: frameDescriptionDraftsRef.current,
       keepStyleConsistent,
       disableTextInImage,
+      autoInferEmptyFrame,
     }),
-    [disableTextInImage, keepStyleConsistent, nodeData]
+    [autoInferEmptyFrame, disableTextInImage, keepStyleConsistent, nodeData]
   )
 
   const handleGenerate = useCallback(async (): Promise<void> => {
@@ -227,22 +294,26 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       return
     }
 
-    const generationParams: Record<string, unknown> = {
+    // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
+    const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState()
+    const injectedParamValues = collectInputValues(id, graphNodes, graphEdges)
+    const generationParams: DynamicValueMap = {
       ...modelParamValues,
+      ...injectedParamValues,
       prompt,
       text: prompt,
     }
-    const estimateParams: Record<string, unknown> = {
+    const estimateParams: DynamicValueMap = {
       ...generationParams,
-      ...(incomingImages.length > 0
+      ...(effectiveImages.length > 0
         ? {
-          images: incomingImages,
-          uploadedFilePaths: incomingImages,
+          images: effectiveImages,
+          uploadedFilePaths: effectiveImages,
         }
         : {}),
     }
     const estimate = await GenerationService.getInstance().getProgressEstimate(
-      selectedModelId,
+      effectiveModelId,
       estimateParams
     )
     const generationDurationMs = estimate?.durationMs ?? 60_000
@@ -259,7 +330,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       displayName: EXPORT_RESULT_DISPLAY_NAME.storyboardGenOutput,
       resultKind: 'storyboardGenOutput',
       prompt: '',
-      modelId: selectedModelId,
+      modelId: effectiveModelId,
       params: { ...modelParamValues },
     })
 
@@ -269,9 +340,9 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
     try {
       const generated = await generateStoryboardImage({
-        modelId: selectedModelId,
+        modelId: effectiveModelId,
         params: generationParams,
-        incomingImages,
+        incomingImages: effectiveImages,
         frameAspectRatioValue,
         gridRows: nodeData.gridRows,
         gridCols: nodeData.gridCols,
@@ -295,7 +366,14 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     } finally {
       setNodeGenerationProgress(newNodeId, null)
     }
-  }, [addEdge, addNode, buildPrompt, findNodePosition, frameAspectRatioValue, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, incomingImages, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, selectedModelId, setNodeGenerationProgress, setSelectedNode, updateNodeData])
+  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, updateNodeData])
+
+  useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
+    if (nodeId !== id) {
+      return
+    }
+    void handleGenerate()
+  }), [handleGenerate, id])
 
   const handleRowChange = useCallback((delta: number): void => {
     const nextRows = Math.max(1, Math.min(9, nodeData.gridRows + delta))
@@ -317,7 +395,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       previous[frame.id] === description ? previous : { ...previous, [frame.id]: description }
     ))
 
-    const referenceIndex = resolveReferenceIndexFromDescription(description, incomingImages.length)
+    const referenceIndex = resolveReferenceIndexFromDescription(description, effectiveImages.length)
     if (frame.description === description && frame.referenceIndex === referenceIndex) {
       return
     }
@@ -325,7 +403,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     const nextFrames = [...nodeData.frames]
     nextFrames[index] = { ...frame, description, referenceIndex }
     updateNodeData(id, { frames: nextFrames })
-  }, [id, incomingImages.length, nodeData.frames, updateNodeData])
+  }, [effectiveImages.length, id, nodeData.frames, updateNodeData])
 
   return (
     <div
@@ -340,15 +418,23 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       onClick={() => setSelectedNode(id)}
     >
       <NodeHeader
-        className={NODE_HEADER_FLOATING_POSITION_CLASS}
+        className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
         icon={<Sparkles className="h-4 w-4" />}
         titleText={resolvedTitle}
-        headerAdjust={STORYBOARD_GEN_HEADER_ADJUST}
         iconAdjust={STORYBOARD_GEN_ICON_ADJUST}
-        titleAdjust={STORYBOARD_GEN_TITLE_ADJUST}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
+        rightSlot={effectiveModel && (
+          <PriceEstimate
+            providerId={effectiveModel.meta.provider}
+            modelId={effectiveModelId}
+            params={modelParamValues}
+            variant="badge"
+          />
+        )}
       />
+
+      <NodeLodPlaceholder title={resolvedTitle} icon={<Sparkles className="h-6 w-6" />} />
 
       <StoryboardGridEditor
         nodeData={nodeData}
@@ -362,26 +448,38 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onFrameDescriptionChange={handleFrameDescriptionChange}
       />
 
-      {error && <div className="mb-1.5 shrink-0 text-[10px] text-red-400">{error}</div>}
+      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-[10px] text-red-400">{error}</div>}
 
-      <StoryboardParamsBar
-        frameLayout={frameLayout}
-        modelId={selectedModelId}
-        providerId={selectedModel?.meta.provider ?? ''}
-        storedParams={nodeData.params}
-        mergedParams={modelParamValues}
-        incomingImages={incomingImages}
-        onModelChange={handleModelChange}
-        onParamsChange={handleParamsChange}
-        onGenerate={handleGenerate}
-      />
+      <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
+        <ModelInputRow
+          mediaType="image"
+          modelId={selectedModelId}
+          overrideModelId={overrideModelId}
+          storedParams={nodeData.params}
+          onModelChange={handleModelChange}
+          onParamsChange={handleParamsChange}
+          incomingImages={effectiveImages}
+          requiredTags={IMAGE_EDIT_REQUIRED_TAGS}
+        />
+        {imageRowMax > 0 && (
+          <MediaInputRow
+            nodeId={id}
+            mediaKind="image"
+            label={t('node.mediaRow.image')}
+            maxCount={imageRowMax}
+            inlineValue={mediaInputs.image ?? []}
+            onInlineChange={handleImageInputChange}
+          />
+        )}
+        <NodeParamRows
+          nodeId={id}
+          schema={modelParamSchema}
+          values={modelParamValues}
+          setParam={setParam}
+          excludeParamIds={PROMPT_PARAM_IDS}
+        />
+      </div>
 
-      <Handle
-        type="target"
-        id="target"
-        position={Position.Left}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
-      />
       <Handle
         type="source"
         id="source"

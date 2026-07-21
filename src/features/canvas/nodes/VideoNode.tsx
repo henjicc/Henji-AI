@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Play, Upload, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -15,16 +15,26 @@ import {
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import { captureVideoPoster } from '@/features/canvas/generation/videoPoster';
+import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
+import { captureVideoPoster, detectVideoAspectRatioFromSource } from '@/features/canvas/generation/videoPoster';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
+import {
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles';
+import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
-import { formatDuration } from '@/utils/mediaDimensions';
+import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
+import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { saveUploadVideo } from '@/utils/save';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { UiInput } from '@/components/ui';
+import { UiIconButton, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
+import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
 
 type VideoNodeProps = NodeProps & {
   id: string;
@@ -42,14 +52,21 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 /** 视频展示节点：服务于结果视频与上传视频两种类型，poster 优先、点击播放才挂载 video */
 export const VideoNode = memo(({ id, data, selected, type, width, height }: VideoNodeProps) => {
   const { t } = useTranslation();
+  const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const hasTargetConnections = useCanvasStore(
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainTarget ?? false
+  );
+  const hasSourceConnections = useCanvasStore(
+    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false
+  );
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const uploadSequenceRef = useRef(0);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.videoUpload;
-  const { isGenerating, progress } = useGenerationProgressDisplay(id, data);
+  const { isGenerating, progress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
 
   const resolvedAspectRatio = data.aspectRatio || '16:9';
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
@@ -63,29 +80,59 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const resolvedWidth = resolveNodeDimension(width, compactSize.width);
   const resolvedHeight = resolveNodeDimension(height, compactSize.height);
 
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, resolvedWidth, resolvedHeight, updateNodeInternals]);
+
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(type as CanvasNodeType, data),
     [data, type]
   );
 
-  const posterSource = useMemo(
-    () => (data.previewImageUrl ? resolveImageDisplayUrl(data.previewImageUrl) : null),
-    [data.previewImageUrl]
-  );
   const videoSource = useMemo(
     () => (data.videoUrl ? resolveImageDisplayUrl(data.videoUrl) : null),
     [data.videoUrl]
   );
-  const durationLabel = useMemo(
-    () => (typeof data.durationSec === 'number' && data.durationSec > 0
-      ? formatDuration(data.durationSec)
-      : null),
-    [data.durationSec]
+  const posterSource = useMemo(
+    () => (data.previewImageUrl ? resolveImageDisplayUrl(data.previewImageUrl) : null),
+    [data.previewImageUrl]
   );
+  // 低倍率下封面降为微缩略图，生成完成前继续显示原封面
+  const preferMicroImage = useMediaMicroLod();
+  const microPosterSource = useMicroThumbnail(posterSource, preferMicroImage);
+  const displayedPosterSource = microPosterSource ?? posterSource;
+
+  // poster 优先：有封面时默认只渲染 <img>，点击播放才挂载 <video>。
+  // 每个常驻 <video preload="auto"> 都是一个解码器实例，几十个视频节点时内存/解码开销可观。
+  const [isPlayerActive, setIsPlayerActive] = useState(false);
+  useEffect(() => {
+    setIsPlayerActive(false);
+  }, [videoSource]);
+  const shouldMountPlayer = Boolean(videoSource) && (isPlayerActive || !posterSource);
 
   const processFile = useCallback(async (file: File) => {
+    const sequence = uploadSequenceRef.current + 1;
+    uploadSequenceRef.current = sequence;
+
+    // 先用本地文件直接探测宽高比，不等待落盘 + 抓帧的完整流程，
+    // 让节点尺寸尽快重新适配，避免“先维持旧尺寸、稍后才跳变”的延迟感
+    const optimisticBlobUrl = URL.createObjectURL(file);
+    detectVideoAspectRatioFromSource(optimisticBlobUrl)
+      .then((ratio) => {
+        if (uploadSequenceRef.current === sequence) {
+          updateNodeData(id, { aspectRatio: ratio });
+        }
+      })
+      .catch(() => {
+        // 探测失败时静默忽略，最终尺寸仍由下方 captureVideoPoster 的结果兜底
+      })
+      .finally(() => URL.revokeObjectURL(optimisticBlobUrl));
+
     const saved = await saveUploadVideo(file, 'persist');
     const poster = await captureVideoPoster(saved.fullPath);
+    if (uploadSequenceRef.current !== sequence) {
+      return;
+    }
     updateNodeData(id, {
       videoUrl: saved.fullPath,
       previewImageUrl: poster.posterUrl,
@@ -93,7 +140,6 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       durationSec: poster.durationSec,
       sourceFileName: file.name,
     });
-    setIsPlaying(false);
   }, [id, updateNodeData]);
 
   const handleFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -121,6 +167,15 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     }
   }, [data.videoUrl, id, isUploadVariant, setSelectedNode]);
 
+  useEffect(() => {
+    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
+      if (nodeId !== id || !file.type.startsWith('video/')) {
+        return;
+      }
+      void processFile(file);
+    });
+  }, [id, processFile]);
+
   return (
     <div
       className={`
@@ -141,54 +196,43 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       />
 
       <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
-        {videoSource && isPlaying ? (
-          <video
-            className="nodrag nowheel h-full w-full object-contain"
+        {videoSource && shouldMountPlayer ? (
+          <CanvasVideoPlayer
             src={videoSource}
-            poster={posterSource ?? undefined}
-            controls
-            autoPlay
-            preload="none"
-            onMouseDown={(event) => event.stopPropagation()}
-            onEnded={() => setIsPlaying(false)}
+            knownDuration={data.durationSec}
+            onOpenViewer={() => setIsViewerOpen(true)}
+            autoPlayOnMount={isPlayerActive}
           />
-        ) : data.videoUrl ? (
-          <>
-            {posterSource ? (
-              <img
-                src={posterSource}
-                alt={resolvedTitle}
-                className="h-full w-full object-contain"
-                draggable={false}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-text-muted/85">
-                <Video className="h-7 w-7 opacity-60" />
-              </div>
-            )}
-            <div
-              className="absolute inset-0 flex cursor-pointer items-center justify-center"
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedNode(id);
-                setIsPlaying(true);
-              }}
-              onDoubleClick={(event) => {
-                event.stopPropagation();
-                setIsPlaying(false);
-                setIsViewerOpen(true);
-              }}
-            >
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-bg-dark/70 text-text-dark transition-transform duration-150 group-hover:scale-105">
+        ) : videoSource && posterSource ? (
+          <div
+            className="group/poster relative h-full w-full"
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              setIsViewerOpen(true);
+            }}
+          >
+            <CanvasNodeImage
+              src={displayedPosterSource ?? ''}
+              alt={resolvedTitle}
+              className="pointer-events-none h-full w-full select-none object-contain"
+              disableViewer
+              draggable={false}
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <UiIconButton
+                aria-label={t('node.videoNode.play')}
+                showBorder={false}
+                className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full !border-white/15 !bg-black/50 !text-white shadow-xl shadow-black/25 backdrop-blur-md hover:!bg-black/65"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsPlayerActive(true);
+                }}
+              >
                 <Play className="ml-0.5 h-5 w-5" />
-              </span>
+              </UiIconButton>
             </div>
-            {durationLabel && (
-              <span className="absolute bottom-1.5 right-1.5 rounded bg-bg-dark/75 px-1.5 py-0.5 text-[10px] leading-none text-text-dark">
-                {durationLabel}
-              </span>
-            )}
-          </>
+          </div>
         ) : isUploadVariant ? (
           <label
             className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85"
@@ -209,8 +253,8 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] transition-[width] duration-100 ease-linear"
-              style={{ width: `${progress * 100}%` }}
+              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] ease-out"
+              style={{ transform: `scaleX(${progress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
             />
           </div>
         )}
@@ -239,14 +283,16 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
           type="target"
           id="target"
           position={Position.Left}
-          className="!h-2 !w-2 !border-surface-dark !bg-accent"
+          className={`${NODE_PORT_NODE_CLASS} ${hasTargetConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+          style={{ background: getSocketColor('VIDEO'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
         />
       )}
       <Handle
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('VIDEO'), right: 0, top: '50%', transform: 'translate(50%, -50%)' }}
       />
       <NodeResizeHandle
         minWidth={resizeConstraints.minWidth}

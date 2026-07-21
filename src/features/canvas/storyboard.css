@@ -82,6 +82,33 @@
   border-radius: var(--ui-radius-lg);
 }
 
+/* 视口层合成化（仅手势期间）：xyflow 默认不给 .react-flow__viewport 提升合成层，
+   平移/缩放的每帧 transform 变化都会触发整棵节点树重绘（光栅），
+   80 个内容型节点时平移只有 ~27fps；提升为合成层后平移是纯合成器移动，恢复 60fps。
+   注意必须只在手势期间提升（Canvas 的 onMoveStart/onMoveEnd 切换本类）：
+   常驻 will-change 会让缩放后的内容停留在旧倍率光栅位图上，表现为放大后文字模糊、
+   点击节点触发局部重绘才恢复清晰；手势结束撤掉提升，浏览器立即按新倍率重光栅。 */
+.canvas-viewport-moving .react-flow__viewport {
+  will-change: transform;
+}
+
+/* 低倍率内容 LOD：缩放低于阈值（见 useCanvasContentLod）时，Canvas 包装层
+   挂 .canvas-lod-low，内容型节点正文（标 .canvas-node-lod-detail）只隐藏绘制、
+   保留布局（visibility 不改变几何，xyflow 的 handle 测量与连线锚点不受影响），
+   同时显示大号标题占位（.canvas-node-lod-placeholder）。
+   目的：总览缩放时不可读的正文不再参与重光栅，大幅降低 zoom 的坏帧。 */
+.canvas-lod-low .canvas-node-lod-detail {
+  visibility: hidden;
+}
+
+.canvas-node-lod-placeholder {
+  display: none;
+}
+
+.canvas-lod-low .canvas-node-lod-placeholder {
+  display: flex;
+}
+
 .canvas-minimap {
   border-radius: 12px;
   overflow: hidden;

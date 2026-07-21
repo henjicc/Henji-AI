@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { open } from '@tauri-apps/plugin-shell'
+import { getPlatform } from '@/platform/runtime'
 
 const logger = createLogger('components.Settings.hooks.useExternalLink')
 
@@ -10,7 +10,7 @@ export interface UseExternalLinkResult {
 export function useExternalLink(): UseExternalLinkResult {
   const openExternal = async (url: string) => {
     try {
-      await open(url)
+      await getPlatform().system.shell.openExternal(url)
     } catch (error) {
       logger.error('打开链接失败:', error)
     }

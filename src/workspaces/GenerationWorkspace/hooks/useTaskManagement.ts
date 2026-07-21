@@ -13,7 +13,7 @@ export interface GenerationTask {
   provider?: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   progress?: number
-  result?: any
+  result?: DynamicValue
   error?: string
   createdAt: number
 }

@@ -47,7 +47,7 @@ export interface ToolProcessor {
   process: (
     toolType: NodeToolType,
     sourceImageUrl: string,
-    options: Record<string, unknown>
+    options: DynamicValueMap
   ) => Promise<ToolProcessorResult>;
 }
 
@@ -64,8 +64,26 @@ export interface CanvasEventMap {
     nodeId: string;
     file: File;
   };
+  'canvas/paste-media': {
+    nodeId: string;
+    file: File;
+  };
   'generation/run': {
     nodeId: string;
+  };
+  'camera-stage/open': {
+    nodeId: string;
+  };
+  'camera-stage/output': {
+    nodeId: string;
+    kind: 'image' | 'video';
+  };
+  'camera-stage/render-video': {
+    nodeId: string;
+  };
+  'canvas/toast': {
+    message: string;
+    type?: 'success' | 'error';
   };
 }
 

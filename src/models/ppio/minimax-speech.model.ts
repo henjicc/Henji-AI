@@ -70,16 +70,16 @@ const CLONE_PREVIEW_MODEL_OPTIONS = [
 ]
 
 interface MinimaxVoiceCatalogItem {
-  voice_id?: unknown
-  description?: unknown
-  voice_name?: unknown
+  voice_id?: DynamicValue
+  description?: DynamicValue
+  voice_name?: DynamicValue
 }
 
 interface MinimaxVoiceCatalog {
   system_voice?: MinimaxVoiceCatalogItem[]
 }
 
-function normalizeVoiceText(value: unknown): string | null {
+function normalizeVoiceText(value: DynamicValue): string | null {
   if (typeof value !== 'string') {
     return null
   }
@@ -87,7 +87,7 @@ function normalizeVoiceText(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function normalizeVoiceDescription(value: unknown): string | null {
+function normalizeVoiceDescription(value: DynamicValue): string | null {
   if (typeof value === 'string') {
     return normalizeVoiceText(value)
   }
@@ -103,7 +103,7 @@ function normalizeVoiceDescription(value: unknown): string | null {
   return null
 }
 
-function buildVoiceSelectorVoices(source: unknown): VoiceSelectorConfig['voices'] {
+function buildVoiceSelectorVoices(source: DynamicValue): VoiceSelectorConfig['voices'] {
   if (!source || typeof source !== 'object') {
     return []
   }
@@ -365,7 +365,7 @@ export const minimaxSpeechModel = defineModel({
     builder: (params) => {
       const isVoiceCloneRequest = params.minimaxCloneOperation === 'clone' || params.minimaxMode === 'voice-clone'
 
-      const pickString = (...values: unknown[]): string | undefined => {
+      const pickString = (...values: DynamicValue[]): string | undefined => {
         for (const value of values) {
           if (typeof value === 'string' && value.trim().length > 0) {
             return value.trim()
@@ -374,7 +374,7 @@ export const minimaxSpeechModel = defineModel({
         return undefined
       }
 
-      const pickNumber = (...values: unknown[]): number | undefined => {
+      const pickNumber = (...values: DynamicValue[]): number | undefined => {
         for (const value of values) {
           const parsed = typeof value === 'number' ? value : Number(value)
           if (Number.isFinite(parsed)) {
@@ -384,7 +384,7 @@ export const minimaxSpeechModel = defineModel({
         return undefined
       }
 
-      const pickBoolean = (...values: unknown[]): boolean | undefined => {
+      const pickBoolean = (...values: DynamicValue[]): boolean | undefined => {
         for (const value of values) {
           if (typeof value === 'boolean') {
             return value
@@ -399,7 +399,7 @@ export const minimaxSpeechModel = defineModel({
 
       if (isVoiceCloneRequest) {
         const clonePanel = params.minimaxVoiceClonePanel && typeof params.minimaxVoiceClonePanel === 'object'
-          ? (params.minimaxVoiceClonePanel as Record<string, unknown>)
+          ? (params.minimaxVoiceClonePanel as DynamicValueMap)
           : {}
         const cloneAudioUrl = pickString(
           clonePanel.cloneAudioFilePath,
@@ -411,7 +411,7 @@ export const minimaxSpeechModel = defineModel({
           throw new Error('音色克隆需要提供复刻音频')
         }
 
-        const requestData: Record<string, unknown> = {
+        const requestData: DynamicValueMap = {
           audio_url: cloneAudioUrl,
         }
 
@@ -468,7 +468,7 @@ export const minimaxSpeechModel = defineModel({
       }
 
       const advanced = params.minimaxAdvancedSettings && typeof params.minimaxAdvancedSettings === 'object'
-        ? (params.minimaxAdvancedSettings as Record<string, unknown>)
+        ? (params.minimaxAdvancedSettings as DynamicValueMap)
         : {}
 
       const voiceId = pickString(params.minimaxVoiceId, params.voice_id)
@@ -495,12 +495,12 @@ export const minimaxSpeechModel = defineModel({
       const channel = pickNumber(advanced.channel, params.minimaxAudioChannel, params.channel)
       const languageBoost = pickString(params.minimaxLanguageBoost, params.language_boost)
 
-      const requestData: Record<string, unknown> = {}
+      const requestData: DynamicValueMap = {}
       if (text.length > 0) {
         requestData.text = text
       }
 
-      const voiceSetting: Record<string, unknown> = {}
+      const voiceSetting: DynamicValueMap = {}
       if (voiceId) voiceSetting.voice_id = voiceId
       if (audioSpeed !== undefined) voiceSetting.speed = audioSpeed
       if (audioVol !== undefined) voiceSetting.vol = audioVol
@@ -513,7 +513,7 @@ export const minimaxSpeechModel = defineModel({
         requestData.voice_setting = voiceSetting
       }
 
-      const audioSetting: Record<string, unknown> = {}
+      const audioSetting: DynamicValueMap = {}
       if (sampleRate !== undefined) audioSetting.audio_sample_rate = sampleRate
       if (bitrate !== undefined) audioSetting.bitrate = bitrate
       if (format) audioSetting.format = format

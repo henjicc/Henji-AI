@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Viewport } from '@xyflow/react';
+import { resetTransientNodeRuntimeState } from '@/features/canvas/domain/nodeMigrations';
 import {
   useCanvasStore,
   type CanvasEdge,
@@ -116,8 +117,8 @@ function mapNodeImageReferences(
   mapImageUrl: (imageUrl: string | null | undefined) => string | null | undefined
 ): CanvasNode[] {
   return nodes.map((node) => {
-    const nodeData = node.data as Record<string, unknown>;
-    const nextData: Record<string, unknown> = { ...nodeData };
+    const nodeData = node.data as DynamicValueMap;
+    const nextData: DynamicValueMap = { ...nodeData };
 
     if ('imageUrl' in nextData) {
       nextData.imageUrl = mapImageUrl(nextData.imageUrl as string | null | undefined) ?? null;
@@ -140,7 +141,7 @@ function mapNodeImageReferences(
           return frame;
         }
 
-        const frameRecord = frame as Record<string, unknown>;
+        const frameRecord = frame as DynamicValueMap;
         if (!('imageUrl' in frameRecord)) {
           return frame;
         }
@@ -189,11 +190,28 @@ function encodeProject(project: Project): PersistedProject {
   const imageIndexMap = new Map<string, number>();
   const encode = (imageUrl: string | null | undefined) =>
     encodeImageReference(imageUrl, imagePool, imageIndexMap);
+  const resetRuntimeState = (nodes: CanvasNode[]): CanvasNode[] => nodes.map((node) => {
+    const data = { ...(node.data as DynamicValueMap) };
+    resetTransientNodeRuntimeState(node.type, data);
+    return {
+      ...node,
+      data: data as CanvasNodeData,
+    };
+  });
 
   return {
     ...project,
-    nodes: mapNodeImageReferences(project.nodes, encode),
-    history: mapHistoryImageReferences(project.history, encode),
+    nodes: mapNodeImageReferences(resetRuntimeState(project.nodes), encode),
+    history: mapHistoryImageReferences({
+      past: project.history.past.map((snapshot) => ({
+        ...snapshot,
+        nodes: resetRuntimeState(snapshot.nodes),
+      })),
+      future: project.history.future.map((snapshot) => ({
+        ...snapshot,
+        nodes: resetRuntimeState(snapshot.nodes),
+      })),
+    }, encode),
     imagePool,
   };
 }
@@ -272,7 +290,7 @@ function extractImagePoolFromHistoryJson(historyJson: string): string[] {
   }
 
   const rawArrayJson = historyJson.slice(arrayStart, arrayEnd + 1);
-  const parsed = safeParseJson<unknown>(rawArrayJson, []);
+  const parsed = safeParseJson<DynamicValue>(rawArrayJson, []);
   if (!Array.isArray(parsed)) {
     return [];
   }

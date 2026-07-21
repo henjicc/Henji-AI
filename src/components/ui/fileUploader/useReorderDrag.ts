@@ -36,6 +36,10 @@ export function useReorderDrag(params: UseReorderDragParams) {
   const [dragState, setDragState] = useState<FilePreviewDragState>(INITIAL_DRAG_STATE)
   const dragStateRef = useRef(dragState)
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+  // 拖拽开始那一刻（尚未有任何让位位移）缓存的原始几何，命中判定全程用这份快照而不是实时 rect。
+  // 否则一旦目标项被视觉上让位位移过，它的实时 rect 已经偏离自己的原始槛位，
+  // 鼠标往回拖时再也找不到"回到原位"的判定锚点，会出现只能单向让位、换不回去的问题。
+  const originalRectsRef = useRef<Array<{ left: number; width: number } | null>>([])
   dragStateRef.current = dragState
 
   const resetDragState = useCallback(() => {
@@ -71,19 +75,21 @@ export function useReorderDrag(params: UseReorderDragParams) {
       const oldTo = dragStateRef.current.toIndex
       if (from === null || oldTo === null) return
 
+      const draggingOriginal = originalRectsRef.current[from]
+      if (!draggingOriginal) return
+      // 用"原始位置 + 鼠标位移"算出拖拽项当前应在的中心点，不读它自己的实时 rect
+      // （实时 rect 还要受调用方为视觉跟手施加的 transform、画布缩放等影响，换算麻烦还容易兜圈子）
+      const draggingCenterX =
+        draggingOriginal.left + draggingOriginal.width / 2 + (e.clientX - dragStateRef.current.startX)
+
       let newToIndex = from
       let minDist = Infinity
-      const draggingEl = itemRefs.current[from]
-      if (!draggingEl) return
 
-      const draggingRect = draggingEl.getBoundingClientRect()
-      const draggingCenterX = draggingRect.left + draggingRect.width / 2
-
+      // 注意：这里不跳过 i === from。拖拽项自己的原始槛位也是一个候选目标——
+      // 没有它，一旦换到别的位置，缺了"回到原位"这个候选，少于 3 项时就再也换不回去了。
       for (let i = 0; i < itemRefs.current.length; i += 1) {
-        if (i === from) continue
-        const el = itemRefs.current[i]
-        if (!el) continue
-        const rect = el.getBoundingClientRect()
+        const rect = originalRectsRef.current[i]
+        if (!rect) continue
         const targetCenterX = rect.left + rect.width / 2
         const dist = Math.abs(draggingCenterX - targetCenterX)
         if (dist < minDist) {
@@ -145,6 +151,10 @@ export function useReorderDrag(params: UseReorderDragParams) {
       const deltaX = Math.abs(e.clientX - startX)
       const deltaY = Math.abs(e.clientY - startY)
       if (deltaX > 25 || deltaY > 25) {
+        // 此刻还没有任何让位位移发生，是缓存"原始槛位"几何的唯一安全时机
+        originalRectsRef.current = itemRefs.current.map((el) =>
+          el ? { left: el.getBoundingClientRect().left, width: el.getBoundingClientRect().width } : null
+        )
         setDragState((prev) => ({ ...prev, isDragging: true }))
         moved = true
       }

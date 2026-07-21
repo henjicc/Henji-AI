@@ -33,14 +33,22 @@ type NodeHeaderProps = {
   headerAdjust?: HeaderAdjust;
   iconAdjust?: HeaderAdjust;
   titleAdjust?: HeaderAdjust;
+  rightSlotAdjust?: HeaderAdjust;
   editable?: boolean;
   onTitleChange?: (value: string) => void;
 };
 
+// 统一控制点：所有节点的"图标+名称"整体相对于节点的位置微调。
+// 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
+export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale: 1 };
+// 统一控制点：所有节点右上角价格徽标（PriceEstimate）相对于节点的位置微调。
+// 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
+export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = { x: -8, y: 0, scale: 1 };
+
 export const NODE_HEADER_TONE_CLASS = 'text-white/55';
 export const NODE_HEADER_TITLE_CLASS = 'text-[14px] font-normal';
 export const NODE_HEADER_META_CLASS = 'text-xs text-text-muted';
-export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-7 left-1 right-1 z-10';
+export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-8 left-2 right-2 z-20';
 // 标题不再用 max-w-[60%] 限宽：百分比宽度作用在"宽度由内容撑出"的祖先链上时
 // 解析不稳定（浏览器常把它解析成一个很小的值），改用逐层 min-w-0 + flex-1 的
 // flex 分配方式，宽度始终由实际可用空间精确推算，不依赖任何百分比。
@@ -93,9 +101,10 @@ export function NodeHeader({
   metaClassName,
   titleRowClassName,
   subtitleClassName,
-  headerAdjust,
+  headerAdjust = NODE_HEADER_ICON_TITLE_ADJUST,
   iconAdjust,
   titleAdjust,
+  rightSlotAdjust = NODE_HEADER_PRICE_ADJUST,
   editable = false,
   onTitleChange,
 }: NodeHeaderProps) {
@@ -199,7 +208,7 @@ export function NodeHeader({
         variant="ghost"
         size="sm"
         className={joinClasses(
-          '!h-auto !min-h-0 !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
+          '!h-auto !min-h-0 !rounded-none !border-0 !bg-transparent !px-0 !py-0 hover:!bg-transparent',
           '!justify-start overflow-hidden whitespace-nowrap cursor-grab select-none text-left active:cursor-grabbing',
           NODE_HEADER_TITLE_FLEX_CLASS,
           NODE_HEADER_TITLE_CLASS,
@@ -256,7 +265,11 @@ export function NodeHeader({
           </div>
         ) : null}
       </div>
-      {rightSlot}
+      {rightSlot ? (
+        <div className="shrink-0" style={composeTransformStyle(rightSlotAdjust)}>
+          {rightSlot}
+        </div>
+      ) : null}
     </div>
   );
 }

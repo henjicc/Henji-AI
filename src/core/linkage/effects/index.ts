@@ -20,10 +20,10 @@ import type { Linkage, ParamDef } from '../../types'
  */
 export function executeEffect(
   linkage: Linkage,
-  triggerValue: any,
-  params: Record<string, any>,
+  triggerValue: DynamicValue,
+  params: DynamicValueMap,
   schema: ParamDef[]
-): Record<string, any> | null {
+): DynamicValueMap | null {
   switch (linkage.effect) {
     case 'reset':
       return executeResetEffect(linkage, params, schema)
@@ -67,15 +67,15 @@ export function executeEffect(
  */
 function executeResetEffect(
   linkage: Linkage & { effect: 'reset' },
-  params: Record<string, any>,
+  params: DynamicValueMap,
   schema: ParamDef[]
-): Record<string, any> | null {
+): DynamicValueMap | null {
   // 检查条件（如果有）
   if (linkage.condition && !linkage.condition(params[linkage.trigger as string], params)) {
     return null
   }
 
-  const changes: Record<string, any> = {}
+  const changes: DynamicValueMap = {}
   const targets = linkage.targets || []
 
   for (const targetId of targets) {
@@ -93,9 +93,9 @@ function executeResetEffect(
  */
 function executeSetValueEffect(
   linkage: Linkage & { effect: 'setValue' },
-  triggerValue: any,
-  params: Record<string, any>
-): Record<string, any> | null {
+  triggerValue: DynamicValue,
+  params: DynamicValueMap
+): DynamicValueMap | null {
   if (!linkage.target) return null
 
   // 检查条件（如果有）
@@ -115,9 +115,9 @@ function executeSetValueEffect(
  */
 function executeAutoSwitchEffect(
   linkage: Linkage & { effect: 'autoSwitch' },
-  triggerValue: any,
-  params: Record<string, any>
-): Record<string, any> | null {
+  triggerValue: DynamicValue,
+  params: DynamicValueMap
+): DynamicValueMap | null {
   if (!linkage.target) return null
 
   // 检查条件
@@ -142,15 +142,15 @@ function executeAutoSwitchEffect(
  */
 function executeCustomEffect(
   linkage: Linkage & { effect: 'custom' },
-  triggerValue: any,
-  params: Record<string, any>
-): Record<string, any> | null {
+  triggerValue: DynamicValue,
+  params: DynamicValueMap
+): DynamicValueMap | null {
   if (!linkage.handler) return null
 
-  const changes: Record<string, any> = {}
+  const changes: DynamicValueMap = {}
 
   // 自定义处理器
-  const updateParam = (paramId: string, value: any) => {
+  const updateParam = (paramId: string, value: DynamicValue) => {
     changes[paramId] = value
   }
 

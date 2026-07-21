@@ -16,6 +16,8 @@ interface TokenRange extends TextRange {
   blockEnd: number;
 }
 
+const TOKEN_TEXT_GAP = ' ';
+const TOKEN_PAIR_GAP = '  ';
 const IMAGE_REFERENCE_TOKEN_REGEX = /@图\d+/g;
 const IMAGE_REFERENCE_PREFIX_REGEX = /@(?=\s*图\d+)/g;
 
@@ -84,8 +86,8 @@ export function insertReferenceToken(
   const previousChar = before.length > 0 ? before.charAt(before.length - 1) : '';
   const nextChar = after.length > 0 ? after.charAt(0) : '';
   const needsLeadingSpace = before.length > 0 && !/\s/.test(previousChar);
-  const needsTrailingSpace = after.length > 0 && !/\s/.test(nextChar);
-  const insertion = `${needsLeadingSpace ? ' ' : ''}${marker}${needsTrailingSpace ? ' ' : ''}`;
+  const needsTrailingSpace = after.length === 0 || !/\s/.test(nextChar);
+  const insertion = `${needsLeadingSpace ? TOKEN_TEXT_GAP : ''}${marker}${needsTrailingSpace ? TOKEN_TEXT_GAP : ''}`;
 
   return {
     nextText: `${before}${insertion}${after}`,
@@ -116,14 +118,30 @@ export function normalizeReferenceTokenSpacing(
     const tokenStart = match.index;
     const tokenEnd = tokenStart + tokenText.length;
     const isAdjacentToPreviousToken = previousTokenEnd === tokenStart;
+    const gapFromPreviousToken = previousTokenEnd >= 0
+      ? text.slice(previousTokenEnd, tokenStart)
+      : '';
+    const visibleGapFromPreviousToken = gapFromPreviousToken.length + (previousAddedTrailingSpace ? 1 : 0);
+    const shouldPadTokenPairGap = previousTokenEnd >= 0
+      && /^ *$/.test(gapFromPreviousToken)
+      && visibleGapFromPreviousToken < TOKEN_PAIR_GAP.length;
     const shouldAddLeadingSpace = tokenStart > 0
       && !/\s/.test(text[tokenStart - 1])
       && !(isAdjacentToPreviousToken && previousAddedTrailingSpace);
 
     segments.push(text.slice(lastIndex, tokenStart));
 
+    if (shouldPadTokenPairGap) {
+      const missingSpaces = TOKEN_PAIR_GAP.length - visibleGapFromPreviousToken;
+      segments.push(TOKEN_TEXT_GAP.repeat(missingSpaces));
+      changed = true;
+      if (nextCursor >= tokenStart) {
+        nextCursor += missingSpaces;
+      }
+    }
+
     if (shouldAddLeadingSpace) {
-      segments.push(' ');
+      segments.push(TOKEN_TEXT_GAP);
       changed = true;
       if (nextCursor > tokenStart) {
         nextCursor += 1;
@@ -132,9 +150,9 @@ export function normalizeReferenceTokenSpacing(
 
     segments.push(tokenText);
 
-    const shouldAddTrailingSpace = tokenEnd < text.length && !/\s/.test(text[tokenEnd]);
+    const shouldAddTrailingSpace = tokenEnd === text.length || !/\s/.test(text[tokenEnd]);
     if (shouldAddTrailingSpace) {
-      segments.push(' ');
+      segments.push(TOKEN_TEXT_GAP);
       changed = true;
       if (nextCursor >= tokenEnd) {
         nextCursor += 1;

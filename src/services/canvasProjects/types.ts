@@ -9,8 +9,8 @@ export interface CanvasProjectSummary {
 }
 
 export interface CanvasProjectSnapshot {
-  nodes: unknown[]
-  edges: unknown[]
+  nodes: DynamicValue[]
+  edges: DynamicValue[]
   viewport: Viewport
 }
 

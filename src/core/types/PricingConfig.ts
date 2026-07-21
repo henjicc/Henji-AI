@@ -69,7 +69,7 @@ export interface PricingConfig {
    * }
    * ```
    */
-  calculator?: (params: Record<string, any>) => number
+  calculator?: (params: DynamicValueMap) => number
 
   /**
    * 价格说明（可选）

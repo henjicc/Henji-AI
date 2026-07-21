@@ -8,7 +8,7 @@ export type UploadProviderType = 'fal' | 'kie' | 'bizyair'
 /**
  * UploadService now keeps only upload strategy settings for UI.
  *
- * Real upload execution has moved to Rust backend runtime.
+ * Real upload execution has moved to the Electron backend runtime.
  */
 export class UploadService {
   private static instance: UploadService

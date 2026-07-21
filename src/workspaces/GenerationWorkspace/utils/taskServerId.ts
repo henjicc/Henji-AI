@@ -1,19 +1,19 @@
 import { isRecord } from './typeGuards'
 
-function normalizeServerTaskId(raw: unknown): string | undefined {
+function normalizeServerTaskId(raw: DynamicValue): string | undefined {
   if (typeof raw !== 'string') return undefined
   const normalized = raw.trim().replace(/^["']|["']$/g, '')
   if (!normalized) return undefined
   const lower = normalized.toLowerCase()
-  if (lower === 'unknown' || lower === 'null' || lower === 'undefined' || lower === 'none' || lower === 'n/a') {
+  if (lower === 'DynamicValue' || lower === 'null' || lower === 'undefined' || lower === 'none' || lower === 'n/a') {
     return undefined
   }
   return normalized
 }
 
-export function extractServerTaskIdFromMetadata(metadata: unknown): string | undefined {
+export function extractServerTaskIdFromMetadata(metadata: DynamicValue): string | undefined {
   if (!isRecord(metadata)) return undefined
-  const candidates: unknown[] = [metadata['task_id'], metadata['taskId'], metadata['request_id'], metadata['requestId']]
+  const candidates: DynamicValue[] = [metadata['task_id'], metadata['taskId'], metadata['request_id'], metadata['requestId']]
   const taskObj = metadata['task']
   const dataObj = metadata['data']
   if (isRecord(taskObj)) {

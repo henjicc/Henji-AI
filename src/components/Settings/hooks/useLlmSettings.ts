@@ -53,9 +53,10 @@ export function useLlmSettings(): UseLlmSettingsResult {
       }
     }
     void bootstrap()
+    const timers = timersRef.current
     return () => {
       disposed = true
-      Object.values(timersRef.current).forEach(timer => {
+      Object.values(timers).forEach(timer => {
         if (timer) clearTimeout(timer)
       })
     }

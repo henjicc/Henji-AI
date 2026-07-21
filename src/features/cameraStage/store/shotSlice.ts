@@ -1,0 +1,522 @@
+import type { StoreApi } from 'zustand'
+import { createLogger } from '@/core/logging'
+import { compileShotsToAnimation } from '../domain/shotCompiler'
+import {
+  captureShotObjectState,
+  createShot,
+  type StageCameraMovePreset,
+  type StageEditorMode,
+  type StageShot,
+  type StageSpatialPath,
+  type StageShotTransitionObjectDetail,
+} from '../domain/shotTypes'
+import type { StageCameraLookAt, StageObject } from '../domain/sceneTypes'
+import { isCameraId } from '../domain/cameraUtils'
+import { createCameraPresetPath } from '../domain/spatialPath'
+import { markSpatialPathCustom } from '../domain/spatialPath'
+import { clampHold, clampTransition, isTimeInShotStaticSegment, quantizeToFrame } from '../simple/timeline/shotClipGeometry'
+import type { CameraStageState } from './cameraStageStore'
+import { applyAnimationAtTime } from './playbackSampling'
+
+const logger = createLogger('features.cameraStage.simple')
+
+export type ShotSliceActions = Pick<
+  CameraStageState,
+  | 'addShot'
+  | 'moveShotTime'
+  | 'removeShot'
+  | 'removeShots'
+  | 'setSelectedShotIds'
+  | 'reorderShot'
+  | 'selectShot'
+  | 'setSelectedShotIdOnly'
+  | 'updateShotTiming'
+  | 'updateShotName'
+  | 'updateShotTransition'
+  | 'setShotSpatialPath'
+  | 'applyCameraPathPreset'
+  | 'setShotPathAnchor'
+  | 'updateShotCamera'
+  | 'updateShotContinuity'
+  | 'captureIntoSelectedShot'
+  | 'setEditorMode'
+  | 'bakeToProMode'
+>
+
+function compile(shots: StageShot[], objects: StageObject[]): CameraStageState['animation'] {
+  const animation = compileShotsToAnimation(shots, objects)
+  logger.debug('简易模式镜头卡编译完成', {
+    event: 'simple_mode.compile.completed',
+    shotCount: shots.length,
+    trackCount: animation.tracks.length,
+  })
+  return animation
+}
+
+function compileAndAlignCurrentFrame(
+  state: CameraStageState,
+  shots: StageShot[],
+  objects: StageObject[] = state.objects,
+): Pick<CameraStageState, 'shots' | 'animation' | 'objects'> {
+  const animation = compile(shots, objects)
+  return {
+    shots,
+    animation,
+    objects: state.playback.playing
+      ? objects
+      : applyAnimationAtTime(objects, animation, state.playback.currentTime),
+  }
+}
+
+/**
+ * 注视目标是摄像机级全局设置，不属于时间轴关键帧。
+ * 简易模式仍在镜头卡快照里保留 lookAt 以兼容现有编译/序列化结构，因此修改时必须同步
+ * 所有既有镜头卡，避免切卡后回退到旧目标；整个过程不插入新的状态关键帧。
+ */
+export function syncCameraLookAtAcrossShots(
+  state: CameraStageState,
+  objects: StageObject[],
+  cameraId: string,
+  lookAt: StageCameraLookAt,
+): Pick<CameraStageState, 'shots' | 'animation' | 'objects'> {
+  const shots = state.shots.map((shot) => {
+    const cameraState = shot.objectStates[cameraId]
+    if (!cameraState) return shot
+    return {
+      ...shot,
+      objectStates: {
+        ...shot.objectStates,
+        [cameraId]: { ...cameraState, lookAt: structuredClone(lookAt) },
+      },
+    }
+  })
+  logger.debug('摄像机注视目标已同步到全部镜头卡', {
+    event: 'simple_mode.camera.look_at.synced',
+    cameraId,
+    shotCount: shots.length,
+    lookAtMode: lookAt.mode,
+  })
+  return compileAndAlignCurrentFrame(state, shots, objects)
+}
+
+export function applyShotToObjects(objects: StageObject[], shot: StageShot): StageObject[] {
+  return objects.map((object) => {
+    const snapshot = shot.objectStates[object.id]
+    if (!snapshot) return object
+    if (object.type === 'camera') {
+      return { ...object, transform: structuredClone(snapshot.transform), color: snapshot.color,
+        fov: snapshot.fov ?? object.fov, lookAt: structuredClone(snapshot.lookAt ?? object.lookAt) }
+    }
+    if (object.type === 'character') {
+      return { ...object, transform: structuredClone(snapshot.transform), color: snapshot.color,
+        pose: structuredClone(snapshot.pose ?? object.pose), motion: structuredClone(snapshot.motion ?? object.motion) }
+    }
+    return { ...object, transform: structuredClone(snapshot.transform), color: snapshot.color }
+  })
+}
+
+export function captureObjectsIntoShot(
+  shots: StageShot[],
+  selectedShotId: string | null,
+  objects: StageObject[],
+  objectIds?: string[],
+): StageShot[] {
+  if (!selectedShotId) return shots
+  const allowedIds = objectIds ? new Set(objectIds) : null
+  return shots.map((shot) => {
+    if (shot.id !== selectedShotId) return shot
+    const objectStates = { ...shot.objectStates }
+    for (const object of objects) {
+      if (!allowedIds || allowedIds.has(object.id)) objectStates[object.id] = captureShotObjectState(object)
+    }
+    return { ...shot, objectStates }
+  })
+}
+
+export function syncAddedObjectToShots(shots: StageShot[], object: StageObject): StageShot[] {
+  const snapshot = captureShotObjectState(object)
+  return shots.map((shot) => ({ ...shot, objectStates: { ...shot.objectStates, [object.id]: snapshot } }))
+}
+
+export function syncRemovedObjectFromShots(shots: StageShot[], objectId: string): StageShot[] {
+  return shots.map((shot) => {
+    const objectStates = { ...shot.objectStates }
+    const perObject = { ...shot.transition.perObject }
+    const cameraMoves = { ...shot.transition.cameraMoves }
+    delete objectStates[objectId]
+    delete perObject[objectId]
+    delete cameraMoves[objectId]
+    return { ...shot, objectStates, transition: { perObject, cameraMoves } }
+  })
+}
+
+/**
+ * 播放头是否允许把编辑捕获进选中卡：必须落在选中卡自己的静止段内（重要记录 003）。
+ * 同时覆盖两种误录场景——过渡段插值状态、播放头停在别的卡上却把编辑录进当前选中卡。
+ */
+function canCaptureAtCurrentTime(state: CameraStageState): boolean {
+  if (!state.selectedShotId) return false
+  return isTimeInShotStaticSegment(state.shots, state.selectedShotId, state.playback.currentTime, state.animation.fps)
+}
+
+function shotAtTime(shots: StageShot[], time: number, fps: number): StageShot | undefined {
+  const epsilon = 1 / (2 * Math.max(1, fps))
+  return shots.find((shot) => Math.abs(shot.time - time) <= epsilon)
+}
+
+function syncTransitionDurations(shots: StageShot[]): StageShot[] {
+  return shots.map((shot, index) => ({
+    ...shot,
+    hold: 0,
+    transitionDuration: Math.max(0, (shots[index + 1]?.time ?? shot.time) - shot.time),
+  }))
+}
+
+function resolveShotTarget(shot: StageShot, objectId: string, objects: StageObject[]): StageObject['transform']['position'] {
+  const cameraState = shot.objectStates[objectId]
+  const lookAt = cameraState?.lookAt
+  if (!lookAt) return { x: 0, y: 0, z: 0 }
+  if (lookAt.mode === 'manual') return { ...lookAt.target }
+  const target = objects.find((object) => object.id === lookAt.objectId)
+  const targetState = shot.objectStates[lookAt.objectId]
+  if (!target || !targetState) return { ...lookAt.fallbackTarget }
+  const position = targetState.transform.position
+  return target.type === 'character'
+    ? { x: position.x, y: position.y + targetState.transform.scale.y, z: position.z }
+    : { ...position }
+}
+
+function replaceSpatialPath(
+  shot: StageShot,
+  objectId: string,
+  path: StageSpatialPath | undefined,
+): StageShot {
+  const previous = shot.transition.perObject[objectId] ?? {}
+  const detail = { ...previous }
+  if (path) detail.spatialPath = path
+  else delete detail.spatialPath
+  const cameraMoves = { ...shot.transition.cameraMoves }
+  delete cameraMoves[objectId]
+  return {
+    ...shot,
+    transition: {
+      perObject: { ...shot.transition.perObject, [objectId]: detail },
+      cameraMoves,
+    },
+  }
+}
+
+function insertCapturedShot(
+  state: CameraStageState,
+  objects: StageObject[],
+): { shots: StageShot[]; shot: StageShot } {
+  const time = quantizeToFrame(state.playback.currentTime, state.animation.fps)
+  // 播放头正好落在别的卡的时间点上时捕获进那张卡，禁止产生同一时刻的重复卡
+  //（重复时间会让 buildShotTimeline 误判为旧版时序数据，整条时间轴布点退化）
+  const existing = shotAtTime(state.shots, time, state.animation.fps)
+  if (existing) {
+    return { shots: captureObjectsIntoShot(state.shots, existing.id, objects), shot: existing }
+  }
+  const shot = createShot(objects, `关键帧 ${state.shots.length + 1}`, state.activeCameraId, time)
+  const shots = syncTransitionDurations([...state.shots, shot].sort((a, b) => a.time - b.time))
+  return { shots, shot }
+}
+
+export function compileSimpleEdit(
+  state: CameraStageState,
+  objects: StageObject[],
+  objectIds: string[],
+): Partial<CameraStageState> {
+  if (state.editorMode !== 'simple' || state.playback.playing) return { objects }
+  if (!canCaptureAtCurrentTime(state)) {
+    const inserted = insertCapturedShot(state, objects)
+    logger.debug('编辑过渡画面时自动插入状态关键帧', {
+      event: 'simple_mode.auto_keyframe.inserted',
+      shotId: inserted.shot.id,
+      time: inserted.shot.time,
+    })
+    return {
+      objects,
+      shots: inserted.shots,
+      selectedShotId: inserted.shot.id,
+      animation: compile(inserted.shots, objects),
+      // 状态关键帧按 fps 吸附；播放头必须在同一次 store 更新里落到完全相同的时间。
+      // 否则重编译后的视口会继续以吸附前的小数时间采样，在新点旁边再次插值，
+      // 用户开始拖动物体/相机的第一瞬间就会看到一次轻微跳变。
+      playback: { ...state.playback, currentTime: inserted.shot.time },
+    }
+  }
+  const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, objects, objectIds)
+  return { objects, shots, animation: compile(shots, objects) }
+}
+
+export function createShotSlice(set: StoreApi<CameraStageState>['setState']): ShotSliceActions {
+  return {
+    addShot: () => set((state) => {
+      const time = quantizeToFrame(state.playback.currentTime, state.animation.fps)
+      const existing = shotAtTime(state.shots, time, state.animation.fps)
+      if (existing) {
+        const shots = captureObjectsIntoShot(state.shots, existing.id, state.objects)
+        return { shots, selectedShotId: existing.id, animation: compile(shots, state.objects) }
+      }
+      const shot = createShot(state.objects, `关键帧 ${state.shots.length + 1}`, state.activeCameraId, time)
+      const shots = syncTransitionDurations([...state.shots, shot].sort((a, b) => a.time - b.time))
+      logger.debug('新增简易模式镜头卡', { event: 'simple_mode.shot.added', shotCount: shots.length })
+      return {
+        shots,
+        selectedShotId: shot.id,
+        animation: compile(shots, state.objects),
+        playback: { ...state.playback, playing: false, currentTime: time },
+      }
+    }),
+    moveShotTime: (id, requestedTime) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === id)
+      if (index < 0) return {}
+      const frame = 1 / Math.max(1, state.animation.fps)
+      const minimum = index === 0 ? 0 : state.shots[index - 1].time + frame
+      const maximum = index === state.shots.length - 1
+        ? Number.POSITIVE_INFINITY
+        : state.shots[index + 1].time - frame
+      const time = Math.min(maximum, Math.max(minimum, quantizeToFrame(requestedTime, state.animation.fps)))
+      if (Math.abs(time - state.shots[index].time) < 1e-6) return {}
+      const shots = syncTransitionDurations(
+        state.shots.map((shot) => shot.id === id ? { ...shot, time } : shot).sort((a, b) => a.time - b.time),
+      )
+      logger.debug('移动状态关键帧', { event: 'simple_mode.keyframe.moved', shotId: id, time })
+      return {
+        shots,
+        animation: compile(shots, state.objects),
+        playback: { ...state.playback, playing: false, currentTime: time },
+      }
+    }),
+    removeShot: (id) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === id)
+      if (index < 0) return {}
+      const shots = syncTransitionDurations(state.shots.filter((shot) => shot.id !== id))
+      const selectedShotId = state.selectedShotId === id
+        ? shots[Math.min(index, shots.length - 1)]?.id ?? null
+        : state.selectedShotId
+      return {
+        shots,
+        selectedShotId,
+        selectedShotIds: state.selectedShotIds.filter((shotId) => shotId !== id),
+        animation: compile(shots, state.objects),
+      }
+    }),
+    removeShots: (ids) => set((state) => {
+      const idSet = new Set(ids)
+      const shots = syncTransitionDurations(state.shots.filter((shot) => !idSet.has(shot.id)))
+      if (shots.length === state.shots.length) return {}
+      const firstRemovedIndex = state.shots.findIndex((shot) => idSet.has(shot.id))
+      const selectedShotId = state.selectedShotId && !idSet.has(state.selectedShotId)
+        ? state.selectedShotId
+        : shots[Math.min(firstRemovedIndex, shots.length - 1)]?.id ?? null
+      logger.debug('批量删除状态关键帧', {
+        event: 'simple_mode.keyframe.batch_removed',
+        removedCount: state.shots.length - shots.length,
+        remainCount: shots.length,
+      })
+      return { shots, selectedShotId, selectedShotIds: [], animation: compile(shots, state.objects) }
+    }),
+    setSelectedShotIds: (ids) => set((state) => {
+      if (state.selectedShotIds.length === 0 && ids.length === 0) return {}
+      return { selectedShotIds: ids }
+    }),
+    reorderShot: (id, toIndex) => set((state) => {
+      const fromIndex = state.shots.findIndex((shot) => shot.id === id)
+      if (fromIndex < 0 || state.shots.length < 2) return {}
+      const times = state.shots.map((shot) => shot.time)
+      const shots = [...state.shots]
+      const [shot] = shots.splice(fromIndex, 1)
+      shots.splice(Math.max(0, Math.min(shots.length, toIndex)), 0, shot)
+      const retimed = syncTransitionDurations(shots.map((shot, index) => ({ ...shot, time: times[index] })))
+      return { shots: retimed, animation: compile(retimed, state.objects) }
+    }),
+    selectShot: (id) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === id)
+      if (index < 0) return {}
+      const shot = state.shots[index]
+      const time = shot.time
+      // 点卡 = 进入该卡的拍摄视角编辑（显式用户动作，允许写 store，重要记录 005/3.2）；
+      // 卡未指定机位，或机位指向已删除的对象时，activeCameraId 保持不变（不写入无效 id）。
+      const activeCameraId = isCameraId(state.objects, shot.cameraId) ? (shot.cameraId as string) : state.activeCameraId
+      return {
+        selectedShotId: id,
+        selectedShotIds: [],
+        objects: applyShotToObjects(state.objects, shot),
+        activeCameraId,
+        playback: { ...state.playback, playing: false, currentTime: time },
+      }
+    }),
+    /**
+     * 只切换选中卡，不应用快照、不移动播放头（界面态，不进撤销历史）。
+     * 用于播放头 scrub 落入某静止段时的"选中跟随"（重要记录 003 前置逻辑）：
+     * 静止段内采样值本就等于卡快照，重复调用 selectShot 只会多余地污染撤销历史。
+     */
+    setSelectedShotIdOnly: (id) => set((state) => {
+      if (state.selectedShotId === id) return {}
+      return { selectedShotId: id }
+    }),
+    updateShotTiming: (id, patch) => set((state) => {
+      const fps = state.animation.fps
+      let shots = state.shots.map((shot) => shot.id === id ? {
+        ...shot,
+        ...(patch.hold === undefined ? {} : { hold: quantizeToFrame(clampHold(patch.hold, fps), fps) }),
+        ...(patch.transitionDuration === undefined
+          ? {}
+          : { transitionDuration: quantizeToFrame(clampTransition(patch.transitionDuration, fps), fps) }),
+      } : shot)
+      if (patch.transitionDuration !== undefined) {
+        const index = shots.findIndex((shot) => shot.id === id)
+        if (index >= 0 && shots[index + 1]) {
+          const nextTime = quantizeToFrame(
+            shots[index].time + clampTransition(patch.transitionDuration, fps),
+            fps,
+          )
+          const afterNext = shots[index + 2]
+          const upper = afterNext === undefined
+            ? nextTime
+            : afterNext.time - 1 / Math.max(1, fps)
+          shots = shots.map((shot, shotIndex) => shotIndex === index + 1
+            ? { ...shot, time: Math.min(upper, nextTime) }
+            : shot)
+        }
+      }
+      shots = syncTransitionDurations(shots)
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    updateShotName: (id, name) => set((state) => ({
+      shots: state.shots.map((shot) => shot.id === id ? { ...shot, name: name.trim() || shot.name } : shot),
+    })),
+    updateShotTransition: (id, patch) => set((state) => {
+      const shots = state.shots.map((shot) => shot.id === id ? {
+        ...shot,
+        transition: {
+          perObject: patch.perObject ? { ...shot.transition.perObject, ...patch.perObject } : shot.transition.perObject,
+          cameraMoves: shot.transition.cameraMoves,
+        },
+      } : shot)
+      return compileAndAlignCurrentFrame(state, shots)
+    }),
+    setShotSpatialPath: (shotId, objectId, path) => set((state) => {
+      const shots = state.shots.map((shot) => (
+        shot.id === shotId ? replaceSpatialPath(shot, objectId, path) : shot
+      ))
+      return compileAndAlignCurrentFrame(state, shots)
+    }),
+    applyCameraPathPreset: (shotId, objectId, preset: StageCameraMovePreset) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === shotId)
+      if (index < 0 || index >= state.shots.length - 1) return {}
+      const fromShot = state.shots[index]
+      const nextShot = state.shots[index + 1]
+      const fromPosition = fromShot.objectStates[objectId]?.transform.position
+      const nextState = nextShot.objectStates[objectId]
+      if (!fromPosition || !nextState) return {}
+      const generated = createCameraPresetPath(preset, fromPosition, resolveShotTarget(fromShot, objectId, state.objects))
+      const shots = state.shots.map((shot, shotIndex) => {
+        if (shotIndex === index) return replaceSpatialPath(shot, objectId, generated.path)
+        if (shotIndex !== index + 1) return shot
+        return {
+          ...shot,
+          objectStates: {
+            ...shot.objectStates,
+            [objectId]: {
+              ...nextState,
+              transform: { ...nextState.transform, position: generated.endPosition },
+            },
+          },
+        }
+      })
+      logger.debug('运镜预设已物化为空间路径', {
+        event: 'simple_mode.camera_path.materialized',
+        shotId,
+        objectId,
+        preset: preset.kind,
+        knotCount: generated.path.knots.length,
+      })
+      return compileAndAlignCurrentFrame(state, shots)
+    }),
+    setShotPathAnchor: (shotId, objectId, endpoint, position) => set((state) => {
+      const index = state.shots.findIndex((shot) => shot.id === shotId)
+      const targetIndex = endpoint === 'start' ? index : index + 1
+      if (index < 0 || targetIndex >= state.shots.length) return {}
+      const shots = state.shots.map((shot, shotIndex) => {
+        if (shotIndex === index) {
+          const path = shot.transition.perObject[objectId]?.spatialPath
+          return path ? replaceSpatialPath(shot, objectId, markSpatialPathCustom(path)) : shot
+        }
+        return shot
+      }).map((shot, shotIndex) => {
+        if (shotIndex !== targetIndex) return shot
+        const objectState = shot.objectStates[objectId]
+        if (!objectState) return shot
+        return {
+          ...shot,
+          objectStates: {
+            ...shot.objectStates,
+            [objectId]: {
+              ...objectState,
+              transform: { ...objectState.transform, position },
+            },
+          },
+        }
+      })
+      return compileAndAlignCurrentFrame(state, shots)
+    }),
+    /**
+     * 修改某张镜头卡的拍摄机位（重要记录 005）。重编译是必须的：机位变化可能触发或解除
+     * 与相邻卡之间的强制硬切（buildShotTimeline 的有效过渡时长会随之变化）。
+     */
+    updateShotCamera: (id, cameraId) => set((state) => {
+      const shots = state.shots.map((shot) => shot.id === id ? { ...shot, cameraId } : shot)
+      logger.debug('更新镜头卡拍摄机位', {
+        event: 'simple_mode.shot.camera_updated',
+        shotId: id,
+        cameraId,
+      })
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    updateShotContinuity: (id, continuity) => set((state) => {
+      const shots = state.shots.map((shot) => shot.id === id ? { ...shot, continuity } : shot)
+      return { shots, animation: compile(shots, state.objects) }
+    }),
+    captureIntoSelectedShot: (objectIds) => set((state) => {
+      if (state.editorMode !== 'simple' || state.playback.playing || !state.selectedShotId) return {}
+      if (!canCaptureAtCurrentTime(state)) {
+        const inserted = insertCapturedShot(state, state.objects)
+        return {
+          shots: inserted.shots,
+          selectedShotId: inserted.shot.id,
+          animation: compile(inserted.shots, state.objects),
+        }
+      }
+      const shots = captureObjectsIntoShot(state.shots, state.selectedShotId, state.objects, objectIds)
+      return shots === state.shots ? {} : { shots, animation: compile(shots, state.objects) }
+    }),
+    setEditorMode: (editorMode: StageEditorMode) => set((state) => {
+      if (state.editorMode === 'pro' && editorMode === 'simple') return {}
+      if (editorMode === state.editorMode && !(editorMode === 'simple' && state.shots.length === 0)) return {}
+      const shots = editorMode === 'simple' && state.shots.length === 0
+        ? [createShot(state.objects, '关键帧 1', state.activeCameraId)]
+        : state.shots
+      return { editorMode, shots, selectedShotId: shots[0]?.id ?? null,
+        ...(editorMode === 'simple' ? { animation: compile(shots, state.objects) } : {}) }
+    }),
+    bakeToProMode: () => set((state) => {
+      if (state.editorMode !== 'simple') return {}
+      const animation = compile(state.shots, state.objects)
+      return {
+        animation,
+        editorMode: 'pro',
+        shots: [],
+        selectedShotId: null,
+        playback: { ...state.playback, playing: false },
+      }
+    }),
+  }
+}
+
+export type ShotTimingPatch = Partial<Pick<StageShot, 'hold' | 'transitionDuration'>>
+export interface ShotTransitionPatch {
+  perObject?: Record<string, StageShotTransitionObjectDetail>
+}

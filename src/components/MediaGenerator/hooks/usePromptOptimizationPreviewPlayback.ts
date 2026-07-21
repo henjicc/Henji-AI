@@ -29,13 +29,25 @@ interface PromptOptimizationPreviewPlaybackResult {
   visible: boolean
 }
 
+interface IntlSegmenterLike {
+  segment(value: string): Iterable<{ segment: string }>
+}
+
+interface IntlWithSegmenter {
+  Segmenter?: new (
+    locale: string,
+    options: { granularity: 'grapheme' }
+  ) => IntlSegmenterLike
+}
+
 function splitGraphemes(value: string): string[] {
   if (!value) {
     return []
   }
 
-  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
-    const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'grapheme' })
+  const intlWithSegmenter = Intl as IntlWithSegmenter
+  if (typeof intlWithSegmenter.Segmenter === 'function') {
+    const segmenter = new intlWithSegmenter.Segmenter('zh-CN', { granularity: 'grapheme' })
     return Array.from(segmenter.segment(value), segment => segment.segment)
   }
 

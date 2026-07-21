@@ -1,4 +1,5 @@
 import type { Edge, Node, XYPosition } from '@xyflow/react';
+import type { RowMediaKind } from './socketTypes';
 
 export const CANVAS_NODE_TYPES = {
   upload: 'uploadNode',
@@ -21,6 +22,7 @@ export const CANVAS_NODE_TYPES = {
   imageModelSelector: 'imageModelSelectorNode',
   videoModelSelector: 'videoModelSelectorNode',
   audioModelSelector: 'audioModelSelectorNode',
+  cameraStage: 'cameraStageNode',
 } as const;
 
 /** 数值/源节点类型集合（单一类型化输出，喂下游参数端口） */
@@ -41,6 +43,21 @@ export const EXPORT_RESULT_NODE_LAYOUT_HEIGHT = 288;
 export const EXPORT_RESULT_NODE_MIN_WIDTH = 168;
 export const EXPORT_RESULT_NODE_MIN_HEIGHT = 168;
 
+/** 模型选择器节点折叠态默认宽度（紧凑 chip 形态） */
+export const MODEL_SELECTOR_COLLAPSED_DEFAULT_WIDTH = 240;
+/**
+ * 模型选择器节点折叠态默认高度：壳体 p-2（8px）上下内边距 + chip 本身高度（h-7，28px），
+ * 折叠态正文固定只有一行 chip，按这个固定结构精确算出"刚好容纳内容"的最小高度，不留多余空白。
+ */
+export const MODEL_SELECTOR_COLLAPSED_DEFAULT_HEIGHT = 44;
+/** 模型选择器节点展开态默认尺寸（搜索+筛选+列表内嵌正文），切换展开/折叠时据此自动调整节点尺寸 */
+export const MODEL_SELECTOR_EXPANDED_DEFAULT_WIDTH = 320;
+export const MODEL_SELECTOR_EXPANDED_DEFAULT_HEIGHT = 380;
+export const MODEL_SELECTOR_EXPANDED_MIN_WIDTH = 280;
+export const MODEL_SELECTOR_EXPANDED_MIN_HEIGHT = 320;
+export const MODEL_SELECTOR_EXPANDED_MAX_WIDTH = 520;
+export const MODEL_SELECTOR_EXPANDED_MAX_HEIGHT = 640;
+
 export const IMAGE_SIZES = ['0.5K', '1K', '2K', '4K'] as const;
 export const IMAGE_ASPECT_RATIOS = [
   '1:1',
@@ -55,7 +72,7 @@ export type ImageSize = (typeof IMAGE_SIZES)[number];
 
 export interface NodeDisplayData {
   displayName?: string;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface NodeImageData extends NodeDisplayData {
@@ -63,7 +80,7 @@ export interface NodeImageData extends NodeDisplayData {
   previewImageUrl?: string | null;
   aspectRatio: string;
   isSizeManuallyAdjusted?: boolean;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface UploadImageNodeData extends NodeImageData {
@@ -82,12 +99,12 @@ export interface ExportImageNodeData extends NodeImageData {
 
 export interface GroupNodeData extends NodeDisplayData {
   label: string;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface TextAnnotationNodeData extends NodeDisplayData {
   content: string;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface ImageEditNodeData extends NodeImageData {
@@ -95,7 +112,7 @@ export interface ImageEditNodeData extends NodeImageData {
   /** 核心 ModelRegistry 中的模型 ID */
   modelId?: string;
   /** schema 驱动的模型参数（与默认值合并后使用） */
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
   model?: string;
   /** @deprecated 旧版字段 */
@@ -103,7 +120,7 @@ export interface ImageEditNodeData extends NodeImageData {
   /** @deprecated 旧版字段 */
   requestAspectRatio?: string;
   /** @deprecated 旧版字段 */
-  extraParams?: Record<string, unknown>;
+  extraParams?: DynamicValueMap;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
@@ -139,7 +156,7 @@ export interface StoryboardSplitNodeData {
   gridCols: number;
   frames: StoryboardFrameItem[];
   exportOptions?: StoryboardExportOptions;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface StoryboardGenFrameItem {
@@ -156,7 +173,9 @@ export interface StoryboardGenNodeData {
   /** 核心 ModelRegistry 中的模型 ID */
   modelId?: string;
   /** schema 驱动的模型参数（与默认值合并后使用） */
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
+  /** 图片行未连线时的本地内联上传值 */
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
   /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
   model?: string;
   /** @deprecated 旧版字段 */
@@ -164,24 +183,24 @@ export interface StoryboardGenNodeData {
   /** @deprecated 旧版字段 */
   requestAspectRatio?: string;
   /** @deprecated 旧版字段 */
-  extraParams?: Record<string, unknown>;
+  extraParams?: DynamicValueMap;
   imageUrl: string | null;
   previewImageUrl?: string | null;
   aspectRatio: string;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export interface MediaGenNodeData extends NodeDisplayData {
   prompt: string;
   modelId?: string;
-  params?: Record<string, unknown>;
+  params?: DynamicValueMap;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 export type VideoGenNodeData = MediaGenNodeData;
@@ -198,7 +217,26 @@ export interface VideoMediaNodeData extends NodeDisplayData {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
+}
+
+export interface CameraStageNodeData extends NodeDisplayData {
+  projectId: string | null;
+  imageUrl: string | null;
+  previewImageUrl?: string | null;
+  videoUrl: string | null;
+  aspectRatio: string;
+  durationSec: number | null;
+  selectedTimeSec: number;
+  videoProgress?: number | null;
+  videoExporting?: boolean;
+  videoRenderPhase?: 'preparing' | 'rendering' | 'encoding' | null;
+  videoRenderRequestId?: string | null;
+  videoRenderError?: string | null;
+  assetCollectionEnabled?: boolean;
+  assetCollectionLibraryId?: string | null;
+  /** 场景时间轴决定的唯一可用输出类型；旧节点缺省按静态图片处理。 */
+  outputKind?: 'image' | 'video';
 }
 
 export interface AudioMediaNodeData extends NodeDisplayData {
@@ -208,7 +246,7 @@ export interface AudioMediaNodeData extends NodeDisplayData {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
-  [key: string]: unknown;
+  [key: string]: DynamicValue;
 }
 
 /**
@@ -222,6 +260,8 @@ export interface ValueSourceNodeData extends NodeDisplayData {
 /** 模型选择器节点数据：按媒体类型选定一个模型，输出 MODEL 值供下游节点的模型端口覆盖 */
 export interface ModelSelectorNodeData extends NodeDisplayData {
   modelId: string;
+  /** 展开态：节点本体直出搜索+筛选+模型列表；未设置（旧节点）按折叠态处理 */
+  isExpanded?: boolean;
 }
 
 export type CanvasNodeData =
@@ -234,6 +274,7 @@ export type CanvasNodeData =
   | StoryboardGenNodeData
   | MediaGenNodeData
   | VideoMediaNodeData
+  | CameraStageNodeData
   | AudioMediaNodeData
   | ValueSourceNodeData
   | ModelSelectorNodeData;
@@ -255,8 +296,7 @@ export interface StoryboardNodeCreationDto {
 }
 
 export const NODE_TOOL_TYPES = {
-  crop: 'crop',
-  annotate: 'annotate',
+  edit: 'edit',
   splitStoryboard: 'split-storyboard',
 } as const;
 
@@ -319,6 +359,12 @@ export function isAudioMediaNode(
   node: CanvasNode | null | undefined
 ): node is Node<AudioMediaNodeData, typeof CANVAS_NODE_TYPES.exportAudio | typeof CANVAS_NODE_TYPES.audioUpload> {
   return node?.type === CANVAS_NODE_TYPES.exportAudio || node?.type === CANVAS_NODE_TYPES.audioUpload;
+}
+
+export function isCameraStageNode(
+  node: CanvasNode | null | undefined,
+): node is Node<CameraStageNodeData, typeof CANVAS_NODE_TYPES.cameraStage> {
+  return node?.type === CANVAS_NODE_TYPES.cameraStage;
 }
 
 export function isValueSourceNodeType(type: CanvasNodeType | string | undefined | null): boolean {

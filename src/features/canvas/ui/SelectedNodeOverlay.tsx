@@ -1,19 +1,14 @@
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { NodeActionToolbar } from './NodeActionToolbar';
 
 export const SelectedNodeOverlay = memo(() => {
-  const nodes = useCanvasStore((state) => state.nodes);
-  const selectedNodeId = useCanvasStore((state) => state.selectedNodeId);
-
-  const selectedNode = useMemo(() => {
-    if (!selectedNodeId) {
-      return null;
-    }
-
-    return nodes.find((node) => node.id === selectedNodeId) ?? null;
-  }, [nodes, selectedNodeId]);
+  // 直接在 selector 里按 id 查找：未选中节点变化时 zustand 默认按引用比较即可短路，
+  // 不会因为画布上任意其他节点的编辑（整份 nodes 数组换引用）而跟着重渲染。
+  const selectedNode = useCanvasStore((state) =>
+    state.selectedNodeId ? state.nodes.find((node) => node.id === state.selectedNodeId) ?? null : null
+  );
 
   if (!selectedNode) {
     return null;

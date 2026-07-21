@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { useCallback, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import { GenerationService } from '@/core/services/GenerationService'
 import { registry } from '@/core/ModelRegistry'
 import { taskQueueManager } from '@/services/taskQueue'
@@ -16,7 +16,7 @@ import {
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
-import type { ImageEditState } from '@/components/ImageEditor'
+import type { ImageMarkSession } from '@/features/imageMark'
 import { saveEditState } from '@/utils/editStatePersistence'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { splitMulti } from '../utils/multiFile'
@@ -44,14 +44,14 @@ export interface UseTaskGenerationParams {
   updateProgress: (taskId: string, progress: number) => void
   notify: (message: string, type?: ToastNotification['type']) => void
   messages: UseTaskGenerationMessages
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditState>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageMarkSession>>
   setUploadedImagesRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
   setUploadedFilePathsRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
 }
 
 export interface UseTaskGenerationReturn {
   isGenerating: boolean
-  handleGenerate: (input: string, model: string, type: MediaType, options?: unknown) => Promise<void>
+  handleGenerate: (input: string, model: string, type: MediaType, options?: DynamicValue) => Promise<void>
   handleContinuePolling: (task: GenerationTask) => Promise<void>
 }
 
@@ -59,12 +59,12 @@ function createTaskId(): string {
   return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function getUserMessage(error: unknown): string {
+function getUserMessage(error: DynamicValue): string {
   if (error instanceof Error) return error.message
   return String(error)
 }
 
-function maybeToUserMessage(error: unknown): string {
+function maybeToUserMessage(error: DynamicValue): string {
   if (!isRecord(error)) return getUserMessage(error)
   const toUserMessage = error['toUserMessage']
   if (typeof toUserMessage === 'function') {
@@ -77,7 +77,7 @@ function maybeToUserMessage(error: unknown): string {
   return getUserMessage(error)
 }
 
-function asGeneratorOptions(value: unknown): GeneratorOptions {
+function asGeneratorOptions(value: DynamicValue): GeneratorOptions {
   return isRecord(value) ? (value as GeneratorOptions) : {}
 }
 
@@ -87,12 +87,12 @@ function classifyMediaSourceKind(source: string): string {
   if (trimmed.startsWith('data:')) return 'data-url'
   if (trimmed.startsWith('blob:')) return 'blob-url'
   if (trimmed.startsWith('asset://localhost/')) return 'asset-url'
-  if (trimmed.startsWith('tauri://localhost/')) return 'tauri-url'
+  if (trimmed.startsWith('tauri://localhost/')) return 'legacy-tauri-url'
   if (trimmed.startsWith('http://asset.localhost/') || trimmed.startsWith('https://asset.localhost/')) {
     return 'asset-http-url'
   }
   if (trimmed.startsWith('http://tauri.localhost/') || trimmed.startsWith('https://tauri.localhost/')) {
-    return 'tauri-http-url'
+    return 'legacy-tauri-http-url'
   }
   if (trimmed.startsWith('file://')) return 'file-url'
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return 'remote-url'
@@ -100,7 +100,7 @@ function classifyMediaSourceKind(source: string): string {
   return 'other'
 }
 
-function summarizeMediaSources(values: unknown): Array<Record<string, unknown>> {
+function summarizeMediaSources(values: DynamicValue): Array<DynamicValueMap> {
   if (!isStringArray(values)) {
     return []
   }
@@ -115,12 +115,12 @@ function summarizeMediaSources(values: unknown): Array<Record<string, unknown>> 
   }))
 }
 
-function isFileValue(value: unknown): value is File {
+function isFileValue(value: DynamicValue): value is File {
   return typeof File !== 'undefined' && value instanceof File
 }
 
 function toVideoDisplayUrl(path: string): string {
-  return convertFileSrc(path.replace(/\\/g, '/'))
+  return toDisplaySrc(path.replace(/\\/g, '/'))
 }
 
 function isLikelyVideoSource(value: string): boolean {
@@ -135,7 +135,7 @@ function isLikelyVideoSource(value: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)
 }
 
-function normalizeNonEmptyString(value: unknown): string | undefined {
+function normalizeNonEmptyString(value: DynamicValue): string | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -147,14 +147,14 @@ function isMinimaxVoiceCloneMode(options: GeneratorOptions): boolean {
   return options.minimaxMode === 'voice-clone'
 }
 
-function asMutableRecord(value: unknown): Record<string, unknown> {
+function asMutableRecord(value: DynamicValue): DynamicValueMap {
   if (isRecord(value)) {
     return { ...value }
   }
   return {}
 }
 
-function extractVoiceIdFromMetadata(metadata: unknown): string | undefined {
+function extractVoiceIdFromMetadata(metadata: DynamicValue): string | undefined {
   if (!isRecord(metadata)) {
     return undefined
   }
@@ -180,7 +180,7 @@ function extractVoiceIdFromMetadata(metadata: unknown): string | undefined {
 async function persistClonedVoiceIfNeeded(
   task: GenerationTask,
   options: GeneratorOptions,
-  metadata: unknown
+  metadata: DynamicValue
 ): Promise<void> {
   if (task.provider !== 'ppio' || !isMinimaxVoiceCloneMode(options)) {
     return
@@ -223,9 +223,9 @@ export function useTaskGeneration({
     input: string,
     options: GeneratorOptions,
     onProgress?: GenerationProgressCallback
-  ): Promise<unknown> => {
+  ): Promise<DynamicValue> => {
     const generationService = GenerationService.getInstance()
-    const params: Record<string, unknown> = {
+    const params: DynamicValueMap = {
       prompt: input,
       text: input,
       ...options,
@@ -253,13 +253,15 @@ export function useTaskGeneration({
         if (typeof options.video !== 'string' || options.video.trim().length === 0) {
           options.video = videoUrls[0]
         }
-        ;(options as Record<string, unknown>).uploadedVideos = options.videos
+        const mutableOptions = options as DynamicValueMap
+        mutableOptions.uploadedVideos = options.videos
 
       }
       if (task.uploadedAudioFilePaths && task.uploadedAudioFilePaths.length > 0) {
         const audioUrls = task.uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p))
         options.audios = await Promise.all(audioUrls)
-        ;(options as Record<string, unknown>).uploadedAudios = options.audios
+        const mutableOptions = options as DynamicValueMap
+        mutableOptions.uploadedAudios = options.audios
       }
 
       updateTask(taskId, { status: 'generating' })
@@ -274,7 +276,7 @@ export function useTaskGeneration({
       }
 
       const result = await generateWithService(task.model, task.prompt, options, handleProgress)
-      const resultObj: Record<string, unknown> = isRecord(result) ? result : {}
+      const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
       const serverTaskId = extractServerTaskIdFromMetadata(metadata)
         ?? (typeof resultObj['taskId'] === 'string' ? resultObj['taskId'] : undefined)
@@ -378,7 +380,7 @@ export function useTaskGeneration({
     input: string,
     model: string,
     type: MediaType,
-    optionsRaw?: unknown
+    optionsRaw?: DynamicValue
   ): Promise<void> => {
     const options = asGeneratorOptions(optionsRaw)
 
@@ -399,22 +401,16 @@ export function useTaskGeneration({
           const jpegBytes = await ensureCompressedJpegBytesWithPica(blob)
           const saved = await saveBytesToUploads(jpegBytes, 'image/jpeg')
 
-          const editState = imageEditStatesRef.current.get(img)
-          if (editState) {
-            let originalSrc = editState.originalSrc
-            if (originalSrc.startsWith('data:')) {
-              const savedOrg = await saveBase64ToUploads(originalSrc)
-              originalSrc = savedOrg.displaySrc
-            }
-
-            const nextState: ImageEditState = {
-              ...editState,
-              imageId: saved.relativePath,
-              originalSrc,
+          const session = imageEditStatesRef.current.get(img)
+          if (session) {
+            let sourceUrl = session.sourceUrl
+            if (sourceUrl.startsWith('data:')) {
+              const savedOrg = await saveBase64ToUploads(sourceUrl)
+              sourceUrl = savedOrg.displaySrc
             }
 
             imageEditStatesRef.current.delete(img)
-            imageEditStatesRef.current.set(saved.displaySrc, nextState)
+            imageEditStatesRef.current.set(saved.displaySrc, { ...session, sourceUrl })
           }
 
           images[i] = saved.displaySrc
@@ -457,7 +453,7 @@ export function useTaskGeneration({
       const videoSourceUrls = uploadedVideoFilePaths.map(toVideoDisplayUrl)
       options.uploadedVideoFilePaths = uploadedVideoFilePaths
       options.videos = videoSourceUrls
-      ;(options as Record<string, unknown>).uploadedVideos = videoSourceUrls
+      ;(options as DynamicValueMap).uploadedVideos = videoSourceUrls
       options.video = videoSourceUrls[0]
     }
 
@@ -465,7 +461,7 @@ export function useTaskGeneration({
       const audioSourceUrls = await Promise.all(uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p)))
       options.uploadedAudioFilePaths = uploadedAudioFilePaths
       options.audios = audioSourceUrls
-      ;(options as Record<string, unknown>).uploadedAudios = audioSourceUrls
+      ;(options as DynamicValueMap).uploadedAudios = audioSourceUrls
     }
 
     const sanitizedVideos = isStringArray(options.videos)
@@ -473,13 +469,13 @@ export function useTaskGeneration({
       : []
     if (sanitizedVideos.length > 0) {
       options.videos = sanitizedVideos
-      ;(options as Record<string, unknown>).uploadedVideos = sanitizedVideos
+      ;(options as DynamicValueMap).uploadedVideos = sanitizedVideos
       if (typeof options.video !== 'string' || options.video.trim().length === 0) {
         options.video = sanitizedVideos[0]
       }
     } else {
       delete options.videos
-      delete (options as Record<string, unknown>).uploadedVideos
+      delete (options as DynamicValueMap).uploadedVideos
       if (typeof options.video === 'string' && !isLikelyVideoSource(options.video)) {
         delete options.video
       }
@@ -487,10 +483,10 @@ export function useTaskGeneration({
 
     if (!isStringArray(options.audios) || options.audios.length === 0) {
       delete options.audios
-      delete (options as Record<string, unknown>).uploadedAudios
+      delete (options as DynamicValueMap).uploadedAudios
     } else {
       options.audios = options.audios.filter((item) => typeof item === 'string' && item.trim().length > 0)
-      ;(options as Record<string, unknown>).uploadedAudios = options.audios
+      ;(options as DynamicValueMap).uploadedAudios = options.audios
     }
 
     if (isMinimaxVoiceCloneMode(options)) {
@@ -559,7 +555,7 @@ export function useTaskGeneration({
     }
 
     // 供应商信息（用于历史）
-    const info: unknown = registry.getModelInfo(model)
+    const info: DynamicValue = registry.getModelInfo(model)
     const providerId = isRecord(info) && typeof info['provider'] === 'string' ? info['provider'] : undefined
 
     // 视频缩略图：优先使用视频文件 URL，避免 <video> 无法渲染 base64 缩略图第一帧
@@ -583,7 +579,7 @@ export function useTaskGeneration({
     const taskId = createTaskId()
 
     const imagesForState = isStringArray(options.images) ? options.images : []
-    const imageEditStates = imagesForState.reduce<Record<string, ImageEditState>>((acc, url, index) => {
+    const imageEditStates = imagesForState.reduce<Record<string, ImageMarkSession>>((acc, url, index) => {
       const state = imageEditStatesRef.current.get(url)
       if (state) {
         acc[String(index)] = state

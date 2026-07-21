@@ -1,4 +1,4 @@
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { openDialog } from '@/platform/desktopApi'
 import { useSettings } from './useSettings'
 
 export interface UseQuickDownloadSettingsResult {

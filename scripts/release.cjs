@@ -166,23 +166,22 @@ async function runBuildCheck() {
   info('步骤 0/7: 运行完整构建测试...');
   console.log();
 
-  log('正在运行 Tauri 完整构建（这可能需要几分钟）...', 'cyan');
+  log('正在运行 Electron 完整构建（这可能需要几分钟）...', 'cyan');
   log('提示: 构建过程中会显示详细输出', 'gray');
   console.log();
 
   try {
-    // 使用 tauri:build 包含 VS 环境设置
-    exec('npm run tauri:build');
+    exec('npm run electron:dist');
     console.log();
-    success('Tauri 构建成功！');
+    success('Electron 构建成功！');
   } catch (err) {
     console.log();
-    error('Tauri 构建失败，请先修复错误后再发布');
+    error('Electron 构建失败，请先修复错误后再发布');
   }
 
   console.log();
   success('构建测试通过，构建产物已生成！');
-  log('构建产物位置: src-tauri/target/release/bundle/', 'gray');
+  log('构建产物位置: release/', 'gray');
   console.log();
 }
 
@@ -244,7 +243,7 @@ async function main() {
   npm run release 0.1.2        # 直接指定版本
 
 交互式模式会：
-  0. 运行构建检查（TypeScript、ESLint、Vite、Cargo）
+  0. 运行构建检查（TypeScript、Vite、electron-builder）
   1. 自动建议下一个版本号
   2. 允许输入更新日志
   3. 更新所有文件中的版本号
@@ -295,10 +294,7 @@ async function main() {
   const rootDir = path.resolve(__dirname, '..');
 
   updateJsonFile(path.join(rootDir, 'package.json'), version);
-  updateJsonFile(path.join(rootDir, 'src-tauri', 'tauri.conf.json'), version);
-  updateCargoToml(path.join(rootDir, 'src-tauri', 'Cargo.toml'), version);
   updateUpdateChecker(path.join(rootDir, 'src', 'services', 'updateChecker.ts'), version);
-  updateNsisInstaller(path.join(rootDir, 'src-tauri', 'nsis', 'installer.nsh'), version);
   console.log();
 
   // 保存更新日志
@@ -331,12 +327,7 @@ async function main() {
     console.log();
   }
 
-  // 更新 Cargo.lock
-  info('步骤 3/7: 更新 Cargo.lock...');
-  process.chdir(path.join(rootDir, 'src-tauri'));
-  exec('cargo update -p henji-ai');
-  process.chdir(rootDir);
-  success('Cargo.lock 已更新');
+  info('步骤 3/7: 跳过 Cargo.lock（Electron 发布不再更新 Rust 产物）');
   console.log();
 
   // 更新 package-lock.json
@@ -350,11 +341,7 @@ async function main() {
   const filesToAdd = [
     'package.json',
     'package-lock.json',
-    'src-tauri/tauri.conf.json',
-    'src-tauri/Cargo.toml',
-    'src-tauri/Cargo.lock',
-    'src/services/updateChecker.ts',
-    'src-tauri/nsis/installer.nsh'
+    'src/services/updateChecker.ts'
   ];
 
   if (changelog) {
@@ -391,7 +378,7 @@ async function main() {
 
   // 推送到远程
   info('步骤 7/7: 推送到远程仓库...');
-  exec('git push origin main');
+  exec('git push origin feat/electron-migration');
   exec(`git push origin v${version}`);
   success('已推送到远程仓库');
   console.log();
@@ -400,8 +387,8 @@ async function main() {
   console.log();
   info('下一步：');
   console.log('  1. 在 GitHub 上查看自动创建的标签');
-  console.log('  2. 运行 npm run tauri:build 构建安装包');
-  console.log('  3. 在 GitHub 上创建 Release 并上传构建产物');
+  console.log('  2. 确认证书环境变量后运行 npm run electron:publish');
+  console.log('  3. 在 GitHub Release 中确认 latest.yml 与安装包产物已上传');
   if (changelog) {
     console.log();
     log('更新日志已保存到 CHANGELOG.md 和 Git 标签中', 'cyan');

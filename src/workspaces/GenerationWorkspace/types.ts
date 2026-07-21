@@ -1,11 +1,11 @@
-import type { ImageEditState } from '@/components/ImageEditor'
+import type { ImageMarkSession } from '@/features/imageMark'
 import type { MediaResult } from '@/types'
 
 export type MediaType = 'image' | 'video' | 'audio'
 
 export type TaskStatus = 'queued' | 'pending' | 'generating' | 'success' | 'error'
 
-export interface GeneratorOptions extends Record<string, unknown> {
+export interface GeneratorOptions extends DynamicValueMap {
   size?: string
   images?: string[]
   uploadedFilePaths?: string[]
@@ -16,8 +16,8 @@ export interface GeneratorOptions extends Record<string, unknown> {
 
   editStateFile?: string
 
-  // 兼容旧模式：内联编辑状态（新逻辑优先使用 editStateFile）
-  imageEditStates?: Record<string, ImageEditState>
+  // 兼容旧模式：内联编辑状态（新逻辑优先使用 editStateFile;旧数据可能仍是 ImageEditState 形状,读取时统一 coerce）
+  imageEditStates?: Record<string, ImageMarkSession>
 }
 
 export interface GenerationTask {

@@ -1,9 +1,29 @@
 import { useEffect, useRef } from 'react'
+import type { ReactFlowInstance } from '@xyflow/react'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
-import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes'
-import { isTypingTarget, resolveClipboardImageFile, type ClipboardSnapshot } from '@/features/canvas/canvasUtils'
+import {
+  CANVAS_NODE_TYPES,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasNodeData,
+  type CanvasNodeType,
+} from '@/features/canvas/domain/canvasNodes'
+import {
+  isTypingTarget,
+  resolveClipboardMediaFile,
+  type ClipboardMediaKind,
+  type ClipboardSnapshot,
+} from '@/features/canvas/canvasUtils'
+
+const CLIPBOARD_MEDIA_NODE_TYPE: Record<ClipboardMediaKind, CanvasNodeType> = {
+  image: CANVAS_NODE_TYPES.upload,
+  video: CANVAS_NODE_TYPES.videoUpload,
+  audio: CANVAS_NODE_TYPES.audioUpload,
+}
 
 interface UseCanvasShortcutsParams {
+  wrapperRef: React.RefObject<HTMLDivElement>
+  reactFlowInstance: ReactFlowInstance<CanvasNode, CanvasEdge>
   selectedUploadNodeId: string | null
   selectedNodeIds: string[]
   selectedNodeId: string | null
@@ -16,11 +36,14 @@ interface UseCanvasShortcutsParams {
   redo: () => boolean
   scheduleCanvasPersist: (delayMs?: number) => void
   duplicateNodes: (sourceNodeIds: string[]) => { firstNodeId: string | null } | null
+  addNode: (type: CanvasNodeType, position: { x: number; y: number }, data?: Partial<CanvasNodeData>) => string
   setSelectedNode: (nodeId: string | null) => void
 }
 
 export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
   const {
+    wrapperRef,
+    reactFlowInstance,
     selectedUploadNodeId,
     selectedNodeIds,
     selectedNodeId,
@@ -33,11 +56,23 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     redo,
     scheduleCanvasPersist,
     duplicateNodes,
+    addNode,
     setSelectedNode
   } = params
 
   const copiedSnapshotRef = useRef<ClipboardSnapshot | null>(null)
   const pasteImageHandledRef = useRef(false)
+  const pointerPositionRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const handlePointerMove = (event: MouseEvent) => {
+      pointerPositionRef.current = { x: event.clientX, y: event.clientY }
+    }
+    document.addEventListener('mousemove', handlePointerMove)
+    return () => {
+      document.removeEventListener('mousemove', handlePointerMove)
+    }
+  }, [])
 
   useEffect(() => {
     if (selectedNodeIds.length === 1) {
@@ -55,24 +90,49 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
       pasteImageHandledRef.current = false
-      if (!selectedUploadNodeId || isTypingTarget(event.target)) return
+      if (isTypingTarget(event.target)) return
 
-      const imageFile = resolveClipboardImageFile(event)
-      if (!imageFile) return
+      const media = resolveClipboardMediaFile(event)
+      if (!media) return
+
+      if (selectedUploadNodeId && media.kind === 'image') {
+        event.preventDefault()
+        pasteImageHandledRef.current = true
+        canvasEventBus.publish('upload-node/paste-image', {
+          nodeId: selectedUploadNodeId,
+          file: media.file,
+        })
+        return
+      }
+
+      // 画布级粘贴：鼠标停留在画布内时，粘贴图片/视频/音频会以鼠标位置为基准新建节点
+      const pointerPosition = pointerPositionRef.current
+      const containerRect = wrapperRef.current?.getBoundingClientRect()
+      const isPointerInsideCanvas = Boolean(
+        pointerPosition && containerRect
+        && pointerPosition.x >= containerRect.left && pointerPosition.x <= containerRect.right
+        && pointerPosition.y >= containerRect.top && pointerPosition.y <= containerRect.bottom
+      )
+      if (!isPointerInsideCanvas || !pointerPosition) return
 
       event.preventDefault()
       pasteImageHandledRef.current = true
-      canvasEventBus.publish('upload-node/paste-image', {
-        nodeId: selectedUploadNodeId,
-        file: imageFile,
-      })
+
+      const nodeType = CLIPBOARD_MEDIA_NODE_TYPE[media.kind]
+      const flowPosition = reactFlowInstance.screenToFlowPosition(pointerPosition)
+      const newNodeId = addNode(nodeType, flowPosition)
+      setSelectedNode(newNodeId)
+      window.setTimeout(() => {
+        canvasEventBus.publish('canvas/paste-media', { nodeId: newNodeId, file: media.file })
+      }, 0)
+      scheduleCanvasPersist(0)
     }
 
     document.addEventListener('paste', handlePaste)
     return () => {
       document.removeEventListener('paste', handlePaste)
     }
-  }, [selectedUploadNodeId])
+  }, [addNode, reactFlowInstance, scheduleCanvasPersist, selectedUploadNodeId, setSelectedNode, wrapperRef])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -100,23 +160,18 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       }
 
       if (isPaste) {
+        // 是否为剪贴板媒体粘贴（新建节点/写入选中上传节点）由 document 的 paste 事件监听器判定，
+        // 这里统一延后一帧检查 pasteImageHandledRef，避免与内部节点复制粘贴重复触发
         const copied = copiedSnapshotRef.current
-        if (selectedUploadNodeId) {
-          pasteImageHandledRef.current = false
-          window.setTimeout(() => {
-            if (pasteImageHandledRef.current) {
-              pasteImageHandledRef.current = false
-              return
-            }
-            if (!copied || copied.nodes.length === 0) return
-            void duplicateNodes(copied.nodes.map((node) => node.id))
-          }, 0)
-          return
-        }
-
-        if (!copied || copied.nodes.length === 0) return
-        event.preventDefault()
-        void duplicateNodes(copied.nodes.map((node) => node.id))
+        pasteImageHandledRef.current = false
+        window.setTimeout(() => {
+          if (pasteImageHandledRef.current) {
+            pasteImageHandledRef.current = false
+            return
+          }
+          if (!copied || copied.nodes.length === 0) return
+          void duplicateNodes(copied.nodes.map((node) => node.id))
+        }, 0)
         return
       }
 
@@ -172,7 +227,6 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     scheduleCanvasPersist,
     selectedNodeId,
     selectedNodeIds,
-    selectedUploadNodeId,
     undo
   ])
 }

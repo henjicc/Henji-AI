@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieSeedream45Model = defineModel({
   meta: {
     id: 'kie-seedream-4.5',
+    seriesId: 'seedream',
+    seriesRank: 4.5,
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-seedream-4.5',
@@ -93,7 +95,7 @@ export const kieSeedream45Model = defineModel({
         ? 'seedream/4.5-text-to-image'
         : 'seedream/4.5-edit'
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       const aspectRatioText = typeof aspectRatio === 'string' ? aspectRatio : ''
       input.aspect_ratio =

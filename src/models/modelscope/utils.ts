@@ -57,7 +57,7 @@ export function resolveModelscopeSize(
 }
 
 export function buildModelscopeRequest(
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   options: {
     modelId: string
     allowGuidance?: boolean
@@ -65,9 +65,9 @@ export function buildModelscopeRequest(
     allowImage?: boolean
     baseSize?: number
   }
-): Record<string, unknown> {
+): DynamicValueMap {
   const prompt = typeof params.prompt === 'string' ? params.prompt : ''
-  const request: Record<string, unknown> = {
+  const request: DynamicValueMap = {
     model: options.modelId,
     prompt
   }

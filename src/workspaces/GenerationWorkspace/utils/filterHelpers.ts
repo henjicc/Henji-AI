@@ -7,7 +7,7 @@ interface Filterable {
   type?: string
   status?: string
   createdAt?: number
-  [key: string]: unknown
+  [key: string]: DynamicValue
 }
 
 /**
@@ -39,7 +39,7 @@ export function filterByStatus<T extends Filterable>(
 /**
  * 按关键词搜索
  */
-export function searchItems<T extends Record<string, unknown>>(
+export function searchItems<T extends DynamicValueMap>(
   items: T[],
   keyword: string,
   searchFields: (keyof T)[]

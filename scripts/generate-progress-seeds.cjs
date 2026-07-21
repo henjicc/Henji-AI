@@ -2,9 +2,9 @@ const fs = require('fs')
 const path = require('path')
 
 const ROOT = process.cwd()
-const BASE_FILE = path.join(ROOT, 'src-tauri', 'resources', 'progress-seeds.base.json')
+const BASE_FILE = path.join(ROOT, 'resources', 'progress-seeds.base.json')
 const LOCAL_FILE = path.join(ROOT, 'dev-data', 'progress-seeds.local.json')
-const OUTPUT_FILE = path.join(ROOT, 'src-tauri', 'resources', 'progress-seeds.json')
+const OUTPUT_FILE = path.join(ROOT, 'resources', 'progress-seeds.json')
 
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) {

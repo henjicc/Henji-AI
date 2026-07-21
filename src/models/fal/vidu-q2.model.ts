@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const viduQ2Model = defineModel({
   meta: {
     id: 'fal-ai-vidu-q2',
+    seriesId: 'vidu',
+    seriesRank: 2,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-vidu-q2',
@@ -165,9 +167,9 @@ export const viduQ2Model = defineModel({
       const resolution = params.viduQ2Resolution || '720p'
       const movementAmplitude = params.viduQ2MovementAmplitude || 'auto'
       const bgm = params.viduQ2Bgm === true
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: any) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
       requestData.duration = duration
 
       if (mode === 'text-to-video' || mode === 'reference-to-video') {

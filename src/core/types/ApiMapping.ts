@@ -31,7 +31,7 @@ export type ApiFieldMapping = string
  * }
  * ```
  */
-export type ApiTransform = (value: any, allParams?: Record<string, any>) => Record<string, any>
+export type ApiTransform = (value: DynamicValue, allParams?: DynamicValueMap) => DynamicValueMap
 
 /**
  * 端点相关 API 映射

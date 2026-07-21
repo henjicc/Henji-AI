@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText } from '@/core'
 export const wan25PreviewModel = defineModel({
   meta: {
     id: 'fal-ai-wan-25-preview',
+    seriesId: 'wan',
+    seriesRank: 2.5,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-wan-25-preview',
@@ -81,7 +83,7 @@ export const wan25PreviewModel = defineModel({
       const resolution = params.falWan25Resolution
       const promptExpansion = params.falWan25PromptExpansion
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         enable_safety_checker: false,
         duration: `${duration}`

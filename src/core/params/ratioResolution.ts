@@ -12,7 +12,7 @@ export interface ChoiceParamDescriptor {
   order: number
   name: I18nText
   apiField?: string
-  defaultValue?: unknown
+  defaultValue?: DynamicValue
   options: ChoiceOptionDescriptor[]
 }
 
@@ -90,7 +90,7 @@ function toSearchText(param: ChoiceParamDescriptor): string {
   return [param.id, param.apiField, toLabelText(param.name)].filter(Boolean).join(' ')
 }
 
-export function isSmartAspectValue(value: unknown): boolean {
+export function isSmartAspectValue(value: DynamicValue): boolean {
   if (typeof value !== 'string') {
     return false
   }
@@ -113,7 +113,7 @@ function parseRatioText(text: string): number | null {
   return width / height
 }
 
-function parseRatioFromRaw(raw: unknown): number | null {
+function parseRatioFromRaw(raw: DynamicValue): number | null {
   if (typeof raw !== 'string') {
     return null
   }
@@ -127,7 +127,7 @@ function parseRatioFromRaw(raw: unknown): number | null {
   return parseRatioText(raw)
 }
 
-function extractAspectRatioText(raw: unknown): string | null {
+function extractAspectRatioText(raw: DynamicValue): string | null {
   if (typeof raw !== 'string') {
     return null
   }
@@ -149,7 +149,7 @@ function extractAspectRatioText(raw: unknown): string | null {
 
 export function formatAspectRatioDisplayLabel(
   label: string,
-  value?: unknown
+  value?: DynamicValue
 ): string {
   return extractAspectRatioText(value) ?? extractAspectRatioText(label) ?? label
 }
@@ -250,6 +250,11 @@ function pickResolutionCandidate(
   }
 
   return candidates[0]
+}
+
+export function isAspectRatioChoiceParam(param: ParamDef): boolean {
+  const descriptor = toChoiceDescriptor(param)
+  return descriptor !== null && looksLikeAspect(descriptor)
 }
 
 export function getAspectChoiceParams(params: ParamDef[]): ChoiceParamDescriptor[] {

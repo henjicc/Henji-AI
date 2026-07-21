@@ -1,8 +1,11 @@
 import { defineModel, modelScopedText, sharedFieldText, sharedModeText, sharedOptionText } from '@/core'
+import { hasUploadedImage } from './mediaSources'
 
 export const kling30Model = defineModel({
   meta: {
     id: 'ppio-kling-3.0',
+    seriesId: 'kling-video',
+    seriesRank: 3.0,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-kling-3.0',
@@ -110,8 +113,7 @@ export const kling30Model = defineModel({
           if (params.ppioKling30Mode === 'motion-control') {
             return false
           }
-          const uploadedImages = Array.isArray(params.uploadedImages) ? params.uploadedImages : []
-          return uploadedImages.length === 0
+          return !hasUploadedImage(params)
         },
         reason: '仅文生视频支持设置宽高比'
       },
@@ -253,7 +255,7 @@ export const kling30Model = defineModel({
         : (rawResolution === '1080P' ? '1080P' : '720P')
 
       if (mode === 'motion-control') {
-        const requestData: Record<string, unknown> = {
+        const requestData: DynamicValueMap = {
           image: requestImages[0],
           video: requestVideos[0],
           prompt,
@@ -274,7 +276,7 @@ export const kling30Model = defineModel({
       const rawSound = params.ppioKling30Sound ?? params.sound
       const sound = rawSound === true
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt,
         duration,
         sound,

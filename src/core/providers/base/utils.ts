@@ -4,8 +4,7 @@
  * 提供文件处理、URL处理、API密钥管理等通用工具函数
  */
 
-import { readFile } from '@tauri-apps/plugin-fs'
-import { ProviderError, ProviderErrorCode } from './errors'
+import { readFile } from '@/platform/desktopApi'
 
 /**
  * 将 Data URI 转换为 Blob
@@ -82,7 +81,7 @@ export async function readLocalFile(path: string): Promise<Blob> {
     // 移除 asset:// 前缀
     const normalizedPath = path.replace(/^asset:\/\//, '')
 
-    // 使用 Tauri 的 readFile API
+    // 使用桌面平台文件 API
     const bytes = await readFile(normalizedPath)
 
     // 根据文件扩展名推断 MIME 类型
@@ -103,13 +102,13 @@ export async function readLocalFile(path: string): Promise<Blob> {
 export function isLocalPath(path: string): boolean {
   // Windows 路径: C:\, D:\, \\network\share
   // macOS/Linux 路径: /Users/, /home/, ~/
-  // Tauri asset 协议: asset://
+  // 旧桌面 asset 协议: asset://
   return (
     /^[a-zA-Z]:\\/.test(path) || // Windows 绝对路径
     /^\\\\/.test(path) || // Windows 网络路径
     /^\//.test(path) || // Unix 绝对路径
     /^~\//.test(path) || // Unix home路径
-    /^asset:\/\//.test(path) // Tauri asset协议
+    /^asset:\/\//.test(path) // 旧 asset 协议
   )
 }
 
@@ -200,8 +199,7 @@ export function extractMimeType(source: string): string {
  * @returns API 密钥或 null
  */
 export function getApiKey(provider: string): string | null {
-  const key = `${provider}ApiKey`
-  return localStorage.getItem(key)
+  throw new Error(`[providers/base/utils] getApiKey("${provider}") is unavailable in Electron runtime. Use keystore commands instead.`)
 }
 
 /**
@@ -211,8 +209,8 @@ export function getApiKey(provider: string): string | null {
  * @param apiKey - API 密钥
  */
 export function setApiKey(provider: string, apiKey: string): void {
-  const key = `${provider}ApiKey`
-  localStorage.setItem(key, apiKey)
+  void apiKey
+  throw new Error(`[providers/base/utils] setApiKey("${provider}") is unavailable in Electron runtime. Use keystore commands instead.`)
 }
 
 /**
@@ -221,7 +219,7 @@ export function setApiKey(provider: string, apiKey: string): void {
  * @returns Fal API 密钥或空字符串
  */
 export function getFalApiKey(): string {
-  return getApiKey('fal') || ''
+  throw new Error('[providers/base/utils] getFalApiKey() is unavailable in Electron runtime. Use keystore commands instead.')
 }
 
 /**
@@ -246,13 +244,13 @@ export async function retry<T>(
   options: {
     maxAttempts: number
     delay: number
-    onRetry?: (attempt: number, error: any) => void
-    shouldRetry?: (error: any) => boolean
+    onRetry?: (attempt: number, error: DynamicValue) => void
+    shouldRetry?: (error: DynamicValue) => boolean
   }
 ): Promise<T> {
   const { maxAttempts, delay, onRetry, shouldRetry = () => true } = options
 
-  let lastError: any
+  let lastError: DynamicValue
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {

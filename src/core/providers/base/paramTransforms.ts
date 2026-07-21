@@ -19,7 +19,7 @@ export const DEFAULT_INTERNAL_PROVIDER_FIELDS: ReadonlyArray<string> = [
  * into remote URLs before sending the API request.
  */
 export async function transformMediaFields(
-  target: Record<string, unknown>,
+  target: DynamicValueMap,
   keys: Set<string>,
   transformer: (value: MediaValue) => Promise<string>
 ): Promise<void> {
@@ -32,7 +32,7 @@ export async function transformMediaFields(
       !Array.isArray(rawValue) &&
       !(rawValue instanceof File)
     ) {
-      await transformMediaFields(rawValue as Record<string, unknown>, keys, transformer)
+      await transformMediaFields(rawValue as DynamicValueMap, keys, transformer)
       continue
     }
 
@@ -56,7 +56,7 @@ export async function transformMediaFields(
 }
 
 export function stripInternalFields(
-  params: Record<string, unknown>,
+  params: DynamicValueMap,
   fields: ReadonlyArray<string> = DEFAULT_INTERNAL_PROVIDER_FIELDS
 ): void {
   for (const key of fields) {

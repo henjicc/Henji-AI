@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const pixverseV45Model = defineModel({
   meta: {
     id: 'ppio-pixverse-v4.5',
+    seriesId: 'pixverse',
+    seriesRank: 4.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-pixverse-v4.5',

@@ -32,6 +32,11 @@
     "generate": "Generate",
     "emptyHintTitle": "Double-click to add a node",
     "emptyHintSubtitle": "Double-click to add a node",
+    "connection": {
+      "typeMismatch": "Connection type mismatch. Use the matching input row.",
+      "mediaLimitExceeded": "{{media}} accepts up to {{max}} connection(s).",
+      "mediaFallback": "Media"
+    },
     "toolbar": {
       "zoomIn": "Zoom In",
       "zoomOut": "Zoom Out",
@@ -41,8 +46,7 @@
     }
   },
   "tool": {
-    "crop": "Crop",
-    "annotate": "Annotate",
+    "edit": "Edit",
     "split": "Split"
   },
   "toolDialog": {
@@ -51,14 +55,15 @@
     "processFailed": "Processing failed",
     "processing": "Processing...",
     "apply": "Apply",
-    "cropResultTitle": "Crop Result",
-    "annotateResultTitle": "Annotation Result"
+    "editResultTitle": "Edit Result"
   },
   "nodeToolbar": {
     "reupload": "Reupload",
     "copy": "Copy",
     "copyText": "Copy Text",
     "download": "Download",
+    "outputImage": "Output Image",
+    "outputVideo": "Output Video",
     "ungroup": "Ungroup",
     "saveAs": "Save as...",
     "noDownloadPresetPathsHint": "No preset path. Add one in Settings > General.",
@@ -68,7 +73,13 @@
     "autoAspectRatio": "Auto",
     "quality": "Quality",
     "aspectRatio": "Aspect Ratio",
-    "title": "Params"
+    "title": "Params",
+    "searchPlaceholder": "Search by model name, provider, or description",
+    "clearSearch": "Clear search",
+    "allProviders": "All",
+    "noModels": "No matching models",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "node": {
     "menu": {
@@ -87,13 +98,19 @@
       "booleanSource": "Boolean",
       "imageModelSelector": "Image Model Selector",
       "videoModelSelector": "Video Model Selector",
-      "audioModelSelector": "Audio Model Selector"
+      "audioModelSelector": "Audio Model Selector",
+      "cameraStage": "3D Camera Reference"
     },
     "mediaRow": {
       "image": "Image",
       "video": "Video",
       "audio": "Audio",
-      "upload": "Upload"
+      "upload": "Upload",
+      "videoTrim": "Trim",
+      "videoTrimTitle": "Trim Video Clip",
+      "videoTrimProcessing": "Processing…",
+      "videoTrimReadFailed": "Failed to read video info",
+      "videoTrimFailed": "Failed to process video"
     },
     "modelRow": {
       "label": "Model",
@@ -146,13 +163,30 @@
     },
     "videoNode": {
       "uploadHint": "Click or drag to upload video",
-      "waitingResult": "Waiting for output video"
+      "waitingResult": "Waiting for output video",
+      "play": "Play"
     },
     "audioNode": {
       "uploadHint": "Click or drag to upload audio",
       "waitingResult": "Waiting for output audio",
       "play": "Play",
-      "pause": "Pause"
+      "pause": "Pause",
+      "openViewer": "Open audio preview"
+    },
+    "cameraStage": {
+      "previewAlt": "Current frame preview",
+      "empty": "Open 3D Camera Reference to start",
+      "preparing": "Preparing render scene",
+      "rendering": "Rendering video {{progress}}%",
+      "encoding": "Encoding video {{progress}}%",
+      "renderFailed": "Video rendering failed",
+      "open": "Open 3D Camera Reference",
+      "openHint": "Double-click to open 3D Camera Reference",
+      "openBlockedRendering": "Video rendering in progress; editor unavailable",
+      "imageResultTitle": "3D Camera Reference Image",
+      "videoResultTitle": "3D Camera Reference Video",
+      "imageOutput": "Image output",
+      "videoOutput": "Video output"
     }
   },
   "viewer": {

@@ -34,6 +34,59 @@ export const STORYBOARD_CELL_BG_HEX = '#262626';
 export const STORYBOARD_NOTE_BG_HEX = '#0A0A0A';
 export const STORYBOARD_NOTE_TEXT_HEX = '#E5E5E5';
 
+// 3D 镜头参考三维场景纯色渲染基础色（1.1 技术验证引入，第二阶段编辑器继续复用）
+export const CAMERA_STAGE_COLOR_HEX = {
+  stageBg: '#18181c',
+  groundBase: '#24242a',
+  gridCell: '#303036',
+  gridSection: '#4a4a52',
+  sunlightNight: '#8FA8D8',
+  sunlightWarm: '#FFD2A6',
+  sunlightNoon: '#FFF6E0',
+  objectWarm: '#e8734a',
+  objectCool: '#4a90e8',
+  characterPlaceholder: '#d9a441',
+  cameraPlaceholder: '#8f97a3',
+  selectionOutline: '#4a90e8',
+} as const;
+
+// 3D 镜头参考时间轴（第三阶段）配色：播放头 / 关键帧菱形 / 轨道分隔 / 曲线图分量色
+export const CAMERA_STAGE_TIMELINE_HEX = {
+  playhead: '#e8734a',
+  keyframe: '#c9ccd2',
+  keyframeSelected: '#4a90e8',
+  keyframeEased: '#e8c84a',
+  laneBorder: '#2a2a30',
+  laneActive: '#202027',
+  // 曲线图分量色（对齐 AE：X 红 / Y 绿 / Z 蓝，其余走强调色）
+  axisX: '#e0555f',
+  axisY: '#5fbf6a',
+  axisZ: '#5a8fe0',
+  curveOther: '#c9a0e8',
+  curveGrid: '#26262c',
+  curveHandle: '#e8c84a',
+} as const;
+
+export const CAMERA_STAGE_MOTION_PATH_HEX = {
+  path: '#e8c84a',
+  tangent: '#8f97a3',
+  handle: '#e8c84a',
+  handleSelected: '#fff6d0',
+  handleOutline: '#3f3920',
+} as const;
+
+// 3D 镜头参考新建对象默认颜色轮换盘（按对象序号取模）
+export const CAMERA_STAGE_OBJECT_PALETTE_HEX = [
+  '#e8734a',
+  '#4a90e8',
+  '#58c472',
+  '#e8c84a',
+  '#b06fe8',
+  '#e85a7a',
+  '#4ac8c2',
+  '#9aa3ad',
+] as const;
+
 export const ANNOTATION_DEFAULT_STROKE_HEX = '#ff4d4f';
 export const ANNOTATION_DEFAULT_TEXT_HEX = '#ffffff';
 export const ANNOTATION_TRANSFORMER_HEX = '#3b82f6';
@@ -67,8 +120,10 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   app: '#0A0A0A',
   canvas: '#0A0A0A',
   panel: '#171717',
-  layer: '#262626',
+  layer: '#404040',
 } as const;
+
+export const APP_WINDOW_BACKGROUND_HEX = DEFAULT_THEME_COLOR_SCHEME_HEX.app;
 
 export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',

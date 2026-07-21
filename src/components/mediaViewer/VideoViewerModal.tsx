@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton } from '@/components/ui'
+import { readVideoInfo } from '@/commands/video'
 import {
   CloseIcon,
   VolumeMutedIcon,
@@ -22,9 +24,12 @@ export interface VideoViewerModalProps {
   filePath?: string
   onClose: () => void
   onDownload?: (filePath: string) => void
+  /** 若视频有关联的裁剪选区，自动从 start 开始播放并在 end 处跳回——
+   *  进度条仍显示完整时长，满足"看起来是完整视频，但只播放选中段"的体验要求 */
+  trimRange?: { start: number; end: number }
 }
 
-export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload }: VideoViewerModalProps): JSX.Element | null {
+export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload, trimRange }: VideoViewerModalProps): JSX.Element | null {
   const { t } = useI18n()
   const [isVisible, setIsVisible] = useState(open)
   const [overlayOpacity, setOverlayOpacity] = useState(0)
@@ -43,6 +48,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   const [videoDuration, setVideoDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
+  const [hasAudio, setHasAudio] = useState<boolean | null>(null)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [loop, setLoop] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
@@ -102,8 +108,28 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
   }, [open, videoUrl])
 
   useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setHasAudio(null)
+    void readVideoInfo(filePath ?? videoUrl).then(
+      (info) => {
+        if (cancelled) return
+        setHasAudio(info.hasAudio)
+        if (!info.hasAudio) setIsVolumeMenuOpen(false)
+      },
+      () => {
+        if (!cancelled) setHasAudio(null)
+      },
+    )
+    return () => { cancelled = true }
+  }, [filePath, open, videoUrl])
+
+  useEffect(() => {
     if (open) return
     if (!isVisible) return
+    videoRef.current?.pause()
+    setIsVideoPlaying(false)
+    setAutoPlayOnOpen(false)
     setOverlayOpacity(0)
     setViewerOpacity(0)
     closeTimerRef.current = window.setTimeout(() => {
@@ -370,9 +396,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   if (!isVisible) return null
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
+      className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 500ms ease',
@@ -408,17 +434,19 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           className="relative w-full h-full flex items-center justify-center"
           onClick={handleViewportClick}
         >
-          <div
-            className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
-            style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
-          >
-            {muted || volume === 0 ? (
-              <VolumeMutedIcon className="w-5 h-5" />
-            ) : (
-              <VolumeOnIcon className="w-5 h-5" />
-            )}
-            <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
-          </div>
+          {hasAudio !== false && (
+            <div
+              className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
+              style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
+            >
+              {muted || volume === 0 ? (
+                <VolumeMutedIcon className="w-5 h-5" />
+              ) : (
+                <VolumeOnIcon className="w-5 h-5" />
+              )}
+              <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
+            </div>
+          )}
 
           <video
             ref={videoRef}
@@ -430,13 +458,26 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
                 setVideoDuration(videoRef.current.duration || 0)
                 updateRenderedVideoRect()
                 if (autoPlayOnOpen) {
+                  // 有裁剪选区时从 start 处开始播放，而不是从 0——
+                  // 但 videoDuration 仍用完整时长，进度条不做范围内重新归一化
+                  if (trimRange && trimRange.start > 0) {
+                    videoRef.current.currentTime = trimRange.start
+                  }
                   videoRef.current.play().catch(() => {})
                   setAutoPlayOnOpen(false)
                 }
               }
             }}
             onTimeUpdate={() => {
-              if (videoRef.current) setCurrentTime(videoRef.current.currentTime || 0)
+              const v = videoRef.current
+              if (!v) return
+              setCurrentTime(v.currentTime || 0)
+              // 有裁剪选区时：超出 end 自动暂停并跳回 start——和 VideoTrimModal 里已有的
+              // "预览只在选区内播放"逻辑一致，让用户在历史记录里也只看到选中的这段
+              if (trimRange && v.currentTime >= trimRange.end) {
+                v.pause()
+                v.currentTime = trimRange.start
+              }
             }}
             onPlaying={() => {
               setIsBuffering(false)
@@ -447,6 +488,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             onStalled={() => setIsBuffering(true)}
             onClick={togglePlay}
             onWheel={(e) => {
+              if (hasAudio === false) return
               e.preventDefault()
               const delta = e.deltaY > 0 ? -0.05 : 0.05
               updateVolume((muted ? 0 : volume) + delta)
@@ -492,6 +534,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           videoDuration={videoDuration}
           muted={muted}
           volume={volume}
+          hasAudio={hasAudio}
           setMuted={setMuted}
           updateVolume={updateVolume}
           playbackRate={playbackRate}
@@ -501,8 +544,10 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           onDownload={onDownload}
           filePath={filePath}
           isBuffering={isBuffering}
+          trimRange={trimRange}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

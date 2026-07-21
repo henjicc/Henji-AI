@@ -36,12 +36,12 @@ function formatPrice(value: number): string {
 }
 
 export function normalizePriceEstimateCurrencyMode(
-  input: unknown
+  input: DynamicValue
 ): PriceEstimateCurrencyMode {
   return input === 'cny' || input === 'usd' || input === 'auto' ? input : 'auto'
 }
 
-export function normalizeUsdToCnyRate(input: unknown): number {
+export function normalizeUsdToCnyRate(input: DynamicValue): number {
   const parsed = typeof input === 'number' ? input : Number(input)
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return DEFAULT_USD_TO_CNY_RATE

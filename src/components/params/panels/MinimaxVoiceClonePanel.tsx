@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
 import { UiButton, UiInput } from '@/components/ui'
@@ -38,8 +38,8 @@ type CloneAlertState = {
 }
 
 interface MinimaxVoiceClonePanelProps {
-  value: unknown
-  onChange: (value: Record<string, unknown>) => void
+  value: DynamicValue
+  onChange: (value: DynamicValueMap) => void
   config?: MinimaxVoiceClonePanelConfig
 }
 
@@ -85,9 +85,9 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   const promptPairValid = hasPromptAudio === hasPromptText
   const hasResultPreview = resultPreviewSrc.length > 0
 
-  const patchValue = (patch: Partial<MinimaxVoiceClonePanelValue>): void => {
+  const patchValue = useCallback((patch: Partial<MinimaxVoiceClonePanelValue>): void => {
     onChange({ ...panelValueRef.current, ...patch })
-  }
+  }, [onChange])
 
   useEffect(() => {
     if (hasResetClonePanelOnSessionStart) {
@@ -101,7 +101,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
     if (shouldReset) {
       patchValue(DEFAULT_VALUE)
     }
-  }, [panelValue])
+  }, [panelValue, patchValue])
 
   useEffect(() => {
     panelValueRef.current = panelValue
@@ -142,7 +142,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
     return () => {
       cancelled = true
     }
-  }, [panelValue.lastPreviewAudioUrl, panelValue.lastPreviewAudioFilePath])
+  }, [panelValue.lastPreviewAudioUrl, panelValue.lastPreviewAudioFilePath, patchValue])
 
   const showWarningDialog = (message: string): void => {
     setAlertState({
@@ -295,7 +295,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
       patchValue(submitPayload)
 
       const generationService = GenerationService.getInstance()
-      const runtimeParams: Record<string, unknown> = {
+      const runtimeParams: DynamicValueMap = {
         minimaxCloneOperation: 'clone',
         text: previewText,
         prompt: previewText,

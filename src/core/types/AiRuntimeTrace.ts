@@ -8,6 +8,6 @@ export interface AiRuntimeTrace {
   route: string
   method: string
   taskId?: string
-  requestBody?: unknown
-  responseBody: unknown
+  requestBody?: DynamicValue
+  responseBody: DynamicValue
 }

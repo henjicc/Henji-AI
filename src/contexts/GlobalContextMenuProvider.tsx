@@ -1,7 +1,9 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useState, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 const logger = createLogger('contexts.GlobalContextMenuProvider')
 
@@ -80,8 +82,9 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       try {
         // 首先尝试使用 Rust 命令读取文件管理器复制的文件
-        const { invoke } = await import('@tauri-apps/api/core')
-        const clipboardFiles = await invoke<Array<{ path: string; data: string; mime_type: string }>>('read_clipboard_files')
+        const clipboardFiles = isDesktopRuntime()
+          ? await getPlatform().clipboard.readClipboardFiles()
+          : []
 
         if (clipboardFiles && clipboardFiles.length > 0) {
           // 有文件管理器复制的图片文件，通过事件传递 base64 数据
@@ -89,7 +92,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             detail: {
               clipboardFiles: clipboardFiles.map(f => ({
                 data: f.data,
-                mimeType: f.mime_type,
+                mimeType: f.mimeType,
                 name: f.path.split(/[/\\]/).pop() || 'clipboard-image'
               }))
             }
@@ -120,10 +123,11 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           await pasteTextToInput(text)
         }
       } catch {
-        // 如果所有方法都失败，尝试使用 Tauri API 读取文本
+        // 如果所有方法都失败，尝试使用平台剪贴板读取文本
         try {
-          const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-          const text = await readText()
+          const text = isDesktopRuntime()
+            ? await getPlatform().clipboard.readText()
+            : await navigator.clipboard.readText()
           if (text) {
             await pasteTextToInput(text)
           }
@@ -136,8 +140,9 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     // 非提示词输入框，只粘贴文本
     try {
-      const { readText } = await import('@tauri-apps/plugin-clipboard-manager')
-      const text = await readText()
+      const text = isDesktopRuntime()
+        ? await getPlatform().clipboard.readText()
+        : await navigator.clipboard.readText()
       if (text) {
         await pasteTextToInput(text)
       }

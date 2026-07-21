@@ -178,7 +178,7 @@ export const seedanceModel = defineModel({
       const cameraFixed = params.falSeedanceV1CameraFixed || false
       const aspectRatio = params.falSeedanceV1AspectRatio
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: `${duration}`,
         enable_safety_checker: false,

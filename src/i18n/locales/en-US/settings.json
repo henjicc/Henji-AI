@@ -5,6 +5,7 @@
   "apiKeys": {
     "title": "API Key Settings",
     "description": "Configure API keys for each provider. Keys are stored locally.",
+    "migrationHint": "The Electron version uses a new secure key store. If keys from the older Tauri version appear empty, please enter them once again.",
     "visibility": {
       "show": "Show",
       "hide": "Hide"
@@ -175,7 +176,17 @@
       "uploadFilenameTitleLabel": "Use filename as upload node title",
       "storyboardKeepStyleLabel": "Keep storyboard style consistent with references",
       "storyboardNoTextLabel": "Disable text in storyboard images",
-      "ignoreAtTagLabel": "Ignore @image tags when copying and generating"
+      "storyboardAutoInferEmptyFrameLabel": "Auto-infer empty storyboard frames",
+      "storyboardAutoInferEmptyFrameHint": "When enabled, frames left without a description get \"infer based on prior content\" appended to the prompt so the model fills them in",
+      "ignoreAtTagLabel": "Ignore @image tags when copying and generating",
+      "lodLabel": "Simplify rendering when zoomed out",
+      "lodHint": "Below the threshold, node bodies switch to lightweight skeletons and media thumbnails drop a tier to keep zooming and panning smooth. Detail-first only simplifies at very small zoom, performance-first simplifies earlier, and off always renders in full.",
+      "lodOptions": {
+        "off": "Off",
+        "detail": "Detail first",
+        "balanced": "Balanced (recommended)",
+        "performance": "Performance first"
+      }
     },
     "promptOptimization": {
       "title": "Prompt Optimization",
@@ -222,6 +233,11 @@
       "collapseDelayHint": "Delay before collapsing after mouse leaves",
       "collapseOnScrollLabel": "Collapse only on scroll",
       "collapseOnScrollHint": "Only collapse while scrolling history"
+    },
+    "assetLibrary": {
+      "title": "Asset Library", "tabAction": "Title-bar click action", "floating": "Open floating panel", "workspace": "Open full workspace",
+      "panelPosition": "Floating panel position", "top": "Top", "left": "Left", "right": "Right",
+      "edgeTrigger": "Enable edge trigger", "edgeHint": "Suppressed during canvas interaction and pointer dragging", "triggerEdge": "Trigger edge", "delay": "Trigger delay ({{value}} ms)"
     },
     "theme": {
       "title": "Theme Appearance",
@@ -271,6 +287,17 @@
         "panel": "Panel Base",
         "layer": "Layer Base"
       }
+    },
+    "largeUpload": {
+      "title": "Large File Handling",
+      "description": "When uploading local video/audio, files up to 100 MB are always copied into the data folder; larger files follow this strategy.",
+      "strategyLabel": "For files over 100 MB",
+      "options": {
+        "ask": "Ask every time",
+        "copy": "Copy into data folder",
+        "reference": "Reference the original file"
+      },
+      "hint": "Referencing skips the copy and is faster, but moving or deleting the original file will break media on the canvas."
     },
     "upload": {
       "title": "Generic Upload Service",

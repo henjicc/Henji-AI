@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieHailuo23Model = defineModel({
   meta: {
     id: 'kie-hailuo-2-3',
+    seriesId: 'hailuo',
+    seriesRank: 2.3,
     provider: 'kie',
     type: 'video',
         i18nScope: 'models.defs.kie-hailuo-2-3',
@@ -87,7 +89,7 @@ export const kieHailuo23Model = defineModel({
       trigger: ['kieHailuo23Duration', 'kieHailuo23Resolution'],
       effect: 'autoSwitch',
       target: 'kieHailuo23Resolution',
-      condition: (_: unknown, allParams: Record<string, unknown>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         return allParams.kieHailuo23Duration === 10 && allParams.kieHailuo23Resolution === '1080P'
       },
       value: '768P'

@@ -3,11 +3,13 @@
  */
 
 import { defineModel, sharedFieldText } from '@/core'
-import { resolvePpioImageSources } from './mediaSources'
+import { countUploadedImages, resolvePpioImageSources } from './mediaSources'
 
 export const viduQ1Model = defineModel({
   meta: {
     id: 'ppio-vidu-q1',
+    seriesId: 'vidu',
+    seriesRank: 1,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-vidu-q1',
@@ -140,24 +142,22 @@ export const viduQ1Model = defineModel({
     },
     // Hide aspect ratio when images uploaded in text-image mode
     {
-      trigger: ['ppioViduQ1Mode', 'uploadedImages'],
+      trigger: ['ppioViduQ1Mode', 'uploadedImages', 'images'],
       effect: 'hide',
       targets: ['ppioViduQ1AspectRatio'],
       condition: (_, allParams) => {
         const mode = allParams.ppioViduQ1Mode
-        const imageCount = allParams.uploadedImages?.length || 0
-        return mode === 'text-image-to-video' && imageCount > 0
+        return mode === 'text-image-to-video' && countUploadedImages(allParams) > 0
       }
     },
     // Hide style when not text-to-video with no images
     {
-      trigger: ['ppioViduQ1Mode', 'uploadedImages'],
+      trigger: ['ppioViduQ1Mode', 'uploadedImages', 'images'],
       effect: 'hide',
       targets: ['ppioViduQ1Style'],
       condition: (_, allParams) => {
         const mode = allParams.ppioViduQ1Mode
-        const imageCount = allParams.uploadedImages?.length || 0
-        return !(mode === 'text-image-to-video' && imageCount === 0)
+        return !(mode === 'text-image-to-video' && countUploadedImages(allParams) === 0)
       }
     }
   ],
@@ -186,7 +186,7 @@ export const viduQ1Model = defineModel({
       const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto'
       const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: 5,
         resolution: '1080p',
@@ -225,7 +225,7 @@ export const viduQ1Model = defineModel({
   },
   pricing: {
     currency: '¥',
-    calculator: (params) => {
+    calculator: (_params) => {
       const basePrice = 0.6
       return basePrice
     },

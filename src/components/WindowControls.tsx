@@ -1,40 +1,39 @@
 import { createLogger } from '@/core/logging'
 import React from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { isDesktop, isDesktopAsync } from '../utils/save'
 import { useI18n } from '@/hooks/useI18n'
 import { UiChipButton, UiIconButton } from '@/components/ui'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import type { WorkspaceId } from '@/core/types/workspace'
+import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
 
 const logger = createLogger('components.WindowControls')
 
-// CSS properties that are not in the default type definitions
-type WebkitAppRegion = 'drag' | 'no-drag'
-
-// Extend the CSSProperties interface
-declare global {
-  namespace React {
-    interface CSSProperties {
-      WebkitAppRegion?: WebkitAppRegion
-    }
-  }
+type AppRegionStyle = React.CSSProperties & {
+  WebkitAppRegion: 'drag' | 'no-drag'
 }
+
+const dragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'drag' }
+const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
+
 
 // Tab 配置
 interface TabConfig {
-  id: string
+  id: WorkspaceId
   label: string
   icon: React.ReactNode
 }
 
 interface WindowControlsProps {
-  activeTab?: string
-  onTabChange?: (tabId: string) => void
+  activeTab?: WorkspaceId
+  assetView?: AssetLibraryView
+  onTabChange?: (tabId: WorkspaceId) => void
+  onAssetClick?: () => void
   onOpenSettings?: () => void
 }
 
-const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', onTabChange, onOpenSettings }) => {
+const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings }) => {
   const { t } = useI18n('ui')
-  const [isTauri, setIsTauri] = React.useState<boolean>(false)
+  const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
   const tabs: TabConfig[] = [
@@ -66,14 +65,15 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         </svg>
       )
     },
+    {
+      id: 'assets',
+      label: t('tabs.assets'),
+      icon: <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M5 7l1-3h12l1 3v13H5V7zm4 4h6" /></svg>
+    },
   ]
 
   React.useEffect(() => {
-    const ok = isDesktop()
-    if (ok) setIsTauri(true)
-    else {
-      isDesktopAsync().then(v => { if (v) setIsTauri(true) })
-    }
+    setIsDesktopShell(isDesktopRuntime())
     // Simple macOS detection
     if (navigator.userAgent.includes('Mac')) {
       setIsMacOS(true)
@@ -81,8 +81,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   }, [])
 
   React.useEffect(() => {
-    if (!isTauri) return
-    const win = getCurrentWindow()
+    if (!isDesktopShell) return
+    const win = getPlatform().window
     let unlisten: (() => void) | null = null
     let isDisposed = false
 
@@ -98,12 +98,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
     }
 
     void syncMaximizeState()
-    void win.onResized(() => {
+    unlisten = win.onResized(() => {
       void syncMaximizeState()
-    }).then((fn) => {
-      unlisten = fn
-    }).catch((error) => {
-      logger.error('[WindowControls] onResized listener failed', error)
     })
 
     return () => {
@@ -112,10 +108,10 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         unlisten()
       }
     }
-  }, [isTauri])
+  }, [isDesktopShell])
 
-  if (!isTauri) return null
-  const win = getCurrentWindow()
+  if (!isDesktopShell) return null
+  const win = getPlatform().window
 
   const handleMinimize = async () => {
     try { await win.minimize() } catch (e) { logger.error('[WindowControls] minimize failed', e) }
@@ -139,18 +135,17 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const TabBar = () => (
     <div
       className="flex items-center gap-0.5 bg-black/20 rounded-lg p-0.5"
-      data-tauri-ignore-drag-region
-      style={{ WebkitAppRegion: 'no-drag' }}
+      style={noDragRegionStyle}
     >
       {tabs.map((tab) => (
         <UiChipButton
           key={tab.id}
           type="button"
-          onClick={() => onTabChange?.(tab.id)}
+          onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
           className={`
             !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
             transition-all duration-200 ease-out
-            ${activeTab === tab.id
+            ${(tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id)
               ? 'bg-accent/30 !text-accent'
               : 'text-gray-400 hover:text-gray-200 hover:bg-white/10 bg-transparent'
             }
@@ -165,17 +160,16 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-[2147483647] h-10 border-b border-zinc-700/50 bg-panel px-3 text-white"
-      data-tauri-drag-region
-      style={{ WebkitAppRegion: 'drag' }}
+      className="fixed top-0 left-0 right-0 z-[2147483647] h-10 select-none border-b border-zinc-700/50 bg-panel px-3 text-white"
+      style={dragRegionStyle}
     >
       {isMacOS ? (
         <>
           {/* macOS: 左侧窗口控制按钮 */}
           <div
             className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-2"
-            data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
+            data-window-nodrag
           >
             <UiIconButton
               type="button"
@@ -223,8 +217,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* macOS: 中间 Tab 栏 */}
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
+            data-window-nodrag
           >
             <TabBar />
           </div>
@@ -238,8 +232,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* Windows: 中间 Tab 栏 */}
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-            data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
+            data-window-nodrag
           >
             <TabBar />
           </div>
@@ -247,8 +241,8 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           {/* Windows: 右侧窗口控制按钮 */}
           <div
             className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 shrink-0"
-            data-tauri-ignore-drag-region
-            style={{ WebkitAppRegion: 'no-drag' }}
+            style={noDragRegionStyle}
+            data-window-nodrag
           >
             <UiIconButton
               type="button"

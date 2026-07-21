@@ -12,9 +12,9 @@ import {
 } from '@/utils/testMode'
 import { ParamFlowViewer } from './debug/ParamFlowViewer'
 import { ExportPanel } from './debug/ExportPanel'
-import { UnifiedLogViewer } from './debug/UnifiedLogViewer'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
+import { openLogWindow } from '@/commands/logging'
 import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiPanel } from '@/components/ui'
 import { X } from 'lucide-react'
 
@@ -24,8 +24,8 @@ interface TestModePanelProps {
   flowRecords?: ParamFlowRecord[]
   onExportFlowRecord?: (record: ParamFlowRecord) => void
   modelId?: string
-  params?: Record<string, unknown>
-  context?: Record<string, unknown>
+  params?: DynamicValueMap
+  context?: DynamicValueMap
 }
 
 const TestModePanel: React.FC<TestModePanelProps> = ({
@@ -280,12 +280,15 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           </div>
         )}
 
-        {/* 统一日志查看器 */}
+        {/* 独立日志窗口入口：日志完整捕获开关已移至日志窗口工具栏（见 2.1 decisions.md） */}
         {state.enabled && activeTab === 'options' && (
           <div>
-            <h3 className="text-white font-medium mb-3">统一日志查看器</h3>
-            <div className="bg-black/50 rounded-lg p-4 border border-zinc-700/50">
-              <UnifiedLogViewer />
+            <h3 className="text-white font-medium mb-3">{t('testMode.logsWindow.title')}</h3>
+            <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30">
+              <div className="text-xs text-gray-400">{t('testMode.logsWindow.description')}</div>
+              <UiButton type="button" size="sm" onClick={() => void openLogWindow()}>
+                {t('testMode.logsWindow.openButton')}
+              </UiButton>
             </div>
           </div>
         )}

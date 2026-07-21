@@ -1,15 +1,34 @@
 import { createLogger } from '@/core/logging'
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { isDesktopRuntime } from '@/platform/runtime';
 
 const logger = createLogger('features.canvas.application.imageData')
 
 import {
-
-  loadImage,
   prepareNodeImageBinary,
-  persistImageSource,
   prepareNodeImageSource,
 } from '@/commands/image';
+import {
+  blobToDataUrl,
+  canvasToDataUrl,
+  imageUrlToDataUrl,
+  isLikelyLocalImagePath,
+  loadImageElement,
+  persistImageLocally,
+  readFileAsDataUrl,
+  resolveImageDisplayUrl,
+} from '@/services/imageSource';
+
+// 通用图片源助手已抽至 services/imageSource,此处 re-export 维持既有导入路径。
+export {
+  blobToDataUrl,
+  canvasToDataUrl,
+  imageUrlToDataUrl,
+  isLikelyLocalImagePath,
+  loadImageElement,
+  persistImageLocally,
+  readFileAsDataUrl,
+  resolveImageDisplayUrl,
+};
 
 export function parseAspectRatio(value: string): number {
   const [width, height] = value.split(':').map((item) => Number(item));
@@ -43,7 +62,6 @@ function greatestCommonDivisor(a: number, b: number): number {
 }
 
 const DEFAULT_PREVIEW_MAX_DIMENSION = 512;
-const LOCAL_PATH_PREFIX_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 
 export interface PreparedNodeImage {
   imageUrl: string;
@@ -53,141 +71,17 @@ export interface PreparedNodeImage {
 
 const ORIGINAL_IMAGE_ZOOM_THRESHOLD = 1.45;
 
+function isNativeImageRuntime(): boolean {
+  return isDesktopRuntime();
+}
+
 export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
-}
-
-export function isLikelyLocalImagePath(imageUrl: string): boolean {
-  if (!imageUrl) {
-    return false;
-  }
-
-  const lower = imageUrl.toLowerCase();
-  if (
-    lower.startsWith('data:') ||
-    lower.startsWith('http://') ||
-    lower.startsWith('https://') ||
-    lower.startsWith('blob:') ||
-    lower.startsWith('asset:') ||
-    lower.startsWith('tauri:') ||
-    lower.startsWith('file://')
-  ) {
-    return false;
-  }
-
-  return LOCAL_PATH_PREFIX_PATTERN.test(imageUrl);
-}
-
-export function resolveImageDisplayUrl(imageUrl: string): string {
-  const lower = imageUrl.toLowerCase();
-  if (lower.startsWith('file://')) {
-    if (!isTauri()) {
-      return imageUrl;
-    }
-
-    try {
-      const parsed = new URL(imageUrl);
-      const decodedPathname = decodeURIComponent(parsed.pathname);
-      const normalizedPath = decodedPathname.replace(/^\/([A-Za-z]:[\\/])/, '$1');
-      if (!normalizedPath) {
-        return imageUrl;
-      }
-      return convertFileSrc(normalizedPath);
-    } catch {
-      return imageUrl;
-    }
-  }
-
-  if (!isLikelyLocalImagePath(imageUrl)) {
-    return imageUrl;
-  }
-
-  if (!isTauri()) {
-    return imageUrl;
-  }
-
-  return convertFileSrc(imageUrl);
-}
-
-export async function persistImageLocally(source: string): Promise<string> {
-  if (isLikelyLocalImagePath(source)) {
-    return source;
-  }
-
-  if (!isTauri()) {
-    return source;
-  }
-
-  return await persistImageSource(source);
-}
-
-export async function loadImageElement(source: string): Promise<HTMLImageElement> {
-  const image = new Image();
-  const displaySource = resolveImageDisplayUrl(source);
-  if (
-    displaySource.startsWith('http://') ||
-    displaySource.startsWith('https://') ||
-    displaySource.startsWith('asset:')
-  ) {
-    image.crossOrigin = 'anonymous';
-  }
-
-  return await new Promise((resolve, reject) => {
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('图片加载失败'));
-    image.src = displaySource;
-  });
-}
-
-export async function imageUrlToDataUrl(imageUrl: string): Promise<string> {
-  if (imageUrl.startsWith('data:')) {
-    return imageUrl;
-  }
-
-  if (isLikelyLocalImagePath(imageUrl)) {
-    if (isTauri()) {
-      return await loadImage(imageUrl);
-    }
-    const localResponse = await fetch(resolveImageDisplayUrl(imageUrl));
-    if (!localResponse.ok) {
-      throw new Error('无法读取本地图片数据');
-    }
-    const localBlob = await localResponse.blob();
-    return await blobToDataUrl(localBlob);
-  }
-
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error('无法下载图片数据');
-  }
-
-  const blob = await response.blob();
-  return await blobToDataUrl(blob);
-}
-
-export async function blobToDataUrl(blob: Blob): Promise<string> {
-  const reader = new FileReader();
-
-  return await new Promise((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('图片转换失败'));
-    reader.readAsDataURL(blob);
-  });
 }
 
 export function extractBase64Payload(dataUrl: string): string {
   const [, payload = ''] = dataUrl.split(',');
   return payload;
-}
-
-export async function readFileAsDataUrl(file: File): Promise<string> {
-  const reader = new FileReader();
-
-  return await new Promise((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsDataURL(file);
-  });
 }
 
 function resolveFileExtension(file: File): string {
@@ -213,8 +107,8 @@ export async function prepareNodeImageFromFile(
   maxPreviewDimension = DEFAULT_PREVIEW_MAX_DIMENSION
 ): Promise<PreparedNodeImage> {
   const started = performance.now();
-  const tauriFilePath = (file as File & { path?: string }).path;
-  const normalizedPath = typeof tauriFilePath === 'string' ? tauriFilePath.trim() : '';
+  const nativeFilePath = (file as File & { path?: string }).path;
+  const normalizedPath = typeof nativeFilePath === 'string' ? nativeFilePath.trim() : '';
   const canUseLocalPath =
     normalizedPath.length > 0
     && (isLikelyLocalImagePath(normalizedPath) || normalizedPath.toLowerCase().startsWith('file://'));
@@ -226,17 +120,17 @@ export async function prepareNodeImageFromFile(
     return prepared;
   }
 
-  if (isTauri()) {
+  if (isNativeImageRuntime()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
     const readStarted = performance.now();
     const bytes = new Uint8Array(await file.arrayBuffer());
     const readElapsed = Math.round(performance.now() - readStarted);
     const extension = resolveFileExtension(file);
-    const tauriStarted = performance.now();
+    const nativeStarted = performance.now();
     const prepared = await prepareNodeImageBinary(bytes, extension, safeMaxDimension);
-    const tauriElapsed = Math.round(performance.now() - tauriStarted);
+    const nativeElapsed = Math.round(performance.now() - nativeStarted);
     logger.info(
-      `[upload-perf][imageData] prepareNodeImageFromFile binary-mode name="${file.name}" size=${file.size}B readArrayBuffer=${readElapsed}ms tauriPrepare=${tauriElapsed}ms total=${Math.round(performance.now() - started)}ms`
+      `[upload-perf][imageData] prepareNodeImageFromFile binary-mode name="${file.name}" size=${file.size}B readArrayBuffer=${readElapsed}ms nativePrepare=${nativeElapsed}ms total=${Math.round(performance.now() - started)}ms`
     );
     return {
       imageUrl: prepared.imagePath,
@@ -258,10 +152,6 @@ export async function prepareNodeImageFromFile(
 export async function detectAspectRatio(imageUrl: string): Promise<string> {
   const image = await loadImageElement(imageUrl);
   return reduceAspectRatio(image.naturalWidth, image.naturalHeight);
-}
-
-export function canvasToDataUrl(canvas: HTMLCanvasElement): string {
-  return canvas.toDataURL('image/png');
 }
 
 function resolvePreviewMimeType(imageUrl: string): string {
@@ -322,22 +212,18 @@ export async function prepareNodeImage(
   maxPreviewDimension = DEFAULT_PREVIEW_MAX_DIMENSION
 ): Promise<PreparedNodeImage> {
   const started = performance.now();
-  if (isTauri()) {
+  if (isNativeImageRuntime()) {
     const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
-    try {
-      const tauriStarted = performance.now();
-      const prepared = await prepareNodeImageSource(imageUrl, safeMaxDimension);
-      logger.info(
-        `[upload-perf][imageData] prepareNodeImage tauri-source elapsed=${Math.round(performance.now() - tauriStarted)}ms total=${Math.round(performance.now() - started)}ms`
-      );
-      return {
-        imageUrl: prepared.imagePath,
-        previewImageUrl: prepared.previewImagePath,
-        aspectRatio: prepared.aspectRatio,
-      };
-    } catch {
-      // fallback to browser path for compatibility
-    }
+    const nativeStarted = performance.now();
+    const prepared = await prepareNodeImageSource(imageUrl, safeMaxDimension);
+    logger.info(
+      `[upload-perf][imageData] prepareNodeImage native-source elapsed=${Math.round(performance.now() - nativeStarted)}ms total=${Math.round(performance.now() - started)}ms`
+    );
+    return {
+      imageUrl: prepared.imagePath,
+      previewImageUrl: prepared.previewImagePath,
+      aspectRatio: prepared.aspectRatio,
+    };
   }
 
   const persistedImagePath = await persistImageLocally(imageUrl);

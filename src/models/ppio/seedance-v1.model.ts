@@ -8,6 +8,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const seedanceV1Model = defineModel({
   meta: {
     id: 'ppio-seedance-v1',
+    seriesId: 'seedance',
+    seriesRank: 1.0,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-seedance-v1',
@@ -124,7 +126,7 @@ export const seedanceV1Model = defineModel({
       const camera_fixed = params.ppioSeedanceV1CameraFixed || params.camera_fixed || false
       const prompt = params.prompt || ''
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         resolution,
         duration,

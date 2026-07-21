@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 
 import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
+import type { ModelTag } from '@/core/types';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
-import { getSocketColor, getSocketTintColor, modelPortId } from '@/features/canvas/domain/socketTypes';
+import { getSocketColor, modelPortId } from '@/features/canvas/domain/socketTypes';
 import { NodeModelParamsControls } from './NodeModelParamsControls';
 import {
   NODE_CONTROL_CHIP_CLASS,
@@ -14,6 +15,8 @@ import {
   NODE_ROW_CONTROL_SLOT_CLASS,
   NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
+  NODE_PORT_ROW_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 
 interface ModelInputRowProps {
@@ -21,10 +24,12 @@ interface ModelInputRowProps {
   modelId: string;
   /** 已连线的模型选择器解析出的覆盖模型 id；非空时节点内选择只读 */
   overrideModelId: string | null;
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (params: Record<string, unknown>) => void;
+  onParamsChange: (params: DynamicValueMap) => void;
   incomingImages?: string[];
+  /** 限定可选模型必须同时具备的标签（如仅展示支持图片编辑的模型） */
+  requiredTags?: ModelTag[];
 }
 
 /**
@@ -40,6 +45,7 @@ export function ModelInputRow({
   onModelChange,
   onParamsChange,
   incomingImages,
+  requiredTags,
 }: ModelInputRowProps) {
   const { t, i18n } = useTranslation();
   const socketColor = getSocketColor('MODEL');
@@ -53,14 +59,13 @@ export function ModelInputRow({
       className={`${NODE_ROW_CLASS} ${
         overrideModelId ? '' : NODE_ROW_HOVER_CLASS
       }`}
-      style={overrideModelId ? { backgroundColor: getSocketTintColor('MODEL') } : undefined}
     >
       <Handle
         type="target"
         id={modelPortId()}
         position={Position.Left}
         style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-        className="!h-2.5 !w-2.5 !border !border-surface-dark"
+        className={`${NODE_PORT_ROW_CLASS} ${overrideModelId ? NODE_PORT_VISIBLE_CLASS : ''}`}
       />
       <span className={NODE_ROW_LABEL_CLASS}>{t('node.modelRow.label')}</span>
       <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
@@ -79,6 +84,7 @@ export function ModelInputRow({
             onModelChange={onModelChange}
             onParamsChange={onParamsChange}
             incomingImages={incomingImages}
+            requiredTags={requiredTags}
             chipClassName={NODE_CONTROL_CHIP_CLASS}
             modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
             showParamsChip={false}

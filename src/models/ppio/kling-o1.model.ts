@@ -6,6 +6,8 @@
 
 import { defineModel, sharedFieldText, sharedModeText } from '@/core'
 import {
+  countUploadedImages,
+  hasUploadedVideo,
   resolvePpioImageSources,
   resolvePpioPrimaryVideoSource,
   resolvePpioVideoSources,
@@ -14,6 +16,8 @@ import {
 export const klingO1Model = defineModel({
   meta: {
     id: 'ppio-kling-o1',
+    seriesId: 'kling-video',
+    seriesRank: 10,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-o1',
@@ -168,12 +172,14 @@ export const klingO1Model = defineModel({
   ],
   linkages: [
     // Mode AutoSwitch 1: 2 images uploaded → switch to start-end-frame
+    // trigger/condition 同时覆盖 images（画布键）与 uploadedImages（对话面板键），
+    // 否则画布上传图片不会触发这条 autoSwitch。
     {
-      trigger: 'images',
+      trigger: ['images', 'uploadedImages'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1Mode',
-      condition: (images: string[], allParams: Record<string, any>) => {
-        const count = images?.length || 0
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
+        const count = countUploadedImages(allParams)
         const mode = allParams.ppioKlingO1Mode
         return mode === 'text-image-to-video' && count === 2
       },
@@ -182,26 +188,25 @@ export const klingO1Model = defineModel({
 
     // Mode AutoSwitch 2: Video uploaded in video modes → keep current mode
     {
-      trigger: ['videos', 'images'],
+      trigger: ['videos', 'images', 'uploadedVideos'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1Mode',
-      condition: (_: any, allParams: Record<string, any>) => {
-        const videoCount = allParams.uploadedVideos?.length || 0
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode
-        return videoCount > 0 && (mode === 'reference-to-video' || mode === 'video-edit')
+        return hasUploadedVideo(allParams) && (mode === 'reference-to-video' || mode === 'video-edit')
       },
-      value: (_: any, allParams: Record<string, any>) => allParams.ppioKlingO1Mode,
+      value: (_: DynamicValue, allParams: DynamicValueMap) => allParams.ppioKlingO1Mode,
       noRestore: true
     },
 
     // Aspect Ratio AutoSwitch 1: Upload image in text-image-to-video → switch to smart
     {
-      trigger: ['ppioKlingO1Mode', 'images', 'videos'],
+      trigger: ['ppioKlingO1Mode', 'images', 'videos', 'uploadedImages'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1AspectRatio',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode || 'text-image-to-video'
-        const imageCount = allParams.uploadedImages?.length || 0
+        const imageCount = countUploadedImages(allParams)
         const currentRatio = allParams.ppioKlingO1AspectRatio
         return (mode === 'text-image-to-video' || mode === 'start-end-frame') &&
           imageCount > 0 &&
@@ -215,7 +220,7 @@ export const klingO1Model = defineModel({
       trigger: ['ppioKlingO1Mode', 'videos'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1AspectRatio',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode || 'text-image-to-video'
         const currentRatio = allParams.ppioKlingO1AspectRatio
         return currentRatio === 'smart' &&
@@ -226,12 +231,12 @@ export const klingO1Model = defineModel({
 
     // Aspect Ratio AutoSwitch 3: Delete all images in image modes → reset to 16:9
     {
-      trigger: ['images', 'videos'],
+      trigger: ['images', 'videos', 'uploadedImages'],
       effect: 'autoSwitch',
       target: 'ppioKlingO1AspectRatio',
-      condition: (_: any, allParams: Record<string, any>) => {
+      condition: (_: DynamicValue, allParams: DynamicValueMap) => {
         const mode = allParams.ppioKlingO1Mode || 'text-image-to-video'
-        const imageCount = allParams.uploadedImages?.length || 0
+        const imageCount = countUploadedImages(allParams)
         const currentRatio = allParams.ppioKlingO1AspectRatio
         return (mode === 'text-image-to-video' || mode === 'start-end-frame') &&
           imageCount === 0 &&

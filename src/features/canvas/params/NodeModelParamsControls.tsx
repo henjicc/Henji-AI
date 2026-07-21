@@ -1,32 +1,38 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { registry } from '@/core/ModelRegistry';
-import { getI18nText } from '@/core/types/I18nText';
+import type { ModelTag } from '@/core/types';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel';
-import { UiChipButton, UiOptionButton, UiPanel } from '@/components/ui';
+import { UiChipButton, UiPanel } from '@/components/ui';
 import {
   getProviderDisplayName,
   type CanvasModelMediaType,
 } from '@/features/canvas/domain/defaultModels';
+import { getI18nText } from '@/core/types/I18nText';
+import { ModelPickerList } from './ModelPickerList';
+import { useModelPickerList } from './useModelPickerList';
 import { useNodeModelParams } from './useNodeModelParams';
 
 interface NodeModelParamsControlsProps {
   mediaType: CanvasModelMediaType;
   modelId: string;
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (nextParams: Record<string, unknown>) => void;
+  onParamsChange: (nextParams: DynamicValueMap) => void;
   /** 上游连线输入的图片（用于智能宽高比预览与联动） */
   incomingImages?: string[];
+  /** 限定可选模型必须同时具备的标签（如仅展示支持图片编辑的模型） */
+  requiredTags?: ModelTag[];
   chipClassName?: string;
   modelChipClassName?: string;
   paramsChipClassName?: string;
   /** 是否显示参数浮层 chip（逐行渲染模式下置 false，仅保留模型选择） */
   showParamsChip?: boolean;
+  /** 模型 chip 内容（名称+供应商）的实际像素宽度变化回调，用于驱动节点最小宽度随内容自适应 */
+  onModelChipContentWidthChange?: (width: number) => void;
 }
 
 interface PanelAnchor {
@@ -63,31 +69,36 @@ export const NodeModelParamsControls = memo(({
   onModelChange,
   onParamsChange,
   incomingImages = [],
+  requiredTags = [],
   chipClassName = '',
   modelChipClassName = 'max-w-[260px] justify-start',
   paramsChipClassName = 'max-w-[120px] justify-start',
   showParamsChip = true,
+  onModelChipContentWidthChange,
 }: NodeModelParamsControlsProps) => {
   const { t, i18n } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const modelTriggerRef = useRef<HTMLDivElement>(null);
+  const modelChipMeasureRef = useRef<HTMLDivElement>(null);
   const paramsTriggerRef = useRef<HTMLDivElement>(null);
   const modelPanelRef = useRef<HTMLDivElement>(null);
   const paramsPanelRef = useRef<HTMLDivElement>(null);
+  const modelSearchInputRef = useRef<HTMLInputElement>(null);
   const [openPanel, setOpenPanel] = useState<'model' | 'params' | null>(null);
   const [renderPanel, setRenderPanel] = useState<'model' | 'params' | null>(null);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [modelPanelAnchor, setModelPanelAnchor] = useState<PanelAnchor | null>(null);
   const [paramsPanelAnchor, setParamsPanelAnchor] = useState<PanelAnchor | null>(null);
-
-  const models = useMemo(() => registry.getModelsByType(mediaType), [mediaType]);
-  const selectedModel = useMemo(
-    () => registry.getModel(modelId) ?? models[0],
-    [modelId, models]
-  );
-  const selectedModelName = selectedModel
-    ? getI18nText(selectedModel.meta.name, i18n.language) || selectedModel.meta.id
-    : modelId;
+  const {
+    modelSearchQuery,
+    setModelSearchQuery,
+    providerFilter,
+    setProviderFilter,
+    providerOptions,
+    filteredModels,
+    selectedModel,
+    selectedModelName,
+  } = useModelPickerList({ mediaType, modelId, requiredTags });
 
   const { schema, values, setParam } = useNodeModelParams({
     modelId: selectedModel?.meta.id ?? modelId,
@@ -158,6 +169,18 @@ export const NodeModelParamsControls = memo(({
     return cleanup;
   }, [openPanel, renderPanel]);
 
+  useLayoutEffect(() => {
+    const measureEl = modelChipMeasureRef.current;
+    if (!measureEl || !onModelChipContentWidthChange) {
+      return;
+    }
+    const measure = () => onModelChipContentWidthChange(measureEl.scrollWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(measureEl);
+    return () => observer.disconnect();
+  }, [onModelChipContentWidthChange, selectedModelName, selectedModel]);
+
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
       const target = event.target as globalThis.Node;
@@ -173,12 +196,24 @@ export const NodeModelParamsControls = memo(({
     };
   }, []);
 
+  useEffect(() => {
+    if (renderPanel !== 'model') {
+      return;
+    }
+    const shouldAutoFocus = localStorage.getItem('enable_auto_focus_model_search') !== 'false';
+    if (!shouldAutoFocus) {
+      return;
+    }
+    const timer = setTimeout(() => modelSearchInputRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
+  }, [renderPanel]);
+
   return (
-    <div ref={containerRef} className="flex items-center gap-1">
-      <div ref={modelTriggerRef} className="relative flex">
+    <div ref={containerRef} className="flex w-full min-w-0 items-center gap-1">
+      <div ref={modelTriggerRef} className="relative flex min-w-0 flex-1">
         <UiChipButton
           active={openPanel === 'model'}
-          className={`${chipClassName} ${modelChipClassName}`}
+          className={`min-w-0 overflow-hidden ${chipClassName} ${modelChipClassName}`}
           onClick={(event) => {
             event.stopPropagation();
             if (openPanel === 'model') {
@@ -189,14 +224,27 @@ export const NodeModelParamsControls = memo(({
             setOpenPanel('model');
           }}
         >
-          <Sparkles className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 truncate text-xs font-normal leading-none">{selectedModelName}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
             <span className="shrink-0 text-xs leading-none text-text-muted/80">
               {getProviderDisplayName(selectedModel.meta.provider)}
             </span>
           )}
         </UiChipButton>
+        {onModelChipContentWidthChange && (
+          <div
+            ref={modelChipMeasureRef}
+            aria-hidden
+            className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 whitespace-nowrap text-xs"
+          >
+            <span className="text-xs font-normal leading-none">{selectedModelName}</span>
+            {selectedModel && (
+              <span className="text-xs leading-none text-text-muted/80">
+                {getProviderDisplayName(selectedModel.meta.provider)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {hasConfigurableParams && (
@@ -237,40 +285,22 @@ export const NodeModelParamsControls = memo(({
           }`}
           style={buildPanelStyle(modelPanelAnchor)}
         >
-          <UiPanel className="w-[360px] p-2">
-            <div className="ui-scrollbar max-h-[300px] space-y-1 overflow-y-auto pr-1">
-              {models.map((model) => {
-                const active = model.meta.id === selectedModel?.meta.id;
-                const displayName = getI18nText(model.meta.name, i18n.language) || model.meta.id;
-
-                return (
-                  <UiOptionButton
-                    key={model.meta.id}
-                    active={active}
-                    className={`w-full items-start gap-3 rounded-lg px-3 py-2 ${
-                      active ? '' : '!border-transparent !bg-transparent hover:!border-transparent hover:!bg-layer'
-                    }`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onModelChange(model.meta.id);
-                      setOpenPanel(null);
-                    }}
-                  >
-                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted ${active ? 'bg-white/15 text-white' : 'bg-bg-dark'}`}>
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className={`truncate text-sm ${active ? 'text-white' : 'text-text-dark'}`}>{displayName}</div>
-                      <div className={`truncate text-xs ${active ? 'text-white/70' : 'text-text-muted'}`}>
-                        {getProviderDisplayName(model.meta.provider)}
-                        {model.meta.description ? ` · ${model.meta.description}` : ''}
-                      </div>
-                    </div>
-                    {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />}
-                  </UiOptionButton>
-                );
-              })}
-            </div>
+          <UiPanel className="w-[420px] p-2">
+            <ModelPickerList
+              variant="floating"
+              modelSearchQuery={modelSearchQuery}
+              onSearchChange={setModelSearchQuery}
+              searchInputRef={modelSearchInputRef}
+              providerFilter={providerFilter}
+              onProviderFilterChange={setProviderFilter}
+              providerOptions={providerOptions}
+              filteredModels={filteredModels}
+              selectedModel={selectedModel}
+              onModelChange={(nextModelId) => {
+                onModelChange(nextModelId);
+                setOpenPanel(null);
+              }}
+            />
           </UiPanel>
         </div>,
         document.body

@@ -6,6 +6,7 @@ import {
   type EdgeProps,
 } from '@xyflow/react';
 
+import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -27,21 +28,19 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
   const deleteEdge = useCanvasStore((state) => state.deleteEdge);
   // 生成中判定：下游是结果展示节点且正在生成（按注册表 media.role 泛化，无节点类型特判）
   const isProcessingEdge = useCanvasStore((state) => {
-    const targetNode = state.nodes.find((node) => node.id === target);
+    const targetNode = getNodeIndexById(state.nodes).get(target);
     if (!targetNode || targetNode.data?.isGenerating !== true) {
       return false;
     }
     return getNodeDefinition(targetNode.type)?.media?.role === 'result';
   });
 
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // 选中态/生成中态切换会触发本组件重渲染，但端点位置往往没变；
+  // 按端点坐标缓存路径计算，避免无关状态变化时重复算 bezier 路径。
+  const [edgePath, labelX, labelY] = useMemo(
+    () => getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }),
+    [sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition]
+  );
 
   const processingStroke = useMemo(() => 'rgb(var(--accent-rgb) / 0.94)', []);
   const baseStrokeWidth = isProcessingEdge

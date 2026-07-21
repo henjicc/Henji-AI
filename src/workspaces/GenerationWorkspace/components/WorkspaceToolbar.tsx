@@ -62,7 +62,7 @@ export const WorkspaceToolbar: React.FC<ToolbarProps> = ({
         <UiSelect
           className="toolbar-select"
           value={filterType}
-          onChange={(e) => onFilterChange(e.target.value as any)}
+          onChange={(e) => onFilterChange(e.target.value as DynamicValue)}
         >
           <option value="all">{t('workspaceToolbar.filter.all')}</option>
           <option value="image">{t('workspaceToolbar.filter.image')}</option>
@@ -73,7 +73,7 @@ export const WorkspaceToolbar: React.FC<ToolbarProps> = ({
         <UiSelect
           className="toolbar-select"
           value={sortBy}
-          onChange={(e) => onSortChange(e.target.value as any)}
+          onChange={(e) => onSortChange(e.target.value as DynamicValue)}
         >
           <option value="date">{t('workspaceToolbar.sort.date')}</option>
           <option value="name">{t('workspaceToolbar.sort.name')}</option>

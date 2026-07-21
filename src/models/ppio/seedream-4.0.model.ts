@@ -39,6 +39,8 @@ type ResolutionValue = SeedreamResolutionValue & { mode?: string }
 export const seedream40Model = defineModel({
     meta: {
         id: 'ppio-seedream-4.0',
+        seriesId: 'seedream',
+        seriesRank: 4.0,
         provider: 'ppio',
         type: 'image',
         i18nScope: 'models.defs.ppio-seedream-4.0',
@@ -176,7 +178,7 @@ export const seedream40Model = defineModel({
                 finalPrompt = `生成${maxImages}张图片。${params.prompt}`
             }
 
-            const requestData: Record<string, unknown> = {
+            const requestData: DynamicValueMap = {
                 prompt: finalPrompt,
                 watermark: false
             }

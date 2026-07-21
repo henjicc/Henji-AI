@@ -7,6 +7,8 @@ import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 export const nanoBananaProModel = defineModel({
   meta: {
     id: 'fal-ai-nano-banana-pro',
+    seriesId: 'nano-banana',
+    seriesRank: 2,
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-nano-banana-pro',
@@ -72,7 +74,7 @@ export const nanoBananaProModel = defineModel({
       const images = params.images || []
       const prompt = params.prompt || ''
 
-      const requestData: any = { prompt }
+      const requestData: DynamicValue = { prompt }
 
       if (params.falNanoBananaProNumImages !== undefined) {
         requestData.num_images = params.falNanoBananaProNumImages

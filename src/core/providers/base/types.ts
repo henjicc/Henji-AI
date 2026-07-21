@@ -19,7 +19,7 @@ export interface GenerateResult {
   /** 生成状态 */
   status: 'completed' | 'pending' | 'failed'
   /** 额外元数据 */
-  metadata?: Record<string, any>
+  metadata?: DynamicValueMap
   /** 真实 API 请求/响应追踪 */
   trace?: AiRuntimeTrace
 }
@@ -37,7 +37,7 @@ export interface ProgressStatus {
   /** 进度百分比 (0-100) */
   progress?: number
   /** 结果数据（COMPLETED时） */
-  result?: any
+  result?: DynamicValue
   /** 错误信息（FAILED时） */
   error?: string
 }
@@ -55,7 +55,7 @@ export interface ProviderConfig {
   /** 请求超时时间（毫秒） */
   timeout?: number
   /** 额外配置 */
-  options?: Record<string, any>
+  options?: DynamicValueMap
 }
 
 /**
@@ -77,17 +77,17 @@ export interface PollingConfig {
  */
 export interface PreprocessedParams {
   /** 处理后的参数 */
-  params: Record<string, any>
+  params: DynamicValueMap
   /** 上传的文件映射 */
   uploadedFiles?: Map<string, string>
   /** 额外元数据 */
-  metadata?: Record<string, any>
+  metadata?: DynamicValueMap
 }
 
 /**
  * API响应接口（通用）
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = DynamicValue> {
   /** 响应数据 */
   data: T
   /** 状态码 */
@@ -123,5 +123,5 @@ export interface SaveMediaOptions {
   /** 自定义文件名 */
   filename?: string
   /** 额外元数据 */
-  metadata?: Record<string, any>
+  metadata?: DynamicValueMap
 }

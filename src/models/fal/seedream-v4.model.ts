@@ -59,6 +59,8 @@ async function resolveFalSeedreamV4Size(
 export const seedreamV4Model = defineModel({
   meta: {
     id: 'fal-ai-bytedance-seedream-v4',
+    seriesId: 'seedream',
+    seriesRank: 4.0,
     provider: 'fal',
     type: 'image',
     i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4',
@@ -184,7 +186,7 @@ export const seedreamV4Model = defineModel({
 
       const imageSize = await resolveFalSeedreamV4Size(resolutionValue, images)
 
-      const requestData: Record<string, unknown> = {
+      const requestData: DynamicValueMap = {
         prompt,
         image_size: imageSize,
         num_images: numImages,

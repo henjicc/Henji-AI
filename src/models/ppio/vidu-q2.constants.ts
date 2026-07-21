@@ -26,11 +26,11 @@ export const MODE_FALLBACK: Record<ViduQ2Edition, ViduQ2Mode> = {
   turbo: 'text-image-to-video'
 }
 
-export function isViduQ2Edition(value: unknown): value is ViduQ2Edition {
+export function isViduQ2Edition(value: DynamicValue): value is ViduQ2Edition {
   return typeof value === 'string' && VIDU_Q2_EDITIONS.includes(value as ViduQ2Edition)
 }
 
-export function resolveEditionFromParams(params: Record<string, unknown>): ViduQ2Edition {
+export function resolveEditionFromParams(params: DynamicValueMap): ViduQ2Edition {
   const proMode = params.ppioViduQ2ProMode === true
   const fastMode = params.ppioViduQ2FastMode === true
   if (proMode && fastMode) {
@@ -54,7 +54,7 @@ export function resolveEditionFromParams(params: Record<string, unknown>): ViduQ
   return 'q2'
 }
 
-export function resolveModeFromParams(params: Record<string, unknown>, edition: ViduQ2Edition): ViduQ2Mode {
+export function resolveModeFromParams(params: DynamicValueMap, edition: ViduQ2Edition): ViduQ2Mode {
   const preferred = params.ppioViduQ2Mode
   const legacy = params.mode
   const mode = typeof preferred === 'string' ? preferred : (typeof legacy === 'string' ? legacy : MODE_FALLBACK[edition])

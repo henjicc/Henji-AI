@@ -10,6 +10,8 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieNanoBananaProModel = defineModel({
   meta: {
     id: 'kie-nano-banana-pro',
+    seriesId: 'nano-banana',
+    seriesRank: 2,
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-nano-banana-pro',
@@ -68,7 +70,7 @@ export const kieNanoBananaProModel = defineModel({
       const aspectRatio = params.kieNanoBananaAspectRatio || params.aspect_ratio
       const resolution = params.kieNanoBananaResolution || params.resolution
 
-      const input: Record<string, unknown> = { prompt }
+      const input: DynamicValueMap = { prompt }
 
       if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
         input.aspect_ratio = aspectRatio

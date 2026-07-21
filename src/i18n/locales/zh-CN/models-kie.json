@@ -1,5 +1,11 @@
 {
   "defs": {
+    "kie-gemini-omni-video": {
+      "meta": {
+        "name": "Gemini Omni",
+        "description": "KIE Gemini Omni 视频生成模型，支持多图参考与视频参考片段"
+      }
+    },
     "kie-grok-imagine-video": {
       "meta": {
         "name": "Grok Imagine 视频",
@@ -42,10 +48,46 @@
         "description": "KIE Nano Banana Pro 图片生成模型"
       }
     },
-    "kie-seedance-v3": {
+    "kie-nano-banana-2": {
       "meta": {
-        "name": "Seedance 3",
-        "description": "KIE Seedance V3 视频生成模型"
+        "name": "Nano Banana 2",
+        "description": "KIE Nano Banana 2 图片生成与参考图编辑模型"
+      }
+    },
+    "kie-nano-banana-2-lite": {
+      "meta": {
+        "name": "Nano Banana 2 Lite",
+        "description": "KIE Nano Banana 2 Lite 图片生成与参考图编辑模型"
+      }
+    },
+    "kie-seedance-1.5-pro": {
+      "meta": {
+        "name": "Seedance 1.5 Pro",
+        "description": "KIE Seedance 1.5 Pro 视频生成模型，支持文生视频、图生视频与首尾帧"
+      }
+    },
+    "kie-seedance-2.0": {
+      "meta": {
+        "name": "Seedance 2.0",
+        "description": "KIE Seedance 2.0 视频生成模型，支持文/图生视频与多模态参考生视频"
+      }
+    },
+    "kie-seedance-2.0-fast": {
+      "meta": {
+        "name": "Seedance 2.0 Fast",
+        "description": "KIE Seedance 2.0 Fast 视频生成模型，支持文/图生视频与多模态参考生视频"
+      }
+    },
+    "kie-seedance-2.0-mini": {
+      "meta": {
+        "name": "Seedance 2.0 Mini",
+        "description": "KIE Seedance 2.0 Mini 视频生成模型，支持文/图生视频与多模态参考生视频"
+      }
+    },
+    "kie-seedance-v1": {
+      "meta": {
+        "name": "Seedance 1.0",
+        "description": "KIE Seedance 1.0 视频生成模型，支持文生视频、图生视频与首尾帧"
       }
     },
     "kie-seedream-4.0": {
@@ -60,10 +102,16 @@
         "description": "KIE Seedream 4.5 图片生成模型"
       }
     },
-    "kie-sora-2": {
+    "kie-seedream-5.0-pro": {
       "meta": {
-        "name": "Sora 2",
-        "description": "KIE Sora 2 视频生成模型"
+        "name": "Seedream 5.0 Pro",
+        "description": "KIE Seedream 5.0 Pro 图片生成与编辑模型"
+      }
+    },
+    "kie-seedream-5.0-lite": {
+      "meta": {
+        "name": "Seedream 5.0 Lite",
+        "description": "KIE Seedream 5.0 Lite 图片生成与编辑模型"
       }
     },
     "kie-z-image": {

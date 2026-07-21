@@ -1,8 +1,8 @@
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null
 }
 
-export function isStringArray(value: unknown): value is string[] {
+export function isStringArray(value: DynamicValue): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === 'string')
 }
 

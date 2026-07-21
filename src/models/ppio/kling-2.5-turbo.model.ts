@@ -10,6 +10,8 @@ import { resolvePpioImageSources } from './mediaSources'
 export const kling25TurboModel = defineModel({
   meta: {
     id: 'ppio-kling-2.5-turbo',
+    seriesId: 'kling-video',
+    seriesRank: 2.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-2.5-turbo',
@@ -76,7 +78,7 @@ export const kling25TurboModel = defineModel({
       const cfgScale = params.ppioKling25TurboCfgScale ?? params.cfg_scale ?? 0.5
       const prompt = (params.prompt || '').slice(0, 2500)
 
-      const requestData: any = {
+      const requestData: DynamicValue = {
         prompt,
         duration: String(duration),
         cfg_scale: cfgScale,

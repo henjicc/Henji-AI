@@ -6,6 +6,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes';
 import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import type { VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { MediaInputRow } from './MediaInputRow';
 import { ModelInputRow } from './ModelInputRow';
 import { NodeParamRows } from './NodeParamRows';
@@ -24,16 +25,20 @@ interface NodeInputRowsProps {
   /** 该节点声明可接受的媒体类型（来自 ports.target.accepts，已过滤为 image/video/audio） */
   acceptedMediaKinds: RowMediaKind[];
   schema: ParamDef[];
-  values: Record<string, unknown>;
-  setParam: (key: string, value: unknown) => void;
+  values: DynamicValueMap;
+  setParam: (key: string, value: DynamicValue) => void;
   excludeParamIds?: string[];
   mediaInputs: Partial<Record<RowMediaKind, string[]>>;
   onMediaInputChange: (kind: RowMediaKind, next: string[]) => void;
   overrideModelId: string | null;
-  storedParams: Record<string, unknown> | undefined;
+  storedParams: DynamicValueMap | undefined;
   onModelChange: (modelId: string) => void;
-  onParamsChange: (params: Record<string, unknown>) => void;
+  onParamsChange: (params: DynamicValueMap) => void;
   incomingImages?: string[];
+  /** 视频媒体行已保存的裁剪选区（若有） */
+  videoTrimRange?: VideoTrimRange | null;
+  /** 确认裁剪只回传选区，不替换视频引用——完整视频始终保留 */
+  onVideoTrimRangeChange?: (range: VideoTrimRange) => void;
 }
 
 /**
@@ -58,6 +63,8 @@ export function NodeInputRows({
   onModelChange,
   onParamsChange,
   incomingImages,
+  videoTrimRange,
+  onVideoTrimRangeChange,
 }: NodeInputRowsProps) {
   const { t } = useTranslation();
   const limits = useMemo(() => resolveInputLimits(modelId, values), [modelId, values]);
@@ -91,6 +98,10 @@ export function NodeInputRows({
           maxCount={max}
           inlineValue={mediaInputs[kind] ?? []}
           onInlineChange={(next) => onMediaInputChange(kind, next)}
+          videoTrimMaxClipSeconds={kind === 'video' ? limits.videoConstraints?.trim?.maxClipSeconds : undefined}
+          videoTrimMaxSizeMB={kind === 'video' ? limits.videoConstraints?.maxSizeMB : undefined}
+          videoTrimRange={kind === 'video' ? videoTrimRange : undefined}
+          onVideoTrimRangeChange={kind === 'video' ? onVideoTrimRangeChange : undefined}
         />
       ))}
 

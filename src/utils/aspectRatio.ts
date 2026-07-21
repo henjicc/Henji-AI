@@ -31,9 +31,9 @@ export async function getImageAspectRatio(imageDataUrl: string): Promise<number>
  */
 export function matchClosestAspectRatio(
   imageRatio: number,
-  options: Array<{ value: any; label: string }>,
-  extractRatio: (value: any) => number | null
-): any {
+  options: Array<{ value: DynamicValue; label: string }>,
+  extractRatio: (value: DynamicValue) => number | null
+): DynamicValue {
   let closestValue = options[0].value
   let minDiff = Infinity
 

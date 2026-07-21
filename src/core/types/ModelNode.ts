@@ -13,7 +13,7 @@ import type { ProgressStatus } from '@/core/providers/base'
  */
 export interface NodeOutput {
   /** 每个输出端口的值 */
-  [portId: string]: any
+  [portId: string]: DynamicValue
 
   /** 元数据 */
   _metadata?: {
@@ -38,7 +38,7 @@ export interface ExecutionContext {
  * 节点执行器
  */
 export type NodeExecutor = (
-  inputs: Record<string, any>,
+  inputs: DynamicValueMap,
   context?: ExecutionContext
 ) => Promise<NodeOutput>
 

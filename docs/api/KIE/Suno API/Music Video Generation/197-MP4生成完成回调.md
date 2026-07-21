@@ -1,0 +1,29 @@
+<!DOCTYPE html><html class="group/root" id="html" data-theme="light" data-accent-color="purple"><head><script src="https://file-assets.apidog.com/docs-site/v1/assets/prepareDocsConfigScript-CLIBKQbk.js"></script><script>__prepareDocsConfigScript(JSON.parse("{\"theme\":\"system\",\"themePrimarySettings\":{\"light\":{\"accentColor\":\"purple\"},\"dark\":{\"accentColor\":\"purple\"}},\"logoSettings\":{\"light\":{\"icon\":\"\",\"type\":\"project\"},\"dark\":{\"icon\":\"\",\"type\":\"followLight\"}},\"backgroundImageSettings\":{\"light\":{\"type\":\"custom\",\"color\":\"\"},\"dark\":{\"type\":\"followLight\",\"color\":\"\"}},\"id\":0}"));</script><script>window.eventTracking = {
+      dataLayer: []
+    }
+    window.eventTracking.report = function(){
+        window.eventTracking.dataLayer.push(arguments);
+    }</script><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="https://file-assets.apidog.com/docs-site/v1/assets/root-CpC_E1fb.css"/></head><body class="overflow-hidden g-body"><div class="fixed h-full w-full bg-background"><div class="ui-spin ui-spin-lg ui-spin-spinning absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" aria-live="polite" aria-busy="true"><span class="ui-spin-dot ui-spin-dot-spin"><i class="ui-spin-dot-item"></i><i class="ui-spin-dot-item"></i><i class="ui-spin-dot-item"></i><i class="ui-spin-dot-item"></i></span></div></div><script>((STORAGE_KEY, restoreKey) => {
+    if (!window.history.state || !window.history.state.key) {
+      let key = Math.random().toString(32).slice(2);
+      window.history.replaceState({
+        key
+      }, "");
+    }
+    try {
+      let positions = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}");
+      let storedY = positions[restoreKey || window.history.state.key];
+      if (typeof storedY === "number") {
+        window.scrollTo(0, storedY);
+      }
+    } catch (error) {
+      console.error(error);
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  })("positions", null)</script><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/manifest-547fd5f7.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/entry.client-mUtkjgQm.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/jsx-runtime-CM5sU0Q5.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/client-BKxavTD9.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/components-DMSdXhQK.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/root-CucMKOoN.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/root-Bb0pZnb9.js"/><link rel="modulepreload" href="https://file-assets.apidog.com/docs-site/v1/assets/route-D_6YkXJe.js"/><script>window.__remixContext = {"basename":"/","future":{"v3_fetcherPersist":true,"v3_relativeSplatPath":true,"v3_throwAbortReason":true,"v3_routeConfig":false,"v3_singleFetch":true,"v3_lazyRouteDiscovery":false,"unstable_optimizeDeps":false},"isSpaMode":false};window.__remixContext.stream = new ReadableStream({start(controller){window.__remixContext.streamController = controller;}}).pipeThrough(new TextEncoderStream());</script><script type="module" async="">import "https://file-assets.apidog.com/docs-site/v1/assets/manifest-547fd5f7.js";
+import * as route0 from "https://file-assets.apidog.com/docs-site/v1/assets/root-Bb0pZnb9.js";
+import * as route1 from "https://file-assets.apidog.com/docs-site/v1/assets/route-D_6YkXJe.js";
+
+window.__remixRouteModules = {"root":route0,"routes/_index/route":route1};
+
+import("https://file-assets.apidog.com/docs-site/v1/assets/entry.client-mUtkjgQm.js");</script></body></html><!--$?--><template id="B:0"></template><!--/$--><div hidden id="S:0"><script>window.__remixContext.streamController.enqueue("[{\"_1\":2,\"_57\":-5,\"_58\":-5},\"loaderData\",{\"_3\":4,\"_56\":-5},\"root\",{\"_5\":6,\"_7\":8},\"type\",\"csrNecessaryData\",\"envConfig\",{\"_9\":10,\"_11\":12,\"_13\":12,\"_14\":15,\"_16\":17,\"_18\":19,\"_20\":21,\"_22\":23,\"_24\":25,\"_26\":27,\"_28\":29,\"_31\":32,\"_33\":34,\"_35\":36,\"_37\":38,\"_39\":40,\"_41\":42,\"_48\":49,\"_50\":51,\"_52\":53,\"_54\":55},\"RELEASE_BASE\",\"apidoc\",\"DEBUG_API_BASE\",\"\",\"DEBUG_WEB_URL_BASE\",\"AGENT_SERVER_API_BASE\",\"https://web-proxy.apidog.com\",\"APP_REGION\",\"GLOBAL\",\"APP_NAME\",\"Apidog\",\"APP_HOMEPAGE\",\"https://apidog.com\",\"APP_NAME_LOWER\",\"apidog\",\"DEFAULT_LOCALE\",\"en-US\",\"APP_BROWSER_EXTENSION_ADAPTER\",\"apidogAgentCrossRequest\",\"APP_API_SERVER_HOSTNAMES\",[30],\"api.apidog.com\",\"APP_SUPPORT_EMAIL\",\"support@apidog.com\",\"APP_SCRIPT_MAIN_OBJECTS\",\"$\",\"SERVER_PROTOCOL\",\"http\",\"SERVER_HOST\",\"apidog-api-fordoc-svc\",\"DEFAULT_DOC_LAYOUT\",\"TwoColumn\",\"NOT_CUSTOM_DOMAIN_HOSTNAMES\",[43,44,45,46,47],\"www.apidog.com\",\"apidog.com\",\"www.apidog.io\",\"apidog.io\",\"share.apidog.com\",\"SERVER_REQUEST_TIMEOUT\",15000,\"IS_SHARED_DOC_INDEPENDENT_DOMAIN\",true,\"APIDOC_CUSTOM_DOMAIN_CNAME_REGEX\",[\"R\",\"\\\\d+\\\\.cname\\\\.apidog\\\\.com\",\"\"],\"IS_ALWAYS_USE_ORIGIN_FETCH\",false,\"routes/_index/route\",\"actionData\",\"errors\"]\n");</script><!--$?--><template id="B:1"></template><!--/$--></div><script>function $RC(a,b){a=document.getElementById(a);b=document.getElementById(b);b.parentNode.removeChild(b);if(a){a=a.previousSibling;var f=a.parentNode,c=a.nextSibling,e=0;do{if(c&&8===c.nodeType){var d=c.data;if("/$"===d)if(0===e)break;else e--;else"$"!==d&&"$?"!==d&&"$!"!==d||e++}d=c.nextSibling;f.removeChild(c);c=d}while(c);for(;b.firstChild;)f.insertBefore(b.firstChild,c);a.data="$";a._reactRetry&&a._reactRetry()}};$RC("B:0","S:0")</script><div hidden id="S:1"><script>window.__remixContext.streamController.close();</script></div><script>$RC("B:1","S:1")</script>

@@ -13,7 +13,7 @@ export interface ManagedFile {
   size: number
   source: 'upload' | 'generated'
   createdAt: number
-  metadata?: Record<string, any>
+  metadata?: DynamicValueMap
 }
 
 export const useFileManagement = () => {

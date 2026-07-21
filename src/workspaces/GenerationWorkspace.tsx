@@ -1,5 +1,5 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toDisplaySrc } from '@/platform/desktopApi'
 import MediaGenerator from '@/components/MediaGenerator'
 import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
@@ -13,7 +13,7 @@ import {
   useGenerationHistoryFilterStore,
   type GenerationHistoryMediaType,
 } from '@/stores/generationHistoryFilterStore.ts'
-import type { ImageEditState } from '@/components/ImageEditor'
+import type { ImageMarkSession } from '@/features/imageMark'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
@@ -187,7 +187,7 @@ const GenerationWorkspace: React.FC = () => {
     tasks,
     setTasks,
   })
-  const imageEditStatesRef = useRef<Map<string, ImageEditState>>(new Map())
+  const imageEditStatesRef = useRef<Map<string, ImageMarkSession>>(new Map())
   const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const setUploadedFilePathsRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const generationMessages = useMemo(() => {
@@ -297,13 +297,8 @@ const GenerationWorkspace: React.FC = () => {
     setCurrentImage(currentImageList[nextIndex])
     setIsEditorMode(false)
   }
-  const handleSaveImageEdit = (dataUrl: string, editState: ImageEditState) => {
-    const nextState: ImageEditState = {
-      ...editState,
-      imageId: dataUrl,
-      originalSrc: editState.originalSrc,
-    }
-    imageEditStatesRef.current.set(dataUrl, nextState)
+  const handleSaveImageEdit = (dataUrl: string, session: ImageMarkSession) => {
+    imageEditStatesRef.current.set(dataUrl, session)
     setCurrentImageList((prev) => {
       const next = [...prev]
       next[currentImageIndex] = dataUrl
@@ -361,6 +356,7 @@ const GenerationWorkspace: React.FC = () => {
   const [isVideoViewerOpen, setIsVideoViewerOpen] = useState(false)
   const [currentVideoUrl, setCurrentVideoUrl] = useState('')
   const [currentVideoPath, setCurrentVideoPath] = useState<string | undefined>(undefined)
+  const [currentVideoTrimRange, setCurrentVideoTrimRange] = useState<{ start: number; end: number } | undefined>(undefined)
   const [isAudioViewerOpen, setIsAudioViewerOpen] = useState(false)
   const [currentAudioUrl, setCurrentAudioUrl] = useState('')
   const [currentAudioPath, setCurrentAudioPath] = useState<string | undefined>(undefined)
@@ -427,14 +423,15 @@ const GenerationWorkspace: React.FC = () => {
   useEffect(() => {
     return () => clearFilterHideTimer()
   }, [clearFilterHideTimer])
-  const openVideoViewer = (url?: string, filePath?: string) => {
+  const openVideoViewer = (url?: string, filePath?: string, trimRange?: { start: number; end: number }) => {
     const rawUrl = typeof url === 'string' ? url : ''
     const normalizedFilePath = filePath ? splitMulti(filePath)[0] : undefined
     const normalizedUrl = normalizedFilePath
-      ? convertFileSrc(normalizedFilePath.replace(/\\/g, '/'))
+      ? toDisplaySrc(normalizedFilePath.replace(/\\/g, '/'))
       : (rawUrl ? (splitMulti(rawUrl)[0] ?? '') : '')
     setCurrentVideoUrl(normalizedUrl)
     setCurrentVideoPath(normalizedFilePath)
+    setCurrentVideoTrimRange(trimRange)
     setIsVideoViewerOpen(true)
   }
   const closeVideoViewer = () => {
@@ -442,7 +439,7 @@ const GenerationWorkspace: React.FC = () => {
     setCurrentVideoPath(undefined)
   }
   const openAudioViewer = (url?: string, filePath?: string) => {
-    setCurrentAudioUrl(url || (filePath ? convertFileSrc(filePath.replace(/\\/g, '/')) : ''))
+    setCurrentAudioUrl(url || (filePath ? toDisplaySrc(filePath.replace(/\\/g, '/')) : ''))
     setCurrentAudioPath(filePath)
     setIsAudioViewerOpen(true)
   }
@@ -545,6 +542,7 @@ const GenerationWorkspace: React.FC = () => {
               onUsePrompt={handleUsePrompt}
               onOpenImageViewer={(url, list, filePaths) => openImageViewer(url, list, filePaths, false)}
               onOpenVideoViewer={openVideoViewer}
+              notify={notify}
             />
           </div>
         </div>
@@ -593,7 +591,7 @@ const GenerationWorkspace: React.FC = () => {
         currentIndex={currentImageIndex}
         fromUpload={isFromUploadArea}
         isEditorMode={isEditorMode}
-        initialEditState={imageEditStatesRef.current.get(currentImage)}
+        initialMarkSession={imageEditStatesRef.current.get(currentImage)}
         onClose={closeImageViewer}
         onNavigate={navigateImage}
         onEnterEditor={() => setIsEditorMode(true)}
@@ -605,6 +603,7 @@ const GenerationWorkspace: React.FC = () => {
         open={isVideoViewerOpen}
         videoUrl={currentVideoUrl}
         filePath={currentVideoPath}
+        trimRange={currentVideoTrimRange}
         onClose={closeVideoViewer}
         onDownload={(filePath) => void handleDownloadFromViewer(filePath)}
       />

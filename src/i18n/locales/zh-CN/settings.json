@@ -5,6 +5,7 @@
   "apiKeys": {
     "title": "API 密钥设置",
     "description": "配置各个服务提供商的 API 密钥。密钥将安全地存储在本地。",
+    "migrationHint": "Electron 版本会使用新的安全密钥存储；如果从旧 Tauri 版本切换后密钥显示为空，请重新填写一次。",
     "visibility": {
       "show": "显示",
       "hide": "隐藏"
@@ -175,7 +176,17 @@
       "uploadFilenameTitleLabel": "上传节点使用文件名作为标题",
       "storyboardKeepStyleLabel": "分镜生成保持与参考图风格一致",
       "storyboardNoTextLabel": "分镜生成禁止生成描述文字",
-      "ignoreAtTagLabel": "复制与生成时忽略 @图 标记"
+      "storyboardAutoInferEmptyFrameLabel": "分镜格子留空时自动推测内容",
+      "storyboardAutoInferEmptyFrameHint": "开启后，未填写描述的分镜格子会在提示词中补充“依据之前的内容进行推测”，交给模型自动续写",
+      "ignoreAtTagLabel": "复制与生成时忽略 @图 标记",
+      "lodLabel": "缩小画布时简化绘制",
+      "lodHint": "缩小到阈值以下时，节点正文换为轻量骨架、媒体缩略图降档，保持缩放平移流畅。细节优先只在极小倍率简化，性能优先更早简化，关闭则始终完整绘制。",
+      "lodOptions": {
+        "off": "关闭",
+        "detail": "细节优先",
+        "balanced": "平衡（推荐）",
+        "performance": "性能优先"
+      }
     },
     "promptOptimization": {
       "title": "提示词优化",
@@ -222,6 +233,11 @@
       "collapseDelayHint": "鼠标离开面板后等待多久自动折叠",
       "collapseOnScrollLabel": "仅滚动时折叠",
       "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠"
+    },
+    "assetLibrary": {
+      "title": "资产库行为", "tabAction": "标题栏点击行为", "floating": "打开悬浮面板", "workspace": "进入完整工作区",
+      "panelPosition": "悬浮面板位置", "top": "顶部", "left": "左侧", "right": "右侧",
+      "edgeTrigger": "启用鼠标触边唤起", "edgeHint": "画布交互和按键拖动期间不会触发", "triggerEdge": "触发边缘", "delay": "触发延迟（{{value}} ms）"
     },
     "theme": {
       "title": "主题外观",
@@ -271,6 +287,17 @@
         "panel": "面板底色",
         "layer": "层级底色"
       }
+    },
+    "largeUpload": {
+      "title": "大文件处理",
+      "description": "上传本地视频/音频时，100MB 及以下的文件总是复制到数据目录；超过 100MB 的文件按此策略处理。",
+      "strategyLabel": "超过 100MB 时",
+      "options": {
+        "ask": "每次询问",
+        "copy": "复制到数据目录",
+        "reference": "直接引用原文件"
+      },
+      "hint": "引用原文件不产生副本、上传更快，但移动或删除原文件会导致画布中的媒体失效。"
     },
     "upload": {
       "title": "通用文件上传服务",

@@ -1,7 +1,4 @@
-import { createLogger } from '@/core/logging'
 import { calculateProgress } from './progress'
-
-const logger = createLogger('utils.polling')
 
 /**
  * 通用轮询配置

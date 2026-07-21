@@ -26,6 +26,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.imageModelSelector]: '图片模型选择器',
   [CANVAS_NODE_TYPES.videoModelSelector]: '视频模型选择器',
   [CANVAS_NODE_TYPES.audioModelSelector]: '音频模型选择器',
+  [CANVAS_NODE_TYPES.cameraStage]: '3D 镜头参考',
 };
 
 export const EXPORT_RESULT_DISPLAY_NAME: Record<ExportImageNodeResultKind, string> = {

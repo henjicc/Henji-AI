@@ -59,15 +59,21 @@ polling: {
 - 视频会按时长做简单放大
 - 音频会按文本长度做简单放大
 
-## 开发期种子导出
+## 开发期 seeds 生成
 
-如果你本机已经积累了一些样本，可以导出本地默认值：
+如果更新了基础 seeds，重新生成打包资源：
 
 ```bash
-npm run progress:export-seeds
+npm run gen:progress-seeds
 ```
 
-导出文件位置：
+基础 seeds 文件位置：
+
+```text
+resources/progress-seeds.base.json
+```
+
+本地覆盖文件位置：
 
 ```text
 dev-data/progress-seeds.local.json
@@ -76,9 +82,11 @@ dev-data/progress-seeds.local.json
 后续执行以下命令时，会自动把这个本地文件合并进最终打包资源：
 
 - `npm run dev`
-- `npm run build`
-- `npm run tauri:dev`
-- `npm run tauri:build`
+- `npm run electron:dev`
+- `npm run electron:build`
+- `npm run electron:dist`
+
+当前生成产物落在 `resources/progress-seeds.json`，Electron 打包会把它复制到随包资源中。`resources/progress-seeds.json` 是自动生成产物，不手写提交。
 
 ## 建议
 

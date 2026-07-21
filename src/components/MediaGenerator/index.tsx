@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { getAvailableProviders, getModelInfo } from '@/utils/modelHelpers'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import PresetPanel from '@/components/PresetPanel'
+import { VideoTrimModal } from '@/components/videoTrim/VideoTrimModal'
+import { saveUploadVideo } from '@/utils/save'
 
 import { useUIState } from './state/useUIState'
 import { useModelState } from './state/useModelState'
@@ -26,7 +28,7 @@ import { validateGenerationRequirements } from '@/core/validation/modelRequireme
 import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
 
 interface MediaGeneratorProps {
-  onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: unknown) => void | Promise<void>
+  onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: DynamicValue) => void | Promise<void>
   isLoading: boolean
   onOpenClearHistory: () => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -101,6 +103,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       maxSizeMB: inputLimits.videoConstraints.maxSizeMB
     }
     : undefined
+  const videoTrimMaxClipSeconds = inputLimits.videoConstraints?.trim?.maxClipSeconds
+  const videoTrimMaxSizeMB = inputLimits.videoConstraints?.maxSizeMB
+  const [videoTrimState, setVideoTrimState] = useState<{ index: number; file: File; previewUrl: string } | null>(null)
 
   // 3. 模型可见性管理
   useModelVisibility(
@@ -127,8 +132,24 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uiState.setUploadedVideoFilePaths,
     uiState.showAlert,
     videoValidationOptions,
-    uiState.setUploadedVideoDuration
+    uiState.setUploadedVideoDuration,
+    uiState.setUploadedVideoTrimStart,
+    uiState.setUploadedVideoTrimEnd
   )
+
+  const handleVideoTrim = (index: number): void => {
+    const videoFile = uiState.uploadedVideoFiles[index]
+    if (!videoFile) return
+    // 打开窗口不落盘：用 object URL 直接预览。完整视频本身不会因为裁剪而被替换，
+    // 确认裁剪只保存 [start, end] 选区，真正切片推迟到生成提交时才做。
+    // file 保留在 state 里是为了确认时按需压缩（需要真实文件路径，通过 resolveSource 懒获取）。
+    setVideoTrimState({ index, file: videoFile, previewUrl: URL.createObjectURL(videoFile) })
+  }
+
+  const handleVideoTrimConfirm = (range: { start: number; end: number }): void => {
+    uiState.setUploadedVideoTrimStart(range.start)
+    uiState.setUploadedVideoTrimEnd(range.end)
+  }
 
   const audioUpload = useAudioUpload(
     uiState.setUploadedAudios,
@@ -148,7 +169,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uiState.uploadedFilePaths,
     uiState.uploadedVideoFilePaths,
     uiState.uploadedAudioFilePaths,
-    onGenerate
+    onGenerate,
+    uiState.uploadedVideoTrimStart,
+    uiState.uploadedVideoTrimEnd
   )
 
   // 获取当前选择的供应商和模型
@@ -177,13 +200,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uiState.setUploadedFilePaths(prev => prev.slice(0, maxImageCount))
       uiState.setFileOrder(prev => prev.filter(item => item.type !== 'image' || item.index < maxImageCount))
     }
-  }, [
-    maxImageCount,
-    uiState.uploadedImages.length,
-    uiState.setFileOrder,
-    uiState.setUploadedFilePaths,
-    uiState.setUploadedImages
-  ])
+  }, [maxImageCount, uiState.uploadedImages.length, uiState.setFileOrder, uiState.setUploadedFilePaths, uiState.setUploadedImages, uiState])
 
   useEffect(() => {
     if (maxVideoCount === 0 && uiState.uploadedVideos.length > 0) {
@@ -204,15 +221,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         uiState.setUploadedVideoDuration(0)
       }
     }
-  }, [
-    maxVideoCount,
-    uiState.uploadedVideos.length,
-    uiState.setFileOrder,
-    uiState.setUploadedVideos,
-    uiState.setUploadedVideoFiles,
-    uiState.setUploadedVideoFilePaths,
-    uiState.setUploadedVideoDuration
-  ])
+  }, [maxVideoCount, uiState.uploadedVideos.length, uiState.setFileOrder, uiState.setUploadedVideos, uiState.setUploadedVideoFiles, uiState.setUploadedVideoFilePaths, uiState.setUploadedVideoDuration, uiState])
 
   useEffect(() => {
     if (maxAudioCount === 0 && uiState.uploadedAudios.length > 0) {
@@ -227,13 +236,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       uiState.setUploadedAudioFilePaths(prev => prev.slice(0, maxAudioCount))
       uiState.setFileOrder(prev => prev.filter(item => item.type !== 'audio' || item.index < maxAudioCount))
     }
-  }, [
-    maxAudioCount,
-    uiState.uploadedAudios.length,
-    uiState.setFileOrder,
-    uiState.setUploadedAudioFilePaths,
-    uiState.setUploadedAudios
-  ])
+  }, [maxAudioCount, uiState.uploadedAudios.length, uiState.setFileOrder, uiState.setUploadedAudioFilePaths, uiState.setUploadedAudios, uiState])
 
   // 6. 暴露 setter 给父组件
   useEffect(() => {
@@ -311,7 +314,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const inputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
 
   // 9. 预设加载处理
-  const handleLoadPreset = (presetData: Record<string, unknown>) => {
+  const handleLoadPreset = (presetData: DynamicValueMap) => {
     const params = PresetManager.loadPreset(presetData, uiState.selectedModel)
     Object.entries(params).forEach(([key, value]) => {
       modelState.setParam(key, value)
@@ -427,6 +430,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         )}
         onDragStateChange={imageUpload.setIsDraggingImage}
         onVideoReplace={videoUpload.handleVideoReplace}
+        onVideoTrim={videoTrimMaxClipSeconds ? (index) => void handleVideoTrim(index) : undefined}
         onAudioReplace={audioUpload.handleAudioReplace}
         onVideoClick={(videoUrl: string) => {
           const index = uiState.uploadedVideos.indexOf(videoUrl)
@@ -454,6 +458,33 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       promptTextareaRef={promptTextareaRef}
       onGenerate={handleGenerate}
     />
+
+      {videoTrimState && videoTrimMaxClipSeconds && (
+        <VideoTrimModal
+          open
+          previewUrl={videoTrimState.previewUrl}
+          maxClipSeconds={videoTrimMaxClipSeconds}
+          maxSizeMB={videoTrimMaxSizeMB}
+          resolveSource={async () => {
+            const saved = await saveUploadVideo(videoTrimState.file, 'persist')
+            return saved.fullPath
+          }}
+          initialRange={
+            uiState.uploadedVideoTrimStart !== null && uiState.uploadedVideoTrimEnd !== null
+              ? { start: uiState.uploadedVideoTrimStart, end: uiState.uploadedVideoTrimEnd }
+              : null
+          }
+          onConfirm={handleVideoTrimConfirm}
+          onVideoCompressed={(newPath) => {
+            // 完整视频已被压缩成新文件：更新引用，让后续生成提交直接用这个压缩版本
+            uiState.setUploadedVideoFilePaths([newPath])
+          }}
+          onClose={() => {
+            URL.revokeObjectURL(videoTrimState.previewUrl)
+            setVideoTrimState(null)
+          }}
+        />
+      )}
 
       {/* 底部工具栏：按钮 + 价格估算 */}
       <div className="mt-2.5 flex items-center justify-between border-t border-zinc-800/70 px-1 pt-2.5">
@@ -483,8 +514,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           <PromptOptimizeButton
             prompt={uiState.input}
             uploadedImages={uiState.uploadedImages}
+            uploadedFilePaths={uiState.uploadedFilePaths}
             uploadedVideos={uiState.uploadedVideos}
             uploadedVideoFiles={uiState.uploadedVideoFiles}
+            uploadedVideoFilePaths={uiState.uploadedVideoFilePaths}
             targetModel={{
               providerId: uiState.selectedProvider,
               providerName: currentProvider?.name,

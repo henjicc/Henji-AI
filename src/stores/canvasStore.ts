@@ -17,6 +17,10 @@ import {
   EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
   EXPORT_RESULT_NODE_MIN_HEIGHT,
   EXPORT_RESULT_NODE_MIN_WIDTH,
+  MODEL_SELECTOR_COLLAPSED_DEFAULT_HEIGHT,
+  MODEL_SELECTOR_COLLAPSED_DEFAULT_WIDTH,
+  MODEL_SELECTOR_EXPANDED_DEFAULT_HEIGHT,
+  MODEL_SELECTOR_EXPANDED_DEFAULT_WIDTH,
   type ActiveToolDialog,
   type CanvasEdge,
   type CanvasNode,
@@ -33,15 +37,22 @@ import {
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry';
 import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
-import { migrateGenerationNodeData } from '@/features/canvas/domain/nodeMigrations';
+import {
+  migrateGenerationNodeData,
+  migrateLegacyTargetHandle,
+  resetTransientNodeRuntimeState,
+} from '@/features/canvas/domain/nodeMigrations';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { canvasNodeFactory } from '@/features/canvas/application/canvasServices';
 import {
   ensureAtLeastOneMinEdge,
+  resolveAdaptiveAutoFitSize,
   resolveMinEdgeFittedSize,
   resolveSizeInsideTargetBox,
 } from '@/features/canvas/application/imageNodeSizing';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
+import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
+import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 
 export type {
   ActiveToolDialog,
@@ -124,6 +135,9 @@ interface CanvasState {
   ) => string | null;
 
   updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;
+  /** 模型选择器节点展开/折叠专用：collapsedWidth 由组件按当前选中模型 chip 的实测内容宽度传入，
+   * 让折叠态节点尺寸精确收紧到内容可容纳的最小宽度，而不是固定常量。 */
+  setModelSelectorExpanded: (nodeId: string, isExpanded: boolean, collapsedWidth?: number) => void;
   setNodeGenerationProgress: (nodeId: string, progress: number | null) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateStoryboardFrame: (
@@ -158,7 +172,7 @@ interface CanvasState {
   clearCanvas: () => void;
 }
 
-function normalizeHandleId(value: unknown): string | undefined {
+function normalizeHandleId(value: DynamicValue): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -181,14 +195,18 @@ function normalizeEdgesWithNodes(rawEdges: CanvasEdge[], nodes: CanvasNode[]): C
       }
       return nodeHasSourceHandle(sourceNode.type) && nodeHasTargetHandle(targetNode.type);
     })
-    .map((edge) => ({
-      ...edge,
-      type: edge.type ?? 'disconnectableEdge',
-      sourceHandle:
-        normalizeHandleId((edge as CanvasEdge & { sourceHandle?: unknown }).sourceHandle) ?? 'source',
-      targetHandle:
-        normalizeHandleId((edge as CanvasEdge & { targetHandle?: unknown }).targetHandle) ?? 'target',
-    }));
+    .map((edge) => {
+      const targetNode = nodeMap.get(edge.target) as CanvasNode;
+      const rawTargetHandle =
+        normalizeHandleId((edge as CanvasEdge & { targetHandle?: DynamicValue }).targetHandle) ?? 'target';
+      return {
+        ...edge,
+        type: edge.type ?? 'disconnectableEdge',
+        sourceHandle:
+          normalizeHandleId((edge as CanvasEdge & { sourceHandle?: DynamicValue }).sourceHandle) ?? 'source',
+        targetHandle: migrateLegacyTargetHandle(targetNode, rawTargetHandle),
+      };
+    });
 }
 
 function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
@@ -209,7 +227,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         const firstFrameAspectRatio = frames.find((frame) => typeof frame.aspectRatio === 'string')
           ?.aspectRatio;
         const normalizedFrameAspectRatio =
-          (typeof (mergedData as { frameAspectRatio?: unknown }).frameAspectRatio === 'string'
+          (typeof (mergedData as { frameAspectRatio?: DynamicValue }).frameAspectRatio === 'string'
             ? (mergedData as { frameAspectRatio?: string }).frameAspectRatio
             : null) ??
           firstFrameAspectRatio ??
@@ -247,20 +265,18 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         node.type === CANVAS_NODE_TYPES.imageEdit
         || node.type === CANVAS_NODE_TYPES.storyboardGen
       ) {
-        migrateGenerationNodeData(mergedData as Record<string, unknown>);
+        migrateGenerationNodeData(mergedData as DynamicValueMap);
       }
 
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
         mergedData.aspectRatio = DEFAULT_ASPECT_RATIO;
       }
 
-      // Generation tasks do not survive app reload, reset transient generating state.
-      if ('isGenerating' in mergedData && mergedData.isGenerating) {
-        mergedData.isGenerating = false;
-        if ('generationStartedAt' in mergedData) {
-          mergedData.generationStartedAt = null;
-        }
-      }
+      // 后台任务不会跨应用重启恢复，统一清理节点内持久化的瞬时运行态。
+      resetTransientNodeRuntimeState(
+        node.type as CanvasNodeType,
+        mergedData as DynamicValueMap
+      );
 
       return {
         ...node,
@@ -334,7 +350,19 @@ function getNodeSize(node: CanvasNode): { width: number; height: number } {
 function isImageAutoResizableType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.upload
     || type === CANVAS_NODE_TYPES.imageEdit
-    || type === CANVAS_NODE_TYPES.exportImage;
+    || type === CANVAS_NODE_TYPES.exportImage
+    || type === CANVAS_NODE_TYPES.videoUpload;
+}
+
+function isModelSelectorNodeType(type: CanvasNodeType): boolean {
+  return type === CANVAS_NODE_TYPES.imageModelSelector
+    || type === CANVAS_NODE_TYPES.videoModelSelector
+    || type === CANVAS_NODE_TYPES.audioModelSelector;
+}
+
+/** 上传类节点（图片/视频）始终按当前尺寸自适应重新贴合，不受手动调整锁定影响 */
+function isAdaptiveUploadNodeType(type: CanvasNodeType): boolean {
+  return type === CANVAS_NODE_TYPES.upload || type === CANVAS_NODE_TYPES.videoUpload;
 }
 
 function withManualSizeLock(node: CanvasNode): CanvasNode {
@@ -414,47 +442,84 @@ function resolveDerivedAspectRatio(
   return imageLikeAspect || fallbackAspectRatio;
 }
 
-function maybeApplyImageAutoResize(node: CanvasNode, patch: Partial<CanvasNodeData>): CanvasNode {
+/**
+ * node 为补丁应用前的原始节点，mergedData 为已合并的新数据。
+ * 上传类节点（图片/视频）每次内容变化都会重新计算尺寸：
+ * - 首次上传内容为空 -> 参考尺寸退化为最小尺寸，结果即为最小可拖拽尺寸
+ * - 重新上传已有内容 -> 参考尺寸取节点当前尺寸，按新比例自适应贴合，不低于最小可拖拽尺寸
+ * 其余类型（AI 编辑结果、导出结果）维持原有“手动调整后锁定”行为。
+ */
+function maybeApplyImageAutoResize(
+  node: CanvasNode,
+  mergedData: CanvasNodeData,
+  patch: Partial<CanvasNodeData>
+): CanvasNode {
   if (!isImageAutoResizableType(node.type)) {
-    return node;
+    return { ...node, data: mergedData };
   }
 
-  const nodeData = node.data as CanvasNodeData & {
+  const previousData = node.data as CanvasNodeData & {
     imageUrl?: string | null;
+    videoUrl?: string | null;
+  };
+  const nextData = mergedData as CanvasNodeData & {
+    imageUrl?: string | null;
+    videoUrl?: string | null;
     aspectRatio?: string;
     isSizeManuallyAdjusted?: boolean;
   };
   const patchData = patch as Partial<CanvasNodeData> & {
     imageUrl?: string | null;
+    videoUrl?: string | null;
     aspectRatio?: string;
-    isSizeManuallyAdjusted?: boolean;
   };
 
-  const hasImageRelatedChange = 'imageUrl' in patchData || 'previewImageUrl' in patchData || 'aspectRatio' in patchData;
-  if (!hasImageRelatedChange) {
-    return node;
+  const hasMediaRelatedChange = 'imageUrl' in patchData
+    || 'videoUrl' in patchData
+    || 'previewImageUrl' in patchData
+    || 'aspectRatio' in patchData;
+  if (!hasMediaRelatedChange) {
+    return { ...node, data: mergedData };
   }
 
-  const isSizeManuallyAdjusted = patchData.isSizeManuallyAdjusted ?? nodeData.isSizeManuallyAdjusted ?? false;
-  if (isSizeManuallyAdjusted) {
-    return node;
+  const isAdaptiveUploadType = isAdaptiveUploadNodeType(node.type);
+  if (nextData.isSizeManuallyAdjusted && !isAdaptiveUploadType) {
+    return { ...node, data: mergedData };
   }
 
-  const nextImageUrl = patchData.imageUrl ?? nodeData.imageUrl;
-  if (typeof nextImageUrl !== 'string' || nextImageUrl.trim().length === 0) {
-    return node;
+  // 上传类节点只要新比例到位就立即重新适配，不必等真正的图片/视频地址落地——
+  // 否则会先维持旧尺寸，等地址写入后才突然跳变，产生明显的“慢半拍”感。
+  // 其余类型（AI 编辑结果、导出结果）仍要求地址已写入才计算尺寸。
+  const readyToResize = isAdaptiveUploadType
+    ? 'aspectRatio' in patchData
+    : typeof nextData.imageUrl === 'string' && nextData.imageUrl.trim().length > 0;
+  if (!readyToResize) {
+    return { ...node, data: mergedData };
   }
 
-  const nextAspectRatio = patchData.aspectRatio ?? nodeData.aspectRatio ?? DEFAULT_ASPECT_RATIO;
-  const nextSize = node.type === CANVAS_NODE_TYPES.exportImage
-    ? resolveAutoImageNodeDimensions(nextAspectRatio, {
-      minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
-      minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
-    })
-    : resolveAutoImageNodeDimensions(nextAspectRatio);
+  const nextAspectRatio = nextData.aspectRatio ?? DEFAULT_ASPECT_RATIO;
+
+  let nextSize: { width: number; height: number };
+  if (isAdaptiveUploadType) {
+    const previousContentUrl = previousData.imageUrl ?? previousData.videoUrl;
+    const hadExistingContent = typeof previousContentUrl === 'string' && previousContentUrl.trim().length > 0;
+    const baseConstraints = { minWidth: EXPORT_RESULT_NODE_MIN_WIDTH, minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT };
+    const referenceSize = hadExistingContent
+      ? getNodeSize(node)
+      : { width: baseConstraints.minWidth, height: baseConstraints.minHeight };
+    nextSize = resolveAdaptiveAutoFitSize(nextAspectRatio, referenceSize, baseConstraints);
+  } else {
+    nextSize = node.type === CANVAS_NODE_TYPES.exportImage
+      ? resolveAutoImageNodeDimensions(nextAspectRatio, {
+        minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
+        minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
+      })
+      : resolveAutoImageNodeDimensions(nextAspectRatio);
+  }
 
   return {
     ...node,
+    data: mergedData,
     width: nextSize.width,
     height: nextSize.height,
     style: {
@@ -520,7 +585,10 @@ function resolveSelectedNodeId(selectedNodeId: string | null, nodes: CanvasNode[
   if (!selectedNodeId) {
     return null;
   }
-  return nodes.some((node) => node.id === selectedNodeId) ? selectedNodeId : null;
+  // 这两个 resolve 函数总是在同一次 set() 里用同一份 nodes 引用各调一次；
+  // 复用 getNodeIndexById 的单槎缓存，O(n) 建一次索引比两次各自 O(n) 的 .some() 扫描更省，
+  // 且建好的索引能被同一帧内其他消费者（如 DisconnectableEdge 的 selector）直接复用。
+  return getNodeIndexById(nodes).has(selectedNodeId) ? selectedNodeId : null;
 }
 
 function resolveActiveToolDialog(
@@ -530,7 +598,7 @@ function resolveActiveToolDialog(
   if (!activeToolDialog) {
     return null;
   }
-  return nodes.some((node) => node.id === activeToolDialog.nodeId) ? activeToolDialog : null;
+  return getNodeIndexById(nodes).has(activeToolDialog.nodeId) ? activeToolDialog : null;
 }
 
 function createDefaultStoryboardExportOptions(): StoryboardExportOptions {
@@ -1092,7 +1160,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
 
         const hasDataChange = Object.entries(data).some(([key, nextValue]) => {
-          const previousValue = (node.data as Record<string, unknown>)[key];
+          const previousValue = (node.data as DynamicValueMap)[key];
           return !Object.is(previousValue, nextValue);
         });
         if (!hasDataChange) {
@@ -1103,16 +1171,66 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ...node.data,
           ...data,
         } as CanvasNodeData;
-        const resizedNode = maybeApplyImageAutoResize(
-          {
-            ...node,
-            data: mergedData,
-          },
-          data
-        );
+        const resizedNode = maybeApplyImageAutoResize(node, mergedData, data);
 
         changed = true;
         return resizedNode;
+      });
+
+      if (!changed) {
+        return {};
+      }
+
+      // 模型切换后旧参数端口（含媒体端口）可能不复存在，回收已失效的连线，
+      // 避免连线在画布上视觉悬空、指向一个已不再渲染的端口。
+      let nextEdges = state.edges;
+      if ('modelId' in data) {
+        const targetNode = nextNodes.find((node) => node.id === nodeId);
+        if (targetNode) {
+          const staleEdgeIds = new Set(findStaleParamEdgeIds(targetNode, nextNodes, state.edges));
+          if (staleEdgeIds.size > 0) {
+            nextEdges = state.edges.filter((edge) => !staleEdgeIds.has(edge.id));
+          }
+        }
+      }
+
+      return {
+        nodes: nextNodes,
+        edges: nextEdges,
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+      };
+    });
+  },
+
+  setModelSelectorExpanded: (nodeId, isExpanded, collapsedWidth) => {
+    set((state) => {
+      let changed = false;
+      const nextNodes = state.nodes.map((node) => {
+        if (node.id !== nodeId || !isModelSelectorNodeType(node.type)) {
+          return node;
+        }
+        if (Boolean((node.data as { isExpanded?: boolean }).isExpanded) === isExpanded) {
+          return node;
+        }
+
+        changed = true;
+        const mergedData = { ...node.data, isExpanded } as CanvasNodeData;
+        const width = isExpanded
+          ? MODEL_SELECTOR_EXPANDED_DEFAULT_WIDTH
+          : Math.round(collapsedWidth ?? MODEL_SELECTOR_COLLAPSED_DEFAULT_WIDTH);
+        const height = isExpanded ? MODEL_SELECTOR_EXPANDED_DEFAULT_HEIGHT : MODEL_SELECTOR_COLLAPSED_DEFAULT_HEIGHT;
+
+        return {
+          ...node,
+          data: mergedData,
+          width,
+          height,
+          style: { ...(node.style ?? {}), width, height },
+        };
       });
 
       if (!changed) {

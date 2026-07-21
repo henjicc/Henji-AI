@@ -5,6 +5,5 @@
  */
 
 export { panelRegistry } from './PanelRegistry'
-export { registerDefaultPanels } from './registerDefaultPanels'
 export { validatePanelConfig, isValidPanelType } from './validatePanelConfig'
 export type { ValidationResult } from './validatePanelConfig'

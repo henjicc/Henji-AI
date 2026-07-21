@@ -32,6 +32,11 @@
     "generate": "生成",
     "emptyHintTitle": "双击鼠标添加节点",
     "emptyHintSubtitle": "Double-click to add a node",
+    "connection": {
+      "typeMismatch": "连接类型不对，请连接到匹配的输入行",
+      "mediaLimitExceeded": "{{media}}最多只能连接 {{max}} 个",
+      "mediaFallback": "媒体"
+    },
     "toolbar": {
       "zoomIn": "放大",
       "zoomOut": "缩小",
@@ -41,8 +46,7 @@
     }
   },
   "tool": {
-    "crop": "裁剪",
-    "annotate": "标注",
+    "edit": "编辑",
     "split": "切割"
   },
   "toolDialog": {
@@ -51,14 +55,15 @@
     "processFailed": "处理失败",
     "processing": "处理中...",
     "apply": "应用",
-    "cropResultTitle": "裁剪结果",
-    "annotateResultTitle": "标注结果"
+    "editResultTitle": "编辑结果"
   },
   "nodeToolbar": {
     "reupload": "重新上传",
     "copy": "复制",
     "copyText": "复制文本",
     "download": "下载",
+    "outputImage": "输出图片",
+    "outputVideo": "输出视频",
     "ungroup": "解散",
     "saveAs": "另存为...",
     "noDownloadPresetPathsHint": "暂无预设路径，请在设置 - 通用中添加",
@@ -68,7 +73,13 @@
     "autoAspectRatio": "自动",
     "quality": "画质",
     "aspectRatio": "比例",
-    "title": "参数"
+    "title": "参数",
+    "searchPlaceholder": "搜索模型名称、供应商或描述",
+    "clearSearch": "清空搜索",
+    "allProviders": "全部",
+    "noModels": "没有匹配的模型",
+    "expand": "展开",
+    "collapse": "收起"
   },
   "node": {
     "menu": {
@@ -87,13 +98,19 @@
       "booleanSource": "开关",
       "imageModelSelector": "图片模型选择器",
       "videoModelSelector": "视频模型选择器",
-      "audioModelSelector": "音频模型选择器"
+      "audioModelSelector": "音频模型选择器",
+      "cameraStage": "3D 镜头参考"
     },
     "mediaRow": {
       "image": "图片",
       "video": "视频",
       "audio": "音频",
-      "upload": "上传"
+      "upload": "上传",
+      "videoTrim": "裁剪",
+      "videoTrimTitle": "裁剪视频片段",
+      "videoTrimProcessing": "处理中…",
+      "videoTrimReadFailed": "读取视频信息失败",
+      "videoTrimFailed": "视频处理失败"
     },
     "modelRow": {
       "label": "模型",
@@ -146,13 +163,30 @@
     },
     "videoNode": {
       "uploadHint": "点击或拖拽上传视频",
-      "waitingResult": "等待输出结果视频"
+      "waitingResult": "等待输出结果视频",
+      "play": "播放"
     },
     "audioNode": {
       "uploadHint": "点击或拖拽上传音频",
       "waitingResult": "等待输出结果音频",
       "play": "播放",
-      "pause": "暂停"
+      "pause": "暂停",
+      "openViewer": "打开音频预览"
+    },
+    "cameraStage": {
+      "previewAlt": "当前帧预览",
+      "empty": "打开 3D 镜头参考开始搭建",
+      "preparing": "正在准备渲染场景",
+      "rendering": "视频渲染中 {{progress}}%",
+      "encoding": "视频编码中 {{progress}}%",
+      "renderFailed": "视频渲染失败",
+      "open": "打开 3D 镜头参考",
+      "openHint": "双击打开 3D 镜头参考",
+      "openBlockedRendering": "视频渲染中，暂不可打开",
+      "imageResultTitle": "3D 镜头参考图片",
+      "videoResultTitle": "3D 镜头参考视频",
+      "imageOutput": "图片输出",
+      "videoOutput": "视频输出"
     }
   },
   "viewer": {

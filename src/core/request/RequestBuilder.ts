@@ -29,7 +29,7 @@ export interface BuildResult {
   /**
    * 请求体
    */
-  body: Record<string, any>
+  body: DynamicValueMap
 }
 
 /**
@@ -49,7 +49,7 @@ export interface BuildOptions {
   /**
    * 自定义上下文
    */
-  context?: Record<string, any>
+  context?: DynamicValueMap
 
   /**
    * 参数流转追踪器（可选）
@@ -84,7 +84,7 @@ export class RequestBuilder {
    */
   async build(
     modelId: string,
-    params: Record<string, any>,
+    params: DynamicValueMap,
     options: BuildOptions = {}
   ): Promise<BuildResult> {
     const { debug = false, validate: _validate = true, context = {}, tracker } = options
@@ -138,8 +138,8 @@ export class RequestBuilder {
    */
   private async buildWithNewConfig(
     model: ModelDefinition,
-    params: Record<string, any>,
-    context: Record<string, any>,
+    params: DynamicValueMap,
+    context: DynamicValueMap,
     debug: boolean,
     tracker?: ParamFlowTracker
   ): Promise<BuildResult> {
@@ -154,7 +154,7 @@ export class RequestBuilder {
     }
 
     // 3. 构建请求体
-    let body: Record<string, any> = {}
+    let body: DynamicValueMap = {}
 
     // 3.0 如果模型定义了 request.builder，优先使用它
     if (model.request?.builder && typeof model.request.builder === 'function') {
@@ -259,8 +259,8 @@ export class RequestBuilder {
   }
 
   private buildEndpointSelectContext(
-    params: Record<string, any>,
-    context: Record<string, any>
+    params: DynamicValueMap,
+    context: DynamicValueMap
   ): SelectContext {
     const next: SelectContext = { ...(context || {}) }
 
@@ -296,14 +296,14 @@ export class RequestBuilder {
    */
   private mapParam(
     paramDef: ParamDef,
-    value: any,
+    value: DynamicValue,
     endpointKey: string,
-    allParams: Record<string, any>,
+    allParams: DynamicValueMap,
     debug: boolean
-  ): Record<string, any> {
+  ): DynamicValueMap {
     // 1. apiMapping（端点相关映射）
-    if ('apiMapping' in paramDef && (paramDef as any).apiMapping?.[endpointKey]) {
-      const mapping = (paramDef as any).apiMapping[endpointKey]
+    if ('apiMapping' in paramDef && (paramDef as DynamicValue).apiMapping?.[endpointKey]) {
+      const mapping = (paramDef as DynamicValue).apiMapping[endpointKey]
       if (debug) {
         logger.info(`[RequestBuilder] Using apiMapping for ${paramDef.id} at endpoint ${endpointKey}`)
       }
@@ -315,7 +315,7 @@ export class RequestBuilder {
       if (debug) {
         logger.info(`[RequestBuilder] Using apiTransform for ${paramDef.id}`)
       }
-      return (paramDef as any).apiTransform(value, allParams)
+      return (paramDef as DynamicValue).apiTransform(value, allParams)
     }
 
     // 3. apiField（简单映射）
@@ -340,7 +340,7 @@ export class RequestBuilder {
    * @param type - 目标类型
    * @returns 转换后的值
    */
-  private convertType(value: any, type: string | undefined): any {
+  private convertType(value: DynamicValue, type: string | undefined): DynamicValue {
     switch (type) {
       case 'number':
         return Number(value)
@@ -363,8 +363,8 @@ export class RequestBuilder {
    */
   private buildWithOldConfig(
     modelId: string,
-    _params: Record<string, any>,
-    _context: Record<string, any>
+    _params: DynamicValueMap,
+    _context: DynamicValueMap
   ): BuildResult {
     logger.warn(`[RequestBuilder] Using legacy builder for: ${modelId}`)
     logger.warn('[RequestBuilder] Legacy builder integration not implemented yet')

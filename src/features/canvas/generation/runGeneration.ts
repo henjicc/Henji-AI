@@ -19,7 +19,7 @@ export interface CanvasGenerationUpstream {
 export interface CanvasGenerationRequest {
   modelId: string;
   mediaType?: CanvasMediaType;
-  params: Record<string, unknown>;
+  params: DynamicValueMap;
   /** @deprecated 请使用 upstream.images */
   referenceImages?: string[];
   /** 上游节点输出的媒体输入（按协议键注入生成参数） */
@@ -72,7 +72,7 @@ export function resolveCanvasModelId(inputModelId: string, mediaType: CanvasMedi
   return models[0].meta.id;
 }
 
-function extractTaskIdFromMetadata(metadata: Record<string, unknown> | undefined): string | undefined {
+function extractTaskIdFromMetadata(metadata: DynamicValueMap | undefined): string | undefined {
   if (!metadata) return undefined;
   const direct = metadata.task_id ?? metadata.taskId ?? metadata.request_id ?? metadata.requestId;
   if (typeof direct === 'string' && direct.trim().length > 0) {
@@ -80,7 +80,7 @@ function extractTaskIdFromMetadata(metadata: Record<string, unknown> | undefined
   }
   const task = metadata.task;
   if (task && typeof task === 'object') {
-    const taskRecord = task as Record<string, unknown>;
+    const taskRecord = task as DynamicValueMap;
     const nested = taskRecord.task_id ?? taskRecord.taskId ?? taskRecord.request_id ?? taskRecord.requestId;
     if (typeof nested === 'string' && nested.trim().length > 0) {
       return nested.trim();
@@ -147,7 +147,7 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
   const generationService = GenerationService.getInstance();
   const handleProgress = createThrottledProgressHandler(request.onProgress);
 
-  const params: Record<string, unknown> = { ...request.params };
+  const params: DynamicValueMap = { ...request.params };
 
   // 上游媒体注入：协议键与对话模式一致（images/uploadedFilePaths 等）
   const upstreamImages = [

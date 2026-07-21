@@ -1,7 +1,13 @@
+import { exists, mkdir, toDisplaySrc, writeFile } from '@/platform/desktopApi'
 import { getImageThumbnailCachePath } from './thumbnailCachePaths'
 
+export interface CachedThumbnailResult {
+  filePath: string
+  displaySrc: string
+  dataUrl?: string
+}
+
 export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl: string): Promise<string> {
-  const { writeFile, mkdir, exists } = await import('@tauri-apps/plugin-fs')
   const { getThumbnailsPath } = await import('@/utils/dataPath')
 
   const cachePath = await getImageThumbnailCachePath(imagePath)
@@ -12,6 +18,20 @@ export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl
     await mkdir(thumbnailsDir, { recursive: true })
   }
 
+  if (imagePath.trim() && window.henjiNative) {
+    try {
+      const { bytes } = await window.henjiNative.image.generateThumbnailBytes({ source: imagePath })
+      await writeFile(cachePath, bytes)
+      return cachePath
+    } catch {
+      // 主进程处理失败（如路径不在协议白名单内），走下面的渲染层后备逻辑
+    }
+  }
+
+  return generateImageThumbnailFallback(imageUrl, cachePath)
+}
+
+function generateImageThumbnailFallback(imageUrl: string, cachePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -87,34 +107,16 @@ export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl
 export async function getOrCreateImageThumbnail(
   imagePath: string,
   imageUrl?: string
-): Promise<{ filePath: string; dataUrl: string }> {
-  const { exists, readFile } = await import('@tauri-apps/plugin-fs')
-  const { convertFileSrc } = await import('@tauri-apps/api/core')
-
+): Promise<CachedThumbnailResult> {
   const cachePath = await getImageThumbnailCachePath(imagePath)
   const cacheExists = await exists(cachePath)
 
   if (cacheExists) {
-    const bytes = await readFile(cachePath)
-    const blob = new Blob([bytes], { type: 'image/webp' })
-    const dataUrl = await new Promise<string>((resolve) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.readAsDataURL(blob)
-    })
-    return { filePath: cachePath, dataUrl }
+    return { filePath: cachePath, displaySrc: toDisplaySrc(cachePath) }
   }
 
-  const url = imageUrl || convertFileSrc(imagePath)
+  const url = imageUrl || toDisplaySrc(imagePath)
   const generatedPath = await generateAndCacheImageThumbnail(imagePath, url)
 
-  const bytes = await readFile(generatedPath)
-  const blob = new Blob([bytes], { type: 'image/webp' })
-  const dataUrl = await new Promise<string>((resolve) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.readAsDataURL(blob)
-  })
-
-  return { filePath: generatedPath, dataUrl }
+  return { filePath: generatedPath, displaySrc: toDisplaySrc(generatedPath) }
 }
