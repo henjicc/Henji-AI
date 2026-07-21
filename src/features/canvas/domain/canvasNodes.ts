@@ -86,6 +86,13 @@ export interface NodeGenerationStatus {
   generationDurationMs?: number;
   /** 生成失败原因；有值时结果节点显示红色描边与错误内容 */
   generationError?: string | null;
+  /**
+   * 服务端异步任务 ID。异步任务一旦创建就写在这里并随项目持久化，
+   * 应用重启后据此继续轮询（见 useCanvasResumePolling），出结果或明确失败前不丢任务。
+   */
+  serverTaskId?: string | null;
+  /** 续查时需要用原模型发请求，与 serverTaskId 成对写入 */
+  serverTaskModelId?: string | null;
 }
 
 export interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {

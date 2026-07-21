@@ -1,5 +1,5 @@
 import { AiRuntimeError } from '../errors'
-import { ensureNotCancelled, waitIntervalMs } from '../polling'
+import { pollUntilResult } from '../polling'
 import type { JsonObject, JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { collectDeepUrls, normalizeEndpoint, readJsonResponse } from './helpers'
 
@@ -51,11 +51,7 @@ async function submit(input: ProviderExecutionInput, endpoint: string, cleanInpu
 }
 
 async function pollByStatusUrl(input: ProviderContinuePollingInput, statusUrl: string): Promise<JsonValue> {
-  const interval = input.polling?.interval ?? 3000
-  const maxAttempts = input.polling?.maxAttempts ?? 120
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    ensureNotCancelled(input.requestId)
-    await waitIntervalMs(interval, input.signal)
+  return await pollUntilResult(input, async () => {
     const response = await fetch(statusUrl, {
       headers: { Authorization: `Key ${input.apiKey}` },
       signal: input.signal,
@@ -74,8 +70,8 @@ async function pollByStatusUrl(input: ProviderContinuePollingInput, statusUrl: s
     if (state === 'FAILED' || state === 'ERROR') {
       throw new AiRuntimeError('provider_task_failed', 'Fal task failed')
     }
-  }
-  throw new AiRuntimeError('provider_task_timeout', `Fal task polling timed out after ${maxAttempts} attempts`)
+    return undefined
+  })
 }
 
 function stripSyncMode(value: JsonValue): JsonValue {

@@ -37,6 +37,7 @@ import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils
 import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
+import { useCanvasResumePolling } from './hooks/useCanvasResumePolling';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
@@ -403,6 +404,9 @@ export function Canvas() {
     setSelectedNode,
     scheduleCanvasPersist,
   });
+
+  // 应用重启后接着轮询未完成的异步生成任务
+  useCanvasResumePolling();
 
   useCanvasShortcuts({
     wrapperRef,

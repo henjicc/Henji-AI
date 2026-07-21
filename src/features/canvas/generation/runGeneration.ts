@@ -26,6 +26,18 @@ export interface CanvasGenerationRequest {
   upstream?: CanvasGenerationUpstream;
   /** 真进度回调，范围 0~1 */
   onProgress?: (progress: number) => void;
+  /**
+   * 异步任务创建后立即回调服务端任务 ID。
+   * 调用方应把它持久化到结果节点，否则应用中途退出这次生成就再也找不回来了。
+   */
+  onTaskId?: (taskId: string) => void;
+}
+
+export interface CanvasResumeRequest {
+  modelId: string;
+  mediaType?: CanvasMediaType;
+  taskId: string;
+  onProgress?: (progress: number) => void;
 }
 
 export interface CanvasGenerationOutput {
@@ -179,11 +191,35 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
     if (!taskId) {
       throw new Error('异步任务缺少 taskId，无法继续轮询');
     }
+    request.onTaskId?.(taskId);
     result = await generationService.continuePolling(modelId, taskId, params, handleProgress, {
       progressSource: 'canvas',
     });
   }
 
+  return toGenerationOutput(result);
+}
+
+/**
+ * 对已存在的服务端任务续查（应用重启后恢复未完成的异步生成）。
+ * 不重新提交任务，只接着取结果。
+ */
+export async function resumeCanvasGeneration(
+  request: CanvasResumeRequest
+): Promise<CanvasGenerationOutput> {
+  const mediaType = request.mediaType ?? 'image';
+  const modelId = resolveCanvasModelId(request.modelId, mediaType);
+  const result = await GenerationService.getInstance().continuePolling(
+    modelId,
+    request.taskId,
+    {},
+    createThrottledProgressHandler(request.onProgress),
+    { progressSource: 'canvas' }
+  );
+  return toGenerationOutput(result);
+}
+
+function toGenerationOutput(result: GenerateResult): CanvasGenerationOutput {
   const outputs = collectOutputs(result);
   if (outputs.length === 0) {
     throw new Error('生成结果为空');

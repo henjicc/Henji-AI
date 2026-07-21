@@ -1,5 +1,5 @@
 import { AiRuntimeError } from '../errors'
-import { ensureNotCancelled, waitIntervalMs } from '../polling'
+import { pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
 
@@ -43,11 +43,7 @@ async function sendJson(input: ProviderExecutionInput, endpoint: string): Promis
 }
 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
-  const interval = input.polling?.interval ?? 3000
-  const maxAttempts = input.polling?.maxAttempts ?? 120
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    ensureNotCancelled(input.requestId)
-    await waitIntervalMs(interval, input.signal)
+  return await pollUntilResult(input, async () => {
     const response = await fetch(`${PPIO_BASE_URL}/async/task-result?task_id=${encodeURIComponent(input.taskId)}`, {
       headers: { Authorization: `Bearer ${input.apiKey}` },
       signal: input.signal,
@@ -58,8 +54,8 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     if (state === 'TASK_STATUS_FAILED') {
       throw new AiRuntimeError('provider_task_failed', extractTaskFailureReason(payload))
     }
-  }
-  throw new AiRuntimeError('provider_task_timeout', `PPIO task polling timed out after ${maxAttempts} attempts`)
+    return undefined
+  })
 }
 
 function extractTaskId(payload: JsonValue): string | undefined {

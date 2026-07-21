@@ -1,5 +1,5 @@
 import { AiRuntimeError } from '../errors'
-import { ensureNotCancelled, waitIntervalMs } from '../polling'
+import { pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
 
@@ -38,11 +38,7 @@ async function submitTask(input: ProviderExecutionInput, endpoint: string): Prom
 }
 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
-  const interval = input.polling?.interval ?? 3000
-  const maxAttempts = input.polling?.maxAttempts ?? 120
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    ensureNotCancelled(input.requestId)
-    await waitIntervalMs(interval, input.signal)
+  return await pollUntilResult(input, async () => {
     const response = await fetch(`${MODELSCOPE_BASE_URL}/v1/tasks/${encodeURIComponent(input.taskId)}`, {
       headers: {
         Authorization: `Bearer ${input.apiKey}`,
@@ -55,8 +51,8 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     const state = stringAt(payload, '/task_status') ?? ''
     if (state === 'SUCCEED') return payload
     if (state === 'FAILED') throw new AiRuntimeError('provider_task_failed', 'ModelScope task failed')
-  }
-  throw new AiRuntimeError('provider_task_timeout', `ModelScope task polling timed out after ${maxAttempts} attempts`)
+    return undefined
+  })
 }
 
 function extractUrls(payload: JsonValue): string[] {

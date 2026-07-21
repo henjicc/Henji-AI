@@ -47,4 +47,49 @@ describe('resetTransientNodeRuntimeState', () => {
       imageUrl: 'henji-media://completed.png',
     });
   });
+
+  it('保留已登记服务端任务且尚无结果的生成态，供重启后续查', () => {
+    const data: DynamicValueMap = {
+      isGenerating: true,
+      generationStartedAt: 123,
+      videoUrl: null,
+      serverTaskId: 'dfcd13c95406b9acf3999f043d6f0a26',
+      serverTaskModelId: 'kie-seedance-2.0-fast',
+    };
+
+    resetTransientNodeRuntimeState(CANVAS_NODE_TYPES.exportVideo, data);
+
+    expect(data.isGenerating).toBe(true);
+    expect(data.generationStartedAt).toBe(123);
+    expect(data.serverTaskId).toBe('dfcd13c95406b9acf3999f043d6f0a26');
+  });
+
+  it('任务已出结果时不再保留生成态', () => {
+    const data: DynamicValueMap = {
+      isGenerating: true,
+      generationStartedAt: 123,
+      videoUrl: 'henji-media://done.mp4',
+      serverTaskId: 'finished-task',
+      serverTaskModelId: 'kie-seedance-2.0-fast',
+    };
+
+    resetTransientNodeRuntimeState(CANVAS_NODE_TYPES.exportVideo, data);
+
+    expect(data.isGenerating).toBe(false);
+    expect(data.generationStartedAt).toBe(null);
+  });
+
+  it('缺少模型 ID 时无法续查，按旧行为清理生成态', () => {
+    const data: DynamicValueMap = {
+      isGenerating: true,
+      generationStartedAt: 123,
+      videoUrl: null,
+      serverTaskId: 'orphan-task',
+    };
+
+    resetTransientNodeRuntimeState(CANVAS_NODE_TYPES.exportVideo, data);
+
+    expect(data.isGenerating).toBe(false);
+    expect(data.generationStartedAt).toBe(null);
+  });
 });

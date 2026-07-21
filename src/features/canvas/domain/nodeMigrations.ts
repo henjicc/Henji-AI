@@ -11,6 +11,7 @@ import {
 } from './canvasNodes';
 import { getDefaultModelId } from './defaultModels';
 import { getCanvasNodeDefinition } from './nodeRegistry';
+import { hasResumableServerTask } from './resumableTask';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
@@ -23,7 +24,10 @@ export function resetTransientNodeRuntimeState(
   nodeType: CanvasNodeType,
   data: DynamicValueMap
 ): void {
-  if (data.isGenerating === true) {
+  // 已登记服务端任务 ID 的生成中节点是可恢复的：任务还在供应商那边跑，
+  // 清成 false 会让重启后既看不到进度、也再没人去取结果。保留生成态，
+  // 交给 useCanvasResumePolling 接着轮询。
+  if (data.isGenerating === true && !hasResumableServerTask(data)) {
     data.isGenerating = false;
     if ('generationStartedAt' in data) {
       data.generationStartedAt = null;

@@ -1,5 +1,5 @@
 import { AiRuntimeError } from '../errors'
-import { ensureNotCancelled, waitIntervalMs } from '../polling'
+import { pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
 
@@ -48,11 +48,7 @@ async function sendCreateTask(input: ProviderExecutionInput, endpoint: string): 
 }
 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
-  const interval = input.polling?.interval ?? 3000
-  const maxAttempts = input.polling?.maxAttempts ?? 120
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    ensureNotCancelled(input.requestId)
-    await waitIntervalMs(interval, input.signal)
+  return await pollUntilResult(input, async () => {
     const endpoint = `${KIE_BASE_URL}${KIE_STATUS_ENDPOINT}?taskId=${encodeURIComponent(input.taskId)}`
     const response = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${input.apiKey}` },
@@ -61,15 +57,15 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     const payload = await readJsonResponse(response, 'KIE')
     const code = getPointer(payload, '/code')
     if (typeof code === 'number' && code !== 200) {
-      continue
+      return undefined
     }
     const state = stringAt(payload, '/data/state') ?? ''
     if (state === 'success') return payload
     if (state === 'fail') {
       throw new AiRuntimeError('provider_task_failed', stringAt(payload, '/data/failMsg') ?? 'KIE task failed')
     }
-  }
-  throw new AiRuntimeError('provider_task_timeout', `KIE task polling timed out after ${maxAttempts} attempts`)
+    return undefined
+  })
 }
 
 function extractTaskId(payload: JsonValue): string | undefined {

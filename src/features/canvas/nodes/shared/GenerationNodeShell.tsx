@@ -402,6 +402,11 @@ export const GenerationNodeShell = memo(({
           audios: effectiveAudios,
         },
         onProgress: (progress) => setNodeGenerationProgress(newNodeId, progress),
+        // 任务一创建就落到节点上：这是应用中途退出后唯一能把这次生成找回来的凭据
+        onTaskId: (taskId) => updateNodeData(newNodeId, {
+          serverTaskId: taskId,
+          serverTaskModelId: effectiveModelId,
+        }),
       });
 
       const resultPatch = await persistGenerationResult(modelType, result.primary);
@@ -410,6 +415,8 @@ export const GenerationNodeShell = memo(({
         isGenerating: false,
         generationStartedAt: null,
         generationError: null,
+        serverTaskId: null,
+        serverTaskModelId: null,
       });
     } catch (generationError) {
       // 失败信息写回输出节点：失败的是那次生成，红边和原因就应该长在它自己身上，
@@ -419,6 +426,8 @@ export const GenerationNodeShell = memo(({
         generationStartedAt: null,
         generationError:
           generationError instanceof Error ? generationError.message : t('ai.error'),
+        serverTaskId: null,
+        serverTaskModelId: null,
       });
     } finally {
       setNodeGenerationProgress(newNodeId, null);

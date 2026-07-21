@@ -454,6 +454,21 @@ export function getCanvasNodeDefinition(type: CanvasNodeType | string): CanvasNo
   return (canvasNodeDefinitions as Record<string, CanvasNodeDefinition>)[type];
 }
 
+/**
+ * 反查某个结果节点类型对应的媒体类型（exportVideoNode → 'video'）。
+ * 从 generation.resultNodeType 声明推导，新增生成节点无需在这里补映射表。
+ */
+export function getResultNodeMediaType(
+  resultNodeType: CanvasNodeType | string
+): 'image' | 'video' | 'audio' | undefined {
+  for (const definition of Object.values(canvasNodeDefinitions)) {
+    if (definition.generation?.resultNodeType === resultNodeType) {
+      return definition.generation.modelType;
+    }
+  }
+  return undefined;
+}
+
 export function getMenuNodeDefinitions(): CanvasNodeDefinition[] {
   return Object.values(canvasNodeDefinitions).filter((definition) => definition.visibleInMenu);
 }
