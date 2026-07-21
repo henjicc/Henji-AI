@@ -75,6 +75,10 @@ export interface CanvasHistoryState {
   future: CanvasHistorySnapshot[];
 }
 
+export interface CanvasHistoryGroupOptions {
+  historyGroup?: string;
+}
+
 const MAX_HISTORY_STEPS = 50;
 const IMAGE_NODE_VISUAL_MIN_EDGE = 96;
 
@@ -85,6 +89,7 @@ interface CanvasState {
   activeToolDialog: ActiveToolDialog | null;
   history: CanvasHistoryState;
   dragHistorySnapshot: CanvasHistorySnapshot | null;
+  activeHistoryGroup: string | null;
   currentViewport: Viewport;
   canvasViewportSize: { width: number; height: number };
   imageViewer: {
@@ -133,7 +138,12 @@ interface CanvasState {
     frameAspectRatio?: string
   ) => string | null;
 
-  updateNodeData: (nodeId: string, data: Partial<CanvasNodeData>) => void;
+  updateNodeData: (
+    nodeId: string,
+    data: Partial<CanvasNodeData>,
+    options?: CanvasHistoryGroupOptions
+  ) => void;
+  endHistoryGroup: (historyGroup: string) => void;
   /** 模型选择器节点展开/折叠专用：collapsedWidth 由组件按当前选中模型 chip 的实测内容宽度传入，
    * 让折叠态节点尺寸精确收紧到内容可容纳的最小宽度，而不是固定常量。 */
   setModelSelectorExpanded: (nodeId: string, isExpanded: boolean, collapsedWidth?: number) => void;
@@ -141,7 +151,8 @@ interface CanvasState {
   updateStoryboardFrame: (
     nodeId: string,
     frameId: string,
-    data: Partial<StoryboardFrameItem>
+    data: Partial<StoryboardFrameItem>,
+    options?: CanvasHistoryGroupOptions
   ) => void;
   reorderStoryboardFrame: (
     nodeId: string,
@@ -623,6 +634,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeToolDialog: null,
   history: { past: [], future: [] },
   dragHistorySnapshot: null,
+  activeHistoryGroup: null,
   currentViewport: { x: 0, y: 0, zoom: 1 },
   canvasViewportSize: { width: 0, height: 0 },
   imageViewer: {
@@ -762,6 +774,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activeToolDialog: null,
       history: normalizeHistory(history),
       dragHistorySnapshot: null,
+      activeHistoryGroup: null,
     });
     useCanvasGenerationProgressStore.getState().clearAllProgress();
   },
@@ -1150,7 +1163,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     return node.id;
   },
 
-  updateNodeData: (nodeId, data) => {
+  updateNodeData: (nodeId, data, options) => {
     set((state) => {
       let changed = false;
       const nextNodes = state.nodes.map((node) => {
@@ -1193,16 +1206,25 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
       }
 
+      const historyGroup = options?.historyGroup;
+      const shouldRecordHistory = !historyGroup || state.activeHistoryGroup !== historyGroup;
       return {
         nodes: nextNodes,
         edges: nextEdges,
-        history: {
-          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
-          future: [],
-        },
+        history: shouldRecordHistory
+          ? {
+              past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+              future: [],
+            }
+          : state.history,
+        activeHistoryGroup: historyGroup ?? null,
         dragHistorySnapshot: null,
       };
     });
+  },
+
+  endHistoryGroup: (historyGroup) => {
+    set((state) => state.activeHistoryGroup === historyGroup ? { activeHistoryGroup: null } : {});
   },
 
   setModelSelectorExpanded: (nodeId, isExpanded, collapsedWidth) => {
@@ -1274,7 +1296,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
-  updateStoryboardFrame: (nodeId, frameId, data) => {
+  updateStoryboardFrame: (nodeId, frameId, data, options) => {
     set((state) => {
       let changed = false;
       const nextNodes = state.nodes.map((node) => {
@@ -1317,12 +1339,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         return {};
       }
 
+      const historyGroup = options?.historyGroup;
+      const shouldRecordHistory = !historyGroup || state.activeHistoryGroup !== historyGroup;
       return {
         nodes: nextNodes,
-        history: {
-          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
-          future: [],
-        },
+        history: shouldRecordHistory
+          ? {
+              past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+              future: [],
+            }
+          : state.history,
+        activeHistoryGroup: historyGroup ?? null,
         dragHistorySnapshot: null,
       };
     });
@@ -1673,6 +1700,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         future: pushSnapshot(state.history.future, currentSnapshot),
       },
       dragHistorySnapshot: null,
+      activeHistoryGroup: null,
     });
     return true;
   },
@@ -1697,6 +1725,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         future: nextFuture,
       },
       dragHistorySnapshot: null,
+      activeHistoryGroup: null,
     });
     return true;
   },

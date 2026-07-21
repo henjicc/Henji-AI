@@ -399,7 +399,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     updateNodeData(id, { gridCols: nextCols })
   }, [id, nodeData.gridCols, updateNodeData])
 
-  const handleFrameDescriptionChange = useCallback((index: number, description: string): void => {
+  const handleFrameDescriptionChange = useCallback((index: number, description: string, historyGroup: string): void => {
     const frame = nodeData.frames[index]
     if (!frame) {
       return
@@ -416,7 +416,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
     const nextFrames = [...nodeData.frames]
     nextFrames[index] = { ...frame, description, referenceIndex }
-    updateNodeData(id, { frames: nextFrames })
+    updateNodeData(id, { frames: nextFrames }, { historyGroup })
   }, [effectiveImages.length, id, nodeData.frames, updateNodeData])
 
   return (
@@ -451,6 +451,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       <NodeLodPlaceholder title={resolvedTitle} icon={<Sparkles className="h-6 w-6" />} />
 
       <StoryboardGridEditor
+        nodeId={id}
         nodeData={nodeData}
         totalFrames={totalFrames}
         frameLayout={frameLayout}

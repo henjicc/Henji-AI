@@ -25,6 +25,8 @@ import {
   NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { NodeParamControl } from './NodeParamControl';
+import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
+import { createCanvasTextHistoryGroup } from '@/features/canvas/hooks/useCanvasTextHistory';
 
 interface NodeParamRowsProps {
   /** 节点 id（用于读取连到本节点参数端口的上游值） */
@@ -34,7 +36,7 @@ interface NodeParamRowsProps {
   /** 默认值与持久化合并后的当前参数值 */
   values: DynamicValueMap;
   /** 参数变化回写 */
-  setParam: (key: string, value: DynamicValue) => void;
+  setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
   /** 不在逐行区渲染的参数（如 prompt，由 shell 单独渲染） */
   excludeParamIds?: string[];
 }
@@ -96,6 +98,10 @@ export const NodeParamRows = memo(({
         const socketType = deriveSocketType(param);
         const socketColor = getSocketColor(socketType);
         const label = getI18nText(param.name, i18n.language) || param.id;
+        const textHistoryGroup = createCanvasTextHistoryGroup(nodeId, `params.${param.id}`);
+        const textHistoryOptions = param.type === 'text' || param.type === 'textarea'
+          ? { historyGroup: textHistoryGroup }
+          : undefined;
         return (
           <div
             key={param.id}
@@ -115,7 +121,8 @@ export const NodeParamRows = memo(({
               <NodeParamControl
                 param={param}
                 value={mergedValues[param.id]}
-                onChange={(next) => setParam(param.id, next)}
+                onChange={(next) => setParam(param.id, next, textHistoryOptions)}
+                historyGroup={textHistoryGroup}
                 disabled={isConnected}
               />
             </div>

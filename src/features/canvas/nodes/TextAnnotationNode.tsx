@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { type NodeProps } from '@xyflow/react';
 import { FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -11,6 +11,7 @@ import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canv
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 
 type TextAnnotationNodeProps = NodeProps & {
   id: string;
@@ -36,6 +37,11 @@ export const TextAnnotationNode = memo(({
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const content = typeof data.content === 'string' ? data.content : '';
+  const contentHistoryGroup = createCanvasTextHistoryGroup(id, 'content');
+  const handleContentChange = useCallback((nextValue: string): void => {
+    updateNodeData(id, { content: nextValue }, { historyGroup: contentHistoryGroup });
+  }, [contentHistoryGroup, id, updateNodeData]);
+  const contentTextHistory = useCanvasTextHistory(contentHistoryGroup, handleContentChange);
   const resolvedTitle = resolveNodeDisplayName(CANVAS_NODE_TYPES.textAnnotation, data);
   const resolvedWidth = Math.max(MIN_WIDTH, Math.round(width ?? DEFAULT_WIDTH));
   const resolvedHeight = Math.max(MIN_HEIGHT, Math.round(height ?? DEFAULT_HEIGHT));
@@ -70,10 +76,8 @@ export const TextAnnotationNode = memo(({
         <UiTextArea
           autoFocus
           value={content}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            updateNodeData(id, { content: nextValue });
-          }}
+          onChange={(event) => contentTextHistory.onValueChange(event.target.value)}
+          textHistory={contentTextHistory}
           placeholder={t('node.textAnnotation.placeholder')}
           className="nodrag nowheel h-full w-full border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/70"
         />

@@ -4,13 +4,14 @@ import { registry } from '@/core/ModelRegistry';
 import { LinkageEngine } from '@/core/linkage';
 import type { ParamDef } from '@/core/types';
 import { extractDefaults } from '@/hooks/utils/defaultExtractor';
+import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
 
 export interface UseNodeModelParamsOptions {
   modelId: string;
   /** 节点 data 中持久化的参数（可为空，缺省时使用 schema 默认值） */
   storedParams: DynamicValueMap | undefined;
   /** 参数变化时回写节点 data（传入完整参数对象） */
-  onParamsChange: (nextParams: DynamicValueMap) => void;
+  onParamsChange: (nextParams: DynamicValueMap, options?: CanvasHistoryGroupOptions) => void;
   /**
    * 当前生效的媒体内容（已连线优先，否则取本地内联上传，即 GenerationNodeShell 的
    * effectiveImages/effectiveVideos/effectiveAudios）。只用于合并进下面的 values 供
@@ -30,7 +31,7 @@ export interface UseNodeModelParamsResult {
   defaults: DynamicValueMap;
   /** 默认值、持久化参数与当前生效媒体合并后的运行时值 */
   values: DynamicValueMap;
-  setParam: (key: string, value: DynamicValue) => void;
+  setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
   resetParams: () => void;
 }
 
@@ -86,12 +87,12 @@ export function useNodeModelParams({
     [defaults, storedParams, mediaImages, mediaVideos, mediaAudios]
   );
 
-  const setParam = useCallback((key: string, value: DynamicValue) => {
+  const setParam = useCallback((key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => {
     let nextValues: DynamicValueMap = { ...values, [key]: value };
     if (linkageEngine) {
       nextValues = linkageEngine.execute(key, nextValues, schema);
     }
-    onParamsChange(stripMediaKeys(nextValues));
+    onParamsChange(stripMediaKeys(nextValues), options);
   }, [linkageEngine, onParamsChange, schema, values]);
 
   // 画布媒体行走独立的 mediaInputs 通路（见 GenerationNodeShell.handleMediaInputChange），

@@ -24,11 +24,13 @@ import { AspectRatioSelector } from '@/components/params/panels/ResolutionPanel/
 import type { AspectRatioOption } from '@/components/params/panels/ResolutionPanel/types';
 import { UiIconButton, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
+import { useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 
 interface NodeParamControlProps {
   param: ParamDef;
   value: DynamicValue;
   onChange: (value: DynamicValue) => void;
+  historyGroup: string;
   disabled?: boolean;
 }
 
@@ -108,6 +110,7 @@ function CompactNumberControl({
         value={draft}
         onFocus={() => setFocused(true)}
         onChange={(event) => setDraft(event.target.value)}
+        textHistory={{ onValueChange: setDraft }}
         onBlur={commitDraft}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
@@ -280,16 +283,19 @@ function CompactTextControl({
   param,
   value,
   onChange,
+  historyGroup,
   disabled,
-}: { param: TextParamDef; value: DynamicValue; onChange: (value: string) => void; disabled?: boolean }) {
+}: { param: TextParamDef; value: DynamicValue; onChange: (value: string) => void; historyGroup: string; disabled?: boolean }) {
   const { i18n } = useTranslation();
   const placeholder = getI18nText(param.placeholder || '', i18n.language);
+  const textHistory = useCanvasTextHistory(historyGroup, onChange);
   return (
     <UiInput
       type="text"
       value={typeof value === 'string' ? value : ''}
       placeholder={placeholder}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => textHistory.onValueChange(event.target.value)}
+      textHistory={textHistory}
       onMouseDown={(event) => event.stopPropagation()}
       disabled={disabled}
       className="h-7 w-32 px-2 text-xs"
@@ -338,7 +344,7 @@ function CompactPanelControl({
  * 仅直接复用底层 primitive（Dropdown/UiInput/UiSwitch/PanelTrigger），
  * 不复用 TextInput/NumberInput/DropdownInput/SwitchInput（它们自带整行标签布局）。
  */
-export function NodeParamControl({ param, value, onChange, disabled }: NodeParamControlProps) {
+export function NodeParamControl({ param, value, onChange, historyGroup, disabled }: NodeParamControlProps) {
   switch (param.type) {
     case 'text':
     case 'textarea':
@@ -347,6 +353,7 @@ export function NodeParamControl({ param, value, onChange, disabled }: NodeParam
           param={param as TextParamDef}
           value={value}
           onChange={onChange as (value: string) => void}
+          historyGroup={historyGroup}
           disabled={disabled}
         />
       );

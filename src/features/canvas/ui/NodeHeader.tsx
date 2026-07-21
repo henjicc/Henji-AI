@@ -179,6 +179,7 @@ export function NodeHeader({
           ref={inputRef}
           value={draftTitle}
           onChange={(event) => setDraftTitle(event.target.value)}
+          textHistory={{ onValueChange: setDraftTitle }}
           onBlur={commitTitle}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}

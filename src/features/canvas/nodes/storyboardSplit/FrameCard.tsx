@@ -1,4 +1,4 @@
-import { memo, useMemo, type CSSProperties } from 'react';
+import { memo, useCallback, useMemo, type CSSProperties } from 'react';
 import { useViewport } from '@xyflow/react';
 import { ImagePlus, SquareArrowOutUpRight } from 'lucide-react';
 import type { StoryboardExportOptions, StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes';
@@ -6,6 +6,7 @@ import { resolveImageDisplayUrl, shouldUseOriginalImageByZoom } from '@/features
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { ReferenceTextarea, type ReferenceItem, UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 
 interface FrameCardProps {
   nodeId: string;
@@ -44,6 +45,11 @@ export const FrameCard = memo(({
 }: FrameCardProps): JSX.Element => {
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const { zoom } = useViewport();
+  const noteHistoryGroup = createCanvasTextHistoryGroup(nodeId, `frames.${frame.id}.note`);
+  const handleNoteChange = useCallback((nextValue: string): void => {
+    updateStoryboardFrame(nodeId, frame.id, { note: nextValue }, { historyGroup: noteHistoryGroup });
+  }, [frame.id, nodeId, noteHistoryGroup, updateStoryboardFrame]);
+  const noteTextHistory = useCanvasTextHistory(noteHistoryGroup, handleNoteChange);
 
   const imageSource = useMemo(() => {
     const preferOriginal = shouldUseOriginalImageByZoom(zoom);
@@ -144,11 +150,8 @@ export const FrameCard = memo(({
         >
           <ReferenceTextarea
             value={frame.note}
-            onChange={(nextValue) => {
-              updateStoryboardFrame(nodeId, frame.id, {
-                note: nextValue,
-              });
-            }}
+            onChange={noteTextHistory.onValueChange}
+            textHistorySession={noteTextHistory}
             references={referenceItems}
             pickerAnchorScale={zoom}
             onMouseDown={(event) => event.stopPropagation()}

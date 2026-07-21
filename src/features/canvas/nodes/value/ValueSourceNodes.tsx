@@ -5,6 +5,7 @@ import type { NodeProps } from '@xyflow/react';
 import { CANVAS_NODE_TYPES, type ValueSourceNodeData } from '@/features/canvas/domain/canvasNodes';
 import { UiIconButton, UiInput, UiSwitch, UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import { ValueSourceShell } from './ValueSourceShell';
 
 type ValueNodeProps = NodeProps & {
@@ -15,11 +16,11 @@ type ValueNodeProps = NodeProps & {
   height?: number;
 };
 
-function useSetValue(id: string): (value: number | string | boolean) => void {
+function useSetValue(id: string, historyGroup?: string): (value: number | string | boolean) => void {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   return useCallback(
-    (value: number | string | boolean) => updateNodeData(id, { value }),
-    [id, updateNodeData]
+    (value: number | string | boolean) => updateNodeData(id, { value }, historyGroup ? { historyGroup } : undefined),
+    [historyGroup, id, updateNodeData]
   );
 }
 
@@ -27,10 +28,12 @@ function NumberValueField({
   value,
   integer,
   onCommit,
+  historyGroup,
 }: {
   value: number;
   integer: boolean;
   onCommit: (value: number) => void;
+  historyGroup: string;
 }) {
   const safeValue = Number.isFinite(value) ? value : 0;
   const commit = useCallback((raw: number) => {
@@ -40,6 +43,13 @@ function NumberValueField({
   const stepBy = useCallback((direction: 1 | -1) => {
     commit(safeValue + direction * (integer ? 1 : 0.1));
   }, [commit, integer, safeValue]);
+  const handleRawChange = useCallback((rawValue: string): void => {
+    const parsed = integer
+      ? Number.parseInt(rawValue, 10)
+      : Number.parseFloat(rawValue);
+    commit(parsed);
+  }, [commit, integer]);
+  const textHistory = useCanvasTextHistory(historyGroup, handleRawChange);
 
   return (
     <div
@@ -50,12 +60,8 @@ function NumberValueField({
         type="text"
         inputMode={integer ? 'numeric' : 'decimal'}
         value={String(safeValue)}
-        onChange={(event) => {
-          const parsed = integer
-            ? Number.parseInt(event.target.value, 10)
-            : Number.parseFloat(event.target.value);
-          commit(parsed);
-        }}
+        onChange={(event) => textHistory.onValueChange(event.target.value)}
+        textHistory={textHistory}
         onKeyDown={(event) => {
           if (event.key === 'ArrowUp') {
             event.preventDefault();
@@ -99,7 +105,8 @@ function NumberValueField({
 }
 
 export const IntSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
-  const setValue = useSetValue(id);
+  const historyGroup = createCanvasTextHistoryGroup(id, 'value');
+  const setValue = useSetValue(id, historyGroup);
   return (
     <ValueSourceShell
       id={id}
@@ -113,14 +120,15 @@ export const IntSourceNode = memo(({ id, data, selected, width, height }: ValueN
       minHeight={56}
       icon={<Hash className="h-4 w-4" />}
     >
-      <NumberValueField value={Number(data.value)} integer onCommit={setValue} />
+      <NumberValueField value={Number(data.value)} integer onCommit={setValue} historyGroup={historyGroup} />
     </ValueSourceShell>
   );
 });
 IntSourceNode.displayName = 'IntSourceNode';
 
 export const FloatSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
-  const setValue = useSetValue(id);
+  const historyGroup = createCanvasTextHistoryGroup(id, 'value');
+  const setValue = useSetValue(id, historyGroup);
   return (
     <ValueSourceShell
       id={id}
@@ -134,14 +142,17 @@ export const FloatSourceNode = memo(({ id, data, selected, width, height }: Valu
       minHeight={56}
       icon={<Hash className="h-4 w-4" />}
     >
-      <NumberValueField value={Number(data.value)} integer={false} onCommit={setValue} />
+      <NumberValueField value={Number(data.value)} integer={false} onCommit={setValue} historyGroup={historyGroup} />
     </ValueSourceShell>
   );
 });
 FloatSourceNode.displayName = 'FloatSourceNode';
 
 export const StringSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
-  const setValue = useSetValue(id);
+  const historyGroup = createCanvasTextHistoryGroup(id, 'value');
+  const setValue = useSetValue(id, historyGroup);
+  const handleValueChange = useCallback((nextValue: string): void => setValue(nextValue), [setValue]);
+  const textHistory = useCanvasTextHistory(historyGroup, handleValueChange);
   return (
     <ValueSourceShell
       id={id}
@@ -157,7 +168,8 @@ export const StringSourceNode = memo(({ id, data, selected, width, height }: Val
     >
       <UiTextArea
         value={typeof data.value === 'string' ? data.value : ''}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => textHistory.onValueChange(event.target.value)}
+        textHistory={textHistory}
         onMouseDown={(event) => event.stopPropagation()}
         className="ui-scrollbar min-h-0 flex-1 resize-none"
       />

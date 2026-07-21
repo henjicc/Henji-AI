@@ -33,6 +33,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
             type="text"
             value={readTextOption(options, field.key)}
             onChange={(event) => updateOption(field.key, event.target.value)}
+            textHistory={{ onValueChange: (value) => updateOption(field.key, value) }}
             placeholder={field.placeholder}
           />
         );
@@ -47,6 +48,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
             max={field.max}
             step={field.step ?? 1}
             onChange={(event) => updateOption(field.key, Number(event.target.value))}
+            textHistory={{ onValueChange: (value) => updateOption(field.key, Number(value)) }}
           />
         );
       }

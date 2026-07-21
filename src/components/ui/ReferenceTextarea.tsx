@@ -29,6 +29,7 @@ import {
   restoreTextareaView,
 } from './referenceTextareaUtils';
 import { UiOptionButton, UiTextAreaField } from './primitives';
+import { type ScopedTextHistoryBinding, useScopedTextHistory } from './useScopedTextHistory';
 export interface ReferenceItem {
   id: string;
   label: string;
@@ -75,6 +76,7 @@ interface ReferenceTextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAre
   onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   getReferenceToken?: (item: ReferenceItem, index: number) => string;
   renderPickerItem?: (params: RenderPickerItemParams) => ReactNode;
+  textHistorySession?: Pick<ScopedTextHistoryBinding, 'onEditStart' | 'onEditEnd'>;
 }
 export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTextareaProps>(function ReferenceTextarea({
   value,
@@ -107,9 +109,15 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
   onKeyDown,
   getReferenceToken,
   renderPickerItem,
+  textHistorySession,
   disabled,
   onScroll,
   onFocus,
+  onBlur,
+  onSelect,
+  onMouseDown,
+  onCompositionStart,
+  onCompositionEnd,
   style,
   ...textareaProps
 }, ref): JSX.Element {
@@ -131,6 +139,10 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
     () => references.map((item) => item.label),
     [references]
   );
+  const textHistory = useScopedTextHistory({
+    value,
+    binding: { onValueChange: onChange, ...textHistorySession },
+  });
 
   const closePicker = useCallback(() => {
     setShowPicker(false);
@@ -166,11 +178,12 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
 
     const executed = document.execCommand('insertText', false, nextValue);
     if (!executed) {
+      textHistory.recordProgrammaticChange(textarea, nextValue, nextValue.length);
       onChange(nextValue);
     }
     requestAnimationFrame(syncHighlightScroll);
     return executed;
-  }, [onChange, syncHighlightScroll]);
+  }, [onChange, syncHighlightScroll, textHistory]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -207,6 +220,9 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
       literalTokens
     );
 
+    if (textareaRef.current) {
+      textHistory.recordProgrammaticChange(textareaRef.current, normalized.nextText, normalized.nextCursor);
+    }
     onChange(normalized.nextText);
     closePicker();
 
@@ -223,7 +239,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
       }
       syncHighlightScroll();
     });
-  }, [closePicker, literalTokens, onChange, pickerCursor, referenceLabels, references, resolveToken, syncHighlightScroll, tokenPrefix, value]);
+  }, [closePicker, literalTokens, onChange, pickerCursor, referenceLabels, references, resolveToken, syncHighlightScroll, textHistory, tokenPrefix, value]);
 
   useEffect(() => {
     if (disabled || references.length === 0) {
@@ -288,6 +304,10 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
       return;
     }
 
+    if (textHistory.handleKeyDown(event)) {
+      return;
+    }
+
     if (event.key === 'Backspace' || event.key === 'Delete') {
       const selectionStart = event.currentTarget.selectionStart ?? value.length;
       const selectionEnd = event.currentTarget.selectionEnd ?? selectionStart;
@@ -305,6 +325,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
       if (deleteRange) {
         event.preventDefault();
         const { nextText, nextCursor } = removeTextRange(value, deleteRange);
+        textHistory.recordProgrammaticChange(event.currentTarget, nextText, nextCursor);
         onChange(nextText);
 
         requestAnimationFrame(() => {
@@ -401,6 +422,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
     showPicker,
     submitShortcut,
     syncHighlightScroll,
+    textHistory,
     value,
     undoTriggerValue,
     undoReplacementValue,
@@ -424,6 +446,10 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
     const rawText = event.currentTarget.value;
     const cursor = event.currentTarget.selectionStart ?? rawText.length;
     const normalized = normalizeReferenceTokenSpacing(rawText, cursor, referenceLabels, tokenPrefix, literalTokens);
+    textHistory.recordNativeChange(event.currentTarget, event.nativeEvent);
+    if (normalized.changed) {
+      textHistory.synchronizeValue(event.currentTarget, normalized.nextText, normalized.nextCursor);
+    }
     onChange(normalized.nextText);
 
     if (!normalized.changed) {
@@ -438,7 +464,7 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
       textareaRef.current.setSelectionRange(normalized.nextCursor, normalized.nextCursor);
       syncHighlightScroll();
     });
-  }, [literalTokens, onChange, referenceLabels, syncHighlightScroll, tokenPrefix]);
+  }, [literalTokens, onChange, referenceLabels, syncHighlightScroll, textHistory, tokenPrefix]);
 
   const pickerNode = showPicker && references.length > 0 ? (
     <div
@@ -512,8 +538,29 @@ export const ReferenceTextarea = forwardRef<ReferenceTextareaHandle, ReferenceTe
           onScroll?.(event);
         }}
         onFocus={(event) => {
+          textHistory.handleFocus(event.currentTarget);
           syncHighlightScroll();
           onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          textHistory.handleBlur(event.currentTarget);
+          onBlur?.(event);
+        }}
+        onSelect={(event) => {
+          textHistory.handleSelect(event.currentTarget);
+          onSelect?.(event);
+        }}
+        onMouseDown={(event) => {
+          textHistory.handleMouseDown();
+          onMouseDown?.(event);
+        }}
+        onCompositionStart={(event) => {
+          textHistory.handleCompositionStart(event.currentTarget);
+          onCompositionStart?.(event);
+        }}
+        onCompositionEnd={(event) => {
+          textHistory.handleCompositionEnd(event.currentTarget);
+          onCompositionEnd?.(event);
         }}
         disabled={disabled}
         className={textareaMergedClassName}

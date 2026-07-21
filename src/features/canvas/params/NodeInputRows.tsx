@@ -8,6 +8,7 @@ import type { RowMediaKind } from '@/features/canvas/domain/socketTypes';
 import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import type { VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
+import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
 import { MediaInputRow } from './MediaInputRow';
 import { ModelInputRow } from './ModelInputRow';
 import { NodeParamRows } from './NodeParamRows';
@@ -29,7 +30,7 @@ interface NodeInputRowsProps {
   acceptedMediaKinds: RowMediaKind[];
   schema: ParamDef[];
   values: DynamicValueMap;
-  setParam: (key: string, value: DynamicValue) => void;
+  setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
   excludeParamIds?: string[];
   mediaInputs: Partial<Record<RowMediaKind, string[]>>;
   onMediaInputChange: (kind: RowMediaKind, next: string[]) => void;

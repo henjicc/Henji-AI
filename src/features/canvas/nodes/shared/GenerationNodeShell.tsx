@@ -45,6 +45,7 @@ import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
+import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
 import { registry } from '@/core/ModelRegistry';
@@ -271,8 +272,8 @@ export const GenerationNodeShell = memo(({
     ? providerKeyStatus[effectiveModel.meta.provider] === true
     : false;
 
-  const handleParamsChange = useCallback((nextParams: DynamicValueMap) => {
-    updateNodeData(id, { params: nextParams });
+  const handleParamsChange = useCallback((nextParams: DynamicValueMap, options?: { historyGroup?: string }) => {
+    updateNodeData(id, { params: nextParams }, options);
   }, [id, updateNodeData]);
 
   const { schema, values: modelParamValues, setParam } = useNodeModelParams({
@@ -313,10 +314,19 @@ export const GenerationNodeShell = memo(({
     }
   }, [data.prompt]);
 
+  const promptHistoryGroup = useMemo(() => createCanvasTextHistoryGroup(id, 'prompt'), [id]);
   const commitPromptDraft = useCallback((nextPrompt: string) => {
     promptDraftRef.current = nextPrompt;
-    updateNodeData(id, { prompt: nextPrompt });
-  }, [id, updateNodeData]);
+    updateNodeData(id, { prompt: nextPrompt }, { historyGroup: promptHistoryGroup });
+  }, [id, promptHistoryGroup, updateNodeData]);
+  const handlePromptChange = useCallback((nextValue: string) => {
+    setPromptDraft(nextValue);
+    commitPromptDraft(nextValue);
+    if (promptInvalid && nextValue.trim()) {
+      setPromptInvalid(false);
+    }
+  }, [commitPromptDraft, promptInvalid]);
+  const promptTextHistory = useCanvasTextHistory(promptHistoryGroup, handlePromptChange);
 
   useEffect(() => {
     if (data.modelId !== selectedModelId) {
@@ -495,13 +505,8 @@ export const GenerationNodeShell = memo(({
           >
             <ReferenceTextarea
               value={promptOverrideValue ?? promptDraft}
-              onChange={(nextValue) => {
-                setPromptDraft(nextValue);
-                commitPromptDraft(nextValue);
-                if (promptInvalid && nextValue.trim()) {
-                  setPromptInvalid(false);
-                }
-              }}
+              onChange={promptTextHistory.onValueChange}
+              textHistorySession={promptTextHistory}
               disabled={Boolean(promptOverrideValue)}
               references={incomingImageItems}
               onMouseDown={(event) => event.stopPropagation()}

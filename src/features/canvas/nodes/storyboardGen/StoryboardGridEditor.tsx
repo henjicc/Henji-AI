@@ -3,8 +3,10 @@ import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes
 import { ReferenceTextarea, type ReferenceItem } from '@/components/ui'
 import { GridStepperControl, GRID_SUMMARY_CLASS } from './shared'
 import type { StoryboardFrameLayout } from './layout'
+import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory'
 
 interface StoryboardGridEditorProps {
+  nodeId: string
   nodeData: StoryboardGenNodeData
   totalFrames: number
   frameLayout: StoryboardFrameLayout
@@ -13,10 +15,56 @@ interface StoryboardGridEditorProps {
   incomingImageItems: ReferenceItem[]
   onRowChange: (delta: number) => void
   onColChange: (delta: number) => void
-  onFrameDescriptionChange: (index: number, description: string) => void
+  onFrameDescriptionChange: (index: number, description: string, historyGroup: string) => void
+}
+
+interface FrameDescriptionEditorProps {
+  nodeId: string
+  frameId: string
+  index: number
+  value: string
+  zoom: number
+  textStyle: CSSProperties
+  references: ReferenceItem[]
+  onChange: (index: number, description: string, historyGroup: string) => void
+}
+
+function FrameDescriptionEditor({
+  nodeId,
+  frameId,
+  index,
+  value,
+  zoom,
+  textStyle,
+  references,
+  onChange,
+}: FrameDescriptionEditorProps): JSX.Element {
+  const historyGroup = createCanvasTextHistoryGroup(nodeId, `frames.${frameId}.description`)
+  const handleChange = (nextValue: string): void => onChange(index, nextValue, historyGroup)
+  const textHistory = useCanvasTextHistory(historyGroup, handleChange)
+  return (
+    <ReferenceTextarea
+      value={value}
+      onChange={textHistory.onValueChange}
+      textHistorySession={textHistory}
+      references={references}
+      pickerAnchorScale={zoom}
+      placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
+      wrap="soft"
+      className="relative h-full w-full"
+      highlightLayerClassName="text-text-dark"
+      highlightLayerStyle={textStyle}
+      highlightContentClassName="px-1.5 py-1 text-left"
+      textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden !border-0 !bg-transparent !shadow-none !px-1.5 !py-1 text-left text-transparent caret-text-dark placeholder:text-text-muted/40 selection:bg-accent/45 selection:text-white focus:!outline-none focus:!ring-0 focus:!shadow-none whitespace-pre-wrap break-words"
+      style={textStyle}
+      pickerClassName="w-[120px]"
+      pickerListClassName="max-h-[180px]"
+    />
+  )
 }
 
 export const StoryboardGridEditor = memo(({
+  nodeId,
   nodeData,
   totalFrames,
   frameLayout,
@@ -79,21 +127,15 @@ export const StoryboardGridEditor = memo(({
                 className="relative overflow-hidden rounded border border-[rgba(255,255,255,0.06)] bg-bg-dark/40 transition-colors focus-within:border-accent/50"
                 style={cellStyle}
               >
-                <ReferenceTextarea
+                <FrameDescriptionEditor
+                  nodeId={nodeId}
+                  frameId={frame.id}
+                  index={index}
                   value={frameDescription}
-                  onChange={(nextValue) => onFrameDescriptionChange(index, nextValue)}
+                  zoom={zoom}
+                  textStyle={cellTextStyle}
                   references={incomingImageItems}
-                  pickerAnchorScale={zoom}
-                  placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
-                  wrap="soft"
-                  className="relative h-full w-full"
-                  highlightLayerClassName="text-text-dark"
-                  highlightLayerStyle={cellTextStyle}
-                  highlightContentClassName="px-1.5 py-1 text-left"
-                  textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden !border-0 !bg-transparent !shadow-none !px-1.5 !py-1 text-left text-transparent caret-text-dark placeholder:text-text-muted/40 selection:bg-accent/45 selection:text-white focus:!outline-none focus:!ring-0 focus:!shadow-none whitespace-pre-wrap break-words"
-                  style={cellTextStyle}
-                  pickerClassName="w-[120px]"
-                  pickerListClassName="max-h-[180px]"
+                  onChange={onFrameDescriptionChange}
                 />
               </div>
             )

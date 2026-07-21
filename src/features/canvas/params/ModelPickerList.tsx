@@ -65,6 +65,7 @@ export function ModelPickerList({
             type="text"
             value={modelSearchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
+            textHistory={{ onValueChange: onSearchChange }}
             onKeyDown={(event) => event.stopPropagation()}
             placeholder={t('modelParams.searchPlaceholder', { defaultValue: '搜索模型名称、供应商或描述' })}
             className="h-7 rounded-md pl-8 pr-8 text-xs"

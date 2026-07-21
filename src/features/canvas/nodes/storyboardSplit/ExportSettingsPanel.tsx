@@ -85,6 +85,7 @@ export function StoryboardExportSettingsPanel({
                 maxLength={4}
                 className="h-8"
                 onChange={(event) => onPatch({ frameIndexPrefix: event.target.value })}
+                textHistory={{ onValueChange: (value) => onPatch({ frameIndexPrefix: value }) }}
               />
             </div>
             <div>
@@ -114,6 +115,7 @@ export function StoryboardExportSettingsPanel({
                 value={exportOptions.cellGap}
                 className="h-8"
                 onChange={(event) => onPatch({ cellGap: Number(event.target.value) || 0 })}
+                textHistory={{ onValueChange: (value) => onPatch({ cellGap: Number(value) || 0 }) }}
               />
             </div>
             <div>
@@ -125,6 +127,7 @@ export function StoryboardExportSettingsPanel({
                 value={exportOptions.fontSize}
                 className="h-8"
                 onChange={(event) => onPatch({ fontSize: Number(event.target.value) || 4 })}
+                textHistory={{ onValueChange: (value) => onPatch({ fontSize: Number(value) || 4 }) }}
               />
             </div>
           </div>

@@ -27,6 +27,10 @@ import {
   UI_PANEL_SURFACE_CLASS,
 } from './styleTokens';
 import { useDialogTransition } from './useDialogTransition';
+import {
+  type ScopedTextHistoryBinding,
+  useScopedTextHistoryProps,
+} from './useScopedTextHistory';
 
 type ButtonVariant = 'primary' | 'muted' | 'ghost';
 
@@ -67,6 +71,18 @@ interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
 interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
   variant?: 'default' | 'card' | 'flat';
+}
+
+interface UiInputProps extends InputHTMLAttributes<HTMLInputElement> {
+  textHistory?: ScopedTextHistoryBinding;
+}
+
+interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  textHistory?: ScopedTextHistoryBinding;
+}
+
+function resolveTextHistoryValue(value: string | number | readonly string[] | undefined): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
 interface UiModalProps {
@@ -234,35 +250,60 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
 
 UiOptionButton.displayName = 'UiOptionButton';
 
-export function UiTextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function UiTextArea({ className = '', textHistory, value, ...props }: UiTextAreaProps): JSX.Element {
+  const historyProps = useScopedTextHistoryProps(
+    resolveTextHistoryValue(value),
+    textHistory,
+    props
+  );
   return (
     <textarea
+      value={value}
       className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
+      {...historyProps}
     />
   );
 }
 
-export const UiTextAreaField = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
-  ({ className = '', ...props }, ref) => (
-    <textarea
-      ref={ref}
-      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
-      {...props}
-    />
-  )
+export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
+  ({ className = '', textHistory, value, ...props }, ref) => {
+    const historyProps = useScopedTextHistoryProps(
+      resolveTextHistoryValue(value),
+      textHistory,
+      props
+    );
+    return (
+      <textarea
+        ref={ref}
+        value={value}
+        className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        {...props}
+        {...historyProps}
+      />
+    );
+  }
 );
 
 UiTextAreaField.displayName = 'UiTextAreaField';
 
-export const UiInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  ({ className = '', ...props }, ref) => (
-    <input
-      ref={ref}
-      className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
-      {...props}
-    />
-  )
+export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
+  ({ className = '', textHistory, value, ...props }, ref) => {
+    const historyProps = useScopedTextHistoryProps(
+      resolveTextHistoryValue(value),
+      textHistory,
+      props
+    );
+    return (
+      <input
+        ref={ref}
+        value={value}
+        className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        {...props}
+        {...historyProps}
+      />
+    );
+  }
 );
 
 UiInput.displayName = 'UiInput';
