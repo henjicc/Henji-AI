@@ -77,7 +77,7 @@ export const PromptSuggestionList = forwardRef<
 
   return (
     <div
-      className="flex min-w-[220px] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-2xl"
+      className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-2xl"
       role="listbox"
       aria-label={items[0]?.kind === 'reference' ? '媒体引用候选' : '模板变量候选'}
     >
@@ -87,7 +87,7 @@ export const PromptSuggestionList = forwardRef<
           <UiOptionButton
             key={`${item.kind}:${getSuggestionKey(item)}`}
             active={index === selectedIndex}
-            className="gap-2"
+            className={`w-full min-w-0 gap-2 ${index === selectedIndex ? '' : '!border-transparent !bg-transparent hover:!border-transparent hover:!bg-layer'}`}
             role="option"
             aria-selected={index === selectedIndex}
             onMouseDown={(event) => event.preventDefault()}
@@ -98,7 +98,7 @@ export const PromptSuggestionList = forwardRef<
               <img
                 src={reference.thumbnailSrc}
                 alt=""
-                className="h-8 w-8 rounded object-cover"
+                className="h-8 w-8 shrink-0 rounded object-cover"
                 draggable={false}
               />
             ) : (
@@ -106,10 +106,16 @@ export const PromptSuggestionList = forwardRef<
                 {reference?.mediaType ?? '{{ }}'}
               </span>
             )}
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate text-xs text-text-dark">{getSuggestionLabel(item)}</span>
-              <span className="truncate text-[10px] text-text-muted">{getSuggestionKey(item)}</span>
-            </span>
+            {reference ? (
+              <span className="min-w-0 flex-1 truncate text-sm text-text-dark">
+                {getSuggestionLabel(item)}
+              </span>
+            ) : (
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-xs text-text-dark">{getSuggestionLabel(item)}</span>
+                <span className="truncate text-[10px] text-text-muted">{getSuggestionKey(item)}</span>
+              </span>
+            )}
           </UiOptionButton>
         )
       })}

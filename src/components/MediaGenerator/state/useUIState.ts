@@ -4,6 +4,7 @@ import type { FileOrderItem } from '../components/InputArea'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import {
+  compactPromptMediaReferenceSpacing,
   parseLegacyPromptString,
   toLegacyPromptString,
   type PromptDocumentV1,
@@ -74,7 +75,9 @@ function useUIStateValue() {
   }, [])
 
   const setInput = useCallback((legacyText: string): void => {
-    setPromptDocument(parseLegacyPromptString(legacyText, { references: promptReferences }))
+    setPromptDocument(compactPromptMediaReferenceSpacing(
+      parseLegacyPromptString(legacyText, { references: promptReferences }),
+    ))
   }, [promptReferences])
 
   const loadPromptCarrier = useCallback((carrier: MediaGeneratorPromptCarrier): void => {

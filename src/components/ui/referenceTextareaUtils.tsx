@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-const IMAGE_REFERENCE_TOKEN_REGEX = /@图\d+/g
+const IMAGE_REFERENCE_TOKEN_REGEX = /@(?:图片|图)\d+/g
 const TEMPLATE_VARIABLE_TOKEN_REGEX = /\{\{[a-zA-Z0-9_.-]+\}\}/g
 
 export interface PickerAnchor {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens'
 import {
+  createLegacyPromptMediaLabels,
   createPromptDocumentDoubleWrite,
   parseLegacyPromptString,
   readPromptDocument,
@@ -94,6 +95,23 @@ describe('PromptDocumentV1 validation', () => {
 })
 
 describe('legacy prompt parser', () => {
+  it('把旧图片简称解析到当前统一标签', () => {
+    const options: LegacyPromptParseOptions = {
+      references: [{
+        resourceId: 'asset:a',
+        mediaType: 'image',
+        label: '图片1',
+        legacyLabels: createLegacyPromptMediaLabels('image', 1),
+      }],
+    }
+    const document = parseLegacyPromptString('参考 @图1，也参考 图片1，还参考 图片 1', options)
+
+    expect(document.content[0].content?.filter((node) => node.type === 'mediaReference'))
+      .toHaveLength(3)
+    expect(toLegacyPromptString(document, { references: options.references }))
+      .toBe('参考 @图片1，也参考 @图片1，还参考 @图片1')
+  })
+
   it('仅把 resolver 表唯一命中的引用和变量升级为 atom', () => {
     const document = parseLegacyPromptString(
       '参考 @图1 和 视频1，使用 {{style}}；未知 @图9 {{unknown}}',
@@ -138,6 +156,31 @@ describe('prompt serializers', () => {
       .toBe('主体参考 @[图2](henji-media:asset%3Aa)，风格 {{style}}\n第二段\n换行')
   })
 
+  it('编辑兼容字符串保持紧凑，模型文本在引用两侧智能补空格', () => {
+    const compactDocument: PromptDocumentV1 = {
+      version: 1,
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: '参考' },
+          {
+            type: 'mediaReference',
+            attrs: { resourceId: 'asset:a', mediaType: 'image', fallbackLabel: '图片1' },
+          },
+          { type: 'text', text: '然后修改' },
+        ],
+      }],
+    }
+
+    expect(toLegacyPromptString(compactDocument, {
+      references: [{ resourceId: 'asset:a', label: '图片1' }],
+    })).toBe('参考@图片1然后修改')
+    expect(toModelPromptText(compactDocument, {
+      references: [{ resourceId: 'asset:a', label: '图片1' }],
+    })).toBe('参考 图片1 然后修改')
+  })
+
   it('失效引用使用 fallbackLabel，且当前图引用模型语义与旧函数一致', () => {
     const legacy = toLegacyPromptString(STRUCTURED_DOCUMENT)
     expect(legacy).toContain('@旧图')
@@ -146,6 +189,7 @@ describe('prompt serializers', () => {
     expect(toModelPromptText(currentReferenceDocument)).toBe(
       stripReferenceAtPrefix(toLegacyPromptString(currentReferenceDocument)),
     )
+    expect(stripReferenceAtPrefix('@图片1 与 @图2')).toBe('图片1 与 图2')
   })
 })
 

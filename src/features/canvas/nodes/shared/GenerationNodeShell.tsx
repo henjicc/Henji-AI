@@ -43,6 +43,7 @@ import {
 } from '@/features/canvas/application/graphValueResolver';
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
+import { createPromptMediaLabel } from '@/core/inputs/promptDocument';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
@@ -231,7 +232,7 @@ export const GenerationNodeShell = memo(({
     () =>
       effectiveImages.map((imageUrl, index) => ({
         id: `image-ref-${index}`,
-        label: `图${index + 1}`,
+        label: createPromptMediaLabel('image', index + 1),
         thumbnailSrc: resolveImageDisplayUrl(imageUrl),
       })),
     [effectiveImages]

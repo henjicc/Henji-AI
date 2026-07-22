@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { createRef } from 'react'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import type { EditorView } from '@tiptap/pm/view'
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -39,14 +39,19 @@ describe('PromptSuggestionList', () => {
     const items: PromptSuggestionItem[] = [
       {
         kind: 'reference',
-        value: { resourceId: 'asset:a', mediaType: 'image', label: '图1' },
+        value: { resourceId: 'asset:a', mediaType: 'image', label: '图片1' },
       },
       {
         kind: 'reference',
-        value: { resourceId: 'asset:b', mediaType: 'image', label: '图2' },
+        value: { resourceId: 'asset:b', mediaType: 'image', label: '图片2' },
       },
     ]
-    render(<PromptSuggestionList ref={ref} {...createSuggestionProps(items, command)} />)
+    const rendered = render(
+      <PromptSuggestionList ref={ref} {...createSuggestionProps(items, command)} />,
+    )
+
+    expect(rendered.getByRole('listbox').className).toContain('w-max')
+    expect(rendered.getAllByRole('option')[1].className).toContain('!bg-transparent')
 
     act(() => {
       ref.current?.onKeyDown(createKeyDownProps('ArrowDown'))
@@ -56,6 +61,19 @@ describe('PromptSuggestionList', () => {
     })
 
     expect(command).toHaveBeenCalledWith(items[1])
+  })
+
+  it('媒体候选只显示单行标签，不暴露资源 ID', () => {
+    const resourceId = 'generation-upload:very-long-resource-id'
+    const items: PromptSuggestionItem[] = [{
+      kind: 'reference',
+      value: { resourceId, mediaType: 'image', label: '图片1' },
+    }]
+
+    render(<PromptSuggestionList {...createSuggestionProps(items, vi.fn())} />)
+
+    expect(screen.getByText('图片1')).toBeTruthy()
+    expect(screen.queryByText(resourceId)).toBeNull()
   })
 
   it('空候选吞掉导航键且不执行 command', () => {

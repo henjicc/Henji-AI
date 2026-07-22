@@ -1,0 +1,1 @@
+export const PROMPT_MEDIA_REFERENCE_ALLOWED_PREFIXES: null = null

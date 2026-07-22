@@ -55,6 +55,10 @@ export class PromptEditorResourceRegistry {
       ?? this.state.references.find((item) => item.resourceId === resourceId)
   }
 
+  getReferences(): readonly PromptReferenceItem[] {
+    return this.state.references
+  }
+
   resolveVariable(key: string): PromptVariableItem | undefined {
     return this.state.resolveVariable?.(key)
       ?? this.state.variables.find((item) => item.key === key)

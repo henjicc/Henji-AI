@@ -31,3 +31,28 @@ export function normalizePromptDocument(document: PromptDocumentV1): PromptDocum
     content: content.length ? content : [{ type: 'paragraph' }],
   }
 }
+
+export function compactPromptMediaReferenceSpacing(
+  document: PromptDocumentV1,
+): PromptDocumentV1 {
+  return {
+    ...document,
+    content: document.content.map((paragraph) => {
+      const nodes = paragraph.content ?? []
+      const content: PromptInlineNodeV1[] = []
+      nodes.forEach((node, index) => {
+        if (node.type !== 'text') {
+          content.push(node)
+          return
+        }
+        const previousIsReference = nodes[index - 1]?.type === 'mediaReference'
+        const nextIsReference = nodes[index + 1]?.type === 'mediaReference'
+        let text = node.text
+        if (previousIsReference) text = text.replace(/^[ \t]+/, '')
+        if (nextIsReference) text = text.replace(/[ \t]+$/, '')
+        if (text) content.push({ ...node, text })
+      })
+      return content.length ? { ...paragraph, content } : { type: 'paragraph' as const }
+    }),
+  }
+}

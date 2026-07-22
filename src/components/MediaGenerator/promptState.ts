@@ -1,4 +1,7 @@
 import {
+  compactPromptMediaReferenceSpacing,
+  createLegacyPromptMediaLabels,
+  createPromptMediaLabel,
   readPromptDocument,
   type PromptDocumentV1,
   type PromptMediaBinding,
@@ -13,6 +16,7 @@ export interface MediaGeneratorPromptReference {
   resourceId: string
   mediaType: 'image'
   label: string
+  legacyLabels: readonly string[]
   thumbnailSrc: string
 }
 
@@ -62,7 +66,8 @@ export function createMediaGeneratorPromptReferences(
   return images.map((image, index) => ({
     resourceId: image.resourceId,
     mediaType: 'image',
-    label: `图${index + 1}`,
+    label: createPromptMediaLabel('image', index + 1),
+    legacyLabels: createLegacyPromptMediaLabels('image', index + 1),
     thumbnailSrc: image.url,
   }))
 }
@@ -112,5 +117,5 @@ export function resolveMediaGeneratorPromptCarrier(
     },
   )
 
-  return { document, images }
+  return { document: compactPromptMediaReferenceSpacing(document), images }
 }

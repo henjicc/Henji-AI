@@ -30,6 +30,7 @@ import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
 import { NodeParamRows } from '@/features/canvas/params/NodeParamRows'
 import { isParamVisible } from '@/components/params/paramVisibility'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { createPromptMediaLabel } from '@/core/inputs/promptDocument'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelTag } from '@/core/types'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
@@ -123,7 +124,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     () =>
       effectiveImages.map((imageUrl, index) => ({
         id: `image-ref-${index}`,
-        label: `图${index + 1}`,
+        label: createPromptMediaLabel('image', index + 1),
         thumbnailSrc: imageUrl,
       })),
     [effectiveImages]

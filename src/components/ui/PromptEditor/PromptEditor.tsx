@@ -28,6 +28,7 @@ import {
   shouldSubmitPromptEditor,
 } from './promptEditorKeyboard'
 import { resolvePromptEditorPreset } from './promptEditorPresets'
+import { pastePromptMediaReferences } from './promptEditorPaste'
 import { PromptEditorResourceRegistry } from './resourceRegistry'
 import type { PromptReferenceItem, PromptVariableItem } from './types'
 import type { PromptEditorHandle, PromptEditorProps } from './types'
@@ -173,9 +174,10 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           callbacksRef.current.onSubmit()
           return true
         },
-        handlePaste: (_view, event): boolean => {
+        handlePaste: (view, event): boolean => {
           callbacksRef.current.onPaste?.(event)
-          return event.defaultPrevented
+          if (event.defaultPrevented) return true
+          return pastePromptMediaReferences(view, event, resourceRegistry)
         },
         handleDrop: (_view, event): boolean => {
           callbacksRef.current.onDrop?.(event)

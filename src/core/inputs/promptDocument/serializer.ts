@@ -47,10 +47,34 @@ function serializeDocument(
   context: PromptDocumentSerializationContext,
 ): string {
   return document.content.map((paragraph) => (
-    (paragraph.content ?? [])
-      .map((node) => serializeInlineNode(node, format, context))
-      .join('')
+    serializeParagraph(paragraph.content ?? [], format, context)
   )).join('\n')
+}
+
+const MODEL_REFERENCE_LEFT_BOUNDARY = /[\s([{（【《“‘]$/
+const MODEL_REFERENCE_RIGHT_BOUNDARY = /^[\s,.;:!?，。；：！？、)\]}）】》”’]/
+
+function serializeParagraph(
+  nodes: readonly PromptInlineNodeV1[],
+  format: SerializationFormat,
+  context: PromptDocumentSerializationContext,
+): string {
+  let output = ''
+  nodes.forEach((node, index) => {
+    const serialized = serializeInlineNode(node, format, context)
+    if (format !== 'model' || node.type !== 'mediaReference') {
+      output += serialized
+      return
+    }
+
+    if (output && !MODEL_REFERENCE_LEFT_BOUNDARY.test(output)) output += ' '
+    output += serialized
+
+    const nextNode = nodes[index + 1]
+    const nextText = nextNode ? serializeInlineNode(nextNode, format, context) : ''
+    if (nextText && !MODEL_REFERENCE_RIGHT_BOUNDARY.test(nextText)) output += ' '
+  })
+  return output
 }
 
 export function toLegacyPromptString(

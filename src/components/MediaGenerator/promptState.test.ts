@@ -28,7 +28,7 @@ describe('MediaGenerator prompt state', () => {
     const references = createMediaGeneratorPromptReferences(reordered)
 
     expect(reordered.map((image) => image.resourceId)).toEqual(['resource-2', 'resource-1'])
-    expect(toModelPromptText(parsed.document, { references })).toBe('图2 跟随 图1')
+    expect(toModelPromptText(parsed.document, { references })).toBe('图片2 跟随 图片1')
   })
 
   it('creates a new identity for replacement while retaining duplicate occurrences', () => {
@@ -78,5 +78,28 @@ describe('MediaGenerator prompt state', () => {
     expect(resolved.document.content[0].content).toEqual([
       { type: 'text', text: '保留损坏预设正文' },
     ])
+  })
+
+  it('载入旧字符串时移除引用边界空格，模型输出再恢复单个空格', () => {
+    const resolved = resolveMediaGeneratorPromptCarrier({
+      legacyText: '参考 @图1 然后修改',
+      legacyImages: ['image-a'],
+    }, createIdFactory())
+    const references = createMediaGeneratorPromptReferences(resolved.images)
+
+    expect(resolved.document.content[0].content).toEqual([
+      { type: 'text', text: '参考' },
+      {
+        type: 'mediaReference',
+        attrs: {
+          resourceId: 'resource-1',
+          mediaType: 'image',
+          fallbackLabel: '图片1',
+        },
+      },
+      { type: 'text', text: '然后修改' },
+    ])
+    expect(toModelPromptText(resolved.document, { references }))
+      .toBe('参考 图片1 然后修改')
   })
 })

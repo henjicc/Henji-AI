@@ -20,9 +20,13 @@ function uniqueByLabel(
 ): ReadonlyMap<string, LegacyPromptReference> {
   const grouped = new Map<string, LegacyPromptReference[]>()
   references.forEach((reference) => {
-    const current = grouped.get(reference.label) ?? []
-    current.push(reference)
-    grouped.set(reference.label, current)
+    const labels = new Set([reference.label, ...(reference.legacyLabels ?? [])])
+    labels.forEach((label) => {
+      if (!label.trim()) return
+      const current = grouped.get(label) ?? []
+      current.push(reference)
+      grouped.set(label, current)
+    })
   })
 
   const unique = new Map<string, LegacyPromptReference>()

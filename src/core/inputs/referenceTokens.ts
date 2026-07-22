@@ -18,8 +18,8 @@ interface TokenRange extends TextRange {
 
 const TOKEN_TEXT_GAP = ' ';
 const TOKEN_PAIR_GAP = '  ';
-const IMAGE_REFERENCE_TOKEN_REGEX = /@图\d+/g;
-const IMAGE_REFERENCE_PREFIX_REGEX = /@(?=\s*图\d+)/g;
+const IMAGE_REFERENCE_TOKEN_REGEX = /@(?:图片|图)\d+/g;
+const IMAGE_REFERENCE_PREFIX_REGEX = /@(?=\s*(?:图片|图)\d+)/g;
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

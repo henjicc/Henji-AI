@@ -15,7 +15,7 @@ export const AUTO_ASPECT_RATIO_OPTION: AspectRatioChoice = {
   label: '自动',
 }
 
-const IMAGE_REFERENCE_MARKER_REGEX = /@图(\d+)/g
+const IMAGE_REFERENCE_MARKER_REGEX = /@(?:图片|图)(\d+)/g
 
 export const STORYBOARD_NODE_HORIZONTAL_PADDING_PX = 24
 export const STORYBOARD_GRID_GAP_PX = 2

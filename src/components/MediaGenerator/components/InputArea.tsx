@@ -382,7 +382,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                   : t('inputArea.placeholder.default')
             }
             className="relative isolate overflow-visible rounded-2xl"
-            editorShellClassName="!rounded-2xl !border-zinc-700/35 !bg-zinc-950/22 transition-colors duration-200 focus-within:!border-zinc-500/50"
+            editorShellClassName="!rounded-2xl !border-zinc-700/35 !bg-transparent transition-colors duration-200 focus-within:!border-zinc-500/50 focus-within:!ring-0"
             editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} max-h-[260px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />

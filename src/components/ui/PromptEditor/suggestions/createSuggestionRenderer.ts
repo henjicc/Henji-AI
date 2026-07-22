@@ -28,6 +28,7 @@ export function createSuggestionRenderer(): () => {
         renderer = new ReactRenderer(PromptSuggestionList, {
           editor: props.editor,
           props,
+          className: 'z-[1000]',
         })
         unmount = props.mount(renderer.element)
       },

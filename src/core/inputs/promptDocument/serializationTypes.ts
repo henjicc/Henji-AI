@@ -11,6 +11,7 @@ export interface PromptDocumentSerializationContext {
 export interface LegacyPromptReference extends PromptDocumentReferenceLabel {
   mediaType: 'image' | 'video' | 'audio'
   sourceNodeId?: string
+  legacyLabels?: readonly string[]
 }
 
 export interface LegacyPromptVariable {

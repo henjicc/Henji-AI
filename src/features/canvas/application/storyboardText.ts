@@ -1,5 +1,5 @@
-const STORYBOARD_AT_TAG_REGEX = /@\s*图\d+/g;
-const STORYBOARD_AT_PREFIX_REGEX = /@(?=\s*图\d+)/g;
+const STORYBOARD_AT_TAG_REGEX = /@\s*(?:图片|图)\d+/g;
+const STORYBOARD_AT_PREFIX_REGEX = /@(?=\s*(?:图片|图)\d+)/g;
 
 export function sanitizeStoryboardText(input: string, ignoreAtTag: boolean): string {
   if (!ignoreAtTag) {

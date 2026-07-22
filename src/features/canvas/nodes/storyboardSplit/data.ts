@@ -5,6 +5,7 @@ import {
   isUploadNode,
 } from '@/features/canvas/domain/canvasNodes';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { createPromptMediaLabel } from '@/core/inputs/promptDocument';
 import type { IncomingImageItem } from './shared';
 
 interface IncomingImageRef {
@@ -66,7 +67,7 @@ export function buildIncomingImageItems(incomingImageRefs: IncomingImageRef[]): 
     imageUrl: item.imageUrl,
     previewImageUrl: item.previewImageUrl,
     displayUrl: resolveImageDisplayUrl(item.previewImageUrl || item.imageUrl),
-    label: `图${index + 1}`,
+    label: createPromptMediaLabel('image', index + 1),
   }));
 }
 

@@ -1,21 +1,25 @@
 /** @vitest-environment jsdom */
 
 import { createRef } from 'react'
-import { generateHTML, generateJSON } from '@tiptap/core'
+import { Editor, generateHTML, generateJSON } from '@tiptap/core'
 import Document from '@tiptap/extension-document'
 import HardBreak from '@tiptap/extension-hard-break'
 import Paragraph from '@tiptap/extension-paragraph'
 import Text from '@tiptap/extension-text'
+import { TextSelection } from '@tiptap/pm/state'
+import { findSuggestionMatch } from '@tiptap/suggestion'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createPlainTextPromptDocument,
+  toModelPromptText,
   type PromptDocumentV1,
 } from '@/core/inputs/promptDocument'
 
 import { PromptEditor } from './PromptEditor'
 import { PromptEditor as PublicPromptEditor } from './PromptEditorFacade'
 import { MediaReferenceExtension } from './extensions/mediaReference'
+import { PROMPT_MEDIA_REFERENCE_ALLOWED_PREFIXES } from './extensions/suggestionConfig'
 import { TemplateVariableExtension } from './extensions/templateVariable'
 import { fromTiptapContent, toTiptapContent } from './promptEditorDocument'
 import { PromptEditorResourceRegistry } from './resourceRegistry'
@@ -24,6 +28,69 @@ import type { PromptEditorHandle } from './types'
 afterEach(cleanup)
 
 describe('PromptEditor', () => {
+  it('媒体引用可在中文等任意字符后触发', () => {
+    const editor = new Editor({
+      extensions: [Document, Paragraph, Text],
+      content: '<p>测试@</p>',
+    })
+    const match = findSuggestionMatch({
+      char: '@',
+      allowSpaces: false,
+      allowToIncludeChar: false,
+      allowedPrefixes: PROMPT_MEDIA_REFERENCE_ALLOWED_PREFIXES,
+      startOfLine: false,
+      $position: TextSelection.atEnd(editor.state.doc).$from,
+    })
+
+    expect(match).toMatchObject({ query: '', text: '@' })
+    editor.destroy()
+  })
+
+  it('粘贴文本仅把当前存在的媒体标签升级为紧凑引用节点', async () => {
+    const ref = createRef<PromptEditorHandle>()
+    const references = [{
+      resourceId: 'asset:a',
+      mediaType: 'image' as const,
+      label: '图片1',
+      legacyLabels: ['图1', '图 1', '图片 1'],
+    }]
+    const rendered = render(
+      <PromptEditor
+        ref={ref}
+        value={createPlainTextPromptDocument('')}
+        onChange={vi.fn()}
+        ariaLabel="粘贴媒体引用"
+        preset="media-references"
+        references={references}
+      />,
+    )
+
+    fireEvent.paste(rendered.getByRole('textbox'), {
+      clipboardData: {
+        getData: (type: string) => type === 'text/plain' ? '参考 图片 1 然后修改' : '',
+      },
+    })
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector('[data-reference-id="asset:a"]')).not.toBeNull()
+    })
+    expect(ref.current?.getDocument().content[0].content).toEqual([
+      { type: 'text', text: '参考' },
+      {
+        type: 'mediaReference',
+        attrs: {
+          resourceId: 'asset:a',
+          mediaType: 'image',
+          fallbackLabel: '图片1',
+        },
+      },
+      { type: 'text', text: '然后修改' },
+    ])
+    expect(toModelPromptText(ref.current?.getDocument() ?? createPlainTextPromptDocument(''), {
+      references,
+    })).toBe('参考 图片1 然后修改')
+  })
+
   it('静态模式不创建 contenteditable 或 Tiptap 实例', () => {
     const value = createPlainTextPromptDocument('静态提示词')
     const rendered = render(

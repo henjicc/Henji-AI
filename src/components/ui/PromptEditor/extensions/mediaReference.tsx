@@ -14,6 +14,7 @@ import { PromptEditorResourceRegistry } from '../resourceRegistry'
 import { createSuggestionRenderer } from '../suggestions/createSuggestionRenderer'
 import type { PromptSuggestionItem } from '../suggestions/PromptSuggestionList'
 import type { PromptReferenceItem } from '../types'
+import { PROMPT_MEDIA_REFERENCE_ALLOWED_PREFIXES } from './suggestionConfig'
 
 export interface MediaReferenceExtensionOptions {
   registry: PromptEditorResourceRegistry
@@ -47,18 +48,15 @@ function insertMediaReference(
 ): void {
   editor.chain()
     .focus()
-    .insertContentAt(range, [
-      {
-        type: 'mediaReference',
-        attrs: {
-          resourceId: reference.resourceId,
-          mediaType: reference.mediaType,
-          fallbackLabel: reference.label,
-          sourceNodeId: reference.sourceNodeId ?? null,
-        },
+    .insertContentAt(range, {
+      type: 'mediaReference',
+      attrs: {
+        resourceId: reference.resourceId,
+        mediaType: reference.mediaType,
+        fallbackLabel: reference.label,
+        sourceNodeId: reference.sourceNodeId ?? null,
       },
-      { type: 'text', text: ' ' },
-    ])
+    })
     .run()
 }
 
@@ -135,6 +133,7 @@ export const MediaReferenceExtension = Node.create<MediaReferenceExtensionOption
         editor: this.editor,
         pluginKey: mediaReferenceSuggestionKey,
         char: '@',
+        allowedPrefixes: PROMPT_MEDIA_REFERENCE_ALLOWED_PREFIXES,
         container: registry.getSuggestionContainer(),
         items: async ({ query }) => (
           (await registry.getReferenceSuggestions(query)).map((value) => ({

@@ -12,6 +12,7 @@ export interface PromptReferenceItem {
   resourceId: string
   mediaType: PromptMediaType
   label: string
+  legacyLabels?: readonly string[]
   thumbnailSrc?: string
   sourceNodeId?: string
 }
