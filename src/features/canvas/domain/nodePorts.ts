@@ -35,8 +35,12 @@ export interface NodeMediaOutput {
   kind: MediaKind;
   url: string;
   previewUrl?: string | null;
+  /** 运行时解析补齐的来源节点 ID，用于构造稳定的结构化提示词引用。 */
+  sourceNodeId?: string;
   /** 多输出节点的来源端口；省略表示默认 source 端口。 */
   sourceHandle?: string;
+  /** 同一来源端口内的稳定输出序号。 */
+  outputIndex?: number;
 }
 
 export function getSourcePortMediaKind(

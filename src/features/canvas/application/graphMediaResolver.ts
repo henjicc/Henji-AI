@@ -28,12 +28,19 @@ export function collectInputMedia(
     if (!sourceNode) {
       continue;
     }
-    for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data, edge.sourceHandle ?? 'source')) {
+    const sourceHandle = edge.sourceHandle ?? 'source';
+    const sourceOutputs = getNodeMediaOutputs(sourceNode.type, sourceNode.data, sourceHandle);
+    for (const [outputIndex, output] of sourceOutputs.entries()) {
       if (!output.url || seen.has(output.url)) {
         continue;
       }
       seen.add(output.url);
-      outputs.push(output);
+      outputs.push({
+        ...output,
+        sourceNodeId: sourceNode.id,
+        sourceHandle: output.sourceHandle ?? sourceHandle,
+        outputIndex,
+      });
     }
   }
   return outputs;
@@ -76,7 +83,12 @@ export function areMediaOutputListsEqual(a: NodeMediaOutput[], b: NodeMediaOutpu
   }
   return a.every((item, index) => {
     const other = b[index];
-    return item.kind === other.kind && item.url === other.url && item.previewUrl === other.previewUrl;
+    return item.kind === other.kind
+      && item.url === other.url
+      && item.previewUrl === other.previewUrl
+      && item.sourceNodeId === other.sourceNodeId
+      && item.sourceHandle === other.sourceHandle
+      && item.outputIndex === other.outputIndex;
   });
 }
 

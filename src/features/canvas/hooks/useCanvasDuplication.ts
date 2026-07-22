@@ -3,6 +3,7 @@ import type { Connection, NodeChange } from '@xyflow/react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { CANVAS_NODE_TYPES, type CanvasEdge, type CanvasNode, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import { cloneCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
+import { rebaseCanvasLocalPromptData } from '@/features/canvas/application/generationPromptDocument'
 import {
   ALT_DRAG_COPY_Z_INDEX,
   cloneNodeData,
@@ -118,6 +119,14 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
         )
         idMap.set(sourceNode.id, nextNodeId)
         sizeMap.set(nextNodeId, getNodeSize(sourceNode))
+        const promptPatch = rebaseCanvasLocalPromptData(
+          data as DynamicValueMap,
+          sourceNode.id,
+          nextNodeId,
+        )
+        if (promptPatch) {
+          useCanvasStore.getState().updateNodeData(nextNodeId, promptPatch, { skipHistory: true })
+        }
         if (sourceNode.type === CANVAS_NODE_TYPES.cameraStage) {
           const projectId = (data as { projectId?: DynamicValue }).projectId
           if (typeof projectId === 'string' && projectId) {

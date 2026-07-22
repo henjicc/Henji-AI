@@ -106,6 +106,38 @@ describe('PromptEditor', () => {
     expect(rendered.getByRole('textbox').textContent).toContain('静态提示词')
   })
 
+  it('编辑器完成 Tiptap mount 后通知调用方就绪', async () => {
+    const onReady = vi.fn()
+    render(
+      <PromptEditor
+        value={createPlainTextPromptDocument('就绪')}
+        onChange={vi.fn()}
+        onReady={onReady}
+        ariaLabel="编辑器就绪"
+      />,
+    )
+
+    await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1))
+  })
+
+  it('静态激活把鼠标点击坐标交给按需挂载的编辑器', () => {
+    const onActivate = vi.fn()
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        value={createPlainTextPromptDocument('点击中间')}
+        onChange={vi.fn()}
+        onActivate={onActivate}
+        ariaLabel="点击定位"
+      />,
+    )
+
+    fireEvent.click(rendered.getByRole('textbox'), { clientX: 126, clientY: 88 })
+
+    expect(onActivate).toHaveBeenCalledWith({ clientX: 126, clientY: 88 })
+    expect(rendered.getByRole('textbox').classList.contains('cursor-text')).toBe(true)
+  })
+
   it('受控外部回写更新内容但不重复触发 onChange', () => {
     const onChange = vi.fn()
     const first = createPlainTextPromptDocument('初始')

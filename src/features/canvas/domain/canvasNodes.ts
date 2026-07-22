@@ -1,4 +1,5 @@
 import type { Edge, Node, XYPosition } from '@xyflow/react';
+import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument';
 import type { RowMediaKind } from './socketTypes';
 
 export const CANVAS_NODE_TYPES = {
@@ -129,6 +130,9 @@ export interface TextAnnotationNodeData extends NodeDisplayData {
 
 export interface ImageEditNodeData extends NodeImageData {
   prompt: string;
+  promptDocument?: PromptDocumentV1;
+  promptMediaBindings?: PromptMediaBinding[];
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
   /** 核心 ModelRegistry 中的模型 ID */
   modelId?: string;
   /** schema 驱动的模型参数（与默认值合并后使用） */
@@ -215,6 +219,11 @@ export interface StoryboardGenNodeData {
 
 export interface MediaGenNodeData extends NodeDisplayData {
   prompt: string;
+  promptDocument?: PromptDocumentV1;
+  promptMediaBindings?: PromptMediaBinding[];
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
+  videoTrimStart?: number;
+  videoTrimEnd?: number;
   modelId?: string;
   params?: DynamicValueMap;
   isGenerating?: boolean;

@@ -42,8 +42,14 @@ export interface ReplacePromptDocumentOptions {
   addToHistory?: boolean
 }
 
+export interface PromptEditorActivationPoint {
+  clientX: number
+  clientY: number
+}
+
 export interface PromptEditorHandle {
   focus: () => void
+  focusAtPoint: (point: PromptEditorActivationPoint) => void
   getDocument: () => PromptDocumentV1
   replaceDocument: (
     document: PromptDocumentV1,
@@ -77,9 +83,10 @@ export interface PromptEditorProps {
   editorShellClassName?: string
   editorClassName?: string
   onSubmit?: () => void
+  onReady?: () => void
   onEditStart?: () => void
   onEditEnd?: () => void
-  onActivate?: () => void
+  onActivate?: (point?: PromptEditorActivationPoint) => void
   onFocus?: () => void
   onBlur?: () => void
   onPaste?: (event: ClipboardEvent) => void

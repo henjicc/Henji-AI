@@ -1,4 +1,5 @@
 import { registry } from '@/core/ModelRegistry';
+import type { PromptMediaBinding } from '@/core/inputs/promptDocument';
 import {
   analyzeRatioResolutionParams,
   isSmartAspectValue,
@@ -15,6 +16,29 @@ import { hasResumableServerTask } from './resumableTask';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
+
+function isPromptMediaBinding(value: unknown): value is PromptMediaBinding {
+  if (!value || typeof value !== 'object') return false;
+  const binding = value as Partial<PromptMediaBinding>;
+  return typeof binding.resourceId === 'string'
+    && binding.resourceId.trim().length > 0
+    && (binding.mediaType === 'image' || binding.mediaType === 'video' || binding.mediaType === 'audio')
+    && (typeof binding.dataUrl === 'string' || typeof binding.filePath === 'string');
+}
+
+/**
+ * 标准生成节点提示词载体的轻量迁移：兼容字段始终为字符串，binding 只保留合法记录。
+ * promptDocument 的完整版本校验由共享核心 adapter 负责，以便损坏数据能记录降级诊断。
+ */
+export function migrateGenerationPromptData(data: DynamicValueMap): void {
+  if (typeof data.prompt !== 'string') {
+    data.prompt = '';
+  }
+  if (data.promptMediaBindings === undefined) return;
+  data.promptMediaBindings = Array.isArray(data.promptMediaBindings)
+    ? data.promptMediaBindings.filter(isPromptMediaBinding)
+    : [];
+}
 
 /**
  * 清理无法跨应用生命周期恢复的节点运行态。

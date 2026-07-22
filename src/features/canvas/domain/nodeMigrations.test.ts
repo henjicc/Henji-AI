@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
 
 import { CANVAS_NODE_TYPES } from './canvasNodes';
-import { resetTransientNodeRuntimeState } from './nodeMigrations';
+import { migrateGenerationPromptData, resetTransientNodeRuntimeState } from './nodeMigrations';
+
+describe('migrateGenerationPromptData', () => {
+  it('旧节点补齐兼容字符串并过滤损坏的媒体 binding', () => {
+    const data: DynamicValueMap = {
+      prompt: null,
+      promptMediaBindings: [
+        {
+          resourceId: 'canvas-local:node-a:valid',
+          mediaType: 'image',
+          dataUrl: 'C:\\media\\a.png',
+        },
+        { resourceId: '', mediaType: 'unknown' },
+      ],
+    };
+
+    migrateGenerationPromptData(data);
+
+    expect(data.prompt).toBe('');
+    expect(data.promptMediaBindings).toEqual([expect.objectContaining({
+      resourceId: 'canvas-local:node-a:valid',
+    })]);
+  });
+});
 
 describe('resetTransientNodeRuntimeState', () => {
   it('清理 3D 镜头节点无法恢复的视频渲染状态并保留结果', () => {

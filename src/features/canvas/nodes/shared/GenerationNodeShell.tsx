@@ -19,7 +19,6 @@ import {
   MODEL_PARAM_ID,
   PROMPT_PARAM_ID,
   getSocketColor,
-  promptPortId,
   type RowMediaKind,
 } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
@@ -27,9 +26,7 @@ import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
   NODE_PORT_NODE_CLASS,
-  NODE_PORT_ROW_CLASS,
   NODE_PORT_VISIBLE_CLASS,
-  NODE_ROW_CARD_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import {
   areMediaOutputListsEqual,
@@ -43,17 +40,18 @@ import {
 } from '@/features/canvas/application/graphValueResolver';
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
-import { createPromptMediaLabel } from '@/core/inputs/promptDocument';
+import { toModelPromptText } from '@/core/inputs/promptDocument';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
-import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
-import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens';
 import { registry } from '@/core/ModelRegistry';
 import { GenerationService } from '@/core/services/GenerationService';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
-import { ReferenceTextarea } from '@/components/ui';
 import PriceEstimate from '@/components/ui/PriceEstimate';
+import { GenerationPromptEditor } from './GenerationPromptEditor';
+import {
+  useGenerationPromptDocument,
+  type GenerationNodeShellData,
+} from './useGenerationPromptDocument';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -61,22 +59,11 @@ import { showAlertDialog } from '@/stores/alertDialogStore';
 
 const DEFAULT_GENERATION_DURATION_MS = 60_000;
 const RESULT_TITLE_MAX_CHARS = 10;
-/** prompt/text 由 ReferenceTextarea 单独渲染，不进入逐行参数区 */
+/** prompt/text 由结构化提示词编辑器单独渲染，不进入逐行参数区 */
 const PROMPT_PARAM_IDS = ['prompt', 'text'];
 const ROW_MEDIA_KINDS: RowMediaKind[] = ['image', 'video', 'audio'];
 
-export interface GenerationNodeShellData {
-  displayName?: string;
-  prompt: string;
-  modelId?: string;
-  params?: DynamicValueMap;
-  /** 媒体行未连线时的本地内联上传值 */
-  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
-  /** 视频裁剪窗口选中的范围（秒），仅是元数据，不替换 mediaInputs.video 里的完整视频引用 */
-  videoTrimStart?: number;
-  videoTrimEnd?: number;
-  [key: string]: DynamicValue;
-}
+export type { GenerationNodeShellData } from './useGenerationPromptDocument';
 
 export interface GenerationNodeShellProps {
   id: string;
@@ -137,9 +124,6 @@ export const GenerationNodeShell = memo(({
   // 提示词漏填只把输入框标红（视线本来就在这儿），不弹窗也不占用节点高度
   const [promptInvalid, setPromptInvalid] = useState(false);
 
-  const [promptDraft, setPromptDraft] = useState(() => data.prompt ?? '');
-  const promptDraftRef = useRef(promptDraft);
-
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress);
@@ -164,6 +148,25 @@ export const GenerationNodeShell = memo(({
     [acceptedKinds]
   );
 
+  const connectedParamIds = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => getConnectedParamIds(id, state.edges),
+    areStringSetsEqual
+  );
+  const injectedValues = useStoreWithEqualityFn(
+    useCanvasStore,
+    (state) => collectInputValues(id, state.nodes, state.edges),
+    areValueOverridesEqual
+  );
+  const isModelOverridden = connectedParamIds.has(MODEL_PARAM_ID);
+  const overrideModelId = isModelOverridden && typeof injectedValues[MODEL_PARAM_ID] === 'string'
+    ? injectedValues[MODEL_PARAM_ID] as string
+    : null;
+  const isPromptOverridden = connectedParamIds.has(PROMPT_PARAM_ID);
+  const promptOverrideValue = isPromptOverridden && typeof injectedValues[PROMPT_PARAM_ID] === 'string'
+    ? injectedValues[PROMPT_PARAM_ID] as string
+    : null;
+
   // 内容相等比较的细粒度订阅：仅在上游媒体实际变化时重渲染，避免全画布节点联动刷新
   const incomingMedia = useStoreWithEqualityFn(
     useCanvasStore,
@@ -171,37 +174,26 @@ export const GenerationNodeShell = memo(({
       .filter((output) => acceptedKinds.includes(output.kind)),
     areMediaOutputListsEqual
   );
-  const incomingImages = useMemo(
-    () => incomingMedia.filter((item) => item.kind === 'image').map((item) => item.url),
-    [incomingMedia]
-  );
-  const incomingVideos = useMemo(
-    () => incomingMedia.filter((item) => item.kind === 'video').map((item) => item.url),
-    [incomingMedia]
-  );
-  const incomingAudios = useMemo(
-    () => incomingMedia.filter((item) => item.kind === 'audio').map((item) => item.url),
-    [incomingMedia]
-  );
-
   const mediaInputs = useMemo(() => data.mediaInputs ?? {}, [data.mediaInputs]);
-  // 生效媒体 = 已连线则用上游，否则用节点上的本地内联上传（与各媒体行内部的双态逻辑一致）
-  const effectiveImages = useMemo(
-    () => (incomingImages.length > 0 ? incomingImages : (mediaInputs.image ?? [])),
-    [incomingImages, mediaInputs]
-  );
-  const effectiveVideos = useMemo(
-    () => (incomingVideos.length > 0 ? incomingVideos : (mediaInputs.video ?? [])),
-    [incomingVideos, mediaInputs]
-  );
-  const effectiveAudios = useMemo(
-    () => (incomingAudios.length > 0 ? incomingAudios : (mediaInputs.audio ?? [])),
-    [incomingAudios, mediaInputs]
-  );
-
-  const handleMediaInputChange = useCallback((kind: RowMediaKind, next: string[]) => {
-    updateNodeData(id, { mediaInputs: { ...mediaInputs, [kind]: next } });
-  }, [id, mediaInputs, updateNodeData]);
+  const handleValidPromptContent = useCallback(() => setPromptInvalid(false), []);
+  const promptState = useGenerationPromptDocument({
+    nodeId: id,
+    data,
+    mediaInputs,
+    incomingMedia,
+    acceptedMediaKinds,
+    isPromptOverridden,
+    promptOverrideValue,
+    invalid: promptInvalid,
+    onValidContent: handleValidPromptContent,
+  });
+  const effectiveImages = promptState.mediaUrls.image;
+  const effectiveVideos = promptState.mediaUrls.video;
+  const effectiveAudios = promptState.mediaUrls.audio;
+  const effectivePromptDocument = promptState.document;
+  const promptReferences = promptState.references;
+  const handlePromptChange = promptState.handleChange;
+  const handleMediaInputChange = promptState.handleMediaInputChange;
 
   // 裁剪窗口选中的 [start, end] 只是附加在视频引用上的元数据，不替换 mediaInputs.video——
   // 完整视频始终保留，重新打开裁剪窗口可以在完整时长范围内重新选择。
@@ -227,38 +219,6 @@ export const GenerationNodeShell = memo(({
     }
     primaryVideoRef.current = primaryVideo;
   }, [effectiveVideos, data.videoTrimStart, data.videoTrimEnd, id, updateNodeData]);
-
-  const incomingImageItems = useMemo(
-    () =>
-      effectiveImages.map((imageUrl, index) => ({
-        id: `image-ref-${index}`,
-        label: createPromptMediaLabel('image', index + 1),
-        thumbnailSrc: resolveImageDisplayUrl(imageUrl),
-      })),
-    [effectiveImages]
-  );
-
-  // 模型端口覆盖：连上模型选择器节点后，节点内选择只读，生效模型以连线为准
-  const connectedParamIds = useStoreWithEqualityFn(
-    useCanvasStore,
-    (state) => getConnectedParamIds(id, state.edges),
-    areStringSetsEqual
-  );
-  const injectedValues = useStoreWithEqualityFn(
-    useCanvasStore,
-    (state) => collectInputValues(id, state.nodes, state.edges),
-    areValueOverridesEqual
-  );
-  const isModelOverridden = connectedParamIds.has(MODEL_PARAM_ID);
-  const overrideModelId = isModelOverridden && typeof injectedValues[MODEL_PARAM_ID] === 'string'
-    ? injectedValues[MODEL_PARAM_ID] as string
-    : null;
-
-  // 提示词端口覆盖：连上字符串/文本源节点后，提示词框只读展示该值
-  const isPromptOverridden = connectedParamIds.has(PROMPT_PARAM_ID);
-  const promptOverrideValue = isPromptOverridden && typeof injectedValues[PROMPT_PARAM_ID] === 'string'
-    ? injectedValues[PROMPT_PARAM_ID] as string
-    : null;
 
   const selectedModelId = useMemo(() => {
     const stored = typeof data.modelId === 'string' ? data.modelId.trim() : '';
@@ -308,35 +268,13 @@ export const GenerationNodeShell = memo(({
     : minHeight;
 
   useEffect(() => {
-    const externalPrompt = data.prompt ?? '';
-    if (externalPrompt !== promptDraftRef.current) {
-      promptDraftRef.current = externalPrompt;
-      setPromptDraft(externalPrompt);
-    }
-  }, [data.prompt]);
-
-  const promptHistoryGroup = useMemo(() => createCanvasTextHistoryGroup(id, 'prompt'), [id]);
-  const commitPromptDraft = useCallback((nextPrompt: string) => {
-    promptDraftRef.current = nextPrompt;
-    updateNodeData(id, { prompt: nextPrompt }, { historyGroup: promptHistoryGroup });
-  }, [id, promptHistoryGroup, updateNodeData]);
-  const handlePromptChange = useCallback((nextValue: string) => {
-    setPromptDraft(nextValue);
-    commitPromptDraft(nextValue);
-    if (promptInvalid && nextValue.trim()) {
-      setPromptInvalid(false);
-    }
-  }, [commitPromptDraft, promptInvalid]);
-  const promptTextHistory = useCanvasTextHistory(promptHistoryGroup, handlePromptChange);
-
-  useEffect(() => {
     if (data.modelId !== selectedModelId) {
       updateNodeData(id, { modelId: selectedModelId });
     }
   }, [data.modelId, id, selectedModelId, updateNodeData]);
 
   const handleGenerate = useCallback(async () => {
-    const prompt = stripReferenceAtPrefix(promptOverrideValue ?? promptDraft).trim();
+    const prompt = toModelPromptText(effectivePromptDocument, { references: promptReferences }).trim();
     if (!prompt) {
       setPromptInvalid(true);
       return;
@@ -444,7 +382,7 @@ export const GenerationNodeShell = memo(({
     } finally {
       setNodeGenerationProgress(newNodeId, null);
     }
-  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptDraft, promptOverrideValue, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptReferences, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
     if (nodeId !== id) {
@@ -493,39 +431,22 @@ export const GenerationNodeShell = memo(({
           实测：加 min-h-0 时根高被钉在 160px 且溢出 162px，去掉后自动撑到 323px。 */}
       <div className="canvas-node-lod-detail relative flex flex-1 flex-col gap-1.5">
         {/* 提示词区是唯一的伸缩项：节点拉高多出来的空间全部由它吸收，下方各行保持原高与行距 */}
-        <div className="group/row relative flex min-h-[100px] flex-1 flex-col">
-          <Handle
-            type="target"
-            id={promptPortId()}
-            position={Position.Left}
-            style={{ background: getSocketColor('STRING'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-            className={`${NODE_PORT_ROW_CLASS} ${isPromptOverridden ? NODE_PORT_VISIBLE_CLASS : ''}`}
-          />
-          <div
-            className={`flex min-h-0 flex-1 flex-col p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS} ${promptInvalid ? '!border-red-500/70' : ''}`}
-          >
-            <ReferenceTextarea
-              value={promptOverrideValue ?? promptDraft}
-              onChange={promptTextHistory.onValueChange}
-              textHistorySession={promptTextHistory}
-              disabled={Boolean(promptOverrideValue)}
-              references={incomingImageItems}
-              onMouseDown={(event) => event.stopPropagation()}
-              // 漏填时把"请输入提示词"直接顶到空框里当占位，比在节点底部加一行红字更省空间
-              placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
-              submitShortcut="mod-enter"
-              onSubmit={() => {
-                void handleGenerate();
-              }}
-              className="relative flex min-h-[86px] flex-1 flex-col overflow-visible rounded-md"
-              highlightLayerClassName="text-sm leading-6 text-text-dark"
-              highlightContentClassName="min-h-full px-1.5 py-1"
-              textareaClassName={`ui-scrollbar nodrag nowheel !border-0 !bg-transparent !shadow-none relative z-10 min-h-[86px] w-full flex-1 resize-none overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 text-transparent caret-text-dark outline-none selection:bg-accent/45 selection:text-white focus:!border-transparent focus:!ring-0 focus:!shadow-none focus-visible:!ring-0 whitespace-pre-wrap break-words disabled:cursor-default ${promptInvalid ? 'placeholder:text-red-400/90' : 'placeholder:text-text-muted/80'}`}
-              pickerClassName="z-[90] w-[120px]"
-              pickerListClassName="max-h-[180px]"
-            />
-          </div>
-        </div>
+        <GenerationPromptEditor
+          nodeId={id}
+          selected={Boolean(selected)}
+          value={effectivePromptDocument}
+          references={promptReferences}
+          readOnly={isPromptOverridden}
+          invalid={promptInvalid}
+          // 漏填时把“请输入提示词”直接顶到空框里当占位，比在节点底部加一行红字更省空间
+          placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
+          onChange={handlePromptChange}
+          onSubmit={() => {
+            void handleGenerate();
+          }}
+          onEditEnd={promptState.onEditEnd}
+          onSelectNode={setSelectedNode}
+        />
 
         <NodeInputRows
           className="shrink-0"

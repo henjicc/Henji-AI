@@ -1,4 +1,10 @@
-import { Fragment, memo, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  Fragment,
+  memo,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import type {
   PromptDocumentV1,
   PromptInlineNodeV1,
@@ -6,6 +12,7 @@ import type {
 import type {
   PromptReferenceItem,
   PromptReferenceResolver,
+  PromptEditorActivationPoint,
   PromptVariableItem,
   PromptVariableResolver,
 } from './types'
@@ -16,7 +23,7 @@ interface PromptDocumentStaticProps {
   placeholder?: string
   disabled?: boolean
   className?: string
-  onActivate?: () => void
+  onActivate?: (point?: PromptEditorActivationPoint) => void
   references?: readonly PromptReferenceItem[]
   variables?: readonly PromptVariableItem[]
   resolveReference?: PromptReferenceResolver
@@ -97,6 +104,10 @@ export const PromptDocumentStatic = memo(function PromptDocumentStatic({
     event.preventDefault()
     onActivate?.()
   }
+  const handleClick = (event: MouseEvent<HTMLDivElement>): void => {
+    if (!canActivate) return
+    onActivate?.({ clientX: event.clientX, clientY: event.clientY })
+  }
 
   return (
     <div
@@ -106,7 +117,7 @@ export const PromptDocumentStatic = memo(function PromptDocumentStatic({
       aria-disabled={disabled}
       tabIndex={canActivate ? 0 : -1}
       className={`min-h-[92px] whitespace-pre-wrap break-words rounded-lg border border-border-dark bg-surface-dark px-3 py-2.5 text-sm leading-6 text-text-dark ${canActivate ? 'cursor-text' : ''} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${className}`}
-      onClick={canActivate ? onActivate : undefined}
+      onClick={canActivate ? handleClick : undefined}
       onKeyDown={handleKeyDown}
     >
       {hasVisibleContent(document) ? document.content.map((paragraph, paragraphIndex) => (

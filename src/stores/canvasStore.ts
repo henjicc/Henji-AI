@@ -39,6 +39,7 @@ import {
 import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
 import {
   migrateGenerationNodeData,
+  migrateGenerationPromptData,
   migrateLegacyTargetHandle,
   resetTransientNodeRuntimeState,
 } from '@/features/canvas/domain/nodeMigrations';
@@ -77,6 +78,8 @@ export interface CanvasHistoryState {
 
 export interface CanvasHistoryGroupOptions {
   historyGroup?: string;
+  /** 惰性数据迁移/稳定 ID 修复使用：更新节点但不制造用户可见的撤销步骤。 */
+  skipHistory?: boolean;
 }
 
 const MAX_HISTORY_STEPS = 50;
@@ -275,6 +278,14 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || node.type === CANVAS_NODE_TYPES.storyboardGen
       ) {
         migrateGenerationNodeData(mergedData as DynamicValueMap);
+      }
+
+      if (
+        node.type === CANVAS_NODE_TYPES.imageEdit
+        || node.type === CANVAS_NODE_TYPES.videoGen
+        || node.type === CANVAS_NODE_TYPES.audioGen
+      ) {
+        migrateGenerationPromptData(mergedData as DynamicValueMap);
       }
 
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
@@ -1204,6 +1215,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             nextEdges = state.edges.filter((edge) => !staleEdgeIds.has(edge.id));
           }
         }
+      }
+
+      if (options?.skipHistory) {
+        return { nodes: nextNodes, edges: nextEdges };
       }
 
       const historyGroup = options?.historyGroup;

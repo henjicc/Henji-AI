@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Viewport } from '@xyflow/react';
+import { mapCanvasNodeMediaReferences } from '@/features/canvas/application/canvasNodeMediaReferences';
 import { resetTransientNodeRuntimeState } from '@/features/canvas/domain/nodeMigrations';
 import {
   useCanvasStore,
@@ -117,43 +118,10 @@ function mapNodeImageReferences(
   mapImageUrl: (imageUrl: string | null | undefined) => string | null | undefined
 ): CanvasNode[] {
   return nodes.map((node) => {
-    const nodeData = node.data as DynamicValueMap;
-    const nextData: DynamicValueMap = { ...nodeData };
-
-    if ('imageUrl' in nextData) {
-      nextData.imageUrl = mapImageUrl(nextData.imageUrl as string | null | undefined) ?? null;
-    }
-    if ('previewImageUrl' in nextData) {
-      nextData.previewImageUrl =
-        mapImageUrl(nextData.previewImageUrl as string | null | undefined) ?? null;
-    }
-    // 视频/音频节点的媒体路径同样进池去重
-    if ('videoUrl' in nextData) {
-      nextData.videoUrl = mapImageUrl(nextData.videoUrl as string | null | undefined) ?? null;
-    }
-    if ('audioUrl' in nextData) {
-      nextData.audioUrl = mapImageUrl(nextData.audioUrl as string | null | undefined) ?? null;
-    }
-
-    if (Array.isArray(nextData.frames)) {
-      nextData.frames = nextData.frames.map((frame) => {
-        if (!frame || typeof frame !== 'object') {
-          return frame;
-        }
-
-        const frameRecord = frame as DynamicValueMap;
-        if (!('imageUrl' in frameRecord)) {
-          return frame;
-        }
-
-        return {
-          ...frameRecord,
-          imageUrl: mapImageUrl(frameRecord.imageUrl as string | null | undefined) ?? null,
-          previewImageUrl:
-            mapImageUrl(frameRecord.previewImageUrl as string | null | undefined) ?? null,
-        };
-      });
-    }
+    const nextData = mapCanvasNodeMediaReferences(
+      node.data as DynamicValueMap,
+      (value) => mapImageUrl(value) ?? value,
+    );
 
     return {
       ...node,

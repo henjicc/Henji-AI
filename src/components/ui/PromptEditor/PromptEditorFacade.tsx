@@ -29,6 +29,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
   }, ref): JSX.Element {
     useImperativeHandle(ref, () => ({
       focus: (): void => onActivate?.(),
+      focusAtPoint: (point): void => onActivate?.(point),
       getDocument: () => value,
       replaceDocument: (document): void => onChange(document),
     }), [onActivate, onChange, value])

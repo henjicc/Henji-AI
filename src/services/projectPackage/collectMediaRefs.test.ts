@@ -1,0 +1,54 @@
+import { describe, expect, it } from 'vitest'
+
+import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
+import { collectAndRewriteMedia, rewritePackagePathsToLocal } from './collectMediaRefs'
+
+describe('结构化提示词项目包媒体收集', () => {
+  it('收集并恢复 mediaInputs 与 promptMediaBindings 中的本地路径', () => {
+    const mediaPath = 'C:\\media\\reference.png'
+    const node = {
+      id: 'generation-node',
+      type: CANVAS_NODE_TYPES.imageEdit,
+      position: { x: 0, y: 0 },
+      data: {
+        imageUrl: null,
+        aspectRatio: '1:1',
+        prompt: '参考@图片1',
+        mediaInputs: { image: [mediaPath] },
+        promptMediaBindings: [{
+          resourceId: 'canvas-local:generation-node:media-1',
+          mediaType: 'image',
+          dataUrl: mediaPath,
+          filePath: mediaPath,
+        }],
+        promptDocument: {
+          version: 1,
+          type: 'doc',
+          content: [{ type: 'paragraph' }],
+        },
+      },
+    } as CanvasNode
+
+    const collected = collectAndRewriteMedia([node])
+    expect(collected.mediaFiles).toEqual([{
+      srcPath: mediaPath,
+      packagePath: 'media/1-reference.png',
+    }])
+    expect(collected.nodes[0].data.mediaInputs).toEqual({
+      image: ['media/1-reference.png'],
+    })
+    expect(collected.nodes[0].data.promptMediaBindings).toEqual([expect.objectContaining({
+      dataUrl: 'media/1-reference.png',
+      filePath: 'media/1-reference.png',
+    })])
+
+    const restored = rewritePackagePathsToLocal(collected.nodes, {
+      'media/1-reference.png': 'D:\\unpacked\\reference.png',
+    })
+    expect(restored[0].data.mediaInputs).toEqual({ image: ['D:\\unpacked\\reference.png'] })
+    expect(restored[0].data.promptMediaBindings).toEqual([expect.objectContaining({
+      dataUrl: 'D:\\unpacked\\reference.png',
+      filePath: 'D:\\unpacked\\reference.png',
+    })])
+  })
+})

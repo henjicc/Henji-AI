@@ -1,9 +1,8 @@
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes';
+import { mapCanvasNodeMediaReferences } from '@/features/canvas/application/canvasNodeMediaReferences';
 import { isLikelyLocalImagePath } from '@/features/canvas/application/imageData';
 import type { PackageMediaFile } from '@/commands/projectPackage';
 
-/** 节点 data 中可能承载本地媒体路径的字段（含分镜帧） */
-const MEDIA_URL_FIELDS = ['imageUrl', 'previewImageUrl', 'videoUrl', 'audioUrl'] as const;
 const PACKAGE_MEDIA_PREFIX = 'media/';
 
 export interface CollectMediaResult {
@@ -17,38 +16,6 @@ function basenameOf(filePath: string): string {
   const name = normalized.slice(normalized.lastIndexOf('/') + 1) || 'media.bin';
   // 防止特殊字符破坏包内路径
   return name.replace(/[^A-Za-z0-9._-]/g, '_').slice(-120);
-}
-
-function mapMediaFields(
-  data: DynamicValueMap,
-  mapValue: (value: string) => string
-): DynamicValueMap {
-  const next: DynamicValueMap = { ...data };
-
-  for (const field of MEDIA_URL_FIELDS) {
-    const value = next[field];
-    if (typeof value === 'string' && value) {
-      next[field] = mapValue(value);
-    }
-  }
-
-  if (Array.isArray(next.frames)) {
-    next.frames = next.frames.map((frame) => {
-      if (!frame || typeof frame !== 'object') {
-        return frame;
-      }
-      const frameRecord = { ...(frame as DynamicValueMap) };
-      for (const field of ['imageUrl', 'previewImageUrl'] as const) {
-        const value = frameRecord[field];
-        if (typeof value === 'string' && value) {
-          frameRecord[field] = mapValue(value);
-        }
-      }
-      return frameRecord;
-    });
-  }
-
-  return next;
 }
 
 /**
@@ -75,7 +42,7 @@ export function collectAndRewriteMedia(nodes: CanvasNode[]): CollectMediaResult 
 
   const rewrittenNodes = nodes.map((node) => ({
     ...node,
-    data: mapMediaFields(node.data as DynamicValueMap, mapValue),
+    data: mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue),
   })) as CanvasNode[];
 
   return { nodes: rewrittenNodes, mediaFiles };
@@ -95,6 +62,6 @@ export function rewritePackagePathsToLocal(
 
   return nodes.map((node) => ({
     ...node,
-    data: mapMediaFields(node.data as DynamicValueMap, mapValue),
+    data: mapCanvasNodeMediaReferences(node.data as DynamicValueMap, mapValue),
   })) as CanvasNode[];
 }

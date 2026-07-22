@@ -31,7 +31,11 @@ import { resolvePromptEditorPreset } from './promptEditorPresets'
 import { pastePromptMediaReferences } from './promptEditorPaste'
 import { PromptEditorResourceRegistry } from './resourceRegistry'
 import type { PromptReferenceItem, PromptVariableItem } from './types'
-import type { PromptEditorHandle, PromptEditorProps } from './types'
+import type {
+  PromptEditorActivationPoint,
+  PromptEditorHandle,
+  PromptEditorProps,
+} from './types'
 
 const EDITOR_CONTENT_CLASS = [
   'min-h-[92px] whitespace-pre-wrap break-words px-3 py-2.5 text-sm leading-6 text-text-dark outline-none',
@@ -71,6 +75,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     editorShellClassName = '',
     editorClassName = '',
     onSubmit,
+    onReady,
     onEditStart,
     onEditEnd,
     onFocus,
@@ -85,6 +90,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     const callbacksRef = useRef({
       onChange,
       onSubmit,
+      onReady,
       onEditStart,
       onEditEnd,
       onFocus,
@@ -99,6 +105,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     callbacksRef.current = {
       onChange,
       onSubmit,
+      onReady,
       onEditStart,
       onEditEnd,
       onFocus,
@@ -160,7 +167,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         attributes: {
           'aria-label': ariaLabel,
           role: 'textbox',
-          class: `${EDITOR_CONTENT_CLASS} ${editorClassName}`,
+          class: `${EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
         },
         handleKeyDown: (view, event): boolean => {
           if (isPromptEditorHistoryShortcut(event)) event.stopPropagation()
@@ -196,6 +203,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
       },
       onCreate: ({ editor: currentEditor }): void => {
         setCharacterCount(currentEditor.storage.characterCount.characters())
+        callbacksRef.current.onReady?.()
       },
       onUpdate: ({ editor: currentEditor }): void => {
         const document = fromTiptapContent(currentEditor.getJSON())
@@ -280,7 +288,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
             'aria-disabled': String(disabled),
             'aria-readonly': String(readOnly),
             role: 'textbox',
-            class: `${EDITOR_CONTENT_CLASS} ${editorClassName}`,
+            class: `${EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
           },
         },
       })
@@ -289,6 +297,18 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     useImperativeHandle(ref, () => ({
       focus: (): void => {
         editor?.commands.focus()
+      },
+      focusAtPoint: (point: PromptEditorActivationPoint): void => {
+        if (!editor) return
+        const position = editor.view.posAtCoords({
+          left: point.clientX,
+          top: point.clientY,
+        })
+        if (!position) {
+          editor.commands.focus()
+          return
+        }
+        editor.chain().focus().setTextSelection(position.pos).run()
       },
       getDocument: () => editor ? fromTiptapContent(editor.getJSON()) : valueRef.current,
       replaceDocument: (document, options = {}): void => {
