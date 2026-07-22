@@ -15,6 +15,8 @@ import { Placeholder } from '@tiptap/extensions/placeholder'
 import { UndoRedo } from '@tiptap/extensions/undo-redo'
 import { EditorContent, useEditor } from '@tiptap/react'
 
+import { MediaReferenceExtension } from './extensions/mediaReference'
+import { TemplateVariableExtension } from './extensions/templateVariable'
 import {
   countPromptDocumentCharacters,
   fromTiptapContent,
@@ -25,6 +27,9 @@ import {
   isPromptEditorHistoryShortcut,
   shouldSubmitPromptEditor,
 } from './promptEditorKeyboard'
+import { resolvePromptEditorPreset } from './promptEditorPresets'
+import { PromptEditorResourceRegistry } from './resourceRegistry'
+import type { PromptReferenceItem, PromptVariableItem } from './types'
 import type { PromptEditorHandle, PromptEditorProps } from './types'
 
 const EDITOR_CONTENT_CLASS = [
@@ -36,10 +41,21 @@ const EDITOR_CONTENT_CLASS = [
   '[&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
 ].join(' ')
 
+const EMPTY_REFERENCES: readonly PromptReferenceItem[] = []
+const EMPTY_VARIABLES: readonly PromptVariableItem[] = []
+
 const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
   function EditablePromptEditor({
     value,
     onChange,
+    preset = 'plain',
+    references = EMPTY_REFERENCES,
+    variables = EMPTY_VARIABLES,
+    resolveReference,
+    resolveVariable,
+    getReferenceSuggestions,
+    getVariableSuggestions,
+    suggestionContainer,
     ariaLabel,
     placeholder = '',
     disabled = false,
@@ -100,19 +116,37 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     const submitShortcutRef = useRef(submitShortcut)
     submitShortcutRef.current = submitShortcut
     const editSessionActiveRef = useRef(false)
+    const [resourceRegistry] = useState(() => new PromptEditorResourceRegistry({
+      references,
+      variables,
+      resolveReference,
+      resolveVariable,
+      getReferenceSuggestions,
+      getVariableSuggestions,
+      suggestionContainer,
+    }))
     const [characterCount, setCharacterCount] = useState(() => (
       countPromptDocumentCharacters(value)
     ))
 
-    const extensions = useMemo(() => [
-      Document,
-      Paragraph,
-      Text,
-      HardBreak,
-      UndoRedo.configure({ depth: 100, newGroupDelay: 500 }),
-      Placeholder.configure({ placeholder: () => placeholderRef.current }),
-      CharacterCount.configure({ limit: maxCharacters ?? null, mode: 'textSize' }),
-    ], [maxCharacters])
+    const extensions = useMemo(() => {
+      const capabilities = resolvePromptEditorPreset(preset)
+      return [
+        Document,
+        Paragraph,
+        Text,
+        HardBreak,
+        UndoRedo.configure({ depth: 100, newGroupDelay: 500 }),
+        Placeholder.configure({ placeholder: () => placeholderRef.current }),
+        CharacterCount.configure({ limit: maxCharacters ?? null, mode: 'textSize' }),
+        ...(capabilities.mediaReferences
+          ? [MediaReferenceExtension.configure({ registry: resourceRegistry })]
+          : []),
+        ...(capabilities.templateVariables
+          ? [TemplateVariableExtension.configure({ registry: resourceRegistry })]
+          : []),
+      ]
+    }, [maxCharacters, preset, resourceRegistry])
 
     const editor = useEditor({
       extensions,
@@ -187,6 +221,27 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         callbacksRef.current.onEditEnd?.()
       },
     }, [extensions])
+
+    useEffect(() => {
+      resourceRegistry.update({
+        references,
+        variables,
+        resolveReference,
+        resolveVariable,
+        getReferenceSuggestions,
+        getVariableSuggestions,
+        suggestionContainer,
+      })
+    }, [
+      getReferenceSuggestions,
+      getVariableSuggestions,
+      references,
+      resolveReference,
+      resolveVariable,
+      resourceRegistry,
+      suggestionContainer,
+      variables,
+    ])
 
     useEffect(() => {
       if (!editor || promptDocumentsEqual(fromTiptapContent(editor.getJSON()), value)) return

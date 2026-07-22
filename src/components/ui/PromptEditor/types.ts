@@ -1,8 +1,41 @@
-import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
+import type { PromptDocumentV1, PromptMediaType } from '@/core/inputs/promptDocument'
 
-export type PromptEditorPreset = 'plain'
+export type PromptEditorPreset =
+  | 'plain'
+  | 'media-references'
+  | 'template-variables'
+  | 'structured'
 export type PromptEditorMode = 'edit' | 'static'
 export type PromptEditorSubmitShortcut = 'enter' | 'mod-enter' | 'none'
+
+export interface PromptReferenceItem {
+  resourceId: string
+  mediaType: PromptMediaType
+  label: string
+  thumbnailSrc?: string
+  sourceNodeId?: string
+}
+
+export interface PromptVariableItem {
+  key: string
+  label: string
+}
+
+export type PromptReferenceResolver = (
+  resourceId: string,
+) => PromptReferenceItem | undefined
+
+export type PromptVariableResolver = (
+  key: string,
+) => PromptVariableItem | undefined
+
+export type PromptReferenceSuggestionProvider = (
+  query: string,
+) => readonly PromptReferenceItem[] | Promise<readonly PromptReferenceItem[]>
+
+export type PromptVariableSuggestionProvider = (
+  query: string,
+) => readonly PromptVariableItem[] | Promise<readonly PromptVariableItem[]>
 
 export interface ReplacePromptDocumentOptions {
   addToHistory?: boolean
@@ -21,6 +54,13 @@ export interface PromptEditorProps {
   value: PromptDocumentV1
   onChange: (document: PromptDocumentV1) => void
   preset?: PromptEditorPreset
+  references?: readonly PromptReferenceItem[]
+  variables?: readonly PromptVariableItem[]
+  resolveReference?: PromptReferenceResolver
+  resolveVariable?: PromptVariableResolver
+  getReferenceSuggestions?: PromptReferenceSuggestionProvider
+  getVariableSuggestions?: PromptVariableSuggestionProvider
+  suggestionContainer?: string | HTMLElement
   mode?: PromptEditorMode
   ariaLabel: string
   placeholder?: string

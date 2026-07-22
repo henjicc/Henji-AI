@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core'
 import type {
   PromptDocumentV1,
   PromptInlineNodeV1,
+  PromptMediaType,
   PromptParagraphV1,
 } from '@/core/inputs/promptDocument'
 
@@ -52,9 +53,42 @@ export function toTiptapContent(document: PromptDocumentV1): JSONContent {
 }
 
 export function fromTiptapContent(content: JSONContent): PromptDocumentV1 {
+  const readString = (value: unknown): string => typeof value === 'string' ? value : ''
+  const readMediaType = (value: unknown): PromptMediaType => (
+    value === 'video' || value === 'audio' ? value : 'image'
+  )
+  const readInlineNode = (node: JSONContent): PromptInlineNodeV1 | null => {
+    if (node.type === 'text') return { type: 'text', text: node.text ?? '' }
+    if (node.type === 'hardBreak') return { type: 'hardBreak' }
+    if (node.type === 'mediaReference') {
+      const sourceNodeId = readString(node.attrs?.sourceNodeId)
+      return {
+        type: 'mediaReference',
+        attrs: {
+          resourceId: readString(node.attrs?.resourceId),
+          mediaType: readMediaType(node.attrs?.mediaType),
+          fallbackLabel: readString(node.attrs?.fallbackLabel) || '失效引用',
+          ...(sourceNodeId ? { sourceNodeId } : {}),
+        },
+      }
+    }
+    if (node.type === 'templateVariable') {
+      return {
+        type: 'templateVariable',
+        attrs: {
+          key: readString(node.attrs?.key),
+          fallbackLabel: readString(node.attrs?.fallbackLabel) || '失效变量',
+        },
+      }
+    }
+    return null
+  }
+
   const paragraphs: PromptParagraphV1[] = (content.content ?? []).map((node) => ({
     type: 'paragraph',
-    content: node.content as PromptInlineNodeV1[] | undefined,
+    content: node.content
+      ?.map(readInlineNode)
+      .filter((item): item is PromptInlineNodeV1 => item !== null),
   }))
 
   return normalizePromptDocument({

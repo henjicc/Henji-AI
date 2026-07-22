@@ -3,6 +3,12 @@ import type {
   PromptDocumentV1,
   PromptInlineNodeV1,
 } from '@/core/inputs/promptDocument'
+import type {
+  PromptReferenceItem,
+  PromptReferenceResolver,
+  PromptVariableItem,
+  PromptVariableResolver,
+} from './types'
 
 interface PromptDocumentStaticProps {
   document: PromptDocumentV1
@@ -11,13 +17,56 @@ interface PromptDocumentStaticProps {
   disabled?: boolean
   className?: string
   onActivate?: () => void
+  references?: readonly PromptReferenceItem[]
+  variables?: readonly PromptVariableItem[]
+  resolveReference?: PromptReferenceResolver
+  resolveVariable?: PromptVariableResolver
 }
 
-function renderInlineNode(node: PromptInlineNodeV1, key: string): ReactNode {
+interface StaticResolvers {
+  resolveReference: PromptReferenceResolver
+  resolveVariable: PromptVariableResolver
+}
+
+function renderInlineNode(
+  node: PromptInlineNodeV1,
+  key: string,
+  resolvers: StaticResolvers,
+): ReactNode {
   if (node.type === 'text') return node.text
   if (node.type === 'hardBreak') return <br key={key} />
-  if (node.type === 'mediaReference') return `@${node.attrs.fallbackLabel}`
-  return `{{${node.attrs.key}}}`
+  if (node.type === 'mediaReference') {
+    const reference = resolvers.resolveReference(node.attrs.resourceId)
+    const label = reference?.label ?? node.attrs.fallbackLabel
+    return (
+      <span
+        key={key}
+        className={`mx-0.5 inline-flex max-w-[180px] items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 align-middle text-xs ${reference ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
+        data-prompt-media-reference=""
+        data-reference-id={node.attrs.resourceId}
+        data-reference-state={reference ? 'resolved' : 'missing'}
+      >
+        {reference?.thumbnailSrc ? (
+          <img src={reference.thumbnailSrc} alt="" className="h-5 w-5 rounded object-cover" />
+        ) : null}
+        <span className="truncate">@{label}</span>
+      </span>
+    )
+  }
+
+  const variable = resolvers.resolveVariable(node.attrs.key)
+  const label = variable?.label ?? node.attrs.fallbackLabel
+  return (
+    <span
+      key={key}
+      className={`mx-0.5 inline-flex max-w-[180px] whitespace-nowrap rounded-md border px-1.5 py-0.5 align-middle text-xs ${variable ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
+      data-prompt-template-variable=""
+      data-variable-key={node.attrs.key}
+      data-variable-state={variable ? 'resolved' : 'missing'}
+    >
+      <span className="truncate">{'{{'}{label}{'}}'}</span>
+    </span>
+  )
 }
 
 function hasVisibleContent(document: PromptDocumentV1): boolean {
@@ -31,8 +80,18 @@ export const PromptDocumentStatic = memo(function PromptDocumentStatic({
   disabled = false,
   className = '',
   onActivate,
+  references = [],
+  variables = [],
+  resolveReference,
+  resolveVariable,
 }: PromptDocumentStaticProps): JSX.Element {
   const canActivate = Boolean(onActivate) && !disabled
+  const resolvers: StaticResolvers = {
+    resolveReference: resolveReference
+      ?? ((resourceId) => references.find((item) => item.resourceId === resourceId)),
+    resolveVariable: resolveVariable
+      ?? ((key) => variables.find((item) => item.key === key)),
+  }
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!canActivate || (event.key !== 'Enter' && event.key !== ' ')) return
     event.preventDefault()
@@ -54,7 +113,7 @@ export const PromptDocumentStatic = memo(function PromptDocumentStatic({
         <div key={`paragraph-${paragraphIndex}`} className="min-h-[1.5em]">
           {paragraph.content?.map((node, nodeIndex) => (
             <Fragment key={`node-${paragraphIndex}-${nodeIndex}`}>
-              {renderInlineNode(node, `node-${paragraphIndex}-${nodeIndex}`)}
+              {renderInlineNode(node, `node-${paragraphIndex}-${nodeIndex}`, resolvers)}
             </Fragment>
           ))}
         </div>

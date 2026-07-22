@@ -1,7 +1,12 @@
 /** @vitest-environment jsdom */
 
 import { createRef } from 'react'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { generateHTML, generateJSON } from '@tiptap/core'
+import Document from '@tiptap/extension-document'
+import HardBreak from '@tiptap/extension-hard-break'
+import Paragraph from '@tiptap/extension-paragraph'
+import Text from '@tiptap/extension-text'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createPlainTextPromptDocument,
@@ -10,6 +15,10 @@ import {
 
 import { PromptEditor } from './PromptEditor'
 import { PromptEditor as PublicPromptEditor } from './PromptEditorFacade'
+import { MediaReferenceExtension } from './extensions/mediaReference'
+import { TemplateVariableExtension } from './extensions/templateVariable'
+import { fromTiptapContent, toTiptapContent } from './promptEditorDocument'
+import { PromptEditorResourceRegistry } from './resourceRegistry'
 import type { PromptEditorHandle } from './types'
 
 afterEach(cleanup)
@@ -109,5 +118,162 @@ describe('PromptEditor', () => {
     expect(firstRef.current?.getDocument()).toEqual(first)
     expect(secondRef.current?.getDocument()).toEqual(secondReplacement)
     expect(parentKeyDown).not.toHaveBeenCalled()
+  })
+
+  it('媒体和变量以 atom NodeView 渲染，运行时资源变化不改写 JSON', async () => {
+    const ref = createRef<PromptEditorHandle>()
+    const document: PromptDocumentV1 = {
+      version: 1,
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: '参考 ' },
+          {
+            type: 'mediaReference',
+            attrs: {
+              resourceId: 'asset:a',
+              mediaType: 'image',
+              fallbackLabel: '旧标签',
+            },
+          },
+          { type: 'text', text: ' 风格 ' },
+          {
+            type: 'templateVariable',
+            attrs: { key: 'style', fallbackLabel: '旧变量' },
+          },
+        ],
+      }],
+    }
+    const rendered = render(
+      <PromptEditor
+        ref={ref}
+        value={document}
+        onChange={vi.fn()}
+        ariaLabel="结构化提示词"
+        preset="structured"
+        references={[{
+          resourceId: 'asset:a',
+          mediaType: 'image',
+          label: '图1',
+          thumbnailSrc: 'henji-media://asset/a',
+        }]}
+        variables={[{ key: 'style', label: '电影感' }]}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(rendered.container.innerHTML).toContain('data-reference-id="asset:a"')
+    })
+    expect(rendered.container.querySelector('[data-reference-id="asset:a"]')?.textContent)
+      .toContain('@图1')
+    expect(rendered.container.querySelector('[data-variable-key="style"]')?.textContent)
+      .toContain('{{电影感}}')
+    expect(JSON.stringify(ref.current?.getDocument())).not.toContain('thumbnailSrc')
+
+    rendered.rerender(
+      <PromptEditor
+        ref={ref}
+        value={document}
+        onChange={vi.fn()}
+        ariaLabel="结构化提示词"
+        preset="structured"
+        references={[{
+          resourceId: 'asset:a',
+          mediaType: 'image',
+          label: '图2',
+        }]}
+        variables={[{ key: 'style', label: '写实' }]}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector('[data-reference-id="asset:a"]')?.textContent)
+        .toContain('@图2')
+    })
+    expect(ref.current?.getDocument()).toEqual(document)
+  })
+
+  it('HTML 复制载体保留原子身份并排除缩略图 URL', () => {
+    const document: PromptDocumentV1 = {
+      version: 1,
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          {
+            type: 'mediaReference',
+            attrs: {
+              resourceId: 'canvas-output:node-1:image:0',
+              mediaType: 'image',
+              fallbackLabel: '图1',
+              sourceNodeId: 'node-1',
+            },
+          },
+          { type: 'templateVariable', attrs: { key: 'style', fallbackLabel: '风格' } },
+        ],
+      }],
+    }
+    const registry = new PromptEditorResourceRegistry()
+    const extensions = [
+      Document,
+      Paragraph,
+      Text,
+      HardBreak,
+      MediaReferenceExtension.configure({ registry }),
+      TemplateVariableExtension.configure({ registry }),
+    ]
+    const html = generateHTML(toTiptapContent(document), extensions)
+
+    expect(html).toContain('data-reference-id="canvas-output:node-1:image:0"')
+    expect(html).toContain('data-variable-key="style"')
+    expect(html).not.toContain('thumbnail')
+    expect(fromTiptapContent(generateJSON(html, extensions))).toEqual(document)
+  })
+
+  it('静态 renderer 对失效引用降级显示并可随 resolver 恢复', () => {
+    const document: PromptDocumentV1 = {
+      version: 1,
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [{
+          type: 'mediaReference',
+          attrs: {
+            resourceId: 'canvas-frame:node-1:frame-1',
+            mediaType: 'image',
+            fallbackLabel: '原图',
+          },
+        }],
+      }],
+    }
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        value={document}
+        onChange={vi.fn()}
+        ariaLabel="静态引用"
+      />,
+    )
+
+    expect(rendered.container.querySelector('[data-reference-state="missing"]')?.textContent)
+      .toContain('@原图')
+
+    rendered.rerender(
+      <PublicPromptEditor
+        mode="static"
+        value={document}
+        onChange={vi.fn()}
+        ariaLabel="静态引用"
+        references={[{
+          resourceId: 'canvas-frame:node-1:frame-1',
+          mediaType: 'image',
+          label: '图3',
+        }]}
+      />,
+    )
+
+    expect(rendered.container.querySelector('[data-reference-state="resolved"]')?.textContent)
+      .toContain('@图3')
   })
 })

@@ -22,6 +22,10 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     disabled = false,
     className,
     onActivate,
+    references,
+    variables,
+    resolveReference,
+    resolveVariable,
   }, ref): JSX.Element {
     useImperativeHandle(ref, () => ({
       focus: (): void => onActivate?.(),
@@ -37,6 +41,10 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         disabled={disabled}
         className={className}
         onActivate={onActivate}
+        references={references}
+        variables={variables}
+        resolveReference={resolveReference}
+        resolveVariable={resolveVariable}
       />
     )
   },
@@ -59,6 +67,10 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
             placeholder={props.placeholder}
             disabled={props.disabled}
             className={props.className}
+            references={props.references}
+            variables={props.variables}
+            resolveReference={props.resolveReference}
+            resolveVariable={props.resolveVariable}
           />
         )}
       >
