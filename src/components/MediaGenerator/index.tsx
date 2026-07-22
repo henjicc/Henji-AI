@@ -16,15 +16,14 @@ import { useAudioUpload } from './hooks/useAudioUpload'
 import { useGlobalPasteImage } from './hooks/useGlobalPasteImage'
 import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
-import ModelSelectorPanel from './components/ModelSelectorPanel'
-import ParameterPanel from './components/ParameterPanel'
 import InputArea from './components/InputArea'
+import { GeneratorConfigurationBar } from './components/GeneratorConfigurationBar'
 import { PromptOptimizeButton } from './components/PromptOptimizeButton'
-import PanelTrigger from '../ui/PanelTrigger'
-import { UiButton } from '@/components/ui'
+import { UiButton, type PromptEditorHandle } from '@/components/ui'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
-import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
+import { parseLegacyPromptString } from '@/core/inputs/promptDocument'
+import type { Preset } from '@/types/preset'
 
 interface MediaGeneratorProps {
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: DynamicValue) => void | Promise<void>
@@ -38,13 +37,6 @@ interface MediaGeneratorProps {
   onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onStateChange?: (state: { modelId: string; prompt: string }) => void
 }
-
-interface PromptOptimizationHistoryEntry {
-  before: string
-  after: string
-}
-
-const MAX_PROMPT_OPTIMIZATION_HISTORY = 20
 
 /**
  * MediaGenerator 主组件 - 重构版
@@ -70,19 +62,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     reasoning: '',
     content: '',
   })
-  const [promptOptimizationHistory, setPromptOptimizationHistory] = useState<PromptOptimizationHistoryEntry[]>([])
-  const [promptOptimizationHistoryCursor, setPromptOptimizationHistoryCursor] = useState(0)
-  const promptTextareaRef = useRef<ReferenceTextareaHandle>(null)
-  const promptUndoEntry = (
-    promptOptimizationHistoryCursor > 0
-      ? promptOptimizationHistory[promptOptimizationHistoryCursor - 1]
-      : null
-  ) ?? null
-  const promptRedoEntry = (
-    promptOptimizationHistoryCursor < promptOptimizationHistory.length
-      ? promptOptimizationHistory[promptOptimizationHistoryCursor]
-      : null
-  ) ?? null
+  const promptEditorRef = useRef<PromptEditorHandle>(null)
 
   // 2. 模型参数管理（使用新系统）
   const modelState = useModelState(uiState.selectedModel, uiState)
@@ -159,7 +139,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   // 5. 生成请求处理
   const { handleGenerate: handleGenerateRequest } = useGenerationHandler(
     uiState.selectedModel,
-    uiState.input,
+    uiState.promptDocument,
+    uiState.promptReferences,
     modelState,
     uiState.uploadedImages,
     uiState.uploadedVideos,
@@ -313,8 +294,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   const inputBusy = isSubmittingGenerate || (isLoading && !isGenerating)
 
   // 9. 预设加载处理
-  const handleLoadPreset = (presetData: DynamicValueMap) => {
-    const params = PresetManager.loadPreset(presetData, uiState.selectedModel)
+  const handleLoadPreset = (preset: Preset): void => {
+    uiState.loadPromptCarrier({
+      document: preset.promptDocument,
+      legacyText: preset.prompt,
+      bindings: preset.promptMediaBindings,
+      legacyImages: preset.images?.dataUrls,
+    })
+    const params = PresetManager.loadPreset(preset.params ?? {}, uiState.selectedModel)
     Object.entries(params).forEach(([key, value]) => {
       modelState.setParam(key, value)
     })
@@ -322,86 +309,15 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
 
 
-  // 11. 收藏模型切换
-  const handleToggleFavorite = (e: React.MouseEvent, providerId: string, modelId: string) => {
-    e.stopPropagation()
-    const key = `${providerId}-${modelId}`
-    uiState.setFavoriteModels(prev => {
-      const next = new Set(prev)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
-      return next
-    })
-  }
-
   return (
     <div className="relative w-full rounded-[inherit]">
-      {/* 顶部参数行：模型选择器 + 参数面板 */}
-      <div className="flex flex-wrap items-end gap-3 mb-2.5 px-1">
-        {/* 模型选择器 */}
-        <PanelTrigger
-          label={t('models:title')}
-          display={`${currentProvider?.name}：${currentModel?.name || t('models:selectModel')}`}
-          className="w-auto min-w-[180px] flex-shrink-0"
-          panelWidth={1100}
-          panelClassName="border-border-dark bg-surface-dark shadow-xl"
-          alignment="aboveCenter"
-          stableHeight={true}
-          closeOnPanelClick={(t) => {
-            if ((t as HTMLElement).closest('[data-prevent-close]')) return false
-            return !!(t as HTMLElement).closest('[data-close-on-select]')
-          }}
-          renderPanel={() => (
-            <ModelSelectorPanel
-              selectedProvider={uiState.selectedProvider}
-              selectedModel={uiState.selectedModel}
-              modelFilterProvider={uiState.modelFilterProvider}
-              modelFilterType={uiState.modelFilterType}
-              modelFilterFunction={uiState.modelFilterFunction}
-              favoriteModels={uiState.favoriteModels}
-              onModelSelect={(pid, mid) => {
-                uiState.setSelectedProvider(pid)
-                uiState.setSelectedModel(mid)
-                modelState.resetParams()
-              }}
-              onFilterProviderChange={uiState.setModelFilterProvider}
-              onFilterTypeChange={uiState.setModelFilterType}
-              onFilterFunctionChange={uiState.setModelFilterFunction}
-              onToggleFavorite={handleToggleFavorite}
-            />
-          )}
-        />
-
-        {/* 参数配置面板 */}
-        <ParameterPanel
-          currentModel={currentModel}
-          selectedModel={uiState.selectedModel}
-          uploadedImages={uiState.uploadedImages}
-          uploadedVideos={uiState.uploadedVideos}
-          values={modelState.params}
-          onChange={modelState.setParam}
-        />
-      </div>
+      <GeneratorConfigurationBar uiState={uiState} modelState={modelState} />
 
       {/* 输入区域 */}
       <InputArea
-        input={uiState.input}
-        setInput={uiState.setInput}
-        promptUndoTriggerValue={promptUndoEntry?.after ?? null}
-        promptUndoReplacementValue={promptUndoEntry?.before ?? null}
-        onUndoPromptReplacement={() => {
-          setPromptOptimizationHistoryCursor((current) => Math.max(0, current - 1))
-        }}
-        promptRedoTriggerValue={promptRedoEntry?.before ?? null}
-        promptRedoReplacementValue={promptRedoEntry?.after ?? null}
-        onRedoPromptReplacement={() => {
-          setPromptOptimizationHistoryCursor((current) =>
-            Math.min(promptOptimizationHistory.length, current + 1)
-          )
-        }}
+        promptDocument={uiState.promptDocument}
+        onPromptDocumentChange={uiState.setPromptDocument}
+        promptReferences={uiState.promptReferences}
         uploadedImages={uiState.uploadedImages}
         uploadedVideos={uiState.uploadedVideos}
         uploadedAudios={uiState.uploadedAudios}
@@ -453,10 +369,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         modelParams={modelState.params}
         isLoading={inputBusy}
         isGenerating={isGenerating}
-      promptOptimizationPreview={promptOptimizationPreview}
-      promptTextareaRef={promptTextareaRef}
-      onGenerate={handleGenerate}
-    />
+        promptOptimizationPreview={promptOptimizationPreview}
+        promptEditorRef={promptEditorRef}
+        onGenerate={handleGenerate}
+      />
 
       {videoTrimState && videoTrimMaxClipSeconds && (
         <VideoTrimModal
@@ -504,8 +420,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           {/* 预设面板 */}
           <PresetPanel
             getCurrentState={() => ({
-              ...modelState.params,
-              input: uiState.input
+              input: uiState.input,
+              promptDocument: uiState.promptDocument,
+              promptMediaBindings: uiState.promptMediaBindings,
+              uploadedImages: uiState.uploadedImages,
+              uploadedFilePaths: uiState.uploadedFilePaths,
+              params: modelState.params,
             })}
             onLoadPreset={handleLoadPreset}
           />
@@ -528,14 +448,14 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             }}
             disabled={inputBusy}
             onOptimized={(value) => {
-              const before = uiState.input
-              if (before !== value) {
-                const appliedHistory = promptOptimizationHistory.slice(0, promptOptimizationHistoryCursor)
-                const nextHistory = [...appliedHistory, { before, after: value }].slice(-MAX_PROMPT_OPTIMIZATION_HISTORY)
-                setPromptOptimizationHistory(nextHistory)
-                setPromptOptimizationHistoryCursor(nextHistory.length)
+              const document = parseLegacyPromptString(value, {
+                references: uiState.promptReferences,
+              })
+              if (promptEditorRef.current) {
+                promptEditorRef.current.replaceDocument(document, { addToHistory: true })
+                return
               }
-              uiState.setInput(value)
+              uiState.setPromptDocument(document)
             }}
             onStreamPreviewChange={setPromptOptimizationPreview}
             onAlert={uiState.showAlert}

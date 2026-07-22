@@ -12,12 +12,22 @@ import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/comp
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useNotification } from '@/contexts/NotificationContext'
+import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
 
 const logger = createLogger('components.PresetPanel')
 
+interface PresetPanelState {
+    input: string
+    promptDocument: PromptDocumentV1
+    promptMediaBindings: PromptMediaBinding[]
+    uploadedImages: string[]
+    uploadedFilePaths: string[]
+    params: DynamicValueMap
+}
+
 interface PresetPanelProps {
-    getCurrentState: () => DynamicValueMap
-    onLoadPreset: (params: DynamicValueMap) => void
+    getCurrentState: () => PresetPanelState
+    onLoadPreset: (preset: Preset) => void
     disabled?: boolean
 }
 const PresetPanel: React.FC<PresetPanelProps> = ({
@@ -44,7 +54,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     }
     const handleQuickSave = async (mode: PresetSaveMode) => {
         const state = getCurrentState()
-        const input = typeof state.input === 'string' ? state.input : ''
+        const input = state.input
         if (!input.trim()) {
             showNotification(t('ui:input.required'), 'error')
             return
@@ -64,13 +74,17 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
         if (!presetName.trim() || !saveMode) return
         try {
             const state = getCurrentState()
-            const input = typeof state.input === 'string' ? state.input : ''
+            const input = state.input
             await createPreset(
                 presetName,
                 input,  // 提示词
                 saveMode,
                 {
-                    params: state  // 所有参数统一保存
+                    images: state.uploadedImages,
+                    imageFilePaths: state.uploadedFilePaths,
+                    promptDocument: state.promptDocument,
+                    promptMediaBindings: state.promptMediaBindings,
+                    params: { ...state.params, input },
                 }
             )
             await loadPresetsData()
@@ -286,9 +300,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         key={preset.id}
                                         data-preset-item
                                         onClick={() => {
-                                            if (preset.params) {
-                                                onLoadPreset(preset.params)
-                                            }
+                                            onLoadPreset(preset)
                                         }}
                                         className="px-3 py-2.5 bg-zinc-700/40 hover:bg-zinc-700/60 rounded-lg border border-zinc-700/50 cursor-pointer transition-colors duration-200 group relative"
                                     >

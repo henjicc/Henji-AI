@@ -2,10 +2,18 @@ import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelType } from '@/core/types'
-import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens'
+import {
+  toModelPromptText,
+  type PromptDocumentV1,
+  type PromptDocumentReferenceLabel,
+} from '@/core/inputs/promptDocument'
 import type { ModelState } from '../state/useModelState'
 
 const logger = createLogger('components.MediaGenerator.hooks.useGenerationHandler')
+
+interface GenerationHandler {
+  handleGenerate: () => Promise<void>
+}
 
 /**
  * 生成请求处理
@@ -14,7 +22,8 @@ const logger = createLogger('components.MediaGenerator.hooks.useGenerationHandle
  */
 export const useGenerationHandler = (
   selectedModel: string,
-  input: string,
+  promptDocument: PromptDocumentV1,
+  promptReferences: readonly PromptDocumentReferenceLabel[],
   modelState: ModelState,
   uploadedImages: string[],
   uploadedVideos: string[],
@@ -26,7 +35,7 @@ export const useGenerationHandler = (
   onGenerate: (input: string, model: string, type: ModelType, options?: DynamicValue) => void | Promise<void>,
   uploadedVideoTrimStart?: number | null,
   uploadedVideoTrimEnd?: number | null
-) => {
+): GenerationHandler => {
   const handleGenerate = useCallback(async () => {
     // 获取模型信息
     const modelInfo = registry.getModelInfo(selectedModel)
@@ -72,11 +81,12 @@ export const useGenerationHandler = (
       hasInlineVideoFile: options.video instanceof File
     })
 
-    // 调用生成回调（将 @图N 规范化为 图N）
-    await onGenerate(stripReferenceAtPrefix(input), selectedModel, modelType, options)
+    const modelPromptText = toModelPromptText(promptDocument, { references: promptReferences })
+    await onGenerate(modelPromptText, selectedModel, modelType, options)
   }, [
     selectedModel,
-    input,
+    promptDocument,
+    promptReferences,
     modelState.params,
     uploadedImages,
     uploadedVideos,

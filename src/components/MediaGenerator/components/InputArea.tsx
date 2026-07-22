@@ -1,8 +1,12 @@
 import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { ReferenceTextarea, StackedMediaUploader, UiIconButton } from '@/components/ui'
-import type { ReferenceTextareaHandle } from '@/components/ui/ReferenceTextarea'
+import { PromptEditor, StackedMediaUploader, UiIconButton } from '@/components/ui'
+import type {
+  PromptEditorHandle,
+  PromptReferenceItem,
+} from '@/components/ui'
+import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { hasTag } from '@/core/tags'
 import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
@@ -13,14 +17,9 @@ export interface FileOrderItem {
   index: number
 }
 interface InputAreaProps {
-  input: string
-  setInput: (value: string) => void
-  promptUndoTriggerValue?: string | null
-  promptUndoReplacementValue?: string | null
-  onUndoPromptReplacement?: () => void
-  promptRedoTriggerValue?: string | null
-  promptRedoReplacementValue?: string | null
-  onRedoPromptReplacement?: () => void
+  promptDocument: PromptDocumentV1
+  onPromptDocumentChange: (document: PromptDocumentV1) => void
+  promptReferences: readonly PromptReferenceItem[]
   currentModel: DynamicValue
   selectedModel: string
   modelParams: DynamicValueMap
@@ -32,7 +31,7 @@ interface InputAreaProps {
   onImageReplace: (index: number, file: File) => void
   onImageReorder: (from: number, to: number) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
-  onPaste: (e: React.ClipboardEvent) => void
+  onPaste: (event: ClipboardEvent) => void
   onImageDrop: (files: File[]) => void
   onDragStateChange: (isDragging: boolean) => void
   uploadedVideos?: string[]
@@ -53,7 +52,7 @@ interface InputAreaProps {
     reasoning: string
     content: string
   }
-  promptTextareaRef?: React.RefObject<ReferenceTextareaHandle>
+  promptEditorRef?: React.RefObject<PromptEditorHandle>
   onGenerate: () => void
 }
 /**
@@ -61,14 +60,9 @@ interface InputAreaProps {
  * 包含图片上传和文本输入
  */
 const InputArea: React.FC<InputAreaProps> = ({
-  input,
-  setInput,
-  promptUndoTriggerValue,
-  promptUndoReplacementValue,
-  onUndoPromptReplacement,
-  promptRedoTriggerValue,
-  promptRedoReplacementValue,
-  onRedoPromptReplacement,
+  promptDocument,
+  onPromptDocumentChange,
+  promptReferences,
   currentModel,
   selectedModel,
   modelParams,
@@ -97,7 +91,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   fileOrder,
   onFileOrderChange,
   promptOptimizationPreview,
-  promptTextareaRef,
+  promptEditorRef,
   onGenerate
 }) => {
   const { t } = useTranslation('ui')
@@ -286,12 +280,6 @@ const InputArea: React.FC<InputAreaProps> = ({
     shouldShowUpload
       ? 'pl-[116px]'
       : 'pl-4'
-  const promptReferences = uploadedImages.map((imageUrl, index) => ({
-    id: `image-ref-${index}`,
-    label: `图${index + 1}`,
-    thumbnailSrc: imageUrl
-  }))
-
   useEffect(() => {
     if (!renderPromptOptimizationPreview) {
       if (promptOptimizationScrollFrameRef.current !== null) {
@@ -369,65 +357,36 @@ const InputArea: React.FC<InputAreaProps> = ({
 
         {/* 文本输入框 */}
         <div className="relative">
-          <ReferenceTextarea
-          ref={promptTextareaRef}
-          value={input}
-          onChange={setInput}
-          undoTriggerValue={promptUndoTriggerValue}
-          undoReplacementValue={promptUndoReplacementValue}
-          onUndoReplacement={onUndoPromptReplacement}
-          redoTriggerValue={promptRedoTriggerValue}
-          redoReplacementValue={promptRedoReplacementValue}
-          onRedoReplacement={onRedoPromptReplacement}
-          references={promptReferences}
-          onPaste={onPaste}
-          onDrop={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))
-            if (files.length > 0) {
-              onImageDrop(files)
+          <PromptEditor
+            ref={promptEditorRef}
+            value={promptDocument}
+            onChange={onPromptDocumentChange}
+            preset="media-references"
+            ariaLabel={t('inputArea.placeholder.default')}
+            references={promptReferences}
+            onPaste={onPaste}
+            onDrop={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              const files = Array.from(event.dataTransfer?.files ?? [])
+                .filter(file => file.type.startsWith('image/'))
+              if (files.length > 0) onImageDrop(files)
+            }}
+            submitShortcut="enter"
+            onSubmit={onGenerate}
+            placeholder={
+              currentModel?.type === 'audio'
+                ? t('inputArea.placeholder.audio')
+                : isEnglishPromptOnly
+                  ? t('inputArea.placeholder.englishOnly')
+                  : t('inputArea.placeholder.default')
             }
-          }}
-          onDragOver={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-          }}
-          submitShortcut="enter"
-          onSubmit={onGenerate}
-          placeholder={
-            currentModel?.type === 'audio'
-              ? t('inputArea.placeholder.audio')
-              : isEnglishPromptOnly
-                ? t('inputArea.placeholder.englishOnly')
-                : t('inputArea.placeholder.default')
-          }
-          className="relative isolate overflow-visible rounded-2xl border border-zinc-700/35 bg-zinc-950/22 transition-colors duration-200 focus-within:border-zinc-500/50"
-          highlightLayerClassName="text-sm leading-6 text-white"
-          highlightContentClassName={`${promptMinHeightClass} ${promptLeftPaddingClass} py-3 pr-14`}
-          textareaClassName={`ui-scrollbar !border-0 !bg-transparent !backdrop-blur-0 !shadow-none !rounded-2xl w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} resize-none overflow-y-auto overflow-x-hidden focus:!ring-0 focus:!shadow-none transition-colors duration-200 ease-out text-transparent caret-white placeholder-zinc-500/85 whitespace-pre-wrap break-words`}
-          pickerClassName="z-50 w-[150px]"
-          pickerListClassName="max-h-[180px]"
-          renderPickerItem={({ item }) => (
-            <>
-              {item.thumbnailSrc ? (
-                <img
-                  src={item.thumbnailSrc}
-                  alt={item.label}
-                  className="h-8 w-8 rounded object-cover"
-                  draggable={false}
-                />
-              ) : (
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-zinc-700/70 text-xs text-zinc-200">
-                  {item.label}
-                </span>
-              )}
-              <span>{item.label}</span>
-            </>
-          )}
-          disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
-        />
-        {renderPromptOptimizationPreview ? (
+            className="relative isolate overflow-visible rounded-2xl"
+            editorShellClassName="!rounded-2xl !border-zinc-700/35 !bg-zinc-950/22 transition-colors duration-200 focus-within:!border-zinc-500/50"
+            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} max-h-[260px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words`}
+            disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
+          />
+          {renderPromptOptimizationPreview ? (
           <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/72 backdrop-blur-md ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
             <div
@@ -454,9 +413,9 @@ const InputArea: React.FC<InputAreaProps> = ({
               ) : null}
             </div>
           </div>
-        ) : null}
-        {/* 生成按钮 */}
-        <UiIconButton
+          ) : null}
+          {/* 生成按钮 */}
+          <UiIconButton
           type="button"
           onClick={onGenerate}
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
@@ -465,7 +424,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             ? '!border-zinc-700/25 !bg-zinc-800/65 !text-zinc-500'
             : '!border-brand-500/55 !bg-accent !text-white hover:scale-105 hover:brightness-110'
             }`}
-        >
+          >
             {isLoading ? (
               <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

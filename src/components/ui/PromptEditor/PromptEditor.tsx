@@ -67,6 +67,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     error = false,
     errorMessage,
     className = '',
+    editorShellClassName = '',
     editorClassName = '',
     onSubmit,
     onEditStart,
@@ -318,7 +319,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
       <div className={className}>
         <EditorContent
           editor={editor}
-          className={`rounded-lg border bg-surface-dark transition-shadow ${shellStateClass} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`rounded-lg border bg-surface-dark transition-shadow ${shellStateClass} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         />
         {(showCharacterCount || errorMessage) ? (
           <div className="mt-1 flex items-start justify-between gap-2 text-xs">

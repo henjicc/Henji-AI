@@ -73,6 +73,7 @@ export interface PromptEditorProps {
   error?: boolean
   errorMessage?: string
   className?: string
+  editorShellClassName?: string
   editorClassName?: string
   onSubmit?: () => void
   onEditStart?: () => void

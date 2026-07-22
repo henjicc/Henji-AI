@@ -1,5 +1,7 @@
 // 预设类型定义
 
+import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
+
 export type PresetSaveMode = 'prompt' | 'prompt-image' | 'full'
 
 export interface Preset {
@@ -10,6 +12,8 @@ export interface Preset {
 
     // === 必需数据 ===
     prompt: string               // 提示词
+    promptDocument?: PromptDocumentV1
+    promptMediaBindings?: PromptMediaBinding[]
 
     // === 可选数据 ===
     saveMode: PresetSaveMode     // 保存模式
@@ -28,7 +32,7 @@ export interface Preset {
     }
 
     // 根据模型类型保存的参数 (仅 full 模式)
-    params?: {
+    params?: DynamicValueMap & {
         // 图片参数
         image?: {
             resolution?: string

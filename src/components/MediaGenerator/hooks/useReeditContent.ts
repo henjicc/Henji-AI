@@ -3,11 +3,14 @@ import { useEffect } from 'react'
 import { readFile } from '@/platform/desktopApi'
 import type { ModelState } from '../state/useModelState'
 import type { UIState } from '../state/useUIState'
+import type { PromptMediaBinding } from '@/core/inputs/promptDocument'
 
 const logger = createLogger('components.MediaGenerator.hooks.useReeditContent')
 
 interface ReEditEventDetail {
   prompt?: string
+  promptDocument?: unknown
+  promptMediaBindings?: PromptMediaBinding[]
   images?: string[]
   uploadedFilePaths?: string[]
   videos?: string[]
@@ -36,6 +39,8 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
       const customEvent = e as CustomEvent<ReEditEventDetail>
       const {
         prompt,
+        promptDocument,
+        promptMediaBindings,
         images,
         uploadedFilePaths,
         videos,
@@ -47,11 +52,22 @@ export function useReeditContent(uiState: UIState, modelState: ModelState): void
 
       logger.info('[MediaGenerator] Handle re-edit:', { model, provider })
 
-      if (prompt !== undefined) uiState.setInput(prompt)
+      const hasImageCarrier = Boolean(promptMediaBindings?.length || images)
+      const shouldLoadPromptCarrier = promptDocument !== undefined || (prompt !== undefined && hasImageCarrier)
+      if (shouldLoadPromptCarrier) {
+        uiState.loadPromptCarrier({
+          document: promptDocument,
+          legacyText: prompt ?? '',
+          bindings: promptMediaBindings,
+          legacyImages: images,
+        })
+      } else if (prompt !== undefined) {
+        uiState.setInput(prompt)
+      }
       if (provider) uiState.setSelectedProvider(provider)
       if (model) uiState.setSelectedModel(model)
 
-      if (images) uiState.setUploadedImages(images)
+      if (images && !shouldLoadPromptCarrier) uiState.setUploadedImages(images)
       if (uploadedFilePaths) uiState.setUploadedFilePaths(uploadedFilePaths)
 
       if (uploadedVideoFilePaths && Array.isArray(uploadedVideoFilePaths) && uploadedVideoFilePaths.length > 0) {

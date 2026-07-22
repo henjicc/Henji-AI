@@ -5,6 +5,17 @@ import { extractImagesFromClipboard } from '@/utils/imageConversion'
 
 const logger = createLogger('components.MediaGenerator.hooks.useImageUpload')
 
+interface ImageUploadHandlers {
+  isDraggingImage: boolean
+  setIsDraggingImage: React.Dispatch<React.SetStateAction<boolean>>
+  handleImageFileUpload: (files: File[], maxImageCount: number) => Promise<void>
+  handleImageReplace: (index: number, newFile: File) => Promise<void>
+  handlePaste: (event: ClipboardEvent, maxImageCount: number) => Promise<void>
+  removeImage: (index: number) => void
+  handleImageReorder: (from: number, to: number) => void
+  handleImageFileDrop: (files: File[], maxImageCount: number) => Promise<void>
+}
+
 /**
  * 图片上传处理逻辑
  * 包含上传、粘贴、拖拽、替换、删除、重排序等功能
@@ -16,7 +27,7 @@ export const useImageUpload = (
   setUploadedImages: React.Dispatch<React.SetStateAction<string[]>>,
   _uploadedFilePaths: string[],
   setUploadedFilePaths: React.Dispatch<React.SetStateAction<string[]>>
-) => {
+): ImageUploadHandlers => {
   const [isDraggingImage, setIsDraggingImage] = useState(false)
 
   // 文件上传 - 只保存到内存
@@ -52,9 +63,12 @@ export const useImageUpload = (
   }
 
   // 粘贴图片 - 只保存到内存
-  const handlePaste = async (e: React.ClipboardEvent, maxImageCount: number) => {
+  const handlePaste = async (event: ClipboardEvent, maxImageCount: number): Promise<void> => {
     try {
-      const pastedFiles = await extractImagesFromClipboard(e.nativeEvent)
+      const containsImage = Array.from(event.clipboardData?.items ?? [])
+        .some((item) => item.type.startsWith('image/'))
+      if (containsImage) event.preventDefault()
+      const pastedFiles = await extractImagesFromClipboard(event)
       if (pastedFiles.length === 0) return
 
       if (uploadedImages.length >= maxImageCount) return

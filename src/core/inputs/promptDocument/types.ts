@@ -1,5 +1,12 @@
 export type PromptMediaType = 'image' | 'video' | 'audio'
 
+export interface PromptMediaBinding {
+  resourceId: string
+  mediaType: PromptMediaType
+  dataUrl?: string
+  filePath?: string
+}
+
 export interface PromptTextV1 {
   type: 'text'
   text: string

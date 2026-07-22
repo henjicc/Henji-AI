@@ -1,23 +1,39 @@
-import { useEffect, useState } from 'react'
-import { FileOrderItem } from '../components/InputArea'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
+import type { FileOrderItem } from '../components/InputArea'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { showAlertDialog } from '@/stores/alertDialogStore'
+import {
+  parseLegacyPromptString,
+  toLegacyPromptString,
+  type PromptDocumentV1,
+  type PromptMediaBinding,
+} from '@/core/inputs/promptDocument'
+import {
+  createMediaGeneratorPromptBindings,
+  createMediaGeneratorPromptReferences,
+  reconcileMediaGeneratorPromptImages,
+  resolveMediaGeneratorPromptCarrier,
+  type MediaGeneratorPromptCarrier,
+  type MediaGeneratorPromptImage,
+} from '../promptState'
 /**
  * 纯 UI 状态管理（不包含模型参数）
  * 职责：管理界面交互状态
- * 文件大小: < 100 行
  */
-export const useUIState = () => {
+function useUIStateValue() {
   const providersSnapshot = getAvailableProviders()
   const providersSignature = providersSnapshot.map(p => `${p.id}:${p.models.map(m => m.id).join(',')}`).join('|')
   const defaultSelection = (providersSnapshot[0] && providersSnapshot[0].models[0])
     ? { providerId: providersSnapshot[0].id, modelId: providersSnapshot[0].models[0].id }
     : { providerId: '', modelId: '' }
 
-  const [input, setInput] = useState('')
+  const [promptDocument, setPromptDocument] = useState<PromptDocumentV1>(() => (
+    parseLegacyPromptString('')
+  ))
   const [selectedProvider, setSelectedProvider] = useState(defaultSelection.providerId)
   const [selectedModel, setSelectedModel] = useState(defaultSelection.modelId)
-  const [uploadedImages, setUploadedImages] = useState<string[]>([])
+  const [uploadedPromptImages, setUploadedPromptImages] = useState<MediaGeneratorPromptImage[]>([])
   const [uploadedFilePaths, setUploadedFilePaths] = useState<string[]>([])
   const [uploadedVideos, setUploadedVideos] = useState<string[]>([])
   const [uploadedVideoFiles, setUploadedVideoFiles] = useState<File[]>([])
@@ -35,6 +51,41 @@ export const useUIState = () => {
   const [modelFilterType, setModelFilterType] = useState<'all' | 'favorite' | 'image' | 'video' | 'audio'>('all')
   const [modelFilterFunction, setModelFilterFunction] = useState<string>('all')
   const [favoriteModels, setFavoriteModels] = useState<Set<string>>(new Set())
+
+  const uploadedImages = useMemo(
+    () => uploadedPromptImages.map((image) => image.url),
+    [uploadedPromptImages],
+  )
+  const promptReferences = useMemo(
+    () => createMediaGeneratorPromptReferences(uploadedPromptImages),
+    [uploadedPromptImages],
+  )
+  const input = useMemo(
+    () => toLegacyPromptString(promptDocument, { references: promptReferences }),
+    [promptDocument, promptReferences],
+  )
+
+  const setUploadedImages: Dispatch<SetStateAction<string[]>> = useCallback((action) => {
+    setUploadedPromptImages((current) => {
+      const currentUrls = current.map((image) => image.url)
+      const nextUrls = typeof action === 'function' ? action(currentUrls) : action
+      return reconcileMediaGeneratorPromptImages(current, nextUrls)
+    })
+  }, [])
+
+  const setInput = useCallback((legacyText: string): void => {
+    setPromptDocument(parseLegacyPromptString(legacyText, { references: promptReferences }))
+  }, [promptReferences])
+
+  const loadPromptCarrier = useCallback((carrier: MediaGeneratorPromptCarrier): void => {
+    const resolved = resolveMediaGeneratorPromptCarrier(carrier)
+    setUploadedPromptImages(resolved.images)
+    setPromptDocument(resolved.document)
+  }, [])
+
+  const promptMediaBindings = useMemo<PromptMediaBinding[]>(() => (
+    createMediaGeneratorPromptBindings(uploadedPromptImages, uploadedFilePaths)
+  ), [uploadedFilePaths, uploadedPromptImages])
 
   // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') =>
@@ -62,6 +113,11 @@ export const useUIState = () => {
   return {
     input,
     setInput,
+    promptDocument,
+    setPromptDocument,
+    promptReferences,
+    promptMediaBindings,
+    loadPromptCarrier,
     selectedProvider,
     setSelectedProvider,
     selectedModel,
@@ -103,4 +159,8 @@ export const useUIState = () => {
   }
 }
 
-export type UIState = ReturnType<typeof useUIState>
+export type UIState = ReturnType<typeof useUIStateValue>
+
+export function useUIState(): UIState {
+  return useUIStateValue()
+}

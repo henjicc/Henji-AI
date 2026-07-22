@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { Preset, PresetSaveMode } from '../types/preset'
 import { readJsonFromAppData, writeJsonToAppData } from './save'
+import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument'
 
 const logger = createLogger('utils.preset')
 
@@ -39,6 +40,9 @@ export async function createPreset(
     saveMode: PresetSaveMode,
     options?: {
         images?: string[]
+        imageFilePaths?: string[]
+        promptDocument?: PromptDocumentV1
+        promptMediaBindings?: PromptMediaBinding[]
         model?: { provider: string; modelId: string; type: 'image' | 'video' | 'audio' }
 
         params?: Preset['params']
@@ -53,13 +57,18 @@ export async function createPreset(
         saveMode,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        ...(options?.promptDocument ? { promptDocument: options.promptDocument } : {}),
+        ...(options?.promptMediaBindings?.length
+            ? { promptMediaBindings: options.promptMediaBindings }
+            : {}),
     }
 
     // 根据保存模式添加可选数据
     if (saveMode === 'prompt-image' || saveMode === 'full') {
-        if (options?.images && options.images.length > 0) {
+        if ((options?.images?.length ?? 0) > 0 || (options?.imageFilePaths?.length ?? 0) > 0) {
             newPreset.images = {
-                dataUrls: options.images
+                ...(options?.images?.length ? { dataUrls: options.images } : {}),
+                ...(options?.imageFilePaths?.length ? { filePaths: options.imageFilePaths } : {}),
             }
         }
     }
