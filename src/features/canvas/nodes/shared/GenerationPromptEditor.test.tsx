@@ -42,6 +42,8 @@ vi.mock('@/components/ui', async () => {
         'aria-label': props.ariaLabel,
         'data-mode': props.mode,
         'data-auto-focus': String(props.autoFocus ?? false),
+        'data-outer-class': String(props.className ?? ''),
+        'data-editor-class': String(props.editorClassName ?? ''),
         onClick: (event: { clientX: number; clientY: number }) => {
           const onActivate = props.onActivate as ((point: {
             clientX: number
@@ -90,11 +92,16 @@ describe('GenerationPromptEditor', () => {
       />,
     )
 
+    const staticOuterClass = rendered.getByRole('textbox').getAttribute('data-outer-class')
     fireEvent.click(rendered.getByRole('textbox'), { clientX: 180, clientY: 96 })
 
     expect(onSelectNode).toHaveBeenCalledWith('node-1')
     expect(rendered.getByRole('textbox').getAttribute('data-mode')).toBe('edit')
     expect(rendered.getByRole('textbox').getAttribute('data-auto-focus')).toBe('false')
+    expect(rendered.getByRole('textbox').getAttribute('data-outer-class')).toBe(staticOuterClass)
+    expect(staticOuterClass).toContain('!p-0')
+    expect(staticOuterClass).not.toContain('!px-1.5')
+    expect(rendered.getByRole('textbox').getAttribute('data-editor-class')).toContain('!px-1.5')
 
     expect(promptEditorMocks.focusAtPoint).toHaveBeenCalledWith({
       clientX: 180,

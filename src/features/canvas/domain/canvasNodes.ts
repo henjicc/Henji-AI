@@ -156,6 +156,7 @@ export interface StoryboardFrameItem {
   previewImageUrl?: string | null;
   aspectRatio?: string;
   note: string;
+  noteDocument?: PromptDocumentV1;
   order: number;
 }
 
@@ -186,6 +187,7 @@ export interface StoryboardSplitNodeData {
 export interface StoryboardGenFrameItem {
   id: string;
   description: string;
+  descriptionDocument?: PromptDocumentV1;
   referenceIndex: number | null;
 }
 
@@ -200,6 +202,7 @@ export interface StoryboardGenNodeData {
   params?: DynamicValueMap;
   /** 图片行未连线时的本地内联上传值 */
   mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
+  promptMediaBindings?: PromptMediaBinding[];
   /** @deprecated 旧版字段，由 nodeMigrations 迁移到 modelId/params */
   model?: string;
   /** @deprecated 旧版字段 */

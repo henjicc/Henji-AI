@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
+import {
+  isPanelInteractionPortalTarget,
+  shouldClosePanelAfterInternalClick,
+} from './panelTriggerClosePolicy'
 import { UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
 
@@ -127,7 +130,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       const targetElement = target instanceof Element ? target : target.parentElement
       const inTrigger = !!ref.current && ref.current.contains(target)
       const inPanel = !!panelRef.current && panelRef.current.contains(target)
-      const inPortaledPanelControl = !!targetElement?.closest('[data-dropdown-portal="true"]')
+      const inPortaledPanelControl = isPanelInteractionPortalTarget(targetElement)
       if (inTrigger) return
       if (inPortaledPanelControl) return
       if (inPanel) {

@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Handle, Position, useUpdateNodeInternals, useViewport } from '@xyflow/react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -14,8 +14,8 @@ import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/c
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels'
 import { MODEL_PARAM_ID } from '@/features/canvas/domain/socketTypes'
 import {
-  areStringListsEqual,
-  collectInputMediaUrls,
+  areMediaOutputListsEqual,
+  collectInputMediaByKind,
 } from '@/features/canvas/application/graphMediaResolver'
 import {
   areStringSetsEqual,
@@ -30,7 +30,6 @@ import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
 import { NodeParamRows } from '@/features/canvas/params/NodeParamRows'
 import { isParamVisible } from '@/components/params/paramVisibility'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
-import { createPromptMediaLabel } from '@/core/inputs/promptDocument'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelTag } from '@/core/types'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
@@ -45,10 +44,8 @@ import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import {
   STORYBOARD_GEN_ICON_ADJUST,
-  areFrameDescriptionDraftsEqual,
   buildFrameDescriptionDrafts,
   generateFrameId,
-  resolveReferenceIndexFromDescription,
 } from '@/features/canvas/nodes/storyboardGen/shared'
 import {
   computeStoryboardBaseFrameLayout,
@@ -61,6 +58,7 @@ import {
 import { GenerationService } from '@/core/services/GenerationService'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor'
+import { useStoryboardFramePrompts } from '@/features/canvas/nodes/storyboardGen/useStoryboardFramePrompts'
 
 /** prompt/text 由分镜格子描述拼装，不进入逐行参数区 */
 const PROMPT_PARAM_IDS = ['prompt', 'text']
@@ -78,7 +76,6 @@ type StoryboardGenNodeProps = {
 
 export const StoryboardGenNode = memo(({ id, data, selected, width, height }: StoryboardGenNodeProps) => {
   const { t } = useTranslation()
-  const { zoom } = useViewport()
   const updateNodeInternals = useUpdateNodeInternals()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
@@ -96,38 +93,32 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
   const nodeData = data as StoryboardGenNodeData
   const [error, setError] = useState<string | null>(null)
-  const [frameDescriptionDrafts, setFrameDescriptionDrafts] = useState<Record<string, string>>(() =>
-    buildFrameDescriptionDrafts(nodeData.frames)
-  )
-  const frameDescriptionDraftsRef = useRef(frameDescriptionDrafts)
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.storyboardGen, nodeData),
     [nodeData]
   )
 
   // 内容相等比较的细粒度订阅：仅在上游图片实际变化时重渲染
-  const incomingImages = useStoreWithEqualityFn(
+  const incomingImageOutputs = useStoreWithEqualityFn(
     useCanvasStore,
-    (state) => collectInputMediaUrls(id, state.nodes, state.edges, 'image'),
-    areStringListsEqual
+    (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
+    areMediaOutputListsEqual
   )
   const mediaInputs = useMemo(() => nodeData.mediaInputs ?? {}, [nodeData.mediaInputs])
-  const handleImageInputChange = useCallback((next: string[]) => {
-    updateNodeData(id, { mediaInputs: { ...mediaInputs, image: next } })
-  }, [id, mediaInputs, updateNodeData])
-  // 生效图片 = 已连线则用上游，否则用节点上的本地内联上传（与媒体行内部的双态逻辑一致）
-  const effectiveImages = useMemo(
-    () => (incomingImages.length > 0 ? incomingImages : (mediaInputs.image ?? [])),
-    [incomingImages, mediaInputs]
-  )
-  const incomingImageItems = useMemo(
-    () =>
-      effectiveImages.map((imageUrl, index) => ({
-        id: `image-ref-${index}`,
-        label: createPromptMediaLabel('image', index + 1),
-        thumbnailSrc: imageUrl,
-      })),
-    [effectiveImages]
+  const {
+    frameDocuments,
+    references: promptReferences,
+    effectiveImages,
+    onImageInputChange: handleImageInputChange,
+    onFrameDocumentChange: handleFrameDescriptionChange,
+  } = useStoryboardFramePrompts({
+    nodeId: id,
+    data: nodeData,
+    incomingImages: incomingImageOutputs,
+  })
+  const frameDescriptionDrafts = useMemo(
+    () => buildFrameDescriptionDrafts(nodeData.frames),
+    [nodeData.frames],
   )
 
   // 模型端口覆盖：连上模型选择器节点后，节点内选择只读，生效模型以连线为准
@@ -236,17 +227,6 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   )
 
   useEffect(() => {
-    frameDescriptionDraftsRef.current = frameDescriptionDrafts
-  }, [frameDescriptionDrafts])
-
-  useEffect(() => {
-    const nextDrafts = buildFrameDescriptionDrafts(nodeData.frames)
-    setFrameDescriptionDrafts((previous) => (
-      areFrameDescriptionDraftsEqual(previous, nextDrafts) ? previous : nextDrafts
-    ))
-  }, [nodeData.frames])
-
-  useEffect(() => {
     updateNodeInternals(id)
   }, [id, resolvedNodeHeight, resolvedNodeWidth, updateNodeInternals])
 
@@ -278,12 +258,12 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const buildPrompt = useCallback(
     (): string => buildStoryboardPrompt({
       nodeData,
-      frameDescriptionDrafts: frameDescriptionDraftsRef.current,
+      frameDescriptionDrafts,
       keepStyleConsistent,
       disableTextInImage,
       autoInferEmptyFrame,
     }),
-    [autoInferEmptyFrame, disableTextInImage, keepStyleConsistent, nodeData]
+    [autoInferEmptyFrame, disableTextInImage, frameDescriptionDrafts, keepStyleConsistent, nodeData]
   )
 
   const handleGenerate = useCallback(async (): Promise<void> => {
@@ -357,7 +337,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         gridCols: nodeData.gridCols,
         gridImageResolution: gridResolutionValue,
         frames: nodeData.frames,
-        frameDescriptionDrafts: frameDescriptionDraftsRef.current,
+        frameDescriptionDrafts,
         ignoreAtTagWhenCopyingAndGenerating,
         onProgress: (progress) => setNodeGenerationProgress(newNodeId, progress),
       })
@@ -381,7 +361,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     } finally {
       setNodeGenerationProgress(newNodeId, null)
     }
-  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
+  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, frameDescriptionDrafts, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
 
   useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
     if (nodeId !== id) {
@@ -399,26 +379,6 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     const nextCols = Math.max(1, Math.min(9, nodeData.gridCols + delta))
     updateNodeData(id, { gridCols: nextCols })
   }, [id, nodeData.gridCols, updateNodeData])
-
-  const handleFrameDescriptionChange = useCallback((index: number, description: string, historyGroup: string): void => {
-    const frame = nodeData.frames[index]
-    if (!frame) {
-      return
-    }
-
-    setFrameDescriptionDrafts((previous) => (
-      previous[frame.id] === description ? previous : { ...previous, [frame.id]: description }
-    ))
-
-    const referenceIndex = resolveReferenceIndexFromDescription(description, effectiveImages.length)
-    if (frame.description === description && frame.referenceIndex === referenceIndex) {
-      return
-    }
-
-    const nextFrames = [...nodeData.frames]
-    nextFrames[index] = { ...frame, description, referenceIndex }
-    updateNodeData(id, { frames: nextFrames }, { historyGroup })
-  }, [effectiveImages.length, id, nodeData.frames, updateNodeData])
 
   return (
     <div
@@ -453,12 +413,13 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
       <StoryboardGridEditor
         nodeId={id}
+        selected={Boolean(selected)}
         nodeData={nodeData}
         totalFrames={totalFrames}
         frameLayout={frameLayout}
-        zoom={zoom}
-        frameDescriptionDrafts={frameDescriptionDrafts}
-        incomingImageItems={incomingImageItems}
+        frameDocuments={frameDocuments}
+        references={promptReferences}
+        onSelectNode={() => setSelectedNode(id)}
         onRowChange={handleRowChange}
         onColChange={handleColChange}
         onFrameDescriptionChange={handleFrameDescriptionChange}

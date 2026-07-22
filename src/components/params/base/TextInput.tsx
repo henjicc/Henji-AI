@@ -6,11 +6,16 @@
  * 支持禁用和条件显示
  */
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TextParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UiInput, UiTextAreaField } from '@/components/ui'
+import { PromptEditor, UiInput, UiTextAreaField } from '@/components/ui'
+import {
+  resolveTextParamPromptDocument,
+  resolveTextParamPromptVariables,
+  serializeTextParamPromptDocument,
+} from './promptTextParam'
 
 interface TextInputProps {
   param: TextParamDef
@@ -30,13 +35,44 @@ export const TextInput: React.FC<TextInputProps> = ({
   // 获取显示名称（支持 i18n）
   const displayName = getI18nText(param.name, i18n.language)
   const placeholder = getI18nText(param.placeholder || '', i18n.language)
+  const promptVariables = useMemo(
+    () => resolveTextParamPromptVariables(param, i18n.language),
+    [i18n.language, param],
+  )
+  const promptDocument = useMemo(
+    () => resolveTextParamPromptDocument(value || '', promptVariables),
+    [promptVariables, value],
+  )
 
   // 处理输入变化
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     onChange(e.target.value)
   }
 
-  // 多行文本输入
+  if (param.editor?.kind === 'prompt') {
+    return (
+      <div className="w-auto">
+        <label className="mb-1.5 block text-sm font-medium text-zinc-300">
+          {displayName}
+          {param.required && <span className="ml-1 text-red-500">*</span>}
+        </label>
+        <PromptEditor
+          value={promptDocument}
+          onChange={(document) => onChange(serializeTextParamPromptDocument(document))}
+          preset={param.editor.preset ?? 'plain'}
+          variables={promptVariables}
+          ariaLabel={displayName}
+          placeholder={placeholder}
+          disabled={disabled}
+          maxCharacters={param.maxLength}
+          showCharacterCount={param.maxLength !== undefined}
+          editorClassName={param.rows && param.rows > 4 ? 'min-h-[120px]' : 'min-h-[80px]'}
+        />
+      </div>
+    )
+  }
+
+  // 多行普通文本输入
   if (param.multiline) {
     return (
       <div className="w-auto">

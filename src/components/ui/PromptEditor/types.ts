@@ -20,6 +20,8 @@ export interface PromptReferenceItem {
 export interface PromptVariableItem {
   key: string
   label: string
+  group?: string
+  description?: string
 }
 
 export type PromptReferenceResolver = (

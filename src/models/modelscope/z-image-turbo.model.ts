@@ -58,7 +58,9 @@ export const modelscopeZImageTurboModel = defineModel({
       type: 'text',
       order: 4,
       name: sharedFieldText('negativePrompt'),
-      default: ''
+      default: '',
+      multiline: true,
+      editor: { kind: 'prompt', preset: 'plain' }
     }
   ],
   linkages: [],

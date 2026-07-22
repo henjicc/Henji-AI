@@ -90,6 +90,25 @@ describe('rebaseCanvasLocalPromptData', () => {
           }],
         }],
       },
+      frames: [{
+        id: 'frame-1',
+        description: '@图片1',
+        descriptionDocument: {
+          version: 1,
+          type: 'doc',
+          content: [{
+            type: 'paragraph',
+            content: [{
+              type: 'mediaReference',
+              attrs: {
+                resourceId: 'canvas-local:source-node:media-1',
+                mediaType: 'image',
+                fallbackLabel: '图片1',
+              },
+            }],
+          }],
+        },
+      }],
     }, 'source-node', 'copy-node')
 
     expect(patch?.promptMediaBindings).toEqual([expect.objectContaining({
@@ -97,5 +116,6 @@ describe('rebaseCanvasLocalPromptData', () => {
     })])
     expect(JSON.stringify(patch?.promptDocument)).toContain('canvas-local:copy-node:media-1')
     expect(JSON.stringify(patch?.promptDocument)).not.toContain('canvas-local:source-node:media-1')
+    expect(JSON.stringify(patch?.frames)).toContain('canvas-local:copy-node:media-1')
   })
 })

@@ -41,16 +41,13 @@ function insertTemplateVariable(
 ): void {
   editor.chain()
     .focus()
-    .insertContentAt(range, [
-      {
-        type: 'templateVariable',
-        attrs: {
-          key: variable.key,
-          fallbackLabel: variable.label,
-        },
+    .insertContentAt(range, {
+      type: 'templateVariable',
+      attrs: {
+        key: variable.key,
+        fallbackLabel: variable.label,
       },
-      { type: 'text', text: ' ' },
-    ])
+    })
     .run()
 }
 

@@ -2,9 +2,17 @@ const GRID_COLUMNS = 10
 const GRID_SPACING_X = 240
 const GRID_SPACING_Y = 200
 
-function buildNodes(imageNodeCount, videoNodeCount, genNodeCount = 0) {
+function createPromptDocument(text) {
+  return {
+    version: 1,
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  }
+}
+
+function buildNodes(imageNodeCount, videoNodeCount, genNodeCount = 0, storyboardNodeCount = 0) {
   const nodes = []
-  const totalCount = imageNodeCount + videoNodeCount + genNodeCount
+  const totalCount = imageNodeCount + videoNodeCount + genNodeCount + storyboardNodeCount
   for (let i = 0; i < totalCount; i += 1) {
     const col = i % GRID_COLUMNS
     const row = Math.floor(i / GRID_COLUMNS)
@@ -39,15 +47,43 @@ function buildNodes(imageNodeCount, videoNodeCount, genNodeCount = 0) {
           isSizeManuallyAdjusted: false,
         },
       })
-    } else {
+    } else if (i < imageNodeCount + videoNodeCount + genNodeCount) {
       const genIndex = i - imageNodeCount - videoNodeCount
+      const prompt = `stress prompt ${genIndex}`
       nodes.push({
         id: `stress-gen-${genIndex}`,
         type: 'imageNode',
         position,
         data: {
           displayName: `压测生成 ${genIndex}`,
-          prompt: `stress prompt ${genIndex}`,
+          prompt,
+          promptDocument: createPromptDocument(prompt),
+        },
+      })
+    } else {
+      const storyboardIndex = i - imageNodeCount - videoNodeCount - genNodeCount
+      const frames = Array.from({ length: 9 }, (_, frameIndex) => {
+        const description = `分镜 ${frameIndex + 1} 压测描述`
+        return {
+          id: `stress-storyboard-${storyboardIndex}-frame-${frameIndex}`,
+          description,
+          descriptionDocument: createPromptDocument(description),
+          referenceIndex: null,
+        }
+      })
+      nodes.push({
+        id: `stress-storyboard-${storyboardIndex}`,
+        type: 'storyboardGenNode',
+        position,
+        data: {
+          displayName: `压测分镜 ${storyboardIndex}`,
+          gridRows: 3,
+          gridCols: 3,
+          frames,
+          mediaInputs: {},
+          imageUrl: null,
+          previewImageUrl: null,
+          aspectRatio: '16:9',
         },
       })
     }

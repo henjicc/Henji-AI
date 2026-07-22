@@ -138,6 +138,19 @@ export interface BaseParamDef {
  * }
  * ```
  */
+export interface TextParamEditorVariableDef {
+  key: string
+  label: I18nText
+  group?: I18nText
+  description?: I18nText
+}
+
+export interface TextParamEditorConfig {
+  kind: 'prompt'
+  preset?: 'plain' | 'template-variables'
+  variables?: TextParamEditorVariableDef[]
+}
+
 export interface TextParamDef extends BaseParamDef {
   type: 'text' | 'textarea'
   valueType?: 'string'
@@ -166,6 +179,9 @@ export interface TextParamDef extends BaseParamDef {
    * 行数（仅多行时有效，默认 4）
    */
   rows?: number
+
+  /** 由 schema 声明使用共享提示词编辑器；未配置时继续使用原生文本 primitive。 */
+  editor?: TextParamEditorConfig
 }
 
 /**

@@ -1,76 +1,80 @@
 import { memo, type CSSProperties } from 'react'
+import type { PromptReferenceItem } from '@/components/ui'
+import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
-import { ReferenceTextarea, type ReferenceItem } from '@/components/ui'
+import { useCanvasEditHistory, createCanvasTextHistoryGroup } from '@/features/canvas/hooks/useCanvasTextHistory'
+import { CanvasPromptEditor } from '@/features/canvas/nodes/shared/CanvasPromptEditor'
 import { GridStepperControl, GRID_SUMMARY_CLASS } from './shared'
 import type { StoryboardFrameLayout } from './layout'
-import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory'
 
 interface StoryboardGridEditorProps {
   nodeId: string
+  selected: boolean
   nodeData: StoryboardGenNodeData
   totalFrames: number
   frameLayout: StoryboardFrameLayout
-  zoom: number
-  frameDescriptionDrafts: Record<string, string>
-  incomingImageItems: ReferenceItem[]
+  frameDocuments: Readonly<Record<string, PromptDocumentV1>>
+  references: readonly PromptReferenceItem[]
+  onSelectNode: () => void
   onRowChange: (delta: number) => void
   onColChange: (delta: number) => void
-  onFrameDescriptionChange: (index: number, description: string, historyGroup: string) => void
+  onFrameDescriptionChange: (index: number, document: PromptDocumentV1, historyGroup: string) => void
 }
 
 interface FrameDescriptionEditorProps {
   nodeId: string
+  selected: boolean
   frameId: string
   index: number
-  value: string
-  zoom: number
+  value: PromptDocumentV1
   textStyle: CSSProperties
-  references: ReferenceItem[]
-  onChange: (index: number, description: string, historyGroup: string) => void
+  references: readonly PromptReferenceItem[]
+  onSelectNode: () => void
+  onChange: (index: number, document: PromptDocumentV1, historyGroup: string) => void
 }
 
 function FrameDescriptionEditor({
   nodeId,
+  selected,
   frameId,
   index,
   value,
-  zoom,
   textStyle,
   references,
+  onSelectNode,
   onChange,
 }: FrameDescriptionEditorProps): JSX.Element {
   const historyGroup = createCanvasTextHistoryGroup(nodeId, `frames.${frameId}.description`)
-  const handleChange = (nextValue: string): void => onChange(index, nextValue, historyGroup)
-  const textHistory = useCanvasTextHistory(historyGroup, handleChange)
+  const editHistory = useCanvasEditHistory(historyGroup)
   return (
-    <ReferenceTextarea
-      value={value}
-      onChange={textHistory.onValueChange}
-      textHistorySession={textHistory}
-      references={references}
-      pickerAnchorScale={zoom}
-      placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
-      wrap="soft"
-      className="relative h-full w-full"
-      highlightLayerClassName="text-text-dark"
-      highlightLayerStyle={textStyle}
-      highlightContentClassName="px-1.5 py-1 text-left"
-      textareaClassName="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden !border-0 !bg-transparent !shadow-none !px-1.5 !py-1 text-left text-transparent caret-text-dark placeholder:text-text-muted/40 selection:bg-accent/45 selection:text-white focus:!outline-none focus:!ring-0 focus:!shadow-none whitespace-pre-wrap break-words"
-      style={textStyle}
-      pickerClassName="w-[120px]"
-      pickerListClassName="max-h-[180px]"
-    />
+    <div className="h-full w-full" style={textStyle}>
+      <CanvasPromptEditor
+        selected={selected}
+        onSelectNode={onSelectNode}
+        value={value}
+        onChange={(document) => onChange(index, document, historyGroup)}
+        onEditEnd={editHistory.onEditEnd}
+        preset="media-references"
+        references={references}
+        ariaLabel={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
+        placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
+        className="nodrag nowheel relative h-full min-h-0 w-full cursor-text"
+        editorShellClassName="relative h-full min-h-0 w-full cursor-text overflow-visible !rounded-none !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
+        editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto overflow-x-hidden !px-1.5 !py-1 text-left !text-[length:var(--storyboard-frame-font-size)] !leading-[var(--storyboard-frame-line-height)]"
+      />
+    </div>
   )
 }
 
 export const StoryboardGridEditor = memo(({
   nodeId,
+  selected,
   nodeData,
   totalFrames,
   frameLayout,
-  zoom,
-  frameDescriptionDrafts,
-  incomingImageItems,
+  frameDocuments,
+  references,
+  onSelectNode,
   onRowChange,
   onColChange,
   onFrameDescriptionChange,
@@ -78,14 +82,12 @@ export const StoryboardGridEditor = memo(({
   // 字号/行高直接走 inline style：Tailwind 任意值 class 与 UiTextAreaField 自带的
   // text-sm/px-3 等基础样式同优先级，谁生效取决于编译后样式表顺序，不可控；
   // inline style 的优先级始终高于普通 class，可以彻底绕开这个问题。
-  // scrollbarGutter 覆写为 auto：ReferenceTextarea 默认用 stable 常驻预留滚动条宽度，
-  // 在最小尺寸的小格子里这部分预留（高 DPI 下可达 10+px）会挤占大半可用宽度、逼着文字换行；
-  // 改成 auto 后无内容溢出时不预留，把宽度让回给文字，小格子才能单行显示。
+  // 小格子不常驻预留滚动条宽度，避免高 DPI 下挤占文字区域。
   const cellTextStyle: CSSProperties = {
-    fontSize: `${frameLayout.cellFontSizePx}px`,
-    lineHeight: `${frameLayout.cellLineHeightPx}px`,
+    '--storyboard-frame-font-size': `${frameLayout.cellFontSizePx}px`,
+    '--storyboard-frame-line-height': `${frameLayout.cellLineHeightPx}px`,
     scrollbarGutter: 'auto',
-  }
+  } as CSSProperties
 
   return (
     <>
@@ -119,7 +121,8 @@ export const StoryboardGridEditor = memo(({
           }}
         >
           {nodeData.frames.map((frame, index) => {
-            const frameDescription = frameDescriptionDrafts[frame.id] ?? frame.description
+            const frameDocument = frameDocuments[frame.id]
+            if (!frameDocument) return null
             const cellStyle: CSSProperties = { aspectRatio: frameLayout.cellAspectRatio }
             return (
               <div
@@ -129,12 +132,13 @@ export const StoryboardGridEditor = memo(({
               >
                 <FrameDescriptionEditor
                   nodeId={nodeId}
+                  selected={selected}
                   frameId={frame.id}
                   index={index}
-                  value={frameDescription}
-                  zoom={zoom}
+                  value={frameDocument}
                   textStyle={cellTextStyle}
-                  references={incomingImageItems}
+                  references={references}
+                  onSelectNode={onSelectNode}
                   onChange={onFrameDescriptionChange}
                 />
               </div>

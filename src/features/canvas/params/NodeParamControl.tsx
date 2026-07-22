@@ -22,9 +22,14 @@ import Dropdown from '@/components/ui/Dropdown';
 import PanelTrigger from '@/components/ui/PanelTrigger';
 import { AspectRatioSelector } from '@/components/params/panels/ResolutionPanel/AspectRatioSelector';
 import type { AspectRatioOption } from '@/components/params/panels/ResolutionPanel/types';
-import { UiIconButton, UiInput, UiSwitch } from '@/components/ui';
+import { PromptEditor, UiIconButton, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
 import { useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
+import {
+  resolveTextParamPromptDocument,
+  resolveTextParamPromptVariables,
+  serializeTextParamPromptDocument,
+} from '@/components/params/base/promptTextParam';
 
 interface NodeParamControlProps {
   param: ParamDef;
@@ -289,10 +294,55 @@ function CompactTextControl({
   const { i18n } = useTranslation();
   const placeholder = getI18nText(param.placeholder || '', i18n.language);
   const textHistory = useCanvasTextHistory(historyGroup, onChange);
+  const textValue = typeof value === 'string' ? value : '';
+  const promptVariables = useMemo(
+    () => resolveTextParamPromptVariables(param, i18n.language),
+    [i18n.language, param]
+  );
+  const promptDocument = useMemo(
+    () => resolveTextParamPromptDocument(textValue, promptVariables),
+    [promptVariables, textValue]
+  );
+
+  if (param.editor?.kind === 'prompt') {
+    return (
+      <PanelTrigger
+        display={textValue || placeholder || '编辑提示词'}
+        disabled={disabled}
+        buttonClassName={`${COMPACT_TRIGGER_CLASS} max-w-32`}
+        buttonLabelClassName={`${COMPACT_TRIGGER_LABEL_CLASS} max-w-24 truncate`}
+        panelWidth={360}
+        alignment="aboveCenter"
+        gap={8}
+        closeOnPanelClick={false}
+        renderPanel={() => (
+          <div className="p-3">
+            <PromptEditor
+              value={promptDocument}
+              onChange={(document) => textHistory.onValueChange(
+                serializeTextParamPromptDocument(document)
+              )}
+              onEditEnd={textHistory.onEditEnd}
+              preset={param.editor?.preset ?? 'plain'}
+              variables={promptVariables}
+              ariaLabel={placeholder || '提示词参数'}
+              placeholder={placeholder}
+              disabled={disabled}
+              autoFocus
+              maxCharacters={param.maxLength}
+              showCharacterCount={param.maxLength !== undefined}
+              editorClassName="min-h-[96px]"
+            />
+          </div>
+        )}
+      />
+    );
+  }
+
   return (
     <UiInput
       type="text"
-      value={typeof value === 'string' ? value : ''}
+      value={textValue}
       placeholder={placeholder}
       onChange={(event) => textHistory.onValueChange(event.target.value)}
       textHistory={textHistory}

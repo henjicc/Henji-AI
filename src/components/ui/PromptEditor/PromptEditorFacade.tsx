@@ -6,6 +6,10 @@ import {
 } from 'react'
 
 import { PromptDocumentStatic } from './PromptDocumentStatic'
+import {
+  getPromptEditorShellStateClass,
+  PROMPT_EDITOR_SHELL_CLASS,
+} from './promptEditorStyles'
 import type { PromptEditorHandle, PromptEditorProps } from './types'
 
 const LazyEditablePromptEditor = lazy(async () => {
@@ -20,7 +24,10 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     ariaLabel,
     placeholder,
     disabled = false,
-    className,
+    error = false,
+    className = '',
+    editorShellClassName = '',
+    editorClassName = '',
     onActivate,
     references,
     variables,
@@ -35,18 +42,24 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     }), [onActivate, onChange, value])
 
     return (
-      <PromptDocumentStatic
-        document={value}
-        ariaLabel={ariaLabel}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={className}
-        onActivate={onActivate}
-        references={references}
-        variables={variables}
-        resolveReference={resolveReference}
-        resolveVariable={resolveVariable}
-      />
+      <div className={className}>
+        <div
+          className={`${PROMPT_EDITOR_SHELL_CLASS} ${getPromptEditorShellStateClass(error)} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+        >
+          <PromptDocumentStatic
+            document={value}
+            ariaLabel={ariaLabel}
+            placeholder={placeholder}
+            disabled={disabled}
+            className={editorClassName}
+            onActivate={onActivate}
+            references={references}
+            variables={variables}
+            resolveReference={resolveReference}
+            resolveVariable={resolveVariable}
+          />
+        </div>
+      </div>
     )
   },
 )
@@ -61,19 +74,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
 
     return (
       <Suspense
-        fallback={(
-          <PromptDocumentStatic
-            document={props.value}
-            ariaLabel={props.ariaLabel}
-            placeholder={props.placeholder}
-            disabled={props.disabled}
-            className={props.className}
-            references={props.references}
-            variables={props.variables}
-            resolveReference={props.resolveReference}
-            resolveVariable={props.resolveVariable}
-          />
-        )}
+        fallback={<StaticPromptEditor {...props} />}
       >
         <LazyEditablePromptEditor ref={ref} {...props} />
       </Suspense>

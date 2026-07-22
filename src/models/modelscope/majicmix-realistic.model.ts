@@ -68,7 +68,9 @@ export const modelscopeMajicMixRealisticModel = defineModel({
       type: 'text',
       order: 5,
       name: sharedFieldText('negativePrompt'),
-      default: ''
+      default: '',
+      multiline: true,
+      editor: { kind: 'prompt', preset: 'plain' }
     }
   ],
   linkages: [],

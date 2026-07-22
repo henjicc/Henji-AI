@@ -61,7 +61,10 @@ function readBindings(value: unknown): PromptMediaBinding[] {
   return Array.isArray(value) ? value.filter(isCanvasPromptMediaBinding) : []
 }
 
-function createOutputResourceId(output: NodeMediaOutput, fallbackIndex: number): string {
+export function createCanvasOutputPromptResourceId(
+  output: NodeMediaOutput,
+  fallbackIndex: number,
+): string {
   const sourceNodeId = output.sourceNodeId ?? 'unknown'
   const sourceHandle = output.sourceHandle ?? 'source'
   const outputIndex = output.outputIndex ?? fallbackIndex
@@ -174,7 +177,7 @@ export function resolveCanvasGenerationPrompt(
       incoming.forEach((output, index) => {
         mediaUrls[mediaType].push(output.url)
         references.push({
-          resourceId: createOutputResourceId(output, index),
+          resourceId: createCanvasOutputPromptResourceId(output, index),
           mediaType,
           label: createPromptMediaLabel(mediaType, index + 1),
           legacyLabels: createLegacyPromptMediaLabels(mediaType, index + 1),
@@ -235,11 +238,37 @@ export function rebaseCanvasLocalPromptData(
   if (resourceIdMap.size === 0) return null
 
   const validation = validatePromptDocumentV1(data.promptDocument)
+  let rebasedFrames: DynamicValue[] | undefined
+  if (Array.isArray(data.frames)) {
+    let framesChanged = false
+    rebasedFrames = data.frames.map((frame) => {
+      if (!frame || typeof frame !== 'object') return frame
+      const frameData = frame as DynamicValueMap
+      const descriptionValidation = validatePromptDocumentV1(frameData.descriptionDocument)
+      const noteValidation = validatePromptDocumentV1(frameData.noteDocument)
+      if (!descriptionValidation.valid && !noteValidation.valid) return frame
+      framesChanged = true
+      return {
+        ...frameData,
+        ...(descriptionValidation.valid ? {
+          descriptionDocument: remapDocumentResourceIds(
+            descriptionValidation.document,
+            resourceIdMap,
+          ),
+        } : {}),
+        ...(noteValidation.valid ? {
+          noteDocument: remapDocumentResourceIds(noteValidation.document, resourceIdMap),
+        } : {}),
+      }
+    })
+    if (!framesChanged) rebasedFrames = undefined
+  }
   return {
     promptMediaBindings: nextBindings,
     ...(validation.valid
       ? { promptDocument: remapDocumentResourceIds(validation.document, resourceIdMap) }
       : {}),
+    ...(rebasedFrames ? { frames: rebasedFrames } : {}),
   }
 }
 

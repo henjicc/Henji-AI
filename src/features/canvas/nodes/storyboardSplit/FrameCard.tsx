@@ -1,15 +1,22 @@
-import { memo, useCallback, useMemo, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
 import { useViewport } from '@xyflow/react';
 import { ImagePlus, SquareArrowOutUpRight } from 'lucide-react';
 import type { StoryboardExportOptions, StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes';
+import type { PromptDocumentV1 } from '@/core/inputs/promptDocument';
 import { resolveImageDisplayUrl, shouldUseOriginalImageByZoom } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
-import { ReferenceTextarea, type ReferenceItem, UiIconButton } from '@/components/ui';
+import { type PromptReferenceItem, UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
+import { createCanvasTextHistoryGroup, useCanvasEditHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
+import { CanvasPromptEditor } from '@/features/canvas/nodes/shared/CanvasPromptEditor';
+import {
+  resolveStoryboardPromptDocument,
+  storyboardPromptDocumentsEqual,
+} from '@/features/canvas/application/storyboardPromptDocument';
 
 interface FrameCardProps {
   nodeId: string;
+  selected: boolean;
   frame: StoryboardFrameItem;
   index: number;
   noteFontSizePx: number;
@@ -17,17 +24,19 @@ interface FrameCardProps {
   noteHeightPx: number;
   imageFit: StoryboardExportOptions['imageFit'];
   viewerImageList: string[];
-  referenceItems: ReferenceItem[];
+  referenceItems: readonly PromptReferenceItem[];
   draggedFrameId: string | null;
   dropTargetFrameId: string | null;
   onSortStart: (frameId: string) => void;
   onSortHover: (frameId: string) => void;
   onTogglePicker: (frameId: string, x: number, y: number) => void;
   onEditFrame: (frame: StoryboardFrameItem) => void;
+  onSelectNode: () => void;
 }
 
 export const FrameCard = memo(({
   nodeId,
+  selected,
   frame,
   index,
   noteFontSizePx,
@@ -42,14 +51,44 @@ export const FrameCard = memo(({
   onSortHover,
   onTogglePicker,
   onEditFrame,
+  onSelectNode,
 }: FrameCardProps): JSX.Element => {
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const { zoom } = useViewport();
   const noteHistoryGroup = createCanvasTextHistoryGroup(nodeId, `frames.${frame.id}.note`);
-  const handleNoteChange = useCallback((nextValue: string): void => {
-    updateStoryboardFrame(nodeId, frame.id, { note: nextValue }, { historyGroup: noteHistoryGroup });
-  }, [frame.id, nodeId, noteHistoryGroup, updateStoryboardFrame]);
-  const noteTextHistory = useCanvasTextHistory(noteHistoryGroup, handleNoteChange);
+  const editHistory = useCanvasEditHistory(noteHistoryGroup);
+  const resolvedNote = useMemo(() => resolveStoryboardPromptDocument({
+    document: frame.noteDocument,
+    legacyText: frame.note ?? '',
+    carrierType: 'storyboard-split-note',
+    carrierId: `${nodeId}:${frame.id}`,
+    references: referenceItems,
+  }), [frame.id, frame.note, frame.noteDocument, nodeId, referenceItems]);
+
+  useEffect(() => {
+    if (
+      frame.note === resolvedNote.legacyText
+      && storyboardPromptDocumentsEqual(frame.noteDocument, resolvedNote.document)
+    ) return;
+    updateStoryboardFrame(nodeId, frame.id, {
+      noteDocument: resolvedNote.document,
+      note: resolvedNote.legacyText,
+    }, { skipHistory: true });
+  }, [frame.id, frame.note, frame.noteDocument, nodeId, resolvedNote, updateStoryboardFrame]);
+
+  const handleNoteChange = useCallback((document: PromptDocumentV1): void => {
+    const resolved = resolveStoryboardPromptDocument({
+      document,
+      legacyText: frame.note ?? '',
+      carrierType: 'storyboard-split-note',
+      carrierId: `${nodeId}:${frame.id}`,
+      references: referenceItems,
+    });
+    updateStoryboardFrame(nodeId, frame.id, {
+      noteDocument: resolved.document,
+      note: resolved.legacyText,
+    }, { historyGroup: noteHistoryGroup });
+  }, [frame.id, frame.note, nodeId, noteHistoryGroup, referenceItems, updateStoryboardFrame]);
 
   const imageSource = useMemo(() => {
     const preferOriginal = shouldUseOriginalImageByZoom(zoom);
@@ -148,22 +187,19 @@ export const FrameCard = memo(({
           style={noteWrapperStyle}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <ReferenceTextarea
-            value={frame.note}
-            onChange={noteTextHistory.onValueChange}
-            textHistorySession={noteTextHistory}
+          <CanvasPromptEditor
+            selected={selected}
+            onSelectNode={onSelectNode}
+            value={resolvedNote.document}
+            onChange={handleNoteChange}
+            onEditEnd={editHistory.onEditEnd}
+            preset="media-references"
             references={referenceItems}
-            pickerAnchorScale={zoom}
-            onMouseDown={(event) => event.stopPropagation()}
-            onWheelCapture={(event) => event.stopPropagation()}
+            ariaLabel={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
             placeholder={`分镜 ${String(index + 1).padStart(2, '0')} 描述`}
-            wrap="soft"
-            className="relative h-full w-full"
-            highlightLayerClassName="text-[length:var(--storyboard-note-font-size)] leading-[var(--storyboard-note-line-height)] text-white"
-            highlightContentClassName="px-2 py-1 text-left"
-            textareaClassName="ui-scrollbar nodrag nowheel relative z-10 block h-full w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-1 text-left text-[length:var(--storyboard-note-font-size)] leading-[var(--storyboard-note-line-height)] text-transparent caret-white outline-none placeholder:text-white/45 whitespace-pre-wrap break-words"
-            pickerClassName="w-[120px]"
-            pickerListClassName="max-h-[180px]"
+            className="nodrag nowheel relative h-full min-h-0 w-full cursor-text"
+            editorShellClassName="relative h-full min-h-0 w-full cursor-text overflow-visible !rounded-none !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
+            editorClassName="ui-scrollbar nodrag nowheel h-full min-h-0 overflow-y-auto !px-2 !py-1 text-left !text-[length:var(--storyboard-note-font-size)] !leading-[var(--storyboard-note-line-height)] !text-white"
           />
         </div>
       </div>

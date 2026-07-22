@@ -1,4 +1,9 @@
 import type { PromptOptimizationProfile } from './types'
+import {
+  readPromptDocument,
+  toLegacyPromptString,
+  type PromptDocumentV1,
+} from '@/core/inputs/promptDocument'
 
 export interface PromptOptimizationTargetModel {
   providerId: string
@@ -37,6 +42,49 @@ export const PROMPT_OPTIMIZATION_VARIABLES: PromptOptimizationVariable[] = [
   { token: '{{target.model.id}}', label: '目标模型 ID', description: '当前生成模型请求 ID', group: '当前模型' },
   { token: '{{target.provider.id}}', label: '目标供应商 ID', description: '当前生成模型所属供应商 ID', group: '当前模型' },
 ]
+
+export const PROMPT_OPTIMIZATION_EDITOR_VARIABLES = PROMPT_OPTIMIZATION_VARIABLES.map((variable) => ({
+  key: variable.token.slice(2, -2),
+  label: variable.label,
+  group: variable.group,
+  description: variable.description,
+}))
+
+export type PromptOptimizationDocumentField = 'systemPrompt' | 'userTemplate'
+
+export function readPromptOptimizationProfileDocument(
+  profile: Pick<
+    PromptOptimizationProfile,
+    'id' | 'systemPrompt' | 'systemPromptDocument' | 'userTemplate' | 'userTemplateDocument'
+  >,
+  field: PromptOptimizationDocumentField,
+): PromptDocumentV1 {
+  const document = field === 'systemPrompt'
+    ? profile.systemPromptDocument
+    : profile.userTemplateDocument
+  return readPromptDocument(
+    { document, legacyText: profile[field] },
+    {
+      carrierType: 'llm-prompt-optimization-profile',
+      carrierId: `${profile.id}:${field}`,
+      variables: PROMPT_OPTIMIZATION_EDITOR_VARIABLES,
+    },
+  ).document
+}
+
+export function normalizePromptOptimizationProfileDocuments(
+  profile: PromptOptimizationProfile,
+): PromptOptimizationProfile {
+  const systemPromptDocument = readPromptOptimizationProfileDocument(profile, 'systemPrompt')
+  const userTemplateDocument = readPromptOptimizationProfileDocument(profile, 'userTemplate')
+  return {
+    ...profile,
+    systemPromptDocument,
+    systemPrompt: toLegacyPromptString(systemPromptDocument),
+    userTemplateDocument,
+    userTemplate: toLegacyPromptString(userTemplateDocument),
+  }
+}
 
 export function getDefaultPromptProfile(config: { promptProfiles: PromptOptimizationProfile[] }): PromptOptimizationProfile | null {
   return config.promptProfiles.find(profile => profile.enabled && profile.isDefault)

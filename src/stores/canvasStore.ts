@@ -255,6 +255,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
               ? frame.aspectRatio
               : normalizedFrameAspectRatio,
           note: frame.note ?? '',
+          ...(frame.noteDocument ? { noteDocument: frame.noteDocument } : {}),
           order: Number.isFinite(frame.order) ? frame.order : index,
         }));
 
@@ -1222,7 +1223,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }
 
       const historyGroup = options?.historyGroup;
-      const shouldRecordHistory = !historyGroup || state.activeHistoryGroup !== historyGroup;
+      const shouldRecordHistory = !options?.skipHistory
+        && (!historyGroup || state.activeHistoryGroup !== historyGroup);
       return {
         nodes: nextNodes,
         edges: nextEdges,
@@ -1232,7 +1234,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               future: [],
             }
           : state.history,
-        activeHistoryGroup: historyGroup ?? null,
+        activeHistoryGroup: options?.skipHistory
+          ? state.activeHistoryGroup
+          : historyGroup ?? null,
         dragHistorySnapshot: null,
       };
     });

@@ -9,7 +9,10 @@ import type { StoryboardExportOptions, StoryboardFrameItem, StoryboardSplitNodeD
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { prepareNodeImage, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
-import { UiButton, UiChipButton } from '@/components/ui';
+import { type PromptReferenceItem, UiButton, UiChipButton } from '@/components/ui';
+import { createLegacyPromptMediaLabels, createPromptMediaLabel } from '@/core/inputs/promptDocument';
+import { createCanvasOutputPromptResourceId } from '@/features/canvas/application/generationPromptDocument';
+import { areMediaOutputListsEqual, collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
 import {
   NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_ICON_CLASS,
@@ -22,7 +25,7 @@ import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboar
 import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
-import { areIncomingImageRefsEqual, buildFrameViewerImageList, buildIncomingImageItems, collectIncomingImageRefs } from '@/features/canvas/nodes/storyboardSplit/data';
+import { buildFrameViewerImageList, buildIncomingImageItems } from '@/features/canvas/nodes/storyboardSplit/data';
 import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
 import { computeStoryboardSplitBaseLayout, computeStoryboardSplitFrameLayout } from '@/features/canvas/nodes/storyboardSplit/layout';
 
@@ -47,10 +50,10 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   // 本节点只需要"上游连了哪些图片"这一派生结果，不需要整个 nodes/edges 数组；
   // 用内容相等比较订阅，避免画布上任意其他节点的无关编辑都触发本节点重渲染。
-  const incomingImageRefs = useStoreWithEqualityFn(
+  const incomingImageOutputs = useStoreWithEqualityFn(
     useCanvasStore,
-    (state) => collectIncomingImageRefs(id, state.nodes, state.edges),
-    areIncomingImageRefsEqual
+    (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
+    areMediaOutputListsEqual
   );
   const reorderStoryboardFrame = useCanvasStore((state) => state.reorderStoryboardFrame);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
@@ -101,15 +104,18 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   );
   const exportOptions = useMemo(() => resolveExportOptions(data.exportOptions), [data.exportOptions]);
 
-  const incomingImageItems = useMemo(() => buildIncomingImageItems(incomingImageRefs), [incomingImageRefs]);
-  const incomingReferenceItems = useMemo(
+  const incomingImageItems = useMemo(() => buildIncomingImageItems(incomingImageOutputs), [incomingImageOutputs]);
+  const incomingReferenceItems = useMemo<PromptReferenceItem[]>(
     () =>
-      incomingImageItems.map((item, index) => ({
-        id: `incoming-image-ref-${index}`,
-        label: item.label,
-        thumbnailSrc: item.displayUrl,
+      incomingImageOutputs.map((output, index) => ({
+        resourceId: createCanvasOutputPromptResourceId(output, index),
+        mediaType: 'image',
+        label: createPromptMediaLabel('image', index + 1),
+        legacyLabels: createLegacyPromptMediaLabels('image', index + 1),
+        thumbnailSrc: resolveImageDisplayUrl(output.previewUrl ?? output.url),
+        ...(output.sourceNodeId ? { sourceNodeId: output.sourceNodeId } : {}),
       })),
-    [incomingImageItems]
+    [incomingImageOutputs]
   );
   const frameViewerImageList = useMemo(() => buildFrameViewerImageList(orderedFrames), [orderedFrames]);
   const incomingImageViewerList = useMemo(() => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)), [incomingImageItems]);
@@ -293,6 +299,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
             <FrameCard
               key={frame.id}
               nodeId={id}
+              selected={Boolean(selected)}
               frame={frame}
               index={index}
               noteFontSizePx={frameLayout.noteFontSizePx}
@@ -301,6 +308,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
               imageFit={exportOptions.imageFit}
               viewerImageList={frameViewerImageList}
               referenceItems={incomingReferenceItems}
+              onSelectNode={() => setSelectedNode(id)}
               draggedFrameId={draggedFrameId}
               dropTargetFrameId={dropTargetFrameId}
               onSortStart={handleSortStart}

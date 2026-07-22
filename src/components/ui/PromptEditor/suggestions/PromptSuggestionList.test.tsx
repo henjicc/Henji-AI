@@ -51,6 +51,7 @@ describe('PromptSuggestionList', () => {
     )
 
     expect(rendered.getByRole('listbox').className).toContain('w-max')
+    expect(rendered.getByRole('listbox').getAttribute('data-prompt-suggestion-portal')).toBe('true')
     expect(rendered.getAllByRole('option')[1].className).toContain('!bg-transparent')
 
     act(() => {
@@ -74,6 +75,23 @@ describe('PromptSuggestionList', () => {
 
     expect(screen.getByText('图片1')).toBeTruthy()
     expect(screen.queryByText(resourceId)).toBeNull()
+  })
+
+  it('变量候选保留分组和描述信息', () => {
+    const items: PromptSuggestionItem[] = [{
+      kind: 'variable',
+      value: {
+        key: 'target.model.name',
+        label: '目标模型名称',
+        group: '当前模型',
+        description: '当前生成模型显示名称',
+      },
+    }]
+
+    render(<PromptSuggestionList {...createSuggestionProps(items, vi.fn())} />)
+
+    expect(screen.getByText('当前模型')).toBeTruthy()
+    expect(screen.getByText('当前生成模型显示名称')).toBeTruthy()
   })
 
   it('空候选吞掉导航键且不执行 command', () => {

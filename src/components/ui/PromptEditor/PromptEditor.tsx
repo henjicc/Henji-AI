@@ -24,6 +24,11 @@ import {
   toTiptapContent,
 } from './promptEditorDocument'
 import {
+  getPromptEditorShellStateClass,
+  PROMPT_EDITOR_CONTENT_CLASS,
+  PROMPT_EDITOR_SHELL_CLASS,
+} from './promptEditorStyles'
+import {
   isPromptEditorHistoryShortcut,
   shouldSubmitPromptEditor,
 } from './promptEditorKeyboard'
@@ -36,15 +41,6 @@ import type {
   PromptEditorHandle,
   PromptEditorProps,
 } from './types'
-
-const EDITOR_CONTENT_CLASS = [
-  'min-h-[92px] whitespace-pre-wrap break-words px-3 py-2.5 text-sm leading-6 text-text-dark outline-none',
-  '[&_.is-editor-empty:first-child::before]:pointer-events-none',
-  '[&_.is-editor-empty:first-child::before]:float-left',
-  '[&_.is-editor-empty:first-child::before]:h-0',
-  '[&_.is-editor-empty:first-child::before]:text-text-muted',
-  '[&_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]',
-].join(' ')
 
 const EMPTY_REFERENCES: readonly PromptReferenceItem[] = []
 const EMPTY_VARIABLES: readonly PromptVariableItem[] = []
@@ -167,7 +163,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         attributes: {
           'aria-label': ariaLabel,
           role: 'textbox',
-          class: `${EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
+          class: `${PROMPT_EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
         },
         handleKeyDown: (view, event): boolean => {
           if (isPromptEditorHistoryShortcut(event)) event.stopPropagation()
@@ -288,7 +284,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
             'aria-disabled': String(disabled),
             'aria-readonly': String(readOnly),
             role: 'textbox',
-            class: `${EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
+            class: `${PROMPT_EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
           },
         },
       })
@@ -333,15 +329,13 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     }), [editor])
 
     const reachedLimit = maxCharacters !== undefined && characterCount >= maxCharacters
-    const shellStateClass = error
-      ? 'border-red-500/70'
-      : 'border-border-dark focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-accent'
+    const shellStateClass = getPromptEditorShellStateClass(error)
 
     return (
       <div className={className}>
         <EditorContent
           editor={editor}
-          className={`rounded-lg border bg-surface-dark transition-shadow ${shellStateClass} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`${PROMPT_EDITOR_SHELL_CLASS} ${shellStateClass} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         />
         {(showCharacterCount || errorMessage) ? (
           <div className="mt-1 flex items-start justify-between gap-2 text-xs">

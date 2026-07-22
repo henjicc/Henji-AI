@@ -16,6 +16,11 @@ import type {
   PromptVariableItem,
   PromptVariableResolver,
 } from './types'
+import {
+  PROMPT_ATOM_CLASS,
+  PROMPT_EDITOR_CONTENT_CLASS,
+  PROMPT_MEDIA_ATOM_CLASS,
+} from './promptEditorStyles'
 
 interface PromptDocumentStaticProps {
   document: PromptDocumentV1
@@ -48,13 +53,13 @@ function renderInlineNode(
     return (
       <span
         key={key}
-        className={`mx-0.5 inline-flex max-w-[180px] items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 align-middle text-xs ${reference ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
+        className={`${PROMPT_MEDIA_ATOM_CLASS} ${reference ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
         data-prompt-media-reference=""
         data-reference-id={node.attrs.resourceId}
         data-reference-state={reference ? 'resolved' : 'missing'}
       >
         {reference?.thumbnailSrc ? (
-          <img src={reference.thumbnailSrc} alt="" className="h-5 w-5 rounded object-cover" />
+          <img src={reference.thumbnailSrc} alt="" className="h-[1.25em] w-[1.25em] rounded object-cover" />
         ) : null}
         <span className="truncate">@{label}</span>
       </span>
@@ -66,7 +71,7 @@ function renderInlineNode(
   return (
     <span
       key={key}
-      className={`mx-0.5 inline-flex max-w-[180px] whitespace-nowrap rounded-md border px-1.5 py-0.5 align-middle text-xs ${variable ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
+      className={`${PROMPT_ATOM_CLASS} ${variable ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
       data-prompt-template-variable=""
       data-variable-key={node.attrs.key}
       data-variable-state={variable ? 'resolved' : 'missing'}
@@ -116,7 +121,7 @@ export const PromptDocumentStatic = memo(function PromptDocumentStatic({
       aria-readonly="true"
       aria-disabled={disabled}
       tabIndex={canActivate ? 0 : -1}
-      className={`min-h-[92px] whitespace-pre-wrap break-words rounded-lg border border-border-dark bg-surface-dark px-3 py-2.5 text-sm leading-6 text-text-dark ${canActivate ? 'cursor-text' : ''} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${className}`}
+      className={`${PROMPT_EDITOR_CONTENT_CLASS} ${canActivate ? 'cursor-text' : ''} ${disabled ? 'cursor-not-allowed' : ''} ${className}`}
       onClick={canActivate ? handleClick : undefined}
       onKeyDown={handleKeyDown}
     >

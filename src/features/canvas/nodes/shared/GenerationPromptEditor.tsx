@@ -129,7 +129,7 @@ export function GenerationPromptEditor({
           onReady={handleEditorReady}
           onEditEnd={handleEditEnd}
           onActivate={canActivate ? handleActivate : undefined}
-          className={`nodrag nowheel relative flex min-h-[86px] flex-1 cursor-text flex-col !rounded-md !border-0 !bg-transparent !shadow-none ${isEditorActive ? 'overflow-visible !p-0' : 'overflow-y-auto overflow-x-hidden !px-1.5 !py-1'} ${invalid ? '[&>span]:!text-red-400/90' : ''}`}
+          className={`nodrag nowheel relative flex min-h-[86px] flex-1 cursor-text flex-col overflow-visible !rounded-md !border-0 !bg-transparent !p-0 !shadow-none ${invalid ? '[&>span]:!text-red-400/90' : ''}`}
           editorShellClassName="relative flex min-h-[86px] flex-1 cursor-text flex-col overflow-visible !rounded-md !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
           editorClassName={`ui-scrollbar nodrag nowheel min-h-[86px] flex-1 overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? '[&.is-editor-empty:first-child::before]:!text-red-400/90' : ''}`}
         />

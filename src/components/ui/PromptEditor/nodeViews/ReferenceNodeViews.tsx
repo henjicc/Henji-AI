@@ -3,6 +3,7 @@ import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 
 import type { PromptMediaType } from '@/core/inputs/promptDocument'
 import type { PromptEditorResourceRegistry } from '../resourceRegistry'
+import { PROMPT_ATOM_CLASS, PROMPT_MEDIA_ATOM_CLASS } from '../promptEditorStyles'
 
 interface ReferenceExtensionOptions {
   registry: PromptEditorResourceRegistry
@@ -65,7 +66,7 @@ export function MediaReferenceNodeView({
   return (
     <NodeViewWrapper
       as="span"
-      className={`mx-0.5 inline-flex max-w-[180px] select-none items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 align-middle text-xs ${
+      className={`${PROMPT_MEDIA_ATOM_CLASS} ${
         selected
           ? 'border-accent bg-brand-600 text-white'
           : reference
@@ -82,11 +83,11 @@ export function MediaReferenceNodeView({
         <img
           src={reference.thumbnailSrc}
           alt=""
-          className="h-5 w-5 shrink-0 rounded object-cover"
+          className="h-[1.25em] w-[1.25em] shrink-0 rounded object-cover"
           draggable={false}
         />
       ) : (
-        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-surface-dark px-1 text-[9px] text-text-muted">
+        <span className="inline-flex h-[1.25em] min-w-[1.25em] items-center justify-center rounded bg-surface-dark px-1 text-[0.65em] text-text-muted">
           {attrs.mediaType}
         </span>
       )}
@@ -109,7 +110,7 @@ export function TemplateVariableNodeView({
   return (
     <NodeViewWrapper
       as="span"
-      className={`mx-0.5 inline-flex max-w-[180px] select-none items-center whitespace-nowrap rounded-md border px-1.5 py-0.5 align-middle text-xs ${
+      className={`${PROMPT_ATOM_CLASS} ${
         selected
           ? 'border-accent bg-brand-600 text-white'
           : variable

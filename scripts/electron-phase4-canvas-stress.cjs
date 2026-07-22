@@ -20,7 +20,8 @@ const TINY_PNG_DATA_URL =
 
 const IMAGE_NODE_COUNT = Number(process.env.HENJI_STRESS_IMAGE_NODES || 60)
 const VIDEO_NODE_COUNT = Number(process.env.HENJI_STRESS_VIDEO_NODES || 20)
-const GEN_NODE_COUNT = Number(process.env.HENJI_STRESS_GEN_NODES || 20)
+const GEN_NODE_COUNT = Number(process.env.HENJI_STRESS_GEN_NODES || 50)
+const STORYBOARD_NODE_COUNT = Number(process.env.HENJI_STRESS_STORYBOARD_NODES || 4)
 
 // 资源加载失败（如个别媒体路径 403）不影响帧率结论，不应让压测直接失败拿不到数据；
 // 其余控制台错误仍然阻断。
@@ -123,9 +124,14 @@ async function main() {
   }
   const samplePngVideoBase64 = fs.readFileSync(SAMPLE_VIDEO_PATH).toString('base64')
 
-  const totalNodes = IMAGE_NODE_COUNT + VIDEO_NODE_COUNT + GEN_NODE_COUNT
+  const totalNodes = IMAGE_NODE_COUNT + VIDEO_NODE_COUNT + GEN_NODE_COUNT + STORYBOARD_NODE_COUNT
   const viewport = computeFitViewport(totalNodes)
-  const nodes = buildNodes(IMAGE_NODE_COUNT, VIDEO_NODE_COUNT, GEN_NODE_COUNT)
+  const nodes = buildNodes(
+    IMAGE_NODE_COUNT,
+    VIDEO_NODE_COUNT,
+    GEN_NODE_COUNT,
+    STORYBOARD_NODE_COUNT
+  )
   const edges = buildEdges(IMAGE_NODE_COUNT, GEN_NODE_COUNT)
   const projectName = `画布压测 ${Date.now()}`
 
@@ -169,6 +175,13 @@ async function main() {
     const renderedNodeCount = await page.evaluate(
       () => document.querySelectorAll('.react-flow__node').length
     )
+    const activePromptEditorCount = await page.evaluate(
+      () => document.querySelectorAll('.ProseMirror[contenteditable="true"]').length
+    )
+    assert(
+      activePromptEditorCount === 0,
+      `inactive prompt editors should stay static: ${activePromptEditorCount} active instances`
+    )
 
     const memoryBeforeBytes = await readJsHeapBytes(page)
 
@@ -189,7 +202,10 @@ async function main() {
       ok: true,
       launchMode: app.mode,
       totalNodes,
+      promptNodeCount: GEN_NODE_COUNT,
+      storyboardNodeCount: STORYBOARD_NODE_COUNT,
       renderedNodeCount,
+      activePromptEditorCount,
       loadElapsedMs,
       fps: {
         idle: Math.round((baseline.frames / baseline.elapsedMs) * 1000),

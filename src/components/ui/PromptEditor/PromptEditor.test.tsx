@@ -106,6 +106,29 @@ describe('PromptEditor', () => {
     expect(rendered.getByRole('textbox').textContent).toContain('静态提示词')
   })
 
+  it('静态态与编辑态遵循相同的外层、壳层和内容层样式契约', () => {
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        value={createPlainTextPromptDocument('盒模型一致')}
+        onChange={vi.fn()}
+        ariaLabel="静态盒模型"
+        className="outer-box"
+        editorShellClassName="shell-box"
+        editorClassName="content-box"
+      />,
+    )
+
+    const content = rendered.getByRole('textbox')
+    const shell = content.parentElement
+    const outer = shell?.parentElement
+    expect(outer?.classList.contains('outer-box')).toBe(true)
+    expect(shell?.classList.contains('shell-box')).toBe(true)
+    expect(content.classList.contains('content-box')).toBe(true)
+    expect(outer?.classList.contains('content-box')).toBe(false)
+    expect(shell?.classList.contains('content-box')).toBe(false)
+  })
+
   it('编辑器完成 Tiptap mount 后通知调用方就绪', async () => {
     const onReady = vi.fn()
     render(
@@ -264,10 +287,17 @@ describe('PromptEditor', () => {
     await waitFor(() => {
       expect(rendered.container.innerHTML).toContain('data-reference-id="asset:a"')
     })
-    expect(rendered.container.querySelector('[data-reference-id="asset:a"]')?.textContent)
-      .toContain('@图1')
-    expect(rendered.container.querySelector('[data-variable-key="style"]')?.textContent)
-      .toContain('{{电影感}}')
+    const mediaReference = rendered.container.querySelector('[data-reference-id="asset:a"]')
+    const templateVariable = rendered.container.querySelector('[data-variable-key="style"]')
+    expect(mediaReference?.textContent).toContain('@图1')
+    expect(mediaReference?.classList.contains('text-[length:inherit]')).toBe(true)
+    expect(mediaReference?.classList.contains('h-[1lh]')).toBe(true)
+    expect(mediaReference?.classList.contains('py-0.5')).toBe(false)
+    expect(mediaReference?.querySelector('img')?.classList.contains('h-[1.25em]')).toBe(true)
+    expect(templateVariable?.textContent).toContain('{{电影感}}')
+    expect(templateVariable?.classList.contains('leading-[inherit]')).toBe(true)
+    expect(templateVariable?.classList.contains('h-[1lh]')).toBe(true)
+    expect(templateVariable?.classList.contains('py-0.5')).toBe(false)
     expect(JSON.stringify(ref.current?.getDocument())).not.toContain('thumbnailSrc')
 
     rendered.rerender(
@@ -375,4 +405,5 @@ describe('PromptEditor', () => {
     expect(rendered.container.querySelector('[data-reference-state="resolved"]')?.textContent)
       .toContain('@图3')
   })
+
 })

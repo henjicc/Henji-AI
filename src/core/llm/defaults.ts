@@ -7,6 +7,9 @@ import type {
   LlmReasoningEffort,
   PromptOptimizationProfile,
 } from './types'
+import {
+  normalizePromptOptimizationProfileDocuments,
+} from './promptOptimization'
 
 export const DEFAULT_DEEPSEEK_PROVIDER_ID = 'deepseek'
 export const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
@@ -36,7 +39,7 @@ export function createDefaultProviderReasoning(adapter = ''): LlmReasoningConfig
 }
 
 export function createDefaultPromptProfile(now = new Date().toISOString()): PromptOptimizationProfile {
-  return {
+  return normalizePromptOptimizationProfileDocuments({
     id: DEFAULT_PROMPT_PROFILE_ID,
     name: '通用提示词优化',
     providerId: DEFAULT_PPIO_PROVIDER_ID,
@@ -56,7 +59,7 @@ export function createDefaultPromptProfile(now = new Date().toISOString()): Prom
     enabled: true,
     createdAt: now,
     updatedAt: now,
-  }
+  })
 }
 
 export function createBuiltInLlmProviders(): LlmProviderConfig[] {

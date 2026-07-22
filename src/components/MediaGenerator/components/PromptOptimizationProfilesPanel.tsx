@@ -1,10 +1,15 @@
 import React, { useMemo } from 'react'
 import { Plus, Save, Star, Trash2 } from 'lucide-react'
-import { ReferenceTextarea, UiButton, UiCheckbox, UiInput, UiOptionButton } from '@/components/ui'
+import { PromptEditor, UiButton, UiCheckbox, UiInput, UiOptionButton } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
-import { renderHighlightedTemplateText } from '@/components/ui/referenceTextareaUtils'
+import { toLegacyPromptString, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { DEFAULT_DEEPSEEK_PROVIDER_ID, createDefaultLlmConfig } from '@/core/llm/defaults'
-import { getDefaultPromptProfile, PROMPT_OPTIMIZATION_VARIABLES } from '@/core/llm/promptOptimization'
+import {
+  getDefaultPromptProfile,
+  normalizePromptOptimizationProfileDocuments,
+  PROMPT_OPTIMIZATION_EDITOR_VARIABLES,
+  readPromptOptimizationProfileDocument,
+} from '@/core/llm/promptOptimization'
 import type { LlmConfigState, LlmModelConfig, LlmProviderConfig, PromptOptimizationProfile } from '@/core/llm/types'
 import { llmConfigService } from '@/services/llm'
 
@@ -23,7 +28,7 @@ function createProfile(config: LlmConfigState): PromptOptimizationProfile {
     ?? config.models[0]
   const providerId = provider?.providerId ?? DEFAULT_DEEPSEEK_PROVIDER_ID
   const modelId = model?.modelId ?? createDefaultLlmConfig().models[0].modelId
-  return {
+  return normalizePromptOptimizationProfileDocuments({
     id: `prompt-profile-${Date.now()}`,
     name: '新的优化提示词',
     providerId,
@@ -35,7 +40,7 @@ function createProfile(config: LlmConfigState): PromptOptimizationProfile {
     enabled: true,
     createdAt: now,
     updatedAt: now,
-  }
+  })
 }
 
 function buildProviderOptions(config: LlmConfigState): LlmProviderConfig[] {
@@ -56,58 +61,28 @@ function buildProfileCapabilities(model?: LlmModelConfig): PromptOptimizationPro
   }
 }
 
-const variableReferences = PROMPT_OPTIMIZATION_VARIABLES.map(variable => ({
-  id: variable.token,
-  label: variable.label,
-}))
-
-const variableTokenSet = PROMPT_OPTIMIZATION_VARIABLES.map(variable => variable.token)
-
-function PromptTemplateTextarea({
+function PromptTemplateEditor({
   value,
   onChange,
   rows,
   placeholder,
 }: {
-  value: string
-  onChange: (value: string) => void
+  value: PromptDocumentV1
+  onChange: (value: PromptDocumentV1) => void
   rows: number
   placeholder: string
 }): JSX.Element {
   return (
-    <ReferenceTextarea
+    <PromptEditor
       value={value}
       onChange={onChange}
-      references={variableReferences}
-      getReferenceToken={(item) => item.id}
-      triggerKey="/"
-      literalTokens={variableTokenSet}
-      renderHighlightedValue={renderHighlightedTemplateText}
-      rows={rows}
+      preset="template-variables"
+      variables={PROMPT_OPTIMIZATION_EDITOR_VARIABLES}
+      ariaLabel={placeholder}
       placeholder={placeholder}
-      className="relative isolate overflow-visible rounded-lg border border-border-dark bg-surface-dark"
-      highlightLayerClassName="text-sm leading-6 text-white"
-      highlightContentClassName="min-h-full px-3 py-2.5"
-      textareaClassName="ui-scrollbar !border-0 !bg-transparent !shadow-none w-full resize-none px-3 py-2.5 text-sm leading-6 text-transparent caret-white placeholder-zinc-400 focus:!ring-0 focus:!shadow-none whitespace-pre-wrap break-words"
-      pickerClassName="z-50 w-[330px]"
-      pickerListClassName="max-h-[260px]"
-      pickerOffsetY={24}
-      pickerPortal
-      renderPickerItem={({ item }) => {
-        const variable = PROMPT_OPTIMIZATION_VARIABLES.find(option => option.token === item.id)
-        return (
-          <div className="min-w-0 space-y-0.5">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-medium">{variable?.label ?? item.label}</span>
-              <span className="rounded border border-border-dark px-1.5 py-0.5 text-[10px] text-text-muted">
-                {variable?.group ?? '变量'}
-              </span>
-            </div>
-            <div className="truncate text-xs text-text-muted">{item.id}</div>
-            <div className="line-clamp-2 text-xs text-text-muted">{variable?.description}</div>
-          </div>
-        )
-      }}
+      className="relative isolate overflow-visible"
+      editorShellClassName="overflow-visible"
+      editorClassName={`ui-scrollbar overflow-y-auto ${rows > 4 ? 'min-h-[120px]' : 'min-h-[96px]'}`}
     />
   )
 }
@@ -201,6 +176,25 @@ export function PromptOptimizationProfilesPanel({
 
   const providerOptions = buildProviderOptions(activeConfig)
   const modelOptions = buildModelOptions(activeConfig, selectedProfile.providerId)
+  const systemPromptDocument = readPromptOptimizationProfileDocument(selectedProfile, 'systemPrompt')
+  const userTemplateDocument = readPromptOptimizationProfileDocument(selectedProfile, 'userTemplate')
+
+  const patchTemplateDocument = (
+    field: 'systemPrompt' | 'userTemplate',
+    document: PromptDocumentV1,
+  ): void => {
+    if (field === 'systemPrompt') {
+      patchProfile({
+        systemPromptDocument: document,
+        systemPrompt: toLegacyPromptString(document),
+      })
+      return
+    }
+    patchProfile({
+      userTemplateDocument: document,
+      userTemplate: toLegacyPromptString(document),
+    })
+  }
 
   return (
     <div className="flex max-h-[min(680px,calc(100vh-96px))] flex-col p-4">
@@ -239,7 +233,7 @@ export function PromptOptimizationProfilesPanel({
           </UiButton>
         </div>
 
-        <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
+        <div className="min-h-0 space-y-3 overflow-y-auto p-1">
           <UiInput
             value={selectedProfile.name}
             onChange={(event) => patchProfile({ name: event.target.value })}
@@ -288,15 +282,15 @@ export function PromptOptimizationProfilesPanel({
             />
           </div>
 
-          <PromptTemplateTextarea
-            value={selectedProfile.systemPrompt}
-            onChange={(value) => patchProfile({ systemPrompt: value })}
+          <PromptTemplateEditor
+            value={systemPromptDocument}
+            onChange={(value) => patchTemplateDocument('systemPrompt', value)}
             rows={4}
             placeholder="System Prompt"
           />
-          <PromptTemplateTextarea
-            value={selectedProfile.userTemplate}
-            onChange={(value) => patchProfile({ userTemplate: value })}
+          <PromptTemplateEditor
+            value={userTemplateDocument}
+            onChange={(value) => patchTemplateDocument('userTemplate', value)}
             rows={5}
             placeholder="User Template，使用 {{prompt}} 插入当前提示词"
           />

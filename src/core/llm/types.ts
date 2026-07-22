@@ -1,3 +1,5 @@
+import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
+
 export interface LlmCapabilities {
   text: boolean
   image: boolean
@@ -41,7 +43,9 @@ export interface PromptOptimizationProfile {
   providerId: string
   modelId: string
   systemPrompt: string
+  systemPromptDocument?: PromptDocumentV1
   userTemplate: string
+  userTemplateDocument?: PromptDocumentV1
   capabilities: Pick<LlmCapabilities, 'text' | 'image' | 'video'>
   isDefault: boolean
   enabled: boolean

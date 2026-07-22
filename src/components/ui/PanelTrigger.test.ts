@@ -1,5 +1,10 @@
+/** @vitest-environment jsdom */
+
 import { describe, expect, it, vi } from 'vitest'
-import { shouldClosePanelAfterInternalClick } from './panelTriggerClosePolicy'
+import {
+  isPanelInteractionPortalTarget,
+  shouldClosePanelAfterInternalClick,
+} from './panelTriggerClosePolicy'
 
 const TARGET = {} as Node
 
@@ -18,5 +23,16 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
 
     expect(shouldClosePanelAfterInternalClick(policy, TARGET)).toBe(true)
     expect(policy).toHaveBeenCalledWith(TARGET)
+  })
+
+  it('下拉和提示词候选 portal 仍归属于当前面板', () => {
+    const dropdown = document.createElement('div')
+    dropdown.dataset.dropdownPortal = 'true'
+    const suggestion = document.createElement('div')
+    suggestion.dataset.promptSuggestionPortal = 'true'
+
+    expect(isPanelInteractionPortalTarget(dropdown)).toBe(true)
+    expect(isPanelInteractionPortalTarget(suggestion)).toBe(true)
+    expect(isPanelInteractionPortalTarget(document.createElement('div'))).toBe(false)
   })
 })

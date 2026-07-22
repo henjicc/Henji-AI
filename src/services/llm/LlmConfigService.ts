@@ -12,6 +12,7 @@ import {
   createDefaultProviderReasoning,
   createDefaultLlmConfig,
 } from '@/core/llm/defaults'
+import { normalizePromptOptimizationProfileDocuments } from '@/core/llm/promptOptimization'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import type {
   LlmCapabilities,
@@ -112,7 +113,7 @@ function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): 
 }
 
 function normalizeProfile(profile: PromptOptimizationProfile): PromptOptimizationProfile {
-  return {
+  return normalizePromptOptimizationProfileDocuments({
     ...profile,
     enabled: profile.enabled !== false,
     isDefault: profile.isDefault === true,
@@ -121,7 +122,7 @@ function normalizeProfile(profile: PromptOptimizationProfile): PromptOptimizatio
       image: profile.capabilities?.image === true,
       video: profile.capabilities?.video === true,
     },
-  }
+  })
 }
 
 function resolveSelectedPromptProfileId(

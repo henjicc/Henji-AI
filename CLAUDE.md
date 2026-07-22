@@ -260,10 +260,10 @@ old-Henji-AI/          # 旧项目代码备份（仅供对照）
    - 对话模式、画布模式、工具模式复用同一套 `Ui*` primitives
    - 禁止同功能多份实现
 
-9. **ReferenceTextarea 规范**
-   - @引用标记插入/删除/空格归一化统一走 `src/core/inputs/referenceTokens.ts`
-   - 高亮渲染统一走 `src/components/ui/referenceTextareaUtils.tsx`
-   - 禁止在业务组件重复实现 @引用解析和高亮
+9. **PromptEditor 规范**
+   - 提示词编辑统一使用 `src/components/ui/PromptEditor/` 与 `src/core/inputs/promptDocument/`
+   - 媒体引用、模板变量、兼容字符串解析和模型文本输出统一走结构化文档 parser/serializer
+   - 禁止重新引入透明 textarea + 镜像高亮层，禁止在业务组件重复实现引用解析
 
 10. **文件上传控件规范**
    - 上传能力统一复用 `FileUploader` / `UiInput(type=file)`
@@ -473,8 +473,8 @@ powershell -Command "$files = Get-ChildItem -Path src,electron -Recurse -Include
 - `src/core/theme/colorTokens.ts` - 主题与画布颜色常量
 - `src/core/theme/runtimeTheme.ts` - 运行时主题应用逻辑
 - `src/stores/settingsStore.ts` - 主题/界面设置状态源
-- `src/components/ui/ReferenceTextarea.tsx` - 引用输入核心组件
-- `src/components/ui/referenceTextareaUtils.tsx` - 引用高亮渲染工具
+- `src/components/ui/PromptEditor/` - 结构化提示词编辑器与静态渲染入口
+- `src/core/inputs/promptDocument/` - 提示词文档、兼容解析与序列化核心
 - `src/features/canvas/canvasUtils.ts` - 画布通用计算与连接预览
 - `src/features/canvas/hooks/useCanvasDuplication.ts` - 画布复制/拖拽行为
 - `src/features/canvas/hooks/useCanvasNodeMenu.ts` - 节点菜单与连接交互

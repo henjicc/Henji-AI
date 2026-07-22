@@ -69,7 +69,10 @@ export const PromptSuggestionList = forwardRef<
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border border-border-dark bg-panel px-3 py-2 text-xs text-text-muted shadow-2xl">
+      <div
+        className="rounded-lg border border-border-dark bg-panel px-3 py-2 text-xs text-text-muted shadow-2xl"
+        data-prompt-suggestion-portal="true"
+      >
         没有匹配项
       </div>
     )
@@ -78,11 +81,13 @@ export const PromptSuggestionList = forwardRef<
   return (
     <div
       className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-2xl"
+      data-prompt-suggestion-portal="true"
       role="listbox"
       aria-label={items[0]?.kind === 'reference' ? '媒体引用候选' : '模板变量候选'}
     >
       {items.map((item, index) => {
         const reference = item.kind === 'reference' ? item.value : null
+        const variable = item.kind === 'variable' ? item.value : null
         return (
           <UiOptionButton
             key={`${item.kind}:${getSuggestionKey(item)}`}
@@ -112,8 +117,20 @@ export const PromptSuggestionList = forwardRef<
               </span>
             ) : (
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-xs text-text-dark">{getSuggestionLabel(item)}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-xs text-text-dark">{getSuggestionLabel(item)}</span>
+                  {variable?.group ? (
+                    <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-[9px] text-text-muted">
+                      {variable.group}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="truncate text-[10px] text-text-muted">{getSuggestionKey(item)}</span>
+                {variable?.description ? (
+                  <span className="max-w-72 truncate text-[10px] text-text-muted">
+                    {variable.description}
+                  </span>
+                ) : null}
               </span>
             )}
           </UiOptionButton>

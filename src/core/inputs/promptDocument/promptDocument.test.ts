@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { stripReferenceAtPrefix } from '@/core/inputs/referenceTokens'
 import {
   createLegacyPromptMediaLabels,
   createPromptDocumentDoubleWrite,
@@ -181,15 +180,13 @@ describe('prompt serializers', () => {
     })).toBe('参考 图片1 然后修改')
   })
 
-  it('失效引用使用 fallbackLabel，且当前图引用模型语义与旧函数一致', () => {
+  it('失效引用使用 fallbackLabel，模型文本移除引用前缀', () => {
     const legacy = toLegacyPromptString(STRUCTURED_DOCUMENT)
     expect(legacy).toContain('@旧图')
 
     const currentReferenceDocument = parseLegacyPromptString('@图1', PARSE_OPTIONS)
-    expect(toModelPromptText(currentReferenceDocument)).toBe(
-      stripReferenceAtPrefix(toLegacyPromptString(currentReferenceDocument)),
-    )
-    expect(stripReferenceAtPrefix('@图片1 与 @图2')).toBe('图片1 与 图2')
+    expect(toLegacyPromptString(currentReferenceDocument)).toBe('@图1')
+    expect(toModelPromptText(currentReferenceDocument)).toBe('图1')
   })
 })
 
