@@ -2,8 +2,8 @@ import path from 'path'
 import { defineConfig } from 'vitest/config'
 
 /**
- * 最小 vitest 配置：只跑 domain 纯函数单元测试（渲染层 src + 主进程 electron）。
- * 不接 UI/组件测试环境（无需 jsdom），保持配置通用，供后续任务（1.3/1.4 等）复用。
+ * Vitest 配置覆盖 domain 纯函数与按文件声明 jsdom 的 React 组件测试。
+ * 默认仍使用 Node 环境，只有带 `@vitest-environment jsdom` 的用例才加载 DOM。
  * alias 对齐 vite.config.ts 的 `@/` -> `src/`，供被测代码间接依赖的模块解析使用。
  */
 export default defineConfig({
@@ -13,6 +13,6 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts', 'electron/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.ts'],
   },
 })
