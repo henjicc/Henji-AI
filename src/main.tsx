@@ -33,6 +33,8 @@ window.addEventListener('unhandledrejection', (event) => {
 // 日志窗口只渲染精简的 `LogsShell`，不挂载主界面相关的拖拽/右键菜单等全局 Provider。
 const isLogsView = new URLSearchParams(window.location.search).get('view') === 'logs'
 const isCameraStageRenderView = new URLSearchParams(window.location.search).get('view') === 'camera-stage-render'
+const isPromptEditorPrototypeView = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get('view') === 'prompt-editor-prototype'
 
 // 日志窗口与三维渲染窗口都只在各自的 `?view=` 分流下挂载，主窗口永远用不到。
 // 静态导入会把 three/@react-three 整包压进启动 chunk，主窗口每次启动都要白解析一遍，
@@ -41,11 +43,18 @@ const LogsShell = React.lazy(() => import('./features/logs/LogsShell'))
 const CameraStageRenderWorker = React.lazy(
   () => import('./features/cameraStage/render/CameraStageRenderWorker'),
 )
+const PromptEditorPrototypeView = import.meta.env.DEV
+  ? React.lazy(() => import('./components/ui/PromptEditor/prototype/PromptEditorPrototypeView'))
+  : null
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     isCameraStageRenderView ? (
         <React.Suspense fallback={null}>
             <CameraStageRenderWorker />
+        </React.Suspense>
+    ) : isPromptEditorPrototypeView && PromptEditorPrototypeView ? (
+        <React.Suspense fallback={null}>
+            <PromptEditorPrototypeView />
         </React.Suspense>
     ) : (
         <React.StrictMode>
