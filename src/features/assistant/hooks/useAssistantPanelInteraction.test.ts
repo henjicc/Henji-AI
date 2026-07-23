@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clampAssistantFloatingPosition,
   clampAssistantPanelSize,
-  getAssistantResizePreviewStyle,
+  getAssistantWorkspaceInsets,
   resizeAssistantPanelLayout,
 } from './useAssistantPanelInteraction'
 
@@ -56,18 +56,9 @@ describe('assistant panel interaction geometry', () => {
     )).toEqual({ x: 12, y: 48 })
   })
 
-  it('尺寸拖动只生成合成层缩放预览且保持正确锚点', () => {
-    const initial = { position: { x: 100, y: 60 }, size: { width: 400, height: 500 } }
-    const next = { position: initial.position, size: { width: 500, height: 600 } }
-
-    expect(getAssistantResizePreviewStyle('left', initial, next)).toEqual({
-      transform: 'translate3d(0, 0, 0) scale3d(1.25, 1, 1)',
-      transformOrigin: 'top left',
-    })
-    expect(getAssistantResizePreviewStyle('right', initial, next).transformOrigin).toBe('top right')
-    expect(getAssistantResizePreviewStyle('floating', initial, next)).toEqual({
-      transform: 'translate3d(100px, 60px, 0) scale3d(1.25, 1.2, 1)',
-      transformOrigin: 'top left',
-    })
+  it('停靠态只更新对应工作区内边距', () => {
+    expect(getAssistantWorkspaceInsets('left', 480)).toEqual({ left: 480, right: 0 })
+    expect(getAssistantWorkspaceInsets('right', 520)).toEqual({ left: 0, right: 520 })
+    expect(getAssistantWorkspaceInsets('floating', 600)).toEqual({ left: 0, right: 0 })
   })
 })

@@ -100,8 +100,9 @@
 
 ### D-017 高频面板交互不经过 React 状态帧
 
-- 悬浮位置拖动经 `requestAnimationFrame` 合并并更新外层 `translate3d`；尺寸拖动只对固定尺寸面板应用 `scale3d` 合成层预览，不在每一帧修改真实宽高、根级 CSS 变量、工作区 padding 或 Zustand。
-- 交互结束后再一次性把最终坐标/尺寸提交到 `assistantUiStore`，由 `App/TabContainer` 消费已提交的数值宽度并更新工作区避让；提交帧临时关闭布局过渡。
+- 悬浮位置拖动经 `requestAnimationFrame` 合并并更新外层 `translate3d`；尺寸拖动在同一动画帧内直接更新助手局部真实 `width/height`，停靠态只同步更新对应工作区容器的局部 padding，保证内容与工作区实时排版且不变形。
+- 高频临时值保存在 ref，禁止逐帧写 React 状态、Zustand 或 `documentElement` 根级变量；交互结束后再一次性把最终坐标/尺寸提交到 `assistantUiStore`，提交帧临时关闭布局过渡。
+- 助手容器使用布局/样式 containment；长对话的计划、工具、审批、Artifact、Markdown 与错误块使用 `content-visibility: auto` 和固有尺寸占位，让离屏内容跳过尺寸帧的布局与绘制。
 - 左右停靠至少保留 320px 工作区，悬浮态受标题栏、右侧和底部可视区约束；鼠标与键盘调整复用同一几何函数。
 
 ## 可调参数

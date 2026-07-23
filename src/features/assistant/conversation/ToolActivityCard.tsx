@@ -1,4 +1,5 @@
 import { CheckCircle2, ExternalLink, LoaderCircle, Wrench, XCircle } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
 import { UiButton } from '@/components/ui'
 
@@ -22,6 +23,11 @@ const statusLabels: Record<AgentToolActivity['status'], string> = {
   failed: '失败',
 }
 
+const deferredCardStyle: CSSProperties = {
+  contentVisibility: 'auto',
+  containIntrinsicSize: 'auto 84px',
+}
+
 interface ToolActivityCardProps {
   activity: AgentToolActivity
   onOpenTask: (taskId: string) => void
@@ -38,7 +44,7 @@ export function ToolActivityCard({ activity, onOpenTask }: ToolActivityCardProps
         : <Wrench className="h-4 w-4 text-text-muted" />
 
   return (
-    <section className="rounded-xl border border-border-dark bg-surface-dark p-3">
+    <section style={deferredCardStyle} className="rounded-xl border border-border-dark bg-surface-dark p-3">
       <div className="flex items-center gap-2">
         {icon}
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">

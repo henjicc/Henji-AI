@@ -1,4 +1,5 @@
 import { AlertTriangle, Check, ShieldCheck, X } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
 import { UiButton } from '@/components/ui'
 import type { AgentApprovalRequest } from '@/core/assistant/events'
@@ -8,12 +9,17 @@ interface ApprovalCardProps {
   onDecision: (decision: 'approve' | 'reject') => void
 }
 
+const deferredCardStyle: CSSProperties = {
+  contentVisibility: 'auto',
+  containIntrinsicSize: 'auto 220px',
+}
+
 export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.Element {
   const expired = Date.parse(approval.expiresAt) <= Date.now()
   const targets = Object.entries(approval.targetIds)
 
   return (
-    <section className="rounded-xl border border-warning/40 bg-warning/10 p-3" aria-label="等待审批">
+    <section style={deferredCardStyle} className="rounded-xl border border-warning/40 bg-warning/10 p-3" aria-label="等待审批">
       <div className="flex items-start gap-2.5">
         <div className="mt-0.5 rounded-lg border border-warning/30 bg-warning/10 p-1.5 text-warning">
           <ShieldCheck className="h-4 w-4" />

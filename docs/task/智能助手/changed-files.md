@@ -163,3 +163,16 @@
 ### 自动生成但未纳入改动
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
+
+## 第四阶段 · 实时排版性能修复
+
+### 修改
+
+- `src/features/assistant/hooks/useAssistantPanelInteraction.ts` 及测试：移除 `scale3d` 尺寸预览；在动画帧内批量写入助手真实宽高与停靠工作区局部避让，交互结束时才提交 Zustand。
+- `src/App.tsx`、`src/components/TabContainer.tsx`、`src/features/assistant/AssistantSidebar.tsx`：把当前工作区 DOM ref 传给交互层，保留已提交尺寸初值与局部 containment，并取消停靠态无效的合成层提示。
+- `src/features/assistant/conversation/AssistantConversation.tsx`、`ToolActivityCard.tsx`、`ApprovalCard.tsx`：对长会话中的计划、工具、审批、Artifact、Markdown 和错误块增加离屏内容可见性与固有尺寸占位，缩小时跳过不可见内容的布局和绘制。
+- `docs/task/智能助手/00-任务总览.md`、`重要记录.md`、4.1 任务文件及五份阶段记录：同步第三轮反馈、最终技术决定、验证结果和真实鼠标复验步骤。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。

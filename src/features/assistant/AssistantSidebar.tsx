@@ -1,4 +1,5 @@
 import { GripHorizontal, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
+import type { RefObject } from 'react'
 
 import { UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
@@ -13,7 +14,11 @@ const modeLabels: Record<AssistantDockMode, string> = {
   floating: '悬浮模式',
 }
 
-export function AssistantSidebar(): JSX.Element {
+interface AssistantSidebarProps {
+  workspaceRef: RefObject<HTMLDivElement>
+}
+
+export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.Element {
   const open = useAssistantUiStore((state) => state.open)
   const mode = useAssistantUiStore((state) => state.mode)
   const position = useAssistantUiStore((state) => state.floatingPosition)
@@ -28,6 +33,7 @@ export function AssistantSidebar(): JSX.Element {
     mode,
     position,
     size,
+    workspaceRef,
     onCommitPosition: setFloatingPosition,
     onCommitSize: setSize,
   })
@@ -66,7 +72,7 @@ export function AssistantSidebar(): JSX.Element {
     <div
       ref={interaction.panelRef}
       data-assistant-sidebar
-      className="pointer-events-none fixed z-40 min-h-0 will-change-transform"
+      className={`pointer-events-none fixed z-40 min-h-0 ${mode === 'floating' ? 'will-change-transform' : ''}`}
       style={positionStyle}
     >
       <aside

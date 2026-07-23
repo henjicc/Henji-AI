@@ -33,9 +33,9 @@ interface AssistantPanelLayout {
 
 export type AssistantResizeAxis = 'width' | 'height' | 'both'
 
-interface AssistantResizePreviewStyle {
-  transform: string
-  transformOrigin: 'top left' | 'top right'
+interface AssistantWorkspaceInsets {
+  left: number
+  right: number
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -50,23 +50,15 @@ function floatingTransform(position: AssistantPanelPosition): string {
   return `translate3d(${position.x}px, ${position.y}px, 0)`
 }
 
-function scaleRatio(next: number, initial: number): number {
-  return Number((next / Math.max(1, initial)).toFixed(5))
-}
-
-export function getAssistantResizePreviewStyle(
+export function getAssistantWorkspaceInsets(
   mode: AssistantDockMode,
-  initial: AssistantPanelLayout,
-  next: AssistantPanelLayout
-): AssistantResizePreviewStyle {
-  const scaleX = scaleRatio(next.size.width, initial.size.width)
-  const scaleY = mode === 'floating' ? scaleRatio(next.size.height, initial.size.height) : 1
-  return {
-    transform: mode === 'floating'
-      ? `${floatingTransform(initial.position)} scale3d(${scaleX}, ${scaleY}, 1)`
-      : `translate3d(0, 0, 0) scale3d(${scaleX}, 1, 1)`,
-    transformOrigin: mode === 'right' ? 'top right' : 'top left',
-  }
+  width: number
+): AssistantWorkspaceInsets {
+  return mode === 'left'
+    ? { left: width, right: 0 }
+    : mode === 'right'
+      ? { left: 0, right: width }
+      : { left: 0, right: 0 }
 }
 
 export function clampAssistantFloatingPosition(
@@ -139,6 +131,7 @@ interface UseAssistantPanelInteractionInput {
   mode: AssistantDockMode
   position: AssistantPanelPosition
   size: AssistantPanelSize
+  workspaceRef: RefObject<HTMLDivElement>
   onCommitPosition: (position: AssistantPanelPosition) => void
   onCommitSize: (size: AssistantPanelSize) => void
 }
@@ -165,6 +158,7 @@ export function useAssistantPanelInteraction({
   mode,
   position,
   size,
+  workspaceRef,
   onCommitPosition,
   onCommitSize,
 }: UseAssistantPanelInteractionInput): UseAssistantPanelInteractionResult {
@@ -195,18 +189,20 @@ export function useAssistantPanelInteraction({
     }
   }, [mode])
 
-  const applyResizePreview = useCallback((
-    initial: AssistantPanelLayout,
-    next: AssistantPanelLayout
-  ): void => {
-    // 尺寸拖动期间只改合成层 transform，避免助手内容和整个工作区逐帧回流。
-    // 真实 width/height 与持久化状态仅在 pointerup 时提交。
+  const applyLiveResize = useCallback((next: AssistantPanelLayout): void => {
+    // 所有尺寸读取在 pointermove 中完成；这里在同一动画帧批量写局部样式，
+    // 不修改根级变量，也不触发 React/Zustand 的高频状态更新。
     layoutRef.current = next
     const panel = panelRef.current
     if (!panel) return
-    const preview = getAssistantResizePreviewStyle(mode, initial, next)
-    panel.style.transform = preview.transform
-  }, [mode])
+    panel.style.width = `${next.size.width}px`
+    if (mode === 'floating') panel.style.height = `${next.size.height}px`
+    const workspace = workspaceRef.current
+    if (!workspace || mode === 'floating') return
+    const insets = getAssistantWorkspaceInsets(mode, next.size.width)
+    workspace.style.paddingLeft = `${insets.left}px`
+    workspace.style.paddingRight = `${insets.right}px`
+  }, [mode, workspaceRef])
 
   const commitLayout = useCallback((layout: AssistantPanelLayout): void => {
     if (!samePosition(layout.position, position)) onCommitPosition(layout.position)
@@ -285,7 +281,7 @@ export function useAssistantPanelInteraction({
 
     const flush = (): void => {
       frameId = null
-      if (kind === 'resize') applyResizePreview(initialLayout, pendingLayout)
+      if (kind === 'resize') applyLiveResize(pendingLayout)
       else applyDragPreview(pendingLayout)
     }
     const queueLayout = (layout: AssistantPanelLayout): void => {
@@ -328,7 +324,8 @@ export function useAssistantPanelInteraction({
     const finish = (pointerEvent: PointerEvent): void => {
       if (pointerEvent.pointerId !== event.pointerId) return
       if (frameId !== null) window.cancelAnimationFrame(frameId)
-      applyCommittedLayout(pendingLayout)
+      if (kind === 'resize') applyLiveResize(pendingLayout)
+      else applyCommittedLayout(pendingLayout)
       commitLayout(pendingLayout)
       setDragging(false)
       setResizing(null)
@@ -338,7 +335,7 @@ export function useAssistantPanelInteraction({
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
-  }, [applyCommittedLayout, applyDragPreview, applyResizePreview, commitLayout, enabled, mode])
+  }, [applyCommittedLayout, applyDragPreview, applyLiveResize, commitLayout, enabled, mode])
 
   const onDragPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>): void => {
     if (mode === 'floating') startPointerInteraction(event, 'drag')

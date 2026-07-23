@@ -63,6 +63,7 @@ const App: React.FC = () => {
   const assistantOpen = useAssistantUiStore((state) => state.open)
   const assistantMode = useAssistantUiStore((state) => state.mode)
   const assistantSize = useAssistantUiStore((state) => state.size)
+  const assistantWorkspaceRef = React.useRef<HTMLDivElement>(null)
 
   const openAssetFloating = React.useCallback((): void => {
     openAssetLibrary('floating')
@@ -176,12 +177,13 @@ const App: React.FC = () => {
 
         {/* 工作区容器 */}
         <TabContainer
+          containerRef={assistantWorkspaceRef}
           activeTab={activeWorkspace}
           insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
           insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
         />
         <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
-        <AssistantSidebar />
+        <AssistantSidebar workspaceRef={assistantWorkspaceRef} />
         {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         <LargeUploadChoiceDialog />
         <GlobalAlertDialog onAskAssistant={openAssistantForDiagnosis} />
