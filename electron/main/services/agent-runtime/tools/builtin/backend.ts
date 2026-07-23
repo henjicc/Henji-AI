@@ -6,6 +6,16 @@ import type { AgentToolDefinition } from '../types'
 import type { AgentToolRegistry } from '../registry'
 import { createUserInstructionTools } from './user-instructions'
 
+const applicationCapabilityCategorySchema = z.enum([
+  'catalog',
+  'navigation',
+  'models',
+  'generation',
+  'user_instructions',
+  'diagnostics',
+  'canvas',
+])
+
 function eraseToolDefinition<TInput, TOutput>(
   definition: AgentToolDefinition<TInput, TOutput>
 ): AgentToolDefinition {
@@ -17,7 +27,7 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
     name: 'search_application_capabilities',
     version: 1,
     title: '搜索应用能力',
-    description: '搜索当前上下文中可用的受控应用工具目录，最多返回 20 项。',
+    description: '搜索当前上下文中可用的受控应用工具目录，最多返回 20 项。创建图片/视频/音频使用 generation 分类，查找生成模型使用 models 分类。',
     category: 'catalog',
     side: 'backend',
     risk: 'R0',
@@ -33,7 +43,7 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
     requiredContext: [],
     inputSchema: z.object({
       query: z.string().max(500).default(''),
-      category: z.string().min(1).optional(),
+      category: applicationCapabilityCategorySchema.optional(),
       cursor: z.number().int().nonnegative().default(0),
       limit: z.number().int().min(1).max(20).default(10),
     }).strict(),
@@ -46,7 +56,18 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
       type: 'object',
       properties: {
         query: { type: 'string' },
-        category: { type: 'string' },
+        category: {
+          type: 'string',
+          enum: [
+            'catalog',
+            'navigation',
+            'models',
+            'generation',
+            'user_instructions',
+            'diagnostics',
+            'canvas',
+          ],
+        },
         cursor: { type: 'integer', minimum: 0 },
         limit: { type: 'integer', minimum: 1, maximum: 20 },
       },

@@ -5,26 +5,34 @@ import {
   type AgentEventInput,
   type AgentRunState,
   type AgentRunStatus,
-  type SerializedAgentError,
 } from '../../../../../src/core/assistant/events'
 import { agentToolObservationSchema, type AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import {
-  hostScopeRevisionsSchema,
   type HostContextSnapshot,
   type HostScopeRevisions,
 } from '../../../../../src/core/assistant/hostContracts'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
-import { shouldOffloadObservation } from '../context/offload'
 import { AgentIntentRouter } from '../context/router'
-import { sanitizeObservationValue } from '../context/sanitize'
 import type { AgentRouteDecision } from '../context/types'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { digestJson } from '../tools/security'
-import { AgentBudgetExceededError, AgentBudgetTracker } from './budget'
+import { AgentBudgetTracker } from './budget'
 import { AgentEventStream } from './event-stream'
+import {
+  runPrimaryAgentModelStep,
+  runRouterModelClassification,
+} from './model-execution'
 import { selectAgentRuntimeModels } from './models'
+import {
+  errorCode,
+  extractResultReferences,
+  extractResultScopeRevisions,
+  rejectedObservation,
+  serializeError,
+  toolMessage,
+} from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import type { AgentRunnerOptions } from './types'
 
@@ -34,73 +42,6 @@ interface ApprovalWaiter {
   approvalId: string
   timer: ReturnType<typeof setTimeout>
   resolve: (decision: 'approve' | 'reject' | 'expired') => void
-}
-
-function errorCode(error: unknown): string {
-  if (error instanceof AgentToolGatewayError || error instanceof AgentBudgetExceededError) return error.code
-  if (error instanceof Error) return error.message.match(/^\[([^\]]+)\]/)?.[1] ?? error.name
-  return 'INTERNAL_ERROR'
-}
-
-function serializeError(error: unknown): SerializedAgentError {
-  const code = errorCode(error)
-  const message = error instanceof Error ? error.message.replace(/^\[[^\]]+\]\s*/, '') : 'Agent 运行失败'
-  return {
-    code,
-    message: message.slice(0, 1_000) || 'Agent 运行失败',
-    retryable: error instanceof AgentToolGatewayError ? error.retryable : false,
-    recovery: error instanceof AgentToolGatewayError ? error.recovery : 'none',
-  }
-}
-
-function toolMessage(call: ModelStepToolCall, observation: AgentToolObservation): ModelStepMessage {
-  const output = shouldOffloadObservation(observation.output)
-    ? { summary: observation.summary, largeResultOmitted: true }
-    : { summary: observation.summary, data: sanitizeObservationValue(observation.output) }
-  return {
-    role: 'tool',
-    content: [{
-      type: 'tool-result',
-      toolCallId: call.toolCallId,
-      toolName: call.toolName,
-      output: { type: 'json', value: output },
-    }],
-  }
-}
-
-function rejectedObservation(call: ModelStepToolCall): AgentToolObservation {
-  return agentToolObservationSchema.parse({
-    source: { toolName: call.toolName, toolVersion: 1, toolCallId: call.toolCallId },
-    trust: 'untrusted_observation',
-    dataClasses: ['C0'],
-    summary: '用户拒绝了本次工具调用。',
-    output: { ok: false, error: { code: 'APPROVAL_REJECTED' } },
-  })
-}
-
-function extractResultReferences(output: unknown): Record<string, string> | undefined {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) return undefined
-  const record = output as Record<string, unknown>
-  const references: Record<string, string> = {}
-  const referenceKeys = [
-    'taskId', 'projectId', 'nodeId', 'edgeId', 'undoRef', 'workspace', 'workspaceId', 'modelId',
-  ] as const
-  for (const key of referenceKeys) {
-    const value = record[key]
-    if (typeof value === 'string' && value.trim()) references[key] = value.slice(0, 500)
-  }
-  const nestedTask = record.task
-  if (!references.taskId && nestedTask && typeof nestedTask === 'object' && !Array.isArray(nestedTask)) {
-    const taskId = (nestedTask as Record<string, unknown>).taskId ?? (nestedTask as Record<string, unknown>).id
-    if (typeof taskId === 'string' && taskId.trim()) references.taskId = taskId.slice(0, 500)
-  }
-  return Object.keys(references).length > 0 ? references : undefined
-}
-
-function extractResultScopeRevisions(output: unknown): HostScopeRevisions | null {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) return null
-  const parsed = hostScopeRevisionsSchema.safeParse((output as Record<string, unknown>).scopeRevisions)
-  return parsed.success ? parsed.data : null
 }
 
 export class AgentRunner {
@@ -298,38 +239,14 @@ export class AgentRunner {
     const requestId = `${this.options.runId}:router:${revision}`
     this.currentModelRequestId = requestId
     try {
-      const result = await this.options.dependencies.runModelStep({
-        requestId,
+      const result = await runRouterModelClassification({
         runId: this.options.runId,
-        stepId: `router:${revision}`,
-        providerId: this.models.router.providerId,
-        modelId: this.models.router.modelId,
-        adapter: this.models.router.adapter,
-        baseUrl: this.models.router.baseUrl,
-        messages: [
-          { role: 'system', content: '只分类用户意图。输出必须符合给定 JSON 结构，不执行工具。' },
-          { role: 'user', content: goal },
-        ],
-        output: {
-          mode: 'object',
-          name: 'agent_intent_route',
-          schema: {
-            type: 'object',
-            properties: {
-              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'user_instructions', 'general'] },
-              complexity: { type: 'string', enum: ['simple', 'multi_step', 'ambiguous'] },
-              path: { type: 'string', enum: ['workflow', 'primary'] },
-              toolDomains: { type: 'array', items: { type: 'string' }, maxItems: 4 },
-              reason: { type: 'string', maxLength: 500 },
-            },
-            required: ['intent', 'complexity', 'path', 'toolDomains', 'reason'],
-            additionalProperties: false,
-          },
-        },
-        capabilities: this.models.router.capabilities,
-        settings: this.models.router.settings,
-      }, () => undefined)
-      if (signal.aborted) throw new Error('[task_cancelled] router cancelled')
+        goal,
+        revision,
+        model: this.models.router,
+        runModelStep: this.options.dependencies.runModelStep,
+        signal,
+      })
       this.budget.recordModelUsage(result.usage)
       return result.structuredOutput
     } finally {
@@ -350,21 +267,14 @@ export class AgentRunner {
       type: 'ModelStarted', stepId, turn,
       providerId: this.models.primary.providerId, modelId: this.models.primary.modelId,
     })
-    const result = await this.options.dependencies.runModelStep({
-      requestId,
+    const result = await runPrimaryAgentModelStep({
       runId: this.options.runId,
-      stepId,
-      providerId: this.models.primary.providerId,
-      modelId: this.models.primary.modelId,
-      adapter: this.models.primary.adapter,
-      baseUrl: this.models.primary.baseUrl,
+      turn,
+      model: this.models.primary,
       messages,
       tools,
-      output: { mode: 'text' },
-      capabilities: this.models.primary.capabilities,
-      settings: this.models.primary.settings,
-    }, (event) => {
-      if (event.type === 'TextDelta') this.emit({ type: 'ModelDelta', stepId, text: event.text })
+      runModelStep: this.options.dependencies.runModelStep,
+      onTextDelta: (text) => this.emit({ type: 'ModelDelta', stepId, text }),
     })
     this.throwIfCancelled()
     this.budget.recordModelUsage(result.usage)
@@ -461,6 +371,18 @@ export class AgentRunner {
         if (result.status !== 'completed') throw new Error('工具审批状态未收敛')
         this.observations.push(result.observation)
         this.conversation.push(toolMessage(call, result.observation))
+        const discoveredToolNames = this.catalogPlanner.rememberDiscovered(
+          call.toolName,
+          result.observation.output
+        )
+        if (discoveredToolNames.length > 0) {
+          logger.info('Agent 能力目录发现新工具', {
+            event: 'agent_catalog.discovery.completed',
+            requestId: this.options.runId,
+            taskId: call.toolCallId,
+            context: { toolNames: discoveredToolNames },
+          })
+        }
         const resultingRevisions = extractResultScopeRevisions(result.observation.output)
         if (resultingRevisions) currentExpectedRevisions = resultingRevisions
         this.budget.recordProgress(`${call.toolName}:${digestJson(result.observation.output)}`)

@@ -23,13 +23,34 @@ const toolsByDomain: Readonly<Record<string, string[]>> = {
 }
 
 export class AgentToolCatalogPlanner {
+  private discoveredToolNames: string[] = []
+
   constructor(private readonly registry: AgentToolRegistry) {}
 
   select(route: AgentRouteDecision, context: HostContextSnapshot | null): AgentToolRegistration[] {
     const requested = route.toolDomains.flatMap((domain) => toolsByDomain[domain] ?? [])
+    const discovered = route.path === 'primary' ? this.discoveredToolNames : []
     const names = route.path === 'primary'
-      ? ['search_application_capabilities', ...requested]
+      ? ['search_application_capabilities', ...requested, ...discovered]
       : requested
     return this.registry.registrations([...new Set(names)].slice(0, 8), context)
+  }
+
+  rememberDiscovered(toolName: string, output: unknown): string[] {
+    if (toolName !== 'search_application_capabilities' || !output || typeof output !== 'object') return []
+    const capabilities = (output as Record<string, unknown>).capabilities
+    if (!Array.isArray(capabilities)) return []
+    const previous = new Set(this.discoveredToolNames)
+    const candidates: string[] = []
+    for (const capability of capabilities) {
+      if (!capability || typeof capability !== 'object' || Array.isArray(capability)) continue
+      const name = (capability as Record<string, unknown>).name
+      if (typeof name !== 'string' || name === 'search_application_capabilities') continue
+      if (!this.registry.get(name) || candidates.includes(name)) continue
+      candidates.push(name)
+      if (candidates.length >= 20) break
+    }
+    this.discoveredToolNames = [...new Set([...candidates, ...this.discoveredToolNames])].slice(0, 20)
+    return candidates.filter((name) => !previous.has(name))
   }
 }

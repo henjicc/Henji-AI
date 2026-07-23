@@ -3,6 +3,46 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import type { AgentToolDefinition, AgentToolRegistration } from './types'
 
+const semanticSearchConcepts: ReadonlyArray<{ pattern: RegExp; concept: string }> = [
+  { pattern: /(?:图片|图像|照片|相片|插画|海报|头像|壁纸|封面|图标|生图|image|picture|photo)/i, concept: 'media:image' },
+  { pattern: /(?:视频|短片|动画|影片|video|animation)/i, concept: 'media:video' },
+  { pattern: /(?:音频|音乐|歌曲|配音|语音|音效|audio|music|song|voice)/i, concept: 'media:audio' },
+  { pattern: /(?:生成|制作|创建|创作|绘制|渲染|generate|generation|create|make|draw|render)/i, concept: 'action:generate' },
+  { pattern: /(?:模型|供应商|model|provider)/i, concept: 'catalog:model' },
+]
+
+const categorySearchConcepts: Readonly<Record<string, string[]>> = {
+  generation: ['action:generate', 'media:image', 'media:video', 'media:audio'],
+  models: ['catalog:model', 'media:image', 'media:video', 'media:audio'],
+  canvas: ['workspace:canvas'],
+  navigation: ['action:navigate', 'action:generate'],
+  diagnostics: ['action:diagnose'],
+  user_instructions: ['settings:user_instructions'],
+}
+
+function normalizeSearchValue(value: string): string {
+  return value.normalize('NFKC').trim().toLowerCase()
+}
+
+function searchScore(entry: AgentToolCatalogEntry, query: string): number {
+  const normalized = normalizeSearchValue(query)
+  if (!normalized) return 1
+  const text = normalizeSearchValue(`${entry.name} ${entry.title} ${entry.description} ${entry.category}`)
+  const rawTerms = normalized.split(/[\s,，。;；:：/\\|]+/).filter(Boolean)
+  const concepts = semanticSearchConcepts
+    .filter((item) => item.pattern.test(normalized))
+    .map((item) => item.concept)
+  const supportedConcepts = categorySearchConcepts[entry.category] ?? []
+  let score = text.includes(normalized) ? 100 : 0
+  for (const term of rawTerms) {
+    if (text.includes(term)) score += 10
+  }
+  for (const concept of concepts) {
+    if (supportedConcepts.includes(concept)) score += 20
+  }
+  return score
+}
+
 export class AgentToolRegistry {
   private readonly definitions = new Map<string, AgentToolDefinition>()
 
@@ -26,12 +66,12 @@ export class AgentToolRegistry {
   }
 
   search(query: string, category?: string, context: HostContextSnapshot | null = null, limit = 20): AgentToolCatalogEntry[] {
-    const normalized = query.trim().toLowerCase()
-    return this.list(context).filter((entry) => {
-      if (category && entry.category !== category) return false
-      if (!normalized) return true
-      return `${entry.name} ${entry.title} ${entry.description} ${entry.category}`.toLowerCase().includes(normalized)
-    }).slice(0, Math.min(Math.max(limit, 1), 20))
+    const scored = this.list(context)
+      .filter((entry) => !category || entry.category === category)
+      .map((entry) => ({ entry, score: searchScore(entry, query) }))
+      .filter((item) => item.score > 0)
+      .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name))
+    return scored.slice(0, Math.min(Math.max(limit, 1), 20)).map((item) => item.entry)
   }
 
   registrations(names: string[], context: HostContextSnapshot | null): AgentToolRegistration[] {

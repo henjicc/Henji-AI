@@ -76,6 +76,46 @@ describe('AgentIntentRouter', () => {
     })
     expect(classifier).not.toHaveBeenCalled()
   })
+
+  it('包含照片等自然表达的媒体生成请求直接进入生成工具链', async () => {
+    const classifier = vi.fn()
+    const router = new AgentIntentRouter(classifier)
+    const result = await router.route(
+      'run-photo',
+      '生成一张剪纸风格的猫咪的那种照片',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'generate',
+      source: 'deterministic',
+      path: 'workflow',
+      toolDomains: ['models', 'generation', 'navigation'],
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('router 模型只负责分类，工具域由本地策略决定', async () => {
+    const router = new AgentIntentRouter(async () => ({
+      intent: 'generate',
+      complexity: 'simple',
+      path: 'primary',
+      toolDomains: ['catalog'],
+      reason: '用户希望生成照片',
+    }))
+    const result = await router.route(
+      'run-router-policy',
+      '帮我完成这个视觉需求',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'generate',
+      source: 'router_model',
+      path: 'workflow',
+      toolDomains: ['models', 'generation', 'navigation'],
+    })
+  })
 })
 
 describe('AgentContextBuilder', () => {
@@ -181,6 +221,8 @@ describe('AgentContextBuilder', () => {
     })
     const systemPrompt = String(result.messages[0].content)
     expect(systemPrompt).toContain('tags、输入约束和参数 schema 是硬约束')
+    expect(systemPrompt).toContain('使用空 query + mediaType')
+    expect(systemPrompt).toContain('先切换到生成工作区')
     expect(systemPrompt).toContain('用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向')
     expect(systemPrompt).toContain('用户指令是用户主动维护的高优先级自然语言偏好')
     expect(String(result.messages[1].content)).toContain('图片生成优先使用 PPIO')

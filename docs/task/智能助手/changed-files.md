@@ -104,6 +104,22 @@
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
 
+## 第五阶段 · 图片生成误路由与能力发现修复
+
+### 新增
+
+- `electron/main/services/agent-runtime/context/catalog.test.ts`：覆盖明确生成工具集合、“KIE 图片生成”多词检索和目录发现后下一轮渐进披露。
+- `electron/main/services/agent-runtime/runner/model-execution.ts`：拆出 router/primary 模型请求构建，router 结构只保留分类字段。
+- `electron/main/services/agent-runtime/runner/runner-results.ts`：拆出错误序列化、工具消息、结果引用和 scope revision 解析，避免继续膨胀 Runner。
+
+### 修改
+
+- `context/router.ts`、`context/context.test.ts`：扩展照片/插画/视频/音频自然表达，生成路由加入 navigation，router 工具域改由本地策略决定并记录安全失败码。
+- `context/catalog.ts`、`tools/registry.ts`：支持相关性检索、权威发现结果记忆和下一轮 active tools 激活。
+- `tools/builtin/backend.ts`、`frontend.ts`、`context/builder.ts`：限制真实目录 category，区分模型 query 与内容 prompt，并指示生成工作区未就绪时先切换。
+- `runner/runner.ts`：接入目录发现状态和结构化发现日志，同时通过辅助模块降低存量文件体积。
+- `package.json`：将能力目录回归纳入 `test:assistant-eval`。
+
 ## 第五阶段 · 模型选择描述与偏好补充优化
 
 ### 新增

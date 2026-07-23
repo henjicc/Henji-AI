@@ -59,7 +59,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     name: 'search_models',
     version: 1,
     title: '搜索生成模型',
-    description: '按关键词、媒体类型或供应商搜索生成模型目录，返回通用模型标识、定性描述与能力标签，最多 20 项。',
+    description: '按模型名称关键词、媒体类型或供应商搜索生成模型目录，返回通用模型标识、定性描述与能力标签，最多 20 项。内容、题材和风格不得放入 query；未指定模型时使用空 query 与 mediaType。',
     category: 'models',
     side: 'frontend',
     risk: 'R0',

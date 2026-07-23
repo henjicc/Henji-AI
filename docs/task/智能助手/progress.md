@@ -36,6 +36,10 @@
 
 ### 2026-07-23
 
+- 修复真实 run `8aa28be8` 的图片生成误路由：原目标中的“照片”未命中窄生成词表，DeepSeek router 输出又未通过结构校验，导致错误降级为只有能力目录的 `general/catalog` 路径。
+- 图片、照片、插画、海报、头像、壁纸、封面、视频和音频等自然表达现在由本地确定性规则直接进入 `models + generation + navigation`；router 模型只分类 intent/complexity，工具域和执行路径由本地权威策略决定。
+- 应用能力目录改为多词、媒体同义词和真实 category 枚举检索；目录发现的权威工具会在下一轮渐进披露，生成工作区尚未就绪时可先切换工作区继续，不再把暂不可用误报为“没有生成能力”。
+- 模型目录查询明确区分内容 prompt 与模型筛选：剪纸风格、猫咪等内容不再作为模型 query；未指定模型时使用空 query + mediaType。助手评测 8 文件、30 用例，全量测试 73 文件、340 用例及前后端 lint、TypeScript、颜色/i18n、Electron build 全部通过。
 - 将结构化模型偏好面板替换为自然语言“用户指令”：设置页统一使用 PromptEditor，主进程权威文件改为 `user-instructions.md`，每次 run 在 main 侧重新读取；开发期旧 `model-preferences.json` 已彻底退出读取与迁移链路，磁盘遗留文件不会影响运行。
 - Agent 新增 `get_user_instructions` / `update_user_instructions` 受控工具；只有用户明确要求长期保存偏好或工作习惯时才能经 R2 审批更新，临时要求、敏感内容和模型推断不得自动写入。
 - 明确当前尚无助手自动管理的长期记忆：run/checkpoint、thread history、用户主动指令、agent-managed memory 分层治理属于 6.1/6.5；记忆相关性检索与渐进披露在 6.5 实现，不在第五阶段建立临时平行系统。

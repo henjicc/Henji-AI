@@ -85,6 +85,7 @@
 | renderer / Electron TypeScript | 通过 |
 | `npm run check:colors` | 通过 |
 | `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功构建，生成 65 个模型 manifest |
 | `npm run electron:build` | 通过；main/preload/renderer 均成功构建 |
 | DeepSeek 官方 JSON Output 契约 | 通过；当前仅声明 `json_object`，并要求提示词包含 JSON 与示例 |
 | `git diff --check` | 通过；无空白错误 |
@@ -409,3 +410,35 @@
 - 在指令中输入凭据形态或“自动批准”等内容，确认 UI 提示，运行上下文不出现凭据原文且安全/审批规则不被覆盖。
 - 在指令中输入普通本地路径和带查询参数网址，确认保存后内容不被删改且可用于当前任务。
 - 确认普通对话不会被助手擅自写入长期记忆；真正的自动记忆、历史持久化和相关性检索等待 6.1/6.5。
+
+## 第五阶段 · 图片生成误路由与能力发现修复
+
+- 验证状态：代码与自动化门槛通过；真实 Provider 生成待用户复验
+- 验证日期：2026-07-23
+- 真实证据：run `8aa28be8` 未命中“照片”确定性规则，router 结构校验失败后降级为 `general/catalog`；两次目录调用均为 0 项并结束，未进入模型目录或生成工具。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| 生成路由/能力目录/Runner 定向测试 | 通过；5 个文件、23 个用例 |
+| `npm run test:assistant-eval` | 通过；8 个文件、30 个用例 |
+| `npm test` | 通过；73 个文件、340 个用例 |
+| renderer / Electron ESLint | 通过；零 warning |
+| renderer / Electron TypeScript | 通过 |
+| `npm run check:colors` | 通过 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功构建，生成 65 个模型 manifest |
+
+### 自动化覆盖
+
+- 截图原句“生成一张剪纸风格的猫咪的那种照片”不调用 router 模型，直接进入 `models + generation + navigation`。
+- router 模型即使返回错误 path/toolDomains，也只能影响分类建议，实际执行路径和工具域由本地策略映射。
+- “KIE 图片生成”能发现创建任务、模型搜索和工作区切换能力；发现结果经 Registry 复核后在下一轮 active tools 生效。
+- 生成 route 在宿主就绪时同时获得模型搜索、schema、可见任务与工作区切换工具；模型内容/风格不会误作目录 query。
+
+### 待用户手动验证
+
+- 重启 Electron 后原样重试截图中的生成语句；确认不再出现两个“搜索应用能力 0 项”卡片。
+- 在非生成工作区发起同一请求，确认先切换生成工作区，再搜索模型、读取 schema 和请求 R2 生成审批。
+- 批准后确认生成工作区出现真实可见任务；真实 Provider 费用、输出和延迟仍按第五阶段脚本记录。
