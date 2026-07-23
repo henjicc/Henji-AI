@@ -61,6 +61,7 @@ describe('verifyModelCapabilities', () => {
       modelId: 'model',
       adapter: 'openai',
       baseUrl: 'https://example.com/v1',
+      structuredOutputMode: 'json',
     })
 
     expect(runModelStep).toHaveBeenCalledTimes(4)
@@ -68,5 +69,6 @@ describe('verifyModelCapabilities', () => {
     expect(result.checks.every(check => check.status === 'passed')).toBe(true)
     expect(result.usage).toMatchObject({ inputTokens: 6, outputTokens: 3, totalTokens: 9 })
     expect(result.cost).toEqual({ status: 'unknown' })
+    expect(vi.mocked(runModelStep).mock.calls[2][0].capabilities.structuredOutputMode).toBe('json')
   })
 })

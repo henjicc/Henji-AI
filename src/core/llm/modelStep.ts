@@ -15,7 +15,7 @@ export const modelStepCapabilitiesSchema = z.object({
   streaming: z.boolean(),
   toolCall: z.boolean(),
   parallelTools: z.boolean(),
-  structuredOutput: z.boolean(),
+  structuredOutputMode: z.enum(['none', 'json', 'schema']),
   reasoning: z.boolean(),
   sampling: z.boolean(),
   usage: z.boolean(),

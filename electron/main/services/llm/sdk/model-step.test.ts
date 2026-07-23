@@ -4,7 +4,7 @@ import { MockLanguageModelV3 } from 'ai/test'
 
 import type { ModelStepInput } from '../../../../../src/core/llm/modelStep'
 import { buildModelStepProviderOptions, executeModelStepWithModel } from './model-step'
-import { applyModelStepProviderNativeOptions, resolveModelStepBaseUrl } from './provider'
+import { applyModelStepProviderNativeOptions, resolveModelStepBaseUrl, usesNativeJsonSchema } from './provider'
 
 const usage = {
   inputTokens: { total: 11, noCache: 7, cacheRead: 4, cacheWrite: 0 },
@@ -25,7 +25,7 @@ function createInput(patch: Partial<ModelStepInput> = {}): ModelStepInput {
       streaming: true,
       toolCall: true,
       parallelTools: false,
-      structuredOutput: true,
+      structuredOutputMode: 'schema',
       reasoning: true,
       sampling: true,
       usage: true,
@@ -115,7 +115,7 @@ describe('executeModelStepWithModel', () => {
         streaming: true,
         toolCall: false,
         parallelTools: false,
-        structuredOutput: false,
+        structuredOutputMode: 'none',
         reasoning: false,
         sampling: false,
         usage: true,
@@ -155,5 +155,14 @@ describe('resolveModelStepBaseUrl', () => {
       model: 'deepseek-v4',
       reasoning: true,
     })
+  })
+
+  it('仅 schema 模式启用 Provider 原生 JSON Schema', () => {
+    expect(usesNativeJsonSchema(createInput({
+      capabilities: { ...createInput().capabilities, structuredOutputMode: 'json' },
+    }))).toBe(false)
+    expect(usesNativeJsonSchema(createInput({
+      capabilities: { ...createInput().capabilities, structuredOutputMode: 'schema' },
+    }))).toBe(true)
   })
 })

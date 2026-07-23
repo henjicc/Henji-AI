@@ -99,7 +99,7 @@ function summarizeProviderMetadata(value: unknown): Record<string, string[]> {
 
 function createOutput(input: ModelStepInput): ReturnType<typeof Output.text> | ReturnType<typeof Output.object> {
   if (input.output.mode === 'text') return Output.text()
-  if (!input.capabilities.structuredOutput) {
+  if (input.capabilities.structuredOutputMode === 'none') {
     throw new Error('[unsupported_capability] Model does not support structured output')
   }
   return Output.object({

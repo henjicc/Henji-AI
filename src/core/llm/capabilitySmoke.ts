@@ -6,6 +6,7 @@ export const modelCapabilitySmokeRequestSchema = z.object({
   modelId: z.string().min(1),
   adapter: z.string().optional(),
   baseUrl: z.string().optional(),
+  structuredOutputMode: z.enum(['json', 'schema']),
   reasoning: z.object({
     enabled: z.boolean(),
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),

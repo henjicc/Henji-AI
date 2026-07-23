@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import { Dropdown, UiButton, UiInput, UiPanel } from '@/components/ui'
 import { findAgentModelVerification } from '@/core/llm/agentProfiles'
+import { applyCapabilitySmokeToCapabilities } from '@/core/llm/capabilitySmokeCapabilities'
 import { createLogger } from '@/core/logging'
 import type {
   AgentModelProfile,
@@ -121,6 +122,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
     const key = modelKey(reference)
     setVerifyingKey(key)
     const requestId = `capability-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const structuredOutputMode = model.capabilities.structuredOutputMode === 'schema' ? 'schema' : 'json'
     try {
       const result = await llmVerifyModelCapabilities({
         requestId,
@@ -128,12 +130,23 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
         modelId: model.modelId,
         adapter: model.adapter,
         baseUrl: model.baseUrl ?? provider.baseUrl,
+        structuredOutputMode,
         reasoning: provider.reasoning,
       })
-      await saveProfile({
+      const nextProfile = {
         ...profile,
         verifications: [...profile.verifications.filter(item => modelKey(item) !== key), result],
         updatedAt: new Date().toISOString(),
+      }
+      await saveConfig({
+        ...config,
+        models: config.models.map(item => modelKey(item) === key
+          ? {
+              ...item,
+              capabilities: applyCapabilitySmokeToCapabilities(item.capabilities, result, structuredOutputMode),
+            }
+          : item),
+        agentProfiles: config.agentProfiles.map(item => item.id === nextProfile.id ? nextProfile : item),
       })
     } catch (error) {
       logger.error('智能助手模型能力验证失败', error, {

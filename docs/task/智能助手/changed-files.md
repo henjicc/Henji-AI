@@ -63,3 +63,17 @@
 ### 自动生成但未纳入改动
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由构建刷新，按仓库规则保持 Git 忽略。
+
+## 第二阶段 · 真实模型验收修复
+
+### 新增
+
+- `src/core/llm/capabilitySmokeCapabilities.ts`、`capabilitySmoke.test.ts`：把真实 smoke 通过项提升为模型静态能力，并覆盖失败项不降级。
+
+### 修改
+
+- `src/core/llm/modelStep.ts`、`capabilitySmoke.ts`：单步能力改用 `none/json/schema`，验证请求显式携带结构化输出模式。
+- `electron/main/services/llm/sdk/provider.ts`、`model-step.ts`、`capability-smoke.ts`：按模式映射 `json_object/json_schema`，并使用明确 JSON 提示执行结构化 smoke。
+- `electron/main/services/llm/sdk/model-step.test.ts`、`capability-smoke.test.ts`：覆盖 Provider 原生 schema 开关与 smoke 模式透传。
+- `src/components/Settings/sections/AgentModelProfilesSection.tsx`：验证成功后同时保存动态结果与实际通过的静态能力。
+- `docs/task/智能助手/progress.md`、`decisions.md`、`handoff.md`、`changed-files.md`、`test-report.md`、2.4 任务文件和 `重要记录.md`：同步真实验收问题、修复决策、验证和复验步骤。

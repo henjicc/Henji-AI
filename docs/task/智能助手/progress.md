@@ -6,8 +6,8 @@
 - 阶段状态：实现完成，待用户手动验收
 - 已完成任务：1.1～2.4（2.1～2.4 待用户手动验收）
 - 开始日期：2026-07-23
-- 当前任务：第二阶段手动验收
-- 阻塞问题：无代码阻塞；真实 Provider capability smoke 与鼠标交互需用户执行
+- 当前任务：第二阶段结构化输出兼容修复后复验
+- 阻塞问题：无代码阻塞；修复后的真实 Provider capability smoke 与鼠标交互需用户执行
 
 ## 阶段进度
 
@@ -26,6 +26,9 @@
 
 ### 2026-07-23
 
+- 修复 DeepSeek capability smoke 将 JSON 对象能力误当成原生 JSON Schema 能力的问题；`json` 模式改发 `json_object`，`schema` 模式才发 `json_schema`。
+- capability smoke 通过后会把实际验证成功的文本、流式、工具、结构化输出和 usage 同步到模型静态能力，避免动态通过但静态仍为“否/none”。
+- 修复后全量 `npm test` 通过（56 文件、283 用例），前后端 lint、TypeScript、颜色/i18n 与 `npm run electron:build` 通过；待用户重启并重新点击真实模型验证。
 - 完成第二阶段 2.1～2.4 实现：全局导航、宿主命令面、前端工具桥、AI SDK 单步适配、Agent 模型档案和 capability smoke。
 - 全量 `npm test` 通过（55 文件、280 用例），前后端 lint、TypeScript、颜色/i18n 与 `npm run electron:build` 通过。
 - `npm run electron:smoke` 唯一失败为用户历史外部媒体路径未在 `henji-media://` 白名单导致的 403，与本阶段改动无关；保留用户数据不处理。

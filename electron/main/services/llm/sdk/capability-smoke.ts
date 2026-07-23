@@ -67,7 +67,7 @@ function createStepInput(
       streaming: true,
       toolCall: true,
       parallelTools: true,
-      structuredOutput: true,
+      structuredOutputMode: request.structuredOutputMode,
       reasoning: request.reasoning?.enabled === true,
       sampling: false,
       usage: true,
@@ -148,7 +148,7 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
 
   checks.push(await runCheck('structuredOutput', async () => {
     const result = await runModelStep(createStepInput(request, 'structuredOutput', {
-      messages: [{ role: 'user', content: '返回 ok=true 的对象' }],
+      messages: [{ role: 'user', content: '只返回 JSON 对象：{"ok":true}' }],
       output: {
         mode: 'object',
         schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },

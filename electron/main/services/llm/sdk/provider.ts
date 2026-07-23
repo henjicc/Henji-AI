@@ -33,12 +33,16 @@ export function createModelStepLanguageModel(input: ModelStepInput, apiKey: stri
     apiKey,
     baseURL: resolveModelStepBaseUrl(input),
     includeUsage: input.capabilities.usage,
-    supportsStructuredOutputs: input.capabilities.structuredOutput,
+    supportsStructuredOutputs: usesNativeJsonSchema(input),
     transformRequestBody: adapter === 'deepseek' && input.capabilities.reasoning && reasoning
       ? body => applyModelStepProviderNativeOptions(body, reasoning.enabled)
       : undefined,
   })
   return provider.chatModel(input.modelId)
+}
+
+export function usesNativeJsonSchema(input: Pick<ModelStepInput, 'capabilities'>): boolean {
+  return input.capabilities.structuredOutputMode === 'schema'
 }
 
 export function applyModelStepProviderNativeOptions(

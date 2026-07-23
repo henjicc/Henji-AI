@@ -67,3 +67,30 @@
 
 - 第二阶段代码可以交付手动验收；未发现代码阻塞。
 - 用户验收通过后可进入 3.1；真实 smoke 结果将成为 Runner 启动前能力判断依据。
+
+## 第二阶段 · 真实模型验收修复
+
+- 验证状态：自动化验证通过；修复后的 DeepSeek 真实 smoke 待用户重启后复验
+- 验证日期：2026-07-23
+- 根因：DeepSeek 返回 “This response_format type is unavailable now”，日志确认适配层把 JSON 对象能力错误映射成了 `response_format: json_schema`。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| 定向测试 | 通过；3 文件、10 用例 |
+| `npm test` | 通过；56 个测试文件、283 个用例全部通过 |
+| `npm run lint` | 通过 |
+| Electron ESLint | 通过；零 warning |
+| renderer / Electron TypeScript | 通过 |
+| `npm run check:colors` | 通过 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功构建 |
+| DeepSeek 官方 JSON Output 契约 | 通过；当前仅声明 `json_object`，并要求提示词包含 JSON 与示例 |
+| `git diff --check` | 通过；无空白错误 |
+
+### 待用户手动验证
+
+- 重启 `npm run electron:dev`，重新点击 DeepSeek 的“验证此模型”。
+- 确认 `structuredOutput` 变为“通过”，六项均通过。
+- 确认静态摘要自动更新为“工具 是 · 结构化 json”；上下文/最大输出未知不影响本次 capability smoke。

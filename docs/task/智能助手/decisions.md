@@ -55,6 +55,12 @@
 - 静态能力表与动态 capability smoke 同时参与 Agent 模型可用性判断；主模型不合格时仅允许切换到已验证 fallback，否则返回明确设置入口。
 - capability smoke 由用户显式触发真实最小请求；记录 token 与延迟，缺少可靠价格时费用固定为 `unknown`。
 
+### D-010 结构化输出模式与能力同步
+
+- `ModelStepCapabilities` 使用 `none/json/schema` 区分不可用、JSON 对象和原生 JSON Schema，不再用单一布尔值混淆两类 Provider 能力。
+- AI SDK OpenAI-compatible Provider 仅在 `schema` 模式启用 `supportsStructuredOutputs`；`json` 模式发送 `json_object`，仍由 `Output.object()` 在本地按 schema 解析和校验。
+- capability smoke 对未声明/schema 以外的模型先验证 `json` 基线；验证成功的文本、流式、工具、结构化输出和 usage 会提升静态能力，失败项不自动降低用户已有声明。
+
 ## 可调参数
 
 - turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于评测调优，但不得绕过安全硬限制。
