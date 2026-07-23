@@ -3,13 +3,13 @@
 ## 当前工作
 
 - 当前阶段：第五阶段 · 闭环验证
-- 状态：5.1～5.4 与模型选择补充优化的代码、自动化和操作记录已完成，待真实 Electron/Provider 联合验收
-- 下一任务：用户先验收中央描述与模型偏好，再按第五阶段脚本完成生成、诊断、护栏、画布与真实评测复验
+- 状态：5.1～5.4、中央模型描述与自然语言用户指令的代码、自动化和操作记录已完成，待真实 Electron/Provider 联合验收
+- 下一任务：用户先验收中央描述与用户指令，再按第五阶段脚本完成生成、诊断、护栏、画布与真实评测复验
 - 阻塞问题：无代码阻塞
 
 ## 下一步
 
-1. 重启 `npm run electron:dev`，在“设置 → 平台密钥 → 智能助手偏好”保存/重读偏好并用“打开偏好文件”验证同一份 JSON；再通过对话要求助手记住供应商/模型偏好并检查 R2 审批与后续生成选型。
+1. 重启 `npm run electron:dev`，在“设置 → 平台密钥 → 助手用户指令”用自然语言保存/重读内容并用“打开指令文件”验证同一份 Markdown；再通过对话要求助手长期记住供应商/模型或回答风格偏好，检查 R2 审批与下一次 run 的选型/表达。
 2. 在 `src/core/modelCatalog/generationModelDescriptions.ts` 补充至少两个同模型跨供应商条目的定性描述，重启后确认模型目录查询返回同一描述且能力筛选仍由 tags/schema 决定。
 3. 确认 Agent Profile 已对目标真实模型完成 capability smoke；复验第四阶段停靠/悬浮/缩放与长对话实时排版。
 4. 按 `首用例操作脚本.md` 分别完成可见生成任务和 requestId 诊断：批准具体预览，核对 taskId 跳转、证据编号、低置信度表达和无敏感原文。
@@ -31,7 +31,8 @@
 - 第五阶段确定性评测已通过，但真实模型具有随机性且可能产生费用；未自动调用真实 Provider，成功率、延迟和 token 基线仍需用户显式执行。
 - 画布 MVP 只开放上传节点与图片节点，完整节点/项目能力仍由 7.2 接入；当前 undoRef 只允许严格撤销 Agent 自己的栈顶动作，用户后续编辑会使旧引用失效。
 - 中央模型描述目前按用户要求保留为空，未填写时不会注入模型元数据；真实选型效果需要用户补充描述后复验。
-- 模型偏好 JSON 允许手工编辑但使用严格 schema；格式无效时会明确报错并保留原文件，不会自动覆盖用户内容。
+- 用户指令文件允许手工编辑，最多 4000 字；超限或包含空字符时明确报错且不自动覆盖。凭据形态会在 UI 提示并在进入模型前脱敏，但不应把密钥写入指令文件。
+- 当前没有助手自动管理的长期记忆，也没有应用重启后的 thread/checkpoint 持久化；6.1 负责运行持久化，6.5 再实现记忆候选、确认、来源、scope、过期、冲突、删除和相关性检索。
 
 ## 必读交付物
 
@@ -44,7 +45,7 @@
 - `src/core/assistant/events.ts`
 - `src/core/assistant/runtimeContracts.ts`
 - `src/core/assistant/toolContracts.ts`
-- `src/core/assistant/modelPreferences.ts`
+- `src/core/assistant/userInstructions.ts`
 - `src/core/modelCatalog/generationModelDescriptions.ts`
 - `electron/main/services/agent-runtime/runtime.ts`
 - `electron/main/services/agent-runtime/runner/runner.ts`
@@ -57,8 +58,8 @@
 - `src/features/assistant/diagnostics/openAssistantDiagnosis.ts`
 - `electron/main/services/agent-runtime/diagnostics/query-diagnostic-events.ts`
 - `electron/main/services/agent-runtime/tools/builtin/frontend-canvas.ts`
-- `electron/main/services/agent-runtime/tools/builtin/model-preferences.ts`
-- `electron/main/services/assistant/model-preferences.ts`
+- `electron/main/services/agent-runtime/tools/builtin/user-instructions.ts`
+- `electron/main/services/assistant/user-instructions.ts`
 - `electron/main/services/agent-runtime/evaluation/minimal-evaluator.ts`
 - `src/features/canvas/domain/agentCanvasCatalog.ts`
 - `src/features/canvas/application/agentCanvasActions.ts`

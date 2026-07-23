@@ -60,7 +60,7 @@ describe('AgentIntentRouter', () => {
     expect(classifier).not.toHaveBeenCalled()
   })
 
-  it('明确模型偏好请求走持久偏好工具域', async () => {
+  it('明确长期偏好请求走用户指令工具域', async () => {
     const classifier = vi.fn()
     const router = new AgentIntentRouter(classifier)
     const result = await router.route(
@@ -70,9 +70,9 @@ describe('AgentIntentRouter', () => {
       new AbortController().signal
     )
     expect(result).toMatchObject({
-      intent: 'model_preferences',
+      intent: 'user_instructions',
       source: 'deterministic',
-      toolDomains: ['model_preferences'],
+      toolDomains: ['user_instructions'],
     })
     expect(classifier).not.toHaveBeenCalled()
   })
@@ -162,12 +162,12 @@ describe('AgentContextBuilder', () => {
     expect(serialized).toContain('***')
   })
 
-  it('模型选择规则区分硬能力、持久偏好与通用描述', () => {
+  it('模型选择规则区分硬能力、自然语言用户指令与通用描述', () => {
     const builder = new AgentContextBuilder()
     const result = builder.build({
       runId: 'run-model-selection',
       goal: '生成一张图片',
-      userPreferences: '{"preferredProviders":["ppio"]}',
+      userInstructions: '图片生成优先使用 PPIO。',
       snapshot: contextSnapshot(),
       route: {
         intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['models', 'generation'],
@@ -181,7 +181,31 @@ describe('AgentContextBuilder', () => {
     })
     const systemPrompt = String(result.messages[0].content)
     expect(systemPrompt).toContain('tags、输入约束和参数 schema 是硬约束')
-    expect(systemPrompt).toContain('用户当前明确要求 > 持久化模型偏好 > 通用模型描述')
-    expect(String(result.messages[1].content)).toContain('preferredProviders')
+    expect(systemPrompt).toContain('用户当前明确要求 > 低优先级用户指令 > 通用模型描述')
+    expect(String(result.messages[1].content)).toContain('图片生成优先使用 PPIO')
+    expect(String(result.messages[1].content)).toContain('UNTRUSTED_USER_INSTRUCTIONS')
+  })
+
+  it('用户指令作为低信任上下文注入并在进入模型前脱敏', () => {
+    const builder = new AgentContextBuilder()
+    const result = builder.build({
+      runId: 'run-user-instructions',
+      goal: '生成一张图片',
+      userInstructions: '优先使用 PPIO。API_KEY=secret-value-1234567890',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['models', 'generation'],
+        source: 'deterministic', reason: '命中生成规则',
+      },
+      conversation: [],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 8_000,
+    })
+    const serialized = JSON.stringify(result.messages)
+    expect(serialized).toContain('优先使用 PPIO')
+    expect(serialized).not.toContain('secret-value-1234567890')
+    expect(serialized).toContain('API_KEY=***')
   })
 })

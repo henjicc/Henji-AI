@@ -7,9 +7,9 @@ import type {
 } from '@/core/assistant/hostContracts'
 import type { AgentRunState } from '@/core/assistant/events'
 import type {
-  AssistantModelPreferences,
-  AssistantModelPreferencesUpdate,
-} from '@/core/assistant/modelPreferences'
+  AssistantUserInstructions,
+  AssistantUserInstructionsUpdate,
+} from '@/core/assistant/userInstructions'
 import type {
   AgentApprovalResponse,
   AgentCancelRunRequest,
@@ -21,10 +21,10 @@ import type {
 } from '@/core/assistant/runtimeContracts'
 
 export interface AssistantPlatform {
-  getModelPreferences(): Promise<AssistantModelPreferences>
-  updateModelPreferences(update: AssistantModelPreferencesUpdate): Promise<AssistantModelPreferences>
-  resetModelPreferences(): Promise<AssistantModelPreferences>
-  openModelPreferencesFile(): Promise<string>
+  getUserInstructions(): Promise<AssistantUserInstructions>
+  updateUserInstructions(update: AssistantUserInstructionsUpdate): Promise<AssistantUserInstructions>
+  resetUserInstructions(): Promise<AssistantUserInstructions>
+  openUserInstructionsFile(): Promise<string>
   publishHostContext(snapshot: HostContextSnapshot): Promise<void>
   acknowledgeFrontendTool(acknowledgement: FrontendToolAcknowledgement): Promise<void>
   completeFrontendTool(result: FrontendToolResult): Promise<void>

@@ -10,7 +10,7 @@ export type AgentIntent =
   | 'cancel_generation'
   | 'diagnose'
   | 'canvas'
-  | 'model_preferences'
+  | 'user_instructions'
   | 'general'
 
 export type AgentRoutePath = 'workflow' | 'primary'
@@ -36,7 +36,7 @@ export interface AgentContextArtifact {
 export interface AgentContextBuildInput {
   runId: string
   goal: string
-  userPreferences?: string
+  userInstructions?: string
   snapshot: HostContextSnapshot
   route: AgentRouteDecision
   conversation: ModelStepMessage[]

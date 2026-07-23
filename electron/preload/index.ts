@@ -82,10 +82,10 @@ const windowApi: HenjiWindowApi = {
 }
 
 const assistantApi: HenjiAssistantApi = {
-  getModelPreferences: () => nativeInvoke('assistant:modelPreferences:get'),
-  updateModelPreferences: (update) => nativeInvoke('assistant:modelPreferences:update', update),
-  resetModelPreferences: () => nativeInvoke('assistant:modelPreferences:reset'),
-  openModelPreferencesFile: () => nativeInvoke('assistant:modelPreferences:openFile'),
+  getUserInstructions: () => nativeInvoke('assistant:userInstructions:get'),
+  updateUserInstructions: (update) => nativeInvoke('assistant:userInstructions:update', update),
+  resetUserInstructions: () => nativeInvoke('assistant:userInstructions:reset'),
+  openUserInstructionsFile: () => nativeInvoke('assistant:userInstructions:openFile'),
   publishHostContext: (snapshot) => nativeInvoke('assistant:publishHostContext', snapshot),
   acknowledgeFrontendTool: (acknowledgement) => nativeInvoke('assistant:frontendTool:ack', acknowledgement),
   completeFrontendTool: (result) => nativeInvoke('assistant:frontendTool:result', result),

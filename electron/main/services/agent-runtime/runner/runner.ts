@@ -249,7 +249,7 @@ export class AgentRunner {
         const context = this.contextBuilder.build({
           runId: this.options.runId,
           goal: this.options.request.goal,
-          userPreferences: this.options.request.userPreferences,
+          userInstructions: this.options.request.userInstructions,
           snapshot: currentSnapshot,
           route,
           conversation: this.conversation,
@@ -316,7 +316,7 @@ export class AgentRunner {
           schema: {
             type: 'object',
             properties: {
-              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'model_preferences', 'general'] },
+              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'user_instructions', 'general'] },
               complexity: { type: 'string', enum: ['simple', 'multi_step', 'ambiguous'] },
               path: { type: 'string', enum: ['workflow', 'primary'] },
               toolDomains: { type: 'array', items: { type: 'string' }, maxItems: 4 },

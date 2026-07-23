@@ -4,7 +4,7 @@ import { createQueryDiagnosticEventsTool } from '../../diagnostics/query-diagnos
 import { defineAgentTool } from '../define-tool'
 import type { AgentToolDefinition } from '../types'
 import type { AgentToolRegistry } from '../registry'
-import { createModelPreferenceTools } from './model-preferences'
+import { createUserInstructionTools } from './user-instructions'
 
 function eraseToolDefinition<TInput, TOutput>(
   definition: AgentToolDefinition<TInput, TOutput>
@@ -70,6 +70,6 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
   return [
     eraseToolDefinition(searchCapabilities),
     createQueryDiagnosticEventsTool(),
-    ...createModelPreferenceTools(),
+    ...createUserInstructionTools(),
   ]
 }

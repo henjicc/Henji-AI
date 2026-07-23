@@ -6,7 +6,7 @@ import { useI18n } from '@/hooks/useI18n'
 import SectionCard from '../components/SectionCard'
 import UploadSection from '../sections/UploadSection'
 import LlmSettingsSection from '../sections/LlmSettingsSection'
-import AgentModelPreferencesSection from '../sections/AgentModelPreferencesSection'
+import AgentUserInstructionsSection from '../sections/AgentUserInstructionsSection'
 import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { useExternalLink } from '../hooks/useExternalLink'
 import { ExternalLink } from 'lucide-react'
@@ -118,7 +118,7 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
 
       {currentSectionId === 'api-agent-preferences' && (
         <section className="space-y-5">
-          <AgentModelPreferencesSection />
+          <AgentUserInstructionsSection />
         </section>
       )}
     </div>

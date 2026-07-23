@@ -7,10 +7,10 @@ import type {
 } from '@/core/assistant/hostContracts'
 import type { AgentRunState } from '@/core/assistant/events'
 import {
-  assistantModelPreferencesUpdateSchema,
-  type AssistantModelPreferences,
-  type AssistantModelPreferencesUpdate,
-} from '@/core/assistant/modelPreferences'
+  assistantUserInstructionsUpdateSchema,
+  type AssistantUserInstructions,
+  type AssistantUserInstructionsUpdate,
+} from '@/core/assistant/userInstructions'
 import {
   AGENT_RUNTIME_SCHEMA_VERSION,
   agentApprovalResponseSchema,
@@ -25,27 +25,27 @@ import {
 } from '@/core/assistant/runtimeContracts'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
-export async function getAssistantModelPreferences(): Promise<AssistantModelPreferences> {
-  if (!isDesktopRuntime()) throw new Error('智能助手模型偏好仅在桌面应用中可用')
-  return await getPlatform().assistant.getModelPreferences()
+export async function getAssistantUserInstructions(): Promise<AssistantUserInstructions> {
+  if (!isDesktopRuntime()) throw new Error('智能助手用户指令仅在桌面应用中可用')
+  return await getPlatform().assistant.getUserInstructions()
 }
 
-export async function updateAssistantModelPreferences(
-  update: AssistantModelPreferencesUpdate
-): Promise<AssistantModelPreferences> {
-  if (!isDesktopRuntime()) throw new Error('智能助手模型偏好仅在桌面应用中可用')
-  const parsed = assistantModelPreferencesUpdateSchema.parse(update)
-  return await getPlatform().assistant.updateModelPreferences(parsed)
+export async function updateAssistantUserInstructions(
+  update: AssistantUserInstructionsUpdate
+): Promise<AssistantUserInstructions> {
+  if (!isDesktopRuntime()) throw new Error('智能助手用户指令仅在桌面应用中可用')
+  const parsed = assistantUserInstructionsUpdateSchema.parse(update)
+  return await getPlatform().assistant.updateUserInstructions(parsed)
 }
 
-export async function resetAssistantModelPreferences(): Promise<AssistantModelPreferences> {
-  if (!isDesktopRuntime()) throw new Error('智能助手模型偏好仅在桌面应用中可用')
-  return await getPlatform().assistant.resetModelPreferences()
+export async function resetAssistantUserInstructions(): Promise<AssistantUserInstructions> {
+  if (!isDesktopRuntime()) throw new Error('智能助手用户指令仅在桌面应用中可用')
+  return await getPlatform().assistant.resetUserInstructions()
 }
 
-export async function openAssistantModelPreferencesFile(): Promise<string> {
-  if (!isDesktopRuntime()) throw new Error('智能助手模型偏好仅在桌面应用中可用')
-  return await getPlatform().assistant.openModelPreferencesFile()
+export async function openAssistantUserInstructionsFile(): Promise<string> {
+  if (!isDesktopRuntime()) throw new Error('智能助手用户指令仅在桌面应用中可用')
+  return await getPlatform().assistant.openUserInstructionsFile()
 }
 
 export async function publishHostContext(snapshot: HostContextSnapshot): Promise<void> {

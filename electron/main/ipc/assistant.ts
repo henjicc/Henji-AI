@@ -5,18 +5,18 @@ import {
   frontendToolResultSchema,
   hostContextSnapshotSchema,
 } from '../../../src/core/assistant/hostContracts'
-import { assistantModelPreferencesUpdateSchema } from '../../../src/core/assistant/modelPreferences'
+import { assistantUserInstructionsUpdateSchema } from '../../../src/core/assistant/userInstructions'
 import {
   acknowledgeAssistantFrontendTool,
   completeAssistantFrontendTool,
   publishAssistantHostContext,
 } from '../services/assistant/frontend-tool-bridge'
 import {
-  getAssistantModelPreferences,
-  openAssistantModelPreferencesFile,
-  resetAssistantModelPreferences,
-  updateAssistantModelPreferences,
-} from '../services/assistant/model-preferences'
+  getAssistantUserInstructions,
+  openAssistantUserInstructionsFile,
+  resetAssistantUserInstructions,
+  updateAssistantUserInstructions,
+} from '../services/assistant/user-instructions'
 import { getMainWindow } from '../window'
 import { parseVoid, registerIpcHandler } from './registry'
 
@@ -37,27 +37,27 @@ export function assertTrustedAssistantRenderer(event: IpcMainInvokeEvent): void 
 
 export function registerAssistantIpc(): void {
   registerIpcHandler(
-    'assistant:modelPreferences:get',
+    'assistant:userInstructions:get',
     parseVoid,
-    () => getAssistantModelPreferences(),
+    () => getAssistantUserInstructions(),
     assertTrustedAssistantRenderer
   )
   registerIpcHandler(
-    'assistant:modelPreferences:update',
-    (input) => assistantModelPreferencesUpdateSchema.parse(input),
-    (update) => updateAssistantModelPreferences(update),
+    'assistant:userInstructions:update',
+    (input) => assistantUserInstructionsUpdateSchema.parse(input),
+    (update) => updateAssistantUserInstructions(update),
     assertTrustedAssistantRenderer
   )
   registerIpcHandler(
-    'assistant:modelPreferences:reset',
+    'assistant:userInstructions:reset',
     parseVoid,
-    () => resetAssistantModelPreferences(),
+    () => resetAssistantUserInstructions(),
     assertTrustedAssistantRenderer
   )
   registerIpcHandler(
-    'assistant:modelPreferences:openFile',
+    'assistant:userInstructions:openFile',
     parseVoid,
-    () => openAssistantModelPreferencesFile(),
+    () => openAssistantUserInstructionsFile(),
     assertTrustedAssistantRenderer
   )
   registerIpcHandler('assistant:publishHostContext', (input) => hostContextSnapshotSchema.parse(input), (snapshot, event) => {

@@ -129,6 +129,27 @@
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
 
+## 第五阶段 · 自然语言用户指令与记忆边界调整
+
+### 新增
+
+- `src/core/assistant/userInstructions.ts` 及测试：自然语言用户指令契约、4000 字上限、换行归一化和敏感/规则冲突提示。
+- `electron/main/services/assistant/user-instructions.ts`：主进程 Markdown 文件读取、写入、清空、打开、旧结构化偏好迁移和结构化日志。
+- `electron/main/services/agent-runtime/tools/builtin/user-instructions.ts`：R0 读取与 R2/C1 完整内容更新工具。
+- `src/components/Settings/sections/AgentUserInstructionsSection.tsx`：基于统一 PromptEditor 的自然语言设置入口。
+
+### 修改
+
+- `src/commands/assistant.ts`、`src/platform/contracts/assistant.ts`、Electron adapter、preload 与 assistant IPC：将模型偏好 API 替换为用户指令 API。
+- `electron/main/ipc/agent-runtime.ts`：每次启动 run 时从主进程权威文件读取最新用户指令，renderer 不再负责注入偏好。
+- `electron/main/services/agent-runtime/context/*`、`runner.ts`、backend 工具注册与测试：新增用户指令意图/工具域，按低信任 P3 脱敏注入，保持目录、工具裁剪、压缩与 offload 渐进上下文策略。
+- `src/components/Settings/index.tsx`、`tabs/ApiKeysTab.tsx`：设置导航改为“助手用户指令”。
+- 提示词与上下文方案、6.5 任务说明和五份阶段记录：明确用户主动指令与助手自动记忆的职责边界。
+
+### 删除/替换
+
+- `src/core/assistant/modelPreferences.ts` 及测试、`electron/main/services/assistant/model-preferences.ts`、`electron/main/services/agent-runtime/tools/builtin/model-preferences.ts`、`AgentModelPreferencesSection.tsx`：由自然语言用户指令链路替代。
+
 ## 第四阶段 · 智能助手侧边栏实现完成，待用户手动验收
 
 ### 新增

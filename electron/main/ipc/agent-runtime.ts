@@ -5,14 +5,24 @@ import {
   agentStartRunRequestSchema,
 } from '../../../src/core/assistant/runtimeContracts'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
+import { getAssistantUserInstructions } from '../services/assistant/user-instructions'
 import { assertTrustedAssistantRenderer } from './assistant'
 import { registerIpcHandler } from './registry'
 
 export function registerAgentRuntimeIpc(): void {
   const runtime = getAgentRuntimeService()
-  registerIpcHandler('assistant:agent:startRun', input => agentStartRunRequestSchema.parse(input), (request, event) => (
-    runtime.startRun(event.sender, request)
-  ), assertTrustedAssistantRenderer)
+  registerIpcHandler(
+    'assistant:agent:startRun',
+    input => agentStartRunRequestSchema.parse(input),
+    async (request, event) => {
+      const instructions = await getAssistantUserInstructions()
+      return runtime.startRun(event.sender, {
+        ...request,
+        userInstructions: instructions.content || undefined,
+      })
+    },
+    assertTrustedAssistantRenderer
+  )
   registerIpcHandler('assistant:agent:cancelRun', input => agentCancelRunRequestSchema.parse(input), (request, event) => (
     runtime.cancelRun(event.sender, request.runId, request.reason)
   ), assertTrustedAssistantRenderer)

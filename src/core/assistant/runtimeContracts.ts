@@ -82,7 +82,7 @@ export const agentStartRunRequestSchema = z.object({
   schemaVersion: z.literal(AGENT_RUNTIME_SCHEMA_VERSION),
   threadId: z.string().min(1).max(200),
   goal: z.string().min(1).max(32 * 1024),
-  userPreferences: z.string().max(8 * 1024).optional(),
+  userInstructions: z.string().max(4_000).optional(),
   profile: agentRuntimeProfileSchema,
   models: z.array(agentRuntimeModelConfigSchema).min(1).max(200),
   budget: agentBudgetConfigSchema.partial().optional(),
