@@ -46,6 +46,19 @@ describe('AgentIntentRouter', () => {
     const result = await router.route('run-1', '帮我处理一下这个需求', contextSnapshot(), new AbortController().signal)
     expect(result).toMatchObject({ intent: 'general', source: 'fallback', path: 'primary' })
   })
+
+  it('明确画布编排请求走确定性 canvas 工具域', async () => {
+    const classifier = vi.fn()
+    const router = new AgentIntentRouter(classifier)
+    const result = await router.route(
+      'run-canvas',
+      '在画布添加两个节点，连接并定位生成节点',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({ intent: 'canvas', source: 'deterministic', toolDomains: ['canvas'] })
+    expect(classifier).not.toHaveBeenCalled()
+  })
 })
 
 describe('AgentContextBuilder', () => {
@@ -105,5 +118,30 @@ describe('AgentContextBuilder', () => {
     expect(result.messages.some((message) => String(message.content).includes('历史摘要'))).toBe(true)
     expect(result.messages.some((message) => String(message.content).includes('保留这个明确目标'))).toBe(true)
     expect(result.messages.some((message) => String(message.content).includes('历史消息-19'))).toBe(true)
+  })
+
+  it('不可信 observation 中的密钥形态在进入模型前被强制脱敏', () => {
+    const builder = new AgentContextBuilder()
+    const result = builder.build({
+      runId: 'run-secret',
+      goal: '诊断错误',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'diagnose', complexity: 'simple', path: 'workflow', toolDomains: ['diagnostics'],
+        source: 'deterministic', reason: '命中诊断规则',
+      },
+      conversation: [],
+      observations: [observation({
+        message: 'Authorization: Bearer hidden-value-1234567890',
+        note: 'sk-stage5-sensitive-probe-123456',
+      })],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 8_000,
+    })
+    const serialized = JSON.stringify(result.messages)
+    expect(serialized).not.toContain('hidden-value-1234567890')
+    expect(serialized).not.toContain('stage5-sensitive-probe-123456')
+    expect(serialized).toContain('***')
   })
 })

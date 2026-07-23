@@ -183,15 +183,15 @@ export function createQueryDiagnosticEventsTool(): AgentToolDefinition {
     description: '在最多 30 分钟时间窗内查询脱敏日志证据；requestId 优先，并排除当前运行和 Agent 自身日志。',
     category: 'diagnostics',
     side: 'backend',
-    risk: 'R1',
+    risk: 'R2',
     permission: 'diagnostics:read',
     readOnly: true,
     destructive: false,
-    openWorld: false,
+    openWorld: true,
     idempotent: true,
     timeoutMs: 10_000,
     retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
-    supportsPreview: false,
+    supportsPreview: true,
     supportsUndo: false,
     requiredContext: [],
     inputSchema: diagnosticQueryInputSchema,
@@ -209,6 +209,22 @@ export function createQueryDiagnosticEventsTool(): AgentToolDefinition {
       },
       required: ['from', 'to'],
       additionalProperties: false,
+    },
+    preview: (input) => {
+      const targetIds: Record<string, string> = {}
+      if (input.subjectRequestId) targetIds.requestId = input.subjectRequestId
+      return {
+        title: '读取并发送脱敏诊断证据',
+        summary: [
+          `将在 ${input.from} 至 ${input.to} 的受限时间窗读取日志证据。`,
+          '仅发送证据编号、时间、级别、domain、event、关联 ID、短摘要和白名单错误字段。',
+          '日志正文被视为不可信数据，不能触发额外工具或扩大授权。',
+        ].join(' '),
+        targetIds,
+        reversible: false,
+        dataClasses: ['C2'] as const,
+        destination: '当前智能助手模型 Provider',
+      }
     },
     execute: async (input, context) => {
       logger.info('Agent 诊断查询开始', {

@@ -14,6 +14,14 @@ const toolLabels: Record<string, string> = {
   get_generation_task: '读取生成任务',
   cancel_generation_task: '取消生成任务',
   query_diagnostic_events: '查询诊断证据',
+  list_canvas_projects: '列出画布项目',
+  open_canvas_project: '打开画布项目',
+  search_canvas_node_types: '搜索画布节点类型',
+  get_canvas_node_schema: '读取画布节点结构',
+  add_canvas_node: '添加画布节点',
+  connect_canvas_nodes: '连接画布节点',
+  focus_canvas_node: '定位画布节点',
+  undo_canvas_change: '撤销画布操作',
 }
 
 const statusLabels: Record<AgentToolActivity['status'], string> = {
@@ -31,10 +39,13 @@ const deferredCardStyle: CSSProperties = {
 interface ToolActivityCardProps {
   activity: AgentToolActivity
   onOpenTask: (taskId: string) => void
+  onOpenNode: (projectId: string, nodeId: string) => void
 }
 
-export function ToolActivityCard({ activity, onOpenTask }: ToolActivityCardProps): JSX.Element {
+export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActivityCardProps): JSX.Element {
   const taskId = activity.resultReferences?.taskId
+  const projectId = activity.resultReferences?.projectId
+  const nodeId = activity.resultReferences?.nodeId
   const icon = activity.status === 'completed'
     ? <CheckCircle2 className="h-4 w-4 text-success" />
     : activity.status === 'failed'
@@ -66,6 +77,14 @@ export function ToolActivityCard({ activity, onOpenTask }: ToolActivityCardProps
           <span className="min-w-0 truncate text-[11px] text-text-muted">任务 {taskId}</span>
           <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="h-7 gap-1 px-2">
             <ExternalLink className="h-3 w-3" />查看
+          </UiButton>
+        </div>
+      ) : null}
+      {projectId && nodeId ? (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-[11px] text-text-muted">节点 {nodeId}</span>
+          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenNode(projectId, nodeId)} className="h-7 gap-1 px-2">
+            <ExternalLink className="h-3 w-3" />定位
           </UiButton>
         </div>
       ) : null}

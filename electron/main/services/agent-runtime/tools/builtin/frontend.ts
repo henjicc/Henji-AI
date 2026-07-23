@@ -1,42 +1,14 @@
 import { z } from 'zod'
 
-import type {
-  FrontendToolOperation,
-  HostCommandResult,
-  HostScopeRevisions,
-} from '../../../../../../src/core/assistant/hostContracts'
 import { defineAgentTool } from '../define-tool'
 import type { AgentToolDefinition } from '../types'
-
-export type FrontendToolInvoker = (
-  operation: FrontendToolOperation,
-  context: { runId: string; toolCallId: string; signal: AbortSignal }
-) => Promise<HostCommandResult>
-
-function eraseToolDefinition<TInput, TOutput>(
-  definition: AgentToolDefinition<TInput, TOutput>
-): AgentToolDefinition {
-  return definition as unknown as AgentToolDefinition
-}
-
-function requireSuccess(result: HostCommandResult): Record<string, unknown> {
-  if (result.ok) return {
-    ...result.data,
-    revision: result.resultingRevision,
-    scopeRevisions: result.resultingScopeRevisions,
-  }
-  const error = new Error(`[${result.error.code}] ${result.error.message}`)
-  error.name = result.error.recoverable ? 'RetryableHostCommandError' : 'HostCommandError'
-  throw error
-}
-
-function expectedRevision(
-  revisions: HostScopeRevisions | undefined,
-  scopes: Array<keyof HostScopeRevisions>
-): Partial<HostScopeRevisions> | undefined {
-  if (!revisions) return undefined
-  return Object.fromEntries(scopes.map((scope) => [scope, revisions[scope]]))
-}
+import { createFrontendCanvasTools } from './frontend-canvas'
+import {
+  eraseToolDefinition,
+  expectedRevision,
+  requireFrontendSuccess,
+  type FrontendToolInvoker,
+} from './frontend-utils'
 
 export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentToolDefinition[] {
   const switchWorkspace = defineAgentTool({
@@ -69,7 +41,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
       required: ['workspaceId'],
       additionalProperties: false,
     },
-    execute: async (input, context) => requireSuccess(await invoke({
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
       kind: 'command',
       command: {
         name: 'switch_workspace',
@@ -126,7 +98,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
       },
       additionalProperties: false,
     },
-    execute: async (input, context) => requireSuccess(await invoke({
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
       kind: 'query',
       query: { name: 'search_models', input },
     }, context)),
@@ -165,7 +137,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     aiInputSchema: {
       type: 'object', properties: { modelId: { type: 'string' } }, required: ['modelId'], additionalProperties: false,
     },
-    execute: async (input, context) => requireSuccess(await invoke({
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
       kind: 'query', query: { name: 'get_model_schema', input },
     }, context)),
     concurrencyKey: (input) => `model_schema:${input.modelId}`,
@@ -222,7 +194,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
       dataClasses: ['C1'],
       destination: '已配置的生成模型 Provider',
     }),
-    execute: async (input, context) => requireSuccess(await invoke({
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
       kind: 'command',
       command: {
         name: 'create_visible_generation_task',
@@ -263,7 +235,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     aiInputSchema: {
       type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false,
     },
-    execute: async (input, context) => requireSuccess(await invoke({
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
       kind: 'query', query: { name: 'get_generation_task', input },
     }, context)),
     concurrencyKey: (input) => `generation:${input.taskId}`,
@@ -310,7 +282,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
       reversible: false,
       dataClasses: ['C1'],
     }),
-    execute: async (input, context) => requireSuccess(await invoke({
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
       kind: 'command',
       command: {
         name: 'cancel_generation_task',
@@ -331,5 +303,8 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     eraseToolDefinition(createGenerationTask),
     eraseToolDefinition(getGenerationTask),
     eraseToolDefinition(cancelGenerationTask),
+    ...createFrontendCanvasTools(invoke),
   ]
 }
+
+export type { FrontendToolInvoker } from './frontend-utils'

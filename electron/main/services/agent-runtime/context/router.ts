@@ -7,7 +7,7 @@ import type { AgentIntent, AgentRouteDecision } from './types'
 const logger = createMainLogger('main.agent_router')
 
 const routerModelDecisionSchema = z.object({
-  intent: z.enum(['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'general']),
+  intent: z.enum(['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'general']),
   complexity: z.enum(['simple', 'multi_step', 'ambiguous']),
   path: z.enum(['workflow', 'primary']),
   toolDomains: z.array(z.string().min(1)).max(4),
@@ -29,6 +29,7 @@ interface DeterministicRule {
 const deterministicRules: DeterministicRule[] = [
   { intent: 'cancel_generation', pattern: /(?:取消|停止|终止).{0,12}(?:生成|任务)|cancel.{0,12}(?:generation|task)/i, toolDomains: ['generation'] },
   { intent: 'diagnose', pattern: /(?:诊断|日志|报错|错误原因|排查)|diagnos|logs?|error/i, toolDomains: ['diagnostics'] },
+  { intent: 'canvas', pattern: /(?:画布|节点).{0,24}(?:添加|放置|连接|定位|高亮|撤销)|(?:添加|放置|连接|定位|高亮|撤销).{0,24}(?:画布|节点)|canvas.{0,24}(?:node|connect|focus|undo)/i, toolDomains: ['canvas'] },
   { intent: 'navigate', pattern: /(?:切换|打开|进入).{0,10}(?:工作区|画布|素材库|工具箱)|(?:switch|open).{0,10}workspace/i, toolDomains: ['navigation'] },
   { intent: 'read_generation', pattern: /(?:查看|查询).{0,10}(?:生成任务|任务状态)|generation task status/i, toolDomains: ['generation'] },
   { intent: 'inspect_model', pattern: /(?:模型参数|模型结构|查找模型|搜索模型)|model (?:schema|catalog|search)/i, toolDomains: ['models'] },

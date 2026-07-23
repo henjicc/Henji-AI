@@ -18,6 +18,7 @@
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
+    "test:assistant-eval": "vitest run electron/main/services/agent-runtime/evaluation/minimal-evaluator.test.ts electron/main/services/agent-runtime/runner/runner-canvas.test.ts electron/main/services/agent-runtime/context/context.test.ts electron/main/services/agent-runtime/tools/builtin/frontend-canvas.test.ts src/features/canvas/application/agentCanvasActions.test.ts electron/main/services/agent-runtime/tools/gateway.test.ts electron/main/services/agent-runtime/diagnostics/query-diagnostic-events.test.ts",
     "lint:colors": "npm run check:colors",
     "lint:fix": "eslint src --ext ts,tsx --fix",
     "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && node scripts/electron-vite-dev.cjs",

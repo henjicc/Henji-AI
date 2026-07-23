@@ -9,6 +9,16 @@ const toolsByDomain: Readonly<Record<string, string[]>> = {
   models: ['search_models', 'get_model_schema'],
   generation: ['create_visible_generation_task', 'get_generation_task', 'cancel_generation_task'],
   diagnostics: ['query_diagnostic_events'],
+  canvas: [
+    'list_canvas_projects',
+    'open_canvas_project',
+    'search_canvas_node_types',
+    'get_canvas_node_schema',
+    'add_canvas_node',
+    'connect_canvas_nodes',
+    'focus_canvas_node',
+    'undo_canvas_change',
+  ],
 }
 
 export class AgentToolCatalogPlanner {

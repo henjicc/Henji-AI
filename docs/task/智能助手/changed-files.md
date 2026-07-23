@@ -176,3 +176,33 @@
 ### 自动生成但未纳入改动
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
+
+## 第五阶段 · 闭环验证实现完成，待用户手动验收
+
+### 新增
+
+- `src/features/canvas/domain/agentCanvasCatalog.ts`：上传/图片节点受限目录、节点数据 schema 与 ModelRegistry 参数校验。
+- `src/features/canvas/application/agentCanvasActions.ts` 及测试：确定性布局、添加、连接、定位、项目持久化、scope revision 与严格后进先出撤销。
+- `electron/main/services/agent-runtime/tools/builtin/frontend-canvas.ts` 及测试：画布目录、schema、添加、连接、定位和撤销 8 个受控 frontend 工具。
+- `electron/main/services/agent-runtime/tools/builtin/frontend-utils.ts`：frontend 工具公共目标与输出辅助函数。
+- `electron/main/services/agent-runtime/runner/runner-canvas.test.ts`：同一模型批次连续画布写操作使用最新 revision 的回归覆盖。
+- `electron/main/services/agent-runtime/evaluation/minimal-cases.ts`、`minimal-evaluator.ts` 及测试：生成/诊断/画布最小用例、捕获校验、指标汇总与失败明细。
+- `docs/task/智能助手/任务/第五阶段-闭环验证/首用例操作脚本.md`、`护栏验收清单.md`、`画布闭环操作脚本.md`、`最小评测结果.md`：真机操作、期望结果与真实基线填写入口。
+
+### 修改
+
+- `src/core/assistant/hostContracts.ts` 及测试：扩展画布目录/Schema、添加、连接、定位、撤销契约和稳定冲突错误码。
+- `src/features/assistant/frontendTools/hostCommandRegistry.ts`、`hostQueryRegistry.ts` 及测试：接入画布应用动作与目录查询。
+- `src/features/assistant/hostContext/hostContext.ts`：仅在当前项目可用时发布画布写命令，持续发布只读目录查询。
+- `src/features/canvas/Canvas.tsx`：注册基于 ReactFlow `fitView` 的窄节点定位 handler。
+- `electron/main/services/agent-runtime/tools/builtin/frontend.ts`、`registry.ts`、`context/catalog.ts`、`router.ts`、`builder.ts`、`types.ts` 及测试：注册画布工具，按宿主能力精确暴露，增加确定性画布路由和上下文约束。
+- `electron/main/services/agent-runtime/runner/runner.ts`：多工具批次传递最新 resulting revision，并补充 nodeId/edgeId/undoRef 结果引用与审批生命周期日志。
+- `electron/main/services/agent-runtime/diagnostics/query-diagnostic-events.ts` 及测试：诊断日志按 C2/open-world/R2 生成字段、目标和用途 preview。
+- `electron/main/services/agent-runtime/tools/security.ts`、`gateway.ts` 及测试、`context/sanitize.ts`：扩展密钥/Bearer 脱敏、C3/R4/审批回归和宿主错误码映射。
+- `src/features/assistant/conversation/AssistantConversation.tsx`、`ToolActivityCard.tsx`、`results/openAssistantResult.ts`：显示画布工具并支持稳定 nodeId 定位跳转。
+- `package.json`：新增 `test:assistant-eval` 最小评测脚本。
+- `docs/task/智能助手/00-任务总览.md`、`重要记录.md`、5.1～5.4 任务文件及五份阶段记录：同步第五阶段实现、自动验证、决策、遗留手动验收与交接。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。

@@ -1,10 +1,11 @@
 import { isSensitiveKey } from '../../logging'
+import { redactAgentText } from '../tools/security'
 
 const maxDepth = 10
 const maxStringLength = 64 * 1024
 
 function sanitizeString(value: string): string {
-  const withoutPaths = value.replace(/[A-Za-z]:\\[^\s"']+/g, '[本地路径]')
+  const withoutPaths = redactAgentText(value).replace(/[A-Za-z]:\\[^\s"']+/g, '[本地路径]')
   const withoutUrlSecrets = withoutPaths.replace(/https?:\/\/[^\s]+/g, (url) => {
     try {
       const parsed = new URL(url)

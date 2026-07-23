@@ -64,13 +64,47 @@ export const openCanvasProjectCommandSchema = commandBaseSchema.extend({
   input: z.object({ projectId: z.string().min(1) }),
 })
 
+export const canvasNodePlacementSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('viewport_center') }),
+  z.object({
+    mode: z.literal('right_of_node'),
+    anchorNodeId: z.string().min(1),
+  }),
+])
+export type CanvasNodePlacement = z.infer<typeof canvasNodePlacementSchema>
+
 export const addCanvasNodeCommandSchema = commandBaseSchema.extend({
   name: z.literal('add_canvas_node'),
   input: z.object({
     projectId: z.string().min(1),
     nodeType: z.string().min(1),
-    position: z.object({ x: z.number().finite(), y: z.number().finite() }),
+    placement: canvasNodePlacementSchema,
     data: z.record(z.string(), z.unknown()).optional(),
+  }),
+})
+
+export const connectCanvasNodesCommandSchema = commandBaseSchema.extend({
+  name: z.literal('connect_canvas_nodes'),
+  input: z.object({
+    projectId: z.string().min(1),
+    sourceNodeId: z.string().min(1),
+    targetNodeId: z.string().min(1),
+  }),
+})
+
+export const focusCanvasNodeCommandSchema = commandBaseSchema.extend({
+  name: z.literal('focus_canvas_node'),
+  input: z.object({
+    projectId: z.string().min(1),
+    nodeId: z.string().min(1),
+  }),
+})
+
+export const undoCanvasChangeCommandSchema = commandBaseSchema.extend({
+  name: z.literal('undo_canvas_change'),
+  input: z.object({
+    projectId: z.string().min(1),
+    undoRef: z.string().min(1),
   }),
 })
 
@@ -96,6 +130,9 @@ export const hostCommandSchema = z.discriminatedUnion('name', [
   switchWorkspaceCommandSchema,
   openCanvasProjectCommandSchema,
   addCanvasNodeCommandSchema,
+  connectCanvasNodesCommandSchema,
+  focusCanvasNodeCommandSchema,
+  undoCanvasChangeCommandSchema,
   createVisibleGenerationTaskCommandSchema,
   cancelGenerationTaskCommandSchema,
 ])
@@ -105,6 +142,18 @@ export type HostCommandName = HostCommand['name']
 export const hostQuerySchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('get_host_context'), input: z.object({}) }),
   z.object({ name: z.literal('list_canvas_projects'), input: z.object({}) }),
+  z.object({
+    name: z.literal('search_canvas_node_types'),
+    input: z.object({
+      query: z.string().max(500).default(''),
+      cursor: z.number().int().nonnegative().default(0),
+      limit: z.number().int().min(1).max(20).default(10),
+    }),
+  }),
+  z.object({
+    name: z.literal('get_canvas_node_schema'),
+    input: z.object({ nodeType: z.string().min(1) }),
+  }),
   z.object({
     name: z.literal('search_models'),
     input: z.object({
@@ -125,6 +174,7 @@ export const hostErrorCodeSchema = z.enum([
   'ABORTED',
   'COMMAND_NOT_READY',
   'COMMAND_REJECTED',
+  'CONFLICT',
   'DEADLINE_EXCEEDED',
   'DUPLICATE_CALL',
   'INVALID_INPUT',

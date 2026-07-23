@@ -75,4 +75,36 @@ describe('assistant host command registry', () => {
       error: { code: 'NOT_FOUND', recoverable: false },
     })
   })
+
+  it('画布节点目录与单项 schema 只暴露受支持的配置驱动节点', async () => {
+    const search = await executeHostQueryResult({
+      name: 'search_canvas_node_types',
+      input: { query: '', cursor: 0, limit: 10 },
+    })
+    expect(search).toMatchObject({
+      ok: true,
+      data: {
+        catalogVersion: 'canvas-agent-node-catalog/v1',
+        nodeTypes: expect.arrayContaining([
+          expect.objectContaining({ nodeType: 'uploadNode' }),
+          expect.objectContaining({ nodeType: 'imageNode' }),
+        ]),
+      },
+    })
+
+    const schema = await executeHostQueryResult({
+      name: 'get_canvas_node_schema',
+      input: { nodeType: 'imageNode' },
+    })
+    expect(schema).toMatchObject({
+      ok: true,
+      data: {
+        schema: {
+          schemaVersion: 'canvas-agent-node-catalog/v1',
+          nodeType: 'imageNode',
+          requiresModelSchema: true,
+        },
+      },
+    })
+  })
 })

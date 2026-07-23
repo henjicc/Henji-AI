@@ -10,7 +10,10 @@ import {
 } from '@/core/inputs/promptDocument'
 
 import { useAgentRun } from '../hooks/useAgentRun'
-import { openAssistantGenerationResult } from '../results/openAssistantResult'
+import {
+  openAssistantCanvasResult,
+  openAssistantGenerationResult,
+} from '../results/openAssistantResult'
 import { useAssistantUiStore } from '../store/assistantUiStore'
 import { ApprovalCard } from './ApprovalCard'
 import { AssistantComposer } from './AssistantComposer'
@@ -85,6 +88,13 @@ export function AssistantConversation(): JSX.Element {
     })
   }
 
+  const openNode = (projectId: string, nodeId: string): void => {
+    setResultError(null)
+    void openAssistantCanvasResult(projectId, nodeId).then((opened) => {
+      if (!opened) setResultError(`节点 ${nodeId} 当前无法定位；项目可能已删除或画布尚未准备完成。`)
+    })
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-app">
       {runState ? (
@@ -106,7 +116,7 @@ export function AssistantConversation(): JSX.Element {
             </div>
             <h2 className="mt-4 text-sm font-medium text-text-dark">让助手操作工作台</h2>
             <p className="mt-2 text-xs leading-5 text-text-muted">
-              可以切换工作区、查模型、创建可见生成任务，或基于脱敏日志诊断错误。所有动作都经过受控工具网关。
+              可以切换工作区、查模型、创建可见生成任务、编排画布节点，或基于脱敏日志诊断错误。所有动作都经过受控工具网关。
             </p>
           </div>
         ) : null}
@@ -128,7 +138,14 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
-        {tools.map((tool) => <ToolActivityCard key={tool.toolCallId} activity={tool} onOpenTask={openTask} />)}
+        {tools.map((tool) => (
+          <ToolActivityCard
+            key={tool.toolCallId}
+            activity={tool}
+            onOpenTask={openTask}
+            onOpenNode={openNode}
+          />
+        ))}
 
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 

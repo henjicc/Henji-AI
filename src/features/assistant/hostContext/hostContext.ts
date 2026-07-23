@@ -97,13 +97,17 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const commands: HostCommandName[] = [
     'switch_workspace',
     'open_canvas_project',
-    'add_canvas_node',
   ]
+  if (project.currentProjectId) {
+    commands.push('add_canvas_node', 'connect_canvas_nodes', 'focus_canvas_node', 'undo_canvas_change')
+  }
   if (generationReady) commands.push('create_visible_generation_task')
   if (generationReady) commands.push('cancel_generation_task')
   const queries: HostQueryName[] = [
     'get_host_context',
     'list_canvas_projects',
+    'search_canvas_node_types',
+    'get_canvas_node_schema',
     'search_models',
     'get_model_schema',
   ]

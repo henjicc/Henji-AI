@@ -5,6 +5,11 @@ import {
 } from '@/core/assistant/hostContracts'
 import { registry } from '@/core/ModelRegistry'
 import { getI18nText } from '@/core/types'
+import {
+  AGENT_CANVAS_CATALOG_VERSION,
+  getAgentCanvasNodeSchema,
+  searchAgentCanvasNodeTypes,
+} from '@/features/canvas/domain/agentCanvasCatalog'
 import { useProjectStore } from '@/stores/projectStore'
 import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
@@ -17,6 +22,23 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
   ['list_canvas_projects', async () => {
     if (!useProjectStore.getState().isHydrated) await useProjectStore.getState().hydrate()
     return { projects: useProjectStore.getState().projects }
+  }],
+  ['search_canvas_node_types', async (query) => {
+    if (query.name !== 'search_canvas_node_types') return {}
+    const all = searchAgentCanvasNodeTypes(query.input.query)
+    const start = query.input.cursor
+    const nodeTypes = all.slice(start, start + query.input.limit)
+    return {
+      catalogVersion: AGENT_CANVAS_CATALOG_VERSION,
+      nodeTypes,
+      nextCursor: start + nodeTypes.length < all.length ? start + nodeTypes.length : null,
+    }
+  }],
+  ['get_canvas_node_schema', async (query) => {
+    if (query.name !== 'get_canvas_node_schema') return {}
+    const schema = getAgentCanvasNodeSchema(query.input.nodeType)
+    if (!schema) throw new Error('CANVAS_NODE_TYPE_NOT_FOUND')
+    return { schema }
   }],
   ['search_models', async (query) => {
     if (query.name !== 'search_models') return {}
@@ -95,7 +117,11 @@ export async function executeHostQueryResult(queryInput: unknown): Promise<HostC
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    if (message === 'MODEL_NOT_FOUND' || message === 'TASK_NOT_FOUND') {
+    if (
+      message === 'MODEL_NOT_FOUND'
+      || message === 'TASK_NOT_FOUND'
+      || message === 'CANVAS_NODE_TYPE_NOT_FOUND'
+    ) {
       return {
         ok: false,
         error: { code: 'NOT_FOUND', message: '请求的宿主资源不存在', recoverable: false },

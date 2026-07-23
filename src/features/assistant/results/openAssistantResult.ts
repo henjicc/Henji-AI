@@ -1,4 +1,8 @@
 import { createLogger } from '@/core/logging'
+import {
+  focusCanvasNodeFromAgent,
+  openCanvasProjectFromAgent,
+} from '@/features/canvas/application/agentCanvasActions'
 import { switchWorkspace } from '@/stores/navigationStore'
 import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
@@ -41,4 +45,28 @@ export async function openAssistantGenerationResult(taskId: string): Promise<boo
     taskId,
   })
   return true
+}
+
+export async function openAssistantCanvasResult(projectId: string, nodeId: string): Promise<boolean> {
+  const controller = new AbortController()
+  try {
+    await openCanvasProjectFromAgent(projectId, controller.signal)
+    switchWorkspace('nodes')
+    await focusCanvasNodeFromAgent(projectId, nodeId, controller.signal)
+    logger.info('智能助手画布结果已定位', {
+      event: 'assistant_ui.canvas_result.open.completed',
+      context: { projectId, nodeId },
+    })
+    return true
+  } catch (error) {
+    logger.warn('智能助手画布结果定位失败', {
+      event: 'assistant_ui.canvas_result.open.failed',
+      context: {
+        projectId,
+        nodeId,
+        errorCode: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
+      },
+    })
+    return false
+  }
 }

@@ -9,6 +9,7 @@ export type AgentIntent =
   | 'read_generation'
   | 'cancel_generation'
   | 'diagnose'
+  | 'canvas'
   | 'general'
 
 export type AgentRoutePath = 'workflow' | 'primary'

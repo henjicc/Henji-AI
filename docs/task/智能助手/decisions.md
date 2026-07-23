@@ -105,7 +105,20 @@
 - 助手容器使用布局/样式 containment；长对话的计划、工具、审批、Artifact、Markdown 与错误块使用 `content-visibility: auto` 和固有尺寸占位，让离屏内容跳过尺寸帧的布局与绘制。
 - 左右停靠至少保留 320px 工作区，悬浮态受标题栏、右侧和底部可视区约束；鼠标与键盘调整复用同一几何函数。
 
+### D-018 画布闭环使用受限目录、确定性布局和严格撤销栈
+
+- 第五阶段只开放上传节点与图片节点两类代表性目录项；节点类型、模型和参数必须经过目录/schema/ModelRegistry 校验，禁止模型自由编造类型或传入任意本地路径。
+- 模型只选择 `viewport_center/right_of_node` 布局意图，renderer 根据项目内容计算像素位置；写操作必须携带显式 projectId 并校验 canvas scope revision。
+- 添加、连接与撤销复用 renderer 应用动作并立即持久化；undoRef 严格后进先出且检查当前历史长度，避免撤销用户在其后做出的其它修改。
+- 同一模型响应包含多个画布写工具时，Runner 把前一步返回的 resulting scope revision 传给后一步，既防止自冲突也不放松外部 revision 校验。
+
+### D-019 诊断外发与最小评测门槛
+
+- 受限日志证据虽然已脱敏，发送到当前助手 Provider 仍按 C2/open-world 处理；每次必须展示确切字段、目标、用途并使用 R2 单次审批，C3 继续由网关硬阻断。
+- 第五阶段评测采用可扩展的 case/capture/check/summary 结构，统一记录工具、参数键、禁止动作、日志成对、敏感探针、成功率、平均/p95 延迟和 token；不建设平行 Trace 平台。
+- 确定性用例必须全过，真实 Provider 需要固定 Profile 重复运行并记录随机性；未完成真实基线前第五阶段保持待验证。
+
 ## 可调参数
 
-- turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于评测调优，但不得绕过安全硬限制。
+- turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于真实评测调优，但不得绕过安全硬限制。
 - 并行只读工具在 3.2 完成串行基线和并发测试后才可开放。

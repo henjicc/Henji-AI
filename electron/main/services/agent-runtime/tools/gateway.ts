@@ -64,8 +64,17 @@ function toGatewayError(error: unknown): AgentToolGatewayError {
   if (hostErrorCode === 'DEADLINE_EXCEEDED') {
     return new AgentToolGatewayError('TIMEOUT', message, true, 'wait')
   }
-  if (hostErrorCode === 'NOT_FOUND') {
+  if (hostErrorCode === 'NOT_FOUND' || hostErrorCode === 'PROJECT_NOT_FOUND') {
     return new AgentToolGatewayError('NOT_FOUND', message, false, 'user_action')
+  }
+  if (hostErrorCode === 'INVALID_INPUT') {
+    return new AgentToolGatewayError('INVALID_INPUT', message, true, 'user_action')
+  }
+  if (hostErrorCode === 'CONFLICT') {
+    return new AgentToolGatewayError('CONFLICT', message, true, 'refresh_context')
+  }
+  if (hostErrorCode === 'COMMAND_NOT_READY') {
+    return new AgentToolGatewayError('NOT_READY', message, true, 'wait')
   }
   return new AgentToolGatewayError('EXECUTION_FAILED', message || '工具执行失败')
 }

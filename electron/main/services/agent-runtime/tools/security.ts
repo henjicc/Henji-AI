@@ -59,9 +59,15 @@ export function digestJson(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(canonicalize(value))).digest('hex')
 }
 
+export function redactAgentText(value: string): string {
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
+    .replace(/\b(sk|pk|rk|key)-[A-Za-z0-9_-]{12,}\b/gi, '$1-***')
+    .replace(/\b(api[_-]?key|authorization|access[_-]?token|refresh[_-]?token|token|secret|password)\b\s*[:=]\s*["']?[^\s,"';]+/gi, '$1=***')
+}
+
 export function summarizeSafeText(value: string, maxLength = 2_000): string {
-  const withoutSecrets = value
-    .replace(/(api[_-]?key|authorization|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, '$1=***')
+  const withoutSecrets = redactAgentText(value)
     .replace(/[A-Za-z]:\\[^\s"']+/g, '[本地路径]')
     .replace(/https?:\/\/[^\s]+/g, (url) => {
       try {

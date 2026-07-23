@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { MainLogEvent } from '../../logging/types'
-import { queryDiagnosticEvidence } from './query-diagnostic-events'
+import { createQueryDiagnosticEventsTool, queryDiagnosticEvidence } from './query-diagnostic-events'
 
 function logEvent(overrides: Partial<MainLogEvent> = {}): MainLogEvent {
   return {
@@ -93,5 +93,25 @@ describe('queryDiagnosticEvidence', () => {
     expect(query).toHaveBeenCalledTimes(2)
     expect(output.evidence).toHaveLength(2)
     expect(output.truncated).toBe(false)
+  })
+
+  it('C2 诊断证据要求逐次预览审批后才能发送给模型', async () => {
+    const tool = createQueryDiagnosticEventsTool()
+    const preview = await tool.preview?.({
+      subjectRequestId: 'subject-run',
+      from: '2026-07-23T00:00:00.000Z',
+      to: '2026-07-23T00:10:00.000Z',
+      limit: 20,
+    }, {
+      runId: 'diagnostic-run', threadId: 'thread-1', toolCallId: 'call-1',
+      signal: new AbortController().signal, hostContext: null,
+    })
+
+    expect(tool).toMatchObject({ risk: 'R2', openWorld: true, supportsPreview: true })
+    expect(preview).toMatchObject({
+      dataClasses: ['C2'],
+      destination: '当前智能助手模型 Provider',
+      targetIds: { requestId: 'subject-run' },
+    })
   })
 })

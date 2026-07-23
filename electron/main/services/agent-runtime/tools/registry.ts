@@ -46,10 +46,8 @@ export class AgentToolRegistry {
   private isAvailable(definition: AgentToolDefinition, context: HostContextSnapshot | null): boolean {
     if (definition.side === 'backend') return true
     if (!context?.uiReady) return false
-    return definition.requiredContext.every((scope) => {
-      if (scope === 'generation') return context.generation.commandReady
-      return true
-    })
+    return context.availableCommands.includes(definition.name)
+      || context.availableQueries.includes(definition.name)
   }
 
   private toCatalogEntry(definition: AgentToolDefinition): AgentToolCatalogEntry {

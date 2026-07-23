@@ -22,8 +22,8 @@ describe('assistant host contracts', () => {
           name: 'add_canvas_node',
           input: {
             projectId: 'project-1',
-            nodeType: 'imageEdit',
-            position: { x: 10, y: 20 },
+            nodeType: 'imageNode',
+            placement: { mode: 'viewport_center' },
           },
           expectedRevisions: { canvas: 3 },
         },
@@ -35,7 +35,7 @@ describe('assistant host contracts', () => {
   it('拒绝没有明确项目 ID 的画布写命令', () => {
     expect(() => hostCommandSchema.parse({
       name: 'add_canvas_node',
-      input: { nodeType: 'imageEdit', position: { x: 0, y: 0 } },
+      input: { nodeType: 'imageNode', placement: { mode: 'viewport_center' } },
     })).toThrow()
   })
 

@@ -114,4 +114,57 @@ describe('AgentToolGateway', () => {
     await expect(gateway.execute({ ...request({ value: 'ok' }), expectedRevisions: { generation: 1 } }))
       .rejects.toEqual(expect.objectContaining<Partial<AgentToolGatewayError>>({ code: 'STALE_CONTEXT' }))
   })
+
+  it('拒绝、过期和已消费审批都不能再次执行副作用', async () => {
+    const rejected = createGateway('R2')
+    const rejectedPending = await rejected.gateway.execute(request({ value: 'reject' }))
+    if (rejectedPending.status !== 'approval_required') throw new Error('expected approval')
+    rejected.gateway.approvals.resolve(rejectedPending.approval.approvalId, 'run-1', 'reject')
+    await expect(rejected.gateway.execute(request(
+      { value: 'reject' },
+      rejectedPending.approval.approvalId
+    ))).rejects.toMatchObject({ code: 'APPROVAL_REJECTED' })
+    expect(rejected.calls).toHaveLength(0)
+
+    const expired = createGateway('R2')
+    const expiredPending = await expired.gateway.execute(request({ value: 'expire' }))
+    if (expiredPending.status !== 'approval_required') throw new Error('expected approval')
+    expired.gateway.approvals.expire(expiredPending.approval.approvalId, 'run-1')
+    await expect(expired.gateway.execute(request(
+      { value: 'expire' },
+      expiredPending.approval.approvalId
+    ))).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' })
+    expect(expired.calls).toHaveLength(0)
+  })
+
+  it('C3 结果被阻断，R4 工具不能注册', async () => {
+    const registry = new AgentToolRegistry()
+    registry.register(defineAgentTool({
+      name: 'secret_tool', version: 1, title: '秘密工具', description: '返回 C3 的测试工具。',
+      category: 'test', side: 'backend', risk: 'R0', permission: 'test:read',
+      readOnly: true, destructive: false, openWorld: false, idempotent: true,
+      timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+      supportsPreview: false, supportsUndo: false, requiredContext: [],
+      inputSchema: z.object({}).strict(), outputSchema: z.object({ value: z.string() }).strict(),
+      aiInputSchema: { type: 'object', properties: {} }, execute: async () => ({ value: 'secret' }),
+      concurrencyKey: () => 'secret', targetIds: () => ({}), dataClasses: () => ['C3'],
+      summarize: () => '不应进入上下文',
+    }))
+    const gateway = new AgentToolGateway({ registry, getHostContext: createContext })
+    await expect(gateway.execute({
+      ...request({}), toolName: 'secret_tool', expectedRevisions: undefined,
+    })).rejects.toMatchObject({ code: 'PERMISSION_DENIED' })
+
+    expect(() => defineAgentTool({
+      name: 'forbidden_tool', version: 1, title: '禁止工具', description: 'R4 测试。',
+      category: 'test', side: 'backend', risk: 'R4', permission: 'forbidden',
+      readOnly: false, destructive: true, openWorld: true, idempotent: false,
+      timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+      supportsPreview: false, supportsUndo: false, requiredContext: [],
+      inputSchema: z.object({}).strict(), outputSchema: z.object({}).strict(),
+      aiInputSchema: { type: 'object', properties: {} }, execute: async () => ({}),
+      concurrencyKey: () => 'forbidden', targetIds: () => ({}), dataClasses: () => ['C0'],
+      summarize: () => '禁止',
+    })).toThrow(/禁止注册 R4/)
+  })
 })

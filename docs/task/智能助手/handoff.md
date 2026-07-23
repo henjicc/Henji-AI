@@ -2,21 +2,19 @@
 
 ## 当前工作
 
-- 当前阶段：第四阶段 · 智能助手侧边栏
-- 状态：4.1 三轮交互反馈修复与 4.1～4.3 自动化验证完成，待真实 Electron 手动复验
-- 下一任务：用户验收第四阶段；通过后进入 5.1 首用例端到端联调
+- 当前阶段：第五阶段 · 闭环验证
+- 状态：5.1～5.4 代码、自动化和操作记录已完成，待真实 Electron/Provider 联合验收
+- 下一任务：用户按第五阶段脚本完成生成、诊断、护栏、画布与真实评测复验
 - 阻塞问题：无代码阻塞
 
 ## 下一步
 
-1. 在当前 `npm run electron:dev` 窗口中手动复验悬浮标题栏快速/慢速拖动，确认面板贴合指针且没有原先的弹性滞后。
-2. 左停靠拖右边缘、右停靠拖左边缘，确认面板文字/卡片和工作区在拖动期间按真实宽度连续重排，没有拉伸变形或整窗卡顿。
-3. 悬浮态分别拖右边缘、下边缘和右下角，确认宽、高、双向调整均实时重排；重点观察 Markdown、工具卡和审批卡在拖动中保持清晰，松手前后不跳变。
-4. 收起重开、切换三种形态并重启应用，确认最终尺寸和悬浮位置持久化；可选用方向键及 `Shift+方向键` 验证可访问调整。
-5. 使用已通过 capability smoke 的真实模型发起助手对话，核对计划、流式文本、工具/审批卡、usage、暂停/恢复/取消和 taskId 结果跳转。
-6. 在运行中刷新 renderer，确认 snapshot 重放不会重复工具且 pending 审批仍可继续；应用级重启恢复不属于本阶段。
-7. 从全局错误框和生成失败卡点击“问助手”，分别验证有/无 requestId 的证据引用与置信度表达。
-8. 上述通过后进入 5.1，跑通真实“创建可见生成任务 + 读取日志诊断”首用例闭环。
+1. 重启 `npm run electron:dev`，确认 Agent Profile 已对目标真实模型完成 capability smoke；先复验第四阶段停靠/悬浮/缩放与长对话实时排版。
+2. 按 `首用例操作脚本.md` 分别完成可见生成任务和 requestId 诊断：批准具体预览，核对 taskId 跳转、证据编号、低置信度表达和无敏感原文。
+3. 按 `护栏验收清单.md` 验证取消、暂停/恢复、批准/拒绝/过期、revision 变化、renderer 重载、非法参数、注入文本和日志可解释性。
+4. 按 `画布闭环操作脚本.md` 在明确项目中创建上传/图片节点、连接、定位、重开和撤销；切换项目验证冲突不会写入错误项目。
+5. 按 `最小评测结果.md` 用固定 Profile 对生成、诊断、画布各重复至少 3 次，补录真实成功率、工具/参数、平均/p95 延迟、token 和失败明细。
+6. 在日志窗口或 `npm run logs:query` 中按 runId/toolCallId 抽查 run/tool/approval/action 成对事件及敏感探针；全部通过后再把 5.1～5.4 标记已完成并进入 6.1。
 
 ## 阻塞与风险
 
@@ -29,6 +27,8 @@
 - 事件历史最多 2000 条、`ArtifactRef` 和活动 run 都只在 main 内存中；renderer 重载可恢复，应用重启/崩溃恢复属于 6.1。
 - 诊断入口只保证受限证据读取与表达约束；真实日志质量、Provider 错误覆盖率和诊断效果需在 5.4/6.2 评测校准。
 - token/压缩阈值是初始值，后续必须由 5.4/6.2 真实评测校准。
+- 第五阶段确定性评测已通过，但真实模型具有随机性且可能产生费用；未自动调用真实 Provider，成功率、延迟和 token 基线仍需用户显式执行。
+- 画布 MVP 只开放上传节点与图片节点，完整节点/项目能力仍由 7.2 接入；当前 undoRef 只允许严格撤销 Agent 自己的栈顶动作，用户后续编辑会使旧引用失效。
 
 ## 必读交付物
 
@@ -51,3 +51,8 @@
 - `src/features/assistant/conversation/agentRunReducer.ts`
 - `src/features/assistant/diagnostics/openAssistantDiagnosis.ts`
 - `electron/main/services/agent-runtime/diagnostics/query-diagnostic-events.ts`
+- `electron/main/services/agent-runtime/tools/builtin/frontend-canvas.ts`
+- `electron/main/services/agent-runtime/evaluation/minimal-evaluator.ts`
+- `src/features/canvas/domain/agentCanvasCatalog.ts`
+- `src/features/canvas/application/agentCanvasActions.ts`
+- `docs/task/智能助手/任务/第五阶段-闭环验证/最小评测结果.md`

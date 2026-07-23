@@ -24,6 +24,7 @@ import '@xyflow/react/dist/style.css';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import { registerCanvasNodeFocusHandler } from '@/features/canvas/application/agentCanvasActions';
 import {
   type CanvasEdge,
   type CanvasNode,
@@ -188,6 +189,16 @@ export function Canvas() {
       unsubscribeClose();
     };
   }, [openToolDialog, closeToolDialog, showConnectionToast]);
+
+  useEffect(() => registerCanvasNodeFocusHandler(async (nodeId) => {
+    setSelectedNode(nodeId);
+    await reactFlowInstance.fitView({
+      nodes: [{ id: nodeId }],
+      padding: 0.35,
+      maxZoom: 1.2,
+      duration: 250,
+    });
+  }), [reactFlowInstance, setSelectedNode]);
 
   useEffect(() => {
     isRestoringCanvasRef.current = true;

@@ -9,7 +9,11 @@ import {
 } from '../../../../../src/core/assistant/events'
 import { agentToolObservationSchema, type AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
-import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import {
+  hostScopeRevisionsSchema,
+  type HostContextSnapshot,
+  type HostScopeRevisions,
+} from '../../../../../src/core/assistant/hostContracts'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { shouldOffloadObservation } from '../context/offload'
@@ -78,7 +82,9 @@ function extractResultReferences(output: unknown): Record<string, string> | unde
   if (!output || typeof output !== 'object' || Array.isArray(output)) return undefined
   const record = output as Record<string, unknown>
   const references: Record<string, string> = {}
-  const referenceKeys = ['taskId', 'projectId', 'nodeId', 'workspace', 'workspaceId', 'modelId'] as const
+  const referenceKeys = [
+    'taskId', 'projectId', 'nodeId', 'edgeId', 'undoRef', 'workspace', 'workspaceId', 'modelId',
+  ] as const
   for (const key of referenceKeys) {
     const value = record[key]
     if (typeof value === 'string' && value.trim()) references[key] = value.slice(0, 500)
@@ -89,6 +95,12 @@ function extractResultReferences(output: unknown): Record<string, string> | unde
     if (typeof taskId === 'string' && taskId.trim()) references.taskId = taskId.slice(0, 500)
   }
   return Object.keys(references).length > 0 ? references : undefined
+}
+
+function extractResultScopeRevisions(output: unknown): HostScopeRevisions | null {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return null
+  const parsed = hostScopeRevisionsSchema.safeParse((output as Record<string, unknown>).scopeRevisions)
+  return parsed.success ? parsed.data : null
 }
 
 export class AgentRunner {
@@ -203,6 +215,12 @@ export class AgentRunner {
     const toolCallId = this.state.currentToolCallId
     if (!toolCallId) throw new Error('审批缺少关联工具调用')
     this.emit({ type: 'ApprovalResolved', toolCallId, approvalId, decision: resolved })
+    logger.info('Agent 工具审批已处理', {
+      event: 'agent_approval.resolved',
+      requestId: this.options.runId,
+      taskId: toolCallId,
+      context: { approvalId, decision: resolved },
+    })
     this.state.waitingApprovalId = null
     if (this.machine.status === 'waiting_approval') this.transition('waiting_tool')
     else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
@@ -298,7 +316,7 @@ export class AgentRunner {
           schema: {
             type: 'object',
             properties: {
-              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'general'] },
+              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'general'] },
               complexity: { type: 'string', enum: ['simple', 'multi_step', 'ambiguous'] },
               path: { type: 'string', enum: ['workflow', 'primary'] },
               toolDomains: { type: 'array', items: { type: 'string' }, maxItems: 4 },
@@ -364,6 +382,7 @@ export class AgentRunner {
     route: AgentRouteDecision,
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<void> {
+    let currentExpectedRevisions = { ...expectedRevisions }
     for (const call of calls.slice(0, 4)) {
       await this.waitIfPaused()
       this.throwIfCancelled()
@@ -379,7 +398,7 @@ export class AgentRunner {
           toolCallId: call.toolCallId,
           toolName: call.toolName,
           input: call.input,
-          expectedRevisions,
+          expectedRevisions: currentExpectedRevisions,
           explicitUserIntent: route.source === 'deterministic',
           signal: this.abortController.signal,
         })
@@ -388,6 +407,17 @@ export class AgentRunner {
           this.transition('waiting_approval')
           const approvalDecision = this.waitForApproval(result.approval.approvalId, result.approval.expiresAt)
           this.emit({ type: 'ApprovalRequired', toolCallId: call.toolCallId, approval: result.approval })
+          logger.info('Agent 工具需要审批', {
+            event: 'agent_approval.requested',
+            requestId: this.options.runId,
+            taskId: call.toolCallId,
+            context: {
+              approvalId: result.approval.approvalId,
+              toolName: call.toolName,
+              risk: result.approval.risk,
+              expiresAt: result.approval.expiresAt,
+            },
+          })
           const decision = await approvalDecision
           await this.waitIfPaused()
           this.throwIfCancelled()
@@ -422,7 +452,7 @@ export class AgentRunner {
             toolCallId: call.toolCallId,
             toolName: call.toolName,
             input: call.input,
-            expectedRevisions,
+            expectedRevisions: currentExpectedRevisions,
             approvalId: result.approval.approvalId,
             explicitUserIntent: route.source === 'deterministic',
             signal: this.abortController.signal,
@@ -431,6 +461,8 @@ export class AgentRunner {
         if (result.status !== 'completed') throw new Error('工具审批状态未收敛')
         this.observations.push(result.observation)
         this.conversation.push(toolMessage(call, result.observation))
+        const resultingRevisions = extractResultScopeRevisions(result.observation.output)
+        if (resultingRevisions) currentExpectedRevisions = resultingRevisions
         this.budget.recordProgress(`${call.toolName}:${digestJson(result.observation.output)}`)
         this.emit({
           type: 'ToolCompleted', toolCallId: call.toolCallId, toolName: call.toolName,
@@ -468,6 +500,12 @@ export class AgentRunner {
         this.options.dependencies.gateway.approvals.expire(approvalId, this.options.runId)
         const toolCallId = this.state.currentToolCallId
         if (toolCallId) this.emit({ type: 'ApprovalResolved', toolCallId, approvalId, decision: 'expired' })
+        logger.warn('Agent 工具审批已过期', {
+          event: 'agent_approval.expired',
+          requestId: this.options.runId,
+          taskId: toolCallId ?? undefined,
+          context: { approvalId },
+        })
         this.state.waitingApprovalId = null
         if (this.machine.status === 'waiting_approval') this.transition('waiting_tool', '审批已过期')
         else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
