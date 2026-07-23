@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
+import { registerAgentRuntimeIpc } from './ipc/agent-runtime'
 import { registerAudioIpc } from './ipc/audio'
 import { registerAssetLibraryIpc } from './ipc/asset-library'
 import { registerAssistantIpc } from './ipc/assistant'
@@ -39,6 +40,7 @@ app.whenReady().then(() => {
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()
   registerAiRuntimeIpc()
+  registerAgentRuntimeIpc()
   registerAudioIpc()
   registerAssetLibraryIpc()
   registerAssistantIpc()

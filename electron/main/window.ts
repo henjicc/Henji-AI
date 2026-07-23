@@ -9,6 +9,11 @@ import { closeCameraStageRenderWindow } from './services/camera-stage-render'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 
 const logger = createMainLogger('main.window')
+let mainWindow: BrowserWindow | null = null
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+}
 
 export function createWindow(): BrowserWindow {
   const iconPath = resolveAppIconPath()
@@ -30,6 +35,7 @@ export function createWindow(): BrowserWindow {
       webSecurity: true,
     },
   })
+  mainWindow = win
 
   bindWindowStateEvents(win)
   win.webContents.on('did-start-loading', () => {
@@ -47,6 +53,7 @@ export function createWindow(): BrowserWindow {
     void cleanupAllVideoFrameExports('web_contents_destroyed')
   })
   win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
     void cleanupAllVideoFrameExports('window_closed')
     closeLogWindow()
     closeCameraStageRenderWindow()

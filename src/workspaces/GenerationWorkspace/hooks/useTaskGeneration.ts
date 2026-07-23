@@ -12,6 +12,7 @@ import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } 
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+import { taskQueueManager } from '@/services/taskQueue'
 import {
   asMutableRecord,
   isMinimaxVoiceCloneMode,
@@ -36,6 +37,7 @@ export interface UseTaskGenerationMessages {
 }
 
 export interface UseTaskGenerationParams {
+  tasks: GenerationTask[]
   setTasks: React.Dispatch<React.SetStateAction<GenerationTask[]>>
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   updateProgress: (taskId: string, progress: number) => void
@@ -122,6 +124,7 @@ async function persistClonedVoiceIfNeeded(
 }
 
 export function useTaskGeneration({
+  tasks,
   setTasks,
   updateTask,
   updateProgress,
@@ -133,6 +136,11 @@ export function useTaskGeneration({
 }: UseTaskGenerationParams): UseTaskGenerationReturn {
   const [isGenerating, setIsGenerating] = useState(false)
   const lastProgressRef = useRef<Record<string, number>>({})
+  const tasksRef = useRef(tasks)
+
+  useEffect(() => {
+    tasksRef.current = tasks
+  }, [tasks])
 
   const generateWithService = useCallback(async (
     modelId: string,
@@ -315,7 +323,34 @@ export function useTaskGeneration({
     updateTask,
   ])
 
-  useEffect(() => registerVisibleGenerationTaskHandler(runCreateVisibleTask), [runCreateVisibleTask])
+  useEffect(() => registerVisibleGenerationTaskHandler({
+    create: runCreateVisibleTask,
+    get: (taskId) => {
+      const task = tasksRef.current.find((item) => item.id === taskId)
+      if (!task) return null
+      return {
+        taskId: task.id,
+        status: task.status,
+        progress: task.progress ?? 0,
+        modelId: task.model,
+        mediaType: task.type,
+        resultAvailable: Boolean(task.result),
+        errorCode: task.error ? 'GENERATION_FAILED' : null,
+      }
+    },
+    cancel: async (taskId, reason) => {
+      const task = tasksRef.current.find((item) => item.id === taskId)
+      if (!task) throw new Error('TASK_NOT_FOUND')
+      if (task.status === 'success' || task.status === 'error') throw new Error('TASK_NOT_CANCELLABLE')
+      if (taskQueueManager.isQueued(taskId)) {
+        taskQueueManager.removeFromQueue(taskId)
+      } else {
+        await GenerationService.getInstance().cancelTask(task.serverTaskId ?? task.id)
+      }
+      updateTask(taskId, { status: 'error', error: reason })
+      return { taskId, status: 'cancelled' }
+    },
+  }), [runCreateVisibleTask, updateTask])
 
   const handleGenerate = useCallback(async (
     input: string,

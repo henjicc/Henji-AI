@@ -61,6 +61,25 @@
 - AI SDK OpenAI-compatible Provider 仅在 `schema` 模式启用 `supportsStructuredOutputs`；`json` 模式发送 `json_object`，仍由 `Output.object()` 在本地按 schema 解析和校验。
 - capability smoke 对未声明/schema 以外的模型先验证 `json` 基线；验证成功的文本、流式、工具、结构化输出和 usage 会提升静态能力，失败项不自动降低用户已有声明。
 
+### D-011 运行时契约与并发边界
+
+- `agent-runtime/v1` 与 `agent-event/v1` 使用共享 Zod schema，在 IPC 双侧校验；事件按 run 内 sequence 严格递增。
+- main 侧 `AgentRunner` 是唯一循环所有者，同一 thread 只允许一个 active run；暂停、审批等待、取消和终态由显式状态机控制。
+- Runner 仅调用已通过 capability smoke 的模型角色；action final 必须有工具 observation 证据，防止模型伪报执行成功。
+
+### D-012 唯一工具网关与审批凭证
+
+- frontend/backend 工具共用一个 main 权威注册表与网关，固定执行 schema、上下文 revision、preview/approval、幂等、并发、超时/重试、output schema、数据分类和日志管线。
+- R2/R3 每次审批，R1 仅在缺少本次明确用户意图时审批；R4 禁止注册和执行。
+- approval 单次消费并绑定 run、tool call、版本、参数摘要、目标、revision、权限 scope、preview 和有效期；renderer 只能执行网关派发的窄命令/查询。
+
+### D-013 上下文路由与大结果处理
+
+- 明确导航、生成、模型/任务查询、取消和诊断请求走确定性路由；只有模糊请求才调用 router，router 失败时保守回退 primary。
+- 每轮最多向模型暴露 8 个 active tools；工具、模型和能力信息通过目录搜索及单项 schema 渐进发现。
+- 大 observation 超过 8 KiB、100 条或约 2k tokens 时 offload 为 `ArtifactRef`；第三阶段使用进程内存储，持久化与恢复留到 6.1。
+- 工具结果始终标记 `untrusted_observation` 并脱敏；C3 在网关阻断，不进入模型上下文。
+
 ## 可调参数
 
 - turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于评测调优，但不得绕过安全硬限制。

@@ -56,7 +56,23 @@ export interface VisibleGenerationTaskDependencies {
 
 export type VisibleGenerationTaskHandler = (input: VisibleGenerationTaskInput) => Promise<string | null>
 
-let registeredHandler: VisibleGenerationTaskHandler | null = null
+export interface VisibleGenerationTaskSummary {
+  taskId: string
+  status: GenerationTask['status']
+  progress: number
+  modelId: string
+  mediaType: MediaType
+  resultAvailable: boolean
+  errorCode: string | null
+}
+
+export interface VisibleGenerationTaskHandlers {
+  create: VisibleGenerationTaskHandler
+  get: (taskId: string) => VisibleGenerationTaskSummary | null
+  cancel: (taskId: string, reason: string) => Promise<Record<string, unknown>>
+}
+
+let registeredHandlers: VisibleGenerationTaskHandlers | null = null
 const changeListeners = new Set<() => void>()
 
 function emitVisibleGenerationTaskChange(): void {
@@ -67,12 +83,12 @@ function createTaskId(): string {
   return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-export function registerVisibleGenerationTaskHandler(handler: VisibleGenerationTaskHandler): () => void {
-  registeredHandler = handler
+export function registerVisibleGenerationTaskHandler(handlers: VisibleGenerationTaskHandlers): () => void {
+  registeredHandlers = handlers
   emitVisibleGenerationTaskChange()
   return () => {
-    if (registeredHandler === handler) {
-      registeredHandler = null
+    if (registeredHandlers === handlers) {
+      registeredHandlers = null
       emitVisibleGenerationTaskChange()
     }
   }
@@ -84,12 +100,22 @@ export function subscribeVisibleGenerationTaskChanges(listener: () => void): () 
 }
 
 export function isVisibleGenerationTaskHandlerReady(): boolean {
-  return registeredHandler !== null
+  return registeredHandlers !== null
 }
 
 export async function runVisibleGenerationTaskCommand(input: VisibleGenerationTaskInput): Promise<string | null> {
-  if (!registeredHandler) throw new Error('可见生成任务命令尚未就绪')
-  return registeredHandler(input)
+  if (!registeredHandlers) throw new Error('可见生成任务命令尚未就绪')
+  return registeredHandlers.create(input)
+}
+
+export function getVisibleGenerationTask(taskId: string): VisibleGenerationTaskSummary | null {
+  if (!registeredHandlers) throw new Error('可见生成任务命令尚未就绪')
+  return registeredHandlers.get(taskId)
+}
+
+export async function cancelVisibleGenerationTask(taskId: string, reason: string): Promise<Record<string, unknown>> {
+  if (!registeredHandlers) throw new Error('可见生成任务命令尚未就绪')
+  return await registeredHandlers.cancel(taskId, reason)
 }
 
 export async function createVisibleGenerationTask(

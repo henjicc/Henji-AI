@@ -94,3 +94,42 @@
 - 重启 `npm run electron:dev`，重新点击 DeepSeek 的“验证此模型”。
 - 确认 `structuredOutput` 变为“通过”，六项均通过。
 - 确认静态摘要自动更新为“工具 是 · 结构化 json”；上下文/最大输出未知不影响本次 capability smoke。
+
+## 第三阶段 · 运行时内核
+
+- 验证状态：通过
+- 验证日期：2026-07-23
+- 验证范围：唯一 Runner、状态机与预算、事件顺序、模型选择、工具网关、审批/幂等/并发、首批 8 工具、上下文路由、压缩/offload、IPC/PAL 和 Electron 构建。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| Runner/网关/宿主查询定向测试 | 通过；3 个测试文件、11 个用例 |
+| `npm test` | 通过；62 个测试文件、300 个用例全部通过 |
+| `npm run lint` | 通过；renderer 零 warning |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过；Electron 零 warning |
+| `npx tsc --noEmit` | 通过 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 |
+| `npm run check:colors` | 通过；无新增颜色硬编码 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功构建 |
+| `git diff --check` | 通过；仅有仓库 CRLF 转换提示，无空白错误 |
+
+### 新增定向覆盖
+
+- final、tool-call、R2 审批等待/恢复、observation 回注、取消传播与事件 sequence 严格递增。
+- 非法状态迁移、turn/tool/token/时长/失败/重复/无进展预算和 action final 证据门槛。
+- 输入输出 schema、R4 禁止、revision 冲突、审批单次绑定、幂等缓存、并发键、超时与安全重试。
+- 明确请求确定性路由、模糊请求 router 降级、active tools 裁剪、脱敏、不可信 observation、压缩与 Artifact offload。
+- 宿主查询资源不存在时稳定返回 `NOT_FOUND`，避免 frontend bridge 不回传导致 main 超时。
+
+### 手动验证说明
+
+- 第三阶段未新增可直接操作的 UI，按项目约定没有代替用户执行鼠标验证。
+- 完整真实模型 Runner 闭环需等待 4.2 提供对话/执行入口，并在 5.1 使用用户选择且已通过 capability smoke 的 Provider 验收。
+
+### 结论
+
+- 3.1～3.3 的代码与自动化验收项全部通过，可以进入 4.1。
+- 大结果当前仅进程内 offload，检查点/Artifact 持久化按计划留到 6.1；token、路由与压缩阈值留到 5.4/6.2 校准。

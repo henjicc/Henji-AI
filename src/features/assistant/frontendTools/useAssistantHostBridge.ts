@@ -11,6 +11,7 @@ import {
   AGENT_CONTRACT_VERSION,
   frontendToolRequestSchema,
   frontendToolResultSchema,
+  getFrontendToolOperationName,
   type FrontendToolRequest,
   type FrontendToolResult,
   type HostCommandResult,
@@ -24,6 +25,7 @@ import {
   subscribeHostContext,
 } from '../hostContext/hostContext'
 import { executeHostCommand } from './hostCommandRegistry'
+import { executeHostQueryResult } from './hostQueryRegistry'
 
 const logger = createLogger('features.assistant.frontend_tools')
 const completedLimit = 300
@@ -136,20 +138,26 @@ export function useAssistantHostBridge(uiReady: boolean): void {
 
         const controller = new AbortController()
         active.set(request.callId, controller)
+        const operationName = getFrontendToolOperationName(request.operation)
         logger.info('前端工具执行开始', {
           event: 'assistant.frontend_tool.start',
           requestId: request.runId,
           taskId: request.toolCallId,
-          command: request.command.name,
+          command: operationName,
         })
         try {
-          const result = await executeHostCommand(request.command, controller.signal)
+          let result: HostCommandResult
+          if (request.operation.kind === 'command') {
+            result = await executeHostCommand(request.operation.command, controller.signal)
+          } else {
+            result = await executeHostQueryResult(request.operation.query)
+          }
           await sendResult(request, result)
           logger.info('前端工具执行完成', {
             event: result.ok ? 'assistant.frontend_tool.completed' : 'assistant.frontend_tool.failed',
             requestId: request.runId,
             taskId: request.toolCallId,
-            command: request.command.name,
+            command: operationName,
           })
         } catch (error) {
           logger.error('前端工具结果回传失败', error, {

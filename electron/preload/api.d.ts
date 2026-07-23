@@ -5,6 +5,15 @@ import type {
   FrontendToolResult,
   HostContextSnapshot,
 } from '../../src/core/assistant/hostContracts'
+import type { AgentRunState } from '../../src/core/assistant/events'
+import type {
+  AgentApprovalResponse,
+  AgentCancelRunRequest,
+  AgentRunControlRequest,
+  AgentRuntimeEventPayload,
+  AgentStartRunRequest,
+  AgentStartRunResult,
+} from '../../src/core/assistant/runtimeContracts'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../src/core/llm/modelStep'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '../../src/core/llm/capabilitySmoke'
 
@@ -21,6 +30,13 @@ export interface HenjiAssistantApi {
   completeFrontendTool(result: FrontendToolResult): Promise<void>
   onFrontendToolRequest(handler: (request: FrontendToolRequest) => void): () => void
   onFrontendToolCancel(handler: (cancel: FrontendToolCancel) => void): () => void
+  startRun(request: AgentStartRunRequest): Promise<AgentStartRunResult>
+  cancelRun(request: AgentCancelRunRequest): Promise<AgentRunState>
+  pauseRun(request: AgentRunControlRequest): Promise<AgentRunState>
+  resumeRun(request: AgentRunControlRequest): Promise<AgentRunState>
+  respondApproval(request: AgentApprovalResponse): Promise<AgentRunState>
+  getRunState(request: AgentRunControlRequest): Promise<AgentRunState>
+  subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }
 
 export interface HenjiWindowStatePayload {

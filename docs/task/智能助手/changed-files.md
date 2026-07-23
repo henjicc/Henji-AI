@@ -77,3 +77,29 @@
 - `electron/main/services/llm/sdk/model-step.test.ts`、`capability-smoke.test.ts`：覆盖 Provider 原生 schema 开关与 smoke 模式透传。
 - `src/components/Settings/sections/AgentModelProfilesSection.tsx`：验证成功后同时保存动态结果与实际通过的静态能力。
 - `docs/task/智能助手/progress.md`、`decisions.md`、`handoff.md`、`changed-files.md`、`test-report.md`、2.4 任务文件和 `重要记录.md`：同步真实验收问题、修复决策、验证和复验步骤。
+
+## 第三阶段 · 运行时内核已完成
+
+### 新增
+
+- `src/core/assistant/events.ts`、`runtimeContracts.ts`、`toolContracts.ts` 及契约测试：版本化 Agent 事件、运行控制、预算、审批、工具风险/数据分类与网关 DTO。
+- `electron/main/services/agent-runtime/runtime.ts`、`electron/main/ipc/agent-runtime.ts`：run 注册表、同 thread 单 active run、renderer 所有权、事件推送和最小控制 IPC。
+- `electron/main/services/agent-runtime/runner/*`：唯一 Runner、显式状态机、预算/停止条件、严格事件序号、模型选择、暂停/恢复/审批/取消及单测。
+- `electron/main/services/agent-runtime/tools/*`：工具定义、权威注册表、固定网关管线、审批凭证、幂等账本、输入输出限额/脱敏及单测。
+- `electron/main/services/agent-runtime/tools/builtin/*`：首批 8 个 MVP frontend/backend 工具，包括能力搜索、导航、模型、可见生成任务和诊断日志。
+- `electron/main/services/agent-runtime/context/*`：revision 上下文构建、确定性/模型路由、渐进工具目录、滑窗压缩、脱敏与内存 Artifact offload 及单测。
+
+### 修改
+
+- `electron/main/index.ts`、`electron/main/window.ts`、`electron/main/ipc/assistant.ts`、`registry.ts`：注册 Agent Runtime，收紧主窗口/top frame/origin sender 校验并支持校验前置。
+- `electron/preload/index.ts`、`api.d.ts`、`src/commands/assistant.ts`、assistant PAL contract/adapter：暴露 start/cancel/pause/resume/approval/state/event 精确 API。
+- `src/core/assistant/hostContracts.ts` 及测试：扩展 query、取消命令、稳定 `NOT_FOUND` 错误与 frontend operation 契约。
+- `electron/main/services/assistant/frontend-tool-bridge.ts`、`src/features/assistant/frontendTools/*`：命令/查询统一往返，查询失败稳定回传，补充模型目录/schema 与任务查询。
+- `src/workspaces/GenerationWorkspace.tsx`、`visibleGenerationTaskCommand.ts`、`useTaskGeneration.ts`：向 Agent 复用可见生成任务创建/读取/取消，不复制生成业务编排。
+- `src/features/assistant/hostContext/hostContext.ts`：发布可用命令与查询目录。
+- `src/core/llm/agentProfiles.ts`：抽取可被 Electron 主进程复用的结构化模型选择接口，保持 renderer 类型兼容。
+- `docs/task/智能助手/00-任务总览.md`、`重要记录.md`、3.1～3.3 任务文件及五份阶段记录：同步第三阶段实现、验证、决策与交接。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。

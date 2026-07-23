@@ -1,0 +1,335 @@
+import { z } from 'zod'
+
+import type {
+  FrontendToolOperation,
+  HostCommandResult,
+  HostScopeRevisions,
+} from '../../../../../../src/core/assistant/hostContracts'
+import { defineAgentTool } from '../define-tool'
+import type { AgentToolDefinition } from '../types'
+
+export type FrontendToolInvoker = (
+  operation: FrontendToolOperation,
+  context: { runId: string; toolCallId: string; signal: AbortSignal }
+) => Promise<HostCommandResult>
+
+function eraseToolDefinition<TInput, TOutput>(
+  definition: AgentToolDefinition<TInput, TOutput>
+): AgentToolDefinition {
+  return definition as unknown as AgentToolDefinition
+}
+
+function requireSuccess(result: HostCommandResult): Record<string, unknown> {
+  if (result.ok) return {
+    ...result.data,
+    revision: result.resultingRevision,
+    scopeRevisions: result.resultingScopeRevisions,
+  }
+  const error = new Error(`[${result.error.code}] ${result.error.message}`)
+  error.name = result.error.recoverable ? 'RetryableHostCommandError' : 'HostCommandError'
+  throw error
+}
+
+function expectedRevision(
+  revisions: HostScopeRevisions | undefined,
+  scopes: Array<keyof HostScopeRevisions>
+): Partial<HostScopeRevisions> | undefined {
+  if (!revisions) return undefined
+  return Object.fromEntries(scopes.map((scope) => [scope, revisions[scope]]))
+}
+
+export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentToolDefinition[] {
+  const switchWorkspace = defineAgentTool({
+    name: 'switch_workspace',
+    version: 1,
+    title: '切换工作区',
+    description: '切换到生成、画布、工具或素材工作区。',
+    category: 'navigation',
+    side: 'frontend',
+    risk: 'R0',
+    permission: 'navigation:write',
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 5_000,
+    retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: ['navigation'],
+    inputSchema: z.object({ workspaceId: z.enum(['generation', 'nodes', 'tools', 'assets']) }).strict(),
+    outputSchema: z.object({
+      workspace: z.string(),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object',
+      properties: { workspaceId: { type: 'string', enum: ['generation', 'nodes', 'tools', 'assets'] } },
+      required: ['workspaceId'],
+      additionalProperties: false,
+    },
+    execute: async (input, context) => requireSuccess(await invoke({
+      kind: 'command',
+      command: {
+        name: 'switch_workspace',
+        input: { workspace: input.workspaceId },
+        expectedRevisions: expectedRevision(context.hostContext?.scopeRevisions, ['navigation']),
+      },
+    }, context)),
+    concurrencyKey: () => 'navigation',
+    targetIds: (input) => ({ workspaceId: input.workspaceId }),
+    dataClasses: () => ['C0'],
+    summarize: (output) => `已切换到 ${String(output.workspace)} 工作区。`,
+  })
+
+  const searchModels = defineAgentTool({
+    name: 'search_models',
+    version: 1,
+    title: '搜索生成模型',
+    description: '按关键词、媒体类型或供应商搜索生成模型目录，最多返回 20 项。',
+    category: 'models',
+    side: 'frontend',
+    risk: 'R0',
+    permission: 'model_catalog:read',
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 5_000,
+    retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: [],
+    inputSchema: z.object({
+      query: z.string().max(500).default(''),
+      mediaType: z.enum(['image', 'video', 'audio']).optional(),
+      providerId: z.string().min(1).optional(),
+      cursor: z.number().int().nonnegative().default(0),
+      limit: z.number().int().min(1).max(20).default(10),
+    }).strict(),
+    outputSchema: z.object({
+      catalogVersion: z.string(),
+      models: z.array(z.record(z.string(), z.unknown())),
+      nextCursor: z.number().int().nonnegative().nullable(),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        mediaType: { type: 'string', enum: ['image', 'video', 'audio'] },
+        providerId: { type: 'string' },
+        cursor: { type: 'integer', minimum: 0 },
+        limit: { type: 'integer', minimum: 1, maximum: 20 },
+      },
+      additionalProperties: false,
+    },
+    execute: async (input, context) => requireSuccess(await invoke({
+      kind: 'query',
+      query: { name: 'search_models', input },
+    }, context)),
+    concurrencyKey: () => 'model_catalog',
+    targetIds: () => ({}),
+    dataClasses: () => ['C0'],
+    summarize: (output) => `模型目录搜索返回 ${Array.isArray(output.models) ? output.models.length : 0} 项。`,
+  })
+
+  const getModelSchema = defineAgentTool({
+    name: 'get_model_schema',
+    version: 1,
+    title: '读取模型参数结构',
+    description: '读取单个生成模型的元数据与裁剪后的参数结构。',
+    category: 'models',
+    side: 'frontend',
+    risk: 'R0',
+    permission: 'model_catalog:read',
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 5_000,
+    retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: [],
+    inputSchema: z.object({ modelId: z.string().min(1) }).strict(),
+    outputSchema: z.object({
+      schemaVersion: z.string(),
+      meta: z.record(z.string(), z.unknown()),
+      params: z.array(z.record(z.string(), z.unknown())),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object', properties: { modelId: { type: 'string' } }, required: ['modelId'], additionalProperties: false,
+    },
+    execute: async (input, context) => requireSuccess(await invoke({
+      kind: 'query', query: { name: 'get_model_schema', input },
+    }, context)),
+    concurrencyKey: (input) => `model_schema:${input.modelId}`,
+    targetIds: (input) => ({ modelId: input.modelId }),
+    dataClasses: () => ['C0'],
+    summarize: (output) => `已读取模型 ${String((output.meta as Record<string, unknown>).id ?? '')} 的参数结构。`,
+  })
+
+  const createGenerationTask = defineAgentTool({
+    name: 'create_visible_generation_task',
+    version: 1,
+    title: '创建可见生成任务',
+    description: '在生成工作区创建用户可见的图片、视频或音频生成任务。该动作会向外部 Provider 发送内容并可能产生费用。',
+    category: 'generation',
+    side: 'frontend',
+    risk: 'R2',
+    permission: 'generation:create',
+    readOnly: false,
+    destructive: false,
+    openWorld: true,
+    idempotent: true,
+    timeoutMs: 60_000,
+    retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+    supportsPreview: true,
+    supportsUndo: false,
+    requiredContext: ['generation'],
+    inputSchema: z.object({
+      modelId: z.string().min(1),
+      prompt: z.string().max(32 * 1024),
+      mediaType: z.enum(['image', 'video', 'audio']),
+      params: z.record(z.string(), z.unknown()).optional(),
+    }).strict(),
+    outputSchema: z.object({
+      taskId: z.string().min(1),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object',
+      properties: {
+        modelId: { type: 'string' },
+        prompt: { type: 'string' },
+        mediaType: { type: 'string', enum: ['image', 'video', 'audio'] },
+        params: { type: 'object', additionalProperties: true },
+      },
+      required: ['modelId', 'prompt', 'mediaType'],
+      additionalProperties: false,
+    },
+    preview: (input) => ({
+      title: '创建生成任务',
+      summary: `使用模型 ${input.modelId} 创建 ${input.mediaType} 任务；提示词长度 ${input.prompt.length}。`,
+      targetIds: { modelId: input.modelId },
+      reversible: false,
+      dataClasses: ['C1'],
+      destination: '已配置的生成模型 Provider',
+    }),
+    execute: async (input, context) => requireSuccess(await invoke({
+      kind: 'command',
+      command: {
+        name: 'create_visible_generation_task',
+        input: { prompt: input.prompt, modelId: input.modelId, mediaType: input.mediaType, options: input.params },
+        expectedRevisions: expectedRevision(context.hostContext?.scopeRevisions, ['generation']),
+      },
+    }, context)),
+    concurrencyKey: (input) => `generation:${input.modelId}`,
+    targetIds: (input) => ({ modelId: input.modelId }),
+    dataClasses: () => ['C1'],
+    summarize: (output) => `已创建可见生成任务 ${String(output.taskId)}。`,
+  })
+
+  const getGenerationTask = defineAgentTool({
+    name: 'get_generation_task',
+    version: 1,
+    title: '读取生成任务',
+    description: '按明确 taskId 读取脱敏后的生成任务状态。',
+    category: 'generation',
+    side: 'frontend',
+    risk: 'R0',
+    permission: 'generation:read',
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 5_000,
+    retryPolicy: { maxRetries: 2, baseDelayMs: 100 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: ['generation'],
+    inputSchema: z.object({ taskId: z.string().min(1) }).strict(),
+    outputSchema: z.object({
+      task: z.record(z.string(), z.unknown()),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false,
+    },
+    execute: async (input, context) => requireSuccess(await invoke({
+      kind: 'query', query: { name: 'get_generation_task', input },
+    }, context)),
+    concurrencyKey: (input) => `generation:${input.taskId}`,
+    targetIds: (input) => ({ taskId: input.taskId }),
+    dataClasses: () => ['C1'],
+    summarize: (output) => `生成任务状态：${String((output.task as Record<string, unknown>).status ?? 'unknown')}。`,
+  })
+
+  const cancelGenerationTask = defineAgentTool({
+    name: 'cancel_generation_task',
+    version: 1,
+    title: '取消生成任务',
+    description: '取消明确 taskId 对应的可取消生成任务。',
+    category: 'generation',
+    side: 'frontend',
+    risk: 'R2',
+    permission: 'generation:cancel',
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 10_000,
+    retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+    supportsPreview: true,
+    supportsUndo: false,
+    requiredContext: ['generation'],
+    inputSchema: z.object({ taskId: z.string().min(1), reason: z.string().min(1).max(500) }).strict(),
+    outputSchema: z.object({
+      taskId: z.string().min(1),
+      status: z.string().min(1),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object',
+      properties: { taskId: { type: 'string' }, reason: { type: 'string' } },
+      required: ['taskId', 'reason'],
+      additionalProperties: false,
+    },
+    preview: (input) => ({
+      title: '取消生成任务',
+      summary: `取消任务 ${input.taskId}。`,
+      targetIds: { taskId: input.taskId },
+      reversible: false,
+      dataClasses: ['C1'],
+    }),
+    execute: async (input, context) => requireSuccess(await invoke({
+      kind: 'command',
+      command: {
+        name: 'cancel_generation_task',
+        input,
+        expectedRevisions: expectedRevision(context.hostContext?.scopeRevisions, ['generation']),
+      },
+    }, context)),
+    concurrencyKey: (input) => `generation:${input.taskId}`,
+    targetIds: (input) => ({ taskId: input.taskId }),
+    dataClasses: () => ['C1'],
+    summarize: (output) => `任务 ${String(output.taskId)} 的取消状态为 ${String(output.status)}。`,
+  })
+
+  return [
+    eraseToolDefinition(switchWorkspace),
+    eraseToolDefinition(searchModels),
+    eraseToolDefinition(getModelSchema),
+    eraseToolDefinition(createGenerationTask),
+    eraseToolDefinition(getGenerationTask),
+    eraseToolDefinition(cancelGenerationTask),
+  ]
+}

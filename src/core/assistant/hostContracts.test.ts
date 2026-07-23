@@ -16,17 +16,20 @@ describe('assistant host contracts', () => {
       callId: 'call-1',
       idempotencyKey: 'idem-1',
       deadline: Date.now() + 10_000,
-      command: {
-        name: 'add_canvas_node',
-        input: {
-          projectId: 'project-1',
-          nodeType: 'imageEdit',
-          position: { x: 10, y: 20 },
+      operation: {
+        kind: 'command',
+        command: {
+          name: 'add_canvas_node',
+          input: {
+            projectId: 'project-1',
+            nodeType: 'imageEdit',
+            position: { x: 10, y: 20 },
+          },
+          expectedRevisions: { canvas: 3 },
         },
-        expectedRevisions: { canvas: 3 },
       },
     })
-    expect(request.command.name).toBe('add_canvas_node')
+    expect(request.operation.kind).toBe('command')
   })
 
   it('拒绝没有明确项目 ID 的画布写命令', () => {
@@ -48,6 +51,7 @@ describe('assistant host contracts', () => {
       assets: { view: 'closed', selectedAssetId: null },
       uiReady: true,
       availableCommands: ['switch_workspace'],
+      availableQueries: ['get_host_context'],
       capturedAt: new Date().toISOString(),
     })
     expect(snapshot.revision).toBe(4)

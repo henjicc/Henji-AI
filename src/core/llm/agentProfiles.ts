@@ -1,34 +1,56 @@
-import type {
-  AgentModelCapabilityVerification,
-  AgentModelProfile,
-  AgentModelReference,
-  AgentModelRole,
-  LlmModelConfig,
-} from './types'
+export interface AgentModelReferenceLike {
+  providerId: string
+  modelId: string
+}
+
+export interface AgentModelVerificationLike extends AgentModelReferenceLike {
+  checks: Array<{ id: string; status: string }>
+}
+
+export interface AgentModelProfileLike {
+  primary: AgentModelReferenceLike
+  router?: AgentModelReferenceLike
+  summarizer?: AgentModelReferenceLike
+  fallback?: AgentModelReferenceLike
+  verifications: AgentModelVerificationLike[]
+}
+
+export interface AgentModelConfigLike extends AgentModelReferenceLike {
+  enabled: boolean
+  capabilities: {
+    text: boolean
+    streaming: boolean
+    toolCall: boolean
+    structuredOutputMode: 'none' | 'json' | 'schema'
+    usage: boolean
+  }
+}
+
+export type AgentModelRoleLike = 'primary' | 'router' | 'summarizer' | 'fallback'
 
 const REQUIRED_PRIMARY_CHECKS = ['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel'] as const
 
-function isSameModel(left: AgentModelReference, right: AgentModelReference): boolean {
+function isSameModel(left: AgentModelReferenceLike, right: AgentModelReferenceLike): boolean {
   return left.providerId === right.providerId && left.modelId === right.modelId
 }
 
-export function resolveAgentRoleReference(profile: AgentModelProfile, role: AgentModelRole): AgentModelReference | undefined {
+export function resolveAgentRoleReference(profile: AgentModelProfileLike, role: AgentModelRoleLike): AgentModelReferenceLike | undefined {
   if (role === 'primary') return profile.primary
   if (role === 'router') return profile.router ?? profile.primary
   if (role === 'summarizer') return profile.summarizer ?? profile.primary
   return profile.fallback
 }
 
-export function findAgentModelVerification(
-  profile: AgentModelProfile,
-  reference: AgentModelReference
-): AgentModelCapabilityVerification | undefined {
+export function findAgentModelVerification<TProfile extends AgentModelProfileLike>(
+  profile: TProfile,
+  reference: AgentModelReferenceLike
+): TProfile['verifications'][number] | undefined {
   return profile.verifications.find(verification => isSameModel(verification, reference))
 }
 
 export function isAgentModelVerified(
-  profile: AgentModelProfile,
-  reference: AgentModelReference
+  profile: AgentModelProfileLike,
+  reference: AgentModelReferenceLike
 ): boolean {
   const verification = findAgentModelVerification(profile, reference)
   if (!verification) return false
@@ -37,7 +59,7 @@ export function isAgentModelVerified(
   ))
 }
 
-export function isAgentModelStaticallyCapable(model: LlmModelConfig | undefined): boolean {
+export function isAgentModelStaticallyCapable(model: AgentModelConfigLike | undefined): boolean {
   return model?.enabled === true
     && model.capabilities.text
     && model.capabilities.streaming
@@ -47,23 +69,23 @@ export function isAgentModelStaticallyCapable(model: LlmModelConfig | undefined)
 }
 
 export interface AgentModelSelectionResult {
-  reference: AgentModelReference
+  reference: AgentModelReferenceLike
   role: 'primary' | 'fallback'
   fellBack: boolean
   reason?: string
 }
 
-function findModel(models: LlmModelConfig[], reference: AgentModelReference): LlmModelConfig | undefined {
+function findModel(models: AgentModelConfigLike[], reference: AgentModelReferenceLike): AgentModelConfigLike | undefined {
   return models.find(model => isSameModel(model, reference))
 }
 
-function canRun(profile: AgentModelProfile, models: LlmModelConfig[], reference: AgentModelReference): boolean {
+function canRun(profile: AgentModelProfileLike, models: AgentModelConfigLike[], reference: AgentModelReferenceLike): boolean {
   return isAgentModelStaticallyCapable(findModel(models, reference)) && isAgentModelVerified(profile, reference)
 }
 
 export function selectAgentExecutionModel(
-  profile: AgentModelProfile,
-  models: LlmModelConfig[]
+  profile: AgentModelProfileLike,
+  models: AgentModelConfigLike[]
 ): AgentModelSelectionResult {
   if (canRun(profile, models, profile.primary)) {
     return { reference: profile.primary, role: 'primary', fellBack: false }

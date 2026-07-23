@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
   addCanvasNodeCommandSchema,
+  cancelGenerationTaskCommandSchema,
   createVisibleGenerationTaskCommandSchema,
   hostCommandSchema,
   openCanvasProjectCommandSchema,
@@ -17,7 +18,10 @@ import type { CanvasNodeData, CanvasNodeType } from '@/features/canvas/domain/ca
 import { switchWorkspace } from '@/stores/navigationStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { runVisibleGenerationTaskCommand } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
+import {
+  cancelVisibleGenerationTask,
+  runVisibleGenerationTaskCommand,
+} from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 
@@ -135,6 +139,10 @@ const definitions: HostCommandDefinition[] = [
       return { taskId }
     }
   ),
+  defineHostCommand('cancel_generation_task', cancelGenerationTaskCommandSchema, ['generation'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await cancelVisibleGenerationTask(command.input.taskId, command.input.reason)
+  }),
 ]
 
 const commandDefinitions = new Map(definitions.map((definition) => [definition.name, definition]))

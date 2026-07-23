@@ -16,6 +16,7 @@ export type IpcHandler<TInput, TResult> = (
   input: TInput,
   event: IpcMainInvokeEvent
 ) => TResult | Promise<TResult>
+export type IpcSenderGuard = (event: IpcMainInvokeEvent) => void
 
 export function parseVoid(input: unknown): void {
   if (input !== undefined) {
@@ -71,10 +72,12 @@ function normalizeError(error: unknown): IpcErrorEnvelope {
 export function registerIpcHandler<TInput, TResult>(
   channel: string,
   parser: IpcParser<TInput>,
-  handler: IpcHandler<TInput, TResult>
+  handler: IpcHandler<TInput, TResult>,
+  senderGuard?: IpcSenderGuard
 ): void {
   ipcMain.handle(channel, async (event, rawInput): Promise<IpcResultEnvelope<TResult>> => {
     try {
+      senderGuard?.(event)
       const input = parser(rawInput)
       const data = await handler(input, event)
       return { ok: true, data }

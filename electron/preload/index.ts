@@ -44,6 +44,10 @@ import type {
   FrontendToolCancel,
   FrontendToolRequest,
 } from '../../src/core/assistant/hostContracts'
+import {
+  agentRuntimeEventPayloadSchema,
+  type AgentRuntimeEventPayload,
+} from '../../src/core/assistant/runtimeContracts'
 
 type IpcResultEnvelope<T> =
   | { ok: true; data: T }
@@ -90,6 +94,20 @@ const assistantApi: HenjiAssistantApi = {
     const listener = (_event: Electron.IpcRendererEvent, cancel: FrontendToolCancel): void => handler(cancel)
     ipcRenderer.on('assistant:frontendTool:cancel', listener)
     return () => ipcRenderer.removeListener('assistant:frontendTool:cancel', listener)
+  },
+  startRun: (request) => nativeInvoke('assistant:agent:startRun', request),
+  cancelRun: (request) => nativeInvoke('assistant:agent:cancelRun', request),
+  pauseRun: (request) => nativeInvoke('assistant:agent:pauseRun', request),
+  resumeRun: (request) => nativeInvoke('assistant:agent:resumeRun', request),
+  respondApproval: (request) => nativeInvoke('assistant:agent:respondApproval', request),
+  getRunState: (request) => nativeInvoke('assistant:agent:getRunState', request),
+  subscribeEvents: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, rawPayload: unknown): void => {
+      const payload: AgentRuntimeEventPayload = agentRuntimeEventPayloadSchema.parse(rawPayload)
+      handler(payload)
+    }
+    ipcRenderer.on('assistant:agent:event', listener)
+    return () => ipcRenderer.removeListener('assistant:agent:event', listener)
   },
 }
 

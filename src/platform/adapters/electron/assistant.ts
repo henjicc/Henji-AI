@@ -15,5 +15,12 @@ export function createElectronAssistant(): AssistantPlatform {
     completeFrontendTool: (result) => getNativeAssistant().completeFrontendTool(result),
     onFrontendToolRequest: (handler) => getNativeAssistant().onFrontendToolRequest(handler),
     onFrontendToolCancel: (handler) => getNativeAssistant().onFrontendToolCancel(handler),
+    startRun: (request) => getNativeAssistant().startRun(request),
+    cancelRun: (request) => getNativeAssistant().cancelRun(request),
+    pauseRun: (request) => getNativeAssistant().pauseRun(request),
+    resumeRun: (request) => getNativeAssistant().resumeRun(request),
+    respondApproval: (request) => getNativeAssistant().respondApproval(request),
+    getRunState: (request) => getNativeAssistant().getRunState(request),
+    subscribeEvents: (handler) => getNativeAssistant().subscribeEvents(handler),
   }
 }

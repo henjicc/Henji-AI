@@ -7,6 +7,7 @@ import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 
 import { executeHostCommand } from './hostCommandRegistry'
+import { executeHostQueryResult } from './hostQueryRegistry'
 
 describe('assistant host command registry', () => {
   beforeEach(() => {
@@ -61,5 +62,17 @@ describe('assistant host command registry', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'PROJECT_NOT_FOUND' } })
     expect(useNavigationStore.getState().activeWorkspace).toBe('generation')
+  })
+
+  it('宿主查询失败时返回稳定错误而不是让调用方等待超时', async () => {
+    const result = await executeHostQueryResult({
+      name: 'get_model_schema',
+      input: { modelId: 'missing-model' },
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'NOT_FOUND', recoverable: false },
+    })
   })
 })

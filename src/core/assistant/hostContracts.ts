@@ -42,6 +42,7 @@ export const hostContextSnapshotSchema = z.object({
   }),
   uiReady: z.boolean(),
   availableCommands: z.array(z.string().min(1)),
+  availableQueries: z.array(z.string().min(1)),
   capturedAt: z.string().datetime(),
 })
 export type HostContextSnapshot = z.infer<typeof hostContextSnapshotSchema>
@@ -83,11 +84,20 @@ export const createVisibleGenerationTaskCommandSchema = commandBaseSchema.extend
   }),
 })
 
+export const cancelGenerationTaskCommandSchema = commandBaseSchema.extend({
+  name: z.literal('cancel_generation_task'),
+  input: z.object({
+    taskId: z.string().min(1),
+    reason: z.string().min(1).max(500),
+  }),
+})
+
 export const hostCommandSchema = z.discriminatedUnion('name', [
   switchWorkspaceCommandSchema,
   openCanvasProjectCommandSchema,
   addCanvasNodeCommandSchema,
   createVisibleGenerationTaskCommandSchema,
+  cancelGenerationTaskCommandSchema,
 ])
 export type HostCommand = z.infer<typeof hostCommandSchema>
 export type HostCommandName = HostCommand['name']
@@ -95,8 +105,21 @@ export type HostCommandName = HostCommand['name']
 export const hostQuerySchema = z.discriminatedUnion('name', [
   z.object({ name: z.literal('get_host_context'), input: z.object({}) }),
   z.object({ name: z.literal('list_canvas_projects'), input: z.object({}) }),
+  z.object({
+    name: z.literal('search_models'),
+    input: z.object({
+      query: z.string().max(500).default(''),
+      mediaType: z.enum(['image', 'video', 'audio']).optional(),
+      providerId: z.string().min(1).optional(),
+      cursor: z.number().int().nonnegative().default(0),
+      limit: z.number().int().min(1).max(20).default(10),
+    }),
+  }),
+  z.object({ name: z.literal('get_model_schema'), input: z.object({ modelId: z.string().min(1) }) }),
+  z.object({ name: z.literal('get_generation_task'), input: z.object({ taskId: z.string().min(1) }) }),
 ])
 export type HostQuery = z.infer<typeof hostQuerySchema>
+export type HostQueryName = HostQuery['name']
 
 export const hostErrorCodeSchema = z.enum([
   'ABORTED',
@@ -105,6 +128,7 @@ export const hostErrorCodeSchema = z.enum([
   'DEADLINE_EXCEEDED',
   'DUPLICATE_CALL',
   'INVALID_INPUT',
+  'NOT_FOUND',
   'PROJECT_NOT_FOUND',
   'RENDERER_RELOADED',
   'STALE_CONTEXT',
@@ -132,6 +156,12 @@ export const hostCommandResultSchema = z.discriminatedUnion('ok', [
 ])
 export type HostCommandResult = z.infer<typeof hostCommandResultSchema>
 
+export const frontendToolOperationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('command'), command: hostCommandSchema }),
+  z.object({ kind: z.literal('query'), query: hostQuerySchema }),
+])
+export type FrontendToolOperation = z.infer<typeof frontendToolOperationSchema>
+
 export const frontendToolRequestSchema = z.object({
   schemaVersion: z.literal(AGENT_CONTRACT_VERSION),
   runId: z.string().min(1),
@@ -139,7 +169,7 @@ export const frontendToolRequestSchema = z.object({
   callId: z.string().min(1),
   idempotencyKey: z.string().min(1),
   deadline: z.number().int().positive(),
-  command: hostCommandSchema,
+  operation: frontendToolOperationSchema,
 })
 export type FrontendToolRequest = z.infer<typeof frontendToolRequestSchema>
 
@@ -168,3 +198,7 @@ export const frontendToolCancelSchema = z.object({
   reason: z.string().min(1),
 })
 export type FrontendToolCancel = z.infer<typeof frontendToolCancelSchema>
+
+export function getFrontendToolOperationName(operation: FrontendToolOperation): string {
+  return operation.kind === 'command' ? operation.command.name : operation.query.name
+}

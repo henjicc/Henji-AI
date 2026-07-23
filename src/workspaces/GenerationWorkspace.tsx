@@ -198,6 +198,7 @@ const GenerationWorkspace: React.FC = () => {
     }
   }, [t])
   const { isGenerating, handleGenerate, handleContinuePolling } = useTaskGeneration({
+    tasks,
     setTasks,
     updateTask,
     updateProgress,

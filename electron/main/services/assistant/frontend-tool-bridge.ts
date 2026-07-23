@@ -5,6 +5,7 @@ import {
   frontendToolAcknowledgementSchema,
   frontendToolRequestSchema,
   frontendToolResultSchema,
+  getFrontendToolOperationName,
   hostContextSnapshotSchema,
   type FrontendToolAcknowledgement,
   type FrontendToolRequest,
@@ -104,7 +105,7 @@ export function completeAssistantFrontendTool(webContentsId: number, rawResult: 
     event: frontendResult.result.ok ? 'assistant.frontend_tool.completed' : 'assistant.frontend_tool.failed',
     requestId: frontendResult.runId,
     taskId: frontendResult.toolCallId,
-    context: { callId: frontendResult.callId, command: pending.request.command.name },
+    context: { callId: frontendResult.callId, command: getFrontendToolOperationName(pending.request.operation) },
   })
 }
 
@@ -161,7 +162,7 @@ export function requestAssistantFrontendTool(sender: WebContents, rawRequest: un
     event: 'assistant.frontend_tool.requested',
     requestId: request.runId,
     taskId: request.toolCallId,
-    context: { callId: request.callId, command: request.command.name },
+    context: { callId: request.callId, command: getFrontendToolOperationName(request.operation) },
   })
   return promise
 }

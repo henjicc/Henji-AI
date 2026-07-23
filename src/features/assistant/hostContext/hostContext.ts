@@ -3,6 +3,7 @@ import {
   hostContextSnapshotSchema,
   type HostCommandName,
   type HostContextSnapshot,
+  type HostQueryName,
   type HostScope,
   type HostScopeRevisions,
 } from '@/core/assistant/hostContracts'
@@ -99,6 +100,14 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     'add_canvas_node',
   ]
   if (generationReady) commands.push('create_visible_generation_task')
+  if (generationReady) commands.push('cancel_generation_task')
+  const queries: HostQueryName[] = [
+    'get_host_context',
+    'list_canvas_projects',
+    'search_models',
+    'get_model_schema',
+  ]
+  if (generationReady) queries.push('get_generation_task')
 
   return hostContextSnapshotSchema.parse({
     schemaVersion: AGENT_CONTRACT_VERSION,
@@ -120,6 +129,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     },
     uiReady,
     availableCommands: commands,
+    availableQueries: queries,
     capturedAt: new Date().toISOString(),
   })
 }
