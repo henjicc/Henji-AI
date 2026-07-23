@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlertCircle, Bot, BrainCircuit, FileArchive, UserRound } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { AlertCircle, Bot, BrainCircuit, ChevronRight, UserRound } from 'lucide-react'
 
 import { UiButton } from '@/components/ui'
 import {
@@ -16,6 +15,7 @@ import {
 } from '../results/openAssistantResult'
 import { useAssistantUiStore } from '../store/assistantUiStore'
 import { ApprovalCard } from './ApprovalCard'
+import { AssistantMarkdown } from './AssistantMarkdown'
 import { AssistantComposer } from './AssistantComposer'
 import { RunStatusBar } from './RunStatusBar'
 import { selectPendingApproval, selectToolActivities } from './agentRunReducer'
@@ -25,6 +25,7 @@ const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
 const deferredBlockStyle: CSSProperties = {
   contentVisibility: 'auto',
   containIntrinsicSize: 'auto 96px',
+  contain: 'layout paint style',
 }
 
 export function AssistantConversation(): JSX.Element {
@@ -37,6 +38,8 @@ export function AssistantConversation(): JSX.Element {
   const currentGoal = useAssistantUiStore((state) => state.currentGoal)
   const pendingGoal = useAssistantUiStore((state) => state.pendingGoal)
   const setPendingGoal = useAssistantUiStore((state) => state.setPendingGoal)
+  const approvalMode = useAssistantUiStore((state) => state.approvalMode)
+  const setApprovalMode = useAssistantUiStore((state) => state.setApprovalMode)
   const runState = run.view.runState
   const busy = Boolean(activeRunId && (!runState || !terminalStatuses.has(runState.status)))
 
@@ -66,14 +69,13 @@ export function AssistantConversation(): JSX.Element {
       event.type === 'ModelDelta' && event.stepId === latestModelStep.stepId ? [event.text] : []
     )).join('')
   }, [latestModelStep, run.view.events])
-  const artifacts = useMemo(() => run.view.events.filter((event) => event.type === 'ArtifactOffloaded'), [run.view.events])
-
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+      const container = scrollRef.current
+      if (container) container.scrollTop = container.scrollHeight
     })
     return () => cancelAnimationFrame(frame)
-  }, [approval, artifacts.length, runState?.status, streamedText, tools.length])
+  }, [approval, runState?.status, streamedText, tools.length])
 
   const submit = (goal: string): void => {
     void run.start(goal).then((started) => {
@@ -108,7 +110,7 @@ export function AssistantConversation(): JSX.Element {
         />
       ) : null}
 
-      <div ref={scrollRef} className="ui-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4">
+      <div ref={scrollRef} className="ui-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
         {!runState && !currentGoal ? (
           <div className="flex min-h-full flex-col items-center justify-center px-8 text-center">
             <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 text-accent shadow-lg">
@@ -129,13 +131,20 @@ export function AssistantConversation(): JSX.Element {
         ) : null}
 
         {plan?.type === 'PlanUpdated' ? (
-          <section style={deferredBlockStyle} className="rounded-xl border border-accent/25 bg-accent/5 p-3">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-accent"><BrainCircuit className="h-3.5 w-3.5" />执行计划</div>
-            <p className="mt-1.5 text-xs leading-5 text-text-muted">{plan.summary}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {plan.toolDomains.map((domain) => <span key={domain} className="rounded border border-border-dark bg-surface-dark px-1.5 py-0.5 text-[10px] text-text-muted">{domain}</span>)}
+          <details style={deferredBlockStyle} className="group rounded-lg bg-accent/5 px-2 py-1.5">
+            <summary className="flex min-h-6 cursor-pointer list-none items-center gap-2 text-[11px] font-medium text-accent">
+              <BrainCircuit className="h-3.5 w-3.5 shrink-0" />
+              <span className="shrink-0">思考摘要</span>
+              <span className="min-w-0 flex-1 truncate font-normal text-text-muted">{plan.summary}</span>
+              <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="pb-1 pl-5 pt-1">
+              <p className="text-[11px] leading-4 text-text-muted">{plan.summary}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {plan.toolDomains.map((domain) => <span key={domain} className="rounded bg-surface-dark px-1.5 py-0.5 text-[10px] text-text-muted">{domain}</span>)}
+              </div>
             </div>
-          </section>
+          </details>
         ) : null}
 
         {tools.map((tool) => (
@@ -149,24 +158,17 @@ export function AssistantConversation(): JSX.Element {
 
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 
-        {artifacts.map((artifact) => artifact.type === 'ArtifactOffloaded' ? (
-          <section key={artifact.eventId} style={deferredBlockStyle} className="flex items-start gap-2 rounded-xl border border-border-dark bg-surface-dark p-3 text-xs text-text-muted">
-            <FileArchive className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="min-w-0"><div>大结果已安全卸载</div><div className="mt-1 truncate text-[10px]">{artifact.artifactRef} · {artifact.originalBytes.toLocaleString()} bytes</div></div>
-          </section>
-        ) : null)}
-
         {streamedText && runState && !terminalStatuses.has(runState.status) ? (
           <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />回应生成中</div>
-            <div className="break-words text-sm leading-6 text-text-dark"><ReactMarkdown>{streamedText}</ReactMarkdown></div>
+            <AssistantMarkdown>{streamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
         {runState?.finalText ? (
           <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />助手</div>
-            <div className="break-words text-sm leading-6 text-text-dark [&_a]:text-accent [&_code]:rounded [&_code]:bg-layer [&_code]:px-1 [&_ul]:list-disc [&_ul]:pl-5"><ReactMarkdown>{runState.finalText}</ReactMarkdown></div>
+            <AssistantMarkdown>{runState.finalText}</AssistantMarkdown>
           </section>
         ) : null}
 
@@ -193,6 +195,8 @@ export function AssistantConversation(): JSX.Element {
         onSubmit={submit}
         disabled={busy}
         submitting={run.submitting}
+        approvalMode={approvalMode}
+        onApprovalModeChange={setApprovalMode}
       />
     </div>
   )

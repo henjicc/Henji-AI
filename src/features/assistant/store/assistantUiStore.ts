@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
+
 export type AssistantDockMode = 'left' | 'right' | 'floating'
 
 export interface AssistantPanelPosition {
@@ -22,6 +24,7 @@ interface AssistantUiState {
   activeRunId: string | null
   currentGoal: string
   pendingGoal: string | null
+  approvalMode: AgentApprovalMode
   setOpen: (open: boolean) => void
   toggleOpen: () => void
   setMode: (mode: AssistantDockMode) => void
@@ -29,6 +32,7 @@ interface AssistantUiState {
   setSize: (size: AssistantPanelSize) => void
   setActiveRun: (runId: string | null, goal?: string) => void
   setPendingGoal: (goal: string | null) => void
+  setApprovalMode: (mode: AgentApprovalMode) => void
 }
 
 const DEFAULT_THREAD_ID = 'assistant-default-thread'
@@ -44,6 +48,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       activeRunId: null,
       currentGoal: '',
       pendingGoal: null,
+      approvalMode: 'assistant_decides',
       setOpen: (open) => set({ open }),
       toggleOpen: () => set((state) => ({ open: !state.open })),
       setMode: (mode) => set({ mode }),
@@ -56,6 +61,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
       setPendingGoal: (pendingGoal) => set(pendingGoal
         ? { pendingGoal, open: true }
         : { pendingGoal: null }),
+      setApprovalMode: (approvalMode) => set({ approvalMode }),
     }),
     {
       name: 'henji-assistant-ui',
@@ -68,6 +74,7 @@ export const useAssistantUiStore = create<AssistantUiState>()(
         threadId: state.threadId,
         activeRunId: state.activeRunId,
         currentGoal: state.currentGoal,
+        approvalMode: state.approvalMode,
       }),
     }
   )

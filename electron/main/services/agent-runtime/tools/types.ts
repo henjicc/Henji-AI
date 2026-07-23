@@ -9,6 +9,7 @@ import type {
   AgentToolRisk,
   AgentToolSide,
 } from '../../../../../src/core/assistant/toolContracts'
+import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
 
 export interface AgentToolRetryPolicy {
@@ -38,6 +39,7 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   openWorld: boolean
   idempotent: boolean
   timeoutMs: number
+  maxCallsPerRun?: number
   retryPolicy: AgentToolRetryPolicy
   supportsPreview: boolean
   supportsUndo: boolean
@@ -62,6 +64,7 @@ export interface AgentToolExecuteRequest {
   input: unknown
   expectedRevisions?: Partial<HostScopeRevisions>
   approvalId?: string
+  approvalMode: AgentApprovalMode
   explicitUserIntent: boolean
   signal: AbortSignal
 }

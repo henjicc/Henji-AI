@@ -47,6 +47,7 @@ export interface AgentContextBuildInput {
 }
 
 export interface AgentContextBuildResult {
+  system: string
   messages: ModelStepMessage[]
   tools: ModelStepTool[]
   activeToolNames: string[]

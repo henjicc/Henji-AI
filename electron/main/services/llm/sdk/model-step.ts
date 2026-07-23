@@ -120,7 +120,9 @@ export async function executeModelStepWithModel(
   const settings = input.settings ?? {}
   const result = streamText({
     model,
+    system: input.system,
     messages: toAiMessages(input.messages),
+    allowSystemInMessages: false,
     tools: buildTools(input),
     output: createOutput(input),
     abortSignal: signal,

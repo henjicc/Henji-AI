@@ -1,5 +1,6 @@
-import { CheckCircle2, ExternalLink, LoaderCircle, Wrench, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ExternalLink, LoaderCircle, Wrench, XCircle } from 'lucide-react'
 import type { CSSProperties } from 'react'
+import { useState } from 'react'
 
 import { UiButton } from '@/components/ui'
 
@@ -33,7 +34,8 @@ const statusLabels: Record<AgentToolActivity['status'], string> = {
 
 const deferredCardStyle: CSSProperties = {
   contentVisibility: 'auto',
-  containIntrinsicSize: 'auto 84px',
+  containIntrinsicSize: 'auto 36px',
+  contain: 'layout paint style',
 }
 
 interface ToolActivityCardProps {
@@ -43,9 +45,11 @@ interface ToolActivityCardProps {
 }
 
 export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActivityCardProps): JSX.Element {
+  const [expanded, setExpanded] = useState(false)
   const taskId = activity.resultReferences?.taskId
   const projectId = activity.resultReferences?.projectId
   const nodeId = activity.resultReferences?.nodeId
+  const hasDetails = Boolean(activity.summary || activity.error || activity.artifactRef)
   const icon = activity.status === 'completed'
     ? <CheckCircle2 className="h-4 w-4 text-success" />
     : activity.status === 'failed'
@@ -55,37 +59,45 @@ export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActiv
         : <Wrench className="h-4 w-4 text-text-muted" />
 
   return (
-    <section style={deferredCardStyle} className="rounded-xl border border-border-dark bg-surface-dark p-3">
-      <div className="flex items-center gap-2">
+    <section style={deferredCardStyle} className="rounded-lg bg-surface-dark/80 px-2 py-1.5">
+      <div className="flex min-h-6 items-center gap-2">
         {icon}
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">
           {toolLabels[activity.toolName] ?? activity.toolName}
         </div>
         <span className="text-[10px] tracking-wide text-text-muted">{statusLabels[activity.status]}</span>
-      </div>
-      {activity.summary ? <p className="mt-2 text-xs leading-5 text-text-muted">{activity.summary}</p> : null}
-      {activity.error ? (
-        <div className="mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
-          {activity.error.code} · {activity.error.message}
-        </div>
-      ) : null}
-      {activity.artifactRef ? (
-        <div className="mt-2 truncate text-[11px] text-text-muted">大结果引用：{activity.artifactRef}</div>
-      ) : null}
-      {taskId ? (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-[11px] text-text-muted">任务 {taskId}</span>
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="h-7 gap-1 px-2">
+        {taskId ? (
+          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="!h-6 gap-1 !px-1.5 text-[10px]">
             <ExternalLink className="h-3 w-3" />查看
           </UiButton>
-        </div>
-      ) : null}
-      {projectId && nodeId ? (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-[11px] text-text-muted">节点 {nodeId}</span>
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenNode(projectId, nodeId)} className="h-7 gap-1 px-2">
+        ) : null}
+        {projectId && nodeId ? (
+          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenNode(projectId, nodeId)} className="!h-6 gap-1 !px-1.5 text-[10px]">
             <ExternalLink className="h-3 w-3" />定位
           </UiButton>
+        ) : null}
+        {hasDetails ? (
+          <UiButton
+            type="button"
+            size="sm"
+            variant="ghost"
+            title={expanded ? '收起详情' : '展开详情'}
+            onClick={() => setExpanded((value) => !value)}
+            className="!h-6 !w-6 !p-0"
+          >
+            <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </UiButton>
+        ) : null}
+      </div>
+      {expanded ? (
+        <div className="border-t border-border-dark/70 pb-1 pt-1.5">
+          {activity.summary ? <p className="text-[11px] leading-4 text-text-muted">{activity.summary}</p> : null}
+          {activity.error ? (
+            <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-[11px] leading-4 text-danger">
+              {activity.error.code} · {activity.error.message}
+            </div>
+          ) : null}
+          {activity.artifactRef ? <div className="mt-1 truncate text-[10px] text-text-muted">内部结果引用：{activity.artifactRef}</div> : null}
         </div>
       ) : null}
     </section>

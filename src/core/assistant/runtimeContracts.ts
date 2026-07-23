@@ -4,6 +4,8 @@ import { agentBudgetConfigSchema, agentEventSchema, agentRunStateSchema } from '
 import { modelStepCapabilitiesSchema } from '../llm/modelStep'
 
 export const AGENT_RUNTIME_SCHEMA_VERSION = 'agent-runtime/v1' as const
+export const agentApprovalModeSchema = z.enum(['ask', 'assistant_decides', 'full_access'])
+export type AgentApprovalMode = z.infer<typeof agentApprovalModeSchema>
 
 const agentModelReferenceSchema = z.object({
   providerId: z.string().min(1),
@@ -85,6 +87,7 @@ export const agentStartRunRequestSchema = z.object({
   userInstructions: z.string().max(4_000).optional(),
   profile: agentRuntimeProfileSchema,
   models: z.array(agentRuntimeModelConfigSchema).min(1).max(200),
+  approvalMode: agentApprovalModeSchema.default('assistant_decides'),
   budget: agentBudgetConfigSchema.partial().optional(),
 }).strict()
 export type AgentStartRunRequest = z.infer<typeof agentStartRunRequestSchema>

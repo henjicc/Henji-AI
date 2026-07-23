@@ -8,8 +8,8 @@ const logger = createMainLogger('main.agent_router')
 
 const routerModelDecisionSchema = z.object({
   intent: z.enum(['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'user_instructions', 'general']),
-  complexity: z.enum(['simple', 'multi_step', 'ambiguous']),
-  reason: z.string().min(1).max(500),
+  complexity: z.enum(['simple', 'multi_step', 'ambiguous']).optional().default('ambiguous'),
+  reason: z.string().min(1).max(500).optional(),
 }).passthrough()
 
 export type RouterModelClassifier = (
@@ -35,32 +35,22 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDo
   general: { path: 'primary', toolDomains: ['catalog'] },
 }
 
-const cancelGenerationPattern = /(?:取消|停止|终止).{0,12}(?:生成|任务)|cancel.{0,12}(?:generation|task)/i
-const generationActionPattern = /(?:生成|制作|创建|创作|绘制|画出|渲染)|(?:generate|create|make|draw|render)/i
-const generationMediaPattern = /(?:图片|图像|照片|相片|插画|海报|头像|壁纸|封面|图标|视频|短片|动画|影片|音频|音乐|歌曲|配音|语音|音效|logo)|(?:image|picture|photo|video|animation|audio|music|song|voice)/i
+const taskIdPattern = /\btask-[a-z0-9-]+\b/i
+const cancelGenerationPattern = /(?:取消|停止|终止|cancel|stop).{0,24}\btask-[a-z0-9-]+\b/i
+const readGenerationPattern = /(?:查看|查询|状态|进度|status|progress).{0,24}\btask-[a-z0-9-]+\b|\btask-[a-z0-9-]+\b.{0,24}(?:查看|查询|状态|进度|status|progress)/i
 
 function regexMatcher(pattern: RegExp): (goal: string) => boolean {
   return (goal) => pattern.test(goal)
-}
-
-function matchesGenerationRequest(goal: string): boolean {
-  return !cancelGenerationPattern.test(goal)
-    && generationActionPattern.test(goal)
-    && generationMediaPattern.test(goal)
 }
 
 const deterministicRules: DeterministicRule[] = [
   { intent: 'cancel_generation', matches: regexMatcher(cancelGenerationPattern) },
   {
     intent: 'user_instructions',
-    matches: regexMatcher(/(?:(?:记住|以后|默认|偏好|优先|避免|不要用).{0,40}(?:供应商|模型|ppio|fal|kie|modelscope|回答|回复|解释|格式|风格))|(?:(?:供应商|模型|ppio|fal|kie|modelscope|回答|回复|解释|格式|风格).{0,40}(?:记住|以后|默认|偏好|优先|避免|不要用))|(?:(?:查看|修改|更新|保存|清空).{0,12}(?:用户|助手)?指令)|user instructions?|model preferences?/i),
+    matches: regexMatcher(/(?:用户指令|助手指令|user instructions?)/i),
   },
-  { intent: 'diagnose', matches: regexMatcher(/(?:诊断|日志|报错|错误原因|排查)|diagnos|logs?|error/i) },
-  { intent: 'canvas', matches: regexMatcher(/(?:画布|节点).{0,24}(?:添加|放置|连接|定位|高亮|撤销)|(?:添加|放置|连接|定位|高亮|撤销).{0,24}(?:画布|节点)|canvas.{0,24}(?:node|connect|focus|undo)/i) },
-  { intent: 'navigate', matches: regexMatcher(/(?:切换|打开|进入).{0,10}(?:工作区|画布|素材库|工具箱)|(?:switch|open).{0,10}workspace/i) },
-  { intent: 'read_generation', matches: regexMatcher(/(?:查看|查询).{0,10}(?:生成任务|任务状态)|generation task status/i) },
-  { intent: 'inspect_model', matches: regexMatcher(/(?:模型参数|模型结构|查找模型|搜索模型)|model (?:schema|catalog|search)/i) },
-  { intent: 'generate', matches: matchesGenerationRequest },
+  { intent: 'navigate', matches: regexMatcher(/(?:切换|打开|进入).{0,10}(?:工作区|画布工作区|素材库工作区|工具箱工作区)|(?:switch|open).{0,10}workspace/i) },
+  { intent: 'read_generation', matches: (goal) => taskIdPattern.test(goal) && readGenerationPattern.test(goal) },
 ]
 
 function deterministicRoute(goal: string): AgentRouteDecision | null {
@@ -98,7 +88,7 @@ export class AgentIntentRouter {
           complexity: classified.complexity,
           ...routePolicy[classified.intent],
           source: 'router_model',
-          reason: classified.reason,
+          reason: classified.reason?.trim() || `路由模型判断为 ${classified.intent} 任务`,
         }
         this.logDecision(runId, decision)
         return decision

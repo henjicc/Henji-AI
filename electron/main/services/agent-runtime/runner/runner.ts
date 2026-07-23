@@ -202,7 +202,7 @@ export class AgentRunner {
         this.emitContextEvents(turn, context)
         let result: ModelStepResult
         try {
-          result = await this.runPrimaryStep(turn, context.messages, context.tools)
+          result = await this.runPrimaryStep(turn, context.system, context.messages, context.tools)
           this.budget.recordSuccess()
         } catch (error) {
           this.currentModelRequestId = null
@@ -248,7 +248,7 @@ export class AgentRunner {
         signal,
       })
       this.budget.recordModelUsage(result.usage)
-      return result.structuredOutput
+      return result.decision
     } finally {
       this.currentModelRequestId = null
     }
@@ -256,6 +256,7 @@ export class AgentRunner {
 
   private async runPrimaryStep(
     turn: number,
+    system: string,
     messages: ModelStepMessage[],
     tools: Parameters<typeof this.options.dependencies.runModelStep>[0]['tools']
   ): Promise<ModelStepResult> {
@@ -271,6 +272,7 @@ export class AgentRunner {
       runId: this.options.runId,
       turn,
       model: this.models.primary,
+      system,
       messages,
       tools,
       runModelStep: this.options.dependencies.runModelStep,
@@ -309,7 +311,8 @@ export class AgentRunner {
           toolName: call.toolName,
           input: call.input,
           expectedRevisions: currentExpectedRevisions,
-          explicitUserIntent: route.source === 'deterministic',
+          approvalMode: this.options.request.approvalMode,
+          explicitUserIntent: route.intent !== 'general',
           signal: this.abortController.signal,
         })
         if (result.status === 'approval_required') {
@@ -364,7 +367,8 @@ export class AgentRunner {
             input: call.input,
             expectedRevisions: currentExpectedRevisions,
             approvalId: result.approval.approvalId,
-            explicitUserIntent: route.source === 'deterministic',
+            approvalMode: this.options.request.approvalMode,
+            explicitUserIntent: route.intent !== 'general',
             signal: this.abortController.signal,
           })
         }

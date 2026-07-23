@@ -104,6 +104,25 @@
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
 
+## 第五阶段 · 手动反馈与架构纠偏
+
+### 新增
+
+- `electron/main/services/ai-runtime/providers/provider-fetch.ts` 及测试：保留安全网络错误码，只重试确定的连接前失败。
+- `src/features/assistant/conversation/AssistantMarkdown.tsx`：统一 GFM Markdown 展示与对话排版。
+
+### 修改
+
+- `electron/main/services/agent-runtime/context/router.ts`、`runner/model-execution.ts` 及测试：自然语言意图交由模型理解，本地只映射工具域和安全边界。
+- `electron/main/services/agent-runtime/tools/gateway.ts`、`types.ts`、`define-tool.ts` 及测试：新增三种批准方式和每 run 工具调用上限。
+- `electron/main/services/agent-runtime/context/builder.ts`、`diagnostics/query-diagnostic-events.ts` 及测试：紧凑诊断证据、限制单次查询，并约束最终诊断表达。
+- `electron/main/services/llm/sdk/model-step.ts`、`src/core/llm/modelStep.ts` 及测试：system 提示改用 AI SDK `system` 选项。
+- `electron/main/services/ai-runtime/providers/kie.ts`、`runtime.ts`：接入安全网络恢复并保留脱敏后的底层错误码。
+- `src/core/assistant/runtimeContracts.ts`、`assistantUiStore.ts`、`useAgentRun.ts`、`AssistantComposer.tsx`：接入批准方式契约、持久化与输入区选择。
+- `AssistantConversation.tsx`、`ToolActivityCard.tsx`、`AssistantSidebar.tsx`：紧凑执行轨迹、折叠执行思路、GFM、即时滚动和布局/绘制隔离。
+- `hostCommandRegistry.ts`、`tools/builtin/frontend.ts`：创建生成任务只返回 `submitted`，避免把提交误报为生成成功。
+- `src/models/kie/seedance-2.0*.model.ts` 及测试：音频默认关闭，只有用户明确开启时才发送 `generate_audio: true`。
+
 ## 第五阶段 · 图片生成误路由与能力发现修复
 
 ### 新增

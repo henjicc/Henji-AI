@@ -45,6 +45,7 @@ export function useAgentRun(): UseAgentRunResult {
   const [submitting, setSubmitting] = useState(false)
   const activeRunId = useAssistantUiStore((state) => state.activeRunId)
   const threadId = useAssistantUiStore((state) => state.threadId)
+  const approvalMode = useAssistantUiStore((state) => state.approvalMode)
   const activeRunIdRef = useRef(activeRunId)
   const bufferedEventsRef = useRef(new Map<string, AgentEvent[]>())
   activeRunIdRef.current = activeRunId
@@ -121,6 +122,7 @@ export function useAgentRun(): UseAgentRunResult {
         goal: normalizedGoal,
         profile,
         models,
+        approvalMode,
       })
       activeRunIdRef.current = result.runId
       useAssistantUiStore.getState().setActiveRun(result.runId, normalizedGoal)
@@ -145,7 +147,7 @@ export function useAgentRun(): UseAgentRunResult {
     } finally {
       setSubmitting(false)
     }
-  }, [submitting, threadId])
+  }, [approvalMode, submitting, threadId])
 
   const control = useCallback(async (
     action: 'cancel' | 'pause' | 'resume',

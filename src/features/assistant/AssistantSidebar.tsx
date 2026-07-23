@@ -1,5 +1,5 @@
 import { GripHorizontal, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
-import type { RefObject } from 'react'
+import type { CSSProperties, RefObject } from 'react'
 
 import { UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
@@ -38,7 +38,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
     onCommitSize: setSize,
   })
 
-  const positionStyle = mode === 'floating'
+  const positionStyle: CSSProperties = mode === 'floating'
     ? {
         left: 0,
         top: 0,
@@ -46,7 +46,8 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         height: size.height,
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
         transformOrigin: 'top left',
-        contain: 'layout style',
+        contain: 'layout paint style',
+        backfaceVisibility: 'hidden',
         maxWidth: 'calc(100vw - 24px)',
         maxHeight: 'calc(100vh - 60px)',
       }
@@ -56,7 +57,8 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         width: size.width,
         transform: 'translate3d(0, 0, 0)',
         transformOrigin: mode === 'right' ? 'top right' : 'top left',
-        contain: 'layout style',
+        contain: 'layout paint style',
+        backfaceVisibility: 'hidden',
         ...(mode === 'left' ? { left: 0 } : { right: 0 }),
       }
 

@@ -112,7 +112,7 @@ const definitions: HostCommandDefinition[] = [
         options: command.input.options,
       })
       if (!taskId) throw new HostCommandError('COMMAND_REJECTED', '生成任务未创建，请检查输入和当前模式', true)
-      return { taskId }
+      return { taskId, status: 'submitted' as const }
     }
   ),
   defineHostCommand('cancel_generation_task', cancelGenerationTaskCommandSchema, ['generation'], async (command, context) => {

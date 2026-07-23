@@ -29,7 +29,28 @@ import type {
 const logger = createMainLogger('ai-runtime')
 
 function toLogError(error: unknown): unknown {
-  return error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+  if (!(error instanceof Error)) return error
+  const cause = (error as Error & { cause?: unknown }).cause
+  const causeSummary = cause && typeof cause === 'object'
+    ? {
+        name: typeof (cause as Record<string, unknown>).name === 'string'
+          ? (cause as Record<string, unknown>).name
+          : undefined,
+        code: typeof (cause as Record<string, unknown>).code === 'string'
+          ? (cause as Record<string, unknown>).code
+          : undefined,
+        message: typeof (cause as Record<string, unknown>).message === 'string'
+          ? (cause as Record<string, unknown>).message
+          : undefined,
+      }
+    : undefined
+  return {
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+    code: error instanceof AiRuntimeError ? error.code : undefined,
+    cause: causeSummary,
+  }
 }
 
 export function getProviderKeyStatus(): ProviderKeyStatusDto[] {

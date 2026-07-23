@@ -23,7 +23,10 @@ function createContext(): HostContextSnapshot {
   }
 }
 
-function createGateway(risk: 'R0' | 'R2' = 'R0'): { gateway: AgentToolGateway; calls: string[] } {
+function createGateway(
+  risk: 'R0' | 'R1' | 'R2' | 'R3' = 'R0',
+  readOnly = risk === 'R0'
+): { gateway: AgentToolGateway; calls: string[] } {
   const calls: string[] = []
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
@@ -35,13 +38,13 @@ function createGateway(risk: 'R0' | 'R2' = 'R0'): { gateway: AgentToolGateway; c
     side: 'backend',
     risk,
     permission: 'test:execute',
-    readOnly: risk === 'R0',
+    readOnly,
     destructive: false,
-    openWorld: risk === 'R2',
+    openWorld: risk === 'R2' || risk === 'R3',
     idempotent: true,
     timeoutMs: 1_000,
     retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
-    supportsPreview: risk === 'R2',
+    supportsPreview: risk === 'R2' || risk === 'R3',
     supportsUndo: false,
     requiredContext: ['generation'],
     inputSchema: z.object({ value: z.string().min(1) }).strict(),
@@ -66,7 +69,11 @@ function createGateway(risk: 'R0' | 'R2' = 'R0'): { gateway: AgentToolGateway; c
   return { gateway: new AgentToolGateway({ registry, getHostContext: createContext }), calls }
 }
 
-function request(input: unknown, approvalId?: string) {
+function request(
+  input: unknown,
+  approvalId?: string,
+  approvalMode: 'ask' | 'assistant_decides' | 'full_access' = 'ask'
+) {
   return {
     runId: 'run-1',
     threadId: 'thread-1',
@@ -75,6 +82,7 @@ function request(input: unknown, approvalId?: string) {
     input,
     expectedRevisions: { generation: 2 },
     approvalId,
+    approvalMode,
     explicitUserIntent: true,
     signal: new AbortController().signal,
   }
@@ -107,6 +115,36 @@ describe('AgentToolGateway', () => {
     expect(calls).toEqual(['approved'])
     expect(await gateway.execute(request({ value: 'approved' }, pending.approval.approvalId)))
       .toMatchObject({ status: 'completed', cached: true })
+  })
+
+  it('三种批准方式按风险与只读属性执行', async () => {
+    const assistantRead = createGateway('R2', true)
+    expect(await assistantRead.gateway.execute(request(
+      { value: 'read' },
+      undefined,
+      'assistant_decides'
+    ))).toMatchObject({ status: 'completed' })
+
+    const assistantWrite = createGateway('R2', false)
+    expect(await assistantWrite.gateway.execute(request(
+      { value: 'write' },
+      undefined,
+      'assistant_decides'
+    ))).toMatchObject({ status: 'approval_required' })
+
+    const fullWrite = createGateway('R2', false)
+    expect(await fullWrite.gateway.execute(request(
+      { value: 'full' },
+      undefined,
+      'full_access'
+    ))).toMatchObject({ status: 'completed' })
+
+    const fullHighRisk = createGateway('R3', false)
+    expect(await fullHighRisk.gateway.execute(request(
+      { value: 'high-risk' },
+      undefined,
+      'full_access'
+    ))).toMatchObject({ status: 'approval_required' })
   })
 
   it('拒绝陈旧 context revision', async () => {

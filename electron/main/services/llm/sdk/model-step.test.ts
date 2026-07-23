@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { simulateReadableStream } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
 
@@ -58,6 +58,28 @@ describe('executeModelStepWithModel', () => {
     expect(result.usage).toMatchObject({ inputTokens: 11, cacheReadTokens: 4, reasoningTokens: 2, totalTokens: 16 })
     expect(result.responseMessages).toHaveLength(1)
     expect(events).toEqual(['TextDelta', 'ReasoningDelta'])
+  })
+
+  it('系统规则通过 SDK system 选项传递且不触发 system message 警告', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const model = new MockLanguageModelV3({
+      doStream: {
+        stream: simulateReadableStream({ chunks: [
+          { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
+        ] }),
+      },
+    })
+
+    await executeModelStepWithModel(
+      createInput({ system: '只遵循可信系统规则。' }),
+      model,
+      () => undefined,
+      new AbortController().signal
+    )
+
+    expect(warning).not.toHaveBeenCalled()
+    expect(model.doStreamCalls[0].prompt[0]).toMatchObject({ role: 'system' })
+    warning.mockRestore()
   })
 
   it('工具只返回调用意图且不会在 SDK 内执行', async () => {

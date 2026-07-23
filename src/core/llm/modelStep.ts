@@ -38,6 +38,7 @@ export const modelStepInputSchema = z.object({
   modelId: z.string().min(1),
   adapter: z.string().optional(),
   baseUrl: z.string().optional(),
+  system: z.string().min(1).max(64 * 1024).optional(),
   messages: z.array(modelStepMessageSchema).min(1),
   tools: z.array(modelStepToolSchema).optional(),
   output: z.discriminatedUnion('mode', [

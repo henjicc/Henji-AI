@@ -20,6 +20,7 @@ function request(): AgentStartRunRequest {
     schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
     threadId: 'thread-canvas',
     goal: '在画布添加两个节点并连接定位',
+    approvalMode: 'ask',
     profile: {
       id: 'profile-canvas', name: '画布评测',
       primary: { providerId: 'provider', modelId: 'model' },
@@ -124,6 +125,18 @@ describe('AgentRunner canvas batch', () => {
         gateway,
         getHostContext: () => context,
         runModelStep: vi.fn(async (input: ModelStepInput) => {
+          if (input.stepId.startsWith('router:')) {
+            return {
+              ...stepResult(input, 2),
+              text: '',
+              structuredOutput: {
+                intent: 'canvas',
+                complexity: 'multi_step',
+                reason: '用户要求编排画布节点',
+              },
+              responseMessages: [{ role: 'assistant' as const, content: '' }],
+            }
+          }
           modelCall += 1
           return stepResult(input, modelCall)
         }),

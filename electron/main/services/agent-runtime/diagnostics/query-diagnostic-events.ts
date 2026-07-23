@@ -11,7 +11,7 @@ const logger = createMainLogger('main.agent_diagnostics')
 const MAX_WINDOW_MS = 30 * 60 * 1_000
 const QUERY_PAGE_SIZE = 200
 const MAX_PAGES_PER_DATE = 3
-const MAX_EVIDENCE = 40
+const MAX_EVIDENCE = 16
 const SAFE_DETAIL_KEYS = new Set(['code', 'errorCode', 'status', 'httpStatus', 'retryable', 'reason', 'stage'])
 
 export const diagnosticQueryInputSchema = z.object({
@@ -180,7 +180,7 @@ export function createQueryDiagnosticEventsTool(): AgentToolDefinition {
     name: 'query_diagnostic_events',
     version: 1,
     title: '查询诊断事件',
-    description: '在最多 30 分钟时间窗内查询脱敏日志证据；requestId 优先，并排除当前运行和 Agent 自身日志。',
+    description: '在最多 30 分钟时间窗内一次性查询脱敏日志证据；requestId 优先。通常请求 5～10 条，已有结果足以形成结论时不得重复查询。',
     category: 'diagnostics',
     side: 'backend',
     risk: 'R2',
@@ -190,6 +190,7 @@ export function createQueryDiagnosticEventsTool(): AgentToolDefinition {
     openWorld: true,
     idempotent: true,
     timeoutMs: 10_000,
+    maxCallsPerRun: 1,
     retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
     supportsPreview: true,
     supportsUndo: false,

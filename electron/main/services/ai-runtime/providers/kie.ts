@@ -2,6 +2,7 @@ import { AiRuntimeError } from '../errors'
 import { POLL_QUERY_FAILED, pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
+import { fetchProvider } from './provider-fetch'
 
 const KIE_BASE_URL = 'https://api.kie.ai'
 const KIE_STATUS_ENDPOINT = '/api/v1/jobs/recordInfo'
@@ -30,7 +31,7 @@ export async function continuePolling(input: ProviderContinuePollingInput): Prom
 }
 
 async function sendCreateTask(input: ProviderExecutionInput, endpoint: string): Promise<JsonValue> {
-  const response = await fetch(endpoint, {
+  const response = await fetchProvider('KIE', endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
@@ -38,6 +39,9 @@ async function sendCreateTask(input: ProviderExecutionInput, endpoint: string): 
     },
     body: JSON.stringify(input.body),
     signal: input.signal,
+  }, {
+    // 只对尚未建立连接的错误重试；连接建立后的失败可能已创建计费任务，禁止盲目重放。
+    retryPreconnectOnce: true,
   })
   const payload = await readJsonResponse(response, 'KIE')
   const code = getPointer(payload, '/code')
@@ -50,9 +54,11 @@ async function sendCreateTask(input: ProviderExecutionInput, endpoint: string): 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
   return await pollUntilResult(input, async () => {
     const endpoint = `${KIE_BASE_URL}${KIE_STATUS_ENDPOINT}?taskId=${encodeURIComponent(input.taskId)}`
-    const response = await fetch(endpoint, {
+    const response = await fetchProvider('KIE', endpoint, {
       headers: { Authorization: `Bearer ${input.apiKey}` },
       signal: input.signal,
+    }, {
+      retryPreconnectOnce: true,
     })
     const payload = await readJsonResponse(response, 'KIE')
     const code = getPointer(payload, '/code')

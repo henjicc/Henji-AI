@@ -1,7 +1,8 @@
 import { useCallback } from 'react'
 import { Send, Square } from 'lucide-react'
 
-import { PromptEditor, UiButton } from '@/components/ui'
+import { Dropdown, PromptEditor, UiButton } from '@/components/ui'
+import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
 import {
   toModelPromptText,
   type PromptDocumentV1,
@@ -13,7 +14,15 @@ interface AssistantComposerProps {
   onSubmit: (goal: string) => void
   disabled: boolean
   submitting: boolean
+  approvalMode: AgentApprovalMode
+  onApprovalModeChange: (mode: AgentApprovalMode) => void
 }
+
+const approvalModeOptions: Array<{ value: AgentApprovalMode; label: string }> = [
+  { value: 'ask', label: '每次询问' },
+  { value: 'assistant_decides', label: '助手判断' },
+  { value: 'full_access', label: '充分访问' },
+]
 
 export function AssistantComposer({
   value,
@@ -21,6 +30,8 @@ export function AssistantComposer({
   onSubmit,
   disabled,
   submitting,
+  approvalMode,
+  onApprovalModeChange,
 }: AssistantComposerProps): JSX.Element {
   const submit = useCallback((): void => {
     const goal = toModelPromptText(value).trim()
@@ -45,7 +56,24 @@ export function AssistantComposer({
         editorClassName="max-h-32 min-h-[72px] overflow-y-auto px-3 py-2.5 text-sm"
       />
       <div className="mt-2 flex items-center justify-between gap-3">
-        <span className="text-[11px] text-text-muted">Enter 发送 · Shift+Enter 换行</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <Dropdown<AgentApprovalMode>
+            value={approvalMode}
+            options={approvalModeOptions}
+            onSelect={onApprovalModeChange}
+            minWidthStrategy="options"
+            panelWidthStrategy="options"
+            buttonClassName="!h-7 !rounded-md !px-2 text-[11px]"
+            panelClassName="text-xs"
+          />
+          <span className="hidden truncate text-[10px] text-text-muted min-[440px]:inline">
+            {approvalMode === 'ask'
+              ? '风险操作逐次确认'
+              : approvalMode === 'assistant_decides'
+                ? '安全读取自动执行'
+                : '允许操作自动执行，高风险仍确认'}
+          </span>
+        </div>
         <UiButton
           type="button"
           size="sm"

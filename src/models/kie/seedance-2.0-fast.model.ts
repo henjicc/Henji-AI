@@ -91,7 +91,7 @@ export const kieSeedance20FastModel = defineModel({
       type: 'switch',
       order: 5,
       name: sharedFieldText('generateAudio'),
-      default: true
+      default: false
     },
     {
       id: 'kieSeedance20FastWebSearch',
@@ -119,7 +119,7 @@ export const kieSeedance20FastModel = defineModel({
       const mode = params.kieSeedance20FastMode === 'reference-to-video' ? 'reference-to-video' : 'text-image-to-video'
       const resolution = params.kieSeedance20FastResolution || params.resolution || '720p'
       const duration = Number(params.kieSeedance20FastDuration ?? params.duration ?? 5)
-      const generateAudio = params.kieSeedance20FastGenerateAudio !== undefined ? params.kieSeedance20FastGenerateAudio === true : true
+      const generateAudio = params.kieSeedance20FastGenerateAudio === true
       const webSearch = params.kieSeedance20FastWebSearch === true
       const aspectRatio = params.kieSeedance20FastAspectRatio || params.aspect_ratio || 'smart'
 

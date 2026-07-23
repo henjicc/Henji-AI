@@ -32,7 +32,7 @@ describe('queryDiagnosticEvidence', () => {
       subjectRequestId: 'subject-run',
       from: '2026-07-23T00:00:00.000Z',
       to: '2026-07-23T00:10:00.000Z',
-      limit: 20,
+      limit: 10,
     }, 'diagnostic-run', {
       listDates: () => Promise.resolve(['2026-07-23']),
       query,
@@ -56,7 +56,7 @@ describe('queryDiagnosticEvidence', () => {
     const output = await queryDiagnosticEvidence({
       from: '2026-07-23T00:00:00.000Z',
       to: '2026-07-23T00:10:00.000Z',
-      limit: 20,
+      limit: 10,
     }, 'diagnostic-run', {
       listDates: () => Promise.resolve(['2026-07-23']),
       query,
@@ -84,7 +84,7 @@ describe('queryDiagnosticEvidence', () => {
       subjectRequestId: 'subject-run',
       from: '2026-07-23T00:00:00.000Z',
       to: '2026-07-23T00:10:00.000Z',
-      limit: 20,
+      limit: 10,
     }, 'diagnostic-run', {
       listDates: () => Promise.resolve(['2026-07-23']),
       query,
@@ -95,19 +95,24 @@ describe('queryDiagnosticEvidence', () => {
     expect(output.truncated).toBe(false)
   })
 
-  it('C2 诊断证据要求逐次预览审批后才能发送给模型', async () => {
+  it('C2 诊断证据保留预览，并限制每轮只查询一次', async () => {
     const tool = createQueryDiagnosticEventsTool()
     const preview = await tool.preview?.({
       subjectRequestId: 'subject-run',
       from: '2026-07-23T00:00:00.000Z',
       to: '2026-07-23T00:10:00.000Z',
-      limit: 20,
+      limit: 10,
     }, {
       runId: 'diagnostic-run', threadId: 'thread-1', toolCallId: 'call-1',
       signal: new AbortController().signal, hostContext: null,
     })
 
-    expect(tool).toMatchObject({ risk: 'R2', openWorld: true, supportsPreview: true })
+    expect(tool).toMatchObject({
+      risk: 'R2',
+      openWorld: true,
+      supportsPreview: true,
+      maxCallsPerRun: 1,
+    })
     expect(preview).toMatchObject({
       dataClasses: ['C2'],
       destination: '当前智能助手模型 Provider',

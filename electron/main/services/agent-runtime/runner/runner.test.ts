@@ -33,6 +33,7 @@ function runRequest(goal: string): AgentStartRunRequest {
     schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
     threadId: 'thread-1',
     goal,
+    approvalMode: 'ask',
     profile: {
       id: 'profile-1',
       name: '测试配置',
@@ -200,6 +201,17 @@ describe('AgentRunner', () => {
     const { gateway } = createRuntime(registry)
     let primaryCalls = 0
     const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      if (input.stepId.startsWith('router:')) {
+        return result(input, {
+          text: '',
+          structuredOutput: {
+            intent: 'generate',
+            complexity: 'simple',
+            reason: '用户要求生成图片',
+          },
+          responseMessages: [{ role: 'assistant', content: '' }],
+        })
+      }
       primaryCalls += 1
       if (primaryCalls === 1) {
         return result(input, {

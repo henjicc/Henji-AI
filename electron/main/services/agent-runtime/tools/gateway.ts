@@ -101,7 +101,17 @@ function validateContext(
   }
 }
 
-function requiresApproval(definition: AgentToolDefinition, explicitUserIntent: boolean): boolean {
+function requiresApproval(
+  definition: AgentToolDefinition,
+  explicitUserIntent: boolean,
+  mode: AgentToolExecuteRequest['approvalMode']
+): boolean {
+  if (mode === 'full_access') return definition.risk === 'R3'
+  if (mode === 'assistant_decides') {
+    if (definition.risk === 'R0' || definition.risk === 'R1') return false
+    if (definition.risk === 'R2' && definition.readOnly && !definition.destructive) return false
+    return true
+  }
   if (definition.risk === 'R2' || definition.risk === 'R3') return true
   return definition.risk === 'R1' && !explicitUserIntent
 }
@@ -139,6 +149,7 @@ export class AgentToolGateway {
   readonly approvals: AgentApprovalManager
   private readonly ledger: AgentIdempotencyLedger
   private readonly locks = new Set<string>()
+  private readonly executionCounts = new Map<string, number>()
 
   constructor(private readonly options: AgentToolGatewayOptions) {
     this.approvals = options.approvals ?? new AgentApprovalManager()
@@ -174,7 +185,7 @@ export class AgentToolGateway {
         return agentToolGatewayResultSchema.parse({ status: 'completed', observation: existing.observation, cached: true })
       }
 
-      if (requiresApproval(definition, request.explicitUserIntent)) {
+      if (requiresApproval(definition, request.explicitUserIntent, request.approvalMode)) {
         if (!request.approvalId) {
           const approval = this.approvals.create({
             runId: request.runId,
@@ -196,6 +207,18 @@ export class AgentToolGateway {
         )
       }
 
+      const executionCountKey = `${request.runId}:${definition.name}`
+      const executionCount = this.executionCounts.get(executionCountKey) ?? 0
+      if (
+        definition.maxCallsPerRun !== undefined
+        && executionCount >= definition.maxCallsPerRun
+      ) {
+        throw new AgentToolGatewayError(
+          'CONFLICT',
+          `${definition.title} 在本次任务中已达到调用上限，请使用已有结果继续`
+        )
+      }
+
       const begun = this.ledger.begin(ledgerKey, inputDigest)
       if (begun.status === 'cached') {
         return agentToolGatewayResultSchema.parse({ status: 'completed', observation: begun.observation, cached: true })
@@ -207,6 +230,9 @@ export class AgentToolGateway {
         throw new AgentToolGatewayError('CONFLICT', `工具并发键冲突：${concurrencyKey}`, true, 'wait')
       }
       this.locks.add(concurrencyKey)
+      if (definition.maxCallsPerRun !== undefined) {
+        this.executionCounts.set(executionCountKey, executionCount + 1)
+      }
       logger.info('Agent 工具执行开始', {
         event: 'agent_tool.execute.started',
         requestId: request.runId,
@@ -241,6 +267,9 @@ export class AgentToolGateway {
         })
         return agentToolGatewayResultSchema.parse({ status: 'completed', observation, cached: false })
       } catch (error) {
+        if (definition.maxCallsPerRun !== undefined) {
+          this.executionCounts.set(executionCountKey, executionCount)
+        }
         if (!definition.readOnly && linked.controller.signal.aborted) this.ledger.markUnknown(ledgerKey)
         else this.ledger.fail(ledgerKey)
         throw error

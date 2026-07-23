@@ -172,6 +172,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     }).strict(),
     outputSchema: z.object({
       taskId: z.string().min(1),
+      status: z.literal('submitted'),
       revision: z.number().int().nonnegative(),
       scopeRevisions: z.record(z.string(), z.number()),
     }).passthrough(),
@@ -205,7 +206,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     concurrencyKey: (input) => `generation:${input.modelId}`,
     targetIds: (input) => ({ modelId: input.modelId }),
     dataClasses: () => ['C1'],
-    summarize: (output) => `已创建可见生成任务 ${String(output.taskId)}。`,
+    summarize: (output) => `生成任务 ${String(output.taskId)} 已提交，正在排队或生成；当前尚不能视为生成成功。`,
   })
 
   const getGenerationTask = defineAgentTool({

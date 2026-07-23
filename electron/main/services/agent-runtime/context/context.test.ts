@@ -47,8 +47,12 @@ describe('AgentIntentRouter', () => {
     expect(result).toMatchObject({ intent: 'general', source: 'fallback', path: 'primary' })
   })
 
-  it('明确画布编排请求走确定性 canvas 工具域', async () => {
-    const classifier = vi.fn()
+  it('自然语言画布编排请求由模型理解语义，本地策略决定工具域', async () => {
+    const classifier = vi.fn().mockResolvedValue({
+      intent: 'canvas',
+      complexity: 'multi_step',
+      reason: '用户要求编排多个画布节点',
+    })
     const router = new AgentIntentRouter(classifier)
     const result = await router.route(
       'run-canvas',
@@ -56,12 +60,16 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(),
       new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'canvas', source: 'deterministic', toolDomains: ['canvas'] })
-    expect(classifier).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ intent: 'canvas', source: 'router_model', toolDomains: ['canvas'] })
+    expect(classifier).toHaveBeenCalledOnce()
   })
 
-  it('明确长期偏好请求走用户指令工具域', async () => {
-    const classifier = vi.fn()
+  it('自然语言长期偏好请求由模型理解语义，本地策略决定工具域', async () => {
+    const classifier = vi.fn().mockResolvedValue({
+      intent: 'user_instructions',
+      complexity: 'simple',
+      reason: '用户要求长期保存供应商偏好',
+    })
     const router = new AgentIntentRouter(classifier)
     const result = await router.route(
       'run-preferences',
@@ -71,14 +79,18 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'user_instructions',
-      source: 'deterministic',
+      source: 'router_model',
       toolDomains: ['user_instructions'],
     })
-    expect(classifier).not.toHaveBeenCalled()
+    expect(classifier).toHaveBeenCalledOnce()
   })
 
-  it('包含照片等自然表达的媒体生成请求直接进入生成工具链', async () => {
-    const classifier = vi.fn()
+  it('包含照片等自然表达的媒体生成请求由模型理解后进入生成工具链', async () => {
+    const classifier = vi.fn().mockResolvedValue({
+      intent: 'generate',
+      complexity: 'simple',
+      reason: '用户希望生成一张视觉图片',
+    })
     const router = new AgentIntentRouter(classifier)
     const result = await router.route(
       'run-photo',
@@ -88,11 +100,11 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'generate',
-      source: 'deterministic',
+      source: 'router_model',
       path: 'workflow',
       toolDomains: ['models', 'generation', 'navigation'],
     })
-    expect(classifier).not.toHaveBeenCalled()
+    expect(classifier).toHaveBeenCalledOnce()
   })
 
   it('router 模型只负责分类，工具域由本地策略决定', async () => {
@@ -140,7 +152,8 @@ describe('AgentContextBuilder', () => {
       contextWindowBudget: 8_000,
     })
     expect(result.offloaded).toHaveLength(1)
-    expect(result.messages[0]).toMatchObject({ role: 'system' })
+    expect(result.system).toContain('受控智能助手')
+    expect(result.messages.every((message) => message.role !== 'system')).toBe(true)
     expect(String(result.messages[0].content)).not.toContain('上传密钥')
     expect(String(result.messages.at(-1)?.content)).toContain('UNTRUSTED_OBSERVATION')
     expect(String(result.messages.at(-1)?.content)).toContain('artifact:')
@@ -219,14 +232,14 @@ describe('AgentContextBuilder', () => {
       activeToolNames: [],
       contextWindowBudget: 8_000,
     })
-    const systemPrompt = String(result.messages[0].content)
+    const systemPrompt = result.system
     expect(systemPrompt).toContain('tags、输入约束和参数 schema 是硬约束')
     expect(systemPrompt).toContain('使用空 query + mediaType')
     expect(systemPrompt).toContain('先切换到生成工作区')
     expect(systemPrompt).toContain('用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向')
     expect(systemPrompt).toContain('用户指令是用户主动维护的高优先级自然语言偏好')
-    expect(String(result.messages[1].content)).toContain('图片生成优先使用 PPIO')
-    expect(String(result.messages[1].content)).toContain('UNTRUSTED_USER_INSTRUCTIONS')
+    expect(String(result.messages[0].content)).toContain('图片生成优先使用 PPIO')
+    expect(String(result.messages[0].content)).toContain('UNTRUSTED_USER_INSTRUCTIONS')
   })
 
   it('用户指令只自动脱敏秘密并保留其他正常内容', () => {
