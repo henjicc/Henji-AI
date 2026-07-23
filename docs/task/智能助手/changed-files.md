@@ -130,3 +130,23 @@
 ### 自动生成但未纳入改动
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
+
+## 第四阶段 · 手动验收交互修复
+
+### 新增
+
+- `src/features/assistant/hooks/useAssistantPanelInteraction.ts` 及测试：统一悬浮拖动、三种形态尺寸调整、逐帧视觉更新、可视区约束和键盘操作。
+
+### 修改
+
+- `src/features/assistant/AssistantSidebar.tsx`：拆分定位外壳与开合动画内层；增加左右停靠内侧宽度手柄，以及悬浮右边、下边和右下角缩放手柄。
+- `src/App.tsx`、`src/components/TabContainer.tsx`：工作区避让改为消费根级助手宽度变量，缩放期间即时跟随且不触发 App 对话树重渲染。
+- `docs/task/智能助手/00-任务总览.md`、`重要记录.md`、4.1 任务文件及五份阶段记录：同步根因、实现、验证结果和手动复验步骤。
+
+### 删除/替换
+
+- `src/features/assistant/hooks/useAssistantFloatingDrag.ts` 及测试：由覆盖拖动与缩放的 `useAssistantPanelInteraction` 替代，消除每次指针移动写 React 状态的旧路径。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
