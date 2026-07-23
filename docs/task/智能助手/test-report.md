@@ -474,3 +474,43 @@
 - 观察含长消息、Markdown 和多条工具轨迹时的悬浮拖动与缩放手感。
 - 复现一次 KIE 临时断网，确认错误包含稳定网络码且任务列表没有重复任务。
 - 确认诊断答复先给结论、原因和步骤，GFM 列表/代码/链接可读，工具轨迹默认单行折叠。
+
+## 第六阶段 · 开始基线
+
+- 基线提交：`a85dbe4`
+- 基线自动化：75 个测试文件、348 个用例通过；renderer/Electron TypeScript、前后端 ESLint、颜色与模型 i18n 检查通过。
+- 本阶段新增验证目标：SQLite migration/往返/版本不匹配/安全恢复、三类评测集、utilityProcess 握手/心跳/崩溃、记忆隐私/过期/冲突/删除和最终长稳。
+
+## 第六阶段 · 持久化、独立进程与记忆治理
+
+- 验证状态：代码与自动化通过；真实 UI 操作、真实 Provider、崩溃体验和 30～60 分钟长稳并入最终统一验收
+- 验证日期：2026-07-23
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| `npm run test:assistant-persistence` | 通过；Electron ABI 下 SQLite 真库 6/6 |
+| `npm run test:assistant-eval` | 通过；9 个文件、33 个用例 |
+| 记忆策略与 SQLite 存储定向测试 | 通过；普通 Node 策略测试与 Electron ABI 真库测试均通过 |
+| `npx tsc --noEmit` | 通过 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 |
+| `npx electron-vite build` | 通过；产出 `out/main/agent-utility.cjs` |
+| `npm run electron:assistant-utility-smoke` | 通过；完成 `agent-utility/v1` 握手 |
+
+### 自动化覆盖
+
+- migration 幂等、run/checkpoint/event/artifact 往返、版本不匹配、安全恢复和新 run 重试。
+- utilityProcess 版本握手；main/utility 契约 schema、心跳、取消和进程退出恢复由实现路径覆盖。
+- 长期记忆默认关闭、秘密/完整日志/文件/提示词拒绝、候选确认、TTL、冲突替换审计、编辑删除清空与相关性检索。
+- 黄金、历史失败、对抗评测覆盖工具次数、嵌套参数、禁止动作、批准风险、日志成对、安全、延迟、token 和可证实费用。
+
+### 待最终统一手动验证
+
+- 重启应用后检查运行历史、`recovery_required` 和显式重试，确认旧工具调用不自动重放。
+- 启用记忆后验证候选确认/拒绝、编辑、TTL、冲突、删除、二次确认清空；确认凭据和安全规则不会保存。
+- 运行中终止 utilityProcess 并观察提示、历史与后续新 run；连续使用 30～60 分钟抽查 CPU、内存、事件顺序和 JSONL 关联。
+
+### 结论
+
+- 第六阶段实现没有代码阻塞；6.1、6.2 完成，6.4、6.5 保持待验证，6.3 按真实需求门槛取消。

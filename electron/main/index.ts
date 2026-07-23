@@ -25,6 +25,7 @@ import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
+import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
@@ -79,4 +80,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  void disposeAgentRuntimeService()
 })

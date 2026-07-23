@@ -1,6 +1,5 @@
 import { createMainLogger } from '../../logging'
 import {
-  AGENT_EVENT_SCHEMA_VERSION,
   agentRunStateSchema,
   type AgentEventInput,
   type AgentRunState,
@@ -13,6 +12,7 @@ import {
   type HostScopeRevisions,
 } from '../../../../../src/core/assistant/hostContracts'
 import { AgentContextBuilder } from '../context/builder'
+import { AgentArtifactStore } from '../context/offload'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentIntentRouter } from '../context/router'
 import type { AgentRouteDecision } from '../context/types'
@@ -20,6 +20,7 @@ import { AgentToolGatewayError } from '../tools/gateway'
 import { digestJson } from '../tools/security'
 import { AgentBudgetTracker } from './budget'
 import { AgentEventStream } from './event-stream'
+import { createInitialAgentRunState } from './initial-state'
 import {
   runPrimaryAgentModelStep,
   runRouterModelClassification,
@@ -49,7 +50,7 @@ export class AgentRunner {
   private readonly budget: AgentBudgetTracker
   private readonly events: AgentEventStream
   private readonly models
-  private readonly contextBuilder = new AgentContextBuilder()
+  private readonly contextBuilder: AgentContextBuilder
   private readonly catalogPlanner
   private readonly abortController = new AbortController()
   private readonly conversation: ModelStepMessage[] = []
@@ -65,27 +66,12 @@ export class AgentRunner {
     this.models = selectAgentRuntimeModels(options.request)
     this.budget = new AgentBudgetTracker(options.request.budget)
     this.events = new AgentEventStream(options.runId)
+    this.contextBuilder = new AgentContextBuilder(
+      options.dependencies.artifactStore ?? new AgentArtifactStore()
+    )
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
     if (options.dependencies.onEvent) this.events.subscribe(options.dependencies.onEvent)
-    const now = new Date().toISOString()
-    this.state = agentRunStateSchema.parse({
-      schemaVersion: AGENT_EVENT_SCHEMA_VERSION,
-      runId: options.runId,
-      threadId: options.request.threadId,
-      status: 'initializing',
-      sequence: 0,
-      turn: 0,
-      currentStepId: null,
-      currentToolCallId: null,
-      waitingApprovalId: null,
-      startedAt: now,
-      updatedAt: now,
-      finalText: null,
-      error: null,
-      budget: this.budget.config,
-      usage: this.budget.snapshot(),
-      lastScopeRevisions: null,
-    })
+    this.state = createInitialAgentRunState(options.runId, options.request)
   }
 
   start(): AgentRunState {
@@ -191,6 +177,7 @@ export class AgentRunner {
           runId: this.options.runId,
           goal: this.options.request.goal,
           userInstructions: this.options.request.userInstructions,
+          memoryContext: this.options.memoryContext,
           snapshot: currentSnapshot,
           route,
           conversation: this.conversation,
@@ -518,6 +505,7 @@ export class AgentRunner {
     const event = this.events.emit(input)
     this.state.sequence = event.sequence
     this.refreshState()
+    this.options.dependencies.onCheckpoint?.(this.getState())
   }
 
   private refreshState(): void {

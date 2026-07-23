@@ -14,6 +14,13 @@ export function createElectronAssistant(): AssistantPlatform {
     updateUserInstructions: (update) => getNativeAssistant().updateUserInstructions(update),
     resetUserInstructions: () => getNativeAssistant().resetUserInstructions(),
     openUserInstructionsFile: () => getNativeAssistant().openUserInstructionsFile(),
+    getMemoryState: () => getNativeAssistant().getMemoryState(),
+    updateMemorySettings: (update) => getNativeAssistant().updateMemorySettings(update),
+    updateMemory: (update) => getNativeAssistant().updateMemory(update),
+    confirmMemoryCandidate: (candidateId) => getNativeAssistant().confirmMemoryCandidate(candidateId),
+    rejectMemoryCandidate: (candidateId) => getNativeAssistant().rejectMemoryCandidate(candidateId),
+    deleteMemory: (memoryId) => getNativeAssistant().deleteMemory(memoryId),
+    clearMemories: (scope) => getNativeAssistant().clearMemories(scope),
     publishHostContext: (snapshot) => getNativeAssistant().publishHostContext(snapshot),
     acknowledgeFrontendTool: (acknowledgement) => getNativeAssistant().acknowledgeFrontendTool(acknowledgement),
     completeFrontendTool: (result) => getNativeAssistant().completeFrontendTool(result),
@@ -26,6 +33,8 @@ export function createElectronAssistant(): AssistantPlatform {
     respondApproval: (request) => getNativeAssistant().respondApproval(request),
     getRunState: (request) => getNativeAssistant().getRunState(request),
     getRunSnapshot: (request) => getNativeAssistant().getRunSnapshot(request),
+    listRuns: (request) => getNativeAssistant().listRuns(request),
+    retryRun: (request) => getNativeAssistant().retryRun(request),
     subscribeEvents: (handler) => getNativeAssistant().subscribeEvents(handler),
   }
 }

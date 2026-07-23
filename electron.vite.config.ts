@@ -13,6 +13,7 @@ export default defineConfig({
         external: ['better-sqlite3', 'ffmpeg-static', 'ffprobe-static'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
+          'agent-utility': resolve(__dirname, 'electron/main/agent-utility.ts'),
         },
         output: {
           format: 'cjs',

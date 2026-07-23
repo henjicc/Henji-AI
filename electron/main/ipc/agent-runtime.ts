@@ -4,6 +4,10 @@ import {
   agentRunControlRequestSchema,
   agentStartRunRequestSchema,
 } from '../../../src/core/assistant/runtimeContracts'
+import {
+  agentListRunsRequestSchema,
+  agentRetryRunRequestSchema,
+} from '../../../src/core/assistant/persistence'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
 import { getAssistantUserInstructions } from '../services/assistant/user-instructions'
 import { assertTrustedAssistantRenderer } from './assistant'
@@ -41,4 +45,16 @@ export function registerAgentRuntimeIpc(): void {
   registerIpcHandler('assistant:agent:getRunSnapshot', input => agentRunControlRequestSchema.parse(input), (request, event) => (
     runtime.getRunSnapshot(event.sender, request.runId)
   ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:listRuns', input => agentListRunsRequestSchema.parse(input), (request) => (
+    runtime.listRuns(request.threadId, request.limit)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler(
+    'assistant:agent:retryRun',
+    input => agentRetryRunRequestSchema.parse(input),
+    async (request, event) => {
+      const instructions = await getAssistantUserInstructions()
+      return runtime.retryRun(event.sender, request.runId, instructions.content || undefined)
+    },
+    assertTrustedAssistantRenderer
+  )
 }

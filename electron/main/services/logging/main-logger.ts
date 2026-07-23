@@ -1,5 +1,6 @@
 import { appendLogEvents } from './push'
 import type { MainLogEvent, MainLogLevel } from './types'
+import { AGENT_UTILITY_PROTOCOL_VERSION } from '../../../../src/core/assistant/utilityContracts'
 
 /**
  * 主进程侧 logger 调用参数，接口对齐渲染层 `src/core/logging/logger.ts` 的
@@ -47,6 +48,15 @@ function logAt(domain: string, level: MainLogLevel, message: string, meta: MainL
     context: meta.context,
     error: meta.error,
     source: 'backend',
+  }
+
+  if (process.parentPort) {
+    process.parentPort.postMessage({
+      type: 'utility.log',
+      protocolVersion: AGENT_UTILITY_PROTOCOL_VERSION,
+      event,
+    })
+    return
   }
 
   // 主进程日志属于诊断信息，写入失败不应影响调用方的主业务流程，此处静默吞掉。

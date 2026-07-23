@@ -9,6 +9,12 @@ const toolsByDomain: Readonly<Record<string, string[]>> = {
   models: ['search_models', 'get_model_schema'],
   generation: ['create_visible_generation_task', 'get_generation_task', 'cancel_generation_task'],
   user_instructions: ['get_user_instructions', 'update_user_instructions'],
+  memory: [
+    'list_agent_memories',
+    'propose_agent_memory',
+    'confirm_agent_memory',
+    'reject_agent_memory',
+  ],
   diagnostics: ['query_diagnostic_events'],
   canvas: [
     'list_canvas_projects',

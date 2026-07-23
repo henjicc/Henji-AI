@@ -2,6 +2,7 @@ import { app } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
+import { runAgentSchemaMigrations } from './agent-runtime/persistence/migrations'
 
 export type SqlBindValue = string | number | boolean | null | Uint8Array
 
@@ -226,6 +227,7 @@ export function initializeSchema(conn: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_asset_library_items_asset ON asset_library_items(asset_id);
     CREATE INDEX IF NOT EXISTS idx_asset_tag_items_asset ON asset_tag_items(asset_id);
   `)
+  runAgentSchemaMigrations(conn)
 }
 
 export function getDb(): Database.Database {

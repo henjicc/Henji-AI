@@ -18,6 +18,7 @@ const categorySearchConcepts: Readonly<Record<string, string[]>> = {
   navigation: ['action:navigate', 'action:generate'],
   diagnostics: ['action:diagnose'],
   user_instructions: ['settings:user_instructions'],
+  memory: ['settings:memory'],
 }
 
 function normalizeSearchValue(value: string): string {
@@ -56,6 +57,10 @@ export class AgentToolRegistry {
 
   get(name: string): AgentToolDefinition | undefined {
     return this.definitions.get(name)
+  }
+
+  allDefinitions(): AgentToolDefinition[] {
+    return [...this.definitions.values()]
   }
 
   list(context: HostContextSnapshot | null = null): AgentToolCatalogEntry[] {

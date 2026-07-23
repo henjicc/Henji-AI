@@ -1,0 +1,190 @@
+import type Database from 'better-sqlite3'
+
+interface SchemaMigration {
+  version: number
+  name: string
+  up: (database: Database.Database) => void
+}
+
+const migrations: SchemaMigration[] = [
+  {
+    version: 1,
+    name: 'agent-runtime-persistence',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS agent_threads (
+          thread_id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          last_run_id TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS agent_runs (
+          run_id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES agent_threads(thread_id) ON DELETE CASCADE,
+          goal TEXT NOT NULL,
+          request_json TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          status TEXT NOT NULL,
+          checkpoint_version TEXT NOT NULL,
+          checkpoint_json TEXT NOT NULL,
+          recovery_status TEXT NOT NULL DEFAULT 'none'
+            CHECK (recovery_status IN ('none', 'recovery_required', 'retried')),
+          parent_run_id TEXT REFERENCES agent_runs(run_id),
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_thread_updated
+          ON agent_runs(thread_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_status_updated
+          ON agent_runs(status, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS agent_events (
+          run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+          sequence INTEGER NOT NULL,
+          event_id TEXT NOT NULL UNIQUE,
+          event_json TEXT NOT NULL,
+          occurred_at INTEGER NOT NULL,
+          PRIMARY KEY (run_id, sequence)
+        );
+
+        CREATE TABLE IF NOT EXISTS agent_artifacts (
+          artifact_ref TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+          source TEXT NOT NULL,
+          data_classes_json TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          original_bytes INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_artifacts_run
+          ON agent_artifacts(run_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS agent_messages (
+          message_id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES agent_threads(thread_id) ON DELETE CASCADE,
+          run_id TEXT REFERENCES agent_runs(run_id) ON DELETE SET NULL,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system_event')),
+          content TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_messages_thread_created
+          ON agent_messages(thread_id, created_at ASC);
+
+        CREATE TABLE IF NOT EXISTS agent_permission_audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+          tool_call_id TEXT,
+          action TEXT NOT NULL,
+          outcome TEXT NOT NULL,
+          metadata_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_permission_audit_run
+          ON agent_permission_audit(run_id, created_at ASC);
+      `)
+    },
+  },
+  {
+    version: 2,
+    name: 'agent-memory',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS agent_memory_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          enabled INTEGER NOT NULL DEFAULT 0,
+          default_ttl_days INTEGER NOT NULL DEFAULT 90,
+          updated_at INTEGER NOT NULL
+        );
+
+        INSERT OR IGNORE INTO agent_memory_settings(id, enabled, default_ttl_days, updated_at)
+        VALUES (1, 0, 90, 0);
+
+        CREATE TABLE IF NOT EXISTS agent_memories (
+          memory_id TEXT PRIMARY KEY,
+          scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'workspace', 'project')),
+          scope_id TEXT,
+          kind TEXT NOT NULL CHECK (kind IN ('preference', 'fact', 'workflow')),
+          content TEXT NOT NULL,
+          source_run_id TEXT REFERENCES agent_runs(run_id) ON DELETE SET NULL,
+          source_label TEXT NOT NULL,
+          sensitivity TEXT NOT NULL CHECK (sensitivity IN ('C0', 'C1')),
+          status TEXT NOT NULL CHECK (status IN ('active', 'superseded', 'deleted')),
+          conflict_key TEXT,
+          expires_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_memories_scope_status
+          ON agent_memories(scope_type, scope_id, status, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_agent_memories_expiry
+          ON agent_memories(status, expires_at);
+
+        CREATE TABLE IF NOT EXISTS agent_memory_conflicts (
+          conflict_id TEXT PRIMARY KEY,
+          existing_memory_id TEXT NOT NULL REFERENCES agent_memories(memory_id) ON DELETE CASCADE,
+          replacement_memory_id TEXT NOT NULL REFERENCES agent_memories(memory_id) ON DELETE CASCADE,
+          resolution TEXT NOT NULL CHECK (resolution IN ('replace', 'keep_existing', 'keep_both')),
+          created_at INTEGER NOT NULL
+        );
+      `)
+    },
+  },
+  {
+    version: 3,
+    name: 'agent-memory-candidates',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS agent_memory_candidates (
+          candidate_id TEXT PRIMARY KEY,
+          scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'workspace', 'project')),
+          scope_id TEXT,
+          kind TEXT NOT NULL CHECK (kind IN ('preference', 'fact', 'workflow')),
+          content TEXT NOT NULL,
+          source_run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+          source_label TEXT NOT NULL,
+          conflict_key TEXT,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'rejected', 'expired')),
+          ttl_days INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_memory_candidates_status
+          ON agent_memory_candidates(status, expires_at);
+      `)
+    },
+  },
+]
+
+export function runAgentSchemaMigrations(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS app_schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at INTEGER NOT NULL
+    );
+  `)
+  const applied = new Set(
+    database.prepare('SELECT version FROM app_schema_migrations').all()
+      .map((row) => Number((row as { version: number }).version))
+  )
+  for (const migration of migrations) {
+    if (applied.has(migration.version)) continue
+    database.transaction(() => {
+      migration.up(database)
+      database.prepare(`
+        INSERT INTO app_schema_migrations(version, name, applied_at)
+        VALUES (?, ?, ?)
+      `).run(migration.version, migration.name, Date.now())
+    })()
+  }
+}
+
+export const AGENT_SCHEMA_VERSION = migrations[migrations.length - 1]?.version ?? 0

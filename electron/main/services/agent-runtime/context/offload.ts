@@ -17,10 +17,17 @@ export function shouldOffloadObservation(output: unknown): boolean {
     || recordCount(output) > OFFLOAD_RECORD_THRESHOLD
 }
 
+interface AgentArtifactPersistence {
+  save: (runId: string, artifact: AgentContextArtifact) => void
+  load: (artifactRef: string) => AgentContextArtifact | null
+}
+
 export class AgentArtifactStore {
   private readonly artifacts = new Map<string, AgentContextArtifact>()
 
-  offload(observation: AgentToolObservation, payload: unknown): AgentContextArtifact {
+  constructor(private readonly persistence?: AgentArtifactPersistence) {}
+
+  offload(runId: string, observation: AgentToolObservation, payload: unknown): AgentContextArtifact {
     const artifact: AgentContextArtifact = {
       artifactRef: `artifact:${randomUUID()}`,
       source: `${observation.source.toolName}:${observation.source.toolCallId}`,
@@ -30,11 +37,12 @@ export class AgentArtifactStore {
       payload,
     }
     this.artifacts.set(artifact.artifactRef, artifact)
+    this.persistence?.save(runId, artifact)
     return artifact
   }
 
   get(artifactRef: string): AgentContextArtifact | null {
-    return this.artifacts.get(artifactRef) ?? null
+    return this.artifacts.get(artifactRef) ?? this.persistence?.load(artifactRef) ?? null
   }
 
   deleteRunArtifacts(artifactRefs: string[]): void {

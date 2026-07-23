@@ -159,6 +159,20 @@
 - 只有连接超时、DNS 暂时失败、无路由、域名不存在或连接被拒绝等能证明尚未建立连接的错误允许重试一次；socket 中断、通用超时和其他不明确错误不得重试 POST。
 - 创建任务成功只表示 `submitted`，不是 Provider 生成完成；只有状态查询返回 completed 且结果可用时才能向用户宣称成功。
 
+### D-026 第六阶段按安全恢复优先实施，MCP 无需求不启动
+
+- 运行、事件、checkpoint、artifact、thread 和 memory 使用 SQLite 独立表与版本化 migration；不修改业务表，不复制 JSONL 日志。
+- 应用重启后，未完成 run 统一进入 `recovery_required` 安全状态；waiting tool/approval 和未知副作用不自动重放，只允许用户从已保存目标创建新的重试 run。
+- thread history、用户主动维护的 `user-instructions.md` 与助手长期记忆分开存储、分开入口；长期记忆默认关闭，必须经用户确认后写入。
+- 6.3 是真实第三方需求触发的可选任务。当前不存在 Server/来源/授权/工具消费者，因此状态记为“跳过”，不引入无消费者 MCP 依赖、进程或权限面。
+
+### D-027 独立进程、持久化与记忆保持最小可信边界
+
+- `utilityProcess` 持有 Runner、上下文、模型单步执行和工具网关；main 持有凭据读取、宿主工具执行、SQLite 和窗口生命周期。renderer 不获得新增凭据或 Node 权限。
+- main 与 utility 只通过 `agent-utility/v1` 版本化消息通信；所有 RPC 输入在接收侧复验 schema，utility 退出只标记安全恢复并自动重建进程，不自动重放工具调用。
+- thread history 只保存必要消息索引，run persistence 不持久化完整用户指令副本；每次运行从 main 重新读取用户指令并按需检索已确认记忆。
+- 长期记忆是低优先级、不可信上下文：默认关闭、候选确认后才生效，不能包含秘密或覆盖安全/批准规则；检索按 scope、TTL 和相关性限制数量，日志只记录 ID、scope 和计数。
+
 ## 可调参数
 
 - turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于真实评测调优，但不得绕过安全硬限制。

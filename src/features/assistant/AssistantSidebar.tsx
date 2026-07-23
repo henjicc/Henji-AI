@@ -1,10 +1,12 @@
-import { GripHorizontal, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
-import type { CSSProperties, RefObject } from 'react'
+import { BrainCircuit, GripHorizontal, History, MessageSquareText, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
+import { useState, type CSSProperties, type RefObject } from 'react'
 
 import { UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 
 import { AssistantConversation } from './conversation/AssistantConversation'
+import { AssistantRunHistory } from './history/AssistantRunHistory'
+import { AssistantMemoryPanel } from './memory/AssistantMemoryPanel'
 import { useAssistantPanelInteraction } from './hooks/useAssistantPanelInteraction'
 import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUiStore'
 
@@ -19,6 +21,7 @@ interface AssistantSidebarProps {
 }
 
 export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.Element {
+  const [contentView, setContentView] = useState<'conversation' | 'history' | 'memory'>('conversation')
   const open = useAssistantUiStore((state) => state.open)
   const mode = useAssistantUiStore((state) => state.mode)
   const position = useAssistantUiStore((state) => state.floatingPosition)
@@ -99,13 +102,20 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             {mode === 'floating' ? <GripHorizontal className={`ml-1 h-4 w-4 text-text-muted ${interaction.dragging ? 'text-accent' : ''}`} /> : null}
           </div>
           <div className="flex items-center gap-1" data-assistant-drag-ignore>
+            <UiIconButton type="button" active={contentView === 'conversation'} onClick={() => setContentView('conversation')} title="当前对话" className="!h-7 !w-7 !rounded-md"><MessageSquareText className="h-3.5 w-3.5" /></UiIconButton>
+            <UiIconButton type="button" active={contentView === 'history'} onClick={() => setContentView('history')} title="运行历史" className="!h-7 !w-7 !rounded-md"><History className="h-3.5 w-3.5" /></UiIconButton>
+            <UiIconButton type="button" active={contentView === 'memory'} onClick={() => setContentView('memory')} title="助手记忆" className="!h-7 !w-7 !rounded-md"><BrainCircuit className="h-3.5 w-3.5" /></UiIconButton>
             <UiIconButton type="button" active={mode === 'left'} onClick={() => setMode('left')} title={modeLabels.left} className="!h-7 !w-7 !rounded-md"><PanelLeft className="h-3.5 w-3.5" /></UiIconButton>
             <UiIconButton type="button" active={mode === 'right'} onClick={() => setMode('right')} title={modeLabels.right} className="!h-7 !w-7 !rounded-md"><PanelRight className="h-3.5 w-3.5" /></UiIconButton>
             <UiIconButton type="button" active={mode === 'floating'} onClick={() => setMode('floating')} title={modeLabels.floating} className="!h-7 !w-7 !rounded-md"><PictureInPicture2 className="h-3.5 w-3.5" /></UiIconButton>
             <UiIconButton type="button" onClick={() => setOpen(false)} title="收起智能助手" hoverVariant="danger" className="!h-7 !w-7 !rounded-md"><X className="h-3.5 w-3.5" /></UiIconButton>
           </div>
         </header>
-        <AssistantConversation />
+        {contentView === 'conversation' ? <AssistantConversation /> : null}
+        {contentView === 'history'
+          ? <AssistantRunHistory onOpenConversation={() => setContentView('conversation')} />
+          : null}
+        {contentView === 'memory' ? <AssistantMemoryPanel /> : null}
 
         {mode === 'left' || mode === 'right' ? (
           <div

@@ -104,6 +104,15 @@ describe('minimal assistant evaluator', () => {
 
     expect(summary).toMatchObject({ caseCount: 3, runCount: 9, passedRuns: 9, successRate: 1 })
     expect(summary.p95LatencyMs).toBe(20)
+    expect(summary).toMatchObject({
+      toolAccuracyRate: 1,
+      parameterAccuracyRate: 1,
+      securityPassRate: 1,
+      logCompletenessRate: 1,
+      knownCostUsd: 0,
+      unknownCostRuns: 9,
+      failures: [],
+    })
     expect(summary.results.every((result) => result.passed)).toBe(true)
   })
 

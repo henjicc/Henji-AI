@@ -7,7 +7,7 @@ import type { AgentIntent, AgentRouteDecision } from './types'
 const logger = createMainLogger('main.agent_router')
 
 const routerModelDecisionSchema = z.object({
-  intent: z.enum(['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'user_instructions', 'general']),
+  intent: z.enum(['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'user_instructions', 'memory', 'general']),
   complexity: z.enum(['simple', 'multi_step', 'ambiguous']).optional().default('ambiguous'),
   reason: z.string().min(1).max(500).optional(),
 }).passthrough()
@@ -32,6 +32,7 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDo
   diagnose: { path: 'workflow', toolDomains: ['diagnostics'] },
   canvas: { path: 'workflow', toolDomains: ['canvas'] },
   user_instructions: { path: 'workflow', toolDomains: ['user_instructions'] },
+  memory: { path: 'workflow', toolDomains: ['memory'] },
   general: { path: 'primary', toolDomains: ['catalog'] },
 }
 

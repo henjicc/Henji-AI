@@ -86,7 +86,7 @@ export function useAgentRun(): UseAgentRunResult {
     useAssistantUiStore.getState().setActiveRun(null)
     activeRunIdRef.current = null
     dispatch({ type: 'connection', connection: 'disconnected' })
-    dispatch({ type: 'action_error', message: '上次运行已不可恢复；运行状态持久化将在后续阶段提供。' })
+    dispatch({ type: 'action_error', message: '无法读取这条运行记录；它可能已被删除或数据库暂时不可用。' })
     logger.warn('智能助手运行恢复失败', {
       event: 'assistant_ui.run.restore.failed',
       requestId: runId,

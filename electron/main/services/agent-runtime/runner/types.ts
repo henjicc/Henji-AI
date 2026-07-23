@@ -4,6 +4,8 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'
+import type { AgentArtifactStore } from '../context/offload'
+import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -16,12 +18,15 @@ export interface AgentRunnerDependencies {
   getHostContext: (runId: string) => HostContextSnapshot | null
   runModelStep: AgentModelStepExecutor
   cancelModelStep: (requestId: string) => void
+  artifactStore?: AgentArtifactStore
   onEvent?: (event: AgentEvent) => void
+  onCheckpoint?: (state: AgentRunState) => void
   onTerminal?: (state: AgentRunState) => void
 }
 
 export interface AgentRunnerOptions {
   runId: string
   request: AgentStartRunRequest
+  memoryContext?: AgentMemoryContextEntry[]
   dependencies: AgentRunnerDependencies
 }

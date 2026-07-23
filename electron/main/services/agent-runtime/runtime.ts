@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { webContents, type WebContents } from 'electron'
+import { z } from 'zod'
 
 import {
   agentRunSnapshotSchema,
@@ -8,8 +9,11 @@ import {
   type AgentStartRunRequest,
   type AgentStartRunResult,
 } from '../../../../src/core/assistant/runtimeContracts'
-import type { AgentRunState } from '../../../../src/core/assistant/events'
-import type { AgentEvent } from '../../../../src/core/assistant/events'
+import type { AgentRunSummary } from '../../../../src/core/assistant/persistence'
+import {
+  agentDataClassSchema,
+} from '../../../../src/core/assistant/toolContracts'
+import type { AgentEvent, AgentRunState } from '../../../../src/core/assistant/events'
 import type {
   FrontendToolOperation,
   HostCommandResult,
@@ -21,93 +25,272 @@ import {
   getAssistantHostContext,
   requestAssistantFrontendTool,
 } from '../assistant/frontend-tool-bridge'
-import { runModelStep } from '../llm/sdk/runtime'
-import { cancelLlmTask } from '../llm/task-registry'
-import { AgentRunner } from './runner/runner'
+import { getDb } from '../db'
+import { getLlmProviderApiKey } from '../keystore'
+import { getAgentMemoryStore } from '../assistant/memory'
+import { AgentRuntimeManager } from '../agent-runtime-manager/manager'
+import { createInitialAgentRunState } from './runner/initial-state'
+import { AgentPersistenceStore } from './persistence/store'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
-import { AgentToolGateway } from './tools/gateway'
 
 interface AgentRunRecord {
-  runner: AgentRunner
   ownerWebContentsId: number
   rendererSessionId: string
   threadId: string
+  state: AgentRunState
+  events: AgentEvent[]
 }
+
+const artifactPayloadSchema = z.object({
+  runId: z.string().min(1),
+  artifact: z.object({
+    artifactRef: z.string().min(1),
+    source: z.string().min(1),
+    dataClasses: z.array(agentDataClassSchema).max(4),
+    createdAt: z.string().datetime(),
+    originalBytes: z.number().int().nonnegative(),
+    payload: z.unknown(),
+  }).strict(),
+}).strict()
+
+const toolExecutionPayloadSchema = z.object({
+  runId: z.string().min(1),
+  threadId: z.string().min(1),
+  toolCallId: z.string().min(1),
+  toolName: z.string().min(1),
+  input: z.unknown(),
+}).strict()
 
 export class AgentRuntimeService {
   private readonly runs = new Map<string, AgentRunRecord>()
   private readonly activeByThread = new Map<string, string>()
+  private readonly persistence = new AgentPersistenceStore(getDb())
+  private readonly memory = getAgentMemoryStore()
   private readonly registry = createBuiltinAgentToolRegistry((operation, context) => (
     this.invokeFrontend(operation, context)
   ))
-  private readonly gateway = new AgentToolGateway({
-    registry: this.registry,
-    getHostContext: (runId) => this.getRunHostContext(runId),
+  private readonly manager = new AgentRuntimeManager({
+    getModelApiKey: getLlmProviderApiKey,
+    executeTool: (payload, signal) => this.executeToolInMain(payload, signal),
+    saveArtifact: (payload) => this.saveArtifact(payload),
+    onEvent: (runId, event) => this.onRunEvent(runId, event),
+    onCheckpoint: (runId, state) => this.onCheckpoint(runId, state),
+    onTerminal: (runId, state) => this.onTerminal(runId, state),
+    onProcessFailure: (runIds, reason) => this.onProcessFailure(runIds, reason),
   })
 
-  startRun(owner: WebContents, request: AgentStartRunRequest): AgentStartRunResult {
+  constructor() {
+    this.persistence.markInterruptedRuns()
+  }
+
+  async startRun(owner: WebContents, request: AgentStartRunRequest): Promise<AgentStartRunResult> {
+    return await this.startRunWithParent(owner, request, null)
+  }
+
+  private async startRunWithParent(
+    owner: WebContents,
+    request: AgentStartRunRequest,
+    parentRunId: string | null
+  ): Promise<AgentStartRunResult> {
     const hostContext = getAssistantHostContext(owner.id)
     if (!hostContext?.uiReady) throw new Error('[host_not_ready] 宿主界面尚未就绪')
     const activeRunId = this.activeByThread.get(request.threadId)
     if (activeRunId) {
-      const active = this.runs.get(activeRunId)?.runner.getState()
+      const active = this.runs.get(activeRunId)?.state
       if (active && !['completed', 'failed', 'cancelled'].includes(active.status)) {
         throw new Error(`[thread_busy] thread ${request.threadId} 已有活动运行 ${activeRunId}`)
       }
     }
 
     const runId = randomUUID()
-    const runner = new AgentRunner({
-      runId,
-      request,
-      dependencies: {
-        registry: this.registry,
-        gateway: this.gateway,
-        getHostContext: (targetRunId) => this.getRunHostContext(targetRunId),
-        runModelStep,
-        cancelModelStep: cancelLlmTask,
-        onEvent: (event) => this.sendEvent(owner.id, hostContext.rendererSessionId, runId, event),
-        onTerminal: () => {
-          if (this.activeByThread.get(request.threadId) === runId) this.activeByThread.delete(request.threadId)
-        },
-      },
-    })
+    const initialState = createInitialAgentRunState(runId, request)
     this.runs.set(runId, {
-      runner,
       ownerWebContentsId: owner.id,
       rendererSessionId: hostContext.rendererSessionId,
       threadId: request.threadId,
+      state: initialState,
+      events: [],
     })
     this.activeByThread.set(request.threadId, runId)
-    return { runId, state: runner.start() }
+    this.persistence.createRun(runId, request, initialState, parentRunId)
+    try {
+      const memoryContext = this.memory.retrieve(
+        request.goal,
+        hostContext.workspace.id,
+        hostContext.project.id
+      )
+      const state = await this.manager.startRun(runId, request, hostContext, memoryContext)
+      this.updateState(runId, state)
+      return { runId, state }
+    } catch (error) {
+      this.activeByThread.delete(request.threadId)
+      const failed = this.persistence.markRunRecoveryRequired(
+        runId,
+        'Agent 独立运行进程未能确认启动；为避免重复副作用，需要由用户确认后重试'
+      )
+      if (failed) this.updateState(runId, failed)
+      throw error
+    }
   }
 
-  cancelRun(owner: WebContents, runId: string, reason: string): AgentRunState {
-    return this.requireOwnedRun(owner, runId).runner.cancel(reason)
+  async cancelRun(owner: WebContents, runId: string, reason: string): Promise<AgentRunState> {
+    this.requireOwnedRun(owner, runId)
+    return this.commitControlState(runId, await this.manager.cancelRun(runId, reason))
   }
 
-  pauseRun(owner: WebContents, runId: string): AgentRunState {
-    return this.requireOwnedRun(owner, runId).runner.pause()
+  async pauseRun(owner: WebContents, runId: string): Promise<AgentRunState> {
+    this.requireOwnedRun(owner, runId)
+    return this.commitControlState(runId, await this.manager.pauseRun(runId))
   }
 
-  resumeRun(owner: WebContents, runId: string): AgentRunState {
-    return this.requireOwnedRun(owner, runId).runner.resume()
+  async resumeRun(owner: WebContents, runId: string): Promise<AgentRunState> {
+    this.requireOwnedRun(owner, runId)
+    return this.commitControlState(runId, await this.manager.resumeRun(runId))
   }
 
-  respondApproval(owner: WebContents, runId: string, approvalId: string, decision: 'approve' | 'reject'): AgentRunState {
-    return this.requireOwnedRun(owner, runId).runner.respondApproval(approvalId, decision)
+  async respondApproval(
+    owner: WebContents,
+    runId: string,
+    approvalId: string,
+    decision: 'approve' | 'reject'
+  ): Promise<AgentRunState> {
+    this.requireOwnedRun(owner, runId)
+    return this.commitControlState(
+      runId,
+      await this.manager.respondApproval(runId, approvalId, decision)
+    )
   }
 
   getRunState(owner: WebContents, runId: string): AgentRunState {
-    return this.requireOwnedRun(owner, runId).runner.getState()
+    const live = this.runs.get(runId)
+    if (live) {
+      this.requireRebindableRun(owner, runId)
+      return live.state
+    }
+    const persisted = this.persistence.loadState(runId)
+    if (!persisted) throw new Error('[run_not_found] 运行不存在')
+    return persisted
   }
 
   getRunSnapshot(owner: WebContents, runId: string): AgentRunSnapshot {
-    const record = this.requireRebindableRun(owner, runId)
+    const live = this.runs.get(runId)
+    if (live) {
+      const record = this.requireRebindableRun(owner, runId)
+      return agentRunSnapshotSchema.parse({ state: record.state, events: record.events })
+    }
+    const state = this.persistence.loadState(runId)
+    if (!state) throw new Error('[run_not_found] 运行不存在')
     return agentRunSnapshotSchema.parse({
-      state: record.runner.getState(),
-      events: record.runner.getEventHistory(),
+      state,
+      events: this.persistence.loadEvents(runId),
     })
+  }
+
+  listRuns(threadId?: string, limit = 30): AgentRunSummary[] {
+    return this.persistence.listRuns(threadId, limit)
+  }
+
+  async retryRun(
+    owner: WebContents,
+    runId: string,
+    userInstructions?: string
+  ): Promise<AgentStartRunResult> {
+    const request = this.persistence.loadRequest(runId)
+    const previous = this.persistence.loadState(runId)
+    if (!request || !previous) throw new Error('[run_not_found] 运行不存在')
+    if (!['completed', 'failed', 'cancelled'].includes(previous.status)) {
+      throw new Error('[run_not_retryable] 活动任务不能重复启动')
+    }
+    const result = await this.startRunWithParent(owner, {
+      ...request,
+      userInstructions,
+    }, runId)
+    this.persistence.markRetried(runId)
+    return result
+  }
+
+  async dispose(): Promise<void> {
+    await this.manager.dispose()
+  }
+
+  private commitControlState(runId: string, state: AgentRunState): AgentRunState {
+    this.updateState(runId, state)
+    this.persistence.saveState(state)
+    return state
+  }
+
+  private onRunEvent(runId: string, event: AgentEvent): void {
+    const record = this.runs.get(runId)
+    if (!record) return
+    record.events.push(event)
+    if (record.events.length > 2_000) record.events.shift()
+    this.persistence.appendEvent(event)
+    this.sendEvent(record, runId, event)
+  }
+
+  private onCheckpoint(runId: string, state: AgentRunState): void {
+    this.updateState(runId, state)
+    this.persistence.saveState(state)
+  }
+
+  private onTerminal(runId: string, state: AgentRunState): void {
+    const record = this.runs.get(runId)
+    this.updateState(runId, state)
+    this.persistence.saveState(state)
+    this.persistence.appendTerminalMessage(state)
+    if (record && this.activeByThread.get(record.threadId) === runId) {
+      this.activeByThread.delete(record.threadId)
+    }
+  }
+
+  private onProcessFailure(runIds: string[], reason: string): void {
+    for (const runId of runIds) {
+      const record = this.runs.get(runId)
+      const state = this.persistence.markRunRecoveryRequired(
+        runId,
+        `${reason}；未知状态的工具调用不会自动重放，请确认后重试`
+      )
+      if (!state) continue
+      this.updateState(runId, state)
+      if (record && this.activeByThread.get(record.threadId) === runId) {
+        this.activeByThread.delete(record.threadId)
+      }
+      const events = this.persistence.loadEvents(runId)
+      const terminalEvent = events[events.length - 1]
+      if (record && terminalEvent) {
+        record.events = events
+        this.sendEvent(record, runId, terminalEvent)
+      }
+    }
+  }
+
+  private updateState(runId: string, state: AgentRunState): void {
+    const record = this.runs.get(runId)
+    if (record) record.state = state
+  }
+
+  private async executeToolInMain(payload: unknown, signal: AbortSignal): Promise<unknown> {
+    const parsed = toolExecutionPayloadSchema.parse(payload)
+    const definition = this.registry.get(parsed.toolName)
+    if (!definition) throw new Error(`[unknown_tool] 未注册工具：${parsed.toolName}`)
+    const input = definition.inputSchema.parse(parsed.input)
+    const hostContext = this.getRunHostContext(parsed.runId)
+    const output = await definition.execute(input, {
+      runId: parsed.runId,
+      threadId: parsed.threadId,
+      toolCallId: parsed.toolCallId,
+      signal,
+      hostContext,
+    })
+    return {
+      output: definition.outputSchema.parse(output),
+      hostContext: this.getRunHostContext(parsed.runId),
+    }
+  }
+
+  private saveArtifact(payload: unknown): void {
+    const parsed = artifactPayloadSchema.parse(payload)
+    this.persistence.saveArtifact(parsed.runId, parsed.artifact)
   }
 
   private requireRebindableRun(owner: WebContents, runId: string): AgentRunRecord {
@@ -166,15 +349,10 @@ export class AgentRuntimeService {
     }
   }
 
-  private sendEvent(
-    webContentsId: number,
-    rendererSessionId: string,
-    runId: string,
-    event: AgentEvent
-  ): void {
-    const target = webContents.fromId(webContentsId)
-    const context = getAssistantHostContext(webContentsId)
-    if (!target || target.isDestroyed() || context?.rendererSessionId !== rendererSessionId) return
+  private sendEvent(record: AgentRunRecord, runId: string, event: AgentEvent): void {
+    const target = webContents.fromId(record.ownerWebContentsId)
+    const context = getAssistantHostContext(record.ownerWebContentsId)
+    if (!target || target.isDestroyed() || context?.rendererSessionId !== record.rendererSessionId) return
     target.send('assistant:agent:event', agentRuntimeEventPayloadSchema.parse({ runId, event }))
   }
 }
@@ -184,4 +362,10 @@ let runtimeService: AgentRuntimeService | null = null
 export function getAgentRuntimeService(): AgentRuntimeService {
   runtimeService ??= new AgentRuntimeService()
   return runtimeService
+}
+
+export async function disposeAgentRuntimeService(): Promise<void> {
+  if (!runtimeService) return
+  await runtimeService.dispose()
+  runtimeService = null
 }

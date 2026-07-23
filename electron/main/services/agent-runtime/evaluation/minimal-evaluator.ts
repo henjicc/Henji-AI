@@ -5,16 +5,18 @@ export interface MinimalEvaluationToolExpectation {
   minCalls: number
   maxCalls?: number
   requiredInputKeys?: string[]
+  forbiddenInputMatches?: Record<string, unknown>
 }
 
 export interface MinimalEvaluationCase {
   id: string
-  category: 'golden' | 'boundary' | 'security' | 'recovery'
+  category: 'golden' | 'historical' | 'adversarial' | 'boundary' | 'security' | 'recovery'
   goal: string
   expectedIntent: string
   expectedTerminalStatuses: AgentRunStatus[]
   expectedTools: MinimalEvaluationToolExpectation[]
   forbiddenTools: string[]
+  expectedApprovalRisks?: Array<'R0' | 'R1' | 'R2' | 'R3'>
   maxLatencyMs: number
   maxInputTokens: number
   maxOutputTokens: number
@@ -60,6 +62,7 @@ export interface MinimalEvaluationCaseResult {
     inputTokens: number
     outputTokens: number
     toolCalls: number
+    knownCostUsd: number | null
   }
 }
 
@@ -72,6 +75,17 @@ export interface MinimalEvaluationSummary {
   p95LatencyMs: number
   totalInputTokens: number
   totalOutputTokens: number
+  knownCostUsd: number
+  unknownCostRuns: number
+  toolAccuracyRate: number
+  parameterAccuracyRate: number
+  securityPassRate: number
+  logCompletenessRate: number
+  failures: Array<{
+    caseId: string
+    repetition: number
+    failedChecks: string[]
+  }>
   results: MinimalEvaluationCaseResult[]
 }
 
@@ -82,6 +96,15 @@ export type MinimalEvaluationExecutor = (
 
 function check(id: string, passed: boolean, detail: string): MinimalEvaluationCheck {
   return { id, passed, detail }
+}
+
+function getInputValue(input: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return undefined
+    }
+    return (current as Record<string, unknown>)[segment]
+  }, input)
 }
 
 function findIntent(events: AgentEvent[]): string | null {
@@ -101,16 +124,29 @@ function checkToolExpectations(
       withinCount,
       `调用 ${matching.length} 次，期望 ${expectation.minCalls}～${expectation.maxCalls ?? '不限'} 次`
     )
-    if (!expectation.requiredInputKeys?.length) return [countCheck]
-    const keysValid = matching.every((call) => expectation.requiredInputKeys?.every((key) => key in call.input))
-    return [
-      countCheck,
-      check(
+    const checks = [countCheck]
+    if (expectation.requiredInputKeys?.length) {
+      const keysValid = matching.every((call) => expectation.requiredInputKeys?.every((key) => (
+        getInputValue(call.input, key) !== undefined
+      )))
+      checks.push(check(
         `tool:${expectation.toolName}:input`,
         matching.length > 0 && keysValid,
         `必需参数：${expectation.requiredInputKeys.join(', ')}`
-      ),
-    ]
+      ))
+    }
+    if (expectation.forbiddenInputMatches) {
+      const forbiddenEntries = Object.entries(expectation.forbiddenInputMatches)
+      const matchesForbidden = matching.some((call) => forbiddenEntries.every(([key, value]) => (
+        JSON.stringify(getInputValue(call.input, key)) === JSON.stringify(value)
+      )))
+      checks.push(check(
+        `tool:${expectation.toolName}:forbidden_input`,
+        !matchesForbidden,
+        `不得提交参数组合：${forbiddenEntries.map(([key]) => key).join(', ')}`
+      ))
+    }
+    return checks
   })
 }
 
@@ -145,6 +181,11 @@ export function evaluateMinimalCapture(
   const terminalPassed = testCase.expectedTerminalStatuses.includes(capture.state.status)
   const intent = findIntent(capture.events)
   const forbidden = capture.toolCalls.filter((call) => testCase.forbiddenTools.includes(call.toolName))
+  const approvalRisks = capture.events.flatMap((event) => (
+    event.type === 'ApprovalRequired' ? [event.approval.risk] : []
+  ))
+  const approvalPassed = testCase.expectedApprovalRisks === undefined
+    || testCase.expectedApprovalRisks.every((risk) => approvalRisks.includes(risk))
   const serializedOutput = JSON.stringify({ outputText: capture.outputText, logs: capture.logs })
   const leaked = (testCase.sensitiveProbes ?? []).filter((probe) => probe && serializedOutput.includes(probe))
   const checks: MinimalEvaluationCheck[] = [
@@ -152,6 +193,7 @@ export function evaluateMinimalCapture(
     check('intent', intent === testCase.expectedIntent, `意图 ${intent ?? 'missing'}`),
     ...checkToolExpectations(testCase.expectedTools, capture.toolCalls),
     check('forbidden_tools', forbidden.length === 0, `禁止工具命中 ${forbidden.map((item) => item.toolName).join(', ') || '无'}`),
+    check('approval_risk', approvalPassed, `批准风险 ${approvalRisks.join(', ') || '无'}`),
     check('latency', capture.latencyMs <= testCase.maxLatencyMs, `耗时 ${capture.latencyMs}ms`),
     check('input_tokens', capture.state.usage.inputTokens <= testCase.maxInputTokens, `输入 token ${capture.state.usage.inputTokens}`),
     check('output_tokens', capture.state.usage.outputTokens <= testCase.maxOutputTokens, `输出 token ${capture.state.usage.outputTokens}`),
@@ -168,6 +210,7 @@ export function evaluateMinimalCapture(
       inputTokens: capture.state.usage.inputTokens,
       outputTokens: capture.state.usage.outputTokens,
       toolCalls: capture.toolCalls.length,
+      knownCostUsd: capture.state.usage.knownCostUsd,
     },
   }
 }
@@ -176,6 +219,15 @@ function percentile95(values: number[]): number {
   if (values.length === 0) return 0
   const sorted = [...values].sort((left, right) => left - right)
   return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)]
+}
+
+function checkRate(
+  results: MinimalEvaluationCaseResult[],
+  predicate: (check: MinimalEvaluationCheck) => boolean
+): number {
+  const checks = results.flatMap((result) => result.checks.filter(predicate))
+  if (checks.length === 0) return 1
+  return checks.filter((item) => item.passed).length / checks.length
 }
 
 export async function runMinimalEvaluation(
@@ -203,6 +255,19 @@ export async function runMinimalEvaluation(
     p95LatencyMs: percentile95(latencies),
     totalInputTokens: results.reduce((total, result) => total + result.metrics.inputTokens, 0),
     totalOutputTokens: results.reduce((total, result) => total + result.metrics.outputTokens, 0),
+    knownCostUsd: results.reduce((total, result) => total + (result.metrics.knownCostUsd ?? 0), 0),
+    unknownCostRuns: results.filter((result) => result.metrics.knownCostUsd === null).length,
+    toolAccuracyRate: checkRate(results, (item) => item.id.startsWith('tool:') && item.id.endsWith(':count')),
+    parameterAccuracyRate: checkRate(results, (item) => item.id.startsWith('tool:') && !item.id.endsWith(':count')),
+    securityPassRate: checkRate(results, (item) => (
+      ['forbidden_tools', 'approval_risk', 'sensitive_probe'].includes(item.id)
+    )),
+    logCompletenessRate: checkRate(results, (item) => item.id.startsWith('logs:')),
+    failures: results.filter((result) => !result.passed).map((result) => ({
+      caseId: result.caseId,
+      repetition: result.repetition,
+      failedChecks: result.checks.filter((item) => !item.passed).map((item) => item.id),
+    })),
     results,
   }
 }

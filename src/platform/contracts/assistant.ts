@@ -19,12 +19,32 @@ import type {
   AgentStartRunRequest,
   AgentStartRunResult,
 } from '@/core/assistant/runtimeContracts'
+import type {
+  AgentListRunsRequest,
+  AgentRetryRunRequest,
+  AgentRunSummary,
+} from '@/core/assistant/persistence'
+import type {
+  AgentMemoryRecord,
+  AgentMemoryScope,
+  AgentMemorySettings,
+  AgentMemorySettingsUpdate,
+  AgentMemoryState,
+  AgentMemoryUpdate,
+} from '@/core/assistant/memory'
 
 export interface AssistantPlatform {
   getUserInstructions(): Promise<AssistantUserInstructions>
   updateUserInstructions(update: AssistantUserInstructionsUpdate): Promise<AssistantUserInstructions>
   resetUserInstructions(): Promise<AssistantUserInstructions>
   openUserInstructionsFile(): Promise<string>
+  getMemoryState(): Promise<AgentMemoryState>
+  updateMemorySettings(update: AgentMemorySettingsUpdate): Promise<AgentMemorySettings>
+  updateMemory(update: AgentMemoryUpdate): Promise<AgentMemoryRecord>
+  confirmMemoryCandidate(candidateId: string): Promise<AgentMemoryRecord>
+  rejectMemoryCandidate(candidateId: string): Promise<void>
+  deleteMemory(memoryId: string): Promise<void>
+  clearMemories(scope?: AgentMemoryScope): Promise<number>
   publishHostContext(snapshot: HostContextSnapshot): Promise<void>
   acknowledgeFrontendTool(acknowledgement: FrontendToolAcknowledgement): Promise<void>
   completeFrontendTool(result: FrontendToolResult): Promise<void>
@@ -37,5 +57,7 @@ export interface AssistantPlatform {
   respondApproval(request: AgentApprovalResponse): Promise<AgentRunState>
   getRunState(request: AgentRunControlRequest): Promise<AgentRunState>
   getRunSnapshot(request: AgentRunControlRequest): Promise<AgentRunSnapshot>
+  listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
+  retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }

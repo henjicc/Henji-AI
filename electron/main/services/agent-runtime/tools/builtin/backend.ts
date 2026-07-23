@@ -5,6 +5,7 @@ import { defineAgentTool } from '../define-tool'
 import type { AgentToolDefinition } from '../types'
 import type { AgentToolRegistry } from '../registry'
 import { createUserInstructionTools } from './user-instructions'
+import { createAgentMemoryTools } from './memory'
 
 const applicationCapabilityCategorySchema = z.enum([
   'catalog',
@@ -12,6 +13,7 @@ const applicationCapabilityCategorySchema = z.enum([
   'models',
   'generation',
   'user_instructions',
+  'memory',
   'diagnostics',
   'canvas',
 ])
@@ -64,6 +66,7 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
             'models',
             'generation',
             'user_instructions',
+            'memory',
             'diagnostics',
             'canvas',
           ],
@@ -92,5 +95,6 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
     eraseToolDefinition(searchCapabilities),
     createQueryDiagnosticEventsTool(),
     ...createUserInstructionTools(),
+    ...createAgentMemoryTools(),
   ]
 }

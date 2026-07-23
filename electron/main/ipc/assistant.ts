@@ -7,6 +7,13 @@ import {
 } from '../../../src/core/assistant/hostContracts'
 import { assistantUserInstructionsUpdateSchema } from '../../../src/core/assistant/userInstructions'
 import {
+  agentMemoryClearSchema,
+  agentMemoryCandidateIdSchema,
+  agentMemoryIdSchema,
+  agentMemorySettingsUpdateSchema,
+  agentMemoryUpdateSchema,
+} from '../../../src/core/assistant/memory'
+import {
   acknowledgeAssistantFrontendTool,
   completeAssistantFrontendTool,
   publishAssistantHostContext,
@@ -17,6 +24,12 @@ import {
   resetAssistantUserInstructions,
   updateAssistantUserInstructions,
 } from '../services/assistant/user-instructions'
+import {
+  clearAgentMemories,
+  getAgentMemoryStore,
+  updateAgentMemory,
+  updateAgentMemorySettings,
+} from '../services/assistant/memory'
 import { getMainWindow } from '../window'
 import { parseVoid, registerIpcHandler } from './registry'
 
@@ -58,6 +71,48 @@ export function registerAssistantIpc(): void {
     'assistant:userInstructions:openFile',
     parseVoid,
     () => openAssistantUserInstructionsFile(),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:getState',
+    parseVoid,
+    () => getAgentMemoryStore().getState(),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:updateSettings',
+    (input) => agentMemorySettingsUpdateSchema.parse(input),
+    (update) => updateAgentMemorySettings(update),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:update',
+    (input) => agentMemoryUpdateSchema.parse(input),
+    (update) => updateAgentMemory(update),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:confirmCandidate',
+    (input) => agentMemoryCandidateIdSchema.parse(input),
+    ({ candidateId }) => getAgentMemoryStore().confirm(candidateId),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:rejectCandidate',
+    (input) => agentMemoryCandidateIdSchema.parse(input),
+    ({ candidateId }) => getAgentMemoryStore().reject(candidateId),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:delete',
+    (input) => agentMemoryIdSchema.parse(input),
+    ({ memoryId }) => getAgentMemoryStore().delete(memoryId),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:memory:clear',
+    (input) => agentMemoryClearSchema.parse(input ?? {}),
+    ({ scope }) => clearAgentMemories(scope),
     assertTrustedAssistantRenderer
   )
   registerIpcHandler('assistant:publishHostContext', (input) => hostContextSnapshotSchema.parse(input), (snapshot, event) => {

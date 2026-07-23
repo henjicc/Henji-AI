@@ -104,6 +104,32 @@
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
 
+## 第六阶段 · 开始
+
+- 已确定将新增 Agent SQLite migration、持久化服务、运行历史/重试契约、评测数据集、utilityProcess 管理器及 thread/memory 管理。
+- 6.3 没有真实第三方工具需求，按任务定义跳过，不新增 MCP 文件或依赖。
+
+## 第六阶段 · 完成
+
+### 新增
+
+- `electron/main/services/agent-runtime/persistence/*`：版本化 migration、run/thread/event/message/checkpoint/artifact/permission audit 持久化与安全重试。
+- `src/core/assistant/persistence.ts`、`src/features/assistant/history/*`：运行历史/重试契约与侧边栏入口。
+- `src/core/assistant/utilityContracts.ts`、`electron/main/agent-utility.ts`、`electron/main/services/agent-runtime-manager/*`：`agent-utility/v1` 协议、独立 Runner 进程、main RPC、心跳、取消、日志与崩溃恢复。
+- `src/core/assistant/memory.ts`、`electron/main/services/assistant/memory-*`、`tools/builtin/memory.ts`、`src/features/assistant/memory/*`：记忆 DTO、隐私策略、SQLite 存储、受控工具与用户管理界面。
+- `electron/main/services/agent-runtime/evaluation/regression-cases.ts` 及测试：黄金、历史失败和对抗评测集。
+- `scripts/test-assistant-persistence.cjs`、`scripts/run-agent-utility-smoke.cjs` 及 smoke app：Electron ABI 真库测试与 utilityProcess 握手验证。
+- `docs/task/智能助手/任务/第六阶段-后续增强/评测集/说明.md`：持续回归数据入口与触发规则。
+
+### 修改
+
+- `electron/main/services/db.ts`、`agent-runtime/runtime.ts`、`runner/*`、`context/*`、`tools/registry.ts`：migration 启动、检查点、落库 artifact、记忆上下文、独立进程代理和可序列化初始状态。
+- `electron/main/ipc/agent-runtime.ts`、`assistant.ts`、preload、PAL 与 commands：历史/重试和记忆管理接口。
+- `electron/main/index.ts`、`electron.vite.config.ts`、`main-logger.ts`：utility 入口构建、退出回收和既有日志汇聚。
+- `AssistantSidebar.tsx`、`useAgentRun.ts`：历史与记忆面板入口、持久化错误反馈。
+- `minimal-evaluator.ts`、`package.json`：嵌套参数、安全/日志/费用指标和专用验证脚本。
+- 第六阶段 6.1～6.5、总览、实施方案与五份阶段记录：同步实现结果、取消项和最终待验收边界。
+
 ## 第五阶段 · 手动反馈与架构纠偏
 
 ### 新增

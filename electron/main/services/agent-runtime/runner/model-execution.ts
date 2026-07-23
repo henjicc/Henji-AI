@@ -60,7 +60,7 @@ export async function runRouterModelClassification(
     system: [
       '只判断用户真正想完成的目标，不执行工具。',
       '根据完整语义分类，不依赖固定关键词，也不要把内容题材误判成模型搜索。',
-      'generate 表示生成图片、视频或音频；diagnose 表示寻找错误原因或解决办法；canvas 表示操作画布或项目。',
+      'generate 表示生成图片、视频或音频；diagnose 表示寻找错误原因或解决办法；canvas 表示操作画布或项目；memory 表示用户明确要求查看、保存、纠正或删除助手长期记忆。',
       '输出必须符合给定 JSON 结构。',
     ].join('\n'),
     messages: [
@@ -83,6 +83,7 @@ export async function runRouterModelClassification(
               'diagnose',
               'canvas',
               'user_instructions',
+              'memory',
               'general',
             ],
           },

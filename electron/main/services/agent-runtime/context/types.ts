@@ -1,6 +1,7 @@
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/llm/modelStep'
+import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 
 export type AgentIntent =
   | 'navigate'
@@ -11,6 +12,7 @@ export type AgentIntent =
   | 'diagnose'
   | 'canvas'
   | 'user_instructions'
+  | 'memory'
   | 'general'
 
 export type AgentRoutePath = 'workflow' | 'primary'
@@ -37,6 +39,7 @@ export interface AgentContextBuildInput {
   runId: string
   goal: string
   userInstructions?: string
+  memoryContext?: AgentMemoryContextEntry[]
   snapshot: HostContextSnapshot
   route: AgentRouteDecision
   conversation: ModelStepMessage[]
