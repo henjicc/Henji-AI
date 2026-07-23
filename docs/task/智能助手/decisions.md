@@ -43,6 +43,18 @@
 - 首批为 8 个工具：能力搜索、工作区切换、模型搜索、模型 schema、创建可见生成任务、读取生成任务、取消生成任务、诊断日志。
 - `create_visible_generation_task` 必须抽取 `useTaskGeneration.handleGenerate()` 的完整业务编排，不能直接调用 `GenerationService.generate()`。
 
+### D-008 导航与宿主命令单一入口
+
+- `navigationStore` 是工作区与工具箱子工具的唯一状态源；素材库开合通过稳定命令协调，不在 Agent 中复制 UI 状态。
+- renderer 只注册声明式 HostCommand/HostQuery handler；main 通过窄 IPC 发送 request/ack/result/cancel，不导入 renderer store、组件或 Hook。
+- 可见生成任务的完整编排抽到应用命令，UI 与未来 Agent 共用同一路径。
+
+### D-009 模型单步与能力验证
+
+- 锁定 `ai@6.0.234`、`@ai-sdk/openai-compatible@2.0.62`、`zod@4.4.3`；SDK adapter 每次只执行一个 `streamText`。
+- 静态能力表与动态 capability smoke 同时参与 Agent 模型可用性判断；主模型不合格时仅允许切换到已验证 fallback，否则返回明确设置入口。
+- capability smoke 由用户显式触发真实最小请求；记录 token 与延迟，缺少可靠价格时费用固定为 `unknown`。
+
 ## 可调参数
 
 - turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于评测调优，但不得绕过安全硬限制。

@@ -1,5 +1,6 @@
 import type {
   LlmCapabilities,
+  AgentModelProfile,
   LlmConfigState,
   LlmModelConfig,
   LlmProviderConfig,
@@ -26,10 +27,35 @@ export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
   audio: false,
   streaming: true,
   toolCall: false,
+  parallelTools: false,
   jsonOutput: false,
+  structuredOutputMode: 'none',
+  reasoning: false,
+  sampling: true,
+  contextWindow: null,
+  maxOutputTokens: null,
+  usage: true,
 }
 
 export const DEFAULT_PROMPT_PROFILE_ID = 'default-general-optimizer'
+export const DEFAULT_AGENT_PROFILE_ID = 'default-agent'
+
+export function createDefaultAgentModelProfile(now = new Date().toISOString()): AgentModelProfile {
+  return {
+    id: DEFAULT_AGENT_PROFILE_ID,
+    name: '默认智能助手',
+    primary: { providerId: DEFAULT_PPIO_PROVIDER_ID, modelId: DEFAULT_PPIO_MODEL_ID },
+    settings: {
+      timeoutMs: 60_000,
+      maxRetries: 1,
+      maxOutputTokens: 4_096,
+      contextWindowBudget: 64_000,
+    },
+    verifications: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+}
 
 export function createDefaultProviderReasoning(adapter = ''): LlmReasoningConfig {
   return {
@@ -150,11 +176,14 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
 
 export function createDefaultLlmConfig(): LlmConfigState {
   const profile = createDefaultPromptProfile()
+  const agentProfile = createDefaultAgentModelProfile()
   return {
     providers: createBuiltInLlmProviders(),
     models: createBuiltInLlmModels(),
     promptProfiles: [profile],
     selectedPromptProfileId: profile.id,
+    agentProfiles: [agentProfile],
+    selectedAgentProfileId: agentProfile.id,
     tools: [],
     policy: {
       allowedTools: [],

@@ -12,7 +12,6 @@ import { registerDefaultPanels } from '@/components/params/panels/registerDefaul
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
-import type { WorkspaceId } from '@/core/types/workspace'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { AssetLibraryFloatingPanel } from '@/features/assets/AssetLibraryFloatingPanel'
 import { LargeUploadChoiceDialog } from '@/components/upload/LargeUploadChoiceDialog'
@@ -22,6 +21,13 @@ import { NotificationProvider } from '@/contexts/NotificationContext'
 import { useUiStore } from '@/stores/uiStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
+import {
+  closeAssetLibrary,
+  openAssetLibrary,
+  switchWorkspace,
+  useNavigationStore,
+} from '@/stores/navigationStore'
+import { useAssistantHostBridge } from '@/features/assistant/frontendTools/useAssistantHostBridge'
 
 const logger = createLogger('App')
 
@@ -36,17 +42,15 @@ const App: React.FC = () => {
   useApplyRuntimeTheme()
   useDevToolsShortcut()
   useLogWindowShortcut()
-  const [activeTab, setActiveTab] = useState<WorkspaceId>('generation')
   const [isReady, setIsReady] = useState(false)
+  useAssistantHostBridge(isReady)
+  const activeWorkspace = useNavigationStore((state) => state.activeWorkspace)
   // 设置面板开关提到 uiStore：错误弹窗的「去设置」可能从任意深度的组件触发
   const isSettingsOpen = useUiStore((state) => state.isSettingsOpen)
   const settingsTarget = useUiStore((state) => state.settingsTarget)
   const openSettings = useUiStore((state) => state.openSettings)
   const closeSettings = useUiStore((state) => state.closeSettings)
   const assetView = useAssetLibraryStore((state) => state.view)
-  const sourceWorkspace = useAssetLibraryStore((state) => state.sourceWorkspace)
-  const setAssetView = useAssetLibraryStore((state) => state.setView)
-  const setSourceWorkspace = useAssetLibraryStore((state) => state.setSourceWorkspace)
   const assetTabAction = useSettingsStore((state) => state.assetTabAction)
   const assetPanelPosition = useSettingsStore((state) => state.assetPanelPosition)
   const assetEdgeTriggerEnabled = useSettingsStore((state) => state.assetEdgeTriggerEnabled)
@@ -55,25 +59,21 @@ const App: React.FC = () => {
   const assetDragEdgeDelayMs = useSettingsStore((state) => state.assetDragEdgeDelayMs)
 
   const openAssetFloating = React.useCallback((): void => {
-    if (activeTab !== 'assets') setSourceWorkspace(activeTab)
-    setAssetView('floating')
-  }, [activeTab, setAssetView, setSourceWorkspace])
+    openAssetLibrary('floating')
+  }, [])
   useAssetEdgeTrigger({ enabled: assetEdgeTriggerEnabled && !isSettingsOpen, edge: assetTriggerEdge, delayMs: assetEdgeDelayMs, dragDelayMs: assetDragEdgeDelayMs, open: assetView !== 'closed', onOpen: openAssetFloating })
 
   const openAssetWorkspace = (): void => {
-    if (activeTab !== 'assets') setSourceWorkspace(activeTab)
-    setAssetView('workspace')
-    setActiveTab('assets')
+    openAssetLibrary('workspace')
   }
   const closeAssets = React.useCallback((): void => {
-    setAssetView('closed')
-    if (activeTab === 'assets') setActiveTab(sourceWorkspace)
-  }, [activeTab, setAssetView, sourceWorkspace])
+    closeAssetLibrary()
+  }, [])
   const handleAssetClick = (): void => {
     if (assetView !== 'closed') { closeAssets(); return }
     if (assetTabAction === 'workspace') openAssetWorkspace(); else openAssetFloating()
   }
-  const handleTabChange = (tab: WorkspaceId): void => { setAssetView('closed'); setActiveTab(tab) }
+  const handleTabChange = switchWorkspace
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -85,8 +85,6 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [assetView, closeAssets])
-  useEffect(() => { if (assetView === 'closed' && activeTab === 'assets') setActiveTab(sourceWorkspace) }, [activeTab, assetView, sourceWorkspace])
-
   // 应用初始化
   useEffect(() => {
     const initializeApp = async () => {
@@ -152,7 +150,7 @@ const App: React.FC = () => {
       >
         {/* 标题栏（含 Tab 切换） */}
         <WindowControls
-          activeTab={activeTab}
+          activeTab={activeWorkspace}
           assetView={assetView}
           onTabChange={handleTabChange}
           onAssetClick={handleAssetClick}
@@ -160,7 +158,7 @@ const App: React.FC = () => {
         />
 
         {/* 工作区容器 */}
-        <TabContainer activeTab={activeTab} />
+        <TabContainer activeTab={activeWorkspace} />
         <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
         {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         <LargeUploadChoiceDialog />

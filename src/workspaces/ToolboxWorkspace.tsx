@@ -1,17 +1,17 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { ArrowLeft, Clapperboard, SquarePen } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { UiIconButton, UiOptionButton } from '@/components/ui'
 import CameraStageApp from '@/features/cameraStage/CameraStageApp'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import ImageMarkTool from '@/features/imageMark/standalone/ImageMarkTool'
+import type { ToolboxToolId } from '@/core/types/workspace'
+import { selectToolboxTool, useNavigationStore } from '@/stores/navigationStore'
 
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
  * 新工具在 TOOLS 里登记并在 renderTool 中接线即可，不改布局骨架。
  */
-
-type ToolboxToolId = 'cameraStage' | 'imageMark'
 
 interface ToolboxToolMeta {
   id: ToolboxToolId
@@ -45,7 +45,7 @@ function renderTool(id: ToolboxToolId): React.ReactNode {
 }
 
 const ToolboxWorkspace: React.FC = () => {
-  const [activeToolId, setActiveToolId] = useState<ToolboxToolId | null>(null)
+  const activeToolId = useNavigationStore((state) => state.activeToolId)
   const cameraStageView = useCameraStageSessionStore((state) => state.appView)
 
   const activeTool = TOOLS.find((tool) => tool.id === activeToolId)
@@ -61,7 +61,7 @@ const ToolboxWorkspace: React.FC = () => {
               appearance="hover-only"
               className="h-7 w-7"
               title="返回工具箱"
-              onClick={() => setActiveToolId(null)}
+              onClick={() => selectToolboxTool(null)}
             >
               <ArrowLeft size={15} />
             </UiIconButton>
@@ -84,7 +84,7 @@ const ToolboxWorkspace: React.FC = () => {
               key={tool.id}
               variant="card"
               className="h-auto flex-col !items-start gap-2 p-4 text-left"
-              onClick={() => setActiveToolId(tool.id)}
+              onClick={() => selectToolboxTool(tool.id)}
             >
               <tool.icon size={22} className="text-text-muted" />
               <span className="text-sm font-medium">{tool.name}</span>

@@ -27,6 +27,12 @@ export function createElectronLlmRuntime(): LlmRuntimePlatform {
     chatStream: async (request, onEvent) => {
       await getNativeLlm().chatStream(request, onEvent)
     },
+    modelStep: async (input, onEvent) => {
+      return await getNativeLlm().modelStep(input, onEvent)
+    },
+    verifyModelCapabilities: async (request) => {
+      return await getNativeLlm().verifyModelCapabilities(request)
+    },
     cancelTask: async (taskId) => {
       await getNativeLlm().cancelTask(taskId)
     },

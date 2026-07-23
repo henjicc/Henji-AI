@@ -1,4 +1,7 @@
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
+import type { ModelCapabilitySmokeResult } from './capabilitySmoke'
+
+export type { CapabilitySmokeCheck, CapabilitySmokeStatus } from './capabilitySmoke'
 
 export interface LlmCapabilities {
   text: boolean
@@ -7,7 +10,14 @@ export interface LlmCapabilities {
   audio: boolean
   streaming: boolean
   toolCall: boolean
+  parallelTools: boolean
   jsonOutput: boolean
+  structuredOutputMode: 'none' | 'json' | 'schema'
+  reasoning: boolean
+  sampling: boolean
+  contextWindow: number | null
+  maxOutputTokens: number | null
+  usage: boolean
 }
 
 export type LlmReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -35,6 +45,34 @@ export interface LlmModelConfig {
   baseUrl?: string
   capabilities: LlmCapabilities
   enabled: boolean
+}
+
+export type AgentModelRole = 'primary' | 'router' | 'summarizer' | 'fallback'
+
+export interface AgentModelReference {
+  providerId: string
+  modelId: string
+}
+
+export type AgentModelCapabilityVerification = ModelCapabilitySmokeResult
+
+export interface AgentModelProfile {
+  id: string
+  name: string
+  primary: AgentModelReference
+  router?: AgentModelReference
+  summarizer?: AgentModelReference
+  fallback?: AgentModelReference
+  settings: {
+    timeoutMs: number
+    maxRetries: number
+    maxOutputTokens: number
+    contextWindowBudget: number
+    temperature?: number
+  }
+  verifications: AgentModelCapabilityVerification[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface PromptOptimizationProfile {
@@ -77,6 +115,8 @@ export interface LlmConfigState {
   models: LlmModelConfig[]
   promptProfiles: PromptOptimizationProfile[]
   selectedPromptProfileId?: string
+  agentProfiles: AgentModelProfile[]
+  selectedAgentProfileId?: string
   tools: LlmToolSchema[]
   policy: LlmPolicy
   memory: LlmMemoryScope

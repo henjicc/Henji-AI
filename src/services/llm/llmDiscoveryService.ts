@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig } from '@/core/llm/types'
+import { DEFAULT_LLM_CAPABILITIES } from '@/core/llm/defaults'
 
 const logger = createLogger('services.llm.llmDiscoveryService')
 
@@ -9,15 +10,7 @@ export interface DiscoveredModelItem {
 }
 
 function getDefaultCapabilities(): LlmCapabilities {
-  return {
-    text: true,
-    image: false,
-    video: false,
-    audio: false,
-    streaming: true,
-    toolCall: false,
-    jsonOutput: false,
-  }
+  return { ...DEFAULT_LLM_CAPABILITIES }
 }
 
 export function createModelFromInput(

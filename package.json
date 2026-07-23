@@ -34,6 +34,7 @@
     "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "2.0.62",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@tiptap/core": "^3.28.0",
@@ -47,6 +48,7 @@
     "@tiptap/suggestion": "^3.28.0",
     "@types/react-window": "^1.8.8",
     "@xyflow/react": "^12.10.1",
+    "ai": "6.0.234",
     "archiver": "^8.0.0",
     "better-sqlite3": "^12.5.0",
     "dockview-react": "^7.0.2",
@@ -73,6 +75,7 @@
     "three-stdlib": "^2.36.1",
     "uuid": "^13.0.0",
     "yauzl": "^3.4.0",
+    "zod": "4.4.3",
     "zundo": "^2.3.0",
     "zustand": "^5.0.11"
   },

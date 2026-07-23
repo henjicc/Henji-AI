@@ -1,5 +1,18 @@
 import type { JsonObject, JsonValue, LlmChatRequestDto, LlmStreamEventDto } from '../services/llm/types'
+import {
+  modelStepInputSchema,
+  type ModelStepEvent,
+  type ModelStepInput,
+  type ModelStepResult,
+} from '../../../src/core/llm/modelStep'
+import {
+  modelCapabilitySmokeRequestSchema,
+  type ModelCapabilitySmokeRequest,
+  type ModelCapabilitySmokeResult,
+} from '../../../src/core/llm/capabilitySmoke'
 import { cancelLlmRuntimeTask, llmChatStream } from '../services/llm/runtime'
+import { runModelStep } from '../services/llm/sdk/runtime'
+import { verifyModelCapabilities } from '../services/llm/sdk/capability-smoke'
 import { discoverModels } from '../services/llm/discovery'
 import type { DiscoveredModelItem } from '../services/llm/discovery'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
@@ -14,6 +27,16 @@ interface ChatStreamEventPayload {
   event: LlmStreamEventDto
 }
 
+interface ModelStepPayload {
+  streamId: string
+  input: ModelStepInput
+}
+
+interface ModelStepEventPayload {
+  streamId: string
+  event: ModelStepEvent
+}
+
 export function registerLlmRuntimeIpc(): void {
   registerIpcHandler<ChatStreamPayload, void>('llm:chatStream', parseChatStreamPayload, async (payload, event) => {
     await llmChatStream(payload.request, (streamEvent) => {
@@ -24,6 +47,19 @@ export function registerLlmRuntimeIpc(): void {
       event.sender.send('llm:chatStream:event', eventPayload)
     })
   })
+
+  registerIpcHandler<ModelStepPayload, ModelStepResult>('llm:modelStep', parseModelStepPayload, async (payload, event) => {
+    return await runModelStep(payload.input, (stepEvent) => {
+      const eventPayload: ModelStepEventPayload = { streamId: payload.streamId, event: stepEvent }
+      event.sender.send('llm:modelStep:event', eventPayload)
+    })
+  })
+
+  registerIpcHandler<ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult>(
+    'llm:verifyModelCapabilities',
+    input => modelCapabilitySmokeRequestSchema.parse(input),
+    verifyModelCapabilities
+  )
 
   registerIpcHandler<string, void>('llm:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {
     cancelLlmRuntimeTask(taskId)
@@ -40,6 +76,14 @@ export function registerLlmRuntimeIpc(): void {
     },
     ({ providerId, baseUrl }) => discoverModels(providerId, baseUrl)
   )
+}
+
+function parseModelStepPayload(input: unknown): ModelStepPayload {
+  const record = parseRecord(input)
+  return {
+    streamId: readString(record, 'streamId'),
+    input: modelStepInputSchema.parse(record.input),
+  }
 }
 
 function parseChatStreamPayload(input: unknown): ChatStreamPayload {

@@ -19,6 +19,7 @@ import { createElectronWindow } from './window'
 import { createElectronLogging } from './logging'
 import { createElectronUpdater } from './updater'
 import { createElectronAssetLibrary } from './assetLibrary'
+import { createElectronAssistant } from './assistant'
 
 export function createElectronPlatform(): PlatformRuntime {
   return {
@@ -42,5 +43,6 @@ export function createElectronPlatform(): PlatformRuntime {
     logging: createElectronLogging(),
     updater: createElectronUpdater(),
     assetLibrary: createElectronAssetLibrary(),
+    assistant: createElectronAssistant(),
   }
 }

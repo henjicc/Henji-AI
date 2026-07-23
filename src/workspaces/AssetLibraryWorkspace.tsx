@@ -1,9 +1,8 @@
 import React from 'react'
 import { AssetLibrarySurface } from '@/features/assets/AssetLibrarySurface'
-import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { closeAssetLibrary } from '@/stores/navigationStore'
 
 const AssetLibraryWorkspace: React.FC = () => {
-  const setView = useAssetLibraryStore((s) => s.setView)
-  return <AssetLibrarySurface mode="workspace" onBack={() => setView('closed')} />
+  return <AssetLibrarySurface mode="workspace" onBack={closeAssetLibrary} />
 }
 export default AssetLibraryWorkspace

@@ -1,8 +1,26 @@
+import type {
+  FrontendToolAcknowledgement,
+  FrontendToolCancel,
+  FrontendToolRequest,
+  FrontendToolResult,
+  HostContextSnapshot,
+} from '../../src/core/assistant/hostContracts'
+import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../src/core/llm/modelStep'
+import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '../../src/core/llm/capabilitySmoke'
+
 export interface HenjiIpcErrorEnvelope {
   name: string
   message: string
   code: string
   stack?: string
+}
+
+export interface HenjiAssistantApi {
+  publishHostContext(snapshot: HostContextSnapshot): Promise<void>
+  acknowledgeFrontendTool(acknowledgement: FrontendToolAcknowledgement): Promise<void>
+  completeFrontendTool(result: FrontendToolResult): Promise<void>
+  onFrontendToolRequest(handler: (request: FrontendToolRequest) => void): () => void
+  onFrontendToolCancel(handler: (cancel: FrontendToolCancel) => void): () => void
 }
 
 export interface HenjiWindowStatePayload {
@@ -284,8 +302,15 @@ export interface HenjiLlmApi {
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(providerIds: string[]): Promise<HenjiProviderKeyStatus[]>
   chatStream(request: HenjiLlmChatRequest, onEvent: (event: HenjiLlmStreamEvent) => void): Promise<void>
+  modelStep(input: ModelStepInput, onEvent: (event: ModelStepEvent) => void): Promise<ModelStepResult>
+  verifyModelCapabilities(request: ModelCapabilitySmokeRequest): Promise<ModelCapabilitySmokeResult>
   cancelTask(taskId: string): Promise<void>
   discoverModels(providerId: string, baseUrl: string): Promise<Array<{ modelId: string; displayName: string }>>
+}
+
+export interface HenjiModelStepEventPayload {
+  streamId: string
+  event: ModelStepEvent
 }
 
 export type HenjiLlmRole = 'system' | 'user' | 'assistant'
@@ -752,6 +777,7 @@ export interface HenjiUpdaterApi {
 }
 
 export interface HenjiNativeApi {
+  assistant: HenjiAssistantApi
   ai: HenjiAiApi
   llm: HenjiLlmApi
   db: HenjiDbApi

@@ -1,22 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
-import { Dropdown, UiButton, UiCheckbox, UiIconButton, UiInput, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
+import { Dropdown, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
-import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig, LlmReasoningConfig, LlmReasoningEffort } from '@/core/llm/types'
+import type { LlmModelConfig, LlmProviderConfig, LlmReasoningConfig, LlmReasoningEffort } from '@/core/llm/types'
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_PPIO_PROVIDER_ID,
   createDefaultProviderReasoning,
 } from '@/core/llm/defaults'
 import { createModelFromInput, fetchOpenAiCompatibleModels } from '@/services/llm/llmDiscoveryService'
-
-const capabilityItems: Array<{ id: keyof Pick<LlmCapabilities, 'image' | 'video' | 'audio' | 'toolCall'>; label: string }> = [
-  { id: 'image', label: '图片输入' },
-  { id: 'video', label: '视频输入' },
-  { id: 'audio', label: '音频输入' },
-  { id: 'toolCall', label: '工具调用' },
-]
+import AgentModelProfilesSection from './AgentModelProfilesSection'
+import LlmModelDialog from './LlmModelDialog'
 
 const providerTypes = [
   { value: 'deepseek', label: 'DeepSeek' },
@@ -237,6 +232,7 @@ const LlmSettingsSection: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-[1152px] space-y-3 p-4">
+      <AgentModelProfilesSection config={config} saveConfig={saveConfig} />
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-medium text-text-dark">供应商配置</div>
@@ -535,43 +531,13 @@ const LlmSettingsSection: React.FC = () => {
         </div>
       </UiModal>
 
-      <UiModal
+      <LlmModelDialog
         isOpen={showModelDialog}
-        title={modelDraft?.modelId ? '编辑模型' : '添加模型'}
+        model={modelDraft}
+        onChange={setModelDraft}
         onClose={() => setShowModelDialog(false)}
-        widthClassName="w-[640px]"
-        footer={(
-          <>
-            <UiButton type="button" variant="muted" onClick={() => setShowModelDialog(false)}>取消</UiButton>
-            <UiButton type="button" variant="primary" onClick={() => void handleSaveModel()}>确定</UiButton>
-          </>
-        )}
-      >
-          <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
-          <div className="space-y-1.5">
-            <div className="text-sm font-medium text-text-dark">模型 ID</div>
-            <UiInput value={modelDraft?.modelId ?? ''} onChange={(e) => setModelDraft(prev => prev ? { ...prev, modelId: e.target.value } : prev)} placeholder="例如 deepseek-v4-flash" />
-          </div>
-          <div className="space-y-1.5">
-            <div className="text-sm font-medium text-text-dark">模型名称</div>
-            <UiInput value={modelDraft?.displayName ?? ''} onChange={(e) => setModelDraft(prev => prev ? { ...prev, displayName: e.target.value } : prev)} placeholder="例如 DeepSeek V4 Flash" />
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm text-text-dark">
-            {capabilityItems.map(item => (
-              <label key={item.id} className="inline-flex items-center gap-2 rounded-lg border border-border-dark bg-app px-3 py-2">
-                <UiCheckbox
-                  checked={!!modelDraft?.capabilities?.[item.id]}
-                  onCheckedChange={(checked) => setModelDraft(prev => prev ? {
-                    ...prev,
-                    capabilities: { ...prev.capabilities, [item.id]: checked, text: true },
-                  } : prev)}
-                />
-                {item.label}
-              </label>
-            ))}
-          </div>
-        </div>
-      </UiModal>
+        onSave={handleSaveModel}
+      />
     </div>
   )
 }

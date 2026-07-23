@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   HenjiAudioApi,
+  HenjiAssistantApi,
   HenjiAssetLibraryApi,
   HenjiDiagnosticsApi,
   HenjiDiagnosticsStreamEvent,
@@ -21,6 +22,7 @@ import type {
   HenjiKeystoreApi,
   HenjiLlmApi,
   HenjiLlmStreamEventPayload,
+  HenjiModelStepEventPayload,
   HenjiLoggingApi,
   HenjiLogEvent,
   HenjiMediaApi,
@@ -38,6 +40,10 @@ import type {
   HenjiWindowApi,
   HenjiWindowStatePayload,
 } from './api'
+import type {
+  FrontendToolCancel,
+  FrontendToolRequest,
+} from '../../src/core/assistant/hostContracts'
 
 type IpcResultEnvelope<T> =
   | { ok: true; data: T }
@@ -68,6 +74,22 @@ const windowApi: HenjiWindowApi = {
     return () => {
       ipcRenderer.removeListener('window:stateChanged', listener)
     }
+  },
+}
+
+const assistantApi: HenjiAssistantApi = {
+  publishHostContext: (snapshot) => nativeInvoke('assistant:publishHostContext', snapshot),
+  acknowledgeFrontendTool: (acknowledgement) => nativeInvoke('assistant:frontendTool:ack', acknowledgement),
+  completeFrontendTool: (result) => nativeInvoke('assistant:frontendTool:result', result),
+  onFrontendToolRequest: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, request: FrontendToolRequest): void => handler(request)
+    ipcRenderer.on('assistant:frontendTool:request', listener)
+    return () => ipcRenderer.removeListener('assistant:frontendTool:request', listener)
+  },
+  onFrontendToolCancel: (handler) => {
+    const listener = (_event: Electron.IpcRendererEvent, cancel: FrontendToolCancel): void => handler(cancel)
+    ipcRenderer.on('assistant:frontendTool:cancel', listener)
+    return () => ipcRenderer.removeListener('assistant:frontendTool:cancel', listener)
   },
 }
 
@@ -192,6 +214,19 @@ const llmApi: HenjiLlmApi = {
       ipcRenderer.removeListener('llm:chatStream:event', listener)
     }
   },
+  async modelStep(input, onEvent) {
+    const streamId = createStreamId()
+    const listener = (_event: Electron.IpcRendererEvent, payload: HenjiModelStepEventPayload): void => {
+      if (payload.streamId === streamId) onEvent(payload.event)
+    }
+    ipcRenderer.on('llm:modelStep:event', listener)
+    try {
+      return await nativeInvoke('llm:modelStep', { streamId, input })
+    } finally {
+      ipcRenderer.removeListener('llm:modelStep:event', listener)
+    }
+  },
+  verifyModelCapabilities: request => nativeInvoke('llm:verifyModelCapabilities', request),
   cancelTask: (taskId) => nativeInvoke('llm:cancelTask', { taskId }),
   discoverModels: (providerId, baseUrl) => nativeInvoke('llm:discoverModels', { providerId, baseUrl }),
 }
@@ -401,6 +436,7 @@ const updaterApi: HenjiUpdaterApi = {
 }
 
 const api: HenjiNativeApi = {
+  assistant: assistantApi,
   ai: aiApi,
   llm: llmApi,
   db: dbApi,

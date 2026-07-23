@@ -27,3 +27,43 @@
 
 - 1.1～1.4 的验收项全部满足，可以进入 2.1。
 - token、router、压缩阈值属于初始设计值，后续在 5.4/6.2 以真实模型和评测集校准。
+
+## 第二阶段 · 宿主可操控化改造
+
+- 验证状态：代码与自动化验证通过；真实 Provider 和鼠标交互待用户验收
+- 验证日期：2026-07-23
+- 验证范围：导航单一状态源、宿主命令/查询、frontend 往返、可见生成任务、AI SDK 单步、Agent Profile、能力 smoke、配置迁移与 Electron 构建。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| `npm test` | 通过；55 个测试文件、280 个用例全部通过 |
+| `npm run lint` | 通过；renderer 无 warning |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过 |
+| `npx tsc --noEmit` | 通过 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 |
+| `npm run check:colors` | 通过；无新增颜色硬编码 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功打包，AI SDK ESM/CJS 兼容 |
+| `git diff --check` | 通过；仅有仓库既有 CRLF 提示，无空白错误 |
+| `npm run electron:smoke` | 未通过；唯一 console error 为用户历史外部媒体路径的 `henji-media://` 403，诊断确认与本阶段改动无关，未修改用户数据 |
+
+### 新增定向覆盖
+
+- 导航与素材联动、HostContract、写命令 revision 冲突、稳定返回值。
+- AI SDK 文本/reasoning 流、单步 tool-call、`Output.object()`、response messages、usage、能力裁剪、Provider 原生参数、取消与错误分类。
+- capability smoke 六项结果聚合、真实 token 汇总与费用 unknown。
+- Agent Profile 旧配置迁移、router/summarizer 复用 primary、已验证 fallback 与明确阻断。
+- 提示词优化既有测试随全量测试通过，旧手写流式路径保留。
+
+### 待用户手动验证
+
+- 四个工作区切换、素材库完整/悬浮模式、Esc 关闭、从 assets 返回来源工作区和工具箱子工具状态。
+- 打开画布项目、添加节点和创建可见生成任务的实际 UI 结果。
+- 使用用户选择的真实模型运行 capability smoke，核对文本、工具、结构化输出、流、usage、取消以及失败提示。
+
+### 结论
+
+- 第二阶段代码可以交付手动验收；未发现代码阻塞。
+- 用户验收通过后可进入 3.1；真实 smoke 结果将成为 Runner 启动前能力判断依据。

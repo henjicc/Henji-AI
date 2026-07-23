@@ -7,6 +7,7 @@ import {
   DEFAULT_PPIO_MODEL_ID,
   DEFAULT_PPIO_PROVIDER_ID,
   DEFAULT_PROMPT_PROFILE_ID,
+  DEFAULT_AGENT_PROFILE_ID,
   createBuiltInLlmModels,
   createBuiltInLlmProviders,
   createDefaultProviderReasoning,
@@ -15,6 +16,9 @@ import {
 import { normalizePromptOptimizationProfileDocuments } from '@/core/llm/promptOptimization'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import type {
+  AgentModelCapabilityVerification,
+  AgentModelProfile,
+  AgentModelReference,
   LlmCapabilities,
   LlmConfigState,
   LlmModelConfig,
@@ -53,6 +57,10 @@ function resolveProviderBaseUrl(provider: LlmProviderConfig): string | undefined
 }
 
 function normalizeCapabilities(capabilities?: Partial<LlmCapabilities>): LlmCapabilities {
+  const configuredMode = capabilities?.structuredOutputMode
+  const structuredOutputMode = configuredMode === 'json' || configuredMode === 'schema' || configuredMode === 'none'
+    ? configuredMode
+    : capabilities?.jsonOutput === true ? 'json' : 'none'
   return {
     text: capabilities?.text !== false,
     image: capabilities?.image === true,
@@ -60,7 +68,58 @@ function normalizeCapabilities(capabilities?: Partial<LlmCapabilities>): LlmCapa
     audio: capabilities?.audio === true,
     streaming: capabilities?.streaming !== false,
     toolCall: capabilities?.toolCall === true,
-    jsonOutput: capabilities?.jsonOutput === true,
+    parallelTools: capabilities?.parallelTools === true,
+    jsonOutput: capabilities?.jsonOutput === true || structuredOutputMode !== 'none',
+    structuredOutputMode,
+    reasoning: capabilities?.reasoning === true,
+    sampling: capabilities?.sampling !== false,
+    contextWindow: typeof capabilities?.contextWindow === 'number' ? capabilities.contextWindow : null,
+    maxOutputTokens: typeof capabilities?.maxOutputTokens === 'number' ? capabilities.maxOutputTokens : null,
+    usage: capabilities?.usage !== false,
+  }
+}
+
+function normalizeAgentModelReference(
+  reference: AgentModelReference | undefined,
+  fallback?: AgentModelReference
+): AgentModelReference | undefined {
+  const providerId = reference?.providerId?.trim()
+  const modelId = reference?.modelId?.trim()
+  if (providerId && modelId) return { providerId, modelId }
+  return fallback
+}
+
+function normalizeVerification(value: AgentModelCapabilityVerification): AgentModelCapabilityVerification {
+  return {
+    ...value,
+    providerId: value.providerId.trim(),
+    modelId: value.modelId.trim(),
+    checks: Array.isArray(value.checks) ? value.checks : [],
+    cost: value.cost?.status === 'known' ? value.cost : { status: 'unknown' },
+  }
+}
+
+function normalizeAgentProfile(profile: AgentModelProfile, fallback: AgentModelProfile): AgentModelProfile {
+  const primary = normalizeAgentModelReference(profile.primary, fallback.primary) ?? fallback.primary
+  return {
+    ...fallback,
+    ...profile,
+    id: profile.id?.trim() || DEFAULT_AGENT_PROFILE_ID,
+    name: profile.name?.trim() || '智能助手',
+    primary,
+    router: normalizeAgentModelReference(profile.router),
+    summarizer: normalizeAgentModelReference(profile.summarizer),
+    fallback: normalizeAgentModelReference(profile.fallback),
+    settings: {
+      timeoutMs: Math.max(1_000, profile.settings?.timeoutMs ?? fallback.settings.timeoutMs),
+      maxRetries: Math.min(5, Math.max(0, profile.settings?.maxRetries ?? fallback.settings.maxRetries)),
+      maxOutputTokens: Math.max(1, profile.settings?.maxOutputTokens ?? fallback.settings.maxOutputTokens),
+      contextWindowBudget: Math.max(1, profile.settings?.contextWindowBudget ?? fallback.settings.contextWindowBudget),
+      temperature: profile.settings?.temperature,
+    },
+    verifications: (profile.verifications ?? []).map(normalizeVerification),
+    createdAt: profile.createdAt || fallback.createdAt,
+    updatedAt: profile.updatedAt || fallback.updatedAt,
   }
 }
 
@@ -136,7 +195,7 @@ function resolveSelectedPromptProfileId(
   return promptProfiles[0]?.id
 }
 
-function normalizeConfig(input: Partial<LlmConfigState> | null): LlmConfigState {
+export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmConfigState {
   const defaults = createDefaultLlmConfig()
   if (!input) return defaults
 
@@ -178,6 +237,13 @@ function normalizeConfig(input: Partial<LlmConfigState> | null): LlmConfigState 
       firstEnabled.isDefault = true
     }
   }
+  const defaultAgentProfile = defaults.agentProfiles[0]
+  const agentProfiles = (input.agentProfiles?.length ? input.agentProfiles : [defaultAgentProfile])
+    .map(profile => normalizeAgentProfile(profile, defaultAgentProfile))
+  const selectedAgentProfileId = input.selectedAgentProfileId?.trim()
+  const resolvedAgentProfileId = selectedAgentProfileId && agentProfiles.some(profile => profile.id === selectedAgentProfileId)
+    ? selectedAgentProfileId
+    : agentProfiles[0]?.id
 
   return {
     providers,
@@ -187,6 +253,8 @@ function normalizeConfig(input: Partial<LlmConfigState> | null): LlmConfigState 
       input.selectedPromptProfileId,
       promptProfiles.length ? promptProfiles : defaults.promptProfiles
     ),
+    agentProfiles,
+    selectedAgentProfileId: resolvedAgentProfileId,
     tools: input.tools ?? defaults.tools,
     policy: input.policy ?? defaults.policy,
     memory: input.memory ?? defaults.memory,
@@ -243,11 +311,11 @@ function ensureBuiltInModels(models: LlmModelConfig[], providers: LlmProviderCon
 export class LlmConfigService {
   async getConfig(): Promise<LlmConfigState> {
     const stored = await readJsonFromAppData<Partial<LlmConfigState>>(LLM_CONFIG_FILE)
-    return normalizeConfig(stored)
+    return normalizeLlmConfig(stored)
   }
 
   async saveConfig(config: LlmConfigState): Promise<void> {
-    const nextConfig = normalizeConfig(config)
+    const nextConfig = normalizeLlmConfig(config)
     await writeJsonToAppData(LLM_CONFIG_FILE, nextConfig)
     emitConfigChanged()
   }
@@ -280,7 +348,7 @@ export class LlmConfigService {
   async deletePromptProfile(profileId: string): Promise<LlmConfigState> {
     const config = await this.getConfig()
     const nextProfiles = config.promptProfiles.filter(profile => profile.id !== profileId)
-    const nextConfig = normalizeConfig({ ...config, promptProfiles: nextProfiles })
+    const nextConfig = normalizeLlmConfig({ ...config, promptProfiles: nextProfiles })
     await this.saveConfig(nextConfig)
     return nextConfig
   }
@@ -291,7 +359,7 @@ export class LlmConfigService {
       ...profile,
       isDefault: profile.id === profileId,
     }))
-    const nextConfig = normalizeConfig({ ...config, promptProfiles: nextProfiles })
+    const nextConfig = normalizeLlmConfig({ ...config, promptProfiles: nextProfiles })
     await this.saveConfig(nextConfig)
     return nextConfig
   }
@@ -301,7 +369,7 @@ export class LlmConfigService {
     const nextProvider = normalizeProvider(provider)
     const nextProviders = config.providers.filter(item => item.providerId !== nextProvider.providerId)
     nextProviders.push(nextProvider)
-    const nextConfig = normalizeConfig({ ...config, providers: nextProviders })
+    const nextConfig = normalizeLlmConfig({ ...config, providers: nextProviders })
     await this.saveConfig(nextConfig)
     return nextConfig
   }
@@ -311,7 +379,7 @@ export class LlmConfigService {
     const nextModel = normalizeModel(model, config.providers)
     const nextModels = config.models.filter(item => !(item.providerId === nextModel.providerId && item.modelId === nextModel.modelId))
     nextModels.push(nextModel)
-    const nextConfig = normalizeConfig({ ...config, models: nextModels })
+    const nextConfig = normalizeLlmConfig({ ...config, models: nextModels })
     await this.saveConfig(nextConfig)
     return nextConfig
   }
@@ -323,7 +391,7 @@ export class LlmConfigService {
         ? { ...provider, enabled }
         : provider
     ))
-    const nextConfig = normalizeConfig({ ...config, providers: nextProviders })
+    const nextConfig = normalizeLlmConfig({ ...config, providers: nextProviders })
     await this.saveConfig(nextConfig)
     return nextConfig
   }
@@ -335,7 +403,7 @@ export class LlmConfigService {
         ? { ...model, enabled }
         : model
     ))
-    const nextConfig = normalizeConfig({ ...config, models: nextModels })
+    const nextConfig = normalizeLlmConfig({ ...config, models: nextModels })
     await this.saveConfig(nextConfig)
     return nextConfig
   }
@@ -343,7 +411,7 @@ export class LlmConfigService {
   async deleteModel(providerId: string, modelId: string): Promise<LlmConfigState> {
     const config = await this.getConfig()
     const nextModels = config.models.filter(model => !(model.providerId === providerId && model.modelId === modelId))
-    const nextConfig = normalizeConfig({ ...config, models: nextModels })
+    const nextConfig = normalizeLlmConfig({ ...config, models: nextModels })
     await this.saveConfig(nextConfig)
     return nextConfig
   }

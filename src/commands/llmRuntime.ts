@@ -1,5 +1,7 @@
 import { createLogger } from '@/core/logging'
 import type { LlmChatRequest, LlmStreamEvent } from '@/core/llm/types'
+import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@/core/llm/modelStep'
+import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/core/llm/capabilitySmoke'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 const logger = createLogger('commands.llmRuntime')
@@ -57,6 +59,32 @@ export async function llmChatStream(
     })
     throw error
   }
+}
+
+export async function llmModelStep(
+  input: ModelStepInput,
+  onEvent: (event: ModelStepEvent) => void
+): Promise<ModelStepResult> {
+  ensureDesktopRuntime()
+  try {
+    return await getPlatform().llmRuntime.modelStep(input, onEvent)
+  } catch (error) {
+    logger.error('模型单步 IPC 调用失败', error, {
+      event: 'llm_model_step.invoke.failed',
+      requestId: input.runId,
+      taskId: input.stepId,
+      providerId: input.providerId,
+      modelId: input.modelId,
+    })
+    throw error
+  }
+}
+
+export async function llmVerifyModelCapabilities(
+  request: ModelCapabilitySmokeRequest
+): Promise<ModelCapabilitySmokeResult> {
+  ensureDesktopRuntime()
+  return await getPlatform().llmRuntime.verifyModelCapabilities(request)
 }
 
 export async function llmCancelTask(taskId: string): Promise<void> {

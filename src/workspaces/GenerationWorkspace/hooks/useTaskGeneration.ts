@@ -1,23 +1,9 @@
 import { createLogger } from '@/core/logging'
-import { useCallback, useRef, useState } from 'react'
-import { toDisplaySrc } from '@/platform/desktopApi'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { GenerationService } from '@/core/services/GenerationService'
-import { registry } from '@/core/ModelRegistry'
-import { taskQueueManager } from '@/services/taskQueue'
-import {
-  dataUrlToBlob,
-  ensureCompressedJpegBytesWithPica,
-  isDesktop,
-  saveUploadAudio,
-  saveBytesToUploads,
-  saveBase64ToUploads,
-  saveUploadVideo,
-} from '@/utils/save'
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
-import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
 import type { ImageMarkSession } from '@/features/imageMark'
-import { saveEditState } from '@/utils/editStatePersistence'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
@@ -26,6 +12,17 @@ import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } 
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
+import {
+  asMutableRecord,
+  isMinimaxVoiceCloneMode,
+  normalizeNonEmptyString,
+  toVideoDisplayUrl,
+} from '../application/generationTaskUtils'
+import {
+  createVisibleGenerationTask,
+  registerVisibleGenerationTaskHandler,
+  type VisibleGenerationTaskInput,
+} from '../application/visibleGenerationTaskCommand'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskGeneration')
 
@@ -55,10 +52,6 @@ export interface UseTaskGenerationReturn {
   handleContinuePolling: (task: GenerationTask) => Promise<void>
 }
 
-function createTaskId(): string {
-  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
-
 function getUserMessage(error: DynamicValue): string {
   if (error instanceof Error) return error.message
   return String(error)
@@ -75,83 +68,6 @@ function maybeToUserMessage(error: DynamicValue): string {
     }
   }
   return getUserMessage(error)
-}
-
-function asGeneratorOptions(value: DynamicValue): GeneratorOptions {
-  return isRecord(value) ? (value as GeneratorOptions) : {}
-}
-
-function classifyMediaSourceKind(source: string): string {
-  const trimmed = source.trim()
-  if (!trimmed) return 'empty'
-  if (trimmed.startsWith('data:')) return 'data-url'
-  if (trimmed.startsWith('blob:')) return 'blob-url'
-  if (trimmed.startsWith('asset://localhost/')) return 'asset-url'
-  if (trimmed.startsWith('tauri://localhost/')) return 'legacy-tauri-url'
-  if (trimmed.startsWith('http://asset.localhost/') || trimmed.startsWith('https://asset.localhost/')) {
-    return 'asset-http-url'
-  }
-  if (trimmed.startsWith('http://tauri.localhost/') || trimmed.startsWith('https://tauri.localhost/')) {
-    return 'legacy-tauri-http-url'
-  }
-  if (trimmed.startsWith('file://')) return 'file-url'
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return 'remote-url'
-  if (/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(trimmed)) return 'local-path'
-  return 'other'
-}
-
-function summarizeMediaSources(values: DynamicValue): Array<DynamicValueMap> {
-  if (!isStringArray(values)) {
-    return []
-  }
-
-  return values.map((value, index) => ({
-    index,
-    kind: classifyMediaSourceKind(value),
-    length: value.length,
-    preview: value.startsWith('data:')
-      ? value.slice(0, 48)
-      : value.slice(0, 140),
-  }))
-}
-
-function isFileValue(value: DynamicValue): value is File {
-  return typeof File !== 'undefined' && value instanceof File
-}
-
-function toVideoDisplayUrl(path: string): string {
-  return toDisplaySrc(path.replace(/\\/g, '/'))
-}
-
-function isLikelyVideoSource(value: string): boolean {
-  const source = value.trim()
-  if (!source) return false
-  if (source.startsWith('data:video/')) return true
-  if (source.startsWith('blob:')) return true
-  if (source.startsWith('asset://localhost/')) return true
-  if (source.startsWith('tauri://localhost/')) return true
-  if (source.startsWith('file://')) return true
-  if (source.startsWith('http://') || source.startsWith('https://')) return true
-  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(source)
-}
-
-function normalizeNonEmptyString(value: DynamicValue): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
-function isMinimaxVoiceCloneMode(options: GeneratorOptions): boolean {
-  return options.minimaxMode === 'voice-clone'
-}
-
-function asMutableRecord(value: DynamicValue): DynamicValueMap {
-  if (isRecord(value)) {
-    return { ...value }
-  }
-  return {}
 }
 
 function extractVoiceIdFromMetadata(metadata: DynamicValue): string | undefined {
@@ -376,284 +292,39 @@ export function useTaskGeneration({
     })
   }, [messages.genericGenerateFailed, notify, updateProgress, updateTask])
 
-  const handleGenerate = useCallback(async (
-    input: string,
-    model: string,
-    type: MediaType,
-    optionsRaw?: DynamicValue
-  ): Promise<void> => {
-    const options = asGeneratorOptions(optionsRaw)
-
-    // 生成前处理 Base64 图片：落盘 + 压缩，避免历史记录膨胀
-    if (isStringArray(options.images) && options.images.length > 0) {
-      const images = [...options.images]
-      const uploadedFilePaths = isStringArray(options.uploadedFilePaths)
-        ? [...options.uploadedFilePaths]
-        : new Array(images.length).fill('')
-
-      let changed = false
-      for (let i = 0; i < images.length; i++) {
-        const img = images[i]
-        if (!img.startsWith('data:')) continue
-
-        try {
-          const blob = await dataUrlToBlob(img)
-          const jpegBytes = await ensureCompressedJpegBytesWithPica(blob)
-          const saved = await saveBytesToUploads(jpegBytes, 'image/jpeg')
-
-          const session = imageEditStatesRef.current.get(img)
-          if (session) {
-            let sourceUrl = session.sourceUrl
-            if (sourceUrl.startsWith('data:')) {
-              const savedOrg = await saveBase64ToUploads(sourceUrl)
-              sourceUrl = savedOrg.displaySrc
-            }
-
-            imageEditStatesRef.current.delete(img)
-            imageEditStatesRef.current.set(saved.displaySrc, { ...session, sourceUrl })
-          }
-
-          images[i] = saved.displaySrc
-          uploadedFilePaths[i] = saved.fullPath
-          changed = true
-        } catch (e) {
-          logger.error('[Workspace] 延迟保存图片失败', e)
-        }
-      }
-
-      if (changed) {
-        options.images = images
-        options.uploadedFilePaths = uploadedFilePaths
-        setUploadedImagesRef.current?.(images)
-        setUploadedFilePathsRef.current?.(uploadedFilePaths)
-      }
-    }
-
-    // 生成前处理上传视频：持久化到 uploads，避免请求/历史记录中使用缩略图 data URL
-    const uploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths)
-      ? [...options.uploadedVideoFilePaths]
-      : []
-    const uploadedAudioFilePaths = isStringArray(options.uploadedAudioFilePaths)
-      ? [...options.uploadedAudioFilePaths]
-      : []
-    const inlineVideo = options.video
-
-    if (isFileValue(inlineVideo) && uploadedVideoFilePaths.length === 0) {
-      try {
-        const savedVideo = await saveUploadVideo(inlineVideo, 'persist')
-        uploadedVideoFilePaths.push(savedVideo.fullPath)
-      } catch (error) {
-        logger.error('[Workspace] 持久化上传视频失败', error)
-        notify('视频保存失败，请重试上传后再生成', 'error')
-        return
-      }
-    }
-
-    if (uploadedVideoFilePaths.length > 0) {
-      const videoSourceUrls = uploadedVideoFilePaths.map(toVideoDisplayUrl)
-      options.uploadedVideoFilePaths = uploadedVideoFilePaths
-      options.videos = videoSourceUrls
-      ;(options as DynamicValueMap).uploadedVideos = videoSourceUrls
-      options.video = videoSourceUrls[0]
-    }
-
-    if (uploadedAudioFilePaths.length > 0) {
-      const audioSourceUrls = await Promise.all(uploadedAudioFilePaths.map((p) => toAudioDisplayUrl(p)))
-      options.uploadedAudioFilePaths = uploadedAudioFilePaths
-      options.audios = audioSourceUrls
-      ;(options as DynamicValueMap).uploadedAudios = audioSourceUrls
-    }
-
-    const sanitizedVideos = isStringArray(options.videos)
-      ? options.videos.filter(isLikelyVideoSource)
-      : []
-    if (sanitizedVideos.length > 0) {
-      options.videos = sanitizedVideos
-      ;(options as DynamicValueMap).uploadedVideos = sanitizedVideos
-      if (typeof options.video !== 'string' || options.video.trim().length === 0) {
-        options.video = sanitizedVideos[0]
-      }
-    } else {
-      delete options.videos
-      delete (options as DynamicValueMap).uploadedVideos
-      if (typeof options.video === 'string' && !isLikelyVideoSource(options.video)) {
-        delete options.video
-      }
-    }
-
-    if (!isStringArray(options.audios) || options.audios.length === 0) {
-      delete options.audios
-      delete (options as DynamicValueMap).uploadedAudios
-    } else {
-      options.audios = options.audios.filter((item) => typeof item === 'string' && item.trim().length > 0)
-      ;(options as DynamicValueMap).uploadedAudios = options.audios
-    }
-
-    if (isMinimaxVoiceCloneMode(options)) {
-      const cloneAudioInput = asMutableRecord(options.minimaxCloneAudioInput)
-      const cloneAudioFile = cloneAudioInput.cloneAudioFile
-      if (isFileValue(cloneAudioFile)) {
-        try {
-          const savedAudio = await saveUploadAudio(cloneAudioFile, 'persist')
-          options.minimaxCloneAudioFilePath = savedAudio.fullPath
-        } catch (error) {
-          logger.error('[Workspace] 持久化复刻音频失败', error)
-          notify('复刻音频保存失败，请重新上传后再试', 'error')
-          return
-        }
-      }
-      delete cloneAudioInput.cloneAudioFile
-      options.minimaxCloneAudioInput = cloneAudioInput
-
-      const cloneSettings = asMutableRecord(options.minimaxCloneSettings)
-      delete cloneSettings.cloneAudioUrl
-
-      const promptAudioFile = cloneSettings.promptAudioFile
-      if (isFileValue(promptAudioFile)) {
-        try {
-          const savedPromptAudio = await saveUploadAudio(promptAudioFile, 'persist')
-          options.minimaxClonePromptAudioFilePath = savedPromptAudio.fullPath
-        } catch (error) {
-          logger.error('[Workspace] 持久化示例音频失败', error)
-          notify('示例音频保存失败，请重新上传后再试', 'error')
-          return
-        }
-      }
-      delete cloneSettings.promptAudioFile
-      delete cloneSettings.promptAudioUrl
-
-      const cloneAudioPath = normalizeNonEmptyString(options.minimaxCloneAudioFilePath)
-      if (!cloneAudioPath) {
-        notify('音色克隆模式需要上传复刻音频文件', 'error')
-        return
-      }
-      options.minimaxCloneAudioFilePath = cloneAudioPath
-
-      const promptAudioPath = normalizeNonEmptyString(options.minimaxClonePromptAudioFilePath)
-      if (promptAudioPath) {
-        options.minimaxClonePromptAudioFilePath = promptAudioPath
-      } else {
-        delete options.minimaxClonePromptAudioFilePath
-      }
-
-      options.minimaxCloneSettings = cloneSettings
-    }
-
-    const hasAnyInput =
-      input.trim().length > 0 ||
-      (isStringArray(options.images) && options.images.length > 0) ||
-      (isStringArray(options.videos) && options.videos.length > 0)
-    if (!hasAnyInput) {
-      notify(messages.missingInput, 'error')
-      return
-    }
-
-    if (shouldSkipRequest()) {
-      logRequestParams({ input, model, type, options, timestamp: new Date().toISOString() })
-      notify(messages.testModeIntercepted, 'success')
-      return
-    }
-
-    // 供应商信息（用于历史）
-    const info: DynamicValue = registry.getModelInfo(model)
-    const providerId = isRecord(info) && typeof info['provider'] === 'string' ? info['provider'] : undefined
-
-    // 视频缩略图：优先使用视频文件 URL，避免 <video> 无法渲染 base64 缩略图第一帧
-    const taskUploadedVideoFilePaths = isStringArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths : undefined
-    const taskUploadedAudioFilePaths = isStringArray(options.uploadedAudioFilePaths) ? options.uploadedAudioFilePaths : undefined
-    const uploadedVideos = isStringArray(options.videos) ? options.videos : undefined
-    const videoUrls = taskUploadedVideoFilePaths?.length
-      ? taskUploadedVideoFilePaths.map(toVideoDisplayUrl)
-      : uploadedVideos
-
-    if (model === 'ppio-wan-2.5-preview') {
-      logger.info('[Workspace] Wan 2.5 Preview 请求媒体输入', {
-        model,
-        images: summarizeMediaSources(options.images),
-        uploadedFilePaths: summarizeMediaSources(options.uploadedFilePaths),
-        videos: summarizeMediaSources(options.videos),
-        uploadedVideoFilePaths: summarizeMediaSources(options.uploadedVideoFilePaths),
-      })
-    }
-
-    const taskId = createTaskId()
-
-    const imagesForState = isStringArray(options.images) ? options.images : []
-    const imageEditStates = imagesForState.reduce<Record<string, ImageMarkSession>>((acc, url, index) => {
-      const state = imageEditStatesRef.current.get(url)
-      if (state) {
-        acc[String(index)] = state
-      }
-      return acc
-    }, {})
-
-    if (Object.keys(imageEditStates).length > 0) {
-      if (isDesktop()) {
-        try {
-          const editStateFile = await saveEditState(taskId, imageEditStates)
-          options.editStateFile = editStateFile
-          delete options.imageEditStates
-          logger.info('[Workspace] 已保存编辑状态到文件', { file: editStateFile })
-        } catch (error) {
-          logger.error('[Workspace] 保存编辑状态文件失败', error)
-          options.imageEditStates = imageEditStates
-        }
-      } else {
-        options.imageEditStates = imageEditStates
-      }
-    }
-    const newTask: GenerationTask = {
-      id: taskId,
-      createdAt: new Date(),
-      type,
-      prompt: input,
-      model,
-      provider: providerId,
-      status: 'pending',
-      progress: 0,
-      images: isStringArray(options.images) ? options.images : undefined,
-      videos: videoUrls,
-        uploadedFilePaths: isStringArray(options.uploadedFilePaths) ? options.uploadedFilePaths : undefined,
-        uploadedVideoFilePaths: taskUploadedVideoFilePaths,
-        uploadedAudioFilePaths: taskUploadedAudioFilePaths,
-        options,
-    }
-
-    // enqueue 前先入列表，保证 UI 立即可见（最新在底部）
-    setTasks((prev) => [...prev, newTask])
-
-    const started = taskQueueManager.enqueue({
-      id: taskId,
-      providerId,
-      execute: async () => {
-        await executeTask(taskId, newTask)
-      },
-      onStart: () => {
-        setIsGenerating(true)
-        updateTask(taskId, { status: 'generating' })
-      },
-      onComplete: () => {
-        setIsGenerating(taskQueueManager.getRunningCount() > 0)
-      },
-      onError: () => {
-        setIsGenerating(taskQueueManager.getRunningCount() > 0)
-      },
+  const runCreateVisibleTask = useCallback((input: VisibleGenerationTaskInput): Promise<string | null> => (
+    createVisibleGenerationTask(input, {
+      appendTask: (task) => setTasks((previous) => [...previous, task]),
+      updateTask,
+      executeTask,
+      setGenerating: setIsGenerating,
+      notify,
+      messages,
+      imageEditStates: imageEditStatesRef.current,
+      setUploadedImages: (images) => setUploadedImagesRef.current?.(images),
+      setUploadedFilePaths: (paths) => setUploadedFilePathsRef.current?.(paths),
     })
-
-    if (!started) {
-      updateTask(taskId, { status: 'queued' })
-    }
-  }, [
+  ), [
     executeTask,
     imageEditStatesRef,
-    messages.missingInput,
-    messages.testModeIntercepted,
+    messages,
     notify,
     setTasks,
     setUploadedFilePathsRef,
     setUploadedImagesRef,
     updateTask,
   ])
+
+  useEffect(() => registerVisibleGenerationTaskHandler(runCreateVisibleTask), [runCreateVisibleTask])
+
+  const handleGenerate = useCallback(async (
+    input: string,
+    model: string,
+    type: MediaType,
+    options?: DynamicValue
+  ): Promise<void> => {
+    await runCreateVisibleTask({ input, model, type, options })
+  }, [runCreateVisibleTask])
 
   return { isGenerating, handleGenerate, handleContinuePolling }
 }
