@@ -110,7 +110,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
     <div className="space-y-5">
       <SectionCard
         title="用户指令"
-        description="直接用自然语言描述长期偏好和工作习惯，例如偏好的供应商、模型、质量取向或回答风格。当前任务中的明确要求始终优先。"
+        description="直接用自然语言描述长期偏好和工作习惯。除安全、权限、审批、真实能力和当前明确要求等硬约束外，用户指令优先于产品默认与模型描述。"
         titleClassName="text-sm normal-case tracking-normal text-text-dark"
       >
         <PromptEditor
@@ -129,7 +129,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           editorClassName="ui-scrollbar min-h-[220px] max-h-[360px] overflow-y-auto px-3 py-2.5 text-sm"
         />
         <p className="mt-3 text-xs leading-5 text-text-muted">
-          这里只保存你主动填写或明确要求助手修改的内容。助手不会自动把对话、推断、日志或文件写入这里；自动管理的会话与长期记忆将在独立记忆系统中处理。
+          这里只保存你主动填写或明确要求助手修改的内容。密钥、令牌、授权头和密码会在进入模型前自动脱敏；其他正常内容会完整传递。助手不会自动把对话、推断、日志或文件写入这里。
         </p>
       </SectionCard>
 

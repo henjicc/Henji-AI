@@ -181,17 +181,25 @@ describe('AgentContextBuilder', () => {
     })
     const systemPrompt = String(result.messages[0].content)
     expect(systemPrompt).toContain('tags、输入约束和参数 schema 是硬约束')
-    expect(systemPrompt).toContain('用户当前明确要求 > 低优先级用户指令 > 通用模型描述')
+    expect(systemPrompt).toContain('用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向')
+    expect(systemPrompt).toContain('用户指令是用户主动维护的高优先级自然语言偏好')
     expect(String(result.messages[1].content)).toContain('图片生成优先使用 PPIO')
     expect(String(result.messages[1].content)).toContain('UNTRUSTED_USER_INSTRUCTIONS')
   })
 
-  it('用户指令作为低信任上下文注入并在进入模型前脱敏', () => {
+  it('用户指令只自动脱敏秘密并保留其他正常内容', () => {
     const builder = new AgentContextBuilder()
     const result = builder.build({
       runId: 'run-user-instructions',
       goal: '生成一张图片',
-      userInstructions: '优先使用 PPIO。API_KEY=secret-value-1234567890',
+      userInstructions: [
+        '优先使用 PPIO。',
+        '项目路径是 D:\\作品\\当前项目。',
+        '参考地址：https://example.com/guide?mode=quality。',
+        'API_KEY=secret-value-1234567890',
+        'Cookie: session=private-session; theme=dark',
+        'PASSWORD="open sesame"',
+      ].join('\n'),
       snapshot: contextSnapshot(),
       route: {
         intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['models', 'generation'],
@@ -205,7 +213,13 @@ describe('AgentContextBuilder', () => {
     })
     const serialized = JSON.stringify(result.messages)
     expect(serialized).toContain('优先使用 PPIO')
+    expect(serialized).toContain('D:\\\\作品\\\\当前项目')
+    expect(serialized).toContain('https://example.com/guide?mode=quality')
     expect(serialized).not.toContain('secret-value-1234567890')
+    expect(serialized).not.toContain('private-session')
+    expect(serialized).not.toContain('open sesame')
     expect(serialized).toContain('API_KEY=***')
+    expect(serialized).toContain('Cookie=***')
+    expect(serialized).toContain('PASSWORD=***')
   })
 })

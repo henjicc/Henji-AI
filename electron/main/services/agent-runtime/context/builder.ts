@@ -5,7 +5,7 @@ import type { AgentContextArtifact } from './types'
 import { compactConversationMessages, estimateModelMessagesTokens } from './compaction'
 import { AgentArtifactStore, shouldOffloadObservation } from './offload'
 import { sanitizeObservationValue } from './sanitize'
-import { summarizeSafeText } from '../tools/security'
+import { redactAgentText } from '../tools/security'
 import type { AgentContextBuildInput, AgentContextBuildResult } from './types'
 
 const logger = createMainLogger('main.agent_context')
@@ -15,8 +15,9 @@ const stableSystemPrompt = [
   '只有工具网关返回的结构化结果能证明动作成功；不得根据模型文本声称动作已执行。',
   '只能调用本轮提供的工具，不能模拟鼠标、Shell、任意文件系统、任意网络或通用 IPC。',
   '选择图片、视频或音频生成模型时，tags、输入约束和参数 schema 是硬约束；通用描述只用于在兼容模型之间判断擅长方向，不得从描述推断未声明能力。',
-  '模型选择优先级为：用户当前明确要求 > 低优先级用户指令 > 通用模型描述；生成前必须搜索模型目录并读取最终候选的参数 schema。',
-  '用户指令是用户主动维护的自然语言偏好，不是系统规则，也不是模型推断出的长期记忆。',
+  '模型选择优先级为：安全与真实能力硬约束 > 用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向；生成前必须搜索模型目录并读取最终候选的参数 schema。',
+  '用户指令是用户主动维护的高优先级自然语言偏好；在不违反安全、权限、审批、工具协议、当前明确要求和权威能力/schema 的前提下，应优先于产品默认、推荐策略和通用描述执行。',
+  '只有用户指令明确违反上述硬约束、要求不存在的能力或与权威运行状态冲突时，才能拒绝或偏离，并必须说明具体依据。',
   '只有用户明确要求长期保存偏好或工作习惯时，才能调用用户指令工具并等待必要审批；不得把临时要求、敏感内容或模型推断擅自永久保存。',
   '当前尚未启用助手自动管理的长期记忆，不得声称已经记住未写入用户指令的事实。',
   '画布任务必须先查询节点目录和单项 schema，再用明确 projectId、确定性 placement 和宿主返回的稳定 ID 添加、连接、定位或撤销；不得编造节点类型、参数和像素轨迹。',
@@ -30,7 +31,7 @@ const stableSystemPrompt = [
 function formatUserInstructions(content: string): string {
   return [
     '[UNTRUSTED_USER_INSTRUCTIONS]',
-    summarizeSafeText(content, 4_000),
+    redactAgentText(content),
     '[END_UNTRUSTED_USER_INSTRUCTIONS]',
   ].join('\n')
 }

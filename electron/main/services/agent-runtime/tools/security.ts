@@ -63,7 +63,11 @@ export function redactAgentText(value: string): string {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
     .replace(/\b(sk|pk|rk|key)-[A-Za-z0-9_-]{12,}\b/gi, '$1-***')
-    .replace(/\b(api[\s_-]?key|authorization|access[_-]?token|refresh[_-]?token|token|secret|password)\b\s*[:=]\s*["']?[^\s,"';]+/gi, '$1=***')
+    .replace(/\b(set-cookie|cookie)\b\s*[:=]\s*[^\r\n]*/gi, '$1=***')
+    .replace(
+      /\b(api[\s_-]?key|authorization|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|token|secret|password)\b\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,"';]+)/gi,
+      '$1=***'
+    )
 }
 
 export function summarizeSafeText(value: string, maxLength = 2_000): string {
