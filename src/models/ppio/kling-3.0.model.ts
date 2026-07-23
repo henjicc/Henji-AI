@@ -4,16 +4,13 @@ import { hasUploadedImage } from './mediaSources'
 export const kling30Model = defineModel({
   meta: {
     id: 'ppio-kling-3.0',
+    canonicalModelId: 'kling-video-3.0',
     seriesId: 'kling-video',
     seriesRank: 3.0,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-kling-3.0',
     name: { key: 'meta.name', fallback: 'Kling 3.0' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Kling video generation model v3.0 with automatic switching by resolution, supporting text/image-to-video, start-end-frame, 4K, and motion control'
-    },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'motion-control', 'provider-ppio'],
     polling: {
       interval: 3000,

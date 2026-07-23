@@ -2,8 +2,7 @@
   "defs": {
     "ppio-seedream-4.0": {
       "meta": {
-        "name": "Seedream 4.0",
-        "description": "派欧云即梦图片生成模型 4.0 版本，支持 2K/4K 分辨率"
+        "name": "Seedream 4.0"
       },
       "params": {
         "resolution": {
@@ -31,8 +30,7 @@
     },
     "ppio-kling-2.6-pro": {
       "meta": {
-        "name": "可灵 2.6 Pro",
-        "description": "派欧云可灵视频生成模型 2.6 Pro 版本，支持文/图生视频和动作控制两种模式"
+        "name": "可灵 2.6 Pro"
       },
       "params": {
         "ppioKling26CharacterOrientation": {
@@ -42,14 +40,12 @@
     },
     "ppio-kling-o1": {
       "meta": {
-        "name": "可灵 O1",
-        "description": "派欧云可灵视频生成模型 O1 版本，支持文/图生视频、首尾帧、参考生视频、视频编辑四种模式"
+        "name": "可灵 O1"
       }
     },
     "ppio-kling-3.0": {
       "meta": {
-        "name": "可灵 3.0",
-        "description": "派欧云可灵视频生成模型 3.0 版本，支持按分辨率自动切换 Standard/Pro/4K，并支持文生视频、图生视频、首尾帧与动作控制"
+        "name": "可灵 3.0"
       },
       "params": {
         "ppioKling30CharacterOrientation": {
@@ -79,8 +75,7 @@
     },
     "ppio-seedance-v1.5-pro": {
       "meta": {
-        "name": "Seedance 1.5 Pro",
-        "description": "派欧云即舞视频生成模型 1.5 Pro 版本，支持文生视频、图生视频、首尾帧三种模式"
+        "name": "Seedance 1.5 Pro"
       },
       "params": {
         "ppioSeedance15ProServiceTier": {
@@ -95,32 +90,27 @@
     },
     "ppio-seedream-4.5": {
       "meta": {
-        "name": "Seedream 4.5",
-        "description": "派欧云即梦图片生成模型 4.5 版本，支持 2K/4K 分辨率"
+        "name": "Seedream 4.5"
       }
     },
     "ppio-seedream-5.0-lite": {
       "meta": {
-        "name": "Seedream 5.0 Lite",
-        "description": "派欧云即梦图片生成模型 5.0 lite 版本，支持文生图、图生图和组图生成"
+        "name": "Seedream 5.0 Lite"
       }
     },
     "ppio-nano-banana-2": {
       "meta": {
-        "name": "Nano Banana 2",
-        "description": "派欧云 Nano Banana 2 图片模型，支持文生图与图片编辑，并根据是否上传图片自动切换端点"
+        "name": "Nano Banana 2"
       }
     },
     "ppio-grok-imagine-image": {
       "meta": {
-        "name": "Grok Imagine 图片",
-        "description": "派欧云 Grok Imagine 图片模型，支持文生图与图片编辑，并根据是否上传图片自动切换端点"
+        "name": "Grok Imagine 图片"
       }
     },
     "ppio-grok-imagine-video": {
       "meta": {
-        "name": "Grok Imagine 视频",
-        "description": "派欧云 Grok Imagine 视频模型，支持文/图生视频与视频编辑，并根据模式和素材自动切换端点"
+        "name": "Grok Imagine 视频"
       }
     },
     "ppio-vidu-q1": {
@@ -130,14 +120,12 @@
     },
     "ppio-vidu-q2": {
       "meta": {
-        "name": "Vidu Q2",
-        "description": "派欧云 Vidu Q2 家族统一模型，使用版本 edition 与模式 mode 双维度驱动"
+        "name": "Vidu Q2"
       }
     },
     "ppio-vidu-q3": {
       "meta": {
-        "name": "Vidu Q3",
-        "description": "派欧云 Vidu Q3 统一模型，关闭专业模式为 Turbo，开启专业模式为 Pro，并自动在文/图生视频与首尾帧之间切换"
+        "name": "Vidu Q3"
       }
     },
     "ppio-wan-2.5-preview": {
@@ -147,14 +135,12 @@
     },
     "ppio-wan-2.6": {
       "meta": {
-        "name": "Wan 2.6",
-        "description": "派欧云万象视频生成模型 2.6 版本，支持文/图生视频和参考生视频两种模式"
+        "name": "Wan 2.6"
       }
     },
     "ppio-wan-2.7": {
       "meta": {
-        "name": "Wan 2.7",
-        "description": "派欧云 Wan 2.7 视频生成模型，支持文生视频、图生视频、参考生视频和视频编辑"
+        "name": "Wan 2.7"
       }
     }
   }

@@ -24,11 +24,11 @@ const resolveCustomInputLimits = (params: DynamicValueMap) => {
 export const modelscopeCustomModel = defineModel({
   meta: {
     id: 'modelscope-custom',
+    canonicalModelId: 'modelscope-custom',
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.modelscope-custom',
     name: { key: 'meta.name', fallback: 'ModelScope Custom' },
-    description: { key: 'meta.description', fallback: 'ModelScope custom model by ID' },
     tags: ['text-to-image', 'image-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,

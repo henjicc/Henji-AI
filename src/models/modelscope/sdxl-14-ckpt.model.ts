@@ -8,11 +8,11 @@ import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CRE
 export const modelscopeSdxl14Model = defineModel({
   meta: {
     id: 'MusePublic/14_ckpt_SD_XL',
+    canonicalModelId: 'sdxl-14-checkpoint',
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.MusePublic/14_ckpt_SD_XL',
     name: { key: 'meta.name', fallback: 'SD XL 1.4' },
-    description: { key: 'meta.description', fallback: 'ModelScope SD XL text-to-image model' },
     tags: ['text-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,

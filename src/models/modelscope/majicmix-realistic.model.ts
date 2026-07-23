@@ -8,11 +8,11 @@ import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CRE
 export const modelscopeMajicMixRealisticModel = defineModel({
   meta: {
     id: 'MusePublic/majicMIX_realistic',
+    canonicalModelId: 'majicmix-realistic',
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.MusePublic/majicMIX_realistic',
     name: { key: 'meta.name', fallback: 'majicMIX Realistic' },
-    description: { key: 'meta.description', fallback: 'ModelScope majicMIX realistic model' },
     tags: ['text-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,

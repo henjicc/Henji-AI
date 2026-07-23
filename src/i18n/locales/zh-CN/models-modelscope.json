@@ -2,44 +2,37 @@
   "defs": {
     "black-forest-labs/FLUX.1-Krea-dev": {
       "meta": {
-        "name": "FLUX.1-Krea-dev",
-        "description": "魔搭 FLUX.1-Krea-dev 文生图模型"
+        "name": "FLUX.1-Krea-dev"
       }
     },
     "MusePublic/majicMIX_realistic": {
       "meta": {
-        "name": "majicMIX Realistic",
-        "description": "魔搭 majicMIX 写实风格模型"
+        "name": "majicMIX Realistic"
       }
     },
     "modelscope-custom": {
       "meta": {
-        "name": "ModelScope Custom",
-        "description": "使用自定义模型ID的魔搭推理模型"
+        "name": "ModelScope Custom"
       }
     },
     "Qwen/Qwen-Image-Edit-2509": {
       "meta": {
-        "name": "Qwen-Image-Edit-2509",
-        "description": "魔搭 Qwen 图片编辑模型（需上传图片）"
+        "name": "Qwen-Image-Edit-2509"
       }
     },
     "Qwen/Qwen-Image": {
       "meta": {
-        "name": "Qwen-Image",
-        "description": "魔搭 Qwen-Image 文生图模型"
+        "name": "Qwen-Image"
       }
     },
     "MusePublic/14_ckpt_SD_XL": {
       "meta": {
-        "name": "SD XL 1.4",
-        "description": "魔搭 SD XL 文生图模型"
+        "name": "SD XL 1.4"
       }
     },
     "Tongyi-MAI/Z-Image-Turbo": {
       "meta": {
-        "name": "Z-Image-Turbo",
-        "description": "魔搭 Z-Image-Turbo 文生图模型"
+        "name": "Z-Image-Turbo"
       }
     }
   }

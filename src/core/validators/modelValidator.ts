@@ -5,6 +5,7 @@
  */
 
 import { ModelDefinition, ParamDef } from '../types'
+import { hasGenerationModelDescription } from '../modelCatalog/generationModelDescriptions'
 
 /**
  * 验证错误类
@@ -48,6 +49,16 @@ function validateMeta(model: ModelDefinition): void {
   // 检查必需字段
   if (!meta.id || typeof meta.id !== 'string') {
     throw new ModelValidationError('Model meta.id is required and must be a string')
+  }
+
+  if (!meta.canonicalModelId || typeof meta.canonicalModelId !== 'string') {
+    throw new ModelValidationError('Model meta.canonicalModelId is required and must be a string')
+  }
+
+  if (!hasGenerationModelDescription(meta.canonicalModelId)) {
+    throw new ModelValidationError(
+      `Model meta.canonicalModelId is not registered in generationModelDescriptions: ${meta.canonicalModelId}`
+    )
   }
 
   if (!meta.provider || typeof meta.provider !== 'string') {

@@ -7,13 +7,13 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const viduQ2Model = defineModel({
   meta: {
     id: 'fal-ai-vidu-q2',
+    canonicalModelId: 'vidu-q2',
     seriesId: 'vidu',
     seriesRank: 2,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-vidu-q2',
     name: { key: 'meta.name', fallback: 'Vidu Q2' },
-    description: 'Vidu Q2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

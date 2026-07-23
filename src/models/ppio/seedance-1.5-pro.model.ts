@@ -10,13 +10,13 @@ import { resolvePpioImageSources } from './mediaSources'
 export const seedance15ProModel = defineModel({
   meta: {
     id: 'ppio-seedance-v1.5-pro',
+    canonicalModelId: 'seedance-1.5-pro',
     seriesId: 'seedance',
     seriesRank: 1.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-seedance-v1.5-pro',
     name: { key: 'meta.name', fallback: 'Seedance 1.5 Pro' },
-    description: { key: 'meta.description', fallback: 'PPIO Seedance video generation model v1.5 Pro, supports text-to-video, image-to-video, and start-end-frame modes' },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame'],
     polling: {
       interval: 3000,

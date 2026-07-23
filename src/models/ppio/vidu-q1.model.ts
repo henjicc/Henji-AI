@@ -8,13 +8,13 @@ import { countUploadedImages, resolvePpioImageSources } from './mediaSources'
 export const viduQ1Model = defineModel({
   meta: {
     id: 'ppio-vidu-q1',
+    canonicalModelId: 'vidu-q1',
     seriesId: 'vidu',
     seriesRank: 1,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-vidu-q1',
     name: { key: 'meta.name', fallback: 'Vidu Q1' },
-    description: 'Vidu Q1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

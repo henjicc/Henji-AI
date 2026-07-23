@@ -7,13 +7,13 @@ import { defineModel, sharedFieldText } from '@/core'
 export const hailuo23Model = defineModel({
   meta: {
     id: 'fal-ai-minimax-hailuo-2.3',
+    canonicalModelId: 'hailuo-2.3',
     seriesId: 'hailuo',
     seriesRank: 2.3,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-minimax-hailuo-2.3',
     name: { key: 'meta.name', fallback: 'MiniMax Hailuo 2.3' },
-    description: 'MiniMax Hailuo 2.3 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-hailuo-2.3', 'minimax-hailuo-2.3-fal']
   },

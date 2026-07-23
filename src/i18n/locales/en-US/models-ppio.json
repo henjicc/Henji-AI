@@ -2,8 +2,7 @@
   "defs": {
     "ppio-seedream-4.0": {
       "meta": {
-        "name": "Seedream 4.0",
-        "description": "PPIO Seedream image generation model v4.0, supports 2K/4K resolution"
+        "name": "Seedream 4.0"
       },
       "params": {
         "resolution": {
@@ -31,8 +30,7 @@
     },
     "ppio-kling-2.6-pro": {
       "meta": {
-        "name": "Kling 2.6 Pro",
-        "description": "PPIO Kling video generation model v2.6 Pro, supports text/image-to-video and motion-control modes"
+        "name": "Kling 2.6 Pro"
       },
       "params": {
         "ppioKling26CharacterOrientation": {
@@ -42,14 +40,12 @@
     },
     "ppio-kling-o1": {
       "meta": {
-        "name": "Kling O1",
-        "description": "PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes"
+        "name": "Kling O1"
       }
     },
     "ppio-kling-3.0": {
       "meta": {
-        "name": "Kling 3.0",
-        "description": "PPIO Kling video generation model v3.0 with automatic switching by Standard/Pro/4K resolution, supporting text/image-to-video, start-end-frame, and motion control"
+        "name": "Kling 3.0"
       },
       "params": {
         "ppioKling30CharacterOrientation": {
@@ -79,8 +75,7 @@
     },
     "ppio-seedance-v1.5-pro": {
       "meta": {
-        "name": "Seedance 1.5 Pro",
-        "description": "PPIO Seedance video generation model v1.5 Pro, supports text-to-video, image-to-video, and start-end-frame modes"
+        "name": "Seedance 1.5 Pro"
       },
       "params": {
         "ppioSeedance15ProServiceTier": {
@@ -95,32 +90,27 @@
     },
     "ppio-seedream-4.5": {
       "meta": {
-        "name": "Seedream 4.5",
-        "description": "PPIO Seedream image generation model v4.5, supports 2K/4K resolution"
+        "name": "Seedream 4.5"
       }
     },
     "ppio-seedream-5.0-lite": {
       "meta": {
-        "name": "Seedream 5.0 Lite",
-        "description": "PPIO Seedream image generation model v5.0 lite, supports text/image generation and sequential image generation"
+        "name": "Seedream 5.0 Lite"
       }
     },
     "ppio-nano-banana-2": {
       "meta": {
-        "name": "Nano Banana 2",
-        "description": "PPIO Nano Banana 2 image model with automatic switching between text-to-image and image editing endpoints"
+        "name": "Nano Banana 2"
       }
     },
     "ppio-grok-imagine-image": {
       "meta": {
-        "name": "Grok Imagine Image",
-        "description": "PPIO Grok Imagine Image model with automatic switching between text-to-image and image editing endpoints"
+        "name": "Grok Imagine Image"
       }
     },
     "ppio-grok-imagine-video": {
       "meta": {
-        "name": "Grok Imagine Video",
-        "description": "PPIO Grok Imagine Video model supporting text/image-to-video and video editing with automatic endpoint routing by mode and media input"
+        "name": "Grok Imagine Video"
       }
     },
     "ppio-vidu-q1": {
@@ -130,14 +120,12 @@
     },
     "ppio-vidu-q2": {
       "meta": {
-        "name": "Vidu Q2",
-        "description": "PPIO Vidu Q2 unified family model driven by edition and mode dimensions"
+        "name": "Vidu Q2"
       }
     },
     "ppio-vidu-q3": {
       "meta": {
-        "name": "Vidu Q3",
-        "description": "PPIO Vidu Q3 unified model with Turbo as default and Pro enabled by the Pro Mode switch, with auto routing between text/image and start-end generation"
+        "name": "Vidu Q3"
       }
     },
     "ppio-wan-2.5-preview": {
@@ -147,14 +135,12 @@
     },
     "ppio-wan-2.6": {
       "meta": {
-        "name": "Wan 2.6",
-        "description": "PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes"
+        "name": "Wan 2.6"
       }
     },
     "ppio-wan-2.7": {
       "meta": {
-        "name": "Wan 2.7",
-        "description": "PPIO Wan 2.7 video generation model supporting text-to-video, image-to-video, reference-to-video, and video editing"
+        "name": "Wan 2.7"
       }
     }
   }

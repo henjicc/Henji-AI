@@ -18,14 +18,11 @@ const SUPPORTED_ASPECT_RATIOS = [
 export const grokImagineImageModel = defineModel({
   meta: {
     id: 'ppio-grok-imagine-image',
+    canonicalModelId: 'grok-imagine-image',
     provider: 'ppio',
     type: 'image',
     i18nScope: 'models.defs.ppio-grok-imagine-image',
     name: { key: 'meta.name', fallback: 'Grok Imagine Image' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Grok Imagine Image model with automatic switching between text-to-image and image editing'
-    },
     tags: ['text-to-image', 'image-to-image', 'provider-ppio'],
     polling: {
       interval: 3000,

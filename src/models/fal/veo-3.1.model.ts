@@ -7,11 +7,11 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const veo31Model = defineModel({
   meta: {
     id: 'fal-ai-veo-3.1',
+    canonicalModelId: 'veo-3.1',
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-veo-3.1',
     name: { key: 'meta.name', fallback: 'Veo 3.1' },
-    description: 'Veo 3.1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

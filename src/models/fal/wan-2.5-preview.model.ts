@@ -7,13 +7,13 @@ import { defineModel, sharedFieldText } from '@/core'
 export const wan25PreviewModel = defineModel({
   meta: {
     id: 'fal-ai-wan-25-preview',
+    canonicalModelId: 'wan-2.5-preview',
     seriesId: 'wan',
     seriesRank: 2.5,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-wan-25-preview',
     name: { key: 'meta.name', fallback: 'Wan 2.5 Preview' },
-    description: 'Wan 2.5 Preview 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-wan-2.5-preview', 'wan-25-preview']
   },

@@ -6,7 +6,18 @@
 
 import { ModelDefinition } from './types/ModelDefinition'
 import { registry } from './ModelRegistry'
+import { getGenerationModelDescription } from './modelCatalog/generationModelDescriptions'
 import { validateModel } from './validators/modelValidator'
+
+function applyCanonicalDescription(model: ModelDefinition): ModelDefinition {
+  const description = getGenerationModelDescription(model.meta.canonicalModelId)
+  if (description) {
+    model.meta.description = description
+  } else {
+    delete model.meta.description
+  }
+  return model
+}
 
 function applyI18nScope(model: ModelDefinition): ModelDefinition {
   const scope = model.meta.i18nScope
@@ -47,10 +58,11 @@ function applyI18nScope(model: ModelDefinition): ModelDefinition {
  * 定义并注册模型
  *
  * 这个函数会：
- * 1. 预处理 i18n key（应用 i18nScope）
- * 2. 验证模型定义的完整性和正确性
- * 3. 自动注册到 ModelRegistry
- * 4. 返回验证后的模型定义
+ * 1. 按 canonicalModelId 解析通用描述
+ * 2. 预处理 i18n key（应用 i18nScope）
+ * 3. 验证模型定义的完整性和正确性
+ * 4. 自动注册到 ModelRegistry
+ * 5. 返回验证后的模型定义
  *
  * @param model - 模型定义
  * @returns 验证后的模型定义
@@ -63,6 +75,7 @@ function applyI18nScope(model: ModelDefinition): ModelDefinition {
  * export const seedream45Model = defineModel({
  *   meta: {
  *     id: 'seedream-4.5',
+ *     canonicalModelId: 'seedream-4.5',
  *     provider: 'ppio',
  *     type: 'image',
  *     name: { zh: '即梦图片 4.5', en: 'Seedream 4.5' }
@@ -74,15 +87,18 @@ function applyI18nScope(model: ModelDefinition): ModelDefinition {
  * ```
  */
 export function defineModel(model: ModelDefinition): ModelDefinition {
-  // 1. 预处理 i18n key
+  // 1. 按跨供应商模型标识解析唯一的通用描述
+  applyCanonicalDescription(model)
+
+  // 2. 预处理 i18n key
   applyI18nScope(model)
 
-  // 2. 验证模型定义
+  // 3. 验证模型定义
   validateModel(model)
 
-  // 3. 注册到 ModelRegistry
+  // 4. 注册到 ModelRegistry
   registry.register(model)
 
-  // 4. 返回验证后的模型定义
+  // 5. 返回验证后的模型定义
   return model
 }

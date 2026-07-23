@@ -10,13 +10,13 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieSeedanceV1Model = defineModel({
   meta: {
     id: 'kie-seedance-v1',
+    canonicalModelId: 'seedance-v1',
     seriesId: 'seedance',
     seriesRank: 1.0,
     provider: 'kie',
     type: 'video',
     i18nScope: 'models.defs.kie-seedance-v1',
     name: { key: 'meta.name', fallback: 'Seedance 1.0' },
-    description: { key: 'meta.description', fallback: 'KIE Seedance V1 video generation model with text, image, and start-end-frame modes' },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'max-images-2', 'fast-mode', 'provider-kie'],
     aliases: ['seedance-v1-kie', 'kie-seedance-1.0'],
     polling: {

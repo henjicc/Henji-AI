@@ -173,6 +173,16 @@ export interface ModelMeta {
   id: string
 
   /**
+   * 跨供应商复用的模型标识。
+   *
+   * 同一个模型即使由不同供应商接入，也必须引用相同的 canonicalModelId。
+   * 通用描述由 generationModelDescriptions.ts 按此字段解析。
+   *
+   * @example "seedream-4.5", "kling-video-2.6-pro"
+   */
+  canonicalModelId: string
+
+  /**
    * Provider ID
    *
    * @example "ppio", "fal", "kie", "modelscope"
@@ -192,9 +202,9 @@ export interface ModelMeta {
   name: I18nText
 
   /**
-   * 模型描述（可选，支持国际化）
+   * 注册阶段从通用描述目录解析出的模型描述。
    *
-   * @example { zh: "先进的图片生成模型，支持4K分辨率", en: "Advanced image generation model with 4K resolution" }
+   * 供应商模型文件不得直接填写此字段。
    */
   description?: I18nText
 
@@ -312,10 +322,10 @@ export type { Linkage } from './Linkage'
  * export const nanoBananaModel: ModelDefinition = {
  *   meta: {
  *     id: 'nano-banana',
+ *     canonicalModelId: 'nano-banana',
  *     provider: 'fal',
  *     type: 'image',
  *     name: { zh: 'Nano Banana', en: 'Nano Banana' },
- *     description: { zh: 'Google 最先进的图片生成模型', en: 'Google\'s most advanced image generation model' },
  *     tags: ['text-to-image', 'image-to-image', 'supports-image-editing'],
  *     polling: {
  *       interval: 3000,

@@ -10,11 +10,11 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieGrokImagineVideoModel = defineModel({
   meta: {
     id: 'kie-grok-imagine-video',
+    canonicalModelId: 'grok-imagine-video',
     provider: 'kie',
     type: 'video',
         i18nScope: 'models.defs.kie-grok-imagine-video',
     name: { key: 'meta.name', fallback: 'Grok Imagine Video' },
-    description: { key: 'meta.description', fallback: 'KIE Grok Imagine video generation model' },
     tags: ['text-to-video', 'image-to-video', 'english-prompt-only', 'provider-kie'],
     aliases: ['grok-imagine-video-kie'],
     polling: {

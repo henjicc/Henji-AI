@@ -10,13 +10,13 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieSeedance20FastModel = defineModel({
   meta: {
     id: 'kie-seedance-2.0-fast',
+    canonicalModelId: 'seedance-2.0-fast',
     seriesId: 'seedance',
     seriesRank: 2.0,
     provider: 'kie',
     type: 'video',
     i18nScope: 'models.defs.kie-seedance-2.0-fast',
     name: { key: 'meta.name', fallback: 'Seedance 2.0 Fast' },
-    description: { key: 'meta.description', fallback: 'KIE Seedance 2.0 Fast video generation model with text/image-to-video and multi-modal reference-to-video modes' },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'multi-mode-switch', 'mixed-upload-mode', 'supports-audio-generation', 'fast-mode', 'provider-kie'],
     polling: {
       interval: 3000,

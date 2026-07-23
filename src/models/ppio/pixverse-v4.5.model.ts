@@ -10,13 +10,13 @@ import { resolvePpioImageSources } from './mediaSources'
 export const pixverseV45Model = defineModel({
   meta: {
     id: 'ppio-pixverse-v4.5',
+    canonicalModelId: 'pixverse-v4.5',
     seriesId: 'pixverse',
     seriesRank: 4.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-pixverse-v4.5',
     name: { key: 'meta.name', fallback: 'PixVerse V4.5' },
-    description: 'PixVerse V4.5 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

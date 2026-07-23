@@ -9,11 +9,11 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieGptImage2Model = defineModel({
   meta: {
     id: 'kie-gpt-image-2',
+    canonicalModelId: 'gpt-image-2',
     provider: 'kie',
     type: 'image',
     i18nScope: 'models.defs.kie-gpt-image-2',
     name: { key: 'meta.name', fallback: 'GPT Image 2' },
-    description: { key: 'meta.description', fallback: 'KIE GPT Image 2 image generation and editing model' },
     tags: [
       'text-to-image',
       'image-to-image',

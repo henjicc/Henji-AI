@@ -7,13 +7,13 @@ import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 export const pixverseV55Model = defineModel({
   meta: {
     id: 'fal-ai-pixverse-v5.5',
+    canonicalModelId: 'pixverse-v5.5',
     seriesId: 'pixverse',
     seriesRank: 5.5,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-pixverse-v5.5',
     name: { key: 'meta.name', fallback: 'PixVerse V5.5' },
-    description: 'PixVerse V5.5 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

@@ -8,6 +8,7 @@ const toolsByDomain: Readonly<Record<string, string[]>> = {
   navigation: ['switch_workspace'],
   models: ['search_models', 'get_model_schema'],
   generation: ['create_visible_generation_task', 'get_generation_task', 'cancel_generation_task'],
+  model_preferences: ['get_model_preferences', 'update_model_preferences'],
   diagnostics: ['query_diagnostic_events'],
   canvas: [
     'list_canvas_projects',

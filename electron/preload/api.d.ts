@@ -15,6 +15,10 @@ import type {
   AgentStartRunRequest,
   AgentStartRunResult,
 } from '../../src/core/assistant/runtimeContracts'
+import type {
+  AssistantModelPreferences,
+  AssistantModelPreferencesUpdate,
+} from '../../src/core/assistant/modelPreferences'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../src/core/llm/modelStep'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '../../src/core/llm/capabilitySmoke'
 
@@ -26,6 +30,10 @@ export interface HenjiIpcErrorEnvelope {
 }
 
 export interface HenjiAssistantApi {
+  getModelPreferences(): Promise<AssistantModelPreferences>
+  updateModelPreferences(update: AssistantModelPreferencesUpdate): Promise<AssistantModelPreferences>
+  resetModelPreferences(): Promise<AssistantModelPreferences>
+  openModelPreferencesFile(): Promise<string>
   publishHostContext(snapshot: HostContextSnapshot): Promise<void>
   acknowledgeFrontendTool(acknowledgement: FrontendToolAcknowledgement): Promise<void>
   completeFrontendTool(result: FrontendToolResult): Promise<void>

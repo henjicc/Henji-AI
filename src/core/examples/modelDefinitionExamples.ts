@@ -12,15 +12,12 @@ import { ModelDefinition } from '../types/ModelDefinition'
 export const nanoBananaExample: ModelDefinition = {
   meta: {
     id: 'nano-banana',
+    canonicalModelId: 'nano-banana',
     provider: 'fal',
     type: 'image',
     name: {
       zh: 'Nano Banana',
       en: 'Nano Banana'
-    },
-    description: {
-      zh: 'Google 最先进的图片生成和编辑模型',
-      en: 'Google\'s most advanced image generation and editing model'
     },
     tags: [
       'text-to-image',
@@ -96,15 +93,12 @@ export const nanoBananaExample: ModelDefinition = {
 export const seedream40Example: ModelDefinition = {
   meta: {
     id: 'seedream-4.0',
+    canonicalModelId: 'seedream-4.0',
     provider: 'ppio',
     type: 'image',
     name: {
       zh: '即梦图片 4.0',
       en: 'Seedream 4.0'
-    },
-    description: {
-      zh: '先进的图片生成模型，支持4K分辨率',
-      en: 'Advanced image generation model with 4K resolution'
     },
     tags: [
       'text-to-image',
@@ -159,15 +153,12 @@ export const seedream40Example: ModelDefinition = {
 export const kling26ProExample: ModelDefinition = {
   meta: {
     id: 'kling-2.6-pro',
+    canonicalModelId: 'kling-video-2.6-pro',
     provider: 'ppio',
     type: 'video',
     name: {
       zh: '可灵 2.6 Pro',
       en: 'Kling 2.6 Pro'
-    },
-    description: {
-      zh: '支持文生视频、图生视频和动作控制，可生成带音频的高质量视频',
-      en: 'Supports text-to-video, image-to-video and motion control with audio generation'
     },
     tags: [
       'text-to-video',

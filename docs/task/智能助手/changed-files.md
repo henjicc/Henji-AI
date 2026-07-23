@@ -104,6 +104,31 @@
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
 
+## 第五阶段 · 模型选择描述与偏好补充优化
+
+### 新增
+
+- `src/core/modelCatalog/generationModelDescriptions.ts` 及测试：43 个图片/视频/音频通用模型标识的单点描述目录，并校验 65 个供应商模型引用完整。
+- `src/core/assistant/modelPreferences.ts` 及测试：结构化偏好 schema、默认值、增量更新、归一化与提示词载荷。
+- `electron/main/services/assistant/model-preferences.ts`：主进程偏好文件读取、写入、重置、打开和结构化日志。
+- `electron/main/services/agent-runtime/tools/builtin/model-preferences.ts`：R0 读取与 R2/C1 更新偏好工具。
+- `src/components/Settings/sections/AgentModelPreferencesSection.tsx`：策略、供应商、图片/视频/音频模型与说明的设置界面。
+
+### 修改
+
+- `src/models/{fal,kie,modelscope,ppio}/*.model.ts`：65 个供应商模型移除 `meta.description`，新增跨供应商 `canonicalModelId`；其他模型配置不变。
+- `src/core/types/ModelDefinition.ts`、`defineModel.ts`、`validators/modelValidator.ts`、`ModelRegistry.ts`：声明、解析并强制校验中央通用模型标识和描述。
+- `src/i18n/locales/{zh-CN,en-US}/models-{kie,modelscope,ppio}.json`：删除重复供应商模型描述，保留名称、参数和价格等文案。
+- `src/features/assistant/frontendTools/hostQueryRegistry.ts`、Agent 前端工具与上下文：模型搜索/schema 返回通用标识和描述，固定选型优先级及能力硬约束。
+- `electron/main/ipc/assistant.ts`、preload、assistant PAL/command、`useAgentRun.ts`：暴露主进程偏好能力并在每次新 run 注入最新偏好。
+- `electron/main/services/agent-runtime/context/*`、`runner.ts`、backend 工具注册：新增模型偏好意图、工具域和路由。
+- `src/components/Settings/index.tsx`、`tabs/ApiKeysTab.tsx`：新增“智能助手偏好”设置分节。
+- `.codex/skills/henji-model-adaptation/**`、`.codex/skills/henji-ai-adaptation-assistant/references/model/**`、`AGENTS.md`、`CLAUDE.md`：同步新模型中央描述检查与引用规则。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
+
 ## 第四阶段 · 智能助手侧边栏实现完成，待用户手动验收
 
 ### 新增

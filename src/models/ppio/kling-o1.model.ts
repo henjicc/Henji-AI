@@ -16,13 +16,13 @@ import {
 export const klingO1Model = defineModel({
   meta: {
     id: 'ppio-kling-o1',
+    canonicalModelId: 'kling-video-o1',
     seriesId: 'kling-video',
     seriesRank: 10,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-o1',
     name: { key: 'meta.name', fallback: 'Kling O1' },
-    description: { key: 'meta.description', fallback: 'PPIO Kling video generation model O1, supports text/image-to-video, start-end-frame, reference-to-video, and video-edit modes' },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'supports-video-editing'],
     polling: {
       interval: 3000,

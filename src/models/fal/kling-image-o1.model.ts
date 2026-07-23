@@ -7,11 +7,11 @@ import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 export const klingImageO1Model = defineModel({
   meta: {
     id: 'fal-ai-kling-image-o1',
+    canonicalModelId: 'kling-image-o1',
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-kling-image-o1',
     name: { key: 'meta.name', fallback: 'Kling Image O1' },
-    description: 'Kling Image O1 高质量图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image']
   },
   params: [

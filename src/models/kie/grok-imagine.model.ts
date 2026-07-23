@@ -9,11 +9,11 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieGrokImagineModel = defineModel({
   meta: {
     id: 'kie-grok-imagine',
+    canonicalModelId: 'grok-imagine-image',
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-grok-imagine',
     name: { key: 'meta.name', fallback: 'Grok Imagine' },
-    description: { key: 'meta.description', fallback: 'KIE Grok Imagine text-to-image model' },
     tags: ['text-to-image', 'provider-kie'],
     aliases: ['grok-imagine-kie']
   },

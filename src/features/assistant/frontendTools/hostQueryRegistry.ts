@@ -47,16 +47,18 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
       if (query.input.mediaType && model.meta.type !== query.input.mediaType) return false
       if (query.input.providerId && model.meta.provider !== query.input.providerId) return false
       if (!normalized) return true
-      return `${model.meta.id} ${getI18nText(model.meta.name, 'zh')} ${getI18nText(model.meta.name, 'en')}`
+      return `${model.meta.id} ${model.meta.canonicalModelId} ${getI18nText(model.meta.name, 'zh')} ${getI18nText(model.meta.name, 'en')} ${model.meta.description ? getI18nText(model.meta.description, 'zh') : ''} ${model.meta.description ? getI18nText(model.meta.description, 'en') : ''}`
         .toLowerCase()
         .includes(normalized)
     })
     const start = query.input.cursor
     const models = filtered.slice(start, start + query.input.limit).map((model) => ({
       modelId: model.meta.id,
+      canonicalModelId: model.meta.canonicalModelId,
       providerId: model.meta.provider,
       mediaType: model.meta.type,
       name: model.meta.name,
+      description: model.meta.description,
       tags: model.meta.tags ?? [],
     }))
     return {
@@ -82,9 +84,11 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
       schemaVersion: 'model-schema/v1',
       meta: {
         id: model.meta.id,
+        canonicalModelId: model.meta.canonicalModelId,
         provider: model.meta.provider,
         type: model.meta.type,
         name: model.meta.name,
+        description: model.meta.description,
         tags: model.meta.tags ?? [],
       },
       params: JSON.parse(JSON.stringify(params)) as unknown,

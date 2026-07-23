@@ -38,16 +38,13 @@ function toInteger(value: DynamicValue): number | null {
 export const seedream50LiteModel = defineModel({
   meta: {
     id: 'ppio-seedream-5.0-lite',
+    canonicalModelId: 'seedream-5.0-lite',
     seriesId: 'seedream',
     seriesRank: 5.0,
     provider: 'ppio',
     type: 'image',
     i18nScope: 'models.defs.ppio-seedream-5.0-lite',
     name: { key: 'meta.name', fallback: 'Seedream 5.0 Lite' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Seedream image generation model v5.0 lite, supports text/image generation and sequential image generation'
-    },
     tags: ['text-to-image', 'image-to-image', 'multi-image', 'provider-ppio'],
     polling: {
       interval: 3000,

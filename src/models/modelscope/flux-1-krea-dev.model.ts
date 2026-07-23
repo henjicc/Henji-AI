@@ -8,11 +8,11 @@ import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CRE
 export const modelscopeFluxKreaDevModel = defineModel({
   meta: {
     id: 'black-forest-labs/FLUX.1-Krea-dev',
+    canonicalModelId: 'flux-1-krea-dev',
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.black-forest-labs/FLUX.1-Krea-dev',
     name: { key: 'meta.name', fallback: 'FLUX.1-Krea-dev' },
-    description: { key: 'meta.description', fallback: 'ModelScope FLUX.1-Krea-dev text-to-image model' },
     tags: ['text-to-image', 'english-prompt-only', 'provider-modelscope'],
     polling: {
       interval: 3000,

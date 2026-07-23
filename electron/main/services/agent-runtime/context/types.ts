@@ -10,6 +10,7 @@ export type AgentIntent =
   | 'cancel_generation'
   | 'diagnose'
   | 'canvas'
+  | 'model_preferences'
   | 'general'
 
 export type AgentRoutePath = 'workflow' | 'primary'

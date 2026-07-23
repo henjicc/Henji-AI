@@ -331,3 +331,41 @@
 
 - 5.1～5.4 所需代码、自动化、脚本和记录已经齐备，没有代码阻塞。
 - 真实 Provider 与 Electron 验收未执行，因此第五阶段不标记完成，也不提前进入 6.1。
+
+## 第五阶段 · 模型选择描述与偏好补充优化
+
+- 验证状态：代码与自动化门槛通过；设置页、手工编辑偏好文件和真实对话选型待用户验收
+- 验证日期：2026-07-23
+- 验证范围：中央模型描述、65 个供应商模型迁移、偏好文件/IPC/PAL、Agent 工具与路由、设置页和完整 Electron 构建。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| 中央描述与偏好定向测试 | 通过；3 个测试文件、13 个用例 |
+| `npm run test:assistant-eval` | 通过；7 个测试文件、24 个用例 |
+| `npm test` | 通过；72 个测试文件、332 个用例 |
+| `npm run lint` | 通过；renderer 零 warning |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过；Electron 零 warning |
+| `npx tsc --noEmit` | 通过 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 |
+| `npm run gen:model-manifest` | 通过；生成 65 个模型 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run check:colors` | 通过 |
+| 两套适配 Skill `quick_validate.py` | 通过；均为有效 Skill |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功构建 |
+| `git diff --check` | 通过；仅有仓库 CRLF 转换提示，无空白错误 |
+
+### 自动化覆盖
+
+- 65 个供应商模型都声明 `canonicalModelId`、都命中 43 条中央目录，且供应商模型元数据不再直接声明描述。
+- 同一偏好增量更新只改指定媒体类型，不清空其他偏好；重复条目被归一化，未知字段被拒绝。
+- “记住/优先/避免某供应商或模型”命中持久偏好工具域；系统提示固定能力硬约束与选型优先级。
+- 完整构建验证主进程偏好服务、preload IPC、渲染层设置和模型注册链路能够共同产出。
+
+### 待用户手动验证
+
+- 在设置页保存、重新读取、恢复默认并打开偏好文件，确认同一份数据双向同步；手工制造无效 JSON 时确认应用明确报错且不覆盖原文件。
+- 通过对话要求助手“以后优先使用 PPIO”“图片优先 Seedream 4.5”“避免某模型”，确认出现 R2 审批，批准后下一次生成按偏好排序。
+- 在当前请求明确指定其他兼容模型，确认当前要求能覆盖持久偏好；给出不兼容输入时确认偏好和描述不能越过 tags/schema 硬约束。
+- 在中央描述文件补充文案并重启，确认同一模型的不同供应商变体读取同一描述。

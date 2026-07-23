@@ -10,13 +10,13 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieKlingV26Model = defineModel({
   meta: {
     id: 'kie-kling-v2-6',
+    canonicalModelId: 'kling-video-2.6-pro',
     seriesId: 'kling-video',
     seriesRank: 2.6,
     provider: 'kie',
     type: 'video',
         i18nScope: 'models.defs.kie-kling-v2-6',
     name: { key: 'meta.name', fallback: 'Kling V2.6' },
-    description: { key: 'meta.description', fallback: 'KIE Kling V2.6 video model with text/image and motion-control modes' },
     tags: ['text-to-video', 'image-to-video', 'motion-control', 'provider-kie'],
     aliases: ['kling-v2-6-kie'],
     polling: {

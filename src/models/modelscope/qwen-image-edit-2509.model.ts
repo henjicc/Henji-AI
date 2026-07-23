@@ -8,11 +8,11 @@ import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CRE
 export const modelscopeQwenImageEdit2509Model = defineModel({
   meta: {
     id: 'Qwen/Qwen-Image-Edit-2509',
+    canonicalModelId: 'qwen-image-edit-2509',
     provider: 'modelscope',
     type: 'image',
     i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2509',
     name: { key: 'meta.name', fallback: 'Qwen-Image-Edit-2509' },
-    description: { key: 'meta.description', fallback: 'ModelScope Qwen image editing model (image required)' },
     tags: ['image-to-image', 'supports-image-editing', 'provider-modelscope'],
     polling: {
       interval: 3000,

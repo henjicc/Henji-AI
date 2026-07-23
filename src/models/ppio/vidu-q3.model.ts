@@ -4,16 +4,13 @@ import { countUploadedImages } from './mediaSources'
 export const viduQ3Model = defineModel({
   meta: {
     id: 'ppio-vidu-q3',
+    canonicalModelId: 'vidu-q3',
     seriesId: 'vidu',
     seriesRank: 3,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-vidu-q3',
     name: { key: 'meta.name', fallback: 'Vidu Q3' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Vidu Q3 unified model with Turbo/Pro switch and automatic text-image/start-end routing'
-    },
     tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'multi-mode-switch', 'provider-ppio'],
     polling: {
       interval: 3000,

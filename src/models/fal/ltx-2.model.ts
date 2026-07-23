@@ -7,11 +7,11 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const ltx2Model = defineModel({
   meta: {
     id: 'fal-ai-ltx-2',
+    canonicalModelId: 'ltx-2',
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-ltx-2',
     name: { key: 'meta.name', fallback: 'LTX 2' },
-    description: 'LTX 2 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

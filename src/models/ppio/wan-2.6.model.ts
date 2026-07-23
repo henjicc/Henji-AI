@@ -10,13 +10,13 @@ import { resolvePpioImageSources, resolvePpioPrimaryVideoSource, resolvePpioVide
 export const wan26Model = defineModel({
   meta: {
     id: 'ppio-wan-2.6',
+    canonicalModelId: 'wan-2.6',
     seriesId: 'wan',
     seriesRank: 2.6,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-wan-2.6',
     name: { key: 'meta.name', fallback: 'Wan 2.6' },
-    description: { key: 'meta.description', fallback: 'PPIO Wan video generation model v2.6, supports text/image-to-video and reference-to-video modes' },
     tags: ['text-to-video', 'image-to-video', 'reference-mode'],
     polling: {
       interval: 3000,

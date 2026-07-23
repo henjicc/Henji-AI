@@ -10,6 +10,10 @@ function getNativeAssistant(): NonNullable<typeof window.henjiNative>['assistant
 
 export function createElectronAssistant(): AssistantPlatform {
   return {
+    getModelPreferences: () => getNativeAssistant().getModelPreferences(),
+    updateModelPreferences: (update) => getNativeAssistant().updateModelPreferences(update),
+    resetModelPreferences: () => getNativeAssistant().resetModelPreferences(),
+    openModelPreferencesFile: () => getNativeAssistant().openModelPreferencesFile(),
     publishHostContext: (snapshot) => getNativeAssistant().publishHostContext(snapshot),
     acknowledgeFrontendTool: (acknowledgement) => getNativeAssistant().acknowledgeFrontendTool(acknowledgement),
     completeFrontendTool: (result) => getNativeAssistant().completeFrontendTool(result),

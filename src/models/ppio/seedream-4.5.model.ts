@@ -37,13 +37,13 @@ const SEEDREAM_45_CONSTRAINTS = {
 export const seedream45Model = defineModel({
     meta: {
         id: 'ppio-seedream-4.5',
+        canonicalModelId: 'seedream-4.5',
         seriesId: 'seedream',
         seriesRank: 4.5,
         provider: 'ppio',
         type: 'image',
         i18nScope: 'models.defs.ppio-seedream-4.5',
         name: { key: 'meta.name', fallback: 'Seedream 4.5' },
-        description: { key: 'meta.description', fallback: 'PPIO Seedream image generation model v4.5, supports 2K/4K resolution' },
         tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-ppio'],
         polling: {
             interval: 3000,

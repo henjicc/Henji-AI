@@ -5,13 +5,20 @@ import {
   frontendToolResultSchema,
   hostContextSnapshotSchema,
 } from '../../../src/core/assistant/hostContracts'
+import { assistantModelPreferencesUpdateSchema } from '../../../src/core/assistant/modelPreferences'
 import {
   acknowledgeAssistantFrontendTool,
   completeAssistantFrontendTool,
   publishAssistantHostContext,
 } from '../services/assistant/frontend-tool-bridge'
+import {
+  getAssistantModelPreferences,
+  openAssistantModelPreferencesFile,
+  resetAssistantModelPreferences,
+  updateAssistantModelPreferences,
+} from '../services/assistant/model-preferences'
 import { getMainWindow } from '../window'
-import { registerIpcHandler } from './registry'
+import { parseVoid, registerIpcHandler } from './registry'
 
 export function assertTrustedAssistantRenderer(event: IpcMainInvokeEvent): void {
   const owner = BrowserWindow.fromWebContents(event.sender)
@@ -29,6 +36,30 @@ export function assertTrustedAssistantRenderer(event: IpcMainInvokeEvent): void 
 }
 
 export function registerAssistantIpc(): void {
+  registerIpcHandler(
+    'assistant:modelPreferences:get',
+    parseVoid,
+    () => getAssistantModelPreferences(),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:modelPreferences:update',
+    (input) => assistantModelPreferencesUpdateSchema.parse(input),
+    (update) => updateAssistantModelPreferences(update),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:modelPreferences:reset',
+    parseVoid,
+    () => resetAssistantModelPreferences(),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:modelPreferences:openFile',
+    parseVoid,
+    () => openAssistantModelPreferencesFile(),
+    assertTrustedAssistantRenderer
+  )
   registerIpcHandler('assistant:publishHostContext', (input) => hostContextSnapshotSchema.parse(input), (snapshot, event) => {
     publishAssistantHostContext(event.sender.id, snapshot)
   }, assertTrustedAssistantRenderer)

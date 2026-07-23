@@ -14,13 +14,13 @@ import {
 export const kling26ProModel = defineModel({
   meta: {
     id: 'ppio-kling-2.6-pro',
+    canonicalModelId: 'kling-video-2.6-pro',
     seriesId: 'kling-video',
     seriesRank: 2.6,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-2.6-pro',
     name: { key: 'meta.name', fallback: 'Kling 2.6 Pro' },
-    description: { key: 'meta.description', fallback: 'PPIO Kling video generation model v2.6 Pro, supports text/image-to-video and motion-control modes' },
     tags: ['text-to-video', 'image-to-video', 'motion-control'],
     polling: {
       interval: 3000,

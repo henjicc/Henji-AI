@@ -7,13 +7,13 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const klingVideoO1Model = defineModel({
   meta: {
     id: 'fal-ai-kling-video-o1',
+    canonicalModelId: 'kling-video-o1',
     seriesId: 'kling-video',
     seriesRank: 10,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-o1',
     name: { key: 'meta.name', fallback: 'Kling Video O1' },
-    description: 'Kling Video O1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

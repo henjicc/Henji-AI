@@ -8,11 +8,11 @@ import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CRE
 export const modelscopeZImageTurboModel = defineModel({
   meta: {
     id: 'Tongyi-MAI/Z-Image-Turbo',
+    canonicalModelId: 'z-image-turbo',
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.Tongyi-MAI/Z-Image-Turbo',
     name: { key: 'meta.name', fallback: 'Z-Image-Turbo' },
-    description: { key: 'meta.description', fallback: 'ModelScope Z-Image-Turbo text-to-image model' },
     tags: ['text-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,

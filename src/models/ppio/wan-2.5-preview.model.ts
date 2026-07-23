@@ -52,13 +52,13 @@ function resolveSupportedValue(
 export const wan25PreviewModel = defineModel({
   meta: {
     id: 'ppio-wan-2.5-preview',
+    canonicalModelId: 'wan-2.5-preview',
     seriesId: 'wan',
     seriesRank: 2.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-wan-2.5-preview',
     name: { key: 'meta.name', fallback: 'Wan 2.5 Preview' },
-    description: '万象 2.5 预览版视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video'],
   },
   inputLimits: {

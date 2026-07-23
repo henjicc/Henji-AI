@@ -9,11 +9,11 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieZImageModel = defineModel({
   meta: {
     id: 'kie-z-image',
+    canonicalModelId: 'z-image',
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-z-image',
     name: { key: 'meta.name', fallback: 'Z-Image' },
-    description: { key: 'meta.description', fallback: 'KIE Z-Image text-to-image model' },
     tags: ['text-to-image', 'provider-kie'],
     aliases: ['z-image-kie']
   },

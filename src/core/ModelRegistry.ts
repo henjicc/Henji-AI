@@ -88,6 +88,7 @@ export class ModelRegistry {
    * registry.register({
    *   meta: {
    *     id: 'nano-banana',
+   *     canonicalModelId: 'nano-banana',
    *     provider: 'fal',
    *     type: 'image',
    *     name: { zh: 'Nano Banana', en: 'Nano Banana' }

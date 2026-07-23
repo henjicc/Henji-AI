@@ -59,6 +59,23 @@ describe('AgentIntentRouter', () => {
     expect(result).toMatchObject({ intent: 'canvas', source: 'deterministic', toolDomains: ['canvas'] })
     expect(classifier).not.toHaveBeenCalled()
   })
+
+  it('明确模型偏好请求走持久偏好工具域', async () => {
+    const classifier = vi.fn()
+    const router = new AgentIntentRouter(classifier)
+    const result = await router.route(
+      'run-preferences',
+      '记住我优先使用 PPIO 供应商的模型',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'model_preferences',
+      source: 'deterministic',
+      toolDomains: ['model_preferences'],
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
 })
 
 describe('AgentContextBuilder', () => {
@@ -143,5 +160,28 @@ describe('AgentContextBuilder', () => {
     expect(serialized).not.toContain('hidden-value-1234567890')
     expect(serialized).not.toContain('stage5-sensitive-probe-123456')
     expect(serialized).toContain('***')
+  })
+
+  it('模型选择规则区分硬能力、持久偏好与通用描述', () => {
+    const builder = new AgentContextBuilder()
+    const result = builder.build({
+      runId: 'run-model-selection',
+      goal: '生成一张图片',
+      userPreferences: '{"preferredProviders":["ppio"]}',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['models', 'generation'],
+        source: 'deterministic', reason: '命中生成规则',
+      },
+      conversation: [],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 8_000,
+    })
+    const systemPrompt = String(result.messages[0].content)
+    expect(systemPrompt).toContain('tags、输入约束和参数 schema 是硬约束')
+    expect(systemPrompt).toContain('用户当前明确要求 > 持久化模型偏好 > 通用模型描述')
+    expect(String(result.messages[1].content)).toContain('preferredProviders')
   })
 })

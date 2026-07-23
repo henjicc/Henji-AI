@@ -19,16 +19,13 @@ const WAN27_EDIT_RATIO_MAP = {
 export const wan27Model = defineModel({
   meta: {
     id: 'ppio-wan-2.7',
+    canonicalModelId: 'wan-2.7',
     seriesId: 'wan',
     seriesRank: 2.7,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-wan-2.7',
     name: { key: 'meta.name', fallback: 'Wan 2.7' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Wan 2.7 video generation model, supports unified text/image-to-video, reference-to-video, and video-edit modes'
-    },
     tags: [
       'text-to-video',
       'image-to-video',

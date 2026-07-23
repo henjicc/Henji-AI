@@ -10,13 +10,13 @@ import { resolvePpioImageSources } from './mediaSources'
 export const kling25TurboModel = defineModel({
   meta: {
     id: 'ppio-kling-2.5-turbo',
+    canonicalModelId: 'kling-video-2.5-turbo',
     seriesId: 'kling-video',
     seriesRank: 2.5,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-kling-2.5-turbo',
     name: { key: 'meta.name', fallback: 'Kling 2.5 Turbo' },
-    description: '可灵 2.5 Turbo 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

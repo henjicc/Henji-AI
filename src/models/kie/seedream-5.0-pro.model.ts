@@ -13,13 +13,13 @@ const SUPPORTED_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:
 export const kieSeedream50ProModel = defineModel({
   meta: {
     id: 'kie-seedream-5.0-pro',
+    canonicalModelId: 'seedream-5.0-pro',
     seriesId: 'seedream',
     seriesRank: 5.0,
     provider: 'kie',
     type: 'image',
     i18nScope: 'models.defs.kie-seedream-5.0-pro',
     name: { key: 'meta.name', fallback: 'Seedream 5.0 Pro' },
-    description: { key: 'meta.description', fallback: 'KIE Seedream 5.0 Pro image generation and editing model' },
     tags: ['text-to-image', 'image-to-image', 'multi-image', 'provider-kie'],
     aliases: ['seedream-5-pro-kie']
   },

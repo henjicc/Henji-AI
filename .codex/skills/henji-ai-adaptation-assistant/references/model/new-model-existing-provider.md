@@ -21,8 +21,9 @@
 
 - 新建 `src/models/{provider}/{model-name}.model.ts`
 - 使用 `defineModel()`，补齐：
-  - `meta.id/provider/type/i18nScope/name/description/tags`
+  - `meta.id/canonicalModelId/provider/type/i18nScope/name/tags`
   - `params/linkages/endpoints/request/pricing`
+- 供应商模型文件禁止填写 `meta.description`。先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有 `canonicalModelId` 就直接引用；没有就新增空描述条目，并在交付时告诉用户在该文件补充定性描述。
 - 文件名必须以 `.model.ts` 结尾。
 - `meta.tags` 不是装饰信息，而是功能筛选数据源；凡是产品要支持筛选的能力，都必须在适配时显式核对是否已写入 tags。
 
@@ -103,7 +104,8 @@
 - 在 `src/i18n/locales/zh-CN/models-{provider}.json` 新增 `defs.{modelId}`。
 - 在 `src/i18n/locales/en-US/models-{provider}.json` 同步新增。
 - 若用了 shared helper，确保 key 存在并能通过 i18n 检查。
-- 描述文案应与实际能力一致；若模型支持首尾帧/参考模式/动作控制等能力，但文案或 tags 未体现，视为适配不完整。
+- 供应商 i18n 中不新增模型描述；通用模型描述只在 `src/core/modelCatalog/generationModelDescriptions.ts` 维护一次。
+- 通用描述只用于表达模型擅长方向或相对定位，功能能力仍以 tags、输入约束、参数 schema 和 builder 为准。
 
 ## 6) 价格（必须确认）
 

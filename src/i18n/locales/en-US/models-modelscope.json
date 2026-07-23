@@ -2,44 +2,37 @@
   "defs": {
     "black-forest-labs/FLUX.1-Krea-dev": {
       "meta": {
-        "name": "FLUX.1-Krea-dev",
-        "description": "ModelScope FLUX.1-Krea-dev text-to-image model"
+        "name": "FLUX.1-Krea-dev"
       }
     },
     "MusePublic/majicMIX_realistic": {
       "meta": {
-        "name": "majicMIX Realistic",
-        "description": "ModelScope majicMIX realistic model"
+        "name": "majicMIX Realistic"
       }
     },
     "modelscope-custom": {
       "meta": {
-        "name": "ModelScope Custom",
-        "description": "ModelScope custom model by ID"
+        "name": "ModelScope Custom"
       }
     },
     "Qwen/Qwen-Image-Edit-2509": {
       "meta": {
-        "name": "Qwen-Image-Edit-2509",
-        "description": "ModelScope Qwen image editing model (image required)"
+        "name": "Qwen-Image-Edit-2509"
       }
     },
     "Qwen/Qwen-Image": {
       "meta": {
-        "name": "Qwen-Image",
-        "description": "ModelScope Qwen-Image text-to-image model"
+        "name": "Qwen-Image"
       }
     },
     "MusePublic/14_ckpt_SD_XL": {
       "meta": {
-        "name": "SD XL 1.4",
-        "description": "ModelScope SD XL text-to-image model"
+        "name": "SD XL 1.4"
       }
     },
     "Tongyi-MAI/Z-Image-Turbo": {
       "meta": {
-        "name": "Z-Image-Turbo",
-        "description": "ModelScope Z-Image-Turbo text-to-image model"
+        "name": "Z-Image-Turbo"
       }
     }
   }

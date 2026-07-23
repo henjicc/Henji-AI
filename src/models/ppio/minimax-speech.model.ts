@@ -233,11 +233,11 @@ const MINIMAX_VOICE_CLONE_PANEL_CONFIG = {
 export const minimaxSpeechModel = defineModel({
   meta: {
     id: 'ppio-minimax-speech',
+    canonicalModelId: 'minimax-speech-2.8',
     provider: 'ppio',
     type: 'audio',
     i18nScope: 'models.defs.ppio-minimax-speech',
     name: { key: 'meta.name', fallback: 'Minimax Speech 2.8' },
-    description: 'Minimax Speech 2.8 异步语音合成模型',
     tags: ['audio', 'text-to-speech', 'voice-synthesis', 'voice-cloning', 'provider-ppio'],
     polling: {
       interval: 3000,

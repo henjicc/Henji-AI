@@ -9,14 +9,11 @@ const DEFAULT_VIDEO_EDIT_DURATION = 8
 export const grokImagineVideoModel = defineModel({
   meta: {
     id: 'ppio-grok-imagine-video',
+    canonicalModelId: 'grok-imagine-video',
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-grok-imagine-video',
     name: { key: 'meta.name', fallback: 'Grok Imagine Video' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Grok Imagine Video model supporting text/image-to-video and video editing'
-    },
     tags: [
       'text-to-video',
       'image-to-video',

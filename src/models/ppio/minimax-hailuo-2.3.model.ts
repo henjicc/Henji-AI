@@ -10,13 +10,13 @@ import { resolvePpioImageSources } from './mediaSources'
 export const minimaxHailuo23Model = defineModel({
   meta: {
     id: 'ppio-minimax-hailuo-2.3',
+    canonicalModelId: 'hailuo-2.3',
     seriesId: 'hailuo',
     seriesRank: 2.3,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-minimax-hailuo-2.3',
     name: { key: 'meta.name', fallback: 'Minimax Hailuo 2.3' },
-    description: 'Minimax 海螺 2.3 视频生成模型，支持文生视频和图生视频',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

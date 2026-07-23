@@ -8,11 +8,11 @@ import { parseImageSize } from './utils'
 export const zImageTurboModel = defineModel({
   meta: {
     id: 'fal-ai-z-image-turbo',
+    canonicalModelId: 'z-image-turbo',
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-z-image-turbo',
     name: { key: 'meta.name', fallback: 'Z-Image Turbo' },
-    description: 'Z-Image Turbo 快速图片生成模型',
     tags: ['image', 'text-to-image', 'fast']
   },
   inputLimits: {

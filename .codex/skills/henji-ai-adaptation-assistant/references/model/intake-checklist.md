@@ -15,6 +15,8 @@
 2) 供应商与模型
 - providerId:
 - modelId:
+- canonicalModelId（跨供应商通用模型标识）:
+- 通用描述目录是否已有该标识；若无，交付时提醒用户补充:
 - 模型显示名(zh/en):
 - 模型类型(image/video/audio):
 - 是否有可复用参考模型（文件路径）:

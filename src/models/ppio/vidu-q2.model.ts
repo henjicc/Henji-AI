@@ -5,16 +5,13 @@ import { viduQ2Linkages } from './vidu-q2.linkages'
 export const viduQ2Model = defineModel({
   meta: {
     id: 'ppio-vidu-q2',
+    canonicalModelId: 'vidu-q2',
     seriesId: 'vidu',
     seriesRank: 2,
     provider: 'ppio',
     type: 'video',
     i18nScope: 'models.defs.ppio-vidu-q2',
     name: { key: 'meta.name', fallback: 'Vidu Q2' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Vidu Q2 unified family model with edition and mode dimensions'
-    },
     tags: [
       'text-to-video',
       'image-to-video',

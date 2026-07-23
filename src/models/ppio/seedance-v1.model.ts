@@ -8,13 +8,13 @@ import { resolvePpioImageSources } from './mediaSources'
 export const seedanceV1Model = defineModel({
   meta: {
     id: 'ppio-seedance-v1',
+    canonicalModelId: 'seedance-v1',
     seriesId: 'seedance',
     seriesRank: 1.0,
     provider: 'ppio',
     type: 'video',
         i18nScope: 'models.defs.ppio-seedance-v1',
     name: { key: 'meta.name', fallback: 'Seedance V1' },
-    description: 'Seedance V1 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

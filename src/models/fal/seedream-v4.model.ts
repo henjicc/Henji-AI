@@ -59,13 +59,13 @@ async function resolveFalSeedreamV4Size(
 export const seedreamV4Model = defineModel({
   meta: {
     id: 'fal-ai-bytedance-seedream-v4',
+    canonicalModelId: 'seedream-4.0',
     seriesId: 'seedream',
     seriesRank: 4.0,
     provider: 'fal',
     type: 'image',
     i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4',
     name: { key: 'meta.name', fallback: 'Seedream V4' },
-    description: 'Bytedance Seedream V4 图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image'],
   },
   runtimeConstraints: {

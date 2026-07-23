@@ -22,16 +22,13 @@ const SUPPORTED_ASPECT_RATIOS = [
 export const nanoBanana2Model = defineModel({
   meta: {
     id: 'ppio-nano-banana-2',
+    canonicalModelId: 'nano-banana-2',
     seriesId: 'nano-banana',
     seriesRank: 3,
     provider: 'ppio',
     type: 'image',
     i18nScope: 'models.defs.ppio-nano-banana-2',
     name: { key: 'meta.name', fallback: 'Nano Banana 2' },
-    description: {
-      key: 'meta.description',
-      fallback: 'PPIO Nano Banana 2 image generation and editing model with automatic endpoint switching'
-    },
     tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-ppio']
   },
   inputLimits: {

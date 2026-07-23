@@ -8,11 +8,11 @@ import { buildModelscopeRequest, MODELSCOPE_ASPECT_RATIO_OPTIONS, MODELSCOPE_CRE
 export const modelscopeQwenImageModel = defineModel({
   meta: {
     id: 'Qwen/Qwen-Image',
+    canonicalModelId: 'qwen-image',
     provider: 'modelscope',
     type: 'image',
         i18nScope: 'models.defs.Qwen/Qwen-Image',
     name: { key: 'meta.name', fallback: 'Qwen-Image' },
-    description: { key: 'meta.description', fallback: 'ModelScope Qwen-Image text-to-image model' },
     tags: ['text-to-image', 'provider-modelscope'],
     polling: {
       interval: 3000,

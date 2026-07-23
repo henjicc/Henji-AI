@@ -10,13 +10,13 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieHailuo23Model = defineModel({
   meta: {
     id: 'kie-hailuo-2-3',
+    canonicalModelId: 'hailuo-2.3',
     seriesId: 'hailuo',
     seriesRank: 2.3,
     provider: 'kie',
     type: 'video',
         i18nScope: 'models.defs.kie-hailuo-2-3',
     name: { key: 'meta.name', fallback: 'Hailuo 2.3' },
-    description: { key: 'meta.description', fallback: 'KIE Hailuo 2.3 image-to-video model' },
     tags: ['image-to-video', 'provider-kie'],
     aliases: ['hailuo-2-3-kie'],
     polling: {

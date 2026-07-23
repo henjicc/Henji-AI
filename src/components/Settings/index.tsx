@@ -28,7 +28,8 @@ const SECTION_MAP: Record<SettingsTab, SettingsSection[]> = {
   api: [
     { id: 'api-keys', label: '平台密钥' },
     { id: 'api-upload', label: '上传策略' },
-    { id: 'api-llm', label: '大语言模型' }
+    { id: 'api-llm', label: '大语言模型' },
+    { id: 'api-agent-preferences', label: '智能助手偏好' }
   ],
   interface: [
     { id: 'interface-layout', label: '布局行为' },

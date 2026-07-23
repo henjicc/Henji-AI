@@ -10,11 +10,11 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieGeminiOmniVideoModel = defineModel({
   meta: {
     id: 'kie-gemini-omni-video',
+    canonicalModelId: 'gemini-omni-video',
     provider: 'kie',
     type: 'video',
     i18nScope: 'models.defs.kie-gemini-omni-video',
     name: { key: 'meta.name', fallback: 'Gemini Omni' },
-    description: { key: 'meta.description', fallback: 'KIE Gemini Omni video generation model with multi-image and video reference input' },
     tags: ['text-to-video', 'image-to-video', 'multi-image-reference', 'video-reference', 'provider-kie'],
     polling: {
       interval: 3000,

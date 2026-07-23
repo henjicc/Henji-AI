@@ -302,6 +302,7 @@ import { defineModel } from '@/core'
 export const myModel = defineModel({
   meta: {
     id: 'unique-model-id',
+    canonicalModelId: 'common-model-id',
     provider: 'provider-name',
     type: 'video', // 'image' | 'video' | 'audio'
     name: { zh: '中文名', en: 'English Name' },
@@ -329,6 +330,9 @@ export const myModel = defineModel({
   }
 })
 ```
+
+供应商模型文件不填写 `meta.description`；通用描述统一维护在
+`src/core/modelCatalog/generationModelDescriptions.ts`。
 
 ### 步骤 2: 验证
 

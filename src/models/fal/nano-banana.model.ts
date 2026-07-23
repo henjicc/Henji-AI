@@ -7,13 +7,13 @@ import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 export const nanoBananaModel = defineModel({
   meta: {
     id: 'fal-ai-nano-banana',
+    canonicalModelId: 'nano-banana',
     seriesId: 'nano-banana',
     seriesRank: 1,
     provider: 'fal',
     type: 'image',
         i18nScope: 'models.defs.fal-ai-nano-banana',
     name: { key: 'meta.name', fallback: 'Nano Banana' },
-    description: 'Nano Banana 快速图片生成模型',
     tags: ['image', 'text-to-image', 'image-to-image']
   },
   params: [

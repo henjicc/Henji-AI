@@ -8,13 +8,13 @@ import { hasUploadedImage } from '@/models/shared/mediaPresence'
 export const klingVideoV26ProModel = defineModel({
   meta: {
     id: 'fal-ai-kling-video-v2.6-pro',
+    canonicalModelId: 'kling-video-2.6-pro',
     seriesId: 'kling-video',
     seriesRank: 2.6,
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-v2.6-pro',
     name: { key: 'meta.name', fallback: 'Kling Video V2.6 Pro' },
-    description: 'Kling Video V2.6 Pro 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video']
   },
   inputLimits: {

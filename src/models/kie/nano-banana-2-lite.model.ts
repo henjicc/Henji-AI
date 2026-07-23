@@ -13,13 +13,13 @@ const SUPPORTED_ASPECT_RATIOS = [
 export const kieNanoBanana2LiteModel = defineModel({
   meta: {
     id: 'kie-nano-banana-2-lite',
+    canonicalModelId: 'nano-banana-2-lite',
     seriesId: 'nano-banana',
     seriesRank: 2,
     provider: 'kie',
     type: 'image',
     i18nScope: 'models.defs.kie-nano-banana-2-lite',
     name: { key: 'meta.name', fallback: 'Nano Banana 2 Lite' },
-    description: { key: 'meta.description', fallback: 'KIE Nano Banana 2 Lite image generation and reference image editing model' },
     tags: ['text-to-image', 'image-to-image', 'multi-image', 'provider-kie'],
     aliases: ['nano-banana-2-lite-kie']
   },

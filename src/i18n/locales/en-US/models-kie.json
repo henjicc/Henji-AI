@@ -2,122 +2,102 @@
   "defs": {
     "kie-gemini-omni-video": {
       "meta": {
-        "name": "Gemini Omni",
-        "description": "KIE Gemini Omni video generation model with multi-image and video reference input"
+        "name": "Gemini Omni"
       }
     },
     "kie-grok-imagine-video": {
       "meta": {
-        "name": "Grok Imagine Video",
-        "description": "KIE Grok Imagine video generation model"
+        "name": "Grok Imagine Video"
       }
     },
     "kie-grok-imagine": {
       "meta": {
-        "name": "Grok Imagine Image",
-        "description": "KIE Grok Imagine Image text-to-image model"
+        "name": "Grok Imagine Image"
       }
     },
     "kie-gpt-image-2": {
       "meta": {
-        "name": "GPT Image 2",
-        "description": "KIE GPT Image 2 image generation and editing model"
+        "name": "GPT Image 2"
       }
     },
     "kie-hailuo-02": {
       "meta": {
-        "name": "Hailuo 02",
-        "description": "KIE Hailuo 02 video generation model"
+        "name": "Hailuo 02"
       }
     },
     "kie-hailuo-2-3": {
       "meta": {
-        "name": "Hailuo 2.3",
-        "description": "KIE Hailuo 2.3 image-to-video model"
+        "name": "Hailuo 2.3"
       }
     },
     "kie-kling-v2-6": {
       "meta": {
-        "name": "Kling V2.6",
-        "description": "KIE Kling V2.6 video model with text/image and motion-control modes"
+        "name": "Kling V2.6"
       }
     },
     "kie-nano-banana-pro": {
       "meta": {
-        "name": "Nano Banana Pro",
-        "description": "KIE Nano Banana Pro image generation model"
+        "name": "Nano Banana Pro"
       }
     },
     "kie-nano-banana-2": {
       "meta": {
-        "name": "Nano Banana 2",
-        "description": "KIE Nano Banana 2 image generation and reference image editing model"
+        "name": "Nano Banana 2"
       }
     },
     "kie-nano-banana-2-lite": {
       "meta": {
-        "name": "Nano Banana 2 Lite",
-        "description": "KIE Nano Banana 2 Lite image generation and reference image editing model"
+        "name": "Nano Banana 2 Lite"
       }
     },
     "kie-seedance-1.5-pro": {
       "meta": {
-        "name": "Seedance 1.5 Pro",
-        "description": "KIE Seedance 1.5 Pro video generation model with text, image, and start-end-frame modes"
+        "name": "Seedance 1.5 Pro"
       }
     },
     "kie-seedance-2.0": {
       "meta": {
-        "name": "Seedance 2.0",
-        "description": "KIE Seedance 2.0 video generation model with text/image-to-video and multi-modal reference-to-video modes"
+        "name": "Seedance 2.0"
       }
     },
     "kie-seedance-2.0-fast": {
       "meta": {
-        "name": "Seedance 2.0 Fast",
-        "description": "KIE Seedance 2.0 Fast video generation model with text/image-to-video and multi-modal reference-to-video modes"
+        "name": "Seedance 2.0 Fast"
       }
     },
     "kie-seedance-2.0-mini": {
       "meta": {
-        "name": "Seedance 2.0 Mini",
-        "description": "KIE Seedance 2.0 Mini video generation model with text/image-to-video and multi-modal reference-to-video modes"
+        "name": "Seedance 2.0 Mini"
       }
     },
     "kie-seedance-v1": {
       "meta": {
-        "name": "Seedance 1.0",
-        "description": "KIE Seedance 1.0 video generation model with text, image, and start-end-frame modes"
+        "name": "Seedance 1.0"
       }
     },
     "kie-seedream-4.0": {
       "meta": {
-        "name": "Seedream 4.0",
-        "description": "KIE Seedream 4.0 image generation model"
+        "name": "Seedream 4.0"
       }
     },
     "kie-seedream-4.5": {
       "meta": {
-        "name": "Seedream 4.5",
-        "description": "KIE Seedream 4.5 image generation model"
+        "name": "Seedream 4.5"
       }
     },
     "kie-seedream-5.0-pro": {
       "meta": {
-        "name": "Seedream 5.0 Pro",
-        "description": "KIE Seedream 5.0 Pro image generation and editing model"
+        "name": "Seedream 5.0 Pro"
       }
     },
     "kie-seedream-5.0-lite": {
       "meta": {
-        "name": "Seedream 5.0 Lite",
-        "description": "KIE Seedream 5.0 Lite image generation and editing model"
+        "name": "Seedream 5.0 Lite"
       }
     },
     "kie-z-image": {
       "meta": {
-        "name": "Z-Image",
-        "description": "KIE Z-Image text-to-image model"
+        "name": "Z-Image"
       }
     }
   }

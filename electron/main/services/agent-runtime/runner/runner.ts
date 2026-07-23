@@ -316,7 +316,7 @@ export class AgentRunner {
           schema: {
             type: 'object',
             properties: {
-              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'general'] },
+              intent: { type: 'string', enum: ['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'model_preferences', 'general'] },
               complexity: { type: 'string', enum: ['simple', 'multi_step', 'ambiguous'] },
               path: { type: 'string', enum: ['workflow', 'primary'] },
               toolDomains: { type: 'array', items: { type: 'string' }, maxItems: 4 },

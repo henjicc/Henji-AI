@@ -10,13 +10,13 @@ const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 export const kieNanoBananaProModel = defineModel({
   meta: {
     id: 'kie-nano-banana-pro',
+    canonicalModelId: 'nano-banana-pro',
     seriesId: 'nano-banana',
     seriesRank: 2,
     provider: 'kie',
     type: 'image',
         i18nScope: 'models.defs.kie-nano-banana-pro',
     name: { key: 'meta.name', fallback: 'Nano Banana Pro' },
-    description: { key: 'meta.description', fallback: 'KIE Nano Banana Pro image generation model' },
     tags: ['text-to-image', 'image-to-image', 'provider-kie'],
     aliases: ['nano-banana-pro-kie']
   },

@@ -7,11 +7,11 @@ import { defineModel, sharedFieldText, sharedModeText, sharedOptionText } from '
 export const seedanceModel = defineModel({
   meta: {
     id: 'fal-ai-bytedance-seedance-v1',
+    canonicalModelId: 'seedance-v1',
     provider: 'fal',
     type: 'video',
         i18nScope: 'models.defs.fal-ai-bytedance-seedance-v1',
     name: { key: 'meta.name', fallback: 'Seedance' },
-    description: 'Bytedance Seedance 视频生成模型',
     tags: ['video', 'text-to-video', 'image-to-video'],
     aliases: ['fal-ai-bytedance-seedance', 'bytedance-seedance-v1']
   },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
 import {
   cancelAgentRun,
+  getAssistantModelPreferences,
   getAgentRunSnapshot,
   getAgentRunState,
   onAgentEvent,
@@ -12,6 +13,7 @@ import {
 } from '@/commands/assistant'
 import type { AgentApprovalResponse } from '@/core/assistant/runtimeContracts'
 import type { AgentEvent } from '@/core/assistant/events'
+import { formatAssistantModelPreferencesForPrompt } from '@/core/assistant/modelPreferences'
 import { createLogger } from '@/core/logging'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 
@@ -104,6 +106,7 @@ export function useAgentRun(): UseAgentRunResult {
     dispatch({ type: 'action_error', message: null })
     try {
       const config = await llmConfigService.getConfig()
+      const modelPreferences = await getAssistantModelPreferences()
       const profile = config.agentProfiles.find((item) => item.id === config.selectedAgentProfileId)
         ?? config.agentProfiles[0]
       if (!profile) throw new Error('尚未配置智能助手模型档案')
@@ -116,7 +119,13 @@ export function useAgentRun(): UseAgentRunResult {
         event: 'assistant_ui.run.start',
         context: { threadId, goalLength: normalizedGoal.length, profileId: profile.id },
       })
-      const result = await startAgentRun({ threadId, goal: normalizedGoal, profile, models })
+      const result = await startAgentRun({
+        threadId,
+        goal: normalizedGoal,
+        profile,
+        models,
+        userPreferences: formatAssistantModelPreferencesForPrompt(modelPreferences),
+      })
       activeRunIdRef.current = result.runId
       useAssistantUiStore.getState().setActiveRun(result.runId, normalizedGoal)
       dispatch({ type: 'begin', state: result.state })
