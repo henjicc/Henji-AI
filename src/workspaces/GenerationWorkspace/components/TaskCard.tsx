@@ -13,9 +13,10 @@ import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
 import { CopyIcon, DownloadIcon, UsePromptIcon } from "./TaskActionIcons"
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
-import { FolderCheck, FolderPlus } from 'lucide-react'
+import { FolderCheck, FolderPlus, MessageCircleQuestion } from 'lucide-react'
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
 import { checkAssetPaths } from '@/commands/assetLibrary'
+import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 
 export interface TaskCardProps {
   task: GenerationTask
@@ -177,7 +178,22 @@ const TaskCard = React.memo(function TaskCard({
           <div className="text-center w-full px-6">
             <p className="text-red-300 font-medium mb-2">{t("common:error")}</p>
             <p className="text-zinc-300 text-sm break-words">{task.error || t("common:status.failed")}</p>
-            <div className="mt-5 flex justify-center">
+            <div className="mt-5 flex justify-center gap-2">
+              <UiButton
+                variant="muted"
+                size="sm"
+                className="h-9 gap-1.5 px-4"
+                onClick={() => openAssistantForDiagnosis({
+                  title: '生成任务失败',
+                  message: task.error || '生成任务失败',
+                  taskId: task.id,
+                  errorCode: 'GENERATION_FAILED',
+                  domain: 'core.services.GenerationService',
+                  occurredAt: task.createdAt.toISOString(),
+                })}
+              >
+                <MessageCircleQuestion className="h-3.5 w-3.5" />问助手
+              </UiButton>
               <UiButton variant="primary" size="sm" className="h-9 px-4" onClick={() => onRetryPolling(task)}>
                 {t("ui:retry")}
               </UiButton>
@@ -336,7 +352,7 @@ const TaskCard = React.memo(function TaskCard({
   }
 
   return (
-    <div className="rounded-xl p-3">
+    <div className="rounded-xl p-3" data-generation-task-id={task.id} tabIndex={-1}>
       <div className="flex items-start gap-3">
         <TaskInputPreview
           taskId={task.id}

@@ -104,6 +104,12 @@ export class AgentApprovalManager {
     }
   }
 
+  expire(approvalId: string, runId: string): 'expired' {
+    const stored = this.requireStored(approvalId, runId)
+    if (stored.status === 'pending' || stored.status === 'approved') stored.status = 'expired'
+    return 'expired'
+  }
+
   private requireStored(approvalId: string, runId: string): StoredApproval {
     const stored = this.approvals.get(approvalId)
     if (!stored || stored.request.runId !== runId) {

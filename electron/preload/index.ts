@@ -101,6 +101,7 @@ const assistantApi: HenjiAssistantApi = {
   resumeRun: (request) => nativeInvoke('assistant:agent:resumeRun', request),
   respondApproval: (request) => nativeInvoke('assistant:agent:respondApproval', request),
   getRunState: (request) => nativeInvoke('assistant:agent:getRunState', request),
+  getRunSnapshot: (request) => nativeInvoke('assistant:agent:getRunSnapshot', request),
   subscribeEvents: (handler) => {
     const listener = (_event: Electron.IpcRendererEvent, rawPayload: unknown): void => {
       const payload: AgentRuntimeEventPayload = agentRuntimeEventPayloadSchema.parse(rawPayload)

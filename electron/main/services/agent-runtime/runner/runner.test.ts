@@ -159,6 +159,8 @@ describe('AgentRunner', () => {
     expect(state).toMatchObject({ status: 'completed', finalText: '已完成' })
     expect(runModelStep).toHaveBeenCalledTimes(2)
     expect(events.map((event) => event.sequence)).toEqual(events.map((_, index) => index + 1))
+    expect(events.some((event) => event.type === 'PlanUpdated')).toBe(true)
+    expect(runner.getEventHistory()).toEqual(events)
   })
 
   it('R2 工具暂停审批，通过后回注 observation 并完成', async () => {

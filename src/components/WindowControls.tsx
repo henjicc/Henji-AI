@@ -5,6 +5,7 @@ import { UiChipButton, UiIconButton } from '@/components/ui'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
+import { Sparkles } from 'lucide-react'
 
 const logger = createLogger('components.WindowControls')
 
@@ -29,9 +30,11 @@ interface WindowControlsProps {
   onTabChange?: (tabId: WorkspaceId) => void
   onAssetClick?: () => void
   onOpenSettings?: () => void
+  assistantOpen?: boolean
+  onAssistantClick?: () => void
 }
 
-const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings }) => {
+const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, assistantOpen = false, onAssistantClick }) => {
   const { t } = useI18n('ui')
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
@@ -223,6 +226,12 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             <TabBar />
           </div>
 
+          <div className="absolute right-3 top-1/2 -translate-y-1/2" style={noDragRegionStyle} data-window-nodrag>
+            <UiIconButton type="button" active={assistantOpen} onClick={onAssistantClick} className="!h-7 !w-7 border-0 bg-transparent" title="智能助手">
+              <Sparkles className="h-4 w-4" />
+            </UiIconButton>
+          </div>
+
         </>
       ) : (
         <>
@@ -244,6 +253,15 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             style={noDragRegionStyle}
             data-window-nodrag
           >
+            <UiIconButton
+              type="button"
+              active={assistantOpen}
+              onClick={onAssistantClick}
+              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-zinc-800/80"
+              title="智能助手"
+            >
+              <Sparkles className="h-4 w-4" />
+            </UiIconButton>
             <UiIconButton
               type="button"
               onClick={handleOpenSettings}

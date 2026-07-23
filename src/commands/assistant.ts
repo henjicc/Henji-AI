@@ -14,6 +14,7 @@ import {
   agentStartRunRequestSchema,
   type AgentApprovalResponse,
   type AgentRuntimeEventPayload,
+  type AgentRunSnapshot,
   type AgentStartRunRequest,
   type AgentStartRunResult,
 } from '@/core/assistant/runtimeContracts'
@@ -84,6 +85,11 @@ export async function respondAgentApproval(
 export async function getAgentRunState(runId: string): Promise<AgentRunState> {
   const request = agentRunControlRequestSchema.parse({ schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION, runId })
   return await getPlatform().assistant.getRunState(request)
+}
+
+export async function getAgentRunSnapshot(runId: string): Promise<AgentRunSnapshot> {
+  const request = agentRunControlRequestSchema.parse({ schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION, runId })
+  return await getPlatform().assistant.getRunSnapshot(request)
 }
 
 export function onAgentEvent(handler: (payload: AgentRuntimeEventPayload) => void): () => void {

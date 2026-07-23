@@ -17,6 +17,9 @@
   --brand-500-rgb: 76 136 255;
   --brand-600-rgb: 47 98 209;
   --brand-700-rgb: 45 79 138;
+  --success-rgb: 52 211 153;
+  --warning-rgb: 251 191 36;
+  --danger-rgb: 248 113 113;
   --ui-surface-panel: rgb(23, 23, 23);
   --ui-surface-field: rgba(10, 10, 10, 0.92);
   --ui-border-soft: rgba(255, 255, 255, 0.14);

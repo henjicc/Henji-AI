@@ -28,4 +28,7 @@ export function registerAgentRuntimeIpc(): void {
   registerIpcHandler('assistant:agent:getRunState', input => agentRunControlRequestSchema.parse(input), (request, event) => (
     runtime.getRunState(event.sender, request.runId)
   ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:getRunSnapshot', input => agentRunControlRequestSchema.parse(input), (request, event) => (
+    runtime.getRunSnapshot(event.sender, request.runId)
+  ), assertTrustedAssistantRenderer)
 }

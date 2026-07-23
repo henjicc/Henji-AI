@@ -80,6 +80,24 @@
 - 大 observation 超过 8 KiB、100 条或约 2k tokens 时 offload 为 `ArtifactRef`；第三阶段使用进程内存储，持久化与恢复留到 6.1。
 - 工具结果始终标记 `untrusted_observation` 并脱敏；C3 在网关阻断，不进入模型上下文。
 
+### D-014 助手容器单点挂载与布局所有权
+
+- 助手侧边栏只在 `App` 根层挂载一次，独立 `assistantUiStore` 是开合、形态、坐标、尺寸和当前 run 引用的单一状态源。
+- 左右停靠通过 `TabContainer` 布局内边距让工作区主动避让；悬浮态受可视区边界约束，层级高于普通业务浮层、低于设置和系统告警。
+- 布局偏好持久化，具体会话与运行检查点不在 renderer 持久化，避免形成第二套运行时真相源。
+
+### D-015 事件恢复与审批到期由主运行时收口
+
+- `AgentEvent` 在 main 保留最多 2000 条进程内历史，renderer 以 `runId + sequence/eventId` 去重排序，并通过 `getRunSnapshot` 补齐重载期间事件。
+- 同一主窗口发生 renderer session 变化时，运行时允许安全重绑定；应用重启后的恢复仍由 6.1 检查点持久化负责。
+- 审批有效期由 main Runner 定时收口并发出 `expired` 事件，renderer 只展示和回传决定，不能自行推进状态机。
+
+### D-016 诊断只读取受限日志证据
+
+- `query_diagnostic_events` 直接复用 main 现有 logging query，最多查询 30 分钟、3 页和 40 条证据，不读取任意路径或建立平行日志通道。
+- 关联顺序为 requestId 优先、domain + 时间窗其次、纯时间窗最后；排除当前诊断 run、`main.agent_*` 和助手 UI 自身日志，避免递归证据。
+- 返回内容使用字段白名单、二次脱敏、短摘要和证据编号；没有 requestId 时必须降低置信度，系统提示要求区分事实/推断且不得声称已修复。
+
 ## 可调参数
 
 - turns、token、offload 和 router 置信阈值是 v1 初值，允许 5.4/6.2 基于评测调优，但不得绕过安全硬限制。

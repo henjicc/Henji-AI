@@ -103,3 +103,30 @@
 ### 自动生成但未纳入改动
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
+
+## 第四阶段 · 智能助手侧边栏实现完成，待用户手动验收
+
+### 新增
+
+- `src/features/assistant/AssistantSidebar.tsx`、`store/assistantUiStore.ts`：全局单点容器、三种摆放形态、布局偏好与运行引用状态。
+- `src/features/assistant/hooks/useAssistantFloatingDrag.ts` 及测试：悬浮拖动、尺寸调整和可视区边界约束。
+- `src/features/assistant/hooks/useAgentRun.ts`：run 启动/控制、事件订阅、快照恢复和日志接入。
+- `src/features/assistant/conversation/*`：结构化输入、对话、计划、工具、审批、结果、错误和预算状态组件及 reducer 测试。
+- `src/features/assistant/results/openAssistantResult.ts`：基于稳定 taskId 的生成结果定位。
+- `src/features/assistant/diagnostics/openAssistantDiagnosis.ts` 及测试：错误上下文清洗、诊断目标构造和助手唤起。
+- `electron/main/services/agent-runtime/diagnostics/query-diagnostic-events.ts` 及测试：受限日志查询、关联、脱敏、证据编号和递归排除。
+
+### 修改
+
+- `src/App.tsx`、`WindowControls.tsx`、`TabContainer.tsx`、`AssetLibraryFloatingPanel.tsx`：根层挂载、全局入口、停靠避让和叠层规则。
+- `src/components/ui/GlobalAlertDialog.tsx`、`src/stores/alertDialogStore.ts`、`TaskCard.tsx`：全局错误/生成失败“问助手”和稳定任务定位标记。
+- `src/core/assistant/events.ts`、`runtimeContracts.ts`：计划事件、工具结果引用和 run snapshot 契约。
+- `electron/main/services/agent-runtime/runner/*`、`runtime.ts`、`tools/approval.ts`：计划事件、历史重放、renderer 重绑定、审批过期与结果引用。
+- `electron/main/services/agent-runtime/context/builder.ts`、`tools/builtin/backend.ts`：诊断输出规则与受限诊断工具工厂接线。
+- `electron/main/ipc/agent-runtime.ts`、preload、assistant PAL/command：暴露经 schema 校验的 `getRunSnapshot`。
+- `src/index.css`、`tailwind.config.js`：补充 success/warning/danger 语义状态色映射。
+- `docs/task/智能助手/00-任务总览.md`、`重要记录.md`、4.1～4.3 任务文件及五份阶段记录：同步第四阶段结果、验证、决策和交接。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。

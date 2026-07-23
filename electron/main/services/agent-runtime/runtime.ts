@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { webContents, type WebContents } from 'electron'
 
 import {
+  agentRunSnapshotSchema,
   agentRuntimeEventPayloadSchema,
+  type AgentRunSnapshot,
   type AgentStartRunRequest,
   type AgentStartRunResult,
 } from '../../../../src/core/assistant/runtimeContracts'
@@ -98,6 +100,24 @@ export class AgentRuntimeService {
 
   getRunState(owner: WebContents, runId: string): AgentRunState {
     return this.requireOwnedRun(owner, runId).runner.getState()
+  }
+
+  getRunSnapshot(owner: WebContents, runId: string): AgentRunSnapshot {
+    const record = this.requireRebindableRun(owner, runId)
+    return agentRunSnapshotSchema.parse({
+      state: record.runner.getState(),
+      events: record.runner.getEventHistory(),
+    })
+  }
+
+  private requireRebindableRun(owner: WebContents, runId: string): AgentRunRecord {
+    const record = this.runs.get(runId)
+    const currentContext = getAssistantHostContext(owner.id)
+    if (!record || record.ownerWebContentsId !== owner.id || !currentContext) {
+      throw new Error('[run_not_owned] 运行不存在、宿主上下文缺失或无权访问')
+    }
+    record.rendererSessionId = currentContext.rendererSessionId
+    return record
   }
 
   private requireOwnedRun(owner: WebContents, runId: string): AgentRunRecord {

@@ -5,6 +5,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { createLogger } from '@/core/logging'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { useUiStore } from '@/stores/uiStore'
+import type { AlertDialogRequest } from '@/stores/alertDialogStore'
 
 const logger = createLogger('components.ui.globalAlertDialog')
 
@@ -14,7 +15,11 @@ const logger = createLogger('components.ui.globalAlertDialog')
  * 业务侧只调用 `showAlertDialog({...})` 描述"发生了什么、能不能去设置、有没有细节可复制"，
  * 按钮的组装与行为都收在这里，避免各页面各写一套开关 state。
  */
-export const GlobalAlertDialog: React.FC = () => {
+interface GlobalAlertDialogProps {
+  onAskAssistant?: (context: Pick<AlertDialogRequest, 'title' | 'message'> & NonNullable<AlertDialogRequest['diagnostic']>) => void
+}
+
+export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssistant }) => {
   const { t } = useI18n('common')
   const current = useAlertDialogStore((state) => state.queue[0] ?? null)
   const dismissCurrent = useAlertDialogStore((state) => state.dismissCurrent)
@@ -50,6 +55,18 @@ export const GlobalAlertDialog: React.FC = () => {
       })
     }
 
+    if (onAskAssistant && current.type !== 'info') {
+      result.push({
+        label: '问助手',
+        variant: 'muted',
+        onClick: () => {
+          const context = { title: current.title, message: current.message, ...current.diagnostic }
+          handleClose()
+          onAskAssistant(context)
+        },
+      })
+    }
+
     if (current.settingsTarget) {
       const target = current.settingsTarget
       result.push({
@@ -64,7 +81,7 @@ export const GlobalAlertDialog: React.FC = () => {
     }
 
     return result
-  }, [copied, current, handleClose, handleCopyDetail, openSettings, t])
+  }, [copied, current, handleClose, handleCopyDetail, onAskAssistant, openSettings, t])
 
   if (!current) {
     return null

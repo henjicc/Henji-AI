@@ -133,3 +133,47 @@
 
 - 3.1～3.3 的代码与自动化验收项全部通过，可以进入 4.1。
 - 大结果当前仅进程内 offload，检查点/Artifact 持久化按计划留到 6.1；token、路由与压缩阈值留到 5.4/6.2 校准。
+
+## 第四阶段 · 智能助手侧边栏
+
+- 验证状态：代码与自动化验证通过；真实 Electron、真实 Provider 和鼠标交互待用户验收
+- 验证日期：2026-07-23
+- 验证范围：侧边栏容器/布局、拖动边界、事件恢复、运行控制、对话/工具/审批可视化、稳定结果跳转、受限日志诊断、IPC/PAL 与完整 Electron 构建。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| 第四阶段定向测试 | 通过；6 个测试文件、14 个用例 |
+| `npm test` | 通过；66 个测试文件、309 个用例全部通过 |
+| `npm run lint` | 通过；renderer 零 warning |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过；Electron 零 warning |
+| `npx tsc --noEmit` | 通过 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 |
+| `npm run check:colors` | 通过；无新增颜色硬编码 |
+| `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer 均成功构建 |
+| `git diff --check` | 通过；仅有仓库 CRLF 转换提示，无空白错误 |
+| 新增文件体积检查 | 通过；第四阶段新增源码均未超过 400 行 |
+| 新增原生控件/裸 `any`/颜色字面量检查 | 通过；第四阶段新增目录无命中 |
+
+### 新增定向覆盖
+
+- 悬浮拖动和尺寸调整的视口边界约束。
+- AgentEvent eventId 去重、sequence 乱序归并、历史 hydration 与工具/审批状态聚合。
+- Runner 计划事件、事件历史快照和运行状态同步。
+- 诊断跨日期查询、requestId 优先、domain/时间窗降级、当前 run/Agent 域排除、字段白名单与二次脱敏。
+- 全局/生成错误诊断上下文清洗、缺失 requestId 的低置信度提示和敏感 URL/本地路径移除。
+
+### 待用户手动验证
+
+- 标题栏入口、右侧默认唤起、左右停靠、工作区避让、悬浮拖动、边界约束、收起重开和应用重启恢复。
+- 助手与素材浮层、设置窗口、全局告警之间的遮挡层级。
+- 已通过 capability smoke 的真实模型对话：计划、流式回复、工具、审批、usage、暂停/恢复/取消和结果跳转。
+- renderer 重载期间的事件补齐与 pending 审批恢复；应用级重启恢复不在本阶段范围。
+- 全局错误和生成失败“问助手”，以及有/无 requestId 时的证据引用、置信度和敏感信息保护。
+
+### 结论
+
+- 4.1～4.3 实现与自动化验收通过，进入真实 Electron 手动验收。
+- 手动验收通过后可进入 5.1；事件/Artifact/运行检查点的应用重启恢复按计划留到 6.1。

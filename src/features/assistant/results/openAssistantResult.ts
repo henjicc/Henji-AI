@@ -1,0 +1,44 @@
+import { createLogger } from '@/core/logging'
+import { switchWorkspace } from '@/stores/navigationStore'
+import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
+
+const logger = createLogger('features.assistant.ui')
+
+function waitForTaskElement(taskId: string, attemptsLeft = 12): Promise<HTMLElement | null> {
+  return new Promise((resolve) => {
+    const find = (): void => {
+      const selector = `[data-generation-task-id="${CSS.escape(taskId)}"]`
+      const element = document.querySelector<HTMLElement>(selector)
+      if (element || attemptsLeft <= 1) {
+        resolve(element)
+        return
+      }
+      requestAnimationFrame(() => {
+        void waitForTaskElement(taskId, attemptsLeft - 1).then(resolve)
+      })
+    }
+    find()
+  })
+}
+
+export async function openAssistantGenerationResult(taskId: string): Promise<boolean> {
+  const task = getVisibleGenerationTask(taskId)
+  if (!task) return false
+  switchWorkspace('generation')
+  const element = await waitForTaskElement(taskId)
+  if (!element) {
+    logger.warn('智能助手结果目标当前不可见', {
+      event: 'assistant_ui.result.open.failed',
+      taskId,
+      context: { reason: 'TASK_ELEMENT_NOT_VISIBLE' },
+    })
+    return false
+  }
+  element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  element.focus({ preventScroll: true })
+  logger.info('智能助手结果已定位', {
+    event: 'assistant_ui.result.open.completed',
+    taskId,
+  })
+  return true
+}

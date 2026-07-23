@@ -11,6 +11,7 @@ import type {
   AgentCancelRunRequest,
   AgentRunControlRequest,
   AgentRuntimeEventPayload,
+  AgentRunSnapshot,
   AgentStartRunRequest,
   AgentStartRunResult,
 } from '@/core/assistant/runtimeContracts'
@@ -27,5 +28,6 @@ export interface AssistantPlatform {
   resumeRun(request: AgentRunControlRequest): Promise<AgentRunState>
   respondApproval(request: AgentApprovalResponse): Promise<AgentRunState>
   getRunState(request: AgentRunControlRequest): Promise<AgentRunState>
+  getRunSnapshot(request: AgentRunControlRequest): Promise<AgentRunSnapshot>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }

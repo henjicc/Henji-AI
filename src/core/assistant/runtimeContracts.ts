@@ -117,3 +117,9 @@ export const agentStartRunResultSchema = z.object({
   state: agentRunStateSchema,
 }).strict()
 export type AgentStartRunResult = z.infer<typeof agentStartRunResultSchema>
+
+export const agentRunSnapshotSchema = z.object({
+  state: agentRunStateSchema,
+  events: z.array(agentEventSchema).max(2_000),
+}).strict()
+export type AgentRunSnapshot = z.infer<typeof agentRunSnapshotSchema>

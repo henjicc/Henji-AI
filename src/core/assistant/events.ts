@@ -139,6 +139,14 @@ const modelCompletedEventSchema = z.object({
   usage: modelStepUsageSchema,
 }).strict()
 
+const planUpdatedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('PlanUpdated'),
+  intent: z.string().min(1).max(100),
+  summary: z.string().min(1).max(500),
+  toolDomains: z.array(z.string().min(1).max(100)).max(4),
+}).strict()
+
 const toolRequestedEventSchema = z.object({
   ...eventBase,
   type: z.literal('ToolRequested'),
@@ -161,6 +169,10 @@ const toolCompletedEventSchema = z.object({
   toolName: z.string().min(1),
   summary: z.string().max(2_000),
   artifactRef: z.string().min(1).optional(),
+  resultReferences: z.record(z.string(), z.string().max(500)).refine(
+    (references) => Object.keys(references).length <= 8,
+    '结果引用最多 8 项'
+  ).optional(),
 }).strict()
 
 const toolFailedEventSchema = z.object({
@@ -237,6 +249,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   modelStartedEventSchema,
   modelDeltaEventSchema,
   modelCompletedEventSchema,
+  planUpdatedEventSchema,
   toolRequestedEventSchema,
   toolStartedEventSchema,
   toolCompletedEventSchema,

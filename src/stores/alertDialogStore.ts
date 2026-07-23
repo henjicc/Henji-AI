@@ -19,6 +19,14 @@ export interface AlertDialogRequest {
   settingsTarget?: SettingsNavigationTarget
   /** 有值时渲染「复制错误详情」按钮；放完整技术信息（堆栈、响应体等） */
   detail?: string
+  /** 可选诊断关联信息；完整技术详情不会自动发送给模型。 */
+  diagnostic?: {
+    requestId?: string
+    taskId?: string
+    errorCode?: string
+    domain?: string
+    occurredAt?: string
+  }
 }
 
 interface AlertDialogState {

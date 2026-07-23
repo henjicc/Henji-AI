@@ -28,6 +28,9 @@ import {
   useNavigationStore,
 } from '@/stores/navigationStore'
 import { useAssistantHostBridge } from '@/features/assistant/frontendTools/useAssistantHostBridge'
+import { AssistantSidebar } from '@/features/assistant/AssistantSidebar'
+import { toggleAssistant, useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
+import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 
 const logger = createLogger('App')
 
@@ -57,6 +60,9 @@ const App: React.FC = () => {
   const assetTriggerEdge = useSettingsStore((state) => state.assetTriggerEdge)
   const assetEdgeDelayMs = useSettingsStore((state) => state.assetEdgeDelayMs)
   const assetDragEdgeDelayMs = useSettingsStore((state) => state.assetDragEdgeDelayMs)
+  const assistantOpen = useAssistantUiStore((state) => state.open)
+  const assistantMode = useAssistantUiStore((state) => state.mode)
+  const assistantSize = useAssistantUiStore((state) => state.size)
 
   const openAssetFloating = React.useCallback((): void => {
     openAssetLibrary('floating')
@@ -85,6 +91,15 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [assetView, closeAssets])
+  useEffect(() => {
+    const handleAssistantShortcut = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLowerCase() !== 'a') return
+      event.preventDefault()
+      toggleAssistant()
+    }
+    window.addEventListener('keydown', handleAssistantShortcut)
+    return () => window.removeEventListener('keydown', handleAssistantShortcut)
+  }, [])
   // 应用初始化
   useEffect(() => {
     const initializeApp = async () => {
@@ -155,14 +170,21 @@ const App: React.FC = () => {
           onTabChange={handleTabChange}
           onAssetClick={handleAssetClick}
           onOpenSettings={() => openSettings()}
+          assistantOpen={assistantOpen}
+          onAssistantClick={toggleAssistant}
         />
 
         {/* 工作区容器 */}
-        <TabContainer activeTab={activeWorkspace} />
+        <TabContainer
+          activeTab={activeWorkspace}
+          insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
+          insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
+        />
         <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
+        <AssistantSidebar />
         {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         <LargeUploadChoiceDialog />
-        <GlobalAlertDialog />
+        <GlobalAlertDialog onAskAssistant={openAssistantForDiagnosis} />
       </div>
     </NotificationProvider>
   )
