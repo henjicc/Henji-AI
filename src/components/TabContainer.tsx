@@ -10,8 +10,8 @@ const AssetLibraryWorkspace = lazy(() => import('../workspaces/AssetLibraryWorks
 
 interface TabContainerProps {
     activeTab: WorkspaceId
-    insetLeft?: boolean
-    insetRight?: boolean
+    insetLeft?: number
+    insetRight?: number
 }
 
 // Loading 占位组件
@@ -30,7 +30,7 @@ const LoadingPlaceholder: React.FC = () => {
  * 避免反复卸载/重建组件树（DOM、图片、ReactFlow 实例等）导致的切换延迟。
  * 每个工作区使用独立 Suspense 边界，避免某个 Tab 首次懒加载时影响已挂载的其他 Tab。
  */
-const TabContainer: React.FC<TabContainerProps> = ({ activeTab, insetLeft = false, insetRight = false }) => {
+const TabContainer: React.FC<TabContainerProps> = ({ activeTab, insetLeft = 0, insetRight = 0 }) => {
     const [visitedTabs, setVisitedTabs] = useState<Set<WorkspaceId>>(() => new Set([activeTab]))
 
     useEffect(() => {
@@ -43,8 +43,8 @@ const TabContainer: React.FC<TabContainerProps> = ({ activeTab, insetLeft = fals
         <div
             className="flex-1 min-h-0 overflow-hidden pt-10 transition-[padding]"
             style={{
-                paddingLeft: insetLeft ? 'var(--assistant-panel-width, 420px)' : 0,
-                paddingRight: insetRight ? 'var(--assistant-panel-width, 420px)' : 0,
+                paddingLeft: insetLeft,
+                paddingRight: insetRight,
                 transitionDuration: 'var(--assistant-layout-transition-duration, 200ms)',
             }}
         >

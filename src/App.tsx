@@ -62,6 +62,7 @@ const App: React.FC = () => {
   const assetDragEdgeDelayMs = useSettingsStore((state) => state.assetDragEdgeDelayMs)
   const assistantOpen = useAssistantUiStore((state) => state.open)
   const assistantMode = useAssistantUiStore((state) => state.mode)
+  const assistantSize = useAssistantUiStore((state) => state.size)
 
   const openAssetFloating = React.useCallback((): void => {
     openAssetLibrary('floating')
@@ -176,8 +177,8 @@ const App: React.FC = () => {
         {/* 工作区容器 */}
         <TabContainer
           activeTab={activeWorkspace}
-          insetLeft={assistantOpen && assistantMode === 'left'}
-          insetRight={assistantOpen && assistantMode === 'right'}
+          insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
+          insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
         />
         <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
         <AssistantSidebar />

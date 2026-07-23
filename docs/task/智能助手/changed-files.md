@@ -150,3 +150,16 @@
 ### 自动生成但未纳入改动
 
 - `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。
+
+## 第四阶段 · 尺寸性能二次修复
+
+### 修改
+
+- `src/features/assistant/hooks/useAssistantPanelInteraction.ts` 及测试：尺寸拖动改为 `scale3d` 合成层预览，增加左右锚点与悬浮双轴变换；松手时一次性应用并提交真实尺寸。
+- `src/features/assistant/AssistantSidebar.tsx`：移除根级宽高变量消费，使用已提交数值尺寸、固定变换原点、常驻合成层提示和布局/样式 containment。
+- `src/App.tsx`、`src/components/TabContainer.tsx`：工作区避让恢复消费已提交的数值宽度，不再跟随尺寸 `pointermove` 连续布局。
+- `docs/task/智能助手/00-任务总览.md`、`重要记录.md`、4.1 任务文件及五份阶段记录：同步第二轮性能根因、修复边界、验证结果和手动复验步骤。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json` 由 `electron:build` 刷新，按仓库规则保持 Git 忽略。

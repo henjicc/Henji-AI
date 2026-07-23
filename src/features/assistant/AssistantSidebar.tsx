@@ -36,17 +36,21 @@ export function AssistantSidebar(): JSX.Element {
     ? {
         left: 0,
         top: 0,
-        width: 'var(--assistant-panel-width, 420px)',
-        height: 'var(--assistant-panel-height, 680px)',
+        width: size.width,
+        height: size.height,
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+        transformOrigin: 'top left',
+        contain: 'layout style',
         maxWidth: 'calc(100vw - 24px)',
         maxHeight: 'calc(100vh - 60px)',
       }
     : {
         top: 40,
         bottom: 0,
-        width: 'var(--assistant-panel-width, 420px)',
-        transform: 'none',
+        width: size.width,
+        transform: 'translate3d(0, 0, 0)',
+        transformOrigin: mode === 'right' ? 'top right' : 'top left',
+        contain: 'layout style',
         ...(mode === 'left' ? { left: 0 } : { right: 0 }),
       }
 
@@ -62,7 +66,7 @@ export function AssistantSidebar(): JSX.Element {
     <div
       ref={interaction.panelRef}
       data-assistant-sidebar
-      className={`pointer-events-none fixed z-40 min-h-0 ${mode === 'floating' ? 'will-change-transform' : ''}`}
+      className="pointer-events-none fixed z-40 min-h-0 will-change-transform"
       style={positionStyle}
     >
       <aside

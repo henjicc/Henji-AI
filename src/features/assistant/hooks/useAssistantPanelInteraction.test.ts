@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clampAssistantFloatingPosition,
   clampAssistantPanelSize,
+  getAssistantResizePreviewStyle,
   resizeAssistantPanelLayout,
 } from './useAssistantPanelInteraction'
 
@@ -53,5 +54,20 @@ describe('assistant panel interaction geometry', () => {
       { width: 420, height: 680 },
       { width: 360, height: 500 }
     )).toEqual({ x: 12, y: 48 })
+  })
+
+  it('尺寸拖动只生成合成层缩放预览且保持正确锚点', () => {
+    const initial = { position: { x: 100, y: 60 }, size: { width: 400, height: 500 } }
+    const next = { position: initial.position, size: { width: 500, height: 600 } }
+
+    expect(getAssistantResizePreviewStyle('left', initial, next)).toEqual({
+      transform: 'translate3d(0, 0, 0) scale3d(1.25, 1, 1)',
+      transformOrigin: 'top left',
+    })
+    expect(getAssistantResizePreviewStyle('right', initial, next).transformOrigin).toBe('top right')
+    expect(getAssistantResizePreviewStyle('floating', initial, next)).toEqual({
+      transform: 'translate3d(100px, 60px, 0) scale3d(1.25, 1.2, 1)',
+      transformOrigin: 'top left',
+    })
   })
 })

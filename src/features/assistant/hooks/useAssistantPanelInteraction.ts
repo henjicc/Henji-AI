@@ -33,12 +33,40 @@ interface AssistantPanelLayout {
 
 export type AssistantResizeAxis = 'width' | 'height' | 'both'
 
+interface AssistantResizePreviewStyle {
+  transform: string
+  transformOrigin: 'top left' | 'top right'
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum)
 }
 
 function currentViewport(): ViewportSize {
   return { width: window.innerWidth, height: window.innerHeight }
+}
+
+function floatingTransform(position: AssistantPanelPosition): string {
+  return `translate3d(${position.x}px, ${position.y}px, 0)`
+}
+
+function scaleRatio(next: number, initial: number): number {
+  return Number((next / Math.max(1, initial)).toFixed(5))
+}
+
+export function getAssistantResizePreviewStyle(
+  mode: AssistantDockMode,
+  initial: AssistantPanelLayout,
+  next: AssistantPanelLayout
+): AssistantResizePreviewStyle {
+  const scaleX = scaleRatio(next.size.width, initial.size.width)
+  const scaleY = mode === 'floating' ? scaleRatio(next.size.height, initial.size.height) : 1
+  return {
+    transform: mode === 'floating'
+      ? `${floatingTransform(initial.position)} scale3d(${scaleX}, ${scaleY}, 1)`
+      : `translate3d(0, 0, 0) scale3d(${scaleX}, 1, 1)`,
+    transformOrigin: mode === 'right' ? 'top right' : 'top left',
+  }
 }
 
 export function clampAssistantFloatingPosition(
@@ -142,23 +170,42 @@ export function useAssistantPanelInteraction({
 }: UseAssistantPanelInteractionInput): UseAssistantPanelInteractionResult {
   const panelRef = useRef<HTMLDivElement>(null)
   const layoutRef = useRef<AssistantPanelLayout>({ position, size })
-  const appliedLayoutRef = useRef<AssistantPanelLayout | null>(null)
   const disposeRef = useRef<(() => void) | null>(null)
+  const transitionRestoreFrameRef = useRef<number | null>(null)
+  const restoreTransitionRef = useRef<(() => void) | null>(null)
   const [dragging, setDragging] = useState(false)
   const [resizing, setResizing] = useState<AssistantResizeAxis | null>(null)
 
-  const applyVisualLayout = useCallback((layout: AssistantPanelLayout): void => {
-    const previous = appliedLayoutRef.current
+  const applyCommittedLayout = useCallback((layout: AssistantPanelLayout): void => {
     layoutRef.current = layout
-    appliedLayoutRef.current = layout
-    if (!previous || !sameSize(previous.size, layout.size)) {
-      const rootStyle = document.documentElement.style
-      rootStyle.setProperty('--assistant-panel-width', `${layout.size.width}px`)
-      rootStyle.setProperty('--assistant-panel-height', `${layout.size.height}px`)
+    const panel = panelRef.current
+    if (!panel) return
+    panel.style.width = `${layout.size.width}px`
+    panel.style.height = mode === 'floating' ? `${layout.size.height}px` : ''
+    panel.style.transformOrigin = mode === 'right' ? 'top right' : 'top left'
+    panel.style.transform = mode === 'floating'
+      ? floatingTransform(layout.position)
+      : 'translate3d(0, 0, 0)'
+  }, [mode])
+
+  const applyDragPreview = useCallback((layout: AssistantPanelLayout): void => {
+    layoutRef.current = layout
+    if (panelRef.current && mode === 'floating') {
+      panelRef.current.style.transform = floatingTransform(layout.position)
     }
-    if (panelRef.current && mode === 'floating' && (!previous || !samePosition(previous.position, layout.position))) {
-      panelRef.current.style.transform = `translate3d(${layout.position.x}px, ${layout.position.y}px, 0)`
-    }
+  }, [mode])
+
+  const applyResizePreview = useCallback((
+    initial: AssistantPanelLayout,
+    next: AssistantPanelLayout
+  ): void => {
+    // 尺寸拖动期间只改合成层 transform，避免助手内容和整个工作区逐帧回流。
+    // 真实 width/height 与持久化状态仅在 pointerup 时提交。
+    layoutRef.current = next
+    const panel = panelRef.current
+    if (!panel) return
+    const preview = getAssistantResizePreviewStyle(mode, initial, next)
+    panel.style.transform = preview.transform
   }, [mode])
 
   const commitLayout = useCallback((layout: AssistantPanelLayout): void => {
@@ -169,22 +216,29 @@ export function useAssistantPanelInteraction({
   useLayoutEffect(() => {
     if (disposeRef.current) return
     const next = normalizeLayout(mode, { position, size }, currentViewport())
-    applyVisualLayout(next)
+    applyCommittedLayout(next)
     commitLayout(next)
-  }, [applyVisualLayout, commitLayout, mode, position, size])
+  }, [applyCommittedLayout, commitLayout, mode, position, size])
 
   useEffect(() => {
     const onViewportResize = (): void => {
       if (disposeRef.current) return
       const next = normalizeLayout(mode, layoutRef.current, currentViewport())
-      applyVisualLayout(next)
+      applyCommittedLayout(next)
       commitLayout(next)
     }
     window.addEventListener('resize', onViewportResize)
     return () => window.removeEventListener('resize', onViewportResize)
-  }, [applyVisualLayout, commitLayout, mode])
+  }, [applyCommittedLayout, commitLayout, mode])
 
-  useEffect(() => () => disposeRef.current?.(), [])
+  useEffect(() => () => {
+    disposeRef.current?.()
+    if (transitionRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(transitionRestoreFrameRef.current)
+      transitionRestoreFrameRef.current = null
+    }
+    restoreTransitionRef.current?.()
+  }, [])
 
   const startPointerInteraction = useCallback((
     event: ReactPointerEvent<HTMLElement>,
@@ -199,16 +253,30 @@ export function useAssistantPanelInteraction({
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     disposeRef.current?.()
+    if (transitionRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(transitionRestoreFrameRef.current)
+      transitionRestoreFrameRef.current = null
+    }
+    restoreTransitionRef.current?.()
 
-    const startLayout = layoutRef.current
+    const initialLayout = layoutRef.current
     const startPoint = { x: event.clientX, y: event.clientY }
-    let pendingLayout = startLayout
+    let pendingLayout = initialLayout
     let frameId: number | null = null
     const rootStyle = document.documentElement.style
     const bodyStyle = document.body.style
     const previousCursor = rootStyle.cursor
     const previousUserSelect = bodyStyle.userSelect
     const previousTransitionDuration = rootStyle.getPropertyValue('--assistant-layout-transition-duration')
+    const restoreTransition = (): void => {
+      if (previousTransitionDuration) {
+        rootStyle.setProperty('--assistant-layout-transition-duration', previousTransitionDuration)
+      } else {
+        rootStyle.removeProperty('--assistant-layout-transition-duration')
+      }
+      restoreTransitionRef.current = null
+    }
+    restoreTransitionRef.current = restoreTransition
     rootStyle.cursor = kind === 'drag' ? 'grabbing' : axis === 'height' ? 'ns-resize' : axis === 'both' ? 'nwse-resize' : 'ew-resize'
     bodyStyle.userSelect = 'none'
     if (kind === 'resize') rootStyle.setProperty('--assistant-layout-transition-duration', '0ms')
@@ -217,7 +285,8 @@ export function useAssistantPanelInteraction({
 
     const flush = (): void => {
       frameId = null
-      applyVisualLayout(pendingLayout)
+      if (kind === 'resize') applyResizePreview(initialLayout, pendingLayout)
+      else applyDragPreview(pendingLayout)
     }
     const queueLayout = (layout: AssistantPanelLayout): void => {
       pendingLayout = layout
@@ -229,16 +298,16 @@ export function useAssistantPanelInteraction({
       if (kind === 'drag') {
         queueLayout({
           position: clampAssistantFloatingPosition({
-            x: startLayout.position.x + delta.x,
-            y: startLayout.position.y + delta.y,
-          }, startLayout.size, currentViewport()),
-          size: startLayout.size,
+            x: initialLayout.position.x + delta.x,
+            y: initialLayout.position.y + delta.y,
+          }, initialLayout.size, currentViewport()),
+          size: initialLayout.size,
         })
       } else {
-        queueLayout(resizeAssistantPanelLayout(mode, axis, startLayout, delta, currentViewport()))
+        queueLayout(resizeAssistantPanelLayout(mode, axis, initialLayout, delta, currentViewport()))
       }
     }
-    const cleanup = (): void => {
+    const cleanup = (deferTransitionRestore = false): void => {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
@@ -246,27 +315,30 @@ export function useAssistantPanelInteraction({
       frameId = null
       rootStyle.cursor = previousCursor
       bodyStyle.userSelect = previousUserSelect
-      if (previousTransitionDuration) {
-        rootStyle.setProperty('--assistant-layout-transition-duration', previousTransitionDuration)
+      if (deferTransitionRestore) {
+        transitionRestoreFrameRef.current = window.requestAnimationFrame(() => {
+          transitionRestoreFrameRef.current = null
+          restoreTransition()
+        })
       } else {
-        rootStyle.removeProperty('--assistant-layout-transition-duration')
+        restoreTransition()
       }
       disposeRef.current = null
     }
     const finish = (pointerEvent: PointerEvent): void => {
       if (pointerEvent.pointerId !== event.pointerId) return
       if (frameId !== null) window.cancelAnimationFrame(frameId)
-      applyVisualLayout(pendingLayout)
-      cleanup()
+      applyCommittedLayout(pendingLayout)
       commitLayout(pendingLayout)
       setDragging(false)
       setResizing(null)
+      cleanup(kind === 'resize')
     }
-    disposeRef.current = cleanup
+    disposeRef.current = () => cleanup(false)
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
-  }, [applyVisualLayout, commitLayout, enabled, mode])
+  }, [applyCommittedLayout, applyDragPreview, applyResizePreview, commitLayout, enabled, mode])
 
   const onDragPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>): void => {
     if (mode === 'floating') startPointerInteraction(event, 'drag')
@@ -292,9 +364,9 @@ export function useAssistantPanelInteraction({
     event.preventDefault()
     const pointerDelta = { x: mode === 'right' ? -widthChange : widthChange, y: heightChange }
     const next = resizeAssistantPanelLayout(mode, axis, layoutRef.current, pointerDelta, currentViewport())
-    applyVisualLayout(next)
+    applyCommittedLayout(next)
     commitLayout(next)
-  }, [applyVisualLayout, commitLayout, mode])
+  }, [applyCommittedLayout, commitLayout, mode])
 
   return {
     panelRef,
