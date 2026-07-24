@@ -580,3 +580,21 @@
 
 - 按《第七阶段-最终手动测试清单.md》验证素材编辑后加入画布时节点确实引用新素材，而不是空上传节点。
 - 继续验证真实 Provider、三种批准方式、鼠标交互、跨工作区失败补偿、日志窗口/JSONL 和 30～60 分钟长稳。
+
+## 手动测试前任务审计
+
+- 审计日期：2026-07-24
+- 审计结论：1～7 阶段的代码实现、工具注册、宿主命令、工作流、自动化测试和构建入口均已完成；未发现代码 TODO、未实现占位或只在目录中声明但没有执行入口的第七阶段能力。
+- 第八阶段 8.1/8.2 保持“待开始”是有意的：它们要求真实 Provider、真实 Electron、日志抽查、崩溃/重载和 30～60 分钟长稳数据，必须在本轮手动验收后执行，不属于当前缺失代码。
+
+### 本轮复验
+
+| 检查 | 结果 |
+|---|---|
+| `npm test -- --run` | 通过；80 个测试文件、363 个用例；2 个文件、6 个用例跳过 |
+| `npm run test:assistant-eval` | 通过；9 个文件、33 个用例 |
+| `npm run lint` / Electron ESLint | 通过；零 warning |
+| renderer / Electron TypeScript | 通过 |
+| `npm run check:colors` / `npm run check:model-i18n` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer/utility 均成功构建 |
+| `npm run electron:assistant-utility-smoke` | 通过；`agent-utility/v1` 握手成功 |
